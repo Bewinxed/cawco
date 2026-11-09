@@ -59,8 +59,8 @@ export interface SocketFrames {
 
 /**
  * Each type a core file marks as a frame: its name and which way it travels.
- * The tag goes on a top-level interface or type alias; one anywhere else
- * fails here naming the file.
+ * The tag goes on a top-level interface or type alias; one anywhere else, or
+ * the name spelled in another case, fails here naming the file and line.
  */
 const framesIn = (
   file: string,
@@ -73,13 +73,16 @@ const framesIn = (
   const seen = new Set<ts.JSDocTag>();
   const visit = (node: ts.Node): void => {
     for (const tag of ts.getJSDocTags(node)) {
-      if (seen.has(tag) || tag.tagName.text !== FRAME_TAG) {
+      const said = tag.tagName.text;
+      if (seen.has(tag) || said.toLowerCase() !== FRAME_TAG.toLowerCase()) {
         continue;
       }
       seen.add(tag);
       const { line } = source.getLineAndCharacterOfPosition(tag.getStart());
       const at = `${file}:${line + 1}`;
-      if (
+      if (said !== FRAME_TAG) {
+        misplaced.push(`${at}: @${said} is not @${FRAME_TAG}`);
+      } else if (
         node.parent === source &&
         (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node))
       ) {
