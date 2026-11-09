@@ -1,6 +1,6 @@
 /**
  * What a delegate leaves running in its boundary keeps running across its
- * turns, and stays where its next command finds it (agent boundary/lifecycle.ts
+ * turns, and stays where its next command finds it (agent boundary/ensure.ts
  * `replaceOlder`, `workLeft`). On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model), boundaries included: run it
  * where a workspace boundary can start (not inside another one).
@@ -298,7 +298,7 @@ const decisionSaid = (
     ? JSON.stringify(decision)
     : "no decision recorded";
 
-/** The agent's stops of workspace `id`'s boundaries as their access narrowed (agent boundary/lifecycle.ts `replaceNarrowed`), oldest first. */
+/** The agent's stops of workspace `id`'s boundaries as their access narrowed (agent boundary/ensure.ts `replaceNarrowed`), oldest first. */
 const stopsOf = async (home: string, id: string): Promise<BoundaryDecision[]> =>
   (await decisionsOf(home, id)).filter(
     (one) => one.decision === "narrowed-stopped"
