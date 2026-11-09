@@ -163,7 +163,7 @@ const launch = async (
   };
   if (linux && own && (await hasLeftDirs(ref.path))) {
     // Its host left a mount point where a dir stands in: an older boundary
-    // beside it held one there ({@link stubbed}).
+    // beside it held one there (staleness.ts `stubbed`).
     restartWhenIdle(ref);
   }
   // Followed from its ready line on, before armHook would follow it from now.
