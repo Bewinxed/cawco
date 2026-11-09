@@ -42,7 +42,7 @@
  *      refused (anonymous, the person, a session);
  * (p7) a delegate works with pairing on: its tools reach the hub through
  *      its machine, its item lands, and its workspace retires on its own
- *      (hub work-items.ts `settle`);
+ *      (hub workspaces.ts `settle`);
  * (p8) turning it off returns to trusted.
  *
  *   bun scripts/probe-kit/run.ts hub-auth

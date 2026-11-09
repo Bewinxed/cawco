@@ -11,7 +11,7 @@
  * live-workspace-judge-answers. … Workspace bb4af2c9-… has a session's
  * process or a command in it, and its hook's judge at …/judge-….sock
  * answered "nothing (connect ECONNREFUSED …)"". The held workspace's close
- * after the cut's bundle (hub work-items.ts `bundleOf`) killed its boundary
+ * after the cut's bundle (hub workspaces.ts `bundleOf`) killed its boundary
  * and its judge, and left a Claude Code process the keeper held in its clone,
  * one whose session the hub had filed asleep; the agent's next start revived
  * the boundary and judge for it (dad89261b), and the next cut killed them

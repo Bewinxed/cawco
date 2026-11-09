@@ -623,7 +623,7 @@ const forReading = async (projectId: string): Promise<string> => {
 
 /**
  * Makes project `projectId`'s folder now if it is not there yet, before a
- * workspace of the project is cut (work-items.ts `openWorkspace`, `recut`).
+ * workspace of the project is cut (workspaces.ts `openWorkspace`, `recut`).
  * A workspace's boundary on the hub's machine reads the folder only once it
  * exists (core workspace-policy.ts `projectFolderOf`). If the folder appears
  * later, at its first read or write, the form of every boundary of the
