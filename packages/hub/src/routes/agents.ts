@@ -5,6 +5,7 @@
 import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
+import { machineOut } from "../machine-out";
 import { refusal } from "../refusal";
 
 /**
@@ -61,14 +62,13 @@ export const agentListRoutes = ({
     // The fleet's list is the person's. A machine reads its own row alone,
     // by its own id (hub-auth.ts): what its CLI's health, install and
     // service checks ask.
-    .get("/api/agents", () => withPresence(db.listAgents()))
-    .get(
-      "/api/agents/:machineId",
-      hidden,
-      ({ params }) =>
-        machineRow(params.machineId) ??
-        refusal(404, "no-machine", machineFault(params.machineId, "unknown"))
-    );
+    .get("/api/agents", () => withPresence(db.listAgents()).map(machineOut))
+    .get("/api/agents/:machineId", hidden, ({ params }) => {
+      const row = machineRow(params.machineId);
+      return row
+        ? machineOut(row)
+        : refusal(404, "no-machine", machineFault(params.machineId, "unknown"));
+    });
 
 export const agentMediaRoutes = ({
   contact,
