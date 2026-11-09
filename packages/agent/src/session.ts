@@ -675,7 +675,6 @@ export class SessionSupervisor {
 
   constructor() {
     gaugeTables("supervisor", {
-      sessions: this.#live.sessions,
       asleep: this.#asleep,
       handed: this.#handed,
       queues: this.#queues,
@@ -683,14 +682,10 @@ export class SessionSupervisor {
       ingested: this.#ingested,
       openAsks: this.#openAsks,
       unheardSettles: this.#unheardSettles,
-      worktrees: this.#spinOffs.worktrees,
-      spinOffs: this.#spinOffs.running,
       titles: this.#titles,
       failures: this.#failures,
       generations: this.#generations,
       placed: this.#placed,
-      activeAt: this.#live.activeAt,
-      pulseAt: this.#live.pulseAt,
       keepAlive: this.#keepAlive,
     });
     // Each live session's own tables, summed by name across sessions.
@@ -1661,10 +1656,13 @@ export class SessionSupervisor {
     const serverBusy = await serverBusyInstances();
     return [
       ...new Set([
-        ...[...this.#live.busy].filter(
-          (id) =>
-            traitsOf(this.#live.sessions.get(id)?.harness).custody !== "server"
-        ),
+        ...this.#live
+          .turnsRunning()
+          .filter(
+            (id) =>
+              traitsOf(this.#live.sessions.get(id)?.harness).custody !==
+              "server"
+          ),
         ...this.#turnPending,
         ...serverBusy,
       ]),
@@ -1776,7 +1774,7 @@ export class SessionSupervisor {
     cwd: string
   ): Promise<void> {
     const met = Date.now();
-    this.#live.activeAt.set(instanceId, met);
+    this.#live.activeAt(instanceId, met);
     if (!session.sessionId) {
       return;
     }
@@ -1787,9 +1785,9 @@ export class SessionSupervisor {
     if (
       info?.lastModified &&
       this.#live.sessions.get(instanceId) === session &&
-      this.#live.activeAt.get(instanceId) === met
+      this.#live.lastActive(instanceId) === met
     ) {
-      this.#live.activeAt.set(instanceId, Math.min(met, info.lastModified));
+      this.#live.activeAt(instanceId, Math.min(met, info.lastModified));
     }
   }
 
@@ -1843,10 +1841,10 @@ export class SessionSupervisor {
         return { why: "an ask is waiting for its answer" };
       }
     }
-    if (this.#live.busy.has(instanceId)) {
+    if (this.#live.turnRunning(instanceId)) {
       return { why: "a turn is running" };
     }
-    if ((this.#live.pulseSubagents.get(instanceId)?.size ?? 0) > 0) {
+    if (this.#live.subagentsRunning(instanceId) > 0) {
       return { why: "a subagent is running" };
     }
     if (!session.sessionId) {
@@ -1905,7 +1903,7 @@ export class SessionSupervisor {
    * handed one) or an ask it parked, whose answer goes to this process alone.
    */
   #inTurn(instanceId: string): boolean {
-    if (this.#live.busy.has(instanceId)) {
+    if (this.#live.turnRunning(instanceId)) {
       return true;
     }
     for (const ask of this.#openAsks.values()) {
@@ -1995,7 +1993,7 @@ export class SessionSupervisor {
     const processGeneration = this.#generations.get(instanceId);
     // Carried, and listed on every beat, until it has stopped: a beat that no
     // longer listed it first would have the hub settle it as ended.
-    this.#live.ending.add(session);
+    this.#live.stopsHere(session);
     await session.stop();
     // Asleep only once no keeper holds its process, as a stop says `stopped`
     // only then ({@link #stop}). `session.stop()` closes the CLI's stdin and
@@ -2146,7 +2144,7 @@ export class SessionSupervisor {
         }
         continue;
       }
-      if (now - (this.#live.activeAt.get(instanceId) ?? now) < IDLE_SLEEP_MS) {
+      if (now - (this.#live.lastActive(instanceId) ?? now) < IDLE_SLEEP_MS) {
         continue;
       }
       const queue = (this.#queues.get(instanceId) ?? Promise.resolve())
@@ -2580,7 +2578,7 @@ export class SessionSupervisor {
     }
     try {
       if (payload.scratchWorktree) {
-        this.#spinOffs.worktrees.set(instanceId, payload.scratchWorktree);
+        this.#spinOffs.worktreeRecorded(instanceId, payload.scratchWorktree);
       }
       let workdir = await workdirFor(payload);
       if (workdir === undefined) {
@@ -2624,7 +2622,7 @@ export class SessionSupervisor {
         }
       }
       // A relaunch stays in the checkout the spin-off has been working in.
-      const cut = this.#spinOffs.worktrees.get(instanceId);
+      const cut = this.#spinOffs.worktree(instanceId);
       if (cut) {
         workdir = cut.dir;
       } else if (scratch?.worktree) {
@@ -2634,17 +2632,11 @@ export class SessionSupervisor {
         );
       }
 
-      // Each spawn says for itself whether this is a spin-off, so a relaunch
-      // of one that has since been kept stops being tagged as scratch.
-      if (scratch) {
-        this.#spinOffs.running.set(instanceId, {
-          ...this.#spinOffs.running.get(instanceId),
-          dir: workdir,
-          harness: adapter.kind,
-        });
-      } else {
-        this.#spinOffs.running.delete(instanceId);
-      }
+      this.#spinOffs.spawned(instanceId, {
+        dir: workdir,
+        harness: adapter.kind,
+        scratch: !!scratch,
+      });
 
       // A spawn for an instance already running is a relaunch: replace the
       // process under the same id, settling the old one first, once its turn
@@ -2780,12 +2772,12 @@ export class SessionSupervisor {
           "dateActivity"
         );
       } else {
-        this.#live.activeAt.set(instanceId, Date.now());
+        this.#live.activeAt(instanceId, Date.now());
       }
       this.#asleep.delete(instanceId);
       // A reattach that met a running turn said so before there was a session
       // to carry the pulse ({@link LiveSessions.emitPulse} drops it): said now.
-      if (this.#live.busy.has(instanceId)) {
+      if (this.#live.turnRunning(instanceId)) {
         this.#live.emitPulse(instanceId, true);
       }
       // The session is in place. Worth saying out loud for a relaunch, whose
@@ -3163,12 +3155,7 @@ export class SessionSupervisor {
         if (this.#openAsks.has(request.requestId)) {
           return;
         }
-        this.#live.touch(instanceId);
-        this.#live.pulseBlocked.set(
-          instanceId,
-          (this.#live.pulseBlocked.get(instanceId) ?? 0) + 1
-        );
-        this.#live.emitPulse(instanceId, true);
+        this.#live.permissionParked(instanceId);
         const body = {
           kind: "permission_request" as const,
           instanceId,
@@ -3183,9 +3170,9 @@ export class SessionSupervisor {
         this.#settleAsk(instanceId, requestId, outcome, false, answer),
       busy: (active) => {
         if (active) {
-          this.#live.busy.add(instanceId);
+          this.#live.turnStarted(instanceId);
         } else {
-          this.#live.busy.delete(instanceId);
+          this.#live.turnEnded(instanceId);
         }
         // A keep-alive ping is the hub's maintenance, not the session doing
         // anything: its rest is still counted from its own last turn.
@@ -3199,7 +3186,7 @@ export class SessionSupervisor {
       failed: (error) => {
         // A process this daemon ended (a sleep, a stop, a relaunch, a move)
         // ends as that stop says, whatever its harness made of it.
-        if (holder.session && this.#live.ending.has(holder.session)) {
+        if (holder.session && this.#live.stoppedHere(holder.session)) {
           this.#endedHere(instanceId, error);
           return;
         }
@@ -3212,13 +3199,13 @@ export class SessionSupervisor {
         // failure: a failed row holds no workspace (workspaces.ts `holdsOf`),
         // and a CLI left running in one was closed under ({@link #endFailed}).
         if (holder.session) {
-          this.#live.ending.add(holder.session);
+          this.#live.stopsHere(holder.session);
         }
         this.#endFailed(instanceId, error, processGeneration);
       },
       died: (signal, error, cut) => {
         const { session } = holder;
-        if (session && this.#live.ending.has(session)) {
+        if (session && this.#live.stoppedHere(session)) {
           this.#endedHere(instanceId, error);
           return;
         }
@@ -3292,7 +3279,7 @@ export class SessionSupervisor {
           // (`#fail`), and anything else is the session at rest, its next
           // message waking it ({@link #gone}). One this daemon is stopping
           // (a sleep, a stop) is said by the one stopping it.
-          if (this.#live.ending.has(holder.session)) {
+          if (this.#live.stoppedHere(holder.session)) {
             return;
           }
           if (this.#failures.has(instanceId)) {
@@ -3456,7 +3443,7 @@ export class SessionSupervisor {
       );
       this.#turnPending.delete(instanceId);
       if (running) {
-        this.#live.busy.add(instanceId);
+        this.#live.turnStarted(instanceId);
         // The hub forgot this session's pulse at the register: the rail's
         // Working list hears it from here, not once it is attached.
         this.#live.emitPulse(instanceId, true);
@@ -3470,7 +3457,7 @@ export class SessionSupervisor {
     } catch (problem) {
       if (
         !this.#live.sessions.has(instanceId) &&
-        this.#live.busy.delete(instanceId)
+        this.#live.turnEnded(instanceId)
       ) {
         this.#live.emitPulse(instanceId, true);
       }
@@ -3556,7 +3543,7 @@ export class SessionSupervisor {
       await custodyProbe(answered, stopped);
     } catch (problem) {
       if (stopped?.aborted) {
-        this.#live.ending.add(session);
+        this.#live.stopsHere(session);
         // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the stop behind it ends the child either way
         await session.dispose().catch(() => {});
       }
@@ -3623,7 +3610,7 @@ export class SessionSupervisor {
       "dateActivity"
     );
     session.attached?.();
-    if (this.#live.busy.has(spec.instanceId)) {
+    if (this.#live.turnRunning(spec.instanceId)) {
       this.#live.emitPulse(spec.instanceId, true);
     }
     this.#adopting.delete(spec.instanceId);
@@ -4380,7 +4367,7 @@ export class SessionSupervisor {
     );
     const attachments = carried.texts;
     let { message } = carried;
-    const worktree = this.#spinOffs.worktrees.get(instanceId);
+    const worktree = this.#spinOffs.worktree(instanceId);
     const { content } = message.message;
     if (!keepAlive && worktree?.announce && typeof content === "string") {
       message = {
@@ -4418,7 +4405,7 @@ export class SessionSupervisor {
         );
       }
       if (
-        this.#live.busy.has(instanceId) ||
+        this.#live.turnRunning(instanceId) ||
         [...this.#openAsks.values()].some(
           (ask) => "instanceId" in ask && ask.instanceId === instanceId
         )
@@ -4522,7 +4509,7 @@ export class SessionSupervisor {
     try {
       const session = this.#live.sessions.get(instanceId);
       if (session) {
-        this.#live.ending.add(session);
+        this.#live.stopsHere(session);
       }
       if (!harness) {
         throw new Error(
@@ -4608,20 +4595,12 @@ export class SessionSupervisor {
       this.#handed.delete(instanceId);
       forgetTaken(instanceId);
       if (discard && !sharedConversation) {
-        if (scratchWorktree) {
-          this.#spinOffs.worktrees.set(instanceId, scratchWorktree);
-        }
-        await this.#spinOffs.removeWorktree(instanceId);
-        if (!this.#spinOffs.running.has(instanceId) && sessionId && cwd) {
-          this.#spinOffs.running.set(instanceId, {
-            dir: cwd,
-            sessionId,
-            harness,
-          });
-        }
-        if (!(sessionId && claimedSessionIds.includes(sessionId))) {
-          await this.#spinOffs.removeQuestSession(instanceId);
-        }
+        await this.#spinOffs.discard(instanceId, {
+          worktree: scratchWorktree,
+          transcript:
+            sessionId && cwd ? { dir: cwd, sessionId, harness } : undefined,
+          keepTranscript: !!sessionId && claimedSessionIds.includes(sessionId),
+        });
       }
       // The hub forgets the session once this stop is confirmed: nothing
       // can reattach it, so its own browser door goes now.
@@ -5015,14 +4994,7 @@ export class SessionSupervisor {
     if (!this.sink(settled)) {
       this.#unheardSettles.set(requestId, settled);
     }
-    this.#live.touch(instanceId);
-    const left = (this.#live.pulseBlocked.get(instanceId) ?? 1) - 1;
-    if (left === 0) {
-      this.#live.pulseBlocked.delete(instanceId);
-    } else {
-      this.#live.pulseBlocked.set(instanceId, left);
-    }
-    this.#live.emitPulse(instanceId, true);
+    this.#live.askSettled(instanceId);
   }
 }
 
