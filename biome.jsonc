@@ -302,7 +302,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -340,7 +340,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -387,7 +387,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -640,7 +640,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -755,7 +755,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -801,7 +801,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
@@ -856,7 +856,7 @@
                     // own entry, which no manifest exports (its binary builds it).
                     "group": [
                       "**/packages/*/src/**",
-                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
+                      "**/{agent,auth,cli,core,design-tokens,hub,icons,jsonl-parser,preview,sessiond,cawrier,dashboard,site}/{src,scripts}/**",
                       "@cawco/*/src/**",
                       "**/apps/*/**",
                       "!**/apps/dashboard/serve.js",
