@@ -1,6 +1,3 @@
-import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { walkOwned } from "./owned-rows";
-import { singleton, singletonColumn } from "./singleton";
 /** Projects: their rows, places, links, offers, spend and notes, and folding one into another. */
 
 import {
@@ -26,9 +23,11 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { AreaRow } from "./areas";
 import { projectPage } from "./artifacts";
 import type { DbCore } from "./core";
+import { walkOwned } from "./owned-rows";
 import {
   actions,
   areas,
@@ -60,6 +59,7 @@ import {
   workItems,
   workspaces,
 } from "./schema";
+import { singleton, singletonColumn } from "./singleton";
 import type { Tx } from "./tx";
 
 export type PlaceRow = typeof projectPlaces.$inferSelect;
