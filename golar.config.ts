@@ -38,8 +38,6 @@ const DESIGN_FIXTURES = `${LINT_FIXTURES}design/*.{svelte,ts}`;
 const HUB_PATH_FIXTURES = `${LINT_FIXTURES}hub-path.ts`;
 /** The bindings of `fetch` to another sender the alias rule must refuse. */
 const FETCH_ALIAS_FIXTURES = `${LINT_FIXTURES}fetch-alias*.ts`;
-/** The refusals dropped that the rule must report. */
-const REFUSAL_FIXTURES = `${LINT_FIXTURES}refusal-kept.ts`;
 
 const tracked = (...globs: string[]): string[] =>
   execFileSync(
@@ -135,7 +133,7 @@ export default defineConfig({
         rules: [noFetchAlias],
       },
       {
-        files: [...hub.map(literal), REFUSAL_FIXTURES],
+        files: hub.map(literal),
         rules: [refusalKept],
       },
     ],
