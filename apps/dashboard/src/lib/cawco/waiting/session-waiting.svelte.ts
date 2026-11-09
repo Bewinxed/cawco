@@ -6,7 +6,7 @@
  * which the pane already holds (SessionPane `parked`, its connect asks).
  *
  * The hub's list is read while the pane is on screen, and again whenever it
- * may have moved (client.svelte.ts `questionsMoved`: an answer, a new ask, a
+ * may have moved (stores/needs.svelte.ts `questionsMoved`: an answer, a new ask, a
  * session ending, a take or a withdrawal). A read that fails keeps the last
  * list and says why, with its way to try again.
  *
