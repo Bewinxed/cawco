@@ -28,7 +28,7 @@ import { ParkedStartSchema } from "#lib/cawco/stored-shapes.js";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { track } from "#lib/platform/track.js";
-import { cawco, followContinuations, sendFirstPrompt } from "../client.svelte";
+import { cawco, sendFirstPrompt } from "../client.svelte";
 import {
   type ContinueSource,
   continuationRunning,
@@ -37,6 +37,10 @@ import {
   type SessionDraft,
 } from "../continue.svelte";
 import { type DraftContent, loadDraft, saveDraft } from "../draft-store";
+import {
+  continuationsStore,
+  followContinuations,
+} from "../stores/continuations.svelte";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { type SpawnPrefill, spawning } from "./new-session.svelte";
 
@@ -236,7 +240,7 @@ export function followJob(id: string, job: string): void {
   if (start) {
     start.job = job;
     start.askedAt ||= Date.now();
-    settleJobs(cawco.continuations);
+    settleJobs(continuationsStore.continuations);
   }
 }
 
