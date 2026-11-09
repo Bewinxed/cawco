@@ -23,7 +23,6 @@ import {
   nextReading,
   replaceSoon,
   start,
-  unaskedCalls,
 } from "./ensure";
 import { closedWhile, liveWhy, recentlyHeld } from "./holding";
 import { closeQuietly, liveFacts, setProject } from "./looks";
@@ -176,11 +175,11 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
     return 0;
   }
   for (const id of left) {
-    closeWhenIdle(id, unaskedCalls);
+    closeWhenIdle(id);
   }
   // A look begun before they were added may have passed them by.
   await lookUnderWay();
-  await lookOnce(unaskedCalls);
+  await lookOnce();
   // A look passes over a workspace whose boundary is starting
   // (ensure.ts `closeRetiring`), as one is while a session there is launched
   // again at start-up (a turn its killed process left): the pass waits that
@@ -192,7 +191,7 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
   if (pending.length > 0) {
     await Promise.all(pending);
     await lookUnderWay();
-    await lookOnce(unaskedCalls);
+    await lookOnce();
   }
   const after = await Promise.all(
     left.map(async (id) => (await readRetiring(id)).length)
@@ -266,7 +265,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
       console.info(
         `[workspace] ${id}: its boundary runs on a retiring session keeper, and is handed over to one on the current keeper`
       );
-      replaceSoon({ id, path: held.path }, unaskedCalls);
+      replaceSoon({ id, path: held.path });
     }
     const judged = (procsOn: typeof procs) =>
       procsOn.some((proc) => isJudgeOf(proc.procId, id));
@@ -277,7 +276,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
       console.info(
         `[workspace] ${id}: its judge runs on a retiring session keeper; its hook is armed again, with a judge on the current one`
       );
-      await armHook(id, held, unaskedCalls).catch((error: unknown) => {
+      await armHook(id, held).catch((error: unknown) => {
         console.warn(
           `[workspace] ${id}: its judge could not be started on the current session keeper: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -399,7 +398,7 @@ export const whileSandboxDown = <T>(
       try {
         return { ran: await work() };
       } finally {
-        const fresh = await start(await sessiond(), ref, unaskedCalls);
+        const fresh = await start(await sessiond(), ref);
         console.info(
           `[workspace] ${ref.id}: its boundary ${held.pid} was down while the host wrote its clone, and ${fresh.pid} runs now`
         );
