@@ -19,7 +19,7 @@
 export const EXTERNAL_SOURCES = ["github", "linear"] as const;
 export type ExternalSource = (typeof EXTERNAL_SOURCES)[number];
 
-export const EXTERNAL_KINDS = ["issue", "pr", "discussion"] as const;
+const EXTERNAL_KINDS = ["issue", "pr", "discussion"] as const;
 export type ExternalKind = (typeof EXTERNAL_KINDS)[number];
 
 /** The source's state in five words every source maps onto; `stateName` keeps its own. */
