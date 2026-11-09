@@ -414,9 +414,9 @@ import {
   decidedTasks,
   decisionRoutes,
 } from "./decisions";
+import type { DelegateResult } from "./delegate-result";
 import { delegateTypesRoutes } from "./delegate-types";
 import { createDelegateWaits, type NoticeMark } from "./delegate-waits";
-import type { DelegateResult } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree, treeSessions } from "./delegation-tree";
 import {
@@ -728,6 +728,7 @@ import {
   receiveFrame,
   sendFrame as writeFrame,
 } from "./wire-socket";
+import { workItemCalls } from "./work-item-calls";
 import { isLive, WorkItemRefusal } from "./work-item-state";
 import {
   blockWords,
@@ -10222,6 +10223,7 @@ export const createServer = (
   // A relayed tool call sent again under its key is answered, not run again.
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
   const delegationMcp = createDelegationMcp({
+    workItemCalls: workItemCalls(ctx),
     lifetime,
     decidesKinds: () => db.decides.kinds(),
     // Kept with the relayed calls' keys, whose table tool-call-keys prunes.
