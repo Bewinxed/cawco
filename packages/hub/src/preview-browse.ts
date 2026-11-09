@@ -15,8 +15,9 @@ import type { Browsed } from "./artifacts/shapes";
 import { dashboardUrl } from "./dashboard-url";
 import type { ArtifactRow } from "./db/artifacts";
 import type { HubContext } from "./hub-context";
-import { embedKey, PreviewRefusal, servedByMachine } from "./preview";
+import { embedKey, servedByMachine } from "./preview";
 import { mintSessionTicket } from "./preview-access";
+import { PreviewRefusal } from "./preview-hosts";
 import { unreachable } from "./unreachable";
 
 const NOT_NAME = /[^a-z0-9]+/gu;
