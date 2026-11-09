@@ -17,10 +17,10 @@
    * would paint under the panes.
    */
   import { Portal } from "bits-ui";
-  import { readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
   import SessionCard from "./SessionCard.svelte";
   import { sessionsStore } from "./stores/sessions.svelte";
+  import { readTranscript } from "./stores/transcript-reads.svelte";
 
   /** The rail whose session rows open the card. */
   let { within }: { within: HTMLElement | undefined } = $props();
