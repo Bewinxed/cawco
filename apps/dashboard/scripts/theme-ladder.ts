@@ -9,7 +9,7 @@ import type {
   TailwindTheme,
   TokenView,
   ViewToken,
-} from "../../../packages/design-tokens/src/design-tokens";
+} from "@cawco/design-tokens/design-tokens";
 
 const VARIANTS = "src/lib/tokens/variants.css";
 const REFERENCE = /^\{([^}]+)\}$/u;
