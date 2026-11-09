@@ -26,7 +26,7 @@
  * - **A round.** The hub files a `design_checks` row, says on the task and
  *   on the builder's chip that it is being checked against the design
  *   system, and starts the verifier: a fresh delegate landing nothing and
- *   reporting to no session (work-items.ts `verifierParent`). The task stays
+ *   reporting to no session (work-item-state.ts `verifierParent`). The task stays
  *   in its active stage; the builder's turns wait, not idle.
  * - **The verdict** (`design_verdict`, listed to the verifier alone):
  *   findings go back to the builder as one message, each tied to

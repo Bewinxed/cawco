@@ -1,5 +1,5 @@
 /**
- * A workspace lives exactly as long as its work item (work-items.ts
+ * A workspace lives exactly as long as its work item (workspaces.ts
  * `settle`). When the item ends, the hub settles its workspace: once nothing
  * holds it (a session of its items attached, an artifact showing what it
  * serves that still waits on someone), its machine closes its boundary, reads on the host what its clone
@@ -14,7 +14,7 @@
  * A finished delegate stays continuable without its folder: a handoff or a
  * follow-up to a retired one cuts its clone again at the same path, at the
  * commit its clone's HEAD was on as its machine deleted it (never its base's
- * tip), and it goes on in the same session (work-items.ts `recut`). Files
+ * tip), and it goes on in the same session (workspaces.ts `recut`). Files
  * git ignores go with the clone; a delegate keeps one by handing it in as an
  * output.
  *
@@ -23,7 +23,7 @@
  * what no event reached (a hub restarted, a machine away at the time): every
  * {@link RETIRE_SWEEP_MS}, each active workspace on every online machine is
  * settled, and each archived one whose clone its machine still has is closed
- * again (work-items.ts `closeLeftClones`). The same look keeps up the server
+ * again (workspaces.ts `closeLeftClones`). The same look keeps up the server
  * of each preview waiting on the person, which would otherwise sleep once its
  * idle half hour ran out (artifacts service `keepWaitingUp`).
  */
