@@ -354,7 +354,7 @@
    * showing the ask (`answerFor`, as Needs you's row reads it): its stage is
    * the card's truth. Out, both buttons hold; refused, the hub's words stand
    * under them and either can be pressed again, the card being the
-   * refusal's one surface while the ask stands (client.svelte.ts
+   * refusal's one surface while the ask stands (stores/commands.svelte.ts
    * `answerCardStillParked`); taken, the ask leaves.
    */
   const sent = $derived(job.askId ? answerFor(job.askId) : null);
