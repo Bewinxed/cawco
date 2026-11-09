@@ -40,6 +40,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BoundaryDecision } from "../../../packages/agent/src/boundary/decisions";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   fetchHub,
   type HubRequest,
@@ -122,7 +123,12 @@ const hubCall = async (fleet: Fleet, request: HubRequest): Promise<unknown> => {
   const { method, path } = request;
   const read = await readWithin(30_000, async (signal) => {
     const response = await fetchHub(fetch, fleet.base, request, { signal });
-    return { status: response.status, text: await response.text() };
+    return {
+      status: response.status,
+      text: response.ok
+        ? await response.text()
+        : refusalWords(await response.text(), response.status),
+    };
   });
   if (read.kind === "unanswered") {
     throw new Error(`${method} ${path}: no answer within ${read.after} ms`);

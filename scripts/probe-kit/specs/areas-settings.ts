@@ -43,6 +43,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   type HubRequest,
   hubInit,
@@ -897,7 +898,11 @@ export default {
           } catch {
             // Words, not JSON: a refusal.
           }
-          return { status: response.status, text, json };
+          return {
+            status: response.status,
+            text: response.ok ? text : refusalWords(text, response.status),
+            json,
+          };
         },
         db,
         kit,

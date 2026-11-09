@@ -45,6 +45,7 @@ import {
   removeFolder,
 } from "../../../packages/agent/src/remove-folder";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   fetchHub,
   type HubRequest,
@@ -666,7 +667,12 @@ export default {
               hubInit(request, { headers: { [PRESENCE_HEADER]: PRESENCE } })
             )
           );
-          return { status: response.status, text: await response.text() };
+          return {
+            status: response.status,
+            text: response.ok
+              ? await response.text()
+              : refusalWords(await response.text(), response.status),
+          };
         },
         calls: [],
         db,
