@@ -21,7 +21,7 @@
   import { decisionsWords } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
   import { artifactShown } from "#lib/cawco/artifact-api.js";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import { artifactReached } from "#lib/cawco/files/reached.js";
   import { pageVisible } from "#lib/cawco/page-visible.svelte.js";
   import { frameHand, holdOpen } from "#lib/cawco/preview/open-pages.js";
@@ -35,6 +35,7 @@
   import { openReference } from "#lib/cawco/reference-open.svelte.js";
   import { heardInput } from "#lib/cawco/reload.svelte.js";
   import { sessionHere } from "#lib/cawco/session-here.js";
+  import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -107,7 +108,7 @@
   let modeMoves = $state(0);
   let modeSeen: string | null = null;
   $effect(() => {
-    const settings = cawco.previewSettings;
+    const settings = previewsStore.previewSettings;
     if (!settings) {
       return;
     }
@@ -227,7 +228,7 @@
     if (!(connected && pageVisible.current)) {
       return;
     }
-    for (const [instanceId, panel] of Object.entries(cawco.previews)) {
+    for (const [instanceId, panel] of Object.entries(previewsStore.previews)) {
       if (
         panel?.state !== "open" ||
         panel.artifact.id !== artifactId ||
