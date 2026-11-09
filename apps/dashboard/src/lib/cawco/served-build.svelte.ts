@@ -20,7 +20,7 @@
  * A build that also raises the wire (`WIRE_PROTOCOL`) is offered the same
  * way: a tab built for the older wire misreads the hub, so it stops reading
  * it while the toast stands, and asks on each snapshot until the dashboard
- * serves the new build (client.svelte.ts `olderThanHub`).
+ * serves the new build (hub/socket.svelte.ts `olderThanHub`).
  */
 import { version } from "$app/env";
 

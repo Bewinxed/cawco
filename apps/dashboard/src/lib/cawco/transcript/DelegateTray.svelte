@@ -5,7 +5,7 @@
   /**
    * The delegate tray: one compact chip per child this session has working
    * (its delegates, and the sessions it started with `start_session`,
-   * client.svelte.ts `trayOf`), in a row standing on the composer, so the
+   * stores/delegates.svelte.ts `trayOf`), in a row standing on the composer, so the
    * reader scrolled far from a child's card still sees what it is doing. A
    * chip enters the first time its card leaves the view (tray.svelte.ts),
    * shows what the child is doing in words and one mark, opens a panel with
