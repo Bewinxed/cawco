@@ -337,7 +337,7 @@ export interface TakeoverTouchPoint {
  * a {@link TakeoverFocus} when the page has one), for the desktop layout's
  * zoom to open on it.
  */
-export type TakeoverMessage =
+type TakeoverMessage =
   | { t: "layout"; layout: TakeoverLayout }
   | {
       t: "touch";
