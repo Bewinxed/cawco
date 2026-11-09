@@ -360,6 +360,41 @@ export const ROOM_HELD = "room_held";
 export const CLI_OUTDATED = "cli_outdated";
 
 /**
+ * A line CawCo's agent itself says in a session's transcript, no harness's
+ * frame, with the fields its frame carries by subtype; the hub reads each by
+ * its subtype. Said through the agent's `sayToSession`, which builds the
+ * neutral system message (agent notices.ts `noticeMessage`).
+ */
+export type AgentNotice =
+  | {
+      subtype:
+        | typeof CONTAINERS_ENDED
+        | typeof CONTAINERS_UNTRACKED
+        | typeof LIMIT_REACHED;
+      uuid: string;
+      content: string;
+    }
+  | {
+      subtype: typeof ROOM_HELD;
+      uuid: string;
+      timestamp: string;
+      content: string;
+    }
+  | {
+      subtype: typeof CLI_OUTDATED;
+      uuid: string;
+      session_id: string;
+      content: string;
+    }
+  | {
+      subtype: typeof LEAK_FOUND;
+      uuid: string;
+      content: string;
+      leak: LeakFound;
+    }
+  | { subtype: typeof LEAK_ENDED; uuid: string };
+
+/**
  * CawCo stopped a session's process, and says why in `content`, in the
  * error formula (DESIGN.md, Voice: what happened, why, what starts it again): the
  * agent's frame, a line of the session's transcript. Drawn as an error
