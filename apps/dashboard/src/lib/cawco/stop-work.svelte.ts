@@ -37,6 +37,10 @@ import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { StopJobSchema } from "#lib/cawco/stored-shapes.js";
+import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { dur } from "#lib/platform/motion/curves.svelte.js";
+import { route } from "#lib/platform/motion/route.svelte.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import {
@@ -50,11 +54,7 @@ import {
   readProjects,
   stopProjectSessions,
 } from "./client.svelte";
-import { failureWords, hubFetch, hubRefusal } from "./hub-read";
-import { dur } from "./motion/curves.svelte";
-import { route } from "./motion/route.svelte";
 import { offerBringBack } from "./project-end.svelte";
-import { readJson, writeJson } from "./storage";
 
 /** Where a tray stands. */
 type StopPhase =

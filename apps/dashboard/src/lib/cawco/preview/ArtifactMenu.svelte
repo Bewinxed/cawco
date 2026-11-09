@@ -53,14 +53,14 @@
     IconTrash,
     IconWindow,
   } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { failureClause } from "#lib/platform/hub-read.js";
+  import { numberOf, reveal } from "#lib/platform/motion/curves.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
   import { listArtifacts, removeArtifact, showArtifact } from "../artifact-api";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
-  import { frameSize } from "../frame-observer";
-  import { failureClause } from "../hub-read";
-  import { numberOf, reveal } from "../motion/curves.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
 

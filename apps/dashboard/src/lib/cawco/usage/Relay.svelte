@@ -17,7 +17,11 @@
   import type { CarrySpan } from "@cawco/core/accounts";
   import { fade } from "svelte/transition";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { dur, easeOut, motionOk } from "../motion/curves.svelte";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { barPlace } from "./bar-place";
   import { usage } from "./forecast.svelte";
   import { fmt, HORIZON_MS, type RingAccount } from "./rings";

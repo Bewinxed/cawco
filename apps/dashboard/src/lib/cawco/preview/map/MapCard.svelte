@@ -29,7 +29,7 @@
    * no canvas to draw, so it can't be chosen.
    */
   import { FORMS } from "@cawco/core/stage";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { cn } from "#lib/utils.js";
   import MapThumb from "./MapThumb.svelte";
 

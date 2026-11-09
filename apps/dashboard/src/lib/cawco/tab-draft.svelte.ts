@@ -12,7 +12,7 @@
  */
 
 import type { z } from "zod";
-import { readJson, writeJson } from "./storage";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 
 export class TabDraft<S extends z.ZodObject> {
   /** The surface's held state; change it in place, and it is kept. */

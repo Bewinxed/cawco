@@ -12,16 +12,16 @@
    */
   import { todoGroups } from "@cawco/core/plan";
   import { tick } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import type { Todo } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
   import { page } from "$app/state";
-  import { dur, motionOk } from "../motion/curves.svelte";
-  import { scrollMotion } from "../motion/keyed.svelte";
 
   let {
     todos,
