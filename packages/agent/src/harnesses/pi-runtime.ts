@@ -1,4 +1,5 @@
 /** Host-only pi turns. This module is absent from the agent process graph. */
+
 import { readFile } from "node:fs/promises";
 import { atProviderLimit } from "@cawco/core/accounts";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
@@ -31,6 +32,7 @@ import type {
   SupportedCommands,
 } from "@cawco/core/session-messages";
 import { MESSAGES_READ, usageByModel } from "@cawco/core/session-messages";
+import { withPastedText } from "@cawco/core/transcript-rules";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import {
   judgeCall,
@@ -1307,17 +1309,11 @@ class PiSession implements HarnessSession {
       data: image.data,
       mimeType: image.mediaType,
     }));
-    const attachments = (extras.attachments ?? [])
-      .map(
-        (a) =>
-          `\n\n<pasted-text name="${a.name}">\n${a.content}\n</pasted-text>`
-      )
-      .join("");
     this.#unread.push(message.uuid);
     this.#setBusy(true);
     const streaming = this.#session.isStreaming;
     this.#session
-      .prompt(text + attachments, {
+      .prompt(withPastedText(text, extras.attachments ?? []), {
         images: images as never,
         ...(streaming ? { streamingBehavior: "steer" as const } : {}),
       })

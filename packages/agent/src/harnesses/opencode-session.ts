@@ -22,6 +22,7 @@
  * before the prompt that needs them (`POST …/model`, `…/agent`, and the whole
  * permission ruleset by `PATCH`, which replaces it, settled #9).
  */
+
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -91,6 +92,7 @@ import {
   usageByModel,
 } from "@cawco/core/session-messages";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
+import { withPastedText } from "@cawco/core/transcript-rules";
 import { unhandled } from "@cawco/core/unhandled";
 import { pricedRequest } from "@cawco/core/usage/pricing";
 import { configurePage } from "@cawco/core/words/configure";
@@ -2892,9 +2894,7 @@ export class OpencodeSession implements HarnessSession {
             )
             .map((block) => block.text)
             .join("\n");
-    for (const attachment of extras.attachments ?? []) {
-      text += `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`;
-    }
+    text = withPastedText(text, extras.attachments ?? []);
     const files = (extras.images ?? []).map((image) => ({
       uri: `data:${image.mediaType};base64,${image.data}`,
       name: "image",
