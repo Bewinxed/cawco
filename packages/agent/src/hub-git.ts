@@ -27,7 +27,7 @@
  *   `git fetch`/`git push` all run inside the boundary, so all take this
  *   one path.
  *
- * A workspace holds no credential of any host (boundary.ts: the home dir's
+ * A workspace holds no credential of any host (boundary/: the home dir's
  * stores are hidden, no key agent is reached, no command gets a forge's
  * token), so every remote across the network is
  * reached the same way, whatever its host or transport: the clone's own
@@ -110,9 +110,9 @@ export const gitDoorOf = (id: string): string =>
 /**
  * A workspace's read-only bin, first on its commands' PATH: its
  * `git-remote-cawco` and `cawco-ssh`, the `git` that judges a move of the
- * worktree (worktree-guard.ts `gitShim`), `cawco-chromium` (boundary.ts
+ * worktree (worktree-guard.ts `gitShim`), `cawco-chromium` (boundary/
  * `writeChromiumShim`), and on macOS the boundary's
- * toolchain shims (boundary.ts `writeShims`).
+ * toolchain shims (boundary/shims.ts `writeShims`).
  */
 export const gitHelperDirOf = (id: string): string =>
   join(workspaceReadOnlyDir(id), "bin");
@@ -971,7 +971,7 @@ const DOOR_LFS: [string, string][] = [["lfs.locksverify", "false"]];
  * person's git and ssh give it (osxkeychain, libsecret, a forge CLI's helper,
  * their ssh keys and agent), with {@link DOOR_LFS}, env-only as
  * {@link hubGitEnv} is. GitHub's https credential is the host's gh where it
- * has one, as inside every workspace (boundary.ts `gitSystemConfig`): gh as
+ * has one, as inside every workspace (boundary/state.ts `gitSystemConfig`): gh as
  * github.com's only helper (`helper =` clears what came before,
  * git-config(1) `credential.helper`), and GitHub's LFS access as that
  * credential makes it (`basic`: sent up front, so no 401 has git-lfs write
@@ -1677,7 +1677,7 @@ const doors = new Map<string, Server>();
 /**
  * What git's ssh is inside a workspace (`GIT_SSH_COMMAND`, {@link gitDoorEnv}):
  * a refusal that says why. A workspace holds no ssh key and reaches no key
- * agent (boundary.ts), so git over ssh could sign in nowhere; the clone's
+ * agent (boundary/), so git over ssh could sign in nowhere; the clone's
  * own origin, over ssh too, goes through the door ({@link doorTarget}).
  */
 const SSH_REFUSAL = `#!${systemProgram("sh")}
@@ -1722,7 +1722,7 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
 
 /**
  * Stops serving workspace `id`'s git door. The dir it is in goes once the
- * workspace's judges are gone too (boundary.ts `closeBoundary`).
+ * workspace's judges are gone too (boundary/lifecycle.ts `closeBoundary`).
  */
 export const closeGitDoor = async (id: string): Promise<void> => {
   const server = doors.get(id);

@@ -1,6 +1,6 @@
 /**
  * A workspace's real executor and runner as this build writes them (agent
- * boundary.ts `executorUnsandboxed`), stood on the host with no sandbox
+ * boundary/runner.ts `executorUnsandboxed`), stood on the host with no sandbox
  * around them: every command goes in through the executor, its environment
  * built as a boundary's is (`commandEnv`), and runs through the runner. The
  * git-door spec's workspace legs (workspace-gh.ts, workspace-git-quiet.ts)
@@ -28,7 +28,7 @@ export const standExecutor = async (
   leg: string,
   at: { clone: string; id: string; root: string }
 ): Promise<StoodExecutor | undefined> => {
-  const boundary = await import("../../packages/agent/src/boundary");
+  const boundary = await import("../../packages/agent/src/boundary/runner");
   const stand = (
     boundary as unknown as {
       executorUnsandboxed?: (
@@ -49,7 +49,7 @@ export const standExecutor = async (
     kit.check(
       `(${leg}) a workspace's executor runs on the host for this leg`,
       false,
-      "this build's boundary.ts exports no executorUnsandboxed"
+      "this build's boundary/runner.ts exports no executorUnsandboxed"
     );
     return;
   }
