@@ -87,12 +87,10 @@
   import { browser } from "$app/env";
   import { stopWords } from "../accounts/switch.svelte";
   import {
-    cawco,
     faultMessage,
     readOlderPage,
     readTranscript,
     reconnectingNow,
-    type SessionState,
   } from "../client.svelte";
   import { devNote } from "../dev-debug";
   import EmptyAsk from "../EmptyAsk.svelte";
@@ -102,6 +100,7 @@
   import { noteChange, repeatedKey, reportRepeat } from "../repeated-keys";
   import { provideSessionHere } from "../session-here";
   import { boardStore } from "../stores/board.svelte";
+  import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
   import type { Message } from "../types";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";
@@ -3314,7 +3313,7 @@
    * store's read lands, and a page put in front of it would go with it.
    */
   function paged(): SessionState | null {
-    const store = cawco.session(session.instanceId);
+    const store = sessionsStore.session(session.instanceId);
     return store === session ? store : null;
   }
 
@@ -4126,7 +4125,7 @@
     // server's stand-in for it (see `SessionPane`): the store's session takes
     // their place the moment its read is in, with the turn in flight on the
     // end. Drawn first, they would be moved under the reader.
-    const store = cawco.session(session.instanceId);
+    const store = sessionsStore.session(session.instanceId);
 
     const reading =
       session.loading || (store !== null && store !== session && store.loading);
@@ -5113,7 +5112,7 @@
    */
   const behind = $derived(
     renderedRows.length > 0
-      ? (cawco.session(session.instanceId)?.behind ?? null)
+      ? (sessionsStore.session(session.instanceId)?.behind ?? null)
       : null
   );
 </script>

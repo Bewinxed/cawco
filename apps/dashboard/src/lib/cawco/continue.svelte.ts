@@ -20,9 +20,10 @@ import type { ContinuationJob } from "@cawco/core/protocol";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
 import { hubJson, hubSend } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
-import { cawco, type SendExtras } from "./client.svelte";
+import type { SendExtras } from "./client.svelte";
 import { spawning } from "./spawn/new-session.svelte";
 import { boardStore } from "./stores/board.svelte";
+import { sessionsStore } from "./stores/sessions.svelte";
 import { contextOf } from "./workspace/workspace.svelte";
 
 /** The session a continuation starts from, as the form shows and sends it. */
@@ -139,7 +140,7 @@ export function continueSourceOf(
   sessionId: string,
   title: string
 ): ContinueSource | null {
-  const session = cawco.session(sessionId);
+  const session = sessionsStore.session(sessionId);
   const row = boardStore.instanceIndex.byId.get(sessionId);
   const context = contextOf(sessionId);
   const machineId = session?.machineId || row?.machineId || context?.machine;
