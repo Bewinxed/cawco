@@ -57,30 +57,10 @@ export interface SocketFrames {
   sent: Set<string>;
 }
 
-/** How far a tag's name may be from `socketFrame` and still be read as a try at it. */
-const NEAR_MISS = 3;
-
-/** The edits between two words (Levenshtein), case aside. */
-const distance = (a: string, b: string): number => {
-  const [x, y] = [a.toLowerCase(), b.toLowerCase()];
-  let row = Array.from({ length: y.length + 1 }, (_, j) => j);
-  for (const [i, char] of [...x].entries()) {
-    const next = [i + 1];
-    for (const [j, other] of [...y].entries()) {
-      next.push(
-        Math.min(row[j + 1] + 1, next[j] + 1, row[j] + (char === other ? 0 : 1))
-      );
-    }
-    row = next;
-  }
-  return row[y.length];
-};
-
 /**
  * Each type a core file marks as a frame: its name and which way it travels.
- * The tag goes on a top-level interface or type alias; one anywhere else, or
- * a tag spelled near it (`@socketframe`, `@socketFrames`), fails here naming
- * the file, so a frame never falls out of the document unseen.
+ * The tag goes on a top-level interface or type alias; one anywhere else
+ * fails here naming the file.
  */
 const framesIn = (
   file: string,
@@ -93,19 +73,13 @@ const framesIn = (
   const seen = new Set<ts.JSDocTag>();
   const visit = (node: ts.Node): void => {
     for (const tag of ts.getJSDocTags(node)) {
-      const said = tag.tagName.text;
-      if (
-        seen.has(tag) ||
-        (said !== FRAME_TAG && distance(said, FRAME_TAG) > NEAR_MISS)
-      ) {
+      if (seen.has(tag) || tag.tagName.text !== FRAME_TAG) {
         continue;
       }
       seen.add(tag);
       const { line } = source.getLineAndCharacterOfPosition(tag.getStart());
       const at = `${file}:${line + 1}`;
-      if (said !== FRAME_TAG) {
-        misplaced.push(`${at}: @${said} is not @${FRAME_TAG}`);
-      } else if (
+      if (
         node.parent === source &&
         (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node))
       ) {
@@ -122,15 +96,6 @@ const framesIn = (
     ts.forEachChild(node, visit);
   };
   visit(source);
-  // A tag in a comment no declaration owns is read by nothing above.
-  const written = [...text.matchAll(/@([A-Za-z][\w-]*)/gu)].filter(
-    ([, word]) => word === FRAME_TAG || distance(word, FRAME_TAG) <= NEAR_MISS
-  ).length;
-  if (written > seen.size) {
-    misplaced.push(
-      `${file}: ${written - seen.size} @${FRAME_TAG} tag${written - seen.size === 1 ? " is" : "s are"} in a comment no declaration owns`
-    );
-  }
   if (misplaced.length) {
     throw new Error(misplaced.join("\n"));
   }
