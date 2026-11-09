@@ -23,7 +23,7 @@ export interface HarnessTraits {
   readonly accountModel: "dir" | "provider";
   /** A model id on it may be bare, one unique among its providers' rows, and is read to its full id off the harness's report. */
   readonly bareModelIds: boolean;
-  /** After a compaction's boundary the session may still report the compaction failed (hub server.ts `compactionFailedAfterBoundary`). */
+  /** After a compaction's boundary the session may still report the compaction failed (hub compaction.ts `compactionFailedAfterBoundary`). */
   readonly boundaryBeforeCompactionFailure: boolean;
   /**
    * Whether a stored conversation missing from the machine's catalog is

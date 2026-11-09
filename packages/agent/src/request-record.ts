@@ -3,7 +3,7 @@
  * or `fs` envelope's `requestId`), and its answer once it has one: what
  * makes the hub's word "sent again under the same id" safe. A link that
  * drops mid-request no longer fails it: the hub holds it and sends it again
- * on this machine's next register (hub server.ts `resendHeld`). Here an id
+ * on this machine's next register (hub machine-calls.ts `resendHeld`). Here an id
  * seen before is never run again: one with its answer kept is answered with
  * it, one still running answers when it ends (through whatever socket is up
  * then), and one this agent's last process was running when it ended is
