@@ -19,8 +19,9 @@
   import { IconKey, IconRefresh } from "#lib/icons.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import AccountName from "../accounts/AccountName.svelte";
-  import { cawco } from "../client.svelte";
+
   import OpenCodeLogo from "../OpenCodeLogo.svelte";
+  import { projectsStore } from "../stores/projects.svelte";
   import { usageStore } from "../stores/usage.svelte";
   import { claudeGap, extraUsageLine, money } from "../usage";
   import Figure from "./Figure.svelte";
@@ -96,7 +97,7 @@
   const titleOf = (row: InstanceRow) =>
     row.title ?? row.derivedTitle ?? "untitled session";
   const projectOf = (row: InstanceRow) =>
-    row.projectId ? (cawco.project(row.projectId)?.name ?? null) : null;
+    row.projectId ? (projectsStore.project(row.projectId)?.name ?? null) : null;
   const tokens = (row: InstanceRow) => {
     const count = row.keepAlive?.contextTokens;
     return count ? `${Math.round(count / 1000)}k` : "";
