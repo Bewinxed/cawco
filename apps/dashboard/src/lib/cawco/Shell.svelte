@@ -18,6 +18,7 @@
   import { onMount, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
+  import { clampRail, RAIL_MAX, RAIL_MIN } from "#lib/cawco/rail.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
@@ -40,7 +41,7 @@
   import { landKey } from "#lib/platform/motion/keyed.svelte.js";
   import { pageIn, pageOut, route } from "#lib/platform/motion/route.svelte.js";
   import { hold } from "#lib/platform/page-marks.js";
-  import { keepPrefs } from "#lib/platform/prefs.js";
+  import { keepPrefs, NARROW_PREF, RAIL_PREF } from "#lib/platform/prefs.js";
   import { store, stored } from "#lib/platform/storage.js";
   import { floor } from "#lib/platform/visible-viewport.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -98,12 +99,6 @@
     },
   });
 
-  const RAIL_KEY = "cawco-rail-width";
-  const RAIL_MIN = 216;
-  const RAIL_MAX = 520;
-  const clamp = (px: number) =>
-    Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px)));
-
   /**
    * The default width is the `c-sidebar-w` token (DESIGN.md: "228px by
    * default, the reader's own width wins"); the stylesheet draws it, and this
@@ -128,7 +123,9 @@
 
   // Seeded once from the server's reading; dragging owns it after that.
   let railWidth = $state<number | null>(
-    untrack(() => (initialRailWidth === null ? null : clamp(initialRailWidth)))
+    untrack(() =>
+      initialRailWidth === null ? null : clampRail(initialRailWidth)
+    )
   );
   /**
    * The width the first paint draws, the server's: the rail's
@@ -169,7 +166,7 @@
    * drag handle and the cookie and localStorage never disagree.
    */
   onMount(() => {
-    const kept = Number(stored("local", RAIL_KEY));
+    const kept = Number(stored("local", RAIL_PREF));
     const own = Number.isFinite(kept) && kept > 0 ? kept : railWidth;
     if (own === null) {
       // No width of the reader's: the token's stands, and is not stored as theirs.
@@ -192,7 +189,7 @@
    * release on conversation-frames: 1,794 elements, 105ms at 4x).
    */
   function showRail(px: number) {
-    railWidth = clamp(px);
+    railWidth = clampRail(px);
     if (railBox) {
       railBox.style.width = `${railWidth}px`;
       railBox.style.flexBasis = `${railWidth}px`;
@@ -211,9 +208,9 @@
    * not while it is changing.
    */
   function rememberRail() {
-    store("local", RAIL_KEY, String(railWidth));
+    store("local", RAIL_PREF, String(railWidth));
     // +layout.server.ts renders the first paint at this width (prefs.ts).
-    keepPrefs({ "cawco-rail-width": String(railWidth) });
+    keepPrefs({ [RAIL_PREF]: String(railWidth) });
   }
 
   /** Both, for the callers that change the width one step at a time. */
@@ -258,7 +255,7 @@
     let latest = drawnWidth();
     const paint = () => {
       frame = 0;
-      latest = clamp(latest);
+      latest = clampRail(latest);
       rail.style.width = `${latest}px`;
       rail.style.flexBasis = `${latest}px`;
     };
@@ -772,7 +769,7 @@
     if (firstRender.held) {
       return;
     }
-    keepPrefs({ "cawco-narrow": narrow ? "1" : "0" });
+    keepPrefs({ [NARROW_PREF]: narrow ? "1" : "0" });
   });
   /** The groups whose tabs the bar carries, once the session has shown, on any route: those along the workspace's top edge. */
   const barLeaves = $derived(surfaceMounted && !narrow ? gridView.tops : []);
