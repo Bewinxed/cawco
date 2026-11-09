@@ -3,8 +3,8 @@
  * comment_read and artifact_list on 2026-11-05, cut to the fields the panel
  * draws. The pins are the owner's five on the decision page title-bars-close,
  * each thread as it stands (long replies cut at
- * a sentence), each named as the overlay now names a spot (agent
- * spot-name.ts: "Search comments field"), where the hub kept the old
+ * a sentence), each named as the overlay now names a spot (preview
+ * overlay/spot-name.ts: "Search comments field"), where the hub kept the old
  * component-and-text names. The artifacts are the session's, newest first, each with
  * the title the hub gave it (a decision page's own program title).
  */
