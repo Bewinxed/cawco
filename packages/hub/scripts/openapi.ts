@@ -12,7 +12,8 @@
  *   return. `@elysia/openapi`'s own `fromTypes` reads emitted declarations,
  *   where Elysia 2 keeps only the last route's response, so the checker is
  *   asked directly.
- * - the dashboard socket's frames: core's frame types.
+ * - the dashboard socket's frames: core's types marked `@socketFrame`
+ *   (wire-compat.ts `socketFrames`).
  *
  * Responses and frames go through one typescript-json-schema generator, so a
  * type both use (an `InstanceRow`, a `NeutralMessage`) is one component.
@@ -45,11 +46,10 @@ import {
   BRIDGES,
   type DeclaredBridge,
   declares,
-  FRAMES,
   GENERATOR_CONFIG,
   openEnumNames,
-  SENT,
   type SentBridge,
+  socketFrames,
   wireBreaks,
   wireProtocolAt,
   withoutBridge,
@@ -68,7 +68,6 @@ if (gate?.fresh) {
 }
 
 const HUB = resolve(import.meta.dir, "..");
-const CORE = resolve(HUB, "../core/src");
 const OUT = resolve(HUB, "../..", APP_SCHEMA);
 
 const scratch = mkdtempSync(join(tmpdir(), "cawco-openapi-"));
@@ -191,8 +190,8 @@ const config = ts.getParsedCommandLineOfConfigFile(
 if (!config) {
   throw new Error("packages/hub/tsconfig.json did not parse");
 }
-const frameFiles = Object.keys(FRAMES).map((file) => join(CORE, file));
-const program = ts.createProgram([routesFile, ...frameFiles], {
+const socket = socketFrames();
+const program = ts.createProgram([routesFile, ...socket.files], {
   ...config.options,
   composite: false,
   declaration: false,
@@ -232,18 +231,31 @@ const generator = TJS.buildGenerator(
     constAsEnum: true,
     ignoreErrors: true,
   },
-  [routesFile, ...frameFiles]
+  [routesFile, ...socket.files]
 );
 if (!generator) {
   throw new Error("typescript-json-schema could not read the program");
 }
 order.readThrough(generator);
+// The generator reads a frame by its name, taking the first type the program
+// declares under it outside node_modules: that must be the one core marks.
+for (const [name, file] of socket.declaredIn) {
+  const named = generator
+    .getSymbols(name)
+    .map(({ symbol }) => symbol.declarations?.[0]?.getSourceFile().fileName)
+    .find((path) => path !== undefined && !path.includes("/node_modules/"));
+  if (named !== file) {
+    throw new Error(
+      `${name} is marked @socketFrame in ${file}, but the generator reads the ${name} in ${named}: give one of them another name`
+    );
+  }
+}
 // The generator reports every property initializer it reads; none is news.
 const { warn } = console;
 console.warn = () => undefined;
 const { definitions = {} } = generator.getSchemaForSymbols([
   ...ids,
-  ...Object.values(FRAMES).flat(),
+  ...socket.frames,
 ]) as { definitions?: Record<string, Schema> };
 console.warn = warn;
 
@@ -656,7 +668,7 @@ for (const item of Object.values(paths)) {
 
 // Only what a path or a frame reaches: a type the converter met on the way
 // (a `Response`'s internals) is not part of the contract.
-const reached = new Set<string>(Object.values(FRAMES).flat());
+const reached = new Set<string>(socket.frames);
 const visit = (value: unknown): void => {
   if (typeof value === "string" && value.startsWith(COMPONENT)) {
     const name = value.slice(COMPONENT.length);
@@ -671,7 +683,7 @@ const visit = (value: unknown): void => {
   }
 };
 visit(paths);
-for (const name of Object.values(FRAMES).flat()) {
+for (const name of socket.frames) {
   visit(components[name]);
 }
 for (const name of Object.keys(components)) {
@@ -701,7 +713,7 @@ if (untyped.length) {
  * closed there: the generator picks branches by which ones decode, so an open
  * one would match them all.
  * What the app only sends (request bodies, parameters, its own socket
- * messages, wire-compat.ts `SENT`) stays as the generator writes it.
+ * messages, `@socketFrame toHub` in core) stays as the generator writes it.
  */
 const isStringEnum = (
   value: unknown
@@ -737,8 +749,8 @@ for (const item of Object.values(paths)) {
     receive((op as Operation).responses);
   }
 }
-for (const name of Object.values(FRAMES).flat()) {
-  if (!SENT.has(name)) {
+for (const name of socket.frames) {
+  if (!socket.sent.has(name)) {
     receive(`${COMPONENT}${name}`);
   }
 }
@@ -1327,8 +1339,8 @@ const readers = bases.map((base) => {
     .record(z.string(), z.unknown())
     .parse(JSON.parse(atBase(APP_SCHEMA)));
   const roots = {
-    frames: Object.values(FRAMES).flat(),
-    sent: SENT,
+    frames: socket.frames,
+    sent: socket.sent,
     openBefore: openEnumNames(atBase(GENERATOR_CONFIG)),
   };
   return {
