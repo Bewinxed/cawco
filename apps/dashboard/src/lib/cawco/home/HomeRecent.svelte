@@ -31,12 +31,13 @@
   import { store, stored } from "#lib/platform/storage.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { cawco, loadCatalog } from "../client.svelte";
+
   import { type BoardRow, conversationHref } from "../links";
   import { runningWords } from "../older";
   import RowFault from "../RowFault.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import { catalogStore, loadCatalog } from "../stores/catalog.svelte";
   import { workspace } from "../workspace/workspace.svelte";
   import {
     clock,
@@ -111,7 +112,7 @@
   /** Each machine whose last listing left a harness out, with the sentences for it. */
   const leftOut = $derived(
     (sayer ? boardStore.machines : []).flatMap((machine) => {
-      const said = cawco.catalogLeftOutOf(machine.machineId);
+      const said = catalogStore.catalogLeftOutOf(machine.machineId);
       return said.length > 0
         ? [{ machineId: machine.machineId, words: said.join(" ") }]
         : [];

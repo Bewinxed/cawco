@@ -98,9 +98,7 @@
   import { track } from "#lib/platform/track.js";
   import { goto } from "$app/navigation";
   import {
-    answeredOr,
     cawco,
-    didntAnswer,
     type ForkSource,
     forkSession,
     machineFs,
@@ -118,6 +116,7 @@
   import type { DraftContent } from "../draft-store";
   import { EFFORT_OPTIONS } from "../effort-levels";
   import { inspectMachine } from "../fleet";
+  import { answeredOr, didntAnswer } from "../hub/control";
   import { connectionStore } from "../hub/socket.svelte";
   import { conversationHref } from "../links";
   import MachineAway from "../MachineAway.svelte";

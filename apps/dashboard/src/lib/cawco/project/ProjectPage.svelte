@@ -94,6 +94,7 @@
   import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
   import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import BulkBar from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
@@ -614,14 +615,14 @@
   let revealsSeen: { count: number | undefined; id: string } | null = null;
   $effect(() => {
     const id = lead.conversationId;
-    const count = id ? cawco.previewRequests[id] : undefined;
+    const count = id ? previewsStore.previewRequests[id] : undefined;
     untrack(() => {
       const seen = revealsSeen;
       revealsSeen = id ? { id, count } : null;
       if (!(id && seen?.id === id && count !== seen.count)) {
         return;
       }
-      const frame = cawco.previews[id];
+      const frame = previewsStore.previews[id];
       if (!(
         frame?.state === "open" &&
         frame.project === projectId &&
