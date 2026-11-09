@@ -58,7 +58,6 @@
     UNKNOWN_LABEL,
   } from "./activity";
   import ContextMeter from "./ContextMeter.svelte";
-  import { submitCommand } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { answeredOr } from "./hub/control";
   import { conversationHref } from "./links";
@@ -85,6 +84,7 @@
     isStale,
   } from "./stores/board.svelte";
   import { takeOverBrowser } from "./stores/browsers.svelte";
+  import { submitCommand } from "./stores/commands.svelte";
   import { plansStore } from "./stores/plans.svelte";
   import { refreshContext, showContext } from "./stores/session-detail.svelte";
   import {

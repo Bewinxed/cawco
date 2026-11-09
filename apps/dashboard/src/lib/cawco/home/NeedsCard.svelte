@@ -115,7 +115,6 @@
   import { isTyping } from "#lib/utils/typing.js";
   import { goto } from "$app/navigation";
   import CopyBox from "../CopyBox.svelte";
-  import { answerFor, submitCommand } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
   import { conversationHref, rowHref } from "../links";
@@ -135,6 +134,7 @@
   } from "../stores/asks.svelte";
   import { boardStore } from "../stores/board.svelte";
   import { takeOverBrowser } from "../stores/browsers.svelte";
+  import { answerFor, submitCommand } from "../stores/commands.svelte";
   import { decideAction } from "../stores/needs.svelte";
   import { relayStore } from "../stores/relay.svelte";
   import { capLine } from "../usage";

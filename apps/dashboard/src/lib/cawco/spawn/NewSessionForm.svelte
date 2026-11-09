@@ -97,7 +97,6 @@
   } from "#lib/platform/storage.js";
   import { track } from "#lib/platform/track.js";
   import { goto } from "$app/navigation";
-  import { type ForkSource, forkSession, spawnSession } from "../client.svelte";
   import Choice from "../config/Choice.svelte";
   import {
     type ContinueSource,
@@ -134,6 +133,11 @@
   import { boardStore } from "../stores/board.svelte";
   import { machineFs } from "../stores/machines";
   import { projectAtFolder, projectsStore } from "../stores/projects.svelte";
+  import {
+    type ForkSource,
+    forkSession,
+    spawnSession,
+  } from "../stores/session-start.svelte";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
