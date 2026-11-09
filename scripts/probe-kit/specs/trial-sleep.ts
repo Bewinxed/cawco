@@ -64,7 +64,7 @@ const NETWORK_BACK_MS = 8000;
 /** The longest one verification is waited on. */
 const VERIFY_WAIT_MS = 200_000;
 
-/** What a machine's SSH door answers when the hub does not answer behind it: the hub's silence (core binary-health.ts). */
+/** What a machine's SSH door answers when the hub does not answer behind it: the hub's silence (cli binary-health.ts). */
 const DOOR_UNREACHABLE = 502;
 
 /** One trial on a hub of its own: its verdict, the trial as the helper left it, and what the helper said. */
