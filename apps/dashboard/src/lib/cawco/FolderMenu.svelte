@@ -20,11 +20,11 @@
     IconSessionAdd,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import type { ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { HUES } from "./identity";
   import { askEnd, endAtRail, endHost } from "./project-end.svelte";
   import { rail } from "./rail.svelte";
+  import type { ProjectRow } from "./stores/projects.svelte";
 
   interface Props {
     children: Snippet;

@@ -7,8 +7,8 @@
      and the page left behind takes nothing back, so every route says its
      own. -->
 <script lang="ts">
-  import { cawco } from "#lib/cawco/client.svelte.js";
   import { sessionName } from "#lib/cawco/home/home-state.svelte.js";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import { page } from "$app/state";
   import { projectOfTab, tabOfPath } from "./tabs";
 
@@ -16,7 +16,7 @@
   const projectId = $derived(projectOfTab(tab));
   const title = $derived(
     projectId
-      ? (cawco.project(projectId)?.name ?? "Project")
+      ? (projectsStore.project(projectId)?.name ?? "Project")
       : sessionName(tab ?? undefined)
   );
 </script>
