@@ -218,8 +218,8 @@ export interface ArtifactsDb {
    * as its parent opens it (artifacts service.ts `promote`), and `held`
    * takes the artifact's: the version's origin, where its address was
    * handed out, answers for the artifact from now on, and the artifact's
-   * own ends with the version's row, which goes next (db index.ts
-   * `onArtifactsGone`). Both repointed in one write, nothing renamed.
+   * own ends with the version's row, which goes next
+   * ({@link artifactEvents} `onArtifactsGone`). Both repointed in one write, nothing renamed.
    */
   readonly handOrigin: (held: string, id: string) => void;
   /** The next version held for artifact `id` (`heldFor`), if one waits. */
@@ -262,7 +262,7 @@ export interface ArtifactsDb {
   /**
    * THE ONE WRITE OF WHAT SERVES AN ARTIFACT: its machine and source set,
    * and, when that moves it to another source key ({@link rowSourceKey}),
-   * the move told once the write is done (db index.ts `onSourceMoved`), so
+   * the move told once the write is done ({@link artifactEvents} `onSourceMoved`), so
    * the preview that serves its origin follows the row (hub
    * preview-service.ts). Undefined when no row has that id.
    */
@@ -313,8 +313,8 @@ export type Deleter = Pick<BunSQLiteDatabase, "delete" | "select">;
  * Every artifact `where` names deleted, and each next version held for one
  * (`heldFor`, which its foreign key cascades): their ids and preview
  * origins, every one, read before the delete, since a cascade returns
- * nothing. The one way an artifact's row goes; db index.ts wraps it
- * (`dropArtifacts`) to tell `onArtifactsGone` of them once the write is
+ * nothing. The one way an artifact's row goes; {@link artifactEvents} wraps
+ * it (`dropArtifacts`) to tell `onArtifactsGone` of them once the write is
  * done.
  */
 const dropArtifactRows = (
