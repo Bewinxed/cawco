@@ -1,13 +1,4 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
-cycle	@cawco/agent	packages/agent/src/boundary/arm.ts	2
-cycle	@cawco/agent	packages/agent/src/boundary/arming.ts	4
-cycle	@cawco/agent	packages/agent/src/boundary/ensure.ts	4
-cycle	@cawco/agent	packages/agent/src/boundary/judge-process.ts	1
-cycle	@cawco/agent	packages/agent/src/boundary/stale-look.ts	4
-cycle	@cawco/agent	packages/agent/src/boundary/staleness.ts	1
-cycle	@cawco/agent	packages/agent/src/boundary/start.ts	4
-cycle	@cawco/agent	packages/agent/src/boundary/stop.ts	1
-cycle	@cawco/agent	packages/agent/src/boundary/watch.ts	2
 cycle	@cawco/agent	packages/agent/src/browser/media-forwarding.ts	1
 cycle	@cawco/agent	packages/agent/src/browser/runtime.ts	1
 cycle	@cawco/agent	packages/agent/src/fleet-harness-set.ts	1

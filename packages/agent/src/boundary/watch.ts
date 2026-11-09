@@ -8,7 +8,6 @@ import { folderSync, ownFolderSync } from "../layer";
 import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { keepStandInsListed } from "../stand-ins";
-import { ensureBoundary } from "./arming";
 import { decided, readDecisions, recordDecision } from "./decisions";
 import { attachedIn, commandsNow } from "./holding";
 import { executors } from "./processes";
@@ -23,6 +22,7 @@ import {
   starting,
 } from "./state";
 import { settleGonePlace, stopBoundary } from "./stop";
+import { ensureAgain } from "./unasked";
 
 /** Each boundary's srt host or Seatbelt runner followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
 const watchedHosts = new Map<string, SessiondClient>();
@@ -466,7 +466,7 @@ const restartUnasked = async (
   console.info(
     `[workspace] ${id}: its boundary ${held.pid} ended unasked while its record stands, so it starts again`
   );
-  const fresh = await ensureBoundary({ id, path: held.path });
+  const fresh = await ensureAgain({ id, path: held.path });
   console.info(
     `[workspace] ${id}: its boundary ${held.pid} is started again as ${fresh.pid}`
   );
