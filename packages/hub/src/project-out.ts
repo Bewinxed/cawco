@@ -7,7 +7,7 @@ import { checkoutOf, type PlaceRow, type ProjectRow } from "./db/projects";
  * A project as the API answers it: its places, and its primary checkout's
  * id (`primaryPlaceId`, null while it has none). A held workspace is no
  * decision of the person's: the session that started its work is told
- * (work-items.ts `heldNotice`). Each place's `held` is null, sent only
+ * (workspaces.ts `heldNotice`). Each place's `held` is null, sent only
  * while installable apps' documents declare it ({@link BridgedHeldPlace}).
  * Each place's `within` is the live projects whose checkout holds it, as a
  * delete with its files reads it (core place-nesting.ts), for its files
