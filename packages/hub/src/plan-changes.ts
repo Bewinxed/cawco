@@ -86,7 +86,7 @@ export interface PlanChangesDeps {
   /**
    * Whether the send under this uuid was never read: still pending, or
    * failed. Asked as a session's conversation is found gone, before its
-   * pending sends are failed (server.ts `settlePending` asks its machine
+   * pending sends are failed (sends.ts `settlePending` asks its machine
    * first), so a pending one counts: it can no longer be read.
    */
   sendUnread: (uuid: string) => boolean;
@@ -259,7 +259,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       const text = message(to, rows);
       if (to.kind === "caw") {
         // Told before the wake goes, so the wake's own send folds none of
-        // them in again (server.ts `tellPlanFirst`); undone if it is refused.
+        // them in again (sends.ts `tellPlanFirst`); undone if it is refused.
         db.closePlanChanges(ids, { at: new Date() });
         const why = await deps.wakeCaw(to.projectId, text);
         if (why !== undefined) {
