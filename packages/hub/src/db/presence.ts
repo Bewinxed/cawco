@@ -1,4 +1,3 @@
-import { singleton, singletonColumn } from "./singleton";
 /** Who is at the hub: presence, push devices and what notifications are owed. */
 
 import { desc, eq, gte, inArray, lt } from "drizzle-orm";
@@ -12,6 +11,7 @@ import {
   presenceSettings,
   pushDevices,
 } from "./schema";
+import { singleton, singletonColumn } from "./singleton";
 
 /** One device's last word on the person, as notifications.ts keeps it. */
 export type PresenceClientRow = typeof presenceClients.$inferSelect;
