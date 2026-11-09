@@ -27,16 +27,16 @@
  */
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  hubRequest,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const TAG = "PROBE-SCRATCH-OUTPUTS";
 const STOPPED_TAG = "PROBE-SCRATCH-OUTPUTS-STOPPED";
@@ -114,12 +114,7 @@ const respond = (request: Seen): Reply => {
 
 type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
 
-interface Started {
-  instanceId: string;
-  workItemId: string;
-  workspaceId: string;
-  workspaceTmp: string;
-}
+type Started = ReturnType<typeof delegateStarted>;
 
 /** The fleet up, a repository in a project, and its parent session running. */
 const setUp = async (
@@ -145,13 +140,11 @@ const setUp = async (
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Scratch outputs",
-        machineId: MACHINE,
-        cwd: src,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Scratch outputs",
+      machineId: MACHINE,
+      cwd: src,
     })
   );
   const parent = await fleet.spawn("claude", "Parent", src, {
@@ -195,11 +188,8 @@ const retired = async (fleet: Fleet, started: Started): Promise<string> => {
     90_000
   ).catch(() => state());
   if (settled !== "archived") {
-    await fleet.api(
-      hubRequest("POST /api/workspaces/:id/archive", {
-        path: { id: started.workspaceId },
-        body: {},
-      })
+    await fleet.api((hub) =>
+      hub.api.workspaces({ id: started.workspaceId }).archive.post({})
     );
   }
   return state();
@@ -248,7 +238,7 @@ const reportPathsHold = async (
 
 /** The scratch dir is gone from the machine. */
 const scratchGone = async (started: Started): Promise<boolean> =>
-  await stat(started.workspaceTmp).then(
+  await stat(started.workspaceTmp ?? "").then(
     () => false,
     () => true
   );
@@ -261,9 +251,9 @@ const finishedLeg = async (
   src: string
 ): Promise<Handed[]> => {
   const { check } = kit;
-  const started = await fleet.api<Started>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Scratch outputs probe",
         prompt: `${TAG}: write your report to $TMPDIR/outputs, then finish.`,
@@ -271,8 +261,8 @@ const finishedLeg = async (
         model: "claude-haiku-4-5",
         cwd: src,
         lands: "none",
-      },
-    })
+      })
+    )
   );
   const assets = `assets/${started.workItemId.slice(0, 8)}`;
   const brief = await until(
@@ -315,7 +305,7 @@ const finishedLeg = async (
   check(
     "its workspace retires, its scratch dir gone",
     state === "archived" && (await scratchGone(started)),
-    `state ${state}, ${started.workspaceTmp} ${(await scratchGone(started)) ? "gone" : "still there"}`
+    `state ${state}, ${started.workspaceTmp ?? ""} ${(await scratchGone(started)) ? "gone" : "still there"}`
   );
   const handed = [
     { by: "the finished leaf", path: `${assets}/x.md`, token: X },
@@ -332,9 +322,9 @@ const stoppedLeg = async (
   parent: string,
   src: string
 ): Promise<Handed[]> => {
-  const started = await fleet.api<Started>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Stopped outputs probe",
         prompt: `${STOPPED_TAG}: write an output, then keep working.`,
@@ -342,14 +332,14 @@ const stoppedLeg = async (
         model: "claude-haiku-4-5",
         cwd: src,
         lands: "none",
-      },
-    })
+      })
+    )
   );
   const assets = `assets/${started.workItemId.slice(0, 8)}`;
   await until(
     "the stopped leaf wrote its output",
     () =>
-      stat(join(started.workspaceTmp, "outputs", "z.md")).then(
+      stat(join(started.workspaceTmp ?? "", "outputs", "z.md")).then(
         () => true,
         () => false
       ),
@@ -391,9 +381,9 @@ const readerLeg = async (
   src: string,
   handed: readonly Handed[]
 ): Promise<void> => {
-  const started = await fleet.api<Started>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Outputs reader probe",
         prompt: `${READER_TAG}: keep working.`,
@@ -401,8 +391,8 @@ const readerLeg = async (
         model: "claude-haiku-4-5",
         cwd: src,
         lands: "none",
-      },
-    })
+      })
+    )
   );
   const credential = await until(
     "the reader's session credential",

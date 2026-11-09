@@ -32,9 +32,9 @@
 import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { delay } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const OTHER = "late-answer-other";
@@ -71,17 +71,13 @@ export default {
     const mark = await fleet.logMark("hub");
     signal(pid, "SIGSTOP");
     const asked = Date.now();
-    const answer = await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("POST /api/agents/:machineId/inspect", {
-        path: { machineId: OTHER },
-        body: {},
-      })
-    ).then(async (response) => ({
-      status: response.status,
-      said: (await response.text()).slice(0, 300),
-    }));
+    const answer = await hubAt(fleet.base)
+      .api.agents({ machineId: OTHER })
+      .inspect.post({})
+      .then(async (response) => ({
+        status: response.status,
+        said: answerText(response).slice(0, 300),
+      }));
     const failedAfter = Date.now() - asked;
     signal(pid, "SIGCONT");
     // The thawed agent reads the ask and answers it, late.
@@ -112,17 +108,13 @@ export default {
     const before = await fleet.logMark("hub");
     signal(pid, "SIGSTOP");
     const from = Date.now();
-    const read = fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("GET /api/agents/:machineId/media", {
-        path: { machineId: OTHER },
-        query: { path: picture },
-      })
-    ).then(async (response) => ({
-      status: response.status,
-      size: (await response.arrayBuffer()).byteLength,
-    }));
+    const read = hubAt(fleet.base)
+      .api.agents({ machineId: OTHER })
+      .media.get({ query: { path: picture } })
+      .then(async (response) => ({
+        status: response.status,
+        size: answerText(response).length,
+      }));
     await delay(FREEZE_HUB_AT_MS);
     fleet.freeze("hub", true);
     signal(pid, "SIGCONT");

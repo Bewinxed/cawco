@@ -39,12 +39,10 @@ import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import {
-  type FindAnswer,
   TRANSCRIPT_ANSWER_MS,
   TRANSCRIPT_QUERY_MS,
   type TranscriptAnswer,
 } from "../../../packages/core/src/find";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { LATE_MS } from "../../../packages/core/src/loop-watch";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { searchWords } from "../../../packages/core/src/words/search";
@@ -161,8 +159,8 @@ const sessionsOf = (answer: { result?: unknown }): Set<string> =>
 /** The person's Find through the hub: its answer, and the machine's coverage. */
 const findViaHub = async (fleet: KitFleet, query: string) => {
   const at = performance.now();
-  const answer = await fleet.api<FindAnswer>(
-    hubRequest("GET /api/find", { query: { q: query, limit: "20" } })
+  const answer = await fleet.api((hub) =>
+    hub.api.find.get({ query: { q: query, limit: "20" } })
   );
   return {
     ms: Math.round(performance.now() - at),

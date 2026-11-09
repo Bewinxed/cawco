@@ -68,7 +68,6 @@ import {
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { toolWords } from "../../lib/tool-call";
 import {
@@ -80,6 +79,7 @@ import {
 } from "../../scratch-fleet";
 import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-FOLDER-(A|B|C1|C2|C3|E|F|P)\b/u;
@@ -506,18 +506,18 @@ const run = async (kit: Kit) => {
       600_000
     );
   const delegate = (tag: Tag, cwd: string, from: string) =>
-    fleet.api<{ workItemId: string; text: string }>(
-      hubRequest("POST /api/work-items", {
-        body: {
+    fleet
+      .api((hub) =>
+        hub.api["work-items"].post({
           parentInstanceId: from,
           title: `Folder ${tag}`,
           prompt: `PROBE-FOLDER-${tag}: run your command, then finish.`,
           harness: "claude",
           model: "claude-haiku-4-5",
           cwd,
-        },
-      })
-    );
+        })
+      )
+      .then(delegateStarted);
 
   // The parents' project: a repository of its own; its gate is a's check.
   const anchor = join(fleet.sandbox, "anchor");
@@ -539,13 +539,11 @@ const run = async (kit: Kit) => {
     `grep -q 'listen 8080;' ${linux ? join(site, "site.conf") : "site.conf"} && echo CONF-OK || { echo CONF-BAD; exit 1; }\n`
   );
   const gateStep = linux ? `sh ${join(site, "check.sh")}` : "sh check.sh";
-  const anchorProject = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Folders",
-        machineId: MACHINE,
-        cwd: anchor,
-      },
+  const anchorProject = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Folders",
+      machineId: MACHINE,
+      cwd: anchor,
     })
   );
   await declareGate(fleet.base, anchorProject.id, `---\n${gateStep}\n---\n`);
@@ -648,17 +646,17 @@ const piLeg = async (
     join(folder, "check.sh"),
     `grep -q '${PI_TEXT}' ${PI_FILE} && echo PI-OK || { echo PI-BAD; exit 1; }\n`
   );
-  const started = await fleet.api<{ workItemId: string; workspaceId: string }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Folder P",
         prompt: "PROBE-FOLDER-P: write your file, read it, then finish.",
         harness: "pi",
         model: MODEL.pi,
         cwd: folder,
-      },
-    })
+      })
+    )
   );
   const itemOf = () =>
     fleet.query<ItemRow>(
@@ -725,21 +723,17 @@ const openCodeLeg = async (
     `grep -q '${OC_TEXT}' ${OC_FILE} && echo OC-OK || { echo OC-BAD; exit 1; }\n`
   );
   const credential = await fleet.sessionCredential(parent);
-  const started = await fleet.api<{
-    instanceId: string;
-    workItemId: string;
-    workspaceId: string;
-  }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const started = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: parent,
         title: "Folder F",
         prompt: "PROBE-FOLDER-F: write your file, read it, then finish.",
         harness: "opencode",
         model: MODEL.opencode,
         cwd: folder,
-      },
-    })
+      })
+    )
   );
   const itemOf = () =>
     fleet.query<ItemRow>(
@@ -864,13 +858,11 @@ const repoLegs = async (
     .cwd(repo)
     .env(env)
     .quiet();
-  const repoProject = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Repo",
-        machineId: MACHINE,
-        cwd: repo,
-      },
+  const repoProject = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Repo",
+      machineId: MACHINE,
+      cwd: repo,
     })
   );
   const repoParent = await fleet.spawn("claude", "Parent repo", repo, {

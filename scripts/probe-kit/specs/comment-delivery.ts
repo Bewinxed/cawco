@@ -89,7 +89,6 @@ import {
   type Pin,
 } from "../../../packages/core/src/comments/model";
 import { heldNoteProblem } from "../../../packages/core/src/comments/validate";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/relaunch";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import {
@@ -1314,14 +1313,12 @@ const busyDecisionChecks = async (
   const place = join(fleet.sandbox, "decider-place");
   await mkdir(place, { recursive: true });
   await writeFile(join(place, "README.md"), "The decider's place.\n");
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Busy decider",
-        machineId: MACHINE,
-        cwd: place,
-        caw: false,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Busy decider",
+      machineId: MACHINE,
+      cwd: place,
+      caw: false,
     })
   );
   const decider = await fleet.spawn("claude", "Decider", place, {
@@ -1367,11 +1364,7 @@ const busyDecisionChecks = async (
   const busy = await until(
     "the decider's pulse reads it working",
     async () =>
-      (
-        await fleet.api<Record<string, { busy?: boolean }>>(
-          hubRequest("GET /api/pulses")
-        )
-      )[decider]?.busy === true,
+      (await fleet.api((hub) => hub.api.pulses.get()))[decider]?.busy === true,
     Boolean,
     20_000
   ).catch(() => false);
@@ -1559,14 +1552,12 @@ const endedWriterChecks = async (
   const place = join(fleet.sandbox, "writer-place");
   await mkdir(place, { recursive: true });
   await writeFile(join(place, "README.md"), "The writer's place.\n");
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Ended writer",
-        machineId: MACHINE,
-        cwd: place,
-        caw: true,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Ended writer",
+      machineId: MACHINE,
+      cwd: place,
+      caw: true,
     })
   );
   const writer = await fleet.spawn("claude", "Writer", place, {

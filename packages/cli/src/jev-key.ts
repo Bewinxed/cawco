@@ -12,6 +12,7 @@
 import {
   type HubAnswer,
   type HubClient,
+  type HubData,
   refusalText,
   unwrap,
 } from "@cawco/agent/hub-client";
@@ -33,7 +34,7 @@ const callHub = async <A extends HubAnswer>(
   hub: string,
   request: (client: HubClient) => Promise<A>,
   refused: string
-): Promise<Extract<A, { error: null }>["data"]> =>
+): Promise<HubData<A>> =>
   unwrap(
     await request(
       ownerClient(

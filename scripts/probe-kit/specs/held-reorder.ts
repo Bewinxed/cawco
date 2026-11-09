@@ -52,7 +52,6 @@ import { readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { taskOf, traceMain } from "../frames";
 import { type Kit, type KitFleet, open, readMotion, type Spec } from "../kit";
@@ -428,13 +427,11 @@ async function board(kit: Kit, fleet: KitFleet) {
   for (let n = 0; n < PROJECTS; n += 1) {
     const cwd = join(fleet.sandbox, `project-${n}`);
     await mkdir(cwd, { recursive: true });
-    const made = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: `Project ${String.fromCharCode(65 + n)}`,
-          machineId: MACHINE,
-          cwd,
-        },
+    const made = await fleet.api((hub) =>
+      hub.api.projects.post({
+        name: `Project ${String.fromCharCode(65 + n)}`,
+        machineId: MACHINE,
+        cwd,
       })
     );
     projects.push({ cwd, id: made.id });
