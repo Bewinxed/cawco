@@ -1911,6 +1911,9 @@ const ruleScopeProblem = (
   return undefined;
 };
 
+/** A hook on one machine, as the routes that read or adopt its copy name it. */
+const HOOK_ON_MACHINE = t.Object({ machineId: t.String(), id: t.String() });
+
 const ruleBody = t.Object({
   name: t.String(),
   enabled: t.Boolean(),
@@ -25166,13 +25169,13 @@ export const createServer = (
     return { current, copy: read.copy };
   };
 
-  /** The fleet to push to `machineId`, or what the route answers when that machine is not connected. */
+  /** The fleet to push to `body.machineId`, or what the route answers when that machine is not connected. */
   const pushTarget = <Refused>(
-    machineId: string,
+    body: { machineId: string },
     status: (code: 404, said: string) => Refused
   ) => {
-    if (!registry.agent(machineId)) {
-      return { refused: status(404, machineFault(machineId, "offline")) };
+    if (!registry.agent(body.machineId)) {
+      return { refused: status(404, machineFault(body.machineId, "offline")) };
     }
     return { config: db.fleetConfig() };
   };
@@ -33985,7 +33988,7 @@ export const createServer = (
       // One machine's copy of a hook's script, for the compare beside a drift.
       .post(
         "/api/fleet/hooks/peek",
-        { body: t.Object({ machineId: t.String(), id: t.String() }) },
+        { body: HOOK_ON_MACHINE },
         async ({ body, set, status }) => {
           const read = await hookCopyOff(body, set, status);
           if ("refused" in read) {
@@ -34001,7 +34004,7 @@ export const createServer = (
       // and the machine it came from finds its file already says so.
       .post(
         "/api/fleet/hooks/adopt",
-        { body: t.Object({ machineId: t.String(), id: t.String() }) },
+        { body: HOOK_ON_MACHINE },
         async ({ body, set, status }) => {
           const read = await hookCopyOff(body, set, status);
           if ("refused" in read) {
@@ -34050,7 +34053,7 @@ export const createServer = (
           body: t.Object({ machineId: t.String(), id: t.Optional(t.String()) }),
         },
         async ({ body, set, status }) => {
-          const target = pushTarget(body.machineId, status);
+          const target = pushTarget(body, status);
           if ("refused" in target) {
             return target.refused;
           }
