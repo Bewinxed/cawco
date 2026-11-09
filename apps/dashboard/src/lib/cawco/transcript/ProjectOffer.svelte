@@ -15,9 +15,12 @@
   import { IconClose, IconFolder } from "#lib/icons.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import { goto } from "$app/navigation";
-  import { answerProjectOffer, dismissProjectJoin } from "../client.svelte";
   import { rowHref } from "../links";
   import RowFault from "../RowFault.svelte";
+  import {
+    answerProjectOffer,
+    dismissProjectJoin,
+  } from "../stores/offers.svelte";
 
   let {
     instanceId,
