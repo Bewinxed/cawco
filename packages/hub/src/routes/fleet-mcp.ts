@@ -6,6 +6,7 @@ import { type FleetMcpConfig, MCP_PLATFORMS } from "@cawco/core/fleet";
 import { Elysia, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
+import { boundFields } from "./bound-fields";
 
 /**
  * Why the hub will not store this server, or nothing. The config itself is
@@ -63,13 +64,7 @@ export const fleetMcpRoutes = ({
           // object; `mcpProblem` checks the one field that makes it startable.
           config: t.Record(t.String(), t.Unknown()),
           enabled: t.Optional(t.Boolean()),
-          /**
-           * One project's only: placed at each of its checkouts and
-           * delegate workspaces. Null: every machine. Left out: as it was.
-           */
-          projectId: t.Optional(t.Union([t.String(), t.Null()])),
-          /** Every project in one area instead, as read now. Null: none. Left out: as it was. */
-          areaId: t.Optional(t.Union([t.String(), t.Null()])),
+          ...boundFields,
           /**
            * The machine platforms it runs on (`machine_capabilities.platform`):
            * any other machine is never sent it. Null or empty: every
