@@ -1573,12 +1573,28 @@ function userBody(
 
 /**
  * A file the reader attached, as every harness folds it into the prompt
- * (`\n\n<pasted-text name="…">\n…\n</pasted-text>`, claude.ts / opencode.ts /
- * pi.ts). OpenCode stores it as its own text part, which the stored read joins
+ * (`\n\n<pasted-text name="…">\n…\n</pasted-text>`, {@link withPastedText}).
+ * OpenCode stores it as its own text part, which the stored read joins
  * back on a newline, so any run of newlines before it belongs to it.
  */
 const PASTED_TEXT =
   /\n*<pasted-text name="([^"\n]*)">\n([\s\S]*?)\n<\/pasted-text>/gu;
+
+/**
+ * `typed` with each text the reader attached folded in after it, as every
+ * harness hands it to its model and {@link pastedText} reads it back.
+ */
+export const withPastedText = (
+  typed: string,
+  texts: readonly { content: string; name: string }[]
+): string =>
+  typed +
+  texts
+    .map(
+      ({ name, content }) =>
+        `\n\n<pasted-text name="${name}">\n${content}\n</pasted-text>`
+    )
+    .join("");
 
 /**
  * A user turn split back into what the reader typed and the files they
