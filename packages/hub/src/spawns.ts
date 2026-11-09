@@ -48,7 +48,7 @@ import { WorkItemRefusal } from "./work-items";
 /**
  * What a request to a machine gets when its own deadline passes with the
  * machine away: held for it all that time, and sent again each time it came
- * back (server.ts `resendHeld`), it never answered. A machine that is there
+ * back (machine-calls.ts `resendHeld`), it never answered. A machine that is there
  * at the deadline and silent is unanswered instead. True of a write only: a
  * read runs nothing, and is answered as its machine being away (`asRead`).
  */

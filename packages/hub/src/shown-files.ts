@@ -17,7 +17,7 @@ interface ShownItem {
 }
 
 export interface ShownDeps {
-  /** The workspace a session runs in: its work item's, or a Caw's place; none outside any boundary (server.ts `sessionWorkspace`). */
+  /** The workspace a session runs in: its work item's, or a Caw's place; none outside any boundary (launches.ts `sessionWorkspace`). */
   readonly boundaryOf: (instanceId: string) => string | undefined;
   /** The machine's home dir, as its daemon reported it. */
   readonly home: (machineId: string) => string | undefined;
