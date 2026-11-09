@@ -42,7 +42,7 @@ const keyboardUse = (event: KeyboardEvent): boolean =>
 
 if (typeof window !== "undefined") {
   const options = { capture: true, passive: true } as const;
-  addEventListener(
+  window.addEventListener(
     "keydown",
     (event) => {
       if (keyboardUse(event)) {
@@ -51,7 +51,7 @@ if (typeof window !== "undefined") {
     },
     options
   );
-  addEventListener(
+  window.addEventListener(
     "pointerdown",
     () => {
       lastInput.current = "pointer";
