@@ -38,7 +38,6 @@ import type {
   CommandResult,
 } from "@cawco/core/commands/controls";
 import type {
-  FleetAgent,
   FleetPlugin,
   FleetSkillMeta,
   FleetSyncReport,
@@ -142,7 +141,6 @@ import type {
 import type { OwedMove } from "./db/owed-moves";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
-import type { TrashKind } from "./db/schema";
 import type { SentMessageRow } from "./db/sends";
 import type {
   ContinuationAsker,
@@ -306,13 +304,6 @@ export interface HubContext {
   >["advanceContinuation"];
   advanceMove: (move: LoginMove) => Promise<void>;
   afterPausingCall: (instanceId: string, neutral: NeutralMessage) => void;
-  agentMoved: (
-    name: string,
-    expectedHash: string | undefined
-  ) =>
-    | { answer: FleetAgent; status: 409 }
-    | { answer: string; status: 404 }
-    | undefined;
   agentProtocols: Map<string, { min: number; max: number } | undefined>;
   allowGranted: ReturnType<typeof createRelayControl>["allowGranted"];
   anchors: Map<string, string>;
@@ -1132,7 +1123,6 @@ export interface HubContext {
   ) => void;
   retireSession: (machineId: string, instanceId: string) => void;
   retryFromTray: (item: WorkItemRow) => Promise<string | undefined>;
-  returned: (kind: TrashKind, key: string) => Promise<unknown>;
   rewinds: Map<string, string>;
   ridingReported: (
     machineId: string,
