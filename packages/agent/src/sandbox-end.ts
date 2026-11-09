@@ -2,7 +2,7 @@
  * How a Linux workspace sandbox ends, for certain: its init first, the pid
  * namespace's process 1, then its outer bwrap. Both the srt host
  * (boundary-host.ts: a guard's restart, its own close) and the agent
- * (boundary/lifecycle.ts `stopBoundary`) end one this way, so this file imports
+ * (boundary/stop.ts `stopBoundary`) end one this way, so this file imports
  * nothing of cawco but the signal wall's sending half
  * (`@cawco/core/signal-wall`, which imports nothing): the host loads
  * nothing else of core.
