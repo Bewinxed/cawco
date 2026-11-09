@@ -3,7 +3,7 @@
  * takes it: IndexedDB (idb.ts `sends`), one record per send, under the
  * send's own id, holding what the send carries. A tab reloaded while a send
  * waits for the hub (its socket dropped, or its ack never came) sends it
- * again under that id as it starts (client.svelte.ts `resumeKeptSends`),
+ * again under that id as it starts (stores/commands.svelte.ts `resumeKeptSends`),
  * and the hub, which takes a repeat of an id as the same send, posts it
  * once. A record goes once the hub takes its send; one the hub refused is
  * kept with its words for Try again or Edit, for as long as those stand.
