@@ -290,6 +290,16 @@ export interface HubContext {
     name?: string;
     prompt?: string;
   }) => string | undefined;
+  askedStart: (query: {
+    account?: string;
+    cwd?: string;
+    harness: string;
+    kind?: "yours" | "delegates";
+    machineId: string;
+    model?: string;
+    projectId?: string;
+    type?: string;
+  }) => Promise<NamedSpawn | { refusal: string; status: 400 | 503 }>;
   askerOf: (request: Request) => string;
   askersOf: (row: InstanceRow | undefined) => string[];
   asRead: (answer: Bounded<ControlResult>) => Bounded<ControlResult>;
