@@ -87,9 +87,9 @@ import {
   isPlace,
 } from "@cawco/core/workspace-policy";
 import { z } from "zod";
+import { ensureBoundary } from "./boundary/arming";
 import { stopWorkspaceBoundary, whileBoundaryClosed } from "./boundary/control";
 import { addAccount, addSpill } from "./boundary/decisions";
-import { ensureBoundary } from "./boundary/lifecycle";
 import { setProject } from "./boundary/looks";
 import { ownInodes } from "./boundary/package-managers";
 import { closeBoundary } from "./boundary/stop";
