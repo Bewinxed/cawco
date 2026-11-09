@@ -30,21 +30,25 @@ import type { WorkItemRow } from "./db/project-work";
  * - `offline`: its session's machine is not connected.
  * - `sendComing`: a send on its way to its session is its next turn.
  */
-export type ItemHold =
-  | "held"
-  | "stopping"
-  | "blocked"
-  | "paused"
-  | "custody"
-  | "waiting"
-  | "waitResuming"
-  | "verifying"
-  | "landing"
-  | "completing"
-  | "finishing"
-  | "movedOn"
-  | "offline"
-  | "sendComing";
+const HOLD_ORDER = [
+  "held",
+  "stopping",
+  "blocked",
+  "paused",
+  "custody",
+  "waiting",
+  "waitResuming",
+  "verifying",
+  "landing",
+  "completing",
+  "finishing",
+  "movedOn",
+  "offline",
+  "sendComing",
+] as const;
+
+/** One hold of {@link HOLD_ORDER}: a hold is named there, in its place in the order, or not at all. */
+export type ItemHold = (typeof HOLD_ORDER)[number];
 
 /** The holds read from what the hub knows now rather than from the item's row. */
 type FactHold = Extract<
@@ -93,23 +97,14 @@ const ROW_HOLDS: Record<
     !!item.landingSince && item.landingPhase === "completing",
 };
 
-/** Every hold, in the one order they are read. */
-const HOLD_ORDER: readonly ItemHold[] = [
-  "held",
-  "stopping",
-  "blocked",
-  "paused",
-  "custody",
-  "waiting",
-  "waitResuming",
-  "verifying",
-  "landing",
-  "completing",
-  "finishing",
-  "movedOn",
-  "offline",
-  "sendComing",
-];
+/** Every hold of {@link HOLD_ORDER} but `left`, in that order. */
+export const holdsBut = <T extends ItemHold>(
+  ...left: readonly T[]
+): Exclude<ItemHold, T>[] =>
+  HOLD_ORDER.filter(
+    (hold): hold is Exclude<ItemHold, T> =>
+      !(left as readonly ItemHold[]).includes(hold)
+  );
 
 const isRowHold = (hold: ItemHold): hold is Exclude<ItemHold, FactHold> =>
   hold in ROW_HOLDS;
