@@ -25,7 +25,6 @@ import type {
   FleetAgent,
   FleetPlugin,
   FleetSkillMeta,
-  FleetVersioned,
   MachineHookScript,
   MarketplaceLink,
   MarketplaceRead,
@@ -101,6 +100,8 @@ import type { FleetWatch } from "./fleet-watch";
 import type { HarnessConfigBody } from "./harness-config-body";
 import type { Caller, createHubAuth } from "./hub-auth";
 import type {
+  FetchedCopy,
+  FolderSkillBody,
   Located,
   MachineAway,
   ReportTold,
@@ -408,13 +409,7 @@ export interface HubContext {
     | undefined;
   installFromFolder: <Refused>(
     name: string,
-    body: {
-      contentHash?: string;
-      enabled?: boolean;
-      projectId?: string | null;
-      areaId?: string | null;
-      source: string;
-    },
+    body: FolderSkillBody,
     refuse: (code: 400 | 409, said: string) => Refused
   ) => Promise<FleetSkillMeta | Refused | undefined>;
   installSessionIdentity: (instanceId: string) => Promise<
@@ -535,8 +530,8 @@ export interface HubContext {
   ) => void;
   noteFetch: (
     row: { skill: string } | { plugin: string },
-    before: FleetVersioned & { hash?: string; source?: string },
-    after: FleetVersioned & { hash?: string; source?: string },
+    before: FetchedCopy,
+    after: FetchedCopy,
     error: string | undefined
   ) => boolean;
   notifications: ReturnType<typeof createNotifications>;
