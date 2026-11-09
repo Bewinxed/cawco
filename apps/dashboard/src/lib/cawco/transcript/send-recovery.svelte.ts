@@ -20,6 +20,7 @@ import { signedInHere } from "../accounts/switch.svelte";
 import { cawco } from "../client.svelte";
 import { type BoardRow, conversationHref } from "../links";
 import { permissionModeLabel } from "../permission-modes";
+import { accountsStore } from "../stores/accounts.svelte";
 import { speakerName } from "./speaker";
 
 /** One way back, as a row action draws it. */
@@ -49,7 +50,7 @@ const machineOf = (machineId: string): string => {
 };
 
 const accountOf = (accountId: string): Account | undefined =>
-  cawco.accounts?.accounts.find((one) => one.id === accountId);
+  accountsStore.accounts?.accounts.find((one) => one.id === accountId);
 
 function signedOut(
   refusal: Extract<SendRefusal, { kind: "account-signed-out" }>,
@@ -66,7 +67,7 @@ function signedOut(
       actions: [],
     };
   }
-  const signins = cawco.accounts?.signins ?? [];
+  const signins = accountsStore.accounts?.signins ?? [];
   if (
     signinState(signins, refusal.accountId, refusal.machineId) === "signed-in"
   ) {
