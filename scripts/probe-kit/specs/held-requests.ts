@@ -33,6 +33,7 @@
  */
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   fetchHub,
   type HubRequest,
@@ -71,7 +72,9 @@ const ask = async (fleet: KitFleet, request: HubRequest): Promise<Answered> => {
     ms: Date.now() - asked,
     status: response.status,
     named: response.headers.get("x-cawco-machine"),
-    said: await response.text(),
+    said: response.ok
+      ? await response.text()
+      : refusalWords(await response.text(), response.status),
   };
 };
 
