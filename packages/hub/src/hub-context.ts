@@ -349,7 +349,7 @@ export interface HubContext {
   publishUsage: (machineId?: string) => void;
   pushAgents: (machineId: string) => Promise<void>;
   pushTarget: <Refused>(
-    machineId: string,
+    body: { machineId: string },
     status: (code: 404, said: string) => Refused
   ) => { config: ReturnType<DbShape["fleetConfig"]> } | { refused: Refused };
   readAgent: (
