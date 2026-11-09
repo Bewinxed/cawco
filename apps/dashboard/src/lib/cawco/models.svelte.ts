@@ -7,8 +7,11 @@
  * why ({@link models}`.unread`).
  */
 
-import type { HarnessKind, ModelInfo } from "@cawco/core/harness/kinds";
-import { isEffortLevel } from "@cawco/core/harness/kinds";
+import {
+  type HarnessKind,
+  isEffortLevel,
+  type ModelInfo,
+} from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
@@ -30,6 +33,7 @@ import {
   modelsForHarness,
   typedOffered,
 } from "./model-catalog";
+import { accountsStore } from "./stores/accounts.svelte";
 import { speakerName } from "./transcript/speaker";
 
 /**
@@ -94,7 +98,7 @@ function reported(): HarnessModel[] {
  * chose one; absent until one has.
  */
 function accountRows(): HarnessModel[] {
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   if (!view) {
     return [];
   }
@@ -181,7 +185,7 @@ function unread(harness: string, machineIds?: string[]): string | null {
  * on its way); null with none signed in there.
  */
 function claudeUnread(machineIds: string[]): string[] | null {
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   const accounts = new Set(
     (view?.signins ?? [])
       .filter(
@@ -205,7 +209,7 @@ function claudeUnread(machineIds: string[]): string[] | null {
  * OpenCode or pi.
  */
 function listingOn(harness: HarnessKind, machineId: string): ModelListing {
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   const signedIn = new Set(
     (view?.signins ?? [])
       .filter(
