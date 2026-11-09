@@ -313,7 +313,7 @@ export const fleetMemoryRoutes = ({
       },
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and pushes every field of a memory write in one place; splitting it would scatter the validation order this route depends on.
       async ({ body, set, status }) => {
-        const target = pushTarget(body.machineId, status);
+        const target = pushTarget(body, status);
         if ("refused" in target) {
           return target.refused;
         }
