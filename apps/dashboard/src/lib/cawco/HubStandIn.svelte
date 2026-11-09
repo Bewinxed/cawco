@@ -16,7 +16,9 @@
     get machineOffline() {
       return seam.machineOffline;
     },
-    read: (path) => seam.read(path),
+    get client() {
+      return seam.client;
+    },
   });
 </script>
 
