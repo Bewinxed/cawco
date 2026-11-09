@@ -33,7 +33,13 @@ import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
 import type { Treaty } from "@elysia/eden";
 import { hub } from "#lib/platform/hub.js";
-import { couldNot, couldNotOrAway, hubData } from "#lib/platform/hub-read.js";
+import {
+  couldNot,
+  couldNotOrAway,
+  type HubAsked,
+  hubAsk,
+  hubData,
+} from "#lib/platform/hub-read.js";
 import { machineFs, onFleetFetch } from "./stores/machines";
 
 /**
@@ -718,43 +724,54 @@ export type AgentWrite<T> =
  * in front of them ("" for a new one): a file somebody else moved comes back
  * (a 409) with what is really there, unwritten, as a memory save does.
  */
-export const saveAgent = async (
+export const saveAgent = (
   name: string,
   content: string,
   expectedHash: string
-): Promise<AgentWrite<FleetAgent>> => {
-  const answer = await hub.api.fleet
-    .agents({ name })
-    .put({ content, expectedHash });
-  if (answer.error) {
-    if (answer.error.status === 409 && typeof answer.error.value === "object") {
-      return { ok: false, latest: answer.error.value };
-    }
-    throw couldNot(`save ${name}`, answer);
-  }
-  return { ok: true, done: answer.data };
-};
+): Promise<AgentWrite<FleetAgent>> =>
+  agentWritten(
+    hubAsk(hub.api.fleet.agents({ name }).put({ content, expectedHash })),
+    `save ${name}`
+  );
 
 /**
  * Forgets it here, if it is still the file at `expectedHash`. The file stays
  * on the machines — the `fs` verb has no delete — so discovery lists it as
  * unmanaged until the daemon can take it away itself.
  */
-export const removeAgent = async (
+export const removeAgent = (
   name: string,
   expectedHash: string
-): Promise<AgentWrite<Deleted>> => {
-  const answer = await hub.api.fleet
-    .agents({ name })
-    .delete(undefined, { query: { expectedHash } });
-  if (answer.error) {
-    if (answer.error.status === 409 && typeof answer.error.value === "object") {
-      return { ok: false, latest: answer.error.value };
-    }
-    throw couldNot(`remove ${name}`, answer);
+): Promise<AgentWrite<Deleted>> =>
+  agentWritten(
+    hubAsk(
+      hub.api.fleet
+        .agents({ name })
+        .delete(undefined, { query: { expectedHash } })
+    ),
+    `remove ${name}`
+  );
+
+/** A subagent write as it ended: done, the file the hub has instead (a 409), or its refusal thrown as "Couldn't `attempt`". */
+async function agentWritten<T>(
+  asked: Promise<HubAsked<T, AgentRefusal>>,
+  attempt: string
+): Promise<AgentWrite<T>> {
+  const answer = await asked;
+  if (answer.ok) {
+    return { ok: true, done: answer.value };
   }
-  return { ok: true, done: answer.data };
-};
+  const { error } = answer.refused;
+  if (error.status === 409 && typeof error.value === "object") {
+    return { ok: false, latest: error.value };
+  }
+  throw couldNot(attempt, answer.refused);
+}
+
+/** How the hub refuses a subagent write, as its route types it. */
+type AgentRefusal = Treaty.Error<
+  ReturnType<typeof hub.api.fleet.agents>["put"]
+>;
 
 /** Writes the subagents again, at every machine that is online. */
 export const pushAgents = () =>
@@ -905,14 +922,16 @@ export async function saveMemory(
   content: string,
   expectedHash?: string
 ): Promise<MemorySave> {
-  const answer = await hub.api.fleet.memory.put({ content, expectedHash });
-  if (answer.error) {
-    if (answer.error.status === 409) {
-      return { ok: false, latest: answer.error.value };
+  const answer = await hubAsk(
+    hub.api.fleet.memory.put({ content, expectedHash })
+  );
+  if (!answer.ok) {
+    if (answer.refused.error.status === 409) {
+      return { ok: false, latest: answer.refused.error.value };
     }
-    throw couldNot("save the memory", answer);
+    throw couldNot("save the memory", answer.refused);
   }
-  return { ok: true, memory: answer.data };
+  return { ok: true, memory: answer.value };
 }
 
 /**
@@ -981,19 +1000,21 @@ export async function saveMemoryDoc(
   | { ok: true; doc: FleetMemoryDocRow }
   | { ok: false; latest: FleetMemoryDocRow }
 > {
-  const answer = await hub.api.fleet.memory.docs.put({
-    path,
-    content,
-    expectedHash,
-    scope,
-  });
-  if (answer.error) {
-    if (answer.error.status === 409) {
-      return { ok: false, latest: answer.error.value };
+  const answer = await hubAsk(
+    hub.api.fleet.memory.docs.put({
+      path,
+      content,
+      expectedHash,
+      scope,
+    })
+  );
+  if (!answer.ok) {
+    if (answer.refused.error.status === 409) {
+      return { ok: false, latest: answer.refused.error.value };
     }
-    throw couldNot(`save ${path}`, answer);
+    throw couldNot(`save ${path}`, answer.refused);
   }
-  return { ok: true, doc: answer.data };
+  return { ok: true, doc: answer.value };
 }
 
 /** Drops one document, and with it the copy on every machine that has cawco's. */
