@@ -25,9 +25,9 @@ import {
   keepers,
   READY,
   readHeld,
+  type UnaskedCalls,
 } from "./state";
 import { settleGonePlace, stopBoundary } from "./stop";
-import { ensureAgain } from "./unasked";
 
 /** Each boundary's srt host or Seatbelt runner followed ({@link watchHost}), by its proc id, with the connection it is followed on. */
 const watchedHosts = new Map<string, SessiondClient>();
@@ -300,6 +300,7 @@ export const liveWorkItems = (ids: unknown): void => {
 export const watchHost = async (
   id: string,
   held: Pick<Held, "gen" | "path" | "pid">,
+  unasked: UnaskedCalls,
   afterSeq?: number
 ): Promise<void> => {
   const procId = boundaryProcId(id, held.gen);
@@ -356,7 +357,7 @@ export const watchHost = async (
           });
           return;
         }
-        restartUnasked(id, held).catch((error: unknown) => {
+        restartUnasked(id, held, unasked).catch((error: unknown) => {
           console.warn(
             `[workspace] ${id}: its boundary ${held.pid} ended unasked and could not be started again: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -455,7 +456,8 @@ export const watchCloneOf = (
  */
 const restartUnasked = async (
   id: string,
-  held: Pick<Held, "gen" | "path" | "pid">
+  held: Pick<Held, "gen" | "path" | "pid">,
+  unasked: UnaskedCalls
 ): Promise<void> => {
   if (isClosing(id) || isStarting(id)) {
     return;
@@ -479,7 +481,7 @@ const restartUnasked = async (
   console.info(
     `[workspace] ${id}: its boundary ${held.pid} ended unasked while its record stands, so it starts again`
   );
-  const fresh = await ensureAgain({ id, path: held.path });
+  const fresh = await unasked.ensureAgain({ id, path: held.path });
   console.info(
     `[workspace] ${id}: its boundary ${held.pid} is started again as ${fresh.pid}`
   );
