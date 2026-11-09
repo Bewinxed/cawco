@@ -217,7 +217,7 @@ export const SESSION_DIR_READ = "session_dir";
  * The `system` subtype of the line the hub writes into a session's transcript
  * when its account reached its limit and the hub moved it, held it until the
  * reset, or continued it from a summary: `move` says which, on what account,
- * and what it cost ({@link import("./accounts").accountMoveWords}). Drawn as a
+ * and what it cost ({@link import("./words/account-lines").accountMoveWords}). Drawn as a
  * hairline divider of its own.
  */
 export const ACCOUNT_MOVE = "account_move";
