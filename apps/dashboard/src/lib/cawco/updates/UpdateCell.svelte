@@ -5,13 +5,13 @@
    * and morphs the words into place; no row moves.
    */
   import type { BinaryUpdatePolicy } from "@cawco/core/binary-updates";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconClock, IconDownload } from "#lib/icons.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { type Cell, cellFor, type UpdateMachine } from "./model";
   import { updates } from "./updates.svelte";
 

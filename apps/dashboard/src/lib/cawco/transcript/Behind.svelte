@@ -28,8 +28,8 @@
 <script lang="ts">
   import { machineLabel } from "@cawco/core/machine-names";
   import { commonWords } from "@cawco/core/words/common";
-  import { rise } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { rise } from "#lib/platform/motion/curves.svelte.js";
   import { cawco, type ReadFault, reconnectingNow } from "../client.svelte";
 
   let {

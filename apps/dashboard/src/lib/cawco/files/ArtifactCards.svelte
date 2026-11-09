@@ -72,12 +72,12 @@
     IconGlobe,
     IconWindow,
   } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { thumbnailUrl } from "../artifact-api";
-  import { frameObserver } from "../frame-observer";
-  import { echoBeat } from "../motion/echo.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import type { ArtifactCard, ArtifactsView } from "./files.svelte";
 
   let {

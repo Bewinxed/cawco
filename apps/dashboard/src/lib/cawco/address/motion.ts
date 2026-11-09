@@ -24,7 +24,7 @@ import {
   motionOk,
   numberOf,
   pinned,
-} from "#lib/cawco/motion/curves.svelte.js";
+} from "#lib/platform/motion/curves.svelte.js";
 
 export function arrive(_node: Element): TransitionConfig {
   if (!motionOk.current) {
