@@ -24,7 +24,6 @@
  *   if any, has finished, whichever way: a move's plan inspects after it.
  */
 
-import { machineCalled } from "@cawco/core/machine-names";
 import { LARGE_FILE_BYTES } from "@cawco/core/move";
 import type { ProjectNote } from "@cawco/core/project-conversation";
 import { PlaceLfsRowSchema } from "@cawco/core/stored-shapes";
@@ -35,6 +34,7 @@ import {
 } from "@cawco/core/workspace/controls";
 import { z } from "zod";
 import type { DbShape } from "./db";
+import { machineName } from "./machine-name";
 import { received } from "./stored-json";
 
 /** What {@link createPlaceRepos} needs of the hub. */
@@ -82,9 +82,6 @@ const leftOutLines = (leftOut: readonly PlaceLeftOut[]): string => {
 };
 
 export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
-  const machineName = (machineId: string): string =>
-    machineCalled(machineId, db.listAgents());
-
   /**
    * The note a made repository leaves in the project's conversation;
    * when its first commit left files out for their size alone, it carries
@@ -106,7 +103,7 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
         commit: made.commit,
         ...(offer ? { lfsOffer: offer } : {}),
       },
-      body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}${offer ? `\n\n${large} of them ${large === 1 ? "was" : "were"} left out for size alone, ${LARGE_FILE_BYTES / MB} MB or more: Git LFS can keep ${large === 1 ? "it" : "them"} instead, by pattern.` : ""}`,
+      body: `${made.root} on ${machineName(db, place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}${offer ? `\n\n${large} of them ${large === 1 ? "was" : "were"} left out for size alone, ${LARGE_FILE_BYTES / MB} MB or more: Git LFS can keep ${large === 1 ? "it" : "them"} instead, by pattern.` : ""}`,
     });
     if (offer) {
       db.lfsOffers.offer({
