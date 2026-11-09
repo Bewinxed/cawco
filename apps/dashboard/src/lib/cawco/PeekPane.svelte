@@ -60,11 +60,8 @@
   import ContextMeter from "./ContextMeter.svelte";
   import {
     cawco,
-    openSession,
     type PermissionAnswer,
     permissionAnswer,
-    readTranscript,
-    setPeeked,
     submitCommand,
   } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
@@ -94,6 +91,8 @@
     type PendingPermission,
     sessionsStore,
   } from "./stores/sessions.svelte";
+  import { openSession, setPeeked } from "./stores/subscriptions.svelte";
+  import { readTranscript } from "./stores/transcript-reads.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
 
