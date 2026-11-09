@@ -341,7 +341,6 @@ import {
   unlistedModelRefusal,
 } from "@cawco/core/model-names";
 import type { MoveProgressFrame } from "@cawco/core/move";
-import { placeNesting } from "@cawco/core/place-nesting";
 import { planWaitsOf } from "@cawco/core/plan";
 import {
   type HubPreviewOrigins,
@@ -700,7 +699,6 @@ import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { withAncestors } from "./board-ancestors";
 import { bodyLimitRefusal } from "./body-limits";
-import type { BridgedHeldPlace } from "./bridged-held-place";
 import { briefingsObserve } from "./briefings";
 import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
@@ -995,6 +993,7 @@ import {
 import type { ProjectAsk, ProjectMade } from "./project-making";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
+import { createProjectOut, placeAddedOf } from "./project-out";
 import {
   foldPlaced,
   onPlacesChanged,
@@ -1063,6 +1062,7 @@ import { trashRoutes } from "./routes/trash";
 import { usageRoutes } from "./routes/usage";
 import { workspaceRoutes } from "./routes/workspaces";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
+import { createRuleRows } from "./rule-rows";
 import { RuleEngine } from "./rules";
 import {
   ATTACHMENT_PAGE_LIMIT,
@@ -14136,11 +14136,11 @@ export const createServer = (
     // (moves.ts `askFor`), and a publish as it reads it (repo-publish.ts).
     // Its repository, a project's second among them, is linked by its origin.
     await learnCheckout(place);
-    return {
-      ...projectOut(db.project(project.id) ?? project),
+    return placeAddedOf(
+      projectOut(db.project(project.id) ?? project),
       place,
-      placeAdded: added,
-    };
+      added
+    );
   };
 
   /**
@@ -25825,39 +25825,7 @@ export const createServer = (
     }
   };
 
-  /**
-   * A project as the API answers it: its places, and its primary checkout's
-   * id (`primaryPlaceId`, null while it has none). A held workspace is no
-   * decision of the person's: the session that started its work is told
-   * (work-items.ts `heldNotice`). Each place's `held` is null, sent only
-   * while installable apps' documents declare it ({@link BridgedHeldPlace}).
-   * Each place's `within` is the live projects whose checkout holds it, as a
-   * delete with its files reads it (core place-nesting.ts), for its files
-   * box; `live` is every live project, read once by a caller listing them all.
-   */
-  const projectOut = (
-    project: ProjectRow,
-    live: readonly ProjectRow[] = db.listProjects()
-  ) => ({
-    ...project,
-    places: project.places.map((place) => ({
-      ...place,
-      held: null as BridgedHeldPlace | null,
-      within:
-        place.kind === "checkout"
-          ? placeNesting(project.id, place, live).within
-          : [],
-    })),
-    primaryPlaceId: checkoutOf(project)?.id ?? null,
-    // Read by nothing: the Apple build is a step a project declares in its
-    // gate.md (gate-file.ts). Kept for the shipped apps that require it
-    // (TestFlight 20261015.3 to 20261018); it goes once none is installable.
-    appleGate: false as boolean,
-    // Read by nothing: a project links a repository each (`links`). Kept
-    // for the shipped apps that require it (every TestFlight build before
-    // 2026-11-03), as their one link; it goes once none is installable.
-    remote: (project.links[0] ?? null) as string | null,
-  });
+  const projectOut = createProjectOut(db);
 
   // Each project's spend cap: what holds its attempts and its Caw back (project-caps.ts).
   const caps = createCaps({
@@ -32018,46 +31986,7 @@ export const createServer = (
     }
   };
 
-  /**
-   * Rules as the list reads them: each with what it has been doing, and, when
-   * it is scoped to a machine the fleet no longer has, that it matches
-   * nothing, with what the machine was called and when the person removed
-   * it (null for a machine this hub has no record of). Its scope stands as
-   * it was written.
-   */
-  const ruleRowsOf = (list: Rule[]) => {
-    const stats = new Map(db.ruleStats().map((row) => [row.ruleId, row]));
-    const fleet = new Set(db.listAgents().map((agent) => agent.machineId));
-    const removed = new Map(
-      db.removedMachines().map((row) => [row.machineId, row])
-    );
-    const orphanOf = (
-      rule: Rule
-    ):
-      | { machineId: string; name: string | null; removedAt: number | null }
-      | undefined => {
-      const { machineId } = rule.scope;
-      if (!machineId || fleet.has(machineId)) {
-        return undefined;
-      }
-      const gone = removed.get(machineId);
-      return {
-        machineId,
-        name: gone?.hostname ?? null,
-        removedAt: gone?.removedAt.getTime() ?? null,
-      };
-    };
-    return list.map((rule) => ({
-      ...rule,
-      stats: stats.get(rule.id) ?? {
-        ruleId: rule.id,
-        pending: 0,
-        totalFires: 0,
-        lastFiredAt: null,
-      },
-      orphaned: orphanOf(rule),
-    }));
-  };
+  const ruleRowsOf = createRuleRows(db);
 
   /**
    * Files a dashboard start's mode as the person's choice for its harness on
