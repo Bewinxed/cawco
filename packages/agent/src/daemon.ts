@@ -249,6 +249,7 @@ import { damagedRecords, sweepRecords } from "./damaged-records";
 import { convergeDeniedTools } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
 import { forgePost } from "./forges/forge";
+import { setHubCredential } from "./git/hub-credential";
 import { setHubGitOrigins } from "./git-credential";
 import { type Harness, isServerHarness } from "./harness";
 import { harness, harnesses } from "./harnesses";
@@ -286,7 +287,6 @@ import {
   movePrepare,
   moveRemoteCredential,
   moveSnapshot,
-  setHubCredential,
   setMoveProgress,
 } from "./move";
 import { placePush } from "./place-push";
