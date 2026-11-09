@@ -1062,6 +1062,7 @@ import {
 import { createRepoPublish } from "./repo-publish";
 import { makesRoutines, talksWithPerson } from "./roles";
 import { agentListRoutes, agentMediaRoutes } from "./routes/agents";
+import { boundFields } from "./routes/bound-fields";
 import { delegateEventRoutes } from "./routes/delegate-events";
 import { delegationRoutes } from "./routes/delegation";
 import { fileRoutes } from "./routes/files";
@@ -1906,6 +1907,26 @@ const TITLE_ASK_LIMIT = 64;
  * to name it: its first turn is almost always among the first few. Ours.
  */
 const TITLE_WINDOW = 40;
+
+/** The first thing wrong with a rule as drafted, in the words the form shows. */
+const firstRuleProblem = (draft: RuleDraft): string | undefined => {
+  const [first] = Object.values(ruleProblem(draft));
+  return first;
+};
+
+/** What is wrong with where a rule is scoped: a project or area this hub doesn't keep. */
+const ruleScopeProblem = (
+  db: DbShape,
+  draft: RuleDraft
+): string | undefined => {
+  if (draft.scope.projectId && !db.project(draft.scope.projectId)) {
+    return `There is no project ${draft.scope.projectId}.`;
+  }
+  if (draft.scope.areaId && !db.areas.get(draft.scope.areaId)) {
+    return areaWords.scopeNoArea(draft.scope.areaId);
+  }
+  return undefined;
+};
 
 const ruleBody = t.Object({
   name: t.String(),
@@ -34029,16 +34050,13 @@ export const createServer = (
       }))
       .post("/api/rules", { body: ruleBody }, ({ body, status }) => {
         const draft = body as unknown as RuleDraft;
-        const wrong = ruleProblem(draft);
-        const [first] = Object.values(wrong);
+        const first = firstRuleProblem(draft);
         if (first) {
           return status(400, first);
         }
-        if (draft.scope.projectId && !db.project(draft.scope.projectId)) {
-          return status(400, `There is no project ${draft.scope.projectId}.`);
-        }
-        if (draft.scope.areaId && !db.areas.get(draft.scope.areaId)) {
-          return status(400, areaWords.scopeNoArea(draft.scope.areaId));
+        const misplaced = ruleScopeProblem(db, draft);
+        if (misplaced) {
+          return status(400, misplaced);
         }
         // The hub mints the id: the client never invents identity, it asks for it.
         const rule: Rule = {
@@ -34052,8 +34070,7 @@ export const createServer = (
       })
       .put("/api/rules/:id", { body: ruleBody }, ({ params, body, status }) => {
         const draft = body as unknown as RuleDraft;
-        const wrong = ruleProblem(draft);
-        const [first] = Object.values(wrong);
+        const first = firstRuleProblem(draft);
         if (first) {
           return status(400, first);
         }
@@ -34063,11 +34080,9 @@ export const createServer = (
         if (!existing) {
           return status(404, `there is no rule ${params.id} to edit`);
         }
-        if (draft.scope.projectId && !db.project(draft.scope.projectId)) {
-          return status(400, `There is no project ${draft.scope.projectId}.`);
-        }
-        if (draft.scope.areaId && !db.areas.get(draft.scope.areaId)) {
-          return status(400, areaWords.scopeNoArea(draft.scope.areaId));
+        const misplaced = ruleScopeProblem(db, draft);
+        if (misplaced) {
+          return status(400, misplaced);
         }
         const rule: Rule = {
           ...draft,
@@ -34154,13 +34169,7 @@ export const createServer = (
             fromMachine: t.Optional(t.String()),
             /** The checkout a project-scoped skill was discovered in. */
             cwd: t.Optional(t.String()),
-            /**
-             * One project's only: placed at each of its checkouts and
-             * delegate workspaces. Null: every machine. Left out: as it was.
-             */
-            projectId: t.Optional(t.Union([t.String(), t.Null()])),
-            /** Every project in one area instead, as read now. Null: none. Left out: as it was. */
-            areaId: t.Optional(t.Union([t.String(), t.Null()])),
+            ...boundFields,
           }),
         },
         async ({ params, body, set, status }) => {
