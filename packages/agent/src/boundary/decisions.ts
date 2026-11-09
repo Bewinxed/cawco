@@ -216,7 +216,7 @@ interface UpdateReasons {
   readonly grant: string | null;
   /** Kept until this build's session keeper is the machine's ({@link ownKeeperOwed}). */
   readonly keeperOwed: boolean;
-  /** It holds an srt mount point where a dir stands in ({@link stubbed}): replaced whole once nothing runs in it. */
+  /** It holds an srt mount point where a dir stands in (staleness.ts `stubbed`): replaced whole once nothing runs in it. */
   readonly leftDirs: boolean;
   /** The ports its work listens on (narrowing.ts `workPorts`). */
   readonly listening: readonly number[];
