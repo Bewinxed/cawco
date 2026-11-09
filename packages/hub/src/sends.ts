@@ -1308,13 +1308,13 @@ export const createSends = (ctx: SendsContext) => {
    * the item ended, which reopens nothing (work-items.ts `reopen`), and the
    * turn ended on it. The CLI's withdrawal is atomic with its read, so one
    * read first ("started") reached the model before it called finish_item,
-   * and stands. OpenCode and pi store a send as they are handed it, and
-   * take no withdrawal. A withdrawal its machine leaves unanswered leaves
+   * and stands. A harness that queues no sends stores a send as it is
+   * handed it, and takes no withdrawal. A withdrawal its machine leaves unanswered leaves
    * the send as it was. Never throws.
    */
   const reclaimUnread = async (instanceId: string): Promise<void> => {
     const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (!traitsOf(row?.harness).withdrawSend) {
+    if (!traitsOf(row?.harness).queuesSends) {
       return;
     }
     const unread = ctx.db.sendsIn(instanceId, ["pending"]).filter((send) => {
