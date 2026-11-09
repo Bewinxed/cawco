@@ -48,12 +48,12 @@ import { store, stored } from "#lib/platform/storage.js";
 import { browser } from "$app/env";
 import {
   type BlockedRequest,
-  type BoardRow,
   cawco,
   cawOf,
   configureCaw,
   type ProjectRow,
 } from "../client.svelte";
+import type { BoardRow } from "../links";
 import { minimizedAsks } from "../minimized-asks.svelte";
 import type { TaskSummary } from "../project-tasks";
 import { QUESTION_KEYS } from "../question";
