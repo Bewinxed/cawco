@@ -1,3 +1,8 @@
+/**
+ * Which boundaries are stale or stubbed, and the words for what they leave
+ * running.
+ */
+
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
