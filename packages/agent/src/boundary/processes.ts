@@ -435,8 +435,8 @@ export const commandsEnded = async (
 /**
  * Whether the work `work` found in a boundary a look waits to replace is
  * worth the look's wait at the gate ({@link commandsEnded}): commands alone,
- * none of them among `before`, those running at the look before ({@link
- * keptRunning}, {@link stubbed}). One seen then has run a look or more (a
+ * none of them among `before`, those running at the look before (staleness.ts
+ * `keptRunning`, staleness.ts `stubbed`). One seen then has run a look or more (a
  * build, a test run), and is waited for with the gate down; a listener is no
  * command, and ends when its work stops it.
  */
