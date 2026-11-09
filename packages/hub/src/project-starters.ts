@@ -67,7 +67,7 @@ import { projectDesign } from "./landed";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { AGENTS_FILE, fileOr } from "./memory";
 import { KNOWLEDGE_DIR } from "./memory-facts";
-import { FolderRefusal, listFolder, refused } from "./project-folder";
+import { FolderRefusal, folderFilePaths, refused } from "./project-folder";
 import {
   boundStarterInputs,
   STARTER_OFTEN,
@@ -155,23 +155,7 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   const writing = new Set<string>();
 
   /** The files under a folder of the project's, by path; none when it has no such folder. */
-  const filesIn = async (
-    projectId: string,
-    dir: string,
-    recursive: boolean
-  ): Promise<string[]> => {
-    try {
-      const listing = await listFolder(projectId, dir, recursive);
-      return listing.entries
-        .filter((entry) => entry.kind === "file")
-        .map((entry) => entry.path);
-    } catch (error) {
-      if (error instanceof FolderRefusal && error.status === 404) {
-        return [];
-      }
-      throw error;
-    }
-  };
+  const filesIn = folderFilePaths;
 
   /**
    * Task kinds filed often: each task made in the last

@@ -758,6 +758,25 @@ export const listFolder = async (
   return { path: rel, entries, truncated: !complete };
 };
 
+/** The files under a folder of the project's, by path ({@link listFolder}); none when it has no such folder. */
+export const folderFilePaths = async (
+  projectId: string,
+  dir: string,
+  recursive = false
+): Promise<string[]> => {
+  try {
+    const listing = await listFolder(projectId, dir, recursive);
+    return listing.entries
+      .filter((entry) => entry.kind === "file")
+      .map((entry) => entry.path);
+  } catch (error) {
+    if (error instanceof FolderRefusal && error.status === 404) {
+      return [];
+    }
+    throw error;
+  }
+};
+
 /**
  * Adds `dir`'s entries (paths under `prefix`) to `entries`, depth first in
  * name order, so a capped listing is the first {@link LIST_LIMIT} paths.
