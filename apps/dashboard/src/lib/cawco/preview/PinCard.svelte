@@ -74,12 +74,12 @@
   import { formatAgeShort } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
-  import type { SendExtras } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { markdownFleetHere, plainReferenceOf } from "../markdown-fleet";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
   import { keysChecked } from "../repeated-keys";
+  import type { SendExtras } from "../stores/commands.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import DocThumb from "../transcript/DocThumb.svelte";
   import Shot from "../transcript/Shot.svelte";
