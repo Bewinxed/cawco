@@ -18,7 +18,6 @@
   import { onMount, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
-  import { clampRail, RAIL_MAX, RAIL_MIN } from "#lib/cawco/rail.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
@@ -41,7 +40,14 @@
   import { landKey } from "#lib/platform/motion/keyed.svelte.js";
   import { pageIn, pageOut, route } from "#lib/platform/motion/route.svelte.js";
   import { hold } from "#lib/platform/page-marks.js";
-  import { keepPrefs, NARROW_PREF, RAIL_PREF } from "#lib/platform/prefs.js";
+  import {
+    clampRail,
+    keepPrefs,
+    NARROW_PREF,
+    RAIL_MAX,
+    RAIL_MIN,
+    RAIL_PREF,
+  } from "#lib/platform/prefs.js";
   import { store, stored } from "#lib/platform/storage.js";
   import { floor } from "#lib/platform/visible-viewport.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
