@@ -21,7 +21,7 @@
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { newestRead } from "#lib/platform/newest-read.js";
-  import { cawco } from "../client.svelte";
+  import { usageStore } from "../stores/usage.svelte";
   import { hubMidnight, money, summaryReader } from "../usage";
   import ReadFailed from "./ReadFailed.svelte";
 
@@ -119,7 +119,7 @@
    * days every device folds spend into, the same days the spend line counts.
    */
   const hubDaysFrom = (start: number): number[] => {
-    const { spend } = cawco;
+    const { spend } = usageStore;
     if (!spend) {
       return [];
     }
@@ -159,7 +159,7 @@
   }
 
   /** Labels on the hub's clock, so a day reads the same day on every device. */
-  const timeZone = $derived(cawco.spend?.timeZone);
+  const timeZone = $derived(usageStore.spend?.timeZone);
   const hourLabel = $derived(
     new Intl.DateTimeFormat(undefined, {
       hour: "2-digit",
