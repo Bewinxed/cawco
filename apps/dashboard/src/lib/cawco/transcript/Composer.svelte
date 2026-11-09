@@ -129,8 +129,8 @@
   import { readAs } from "../find/mention.svelte";
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
+  import type { SendExtras } from "../send-store";
   import { skillsOf } from "../skill-chips";
-  import type { SendExtras } from "../stores/commands.svelte";
   import {
     loadSuggestSetting,
     type SuggestCandidate,
