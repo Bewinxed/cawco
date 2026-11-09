@@ -47,7 +47,7 @@ const TAIL = 500;
 const PICTURE_WAIT = 5000;
 /**
  * How long a lost link stands before what is drawn on the page is refused,
- * ms: the page's own (preview-overlay artifact.ts `LOST_REFUSES_MS`).
+ * ms: the page's own (preview overlay/artifact.ts `LOST_REFUSES_MS`).
  */
 export const LOST_REFUSES_MS = 5000;
 
