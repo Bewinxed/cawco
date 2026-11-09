@@ -61,7 +61,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import type { StageKind } from "@cawco/core/views";
 import { noticePartWords, reasonLine } from "@cawco/core/words/artifact-needs";
 import { artifactWords } from "@cawco/core/words/artifacts";
-import { t } from "elysia";
+import { ElysiaStatus, t } from "elysia";
 import type { DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
 import {
@@ -82,7 +82,7 @@ import {
   taskEntry,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
-import { refusal, StatusRefusal } from "./refusal";
+import { refusal } from "./refusal";
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
@@ -526,14 +526,18 @@ const momentMatch = (
   );
 };
 
-/** The offset a cursor this hub gave starts at; 0 for none. */
-export const decodeCursor = (cursor: string | undefined): number => {
+/** The offset a cursor this hub gave starts at; 0 for none; or the refusal of one it did not give. */
+export const decodeCursor = (cursor: string | undefined) => {
   if (!cursor) {
     return 0;
   }
   const offset = Number(Buffer.from(cursor, "base64url").toString("utf8"));
   if (!Number.isInteger(offset) || offset < 0) {
-    throw new FindRefusal(`"${cursor}" is not a cursor this hub gave.`);
+    return refusal(
+      400,
+      "find-cursor-unknown",
+      `"${cursor}" is not a cursor this hub gave.`
+    );
   }
   return offset;
 };
@@ -1320,8 +1324,8 @@ export const createFind = (deps: FindDeps) => {
       stale = true;
     },
 
-    /** One page of a find. */
-    async find(request: FindRequest): Promise<FindPage> {
+    /** One page of a find, or the refusal of a cursor this hub did not give. */
+    async find(request: FindRequest) {
       const started = performance.now();
       const query = parse(request.q);
       const limit = Math.min(
@@ -1329,6 +1333,9 @@ export const createFind = (deps: FindDeps) => {
         MAX_LIMIT
       );
       const offset = decodeCursor(request.cursor);
+      if (offset instanceof ElysiaStatus) {
+        return offset;
+      }
       // No words: what moved last among sessions, unless kinds say.
       const named = request.kinds?.length ? new Set(request.kinds) : null;
       const kinds =
@@ -1347,7 +1354,7 @@ export const createFind = (deps: FindDeps) => {
       );
       const page = fresh.ranked.slice(offset, offset + limit);
       const end = offset + page.length;
-      return {
+      const found: FindPage = {
         query: query.words.join(" "),
         results: page,
         next: end < fresh.ranked.length ? cursorAt(end) : null,
@@ -1355,6 +1362,7 @@ export const createFind = (deps: FindDeps) => {
         coverage: fresh.coverage,
         timing: { namesMs: fresh.namesMs, transcriptsMs: fresh.transcriptsMs },
       };
+      return found;
     },
 
     /**
@@ -1530,26 +1538,11 @@ const reportsWaiting = (
     ];
   });
 
-/** A find refused for what was asked: its status, and the sentence that says why. */
-export class FindRefusal extends StatusRefusal<400 | 404> {
-  constructor(message: string, answering: 400 | 404 = 400) {
-    super(answering, message);
-  }
-}
-
 /** `by=me` and its kin read into a moment's author; anything else is refused by the schema. */
 const AUTHOR_OF: Record<FindBy, MomentAuthor> = {
   me: "owner",
   agent: "agent",
   report: "report",
-};
-
-/** A refusal thrown as its status; anything else as it was. */
-const refused = (error: unknown): never => {
-  if (error instanceof FindRefusal) {
-    throw refusal(error.status, "find-refused", error.message);
-  }
-  throw error;
 };
 
 /**
@@ -1577,7 +1570,7 @@ export const FIND_PLACES_QUERY = t.Object({
 });
 
 /** `kinds=conversation,task` read into kinds, or the refusal naming the unknown one. */
-const kindsOf = (raw: string | undefined): FindKind[] | undefined => {
+const kindsOf = (raw: string | undefined) => {
   if (!raw?.trim()) {
     return;
   }
@@ -1589,14 +1582,16 @@ const kindsOf = (raw: string | undefined): FindKind[] | undefined => {
     (kind) => !(FIND_KINDS as readonly string[]).includes(kind)
   );
   if (unknown.length > 0) {
-    throw new FindRefusal(
+    return refusal(
+      400,
+      "find-kind-unknown",
       `${unknown.map((kind) => `"${kind}"`).join(", ")} is not a kind find answers with. Kinds: ${FIND_KINDS.join(", ")}.`
     );
   }
   return kinds as FindKind[];
 };
 
-/** `GET /api/find`'s answer, or its refusal thrown as a status. */
+/** `GET /api/find`'s answer, or its refusal. */
 export const answerFind = async (
   find: Find,
   query: {
@@ -1611,20 +1606,25 @@ export const answerFind = async (
   context: boolean,
   /** Who asks, and the request's signal, which aborts once its asker goes (a newer keystroke). */
   ask: Pick<FindRequest, "caller" | "signal">
-): Promise<FindAnswer> => {
-  try {
-    const { total: _total, ...answer } = await find.find({
-      q: query.q ?? "",
-      ...ask,
-      ...(context ? { context: true as const } : {}),
-      ...(query.limit ? { limit: Number(query.limit) || DEFAULT_LIMIT } : {}),
-      ...(query.cursor ? { cursor: query.cursor } : {}),
-      ...(query.by ? { author: AUTHOR_OF[query.by] } : {}),
-      kinds: kindsOf(query.kinds),
-      transcripts: query.transcripts !== "0",
-    });
-    return answer;
-  } catch (error) {
-    return refused(error);
+) => {
+  const kinds = kindsOf(query.kinds);
+  if (kinds instanceof ElysiaStatus) {
+    return kinds;
   }
+  const page = await find.find({
+    q: query.q ?? "",
+    ...ask,
+    ...(context ? { context: true as const } : {}),
+    ...(query.limit ? { limit: Number(query.limit) || DEFAULT_LIMIT } : {}),
+    ...(query.cursor ? { cursor: query.cursor } : {}),
+    ...(query.by ? { author: AUTHOR_OF[query.by] } : {}),
+    kinds,
+    transcripts: query.transcripts !== "0",
+  });
+  if (page instanceof ElysiaStatus) {
+    return page;
+  }
+  const { total: _total, ...answer } = page;
+  const answered: FindAnswer = answer;
+  return answered;
 };
