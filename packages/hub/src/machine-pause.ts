@@ -27,12 +27,12 @@
  * The pause is the machine's row (`agents.paused_until`), so it survives the
  * hub's restart and its agent's; the timer is armed again as the hub starts.
  */
-import { machineCalled } from "@cawco/core/machine-names";
 import type { RunKind, StoppedCommands } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { pauseClock, stoppedWords } from "@cawco/core/words/machine-pause";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { machineName } from "./machine-name";
 
 /** The origin name of the word a pause sends the sessions it cut, to carry on. */
 export const PAUSE_ORIGIN = "machine-pause";
@@ -253,7 +253,7 @@ export const createMachinePause = (deps: MachinePauseDeps): MachinePause => {
       if (at === undefined) {
         return;
       }
-      const name = machineCalled(machineId, db.listAgents());
+      const name = machineName(db, machineId);
       return `${name} is paused until ${pauseClock(at)}`;
     },
     free: (machineId) =>
