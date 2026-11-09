@@ -14,8 +14,14 @@
  *   piped, from the owner's terminal to the hub; refused inside a session,
  *   whose transcript a secret must never reach. Nothing prints it back.
  */
+
+import {
+  type HubAnswer,
+  type HubClient,
+  refusalText,
+  unwrap,
+} from "@cawco/agent/hub-client";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import {
   RELAY_PROVIDERS,
   type RelayProvider,
@@ -24,7 +30,7 @@ import {
 import { RelayViewSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
-import { ownerAsk } from "./owner";
+import { ownerClient } from "./owner";
 import { callTool, toolDoor } from "./tools";
 
 class RelayError extends Error {}
@@ -57,28 +63,29 @@ type Created = z.infer<typeof CreatedSchema>;
 const sessionOf = (flag: string | undefined): string | undefined =>
   flag ?? (readEnv(CAWCO_ENV.instanceId)?.trim() || undefined);
 
-const call = async (
+const call = async <A extends HubAnswer>(
   hub: string | undefined,
-  request: HubRequest
-): Promise<unknown> => {
+  what: string,
+  request: (client: HubClient) => Promise<A>
+): Promise<Extract<A, { error: null }>["data"]> => {
   if (!hub) {
     throw new RelayError("no hub found");
   }
-  const { method, path } = request;
-  const { ok, said, status } = await ownerAsk(
-    hub,
-    request,
-    "cawco relay",
-    // Opening a relay waits on Tailscale and on GitHub's ping.
-    180_000,
-    RelayError,
-    (seconds) =>
-      `${hub} did not answer ${method} ${path} within ${seconds}s, so what it did is not known`
+  return unwrap(
+    await request(
+      ownerClient(
+        hub,
+        "cawco relay",
+        // Opening a relay waits on Tailscale and on GitHub's ping.
+        180_000,
+        RelayError,
+        (seconds) =>
+          `${hub} did not answer ${what} within ${seconds}s, so what it did is not known`
+      )
+    ),
+    (refusal) =>
+      new RelayError(`${refusal.status}: ${refusalText(refusal).slice(0, 500)}`)
   );
-  if (!ok) {
-    throw new RelayError(`${status}: ${said.slice(0, 500)}`);
-  }
-  return said ? (JSON.parse(said) as unknown) : undefined;
 };
 
 /** A project named by id or by name. */
@@ -89,10 +96,9 @@ const projectId = async (
   if (!named) {
     throw new RelayError("name the project, by id or name");
   }
-  const projects = (await call(hub, hubRequest("GET /api/projects"))) as {
-    id: string;
-    name: string;
-  }[];
+  const projects = await call(hub, "GET /api/projects", (client) =>
+    client.api.projects.get()
+  );
   const found =
     projects.find((one) => one.id === named) ??
     projects.filter((one) => one.name === named);
@@ -104,7 +110,11 @@ const projectId = async (
           : `${found.length} projects are named ${named}; name it by id`
       );
     }
-    return (found[0] as { id: string }).id;
+    const [only] = found;
+    if (!only) {
+      throw new RelayError(`no project ${named}`);
+    }
+    return only.id;
   }
   return found.id;
 };
@@ -182,13 +192,11 @@ const on = async (args: RelayArgs): Promise<string[]> => {
     return createdLines(CreatedSchema.parse(JSON.parse(said)));
   }
   const id = await projectId(args.hub, args.rest[0]);
-  const { public: shown } = (await call(
+  const { public: shown } = await call(
     args.hub,
-    hubRequest("POST /api/projects/:id/relays/preview", {
-      path: { id },
-      body: input,
-    })
-  )) as { public: string };
+    `POST /api/projects/${id}/relays/preview`,
+    (client) => client.api.projects({ id }).relays.preview.post(input)
+  );
   console.log(shown);
   if (!args.yes) {
     if (!process.stdin.isTTY) {
@@ -201,10 +209,9 @@ const on = async (args: RelayArgs): Promise<string[]> => {
     }
   }
   return createdLines(
-    (await call(
-      args.hub,
-      hubRequest("POST /api/projects/:id/relays", { path: { id }, body: input })
-    )) as Created
+    await call(args.hub, `POST /api/projects/${id}/relays`, (client) =>
+      client.api.projects({ id }).relays.post(input)
+    )
   );
 };
 
@@ -226,13 +233,9 @@ const setSecret = async (args: RelayArgs): Promise<string[]> => {
   if (!secret) {
     throw new ConnectionKeyError("no secret was given; nothing was sent");
   }
-  const view = (await call(
-    args.hub,
-    hubRequest("PUT /api/relays/:id/secret", {
-      path: { id },
-      body: { secret },
-    })
-  )) as RelayView;
+  const view = await call(args.hub, `PUT /api/relays/${id}/secret`, (client) =>
+    client.api.relays({ id }).secret.put({ secret })
+  );
   return [
     `Secret set for relay ${id} (${secret.length} characters)`,
     ...describe(view),
@@ -264,13 +267,9 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
                 )
               )
             )
-        : ((await call(
-            args.hub,
-            hubRequest("DELETE /api/relays/:id", { path: { id } })
-          )) as {
-            github: string;
-            relay: RelayView;
-          });
+        : await call(args.hub, `DELETE /api/relays/${id}`, (client) =>
+            client.api.relays({ id }).delete()
+          );
       return [...describe(said.relay), `GitHub: ${said.github}`];
     }
     case "list": {
@@ -282,12 +281,11 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
                 await callTool(args.hub, session, "relay_list", "{}", "record")
               )
             )
-        : ((await call(
-            args.hub,
-            hubRequest("GET /api/projects/:id/relays", {
-              path: { id: await projectId(args.hub, args.rest[0]) },
-            })
-          )) as RelayView[]);
+        : await call(args.hub, "GET /api/projects/:id/relays", async (client) =>
+            client.api
+              .projects({ id: await projectId(args.hub, args.rest[0]) })
+              .relays.get()
+          );
       return views.length === 0
         ? ["No relays."]
         : views.flatMap((view) => [...describe(view), ""]);

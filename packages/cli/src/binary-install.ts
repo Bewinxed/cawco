@@ -8,6 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeCapabilities } from "@cawco/agent/capabilities";
+import { hubClient, refusalText, unwrap } from "@cawco/agent/hub-client";
 import {
   requireLinger,
   systemdActive,
@@ -33,7 +34,6 @@ import type {
 import { writeWrapper } from "@cawco/core/binary-wrapper";
 import { CAWCO_ENV } from "@cawco/core/cawco-env";
 import { HARNESSES } from "@cawco/core/harness/kinds";
-import { fetchHub, hubRequest } from "@cawco/core/hub-request";
 import { INSTALL_JOINED, INSTALL_STEP_PREFIX } from "@cawco/core/join";
 import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
@@ -203,16 +203,15 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
   }
   if (options.role === "hub") {
     await awaitFirstMachineReady(options.hubUrl, note);
-    const saved = await fetchHub(
-      fetch,
-      options.hubUrl,
-      hubRequest("PUT /api/binary-updates/settings", { body: options.policy })
+    unwrap(
+      await hubClient(options.hubUrl, fetch).api["binary-updates"].settings.put(
+        options.policy
+      ),
+      (refusal) =>
+        new Error(
+          `The hub did not save the update settings: ${refusalText(refusal)}`
+        )
     );
-    if (!saved.ok) {
-      throw new Error(
-        `The hub did not save the update settings: ${await saved.text()}`
-      );
-    }
   } else {
     await awaitJoined(options.hubUrl);
   }
