@@ -18,17 +18,17 @@
  *   read the members' sources by design, and a member reading a shared asset
  *   has no manifest to go through.
  *
- * Every rule counts each file's imports against scripts/import-rules.baseline.json,
- * which only goes down. Biome's noImportCycles reads no `.svelte` file, and
+ * Every rule counts imports against scripts/import-rules.baseline.tsv
+ * (lib/ratchet.ts): a count falls or moves with its file, and never rises. Biome's noImportCycles reads no `.svelte` file, and
  * dependency-cruiser loses a component's type imports, so the graph is read
  * here with TypeScript's parser.
  *
- *   bun scripts/import-rules-check.ts                   exits 1 on a rise or a fall
- *   bun scripts/import-rules-check.ts --write-baseline  after a fix lowers a count
+ *   bun scripts/import-rules-check.ts                   exits 1 on a rise
+ *   bun scripts/import-rules-check.ts --write-baseline  starts a rule the baseline does not hold
  */
 import { join } from "node:path";
 import { cycles, type Import, importGraph } from "./lib/import-graph";
-import { holdRatchet } from "./lib/ratchet";
+import { type Found, holdRatchet } from "./lib/ratchet";
 import { ROOT, repoFiles } from "./lib/repo-files";
 import { packageOf, packages, throughExports } from "./lib/workspace-imports";
 
@@ -89,23 +89,11 @@ const files = present.filter(
 );
 const graph = importGraph(files, new Set(present));
 
-const counts: Record<Rule, Record<string, number>> = {
-  cycle: {},
-  "core-reaches-out": {},
-  "kit-reaches-up": {},
-  "reaches-in": {},
-};
-const places = new Map<string, string[]>();
-const count = (rule: Rule, file: string, edge: Import): void => {
-  if (ALLOWED[`${file} → ${edge.specifier}`] === rule) {
-    return;
+const found: Found[] = [];
+const count = (rule: Rule, file: string, edge: Import, shape = ""): void => {
+  if (ALLOWED[`${file} → ${edge.specifier}`] !== rule) {
+    found.push({ rule, file, line: edge.line, shape });
   }
-  counts[rule][file] = (counts[rule][file] ?? 0) + 1;
-  const key = `${rule}\0${file}`;
-  places.set(key, [
-    ...(places.get(key) ?? []),
-    `${file}:${edge.line} ${edge.specifier}`,
-  ]);
 };
 
 /* cycle */
@@ -123,7 +111,9 @@ for (const [file, edges] of graph) {
       edge.file !== file &&
       cycleOf.get(edge.file ?? "") === at
     ) {
-      count("cycle", file, edge);
+      // The package's own name: a move inside it is the same cycle, and a
+      // file carrying a cycle into another package is a new one there.
+      count("cycle", file, edge, packageOf(file).name);
     }
   }
 }
@@ -175,21 +165,19 @@ for (const [file, edges] of graph) {
 }
 
 const freeDirs = FREE_OF_CYCLES.map((name) => packages.get(name)?.dir);
-const startedCycle = Object.keys(counts.cycle).filter((file) =>
-  freeDirs.includes(packageOf(file).dir)
+const startedCycle = found.filter(
+  (one) => one.rule === "cycle" && freeDirs.includes(packageOf(one.file).dir)
 );
 
-holdRatchet(counts, {
+holdRatchet(found, {
   name: "import-rules",
-  baseline: join(ROOT, "scripts/import-rules.baseline.json"),
+  baseline: join(ROOT, "scripts/import-rules.baseline.tsv"),
   rules: RULES,
-  places: (rule, file) => places.get(`${rule}\0${file}`) ?? [],
 });
 if (startedCycle.length > 0) {
   process.stdout.write(
     `import-rules: a package that had no import cycle has one (${FREE_OF_CYCLES.join(", ")} stay free):\n${startedCycle
-      .flatMap((file) => places.get(`cycle\0${file}`) ?? [])
-      .map((place) => `  ${place}`)
+      .map((one) => `  ${one.file}:${one.line}`)
       .join("\n")}\n`
   );
   process.exitCode = 1;
