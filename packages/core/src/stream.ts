@@ -331,7 +331,7 @@ export interface StreamSubscribe {
  * socket does not follow is no change. The session's plan, when the socket
  * follows it alone (`plan.follow`), is not this message's.
  */
-export interface StreamUnsubscribe {
+interface StreamUnsubscribe {
   sessionId: string;
   type: "stream.unsubscribe";
 }
