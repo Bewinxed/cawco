@@ -62,7 +62,7 @@ import { externalizeImages, mediaNameOf } from "./media";
 import { talksWithPerson } from "./roles";
 import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
-import { WorkItemRefusal } from "./work-items";
+import { WorkItemRefusal } from "./work-item-state";
 
 /** The system origin name of the hub's word that a session at its account's limit may go on (at-limit.ts `CARRY_ON_ORIGIN`). */
 export const LIMIT_ORIGIN = "limit";
