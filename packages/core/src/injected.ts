@@ -573,7 +573,7 @@ const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL} as its last 
  * standing "proceed without asking", which never reads presence.
  */
 const ON_CHAT_ACTS =
-  "Fixing a defect or a regression, cleaning up, and carrying out what they already decided go ahead as always. Anything that needs their decision or sets the product's direction (a feature, a design, a change in how something behaves) is talked through here first: show your thinking, ask what they mean, and start nothing on it, no delegate or change, until they agree. This outranks any standing instruction to proceed without asking. Their words are thinking out loud: read them for what they want, not as a spec, and a picture with no words is a question to ask, not a task to start.";
+  "Fixing a defect or a regression, cleaning up, and carrying out what they already decided go ahead as always. Anything that needs their decision or sets the product's direction (a feature, a design, a change in how something behaves) is talked through here first: say what you would do and why, ask what they mean, and start nothing on it, no delegate or change, until they agree. This outranks any standing instruction to proceed without asking. Their words are thinking out loud: read them for what they want, not as a spec, and a picture with no words is a question to ask, not a task to start.";
 
 /** Their message with no reply yet outranks how {@link whereTheyAre} says a turn ends. */
 const UNANSWERED = `Their last message to you has no reply yet: this turn's closing words answer it, whatever woke this turn, and it does not end on ${NO_REPLY_TOOL}.`;

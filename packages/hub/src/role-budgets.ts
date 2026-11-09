@@ -100,10 +100,14 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * a delegate started without the instruction context against one started
  * with it, described in one line (worker 29,932, delegate 11,164 measured:
  * a leaf is listed no delegate).
+ * 2026-11-09: fitted to Prompting Claude Fable 5.2. delegate's description
+ * says what a delegate costs and how to brief one ("Set expectations for
+ * subagents"), and finish_item's says who reads the report ("Make reports
+ * easy to follow") (worker 30,040, delegate 11,206 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 29_950,
-  delegate: 11_200,
+  worker: 30_100,
+  delegate: 11_250,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

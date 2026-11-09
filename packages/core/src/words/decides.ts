@@ -90,7 +90,7 @@ export const decidesWords = {
     `${kind} is yours to decide ${here}: call settle on the card with your why.`,
   /** A kind a member is on. */
   routedMember: (kind: string, member: string, here: string) =>
-    `${kind} goes to ${member} ${here}: one is on it; wait on the card.`,
+    `${kind} goes to ${member} ${here}: one is on it, and the work that depends on it waits on the card.`,
   /** A kind whose member could not start. */
   routedFailed: (kind: string, member: string, here: string, why: string) =>
     `${kind} goes to ${member} ${here}, but none could start: ${why} The card stays open; update the page to try again.`,
@@ -137,7 +137,7 @@ export const decidesWords = {
     `${kind} is the agent's to decide here, and only the session that wrote the card settles it${writer ? `: ${writer}` : ""}.`,
   /** Why `settle` is refused to anyone but the member's session. */
   settleMember: (kind: string, member: string) =>
-    `${kind} goes to ${member} here: only ${member}'s session for this card settles it; wait on the card.`,
+    `${kind} goes to ${member} here: only ${member}'s session for this card settles it, and the work that depends on it waits on the card.`,
   /** Common practice settles with no https source. */
   practiceCites:
     "Common practice cites: name at least one https link in sources.",

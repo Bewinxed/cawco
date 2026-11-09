@@ -225,5 +225,5 @@ export const imageGenerationWords = {
     `ChatGPT image generation refused the request (${status}): ${detail} No image was saved, no API-key request was made and no retry was submitted.`,
   /** ChatGPT answered without an image. */
   noImage: () =>
-    "ChatGPT returned no image. No file was saved. Do not automatically retry an uncertain generation.",
+    "ChatGPT answered without an image it could read, though it may have made and counted one. No file was saved. Do not retry it automatically: a retry may make and count a second image.",
 };

@@ -221,10 +221,12 @@ const forgeWriteOf = (asked: {
  * a host-scope item hands in its report and its `$TMPDIR/outputs/`.
  */
 const finishItemDescription = (lands: ItemEnd = "main"): string => {
-  const reads =
-    " Your parent reads this report alone; chat messages reach no one. A report pointing at a chat message is refused.";
-  const proof =
-    " Your parent reads this report alone; chat messages reach no one. `summary` carries the deliverable whole, or names the file (committed, or in $TMPDIR/outputs/) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.";
+  // Prompting Claude Fable 5.2, "Make reports easy to follow": the parent
+  // reads the report having seen none of the work behind it.
+  const reader =
+    " Write it for a reader who saw none of your tool calls or files: key points first, in plain full sentences, no term you coined during the work.";
+  const reads = ` Your parent reads this report alone; chat messages reach no one.${reader} A report pointing at a chat message is refused.`;
+  const proof = ` Your parent reads this report alone; chat messages reach no one.${reader} \`summary\` carries the deliverable whole, or names the file (committed, or in $TMPDIR/outputs/) holding a long one, then the proof: each command's real output, and what your boundary could not run. A report pointing at a chat message is refused.`;
   const gate = "the merge checks your project's gate.md names";
   const back =
     " A failed check or a conflict comes back with its output: fix, commit, call again.";
@@ -634,8 +636,10 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "delegate",
       "Run bounded work in a new session with its own workspace and fresh context. It reports back once its work passes the hub's merge checks, quoting the output of the commands that prove it.\n\n" +
-        "Use it for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs. " +
-        "Do yourself: one command whose exact output you need, git status, log or diff, grep, a few file reads, a port check, a log tail, a restart, edits to files you are changing, and what the user wants to watch.\n\n" +
+        "A delegate costs a whole session: it reads the code again from nothing, its workspace is cut and its checks run, and you wait for its report. " +
+        "That pays off for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs, independent pieces run at once. " +
+        "It does not for one command whose exact output you need, git status, log or diff, grep, a few file reads, a port check, a log tail, a restart, edits to files you are changing, or what the user wants to watch: do those yourself.\n\n" +
+        "Brief it as an engineer who cannot see this conversation: the goal and what done looks like, what you know and where, the person's constraints, the checks that prove it.\n\n" +
         "Prefer it over start_session, and over handoff for new standalone work.",
       {
         prompt: z
@@ -1453,6 +1457,17 @@ const loadingLine = (listable: Listable): string =>
 const ANSWERS =
   'response_format: "detailed" returns the hub\'s whole record as JSON, for when the words leave out what you need.';
 
+/**
+ * How a leaf carries its brief to the end, from Prompting Claude Fable 5.2,
+ * "Finish the whole task": a leaf runs unattended, most at the `medium` and
+ * `low` types' effort, where that model ends turns early with work left. It
+ * keeps the guide's line between an ordinary obstacle, worked through, and
+ * a deliberate one (the workspace's boundary among them), left alone and
+ * named in finish_item's `blocked`.
+ */
+const LEAF_FINISHING =
+  "Keep working while the brief still owes work, and work that does not depend on an open question or card goes on while it waits. An error, a timeout, a busy or failing tool, a locked file or an empty result is an ordinary obstacle: diagnose it and work through it with the access you have (wait and retry, fix the call, use another tool or source). A deliberate block is different: the workspace's boundary, access that was withheld, a file the brief says not to touch, a guardrail. Leave it alone, look for another safe way to finish, and when there is none, name it in finish_item's `blocked`. None of this lifts a confirmation the harness asks for a risky or destructive action.";
+
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
   deps: HandoffDeps,
@@ -1479,7 +1494,7 @@ export function handoffInstructions(
       mayStart.length > 0
         ? ` It may delegate only to ${mayStart.join(", ")}, whose reports wake it: end the turn to wait for one.`
         : "";
-    return `This session is a leaf delegate: do the assigned work yourself and call finish_item when it is done.${starts}\n\n${naming}${loading}${images}`;
+    return `This session is a leaf delegate: do the assigned work yourself and call finish_item when it is done.${starts}\n\n${LEAF_FINISHING}\n\n${naming}${loading}${images}`;
   }
   // The orchestrator's seat, the same on every model: an Opus orchestrator
   // made 387 shell and about 50 browser calls in one day (killing dev
@@ -1488,8 +1503,8 @@ export function handoffInstructions(
   // (code.claude.com/docs/en/mcp, "For MCP server authors"), so what the
   // seat must read comes first and the block stays well inside the cap.
   return [
-    "This session orchestrates: it plans, briefs, reads reports and decides, and takes a delegate's report as the evidence for its work. Substantial execution goes to a delegate: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. Give each delegate a concrete deliverable. `owns` keeps two items from overlapping; work on a screen owns the whole screen. Reports arrive by themselves, so independent parent work keeps moving. Finished work goes to the person as it is; a review runs when they ask for one. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
-    "When delegation fails or no type fits, report the blocker and keep bulk exploration for a delegate.",
+    "This session orchestrates: it plans, briefs, reads reports and decides, and takes a delegate's report as the evidence for its work. Substantial execution goes to a delegate, so this session stays free for the person and the plan: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. Give each delegate a concrete deliverable. `owns` keeps two items from overlapping; work on a screen owns the whole screen. Reports arrive by themselves, so independent parent work keeps moving. Finished work goes to the person as it is; a review runs when they ask for one. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
+    "When a delegate call is refused, read the refusal and fix the call (another type, a missing field, a narrower brief), then call again. When no type fits or the refusal stands, tell the person with its error; bulk exploration still goes to a delegate once one can run.",
     `${naming}${loading}${images}`,
   ].join("\n\n");
 }
