@@ -65,11 +65,11 @@
   import { Kbd, KbdGroup } from "#lib/components/ui/kbd/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconSend, IconTick, IconWarningTriangle } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-ready.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-ready.webp";
-  import { frameObserver } from "../../frame-observer.js";
-  import { CURVE, dur, motionOk } from "../../motion/curves.svelte";
-  import { morph } from "../../motion/morph.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import {
     bridge,

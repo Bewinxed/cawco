@@ -9,8 +9,8 @@
 
 <script generics="Item extends RailItem" lang="ts">
   import type { Snippet } from "svelte";
-  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
-  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
+  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
+  import { staggered } from "#lib/platform/motion/curves.svelte.js";
   import { cn } from "#lib/utils.js";
   /**
    * A designed radio group: a thumb that slides under the chosen item, and

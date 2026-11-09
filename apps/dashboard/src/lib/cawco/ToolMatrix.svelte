@@ -7,8 +7,6 @@
   import Check from "#lib/cawco/accounts/Check.svelte";
   import SigninPanel from "#lib/cawco/accounts/SigninPanel.svelte";
   import HarnessLogo, { hasMark } from "#lib/cawco/HarnessLogo.svelte";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { quotedScreen } from "#lib/cawco/signin-screen.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -28,6 +26,8 @@
     IconTerminal,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { didntAnswer, type Machine } from "./client.svelte";
   import NoMachines from "./config/NoMachines.svelte";
   import { EMPTY_LINES } from "./empty-asks";

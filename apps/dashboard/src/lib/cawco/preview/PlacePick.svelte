@@ -9,12 +9,12 @@
    */
   import { machineLabel } from "@cawco/core/machine-names";
   import { placePickWords as words } from "@cawco/core/words/place";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
-  import { appear } from "../motion/curves.svelte";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
   import { paneFleet } from "./pane-fleet";
 
   let {

@@ -85,7 +85,7 @@ Session (hub — fleet board)
 └── Usage (spoke)
 ```
 
-**Sitemap on disk now.** The routes have since regrouped. Tools and Rules are sections of one **Configure** spoke. The rail's spokes, top to bottom, are Fleet, Usage, Configure (`lib/cawco/Sidebar.svelte`; `lib/cawco/motion/route.svelte.ts` `SPOKE_ORDER`). The specs below keep their original surface names; this is where each lives today:
+**Sitemap on disk now.** The routes have since regrouped. Tools and Rules are sections of one **Configure** spoke. The rail's spokes, top to bottom, are Fleet, Usage, Configure (`lib/cawco/Sidebar.svelte`; `lib/platform/motion/route.svelte.ts` `SPOKE_ORDER`). The specs below keep their original surface names; this is where each lives today:
 ```
 /session                     Fleet board (hub)                    spec 1 `session`
 /session/[id]                Session transcript                   spec 2 `session/[id]` (one [[id]] route)
