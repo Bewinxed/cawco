@@ -29,17 +29,14 @@ export const systemdDir = (): string =>
 export const launchAgentsDir = (): string =>
   join(homedir(), "Library", "LaunchAgents");
 
-/** The user's systemd unit folder as this process started with it: where an install writes. */
-const SYSTEMD_DIR = systemdDir();
-
 export const systemdPath = (name: string): string =>
-  join(SYSTEMD_DIR, unitName(name));
+  join(systemdDir(), unitName(name));
 
 /** A listening socket systemd holds for a socket-activated service, by its base name (`SocketSpec.unit`). */
 export const socketName = (base: string): string => `cawco-${base}.socket`;
 
 export const socketPath = (base: string): string =>
-  join(SYSTEMD_DIR, socketName(base));
+  join(systemdDir(), socketName(base));
 
 export const launchAgentPath = (name: string): string =>
   join(launchAgentsDir(), `${label(name)}.plist`);
