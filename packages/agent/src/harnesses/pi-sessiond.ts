@@ -1,4 +1,5 @@
 /** Agent-side pi transport. Only the sessiond-owned host runs the SDK. */
+
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
@@ -34,6 +35,7 @@ import {
   refusalReason,
   type SessiondClient,
 } from "../sessiond-client";
+import { SessionLedger } from "./session-ledger";
 
 export type PiHostCommand =
   | {
@@ -232,7 +234,7 @@ class PiRemoteSession implements HarnessSession {
    * says nothing of it; stopping the host before pi reads it loses it
    * ({@link holding}).
    */
-  readonly #unread = new Set<string>();
+  readonly #unread = new SessionLedger();
   /**
    * The shell commands the host moved to the background that still run, by
    * task id: from their `task_started` (or the host's own list,
@@ -290,7 +292,7 @@ class PiRemoteSession implements HarnessSession {
               ctx.failed(new Error(event.error));
               break;
             case "rejected":
-              this.#unread.delete(event.uuid);
+              this.#unread.read(event.uuid);
               ctx.rejected(event.uuid, new Error(event.error));
               break;
             case "reply": {
@@ -328,7 +330,7 @@ class PiRemoteSession implements HarnessSession {
           this.#pending.clear();
           this.#exited = true;
           // Gone with the host: the supervisor hands back what it never read.
-          this.#unread.clear();
+          this.#unread.readAll();
           this.#setBusy(false);
           ctx.closed?.();
           client.release(procIdFor("pi", ctx.instanceId), pid);
@@ -346,7 +348,7 @@ class PiRemoteSession implements HarnessSession {
   #frame(seq: number, message: NeutralMessage): void {
     if (message.type === "system" && message.subtype === MESSAGES_READ) {
       for (const uuid of message.read ?? []) {
-        this.#unread.delete(uuid);
+        this.#unread.read(uuid);
       }
     }
     const moved = backgroundShell(message);
@@ -394,7 +396,7 @@ class PiRemoteSession implements HarnessSession {
     // What the host holds unread when it answers: the reads after it come
     // as frames. One sent since it answered is in the set already.
     for (const uuid of state.held) {
-      this.#unread.add(uuid);
+      this.#unread.handed(uuid);
     }
     for (const taskId of state.background ?? []) {
       this.#background.add(taskId);
@@ -480,12 +482,12 @@ class PiRemoteSession implements HarnessSession {
   }
 
   send(message: SentMessage, extras: TurnExtras): void {
-    this.#unread.add(message.uuid);
+    this.#unread.handed(message.uuid);
     this.#setBusy(true);
     this.write({ type: "send", message, extras }).catch((error: unknown) => {
       // A refused write has been said, and its send is kept for the next
       // start ({@link KeeperRefused}); any other failure is this send's.
-      this.#unread.delete(message.uuid);
+      this.#unread.read(message.uuid);
       if (!(error instanceof KeeperRefused)) {
         this.#ctx.rejected(message.uuid, error);
       }
@@ -493,8 +495,9 @@ class PiRemoteSession implements HarnessSession {
   }
 
   holding(): string | undefined {
-    if (this.#unread.size > 0) {
-      return `it holds ${this.#unread.size} send(s) it has not read yet`;
+    const unread = this.#unread.held();
+    if (unread) {
+      return unread;
     }
     // Its host runs them, and a resume brings none back.
     return this.#background.size > 0
