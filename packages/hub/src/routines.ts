@@ -2636,7 +2636,7 @@ const ROUTINE_TOOL_NAMES = [
 export const ROUTINE_TOOLS: ReadonlySet<string> = new Set(ROUTINE_TOOL_NAMES);
 
 /** Runs a route's work, a refusal answered with its status. */
-const answered = refusalAttempt(RoutineRefusal);
+const answered = refusalAttempt(RoutineRefusal, "routine-refused");
 
 /** How a routine's runs are made and what they may spend, as a route sets them. */
 const RUN_FIELDS = {

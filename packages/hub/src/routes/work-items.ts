@@ -167,7 +167,7 @@ export const workItemRoutes = (
             }
           },
         },
-        async ({ body, request, status, server }) => {
+        async ({ body, request, server }) => {
           server?.timeout(request, 0);
           const stranger = sessionCallerRefusal(
             identities,
@@ -185,10 +185,11 @@ export const workItemRoutes = (
               error instanceof Error ? error.message : String(error);
             // Anything that is not the hub's own refusal is the machine's:
             // offline, or git turning the checkout down.
-            return status(
+            return refusal(
               error instanceof WorkItemRefusal || error instanceof FolderRefusal
                 ? error.status
                 : 502,
+              "work-item-refused",
               message
             );
           }
@@ -215,7 +216,7 @@ export const workItemRoutes = (
             }
           },
         },
-        ({ body, request, status }) => {
+        ({ body, request }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
@@ -234,8 +235,9 @@ export const workItemRoutes = (
               ),
             };
           } catch (error) {
-            return status(
+            return refusal(
               error instanceof WorkItemRefusal ? error.status : 502,
+              "work-item-refused",
               error instanceof Error ? error.message : String(error)
             );
           }
@@ -261,7 +263,7 @@ export const workItemRoutes = (
             ship: t.Optional(t.Object({ notes: t.String({ minLength: 1 }) })),
           }),
         },
-        async ({ body, status, request, server }) => {
+        async ({ body, request, server }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
@@ -278,8 +280,9 @@ export const workItemRoutes = (
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
-            return status(
+            return refusal(
               error instanceof WorkItemRefusal ? error.status : 502,
+              "work-item-refused",
               message
             );
           }
@@ -297,7 +300,7 @@ export const workItemRoutes = (
             instanceId: t.String({ minLength: 1 }),
           }),
         },
-        ({ body, request, status }) => {
+        ({ body, request }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
@@ -312,7 +315,7 @@ export const workItemRoutes = (
             return calls.stop(body.from, body.instanceId);
           } catch (error) {
             if (error instanceof WorkItemRefusal) {
-              return status(error.status, error.message);
+              return refusal(error.status, "work-item-refused", error.message);
             }
             throw error;
           }
@@ -329,7 +332,7 @@ export const workItemRoutes = (
             target: t.String({ minLength: 1 }),
           }),
         },
-        ({ body, request, status }) => {
+        ({ body, request }) => {
           const stranger = sessionCallerRefusal(
             identities,
             request,
@@ -351,8 +354,9 @@ export const workItemRoutes = (
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
-            return status(
+            return refusal(
               error instanceof WorkItemRefusal ? error.status : 502,
+              "work-item-refused",
               message
             );
           }
