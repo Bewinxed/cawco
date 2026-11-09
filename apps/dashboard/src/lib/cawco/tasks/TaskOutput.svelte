@@ -28,7 +28,11 @@
   import { on } from "svelte/events";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
-  import { failureWords, hubRefusal } from "#lib/platform/hub-read.js";
+  import {
+    failureWords,
+    hubRefusal,
+    refusedOf,
+  } from "#lib/platform/hub-read.js";
   import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { track } from "#lib/platform/track.js";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
@@ -124,7 +128,10 @@
         response.ok
           ? madeWords.notShown(name)
           : failureWords(
-              await hubRefusal(response, madeWords.notShownThen(name))
+              hubRefusal(
+                await refusedOf(response),
+                madeWords.notShownThen(name)
+              )
             ),
       (error: unknown) => failureWords(error)
     );
