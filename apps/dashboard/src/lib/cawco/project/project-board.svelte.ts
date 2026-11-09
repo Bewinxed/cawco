@@ -21,7 +21,6 @@ import {
   type TaskView,
   updateTask,
 } from "#lib/cawco/project-tasks.js";
-import type { BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
 import type { TaskFind } from "#lib/cawco/tasks/task-find.svelte.js";
 import { clearPicks, selection } from "#lib/cawco/tasks/task-select.svelte.js";
 import { taskShare } from "#lib/cawco/tasks/task-share.js";
@@ -40,6 +39,16 @@ import {
 import { departShared } from "#lib/platform/motion/share.svelte.js";
 import { newestRead } from "#lib/platform/newest-read.js";
 import type { ProjectPageData } from "./project-page-data";
+
+/** A bulk change in flight: what it does, how far it is, where it stopped. */
+export interface BulkRun {
+  done: number;
+  /** The task the hub refused, and its words; the rest stay picked. */
+  failed: { id: string; text: string } | null;
+  total: number;
+  /** "Moving", "Labelling", "Archiving", "Dropping". */
+  verb: string;
+}
 
 /** A refused read, as a sentence with its status for support. */
 const refusal = (read: HubRead<unknown>): string | null =>
