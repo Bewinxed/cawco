@@ -77,3 +77,14 @@ no-explicit-any/planted.ts:4:30 no-explicit-any
 no-explicit-any/planted.ts:5:30 no-explicit-any
 no-explicit-any/Planted.svelte:2:27 no-explicit-any
 no-explicit-any/Planted.svelte:5:18 no-explicit-any
+no-harness-compare/planted.ts:7:25 no-harness-compare
+no-harness-compare/planted.ts:8:28 no-harness-compare
+no-harness-compare/planted.ts:9:24 no-harness-compare
+no-harness-compare/planted.ts:10:22 no-harness-compare
+no-harness-compare/planted.ts:11:20 no-harness-compare
+no-harness-compare/planted.ts:12:23 no-harness-compare
+no-harness-compare/planted.ts:13:25 no-harness-compare
+no-harness-compare/planted.ts:17:5 no-harness-compare
+no-harness-compare/Planted.svelte:3:20 no-harness-compare
+no-harness-compare/Planted.svelte:6:6 no-harness-compare
+no-harness-compare/Planted.svelte:7:11 no-harness-compare
