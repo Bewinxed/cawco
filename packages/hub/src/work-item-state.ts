@@ -119,3 +119,12 @@ export class WorkItemRefusal extends Error {
     this.status = status;
   }
 }
+
+/**
+ * The longest wait an item declares, in whole minutes: `wait_item`'s tool,
+ * its route and work-items.ts `waitItem` hold a session to it, and a landing
+ * waiting for a machine its gate needs declares it (landing-run.ts).
+ */
+export const WAIT_ITEM_MAX_MINUTES = 120;
+
+export const WAIT_ITEM_LIMIT = `Wait not set. Use whole minutes from 1 to ${WAIT_ITEM_MAX_MINUTES} and a non-empty reason for waiting on a command you started.`;
