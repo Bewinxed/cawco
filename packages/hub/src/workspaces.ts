@@ -1,5 +1,6 @@
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { detach } from "@cawco/core/detach";
+import { machineCalled } from "@cawco/core/machine-names";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import type { InstanceRow, InstanceStatus } from "@cawco/core/protocol";
@@ -319,38 +320,11 @@ export type Settled =
   | { kind: "failed"; reason: string }
   | { kind: "none" };
 
-export interface WorkspacesDeps {
-  /** Runs a machine-scoped daemon function; throws the machine's own words. */
-  readonly call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
-  /**
-   * Runs a command on a machine, in a directory — inside `workspace`'s
-   * boundary when one is named; throws when the machine cannot. Its limit
-   * stands while it waits for a shared machine slot; on a paused machine it
-   * waits for the pause's end, and one a pause cancels runs again after it
-   * (or answers `cancelled`, `how.movable`); `how.onWait` hears each wait.
-   */
-  readonly command: (
-    machineId: string,
-    cwd: string,
-    cmd: string,
-    timeoutMs?: number,
-    workspace?: WorkspaceRef,
-    how?: CommandOptions
-  ) => Promise<CommandResult>;
-  readonly db: DbShape;
-  readonly discardCreate: (id: string, machineId: string) => Promise<void>;
-  /**
-   * Store stop intent and wait for the machine's positive end confirmation,
-   * for `waitMs` at most. Returns at once for a session already ended or with
-   * no process on its machine.
-   */
-  readonly end: (instanceId: string, waitMs?: number) => Promise<void>;
-  readonly finishing: Set<string>;
-  readonly itemOf: (row: InstanceRow) => WorkItemRow | undefined;
+/**
+ * What workspaces read of the hub that work items read nothing of: the hub
+ * hands it to createWorkItems as one `forWorkspaces`, passed on whole.
+ */
+export interface WorkspacesHub {
   /**
    * The Claude account session `instanceId`'s next launch on `machineId`
    * runs on, as the hub's launch grant will name it (`ItemPlacement`'s
@@ -362,25 +336,12 @@ export interface WorkspacesDeps {
     machineId: string,
     instanceId: string
   ) => string | undefined;
-  readonly leadFor: (item: WorkItemRow) => InstanceRow | undefined;
-  readonly machineName: (machineId: string) => string;
   /**
    * Whether a create is making a preview from workspace `id` now, its
    * server started and its row not yet written (artifacts service
    * `makingFrom`): its retirement waits for it ({@link previewedBy}).
    */
   readonly makingFrom?: (id: string) => boolean;
-  readonly mayReopen: (item: WorkItemRow, origin: NeutralOrigin) => boolean;
-  readonly notPaused: (machineId: string) => void;
-  readonly opening: Set<string>;
-  readonly report: (
-    row: InstanceRow,
-    body: string,
-    failed: boolean,
-    notice?: boolean,
-    headline?: string,
-    outputs?: string[]
-  ) => void;
   /**
    * Whether a send pending for the session may start a turn in it (server.ts
    * `startsTurnIn`): it wakes the session in its workspace, which holds the
@@ -411,21 +372,61 @@ export interface WorkspacesDeps {
   readonly workspaceChanged?: (workspace: WorkspaceRow) => void;
 }
 
+export interface WorkspacesDeps extends WorkspacesHub {
+  /** Runs a machine-scoped daemon function; throws the machine's own words. */
+  readonly call: (
+    machineId: string,
+    method: string,
+    args: unknown[]
+  ) => Promise<unknown>;
+  /**
+   * Runs a command on a machine, in a directory — inside `workspace`'s
+   * boundary when one is named; throws when the machine cannot. Its limit
+   * stands while it waits for a shared machine slot; on a paused machine it
+   * waits for the pause's end, and one a pause cancels runs again after it
+   * (or answers `cancelled`, `how.movable`); `how.onWait` hears each wait.
+   */
+  readonly command: (
+    machineId: string,
+    cwd: string,
+    cmd: string,
+    timeoutMs?: number,
+    workspace?: WorkspaceRef,
+    how?: CommandOptions
+  ) => Promise<CommandResult>;
+  readonly db: DbShape;
+  /**
+   * Store stop intent and wait for the machine's positive end confirmation,
+   * for `waitMs` at most. Returns at once for a session already ended or with
+   * no process on its machine.
+   */
+  readonly end: (instanceId: string, waitMs?: number) => Promise<void>;
+  /** Whether this hub process runs item `itemId`'s landing now (landing-run.ts `landingRuns`). */
+  readonly landingRuns: (itemId: string) => boolean;
+  readonly leadFor: (item: WorkItemRow) => InstanceRow | undefined;
+  readonly mayReopen: (item: WorkItemRow, origin: NeutralOrigin) => boolean;
+  readonly notPaused: (machineId: string) => void;
+  readonly report: (
+    row: InstanceRow,
+    body: string,
+    failed: boolean,
+    notice?: boolean,
+    headline?: string,
+    outputs?: string[]
+  ) => void;
+}
+
 export const createWorkspaces = ({
   call,
   command,
   db,
-  discardCreate,
   end,
-  finishing,
-  itemOf,
+  landingRuns,
   launchesOn,
   leadFor,
-  machineName,
   makingFrom,
   mayReopen,
   notPaused,
-  opening,
   report,
   sendWakes,
   servedOwed,
@@ -433,6 +434,38 @@ export const createWorkspaces = ({
   waitingOnPerson,
   workspaceChanged,
 }: WorkspacesDeps) => {
+  /** A machine as a line names it: its hostname as the fleet shows it. */
+  const machineName = (machineId: string): string =>
+    machineCalled(machineId, db.listAgents());
+  /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
+  const opening = new Set<string>();
+  const discarding = new Map<string, Promise<void>>();
+  /** The filed and unfiled cases use the same machine archive, acknowledged before forgetting it. */
+  const discardCreate = (id: string, machineId: string): Promise<void> => {
+    const pending = discarding.get(id);
+    if (pending !== undefined) {
+      return pending;
+    }
+    const unmade: WorkspaceArchive = { id, unlanded: "unmade" };
+    const discarded = call(machineId, CONTROL_WORKSPACE_ARCHIVE, [unmade])
+      .then(() => db.finishWorkspaceCreate(id))
+      .finally(() => discarding.delete(id));
+    discarding.set(id, discarded);
+    return discarded;
+  };
+  /** Replays durable discards, including creates whose reply a previous hub never received. */
+  const discardUnfiled = (machineId: string): void => {
+    for (const { id } of db.workspaceCreatesOn(machineId)) {
+      if (opening.has(id)) {
+        continue;
+      }
+      discardCreate(id, machineId).catch((error: unknown) => {
+        console.warn(
+          `[workspaces] discard ${id} on ${machineId} is still pending: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    }
+  };
   /** The one workspace `needle` names; refused when it names none or several. */
   const namedWorkspace = (needle: string): WorkspaceRow => {
     const named = db.workspacesNamed(needle.trim());
@@ -944,7 +977,7 @@ export const createWorkspaces = ({
     // A stopped item's landing runs on in the clone until its next turn or
     // push ends it (landing.ts `stopped`): closing the clone under it would
     // cut its commands off mid-rebase.
-    const landing = items.find((item) => finishing.has(item.id));
+    const landing = items.find((item) => landingRuns(item.id));
     if (landing) {
       holds.push({
         kind: "landing",
@@ -1224,7 +1257,7 @@ export const createWorkspaces = ({
    * {@link CONTROL_WORKSPACE_WORK_END}: agent boundary.ts `endSessionWork`,
    * as an interrupt and a stop do), once per set of ended items; the
    * boundary and the sessions run on, so a handoff resumes one there. Not
-   * while its landing runs (`finishing`), an artifact shows what it serves
+   * while its landing runs ({@link WorkspacesDeps.landingRuns}), an artifact shows what it serves
    * ({@link previewedBy}: once the artifact goes, the next settle ends it),
    * a project's folder is inside it ({@link placesIn}), or a message or
    * continuation is on its way to one of its sessions (its new turn's work
@@ -1408,6 +1441,54 @@ export const createWorkspaces = ({
    */
   const turnMayRetire = (id: string): boolean =>
     workspaceTurns.has(id) && !goingOn.has(id);
+  /**
+   * Session `instanceId`'s workspace `workspaceId` cut again in its turn,
+   * after whatever runs there, if it is retired by then ({@link recut}):
+   * one wait per session ({@link recutWaits}), so nothing when one already
+   * waits for it.
+   */
+  const recutInTurn = (
+    instanceId: string,
+    workspaceId: string
+  ): Promise<void> | undefined => {
+    if (recutWaits.has(instanceId)) {
+      return undefined;
+    }
+    recutWaits.add(instanceId);
+    return inWorkspaceTurn(workspaceId, async () => {
+      const [now] = db.workspacesNamed(workspaceId);
+      if (now && recuttable(now)) {
+        await recut(now);
+      }
+    }).finally(() => recutWaits.delete(instanceId));
+  };
+  /**
+   * Item `itemId`'s workspace `workspaceId` held for a continuation of its
+   * session ({@link continuing}, {@link holdsOf}) until the answered
+   * release, which only its first call ends; released, the workspace
+   * settles as it stands.
+   */
+  const holdForContinuation = (
+    itemId: string,
+    workspaceId: string
+  ): (() => void) => {
+    continuing.set(itemId, (continuing.get(itemId) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      const left = (continuing.get(itemId) ?? 1) - 1;
+      if (left > 0) {
+        continuing.set(itemId, left);
+      } else {
+        continuing.delete(itemId);
+      }
+      // Held no longer by this, it settles as it stands.
+      settleSoon(workspaceId);
+    };
+  };
   /** A settle queued in its workspace's turn and not yet begun: every caller meanwhile shares it. */
   const settleQueued = new Map<string, Promise<Settled>>();
   /**
@@ -1435,6 +1516,37 @@ export const createWorkspaces = ({
   /** {@link settleNow}, off the caller's step. */
   const settleSoon = (id: string): void => {
     soon(() => detach(settleNow(id), `settle ${id}`));
+  };
+  /**
+   * {@link settle} for each active workspace on `machineId`, one after
+   * another, then each archived one whose clone is still there closed
+   * again ({@link closeLeftClones}): the sweep's look (workspace-retire.ts).
+   * A timed look passes over a workspace whose last settle failed until its
+   * wait is over ({@link settleFailed}); a look someone `asked` for tries
+   * it now. Answers each one's outcome by id.
+   */
+  const settleOn = async (
+    machineId: string,
+    asked: boolean
+  ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> => {
+    const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
+    for (const workspace of db.activeWorkspacesOn(machineId)) {
+      // Something runs in its turn now, or its last settle failed and its
+      // wait is not over: a later look settles it.
+      if (
+        workspaceTurns.has(workspace.id) ||
+        (!asked &&
+          (settleFailures.get(workspace.id)?.retryAt ?? 0) > Date.now())
+      ) {
+        continue;
+      }
+      done.push({
+        workspace,
+        outcome: await settleNow(workspace.id),
+      });
+    }
+    done.push(...(await closeLeftClones(machineId)));
+    return done;
   };
   /**
    * Workspace `id` read again, off the caller's step and in its turn, now
@@ -1727,7 +1839,7 @@ export const createWorkspaces = ({
    * back at main, without its own commit. The machine refuses a commit the
    * branch it was on no longer holds. Its boundary is started on the account
    * its latest item's session's next launch runs on ({@link
-   * WorkItemDeps.launchesOn}): its delegate goes on in the same
+   * WorkspacesHub.launchesOn}): its delegate goes on in the same
    * session, on its transcript, in the same folder. Filed active again, one
    * of its project's places. Nothing git does not track comes back:
    * installed dependencies, build outputs, its scratch dir. CawCo installs
@@ -1878,7 +1990,7 @@ export const createWorkspaces = ({
    */
   const retiredFor = (instanceId: string, origin: NeutralOrigin): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
-    const item = row ? itemOf(row) : undefined;
+    const item = row?.workItemId ? db.workItem(row.workItemId) : undefined;
     if (!item || LIVE.has(item.state) || !mayReopen(item, origin)) {
       return false;
     }
@@ -2357,18 +2469,16 @@ export const createWorkspaces = ({
     resettleSoon,
     retiredFor,
     turnMayRetire,
-    recutWaits,
+    recutInTurn,
+    holdForContinuation,
     inWorkspaceTurn,
     archivedWords,
-    continuing,
     holdsProjectOn,
     heldWork,
     unlandedOf,
     owedFrom,
-    closeLeftClones,
-    workspaceTurns,
-    settleFailures,
-    settleNow,
+    settleOn,
+    discardUnfiled,
     fileStage,
     archiveNow,
     waitingFrom,
