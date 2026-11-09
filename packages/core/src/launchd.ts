@@ -181,6 +181,17 @@ type LaunchdStart = z.infer<typeof LaunchdStartSchema>;
 const launchdStartPath = (label: string): string =>
   join(homedir(), ".cawco", "launchd", `${label}.start.json`);
 
+/** `value` as XML text: the one escape every plist CawCo writes goes through. */
+export const xml = (value: string): string =>
+  value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
+
+/** What {@link xml} escaped, as it was. */
+export const unxml = (value: string): string =>
+  value
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+
 /**
  * The shell every job CawCo writes starts in: its start record written whole
  * (a temporary file, then a rename) beside where {@link launchdStartPath}
@@ -200,9 +211,7 @@ const START_SCRIPT = [
  * shell: its arguments after the script are `cawco-launchd-start`, the
  * record's path and the command, as {@link launchdProgram} gives them.
  */
-export const LAUNCHD_START_XML = START_SCRIPT.replaceAll("&", "&amp;")
-  .replaceAll("<", "&lt;")
-  .replaceAll(">", "&gt;");
+export const LAUNCHD_START_XML = xml(START_SCRIPT);
 
 /** The ProgramArguments of the job `label` that runs `argv`: its start record first, then `argv` itself. */
 export const launchdProgram = (
