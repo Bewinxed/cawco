@@ -1,6 +1,8 @@
 import { lookup } from "node:dns/promises";
 import { networkInterfaces } from "node:os";
 import { detach } from "@cawco/core/detach";
+import { isStreamRelayPort } from "@cawco/core/stream-relay";
+import type { TailnetServing } from "@cawco/core/tailnet-https";
 import {
   causeOf,
   heldWhileServed,
@@ -9,9 +11,7 @@ import {
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
-} from "@cawco/core/preview/proxy";
-import { isStreamRelayPort } from "@cawco/core/stream-relay";
-import type { TailnetServing } from "@cawco/core/tailnet-https";
+} from "@cawco/preview/proxy";
 import type { Server } from "bun";
 import { type AgentState, type HubHere, recordAgentState } from "./agent-state";
 
