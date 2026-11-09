@@ -32,9 +32,9 @@
   import { commentWords } from "@cawco/core/words/comments";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconRefresh } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
 
   let {
     lines,

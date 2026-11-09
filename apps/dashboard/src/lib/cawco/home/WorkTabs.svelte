@@ -67,15 +67,19 @@
     IconStructure as Structure,
     IconStructureSolid as StructureOn,
   } from "#lib/icons.js";
+  import { nestFrom } from "#lib/platform/motion/branch.svelte.js";
+  import {
+    crossIn,
+    reveal,
+    revealOut,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { echoBeat } from "#lib/platform/motion/echo.svelte.js";
+  import { holdWhileInside } from "#lib/platform/motion/held-order.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
   import { type BoardRow, cawco, isFailed } from "../client.svelte";
   import { conversationHref } from "../links";
-  import { nestFrom } from "../motion/branch.svelte";
-  import { crossIn, reveal, revealOut } from "../motion/curves.svelte";
-  import { echoBeat } from "../motion/echo.svelte";
-  import { holdWhileInside } from "../motion/held-order.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import OlderRows from "../OlderRows.svelte";
   import OsMark from "../OsMark.svelte";
   import { failedWords } from "../older";
