@@ -22,9 +22,7 @@ import { TURN_UNRECORDED } from "./db/sends";
 import type { MachineLine } from "./db/session-lines";
 import type { HubContext } from "./hub-context";
 import { isKeepAlive } from "./keep-alive";
-import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import { uuidOf } from "./named-uuid";
-import { sessionControl } from "./session-word";
 import { unreachable } from "./unreachable";
 
 /** A clock time as a hand-back says it: `12:09 UTC`. */
@@ -117,9 +115,7 @@ export const machineLine = (
 export type CutTurnsContext = Pick<
   HubContext,
   | "SETTLED"
-  | "asRead"
   | "atLimit"
-  | "awaitReply"
   | "cutTasksWords"
   | "db"
   | "deliverSend"
@@ -133,8 +129,8 @@ export type CutTurnsContext = Pick<
   | "planChanges"
   | "publishInstances"
   | "push"
+  | "readSessionProcess"
   | "registry"
-  | "sendAnswerable"
   | "sessionAsleep"
   | "sessionName"
   | "transcripts"
@@ -197,18 +193,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     row: InstanceRow,
     taskId: string
   ): Promise<Pick<EndedTask, "output" | "outputUnread">> => {
-    const requestId = crypto.randomUUID();
-    const answer = ctx.asRead(
-      await ctx.awaitReply(row.machineId, requestId, READ_TIMEOUT_MS, () => {
-        const agent = ctx.registry.agent(row.machineId);
-        return agent
-          ? ctx.sendAnswerable(
-              agent,
-              sessionControl(row, requestId, "getTaskOutput", [taskId])
-            )
-          : undefined;
-      })
-    );
+    const answer = await ctx.readSessionProcess(row, "getTaskOutput", [taskId]);
     switch (answer.kind) {
       case "unanswered":
         return { outputUnread: { after: answer.after } };
