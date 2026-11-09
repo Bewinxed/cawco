@@ -20,9 +20,9 @@
    *    (ActionsTable), without the routine's name, which is the row's.
    */
   import { rowHref } from "#lib/cawco/links.js";
+  import Markdown from "#lib/cawco/Markdown.svelte";
   import { since } from "#lib/cawco/rules.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import { frameObserver } from "#lib/platform/frame-observer.js";
   import ActionsTable from "./ActionsTable.svelte";
