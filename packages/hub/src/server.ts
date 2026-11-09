@@ -1072,6 +1072,7 @@ import { modelWindowRoutes } from "./routes/model-windows";
 import { moveRoutes } from "./routes/moves";
 import { pendingRoutes } from "./routes/pending";
 import { projectRoutes } from "./routes/projects";
+import { pulseRoutes } from "./routes/pulses";
 import { ruleActivityRoutes, ruleRoutes } from "./routes/rules";
 import { continueBody } from "./routes/session-bodies";
 import { sessionIdentityRoutes } from "./routes/session-identities";
@@ -3316,6 +3317,7 @@ export const createServer = (
     ruleRowsOf: () => ruleRowsOf,
     stopProjectBrowsers: () => stopProjectBrowsers,
     tasks: () => tasks,
+    pulses: () => pulses,
     say: () => (payload) =>
       registry.broadcast({
         verb: "frames",
@@ -33188,12 +33190,8 @@ export const createServer = (
       }),
     machinePauseRoutes(ctx),
     agentControlRoutes(ctx),
-    new Elysia()
-      .get("/api/instances", () => laws.raise(boardRows))
-      // Every session's pulse, the daemon's now-state, as the socket's first
-      // `instances` frame seeds it: the dashboard's server load reads it so a
-      // page's first paint draws a working session working.
-      .get("/api/pulses", () => Object.fromEntries(pulses)),
+    new Elysia().get("/api/instances", () => laws.raise(boardRows)),
+    pulseRoutes(ctx),
     followupStateRoutes(ctx),
     new Elysia()
       // Moves a session to another account of its provider, whole: its
@@ -33648,9 +33646,9 @@ export const createServer = (
     fleetRoutes(ctx),
     fleetMcpRoutes(ctx),
     ruleRoutes(ctx),
-    trashRoutes(ctx),
   ]);
   const hubRoutes = hubRoutesPart1.use([
+    trashRoutes(ctx),
     ruleActivityRoutes(ctx),
     modelAccessRoutes(ctx),
     imageSettingRoutes(ctx),
