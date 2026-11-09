@@ -6,7 +6,7 @@
  */
 import { getContext, type Snippet, setContext, untrack } from "svelte";
 import { MediaQuery } from "svelte/reactivity";
-import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+import { numberOf } from "#lib/platform/motion/curves.svelte.js";
 import { browser } from "$app/env";
 
 const phone = new MediaQuery("(width < 640px)");

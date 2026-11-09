@@ -18,10 +18,10 @@
    * and so does a line arriving or leaving under it.
    */
   import type { Component, Snippet } from "svelte";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import { IconCheck, IconWarningTriangle } from "#lib/icons.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
   import RowMenu, { type RowAction } from "./RowMenu.svelte";
 
   let {

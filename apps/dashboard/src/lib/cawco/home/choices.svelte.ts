@@ -13,8 +13,9 @@
  * - `answer`   NeedsCard.svelte
  * - `finished` home.svelte.ts
  */
+
+import { store, stored } from "#lib/platform/storage.js";
 import { browser, dev } from "$app/env";
-import { store, stored } from "../storage";
 
 export interface Choices {
   /** One answer form on the needs-you cards: (a) Approve/Deny, (b) open only. */

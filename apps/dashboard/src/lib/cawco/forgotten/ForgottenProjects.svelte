@@ -35,10 +35,10 @@
     IconFolder,
     IconReset,
   } from "#lib/icons.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import FromDiskBox from "../FromDiskBox.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import RowFault from "../RowFault.svelte";
 
   let {

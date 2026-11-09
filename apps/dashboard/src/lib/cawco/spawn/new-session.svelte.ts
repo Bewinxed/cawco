@@ -17,13 +17,13 @@
  */
 import type { Bounded } from "@cawco/core/bounded";
 import { KeptFormSchema } from "#lib/cawco/stored-shapes.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { page } from "$app/state";
 import {
   type ForkSource,
   forkSession,
   type SendExtras,
 } from "../client.svelte";
-import { readJson, writeJson } from "../storage";
 import { projectOfTab, tabOfPath } from "../workspace/tabs";
 
 export interface SpawnPrefill {
