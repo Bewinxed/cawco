@@ -297,7 +297,7 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type BreathRead, readBreath } from "../breath";
 import { type MainTask, traceMain } from "../frames";
-import { requestOf } from "../hub";
+import { pageHub } from "../hub";
 import {
   COMPOSER,
   type Kit,
@@ -12288,12 +12288,9 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
   }
   const pinned = frame ? pinNumbered((await docOf(frame)).pins, 1) : undefined;
   // The session's own title, forty words, as the owner names it.
-  const renamed = await on.page.evaluate(
-    async (request) => (await fetch(request.path, request)).status,
-    await requestOf((hub) =>
-      hub.api.instances({ id: on.session }).patch({ title: FORTY_WORDS })
-    )
-  );
+  const { status: renamed } = await pageHub(on.page)
+    .api.instances({ id: on.session })
+    .patch({ title: FORTY_WORDS });
   await agentSays(
     on,
     `Long names: ${cardLink}, [${LONGEST_TITLE}](cawco:artifact/${pid}), [the words](cawco:pin/${pid}/1) and [this session](cawco:session/${on.session}).`
