@@ -10,6 +10,7 @@
  * own origin there was a 502 in every embed's console.
  */
 
+import { hubData } from "#lib/platform/hub-read.js";
 import { browser } from "$app/env";
 import type { HubSeam } from "./hub-seam";
 import type { ConfiguredServer } from "./mcp";
@@ -33,11 +34,9 @@ export function fleetMcpServers(hub: HubSeam): ConfiguredServer[] | null {
     reads.set(hub, held);
     // A hub without a fleet, or a stand-in that keeps none, leaves rows on
     // their glyphs.
-    hub.client.api.fleet.get().then(
-      (answer) => {
-        if (!answer.error) {
-          held.servers = answer.data.config.mcp;
-        }
+    hubData(hub.client.api.fleet.get()).then(
+      (fleet) => {
+        held.servers = fleet.config.mcp;
       },
       () => undefined
     );

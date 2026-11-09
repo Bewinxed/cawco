@@ -15,10 +15,9 @@
 import type { FindBy, FindKind } from "@cawco/core/find";
 import { hub } from "#lib/platform/hub.js";
 import {
-  type HubAnswer,
-  hubData,
+  type HubAsked,
+  hubAsk,
   hubSaid,
-  unanswered,
   unreachable,
   unreachedAnswer,
 } from "#lib/platform/hub-read.js";
@@ -55,11 +54,11 @@ export type Asked<T> =
   { kind: "answered"; read: Read<T> } | { kind: "superseded" };
 
 async function read<T>(
-  call: Promise<HubAnswer<T>>,
+  asked: Promise<HubAsked<T>>,
   signal?: AbortSignal
 ): Promise<Asked<T>> {
   try {
-    return { kind: "answered", read: await answer(call, signal) };
+    return { kind: "answered", read: await answer(asked, signal) };
   } catch (error) {
     // The abort rejects the fetch, or the body read after it (Firefox: "The
     // operation was aborted."); either way it is the caller letting go.
@@ -71,23 +70,25 @@ async function read<T>(
 }
 
 async function answer<T>(
-  call: Promise<HubAnswer<T>>,
+  asked: Promise<HubAsked<T>>,
   signal?: AbortSignal
 ): Promise<Read<T>> {
-  const answered = await call;
-  if (answered.error) {
-    if (unanswered(answered)) {
-      if (!signal?.aborted && unreachable(answered.error.value)) {
-        return { ok: false, unreached: true };
-      }
-      throw answered.error.value;
-    }
-    if (unreachedAnswer(answered.response)) {
+  let answered: HubAsked<T>;
+  try {
+    answered = await asked;
+  } catch (error) {
+    if (!signal?.aborted && unreachable(error)) {
       return { ok: false, unreached: true };
     }
-    return { ok: false, unreached: false, detail: hubSaid(answered) };
+    throw error;
   }
-  return { ok: true, value: await hubData(answered) };
+  if (answered.ok) {
+    return answered;
+  }
+  if (unreachedAnswer(answered.refused.response)) {
+    return { ok: false, unreached: true };
+  }
+  return { ok: false, unreached: false, detail: hubSaid(answered.refused) };
 }
 
 export interface Ask {
@@ -105,17 +106,19 @@ const query = (
   { by, kinds, limit, relist, signal }: Ask,
   transcripts: boolean
 ) =>
-  hub.api.find.get({
-    query: {
-      q,
-      ...(limit ? { limit: String(limit) } : {}),
-      ...(kinds && kinds.length > 0 ? { kinds: kinds.join(",") } : {}),
-      ...(by ? { by } : {}),
-      ...(relist ? { relist } : {}),
-      ...(transcripts ? {} : { transcripts: "0" as const }),
-    },
-    fetch: { signal },
-  });
+  hubAsk(
+    hub.api.find.get({
+      query: {
+        q,
+        ...(limit ? { limit: String(limit) } : {}),
+        ...(kinds && kinds.length > 0 ? { kinds: kinds.join(",") } : {}),
+        ...(by ? { by } : {}),
+        ...(relist ? { relist } : {}),
+        ...(transcripts ? {} : { transcripts: "0" as const }),
+      },
+      fetch: { signal },
+    })
+  );
 
 /** What the hub knows by name, in milliseconds: asked on every keystroke. */
 export const findNames = (q: string, ask: Ask = {}) =>
@@ -126,7 +129,7 @@ export const findEverywhere = (q: string, ask: Ask = {}) =>
   read(query(q, ask, true), ask.signal);
 
 export const findWaiting = (signal?: AbortSignal) =>
-  read(hub.api.find.waiting.get({ fetch: { signal } }), signal);
+  read(hubAsk(hub.api.find.waiting.get({ fetch: { signal } })), signal);
 
 /**
  * Every place in one conversation where the words stand, its machine's
@@ -134,6 +137,8 @@ export const findWaiting = (signal?: AbortSignal) =>
  */
 export const findPlaces = (session: string, q: string, signal?: AbortSignal) =>
   read(
-    hub.api.find.places.get({ query: { session, q }, fetch: { signal } }),
+    hubAsk(
+      hub.api.find.places.get({ query: { session, q }, fetch: { signal } })
+    ),
     signal
   );
