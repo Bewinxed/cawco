@@ -26,7 +26,7 @@
  * session and the step's id (`<session>/<step>`); a routine, a project and
  * a machine each by its own id.
  */
-export const REFERENCE_KINDS = [
+const REFERENCE_KINDS = [
   "session",
   "pin",
   "change",
