@@ -79,13 +79,14 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { cawco } from "../client.svelte";
+
   import { type BoardRow, conversationHref } from "../links";
   import OlderRows from "../OlderRows.svelte";
   import OsMark from "../OsMark.svelte";
   import { failedWords } from "../older";
   import { rail } from "../rail.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
+  import { asksStore } from "../stores/asks.svelte";
   import { boardStore, isFailed } from "../stores/board.svelte";
   import { type TreeLine, tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
@@ -479,7 +480,7 @@
 
   /** A working row's line: its project, then what it is doing now. */
   function workingLine(row: BoardRow): string {
-    const tool = cawco.currentToolOf(row.id);
+    const tool = asksStore.currentToolOf(row.id);
     const doing = tool ? `${tool.name} ${tool.glance}`.trim() : "";
     return [projectOfRow(row), doing].filter(Boolean).join(" · ");
   }

@@ -67,7 +67,7 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { land } from "#lib/platform/motion/share.svelte.js";
   import { stopWords } from "../accounts/switch.svelte";
-  import { cawco, type TrayChild } from "../client.svelte";
+
   import { age } from "../find/find-rows";
   import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";
@@ -76,6 +76,7 @@
   import RowFault from "../RowFault.svelte";
   import { sessionPlace } from "../session-names.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import { delegatesStore, type TrayChild } from "../stores/delegates.svelte";
   import { sessionsStore } from "../stores/sessions.svelte";
   import { dismissWorkItem, retryWorkItem } from "../stores/work-items.svelte";
   import { composerLayerOf } from "./composer-layer.svelte";
@@ -157,7 +158,7 @@
   /** Delegates that existed before this tray: their chips are simply there. */
   const mountedAt = Date.now();
 
-  const items = $derived(cawco.trayOf(parentId));
+  const items = $derived(delegatesStore.trayOf(parentId));
 
   const toChip = (item: TrayChild): Chip => {
     const pending = sessionsStore.session(item.instanceId)?.pending ?? [];
