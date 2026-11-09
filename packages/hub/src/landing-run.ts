@@ -599,23 +599,25 @@ interface LandingRunDeps
   ) => void;
 }
 
-export const createLandingRun = (deps: LandingRunDeps) => {
-  const {
-    call,
-    closeTurn,
-    command,
-    db,
-    declareWait,
-    finish,
-    heldForGroup,
-    hubMachineId,
-    published,
-    report,
-    sessionUrl,
-    taskTitle,
-    update,
-    workspaces,
-  } = deps;
+export const createLandingRun = ({
+  call,
+  closeTurn,
+  command,
+  db,
+  declareWait,
+  finish,
+  heldForGroup,
+  hubMachineId,
+  machineFree,
+  machinePaused,
+  online,
+  published,
+  report,
+  sessionUrl,
+  taskTitle,
+  update,
+  workspaces,
+}: LandingRunDeps) => {
   /**
    * Each landing this hub process runs, by item: aborted as its item ends
    * ({@link finish}), which cancels every command the landing has running,
@@ -754,7 +756,14 @@ export const createLandingRun = (deps: LandingRunDeps) => {
         }
       );
   const gateRun = createGate({
-    ...deps,
+    call,
+    command,
+    db,
+    machineFree,
+    machinePaused,
+    online,
+    update,
+    workspaces,
     landingStop: (itemId) => landingStops.get(itemId)?.signal,
     runIn,
   });
