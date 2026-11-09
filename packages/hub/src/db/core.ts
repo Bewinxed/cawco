@@ -1,4 +1,5 @@
-import { idList, SESSION_GOES } from "./owned-rows";
+import { idList } from "./id-list";
+import { SESSION_GOES } from "./owned-rows";
 import { singleton } from "./singleton";
 /**
  * What the domain stores share: the connection and the closures more than
