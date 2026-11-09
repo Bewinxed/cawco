@@ -8,7 +8,7 @@ export const sessionWord = (
   row: { id: string; machineId: string },
   content: string,
   origin: SendPayload["message"]["origin"],
-  more: { shouldQuery?: false } = {}
+  more: { shouldQuery?: boolean } = {}
 ): Envelope<SendPayload> => ({
   verb: "send",
   machineId: row.machineId,
