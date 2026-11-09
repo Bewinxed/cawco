@@ -57,6 +57,7 @@ import type { BoardRow } from "../links";
 import { minimizedAsks } from "../minimized-asks.svelte";
 import type { TaskSummary } from "../project-tasks";
 import { QUESTION_KEYS } from "../question";
+import { clockStore } from "../stores/clock.svelte";
 import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
@@ -541,7 +542,7 @@ export class CawLead {
   /** The cap's line: reached, and when the next period starts it clear. */
   readonly capLine = $derived.by((): string | null =>
     this.cap
-      ? `Budget reached · resets ${resetLabel(new Date(this.cap.resetsAt).toISOString(), cawco.now)}`
+      ? `Budget reached · resets ${resetLabel(new Date(this.cap.resetsAt).toISOString(), clockStore.now)}`
       : null
   );
 
