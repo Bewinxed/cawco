@@ -28,12 +28,13 @@
   } from "#lib/icons.js";
   import { failureWords as message } from "#lib/platform/hub-read.js";
   import { dur } from "#lib/platform/motion/curves.svelte.js";
-  import { didntAnswer, type Machine } from "./client.svelte";
+  import { didntAnswer } from "./client.svelte";
   import NoMachines from "./config/NoMachines.svelte";
   import { EMPTY_LINES } from "./empty-asks";
   import MachineLedger from "./MachineLedger.svelte";
   import NsPopover from "./spawn/NsPopover.svelte";
   import NsPopoverGroup from "./spawn/NsPopoverGroup.svelte";
+  import type { Machine } from "./stores/board.svelte";
   import {
     dropToolSignin,
     heldToolSignin,

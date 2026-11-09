@@ -25,9 +25,7 @@
   import { onMount, type Snippet } from "svelte";
   import {
     addProjectPlace,
-    cawco,
     editProject,
-    type Machine,
     type ProjectRow,
     readConnections,
     removeProjectPlace,
@@ -46,6 +44,7 @@
   } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { accountsStore } from "#lib/cawco/stores/accounts.svelte.js";
+  import { boardStore, type Machine } from "#lib/cawco/stores/board.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -616,7 +615,7 @@
    */
   const holdsCode = $derived(project.links.length > 0 || checkouts > 0);
   const hostOf = (machineId: string) =>
-    cawco.machines.find((row) => row.machineId === machineId);
+    boardStore.machines.find((row) => row.machineId === machineId);
   const hostWords = (machineId: string) => {
     const host = hostOf(machineId);
     return host ? machineLabel(host.hostname) : "A machine not joined";
@@ -650,7 +649,8 @@
   function startAdd(): void {
     adding = true;
     addFault = null;
-    addMachine ||= machine?.machineId ?? cawco.machines[0]?.machineId ?? "";
+    addMachine ||=
+      machine?.machineId ?? boardStore.machines[0]?.machineId ?? "";
   }
 
   function stopAdd(): void {
@@ -919,7 +919,7 @@
               class="w-full"
               bind:value={addMachine}
             >
-              {#each cawco.machines as host (host.machineId)}
+              {#each boardStore.machines as host (host.machineId)}
                 <NativeSelect.Option value={host.machineId}
                   >{machineLabel(host.hostname)}</NativeSelect.Option
                 >

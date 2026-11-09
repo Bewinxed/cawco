@@ -28,7 +28,6 @@
   import { failureWords as message } from "#lib/platform/hub-read.js";
   import { appear, CURVE, dur } from "#lib/platform/motion/curves.svelte.js";
   import { fold } from "#lib/platform/motion/fold.svelte.js";
-  import type { Machine } from "./client.svelte";
   import {
     adoptSkill,
     pushSkill,
@@ -46,6 +45,7 @@
   import MachineAway from "./MachineAway.svelte";
   import { MachineWait } from "./machine-wait.svelte";
   import OsMark from "./OsMark.svelte";
+  import type { Machine } from "./stores/board.svelte";
 
   let {
     group,
