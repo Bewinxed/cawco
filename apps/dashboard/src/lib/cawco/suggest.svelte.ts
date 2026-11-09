@@ -6,9 +6,13 @@
 
 import { hubRequest } from "@cawco/core/hub-request";
 import type { SuggestCandidate } from "@cawco/core/suggest";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  hubFetch,
+  hubJson,
+  hubRefusal,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 import type { HubSeam } from "./hub-seam";
-import { send } from "./project-tasks";
 
 export type { SuggestCandidate } from "@cawco/core/suggest";
 
@@ -75,9 +79,12 @@ export async function askSuggestions(
   body: { text: string; candidates: SuggestCandidate[] },
   signal: AbortSignal
 ): Promise<{ id: string; noul: number }[]> {
-  const { suggestions: ranked } = await send<{
+  const { suggestions: ranked } = await hubJson<{
     suggestions: { id: string; noul: number }[];
-  }>(hubRequest("POST /api/suggest", { body }), { signal });
+  }>(hubRequest("POST /api/suggest", { body }), {
+    failure: refusedOrUnreached,
+    init: { signal },
+  });
   return ranked;
 }
 
