@@ -82,7 +82,7 @@ export const PREVIEW_PING_PATH = "/__cawco/ping";
 /**
  * What says the person's hand is on a page: a key, a pointer press or move, a
  * wheel, a touch. The dashboard hears them on its own window (reload.svelte.ts)
- * and a previewed page's overlay on the page's (agent preview-overlay page.ts).
+ * and a previewed page's overlay on the page's (preview overlay/page.ts).
  */
 export const PERSONS_INPUT = [
   "pointerdown",
@@ -110,7 +110,7 @@ export const personsInput = (event: Event): boolean =>
  */
 export const PAGE_TOUCHED_MESSAGE = "cawco:touched";
 
-/** Where every previewed page loads the overlay from, on its own origin (core preview-proxy.ts `injectOverlay`). */
+/** Where every previewed page loads the overlay from, on its own origin (preview proxy.ts `injectOverlay`). */
 export const OVERLAY_PATH = "/__cawco/overlay.js";
 
 /**
