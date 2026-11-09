@@ -1,6 +1,5 @@
 export { default as Root } from "./context-menu.svelte";
 export { default as Content } from "./context-menu-content.svelte";
-export { default as CopyItem } from "./context-menu-copy-item.svelte";
 
 export { default as Item } from "./context-menu-item.svelte";
 export { default as Lazy } from "./context-menu-lazy.svelte";
