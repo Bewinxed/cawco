@@ -19,7 +19,7 @@ import {
   modelNameIn,
 } from "@cawco/core/model-names";
 import { z } from "zod";
-import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { hubJson } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { cawco } from "./client.svelte";
 import {
@@ -246,12 +246,10 @@ const listingsOn = (harness: HarnessKind, machineIds?: string[]): ListingsOn =>
 
 /** Reads the claude windows the hub has observed, for pickers that size models. */
 export async function loadModelWindows(): Promise<void> {
-  const response = await hubFetch(hubRequest("GET /api/model-windows"));
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
   store.claudeWindows = (
-    (await response.json()) as { claude: Record<string, number> }
+    await hubJson<{ claude: Record<string, number> }>(
+      hubRequest("GET /api/model-windows")
+    )
   ).claude;
 }
 
