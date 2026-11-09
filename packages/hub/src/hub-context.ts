@@ -365,6 +365,9 @@ export interface HubContext {
     agent: HubSocket,
     op: Omit<FsPayload, "requestId">
   ) => Promise<Bounded<ControlResult>>;
+  cancelContinuation: (
+    id: string
+  ) => { row: ContinuationRow } | { refused: 404 | 409; why: string };
   caps: ReturnType<typeof createCaps>;
   carryOn: (
     row: { id: string; machineId: string },
@@ -427,6 +430,7 @@ export interface HubContext {
     harness: HarnessKind,
     model: string | undefined
   ) => Promise<number | undefined>;
+  continuationJob: (row: ContinuationSlip) => ContinuationJob;
   continuationRefusal: (
     prepared: PreparedContinuation,
     request: ContinueRequest,
