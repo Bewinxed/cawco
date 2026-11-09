@@ -5,7 +5,7 @@
    * problem under it (or that another row has it); Enabled, saying what on
    * and off mean; and why the hub refused the last Save or Delete.
    */
-  import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import { appear } from "#lib/platform/motion/curves.svelte.js";
   import type { EditorForm } from "./editor-form.svelte";
   import SwitchField from "./SwitchField.svelte";
   import TitleInput from "./TitleInput.svelte";

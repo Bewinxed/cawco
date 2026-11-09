@@ -28,9 +28,9 @@
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
-  import { frameSize } from "../frame-observer";
-  import { numberOf } from "../motion/curves.svelte";
   import TaskCanvasFit from "./canvas/TaskCanvasFit.svelte";
   import TaskEdgeLine from "./canvas/TaskEdgeLine.svelte";
   import TaskNode from "./canvas/TaskNode.svelte";

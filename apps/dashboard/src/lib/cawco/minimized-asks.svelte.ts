@@ -1,6 +1,6 @@
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
-import { readJson, writeJson } from "./storage";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 
 /**
  * The parked questions the reader has minimized on this device: the card

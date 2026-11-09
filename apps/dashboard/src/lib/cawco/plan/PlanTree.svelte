@@ -80,8 +80,8 @@
    */
   import type { Attachment } from "svelte/attachments";
   import { IconTick } from "#lib/icons.js";
-  import { branch } from "../motion/branch.svelte";
-  import { reflow } from "../motion/rows.svelte";
+  import { branch } from "../../platform/motion/branch.svelte";
+  import { reflow } from "../../platform/motion/rows.svelte";
   import TreeLine from "../TreeLine.svelte";
   import { flatTree, lineAttrs } from "../tree-lines";
 
