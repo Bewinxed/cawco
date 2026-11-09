@@ -16,6 +16,7 @@ import {
   type HubAnswer,
   type HubClient,
   type HubData,
+  HubNotAnswering,
   hubClient,
   hubPath,
   reached,
@@ -146,9 +147,14 @@ const askHub = <A extends HubAnswer>(
       if (answer.error !== null) {
         return { status: answer.status };
       }
-      return typeof answer.data === "object"
-        ? { status: answer.status, value: dataOf(answer) }
-        : { status: answer.status, unread: true };
+      try {
+        return { status: answer.status, value: dataOf(answer) };
+      } catch (error) {
+        if (error instanceof HubNotAnswering) {
+          return { status: answer.status, unread: true };
+        }
+        throw error;
+      }
     },
     byMs
   );
