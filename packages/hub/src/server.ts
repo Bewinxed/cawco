@@ -206,7 +206,7 @@ import {
   READ_SKILL_FOLDER,
 } from "@cawco/core/fleet";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
-import { maskInspection, maskMcpServer } from "@cawco/core/fleet-secrets";
+import { maskMcpServer } from "@cawco/core/fleet-secrets";
 import {
   CONTROL_FORGE_POST,
   type ForgeVerdict,
@@ -394,7 +394,6 @@ import type {
   SpawnPayload,
   StoredFrame,
   TabNamed,
-  UpdateReport,
 } from "@cawco/core/protocol";
 import {
   AGENT_BUSY,
@@ -407,7 +406,6 @@ import {
   type RunKind,
   type StoppedCommands,
   TAB_NAMES_PER_ASK,
-  UPDATE_CAWCO,
 } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import { artifactLink, sessionLink, taskLink } from "@cawco/core/references";
@@ -434,7 +432,6 @@ import {
   CONTROL_ABANDON,
   CONTROL_CARRY_SESSIONS,
   CONTROL_CONTEXT_USAGE,
-  CONTROL_FOLDER_COMMANDS,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
@@ -480,7 +477,6 @@ import {
   PROVIDER_RETRY,
   SEND_STATES,
   STREAM_SO_FAR,
-  type SupportedCommands,
   waitsOnItself,
 } from "@cawco/core/session-messages";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -1060,6 +1056,7 @@ import {
 } from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
 import { makesRoutines, talksWithPerson } from "./roles";
+import { agentControlRoutes } from "./routes/agent-control";
 import { agentListRoutes, agentMediaRoutes } from "./routes/agents";
 import { boundFields } from "./routes/bound-fields";
 import { delegateEventRoutes } from "./routes/delegate-events";
@@ -1640,15 +1637,6 @@ const killedWords = (signal: string, killedAt: Date): string =>
  */
 const HEARTBEAT_SETTLE_GRACE_MS = 45_000;
 
-/** An update is a pull, an install and a dashboard build — minutes, not seconds. */
-const UPDATE_TIMEOUT_MS = 10 * 60_000;
-
-/**
- * A folder's `/` menu read before a session: a harness started without a
- * turn (Claude Code answers its initialize in 0.3–2.4 s, measured
- * 2026-11-05), with room for a cold start on a busy machine.
- */
-const FOLDER_COMMANDS_TIMEOUT_MS = 30_000;
 /**
  * How long a tool install the hub runs itself (a joined machine's harness
  * CLIs, `readyHarnesses`) may take to answer: the dashboard's own install wait
@@ -3404,6 +3392,23 @@ export const createServer = (
     hookCopyOff: () => hookCopyOff,
     pushTarget: () => pushTarget,
     skillFilesOff: () => skillFilesOff,
+    addProjectPlace: () => addProjectPlace,
+    askedProjectName: () => askedProjectName,
+    askerOf: () => askerOf,
+    caps: () => caps,
+    createOrJoinProject: () => createOrJoinProject,
+    deletedProjects: () => deletedProjects,
+    forgottenProjects: () => forgottenProjects,
+    presenceSaid: () => presenceSaid,
+    previewListeners: () => previewListeners,
+    projectEdits: () => projectEdits,
+    projectMoved: () => projectMoved,
+    projectOut: () => projectOut,
+    projectStops: () => projectStops,
+    ruleEngine: () => ruleEngine,
+    ruleRowsOf: () => ruleRowsOf,
+    stopProjectBrowsers: () => stopProjectBrowsers,
+    tasks: () => tasks,
     say: () => (payload) =>
       registry.broadcast({
         verb: "frames",
@@ -33309,143 +33314,8 @@ export const createServer = (
         return { ok: true };
       }),
     machinePauseRoutes(ctx),
+    agentControlRoutes(ctx),
     new Elysia()
-      .get("/api/agents/:machineId/busy", async ({ params, set, status }) => {
-        const answer = await readAgent(
-          params.machineId,
-          AGENT_BUSY,
-          [],
-          BUSY_TIMEOUT_MS
-        );
-        switch (answer.kind) {
-          case "unanswered":
-            return awayAnswer(set, params.machineId, answer, status);
-          case "answered":
-            return answer.value.ok
-              ? (answer.value.result as { busy: number; instances: string[] })
-              : status(500, answer.value.error ?? "the busy probe failed");
-          default:
-            throw unreachable(answer);
-        }
-      })
-      // And the update itself: the machine pulls, installs, rebuilds and restarts
-      // what it serves, then says what it actually did.
-      .post(
-        "/api/agents/:machineId/update",
-        {
-          body: t.Object({
-            restartAgent: t.Optional(t.Boolean()),
-            force: t.Optional(t.Boolean()),
-            // One per press of Install now: the machine acts on a command once.
-            commandId: t.Optional(t.String()),
-            // The build the person was shown; the machine applies that one only.
-            version: t.Optional(t.String()),
-          }),
-        },
-        async ({ params, body, status }) => {
-          const answer = await callAgent(
-            params.machineId,
-            UPDATE_CAWCO,
-            [body],
-            UPDATE_TIMEOUT_MS
-          );
-          switch (answer.kind) {
-            case "unanswered":
-              // A machine that restarts the hub as part of its update answers
-              // into a socket that no longer exists, so this is not proof that
-              // nothing happened — only that the hub stopped hearing about it.
-              return answer.reason === "dead"
-                ? status(404, machineFault(params.machineId, "offline"))
-                : status(
-                    504,
-                    `${machineName(params.machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`
-                  );
-            case "answered":
-              return answer.value.ok
-                ? (answer.value.result as UpdateReport)
-                : status(500, answer.value.error ?? "the update failed");
-            default:
-              throw unreachable(answer);
-          }
-        }
-      )
-      // What a machine really has, fleet or not (NEW.md §11) — and what a session
-      // in `cwd` would see. Nothing is stored: this is the machine's own word at
-      // the moment it was asked, and a stale copy of it would be worse than none.
-      .post(
-        "/api/agents/:machineId/inspect",
-        { body: t.Object({ cwd: t.Optional(t.String()) }) },
-        async ({ params, body, set, status }) => {
-          const answer = await readAgent(
-            params.machineId,
-            INSPECT_CONFIG,
-            [body.cwd],
-            READ_TIMEOUT_MS
-          );
-          switch (answer.kind) {
-            case "unanswered":
-              return awayAnswer(set, params.machineId, answer, status);
-            case "answered":
-              return answer.value.ok
-                ? // A machine's own connectors carry their keys: said as set.
-                  maskInspection(
-                    answer.value
-                      .result as import("@cawco/core/fleet").ConfigInspection
-                  )
-                : status(
-                    500,
-                    answer.value.error ??
-                      "the machine could not read its config"
-                  );
-            default:
-              throw unreachable(answer);
-          }
-        }
-      )
-      // The `/` menu a session of `harness` would open with in `cwd` on this
-      // machine on `model`, before one exists: the machine's harness reads it
-      // the way that session's own `supportedCommands` does (core
-      // `CONTROL_FOLDER_COMMANDS`), so the New Session form lists what the
-      // session's composer will. A Claude session's on the account it names,
-      // else the machine's. Nothing is stored, like `/inspect` beside it.
-      .get(
-        "/api/agents/:machineId/commands",
-        {
-          query: t.Object({
-            harness: harnessSchema,
-            cwd: t.String({ minLength: 1 }),
-            account: t.Optional(t.String()),
-            model: t.Optional(t.String()),
-          }),
-        },
-        async ({ params, query, set, status }) => {
-          const account =
-            traitsOf(query.harness).accountModel === "dir"
-              ? (query.account ?? machineAccount(db, params.machineId))
-              : undefined;
-          const answer = await readAgent(
-            params.machineId,
-            CONTROL_FOLDER_COMMANDS,
-            [query.cwd, account, query.model],
-            FOLDER_COMMANDS_TIMEOUT_MS,
-            query.harness
-          );
-          switch (answer.kind) {
-            case "unanswered":
-              return awayAnswer(set, params.machineId, answer, status);
-            case "answered":
-              return answer.value.ok
-                ? (answer.value.result as SupportedCommands)
-                : status(
-                    500,
-                    answer.value.error ??
-                      `${machineName(params.machineId)} could not list the commands of ${query.cwd}`
-                  );
-            default:
-              throw unreachable(answer);
-          }
-        }
-      )
       .get("/api/instances", () => laws.raise(boardRows))
       // Every session's pulse, the daemon's now-state, as the socket's first
       // `instances` frame seeds it: the dashboard's server load reads it so a
@@ -34035,6 +33905,8 @@ export const createServer = (
         return undoable(trashed);
       }),
     trashRoutes(ctx),
+  ]);
+  const hubRoutes = hubRoutesPart1.use([
     new Elysia()
       /**
        * What a rule has actually been doing, per session: fires, and whether
@@ -34065,8 +33937,6 @@ export const createServer = (
           }),
         };
       }),
-  ]);
-  const hubRoutes = hubRoutesPart1.use([
     modelAccessRoutes(ctx),
     imageSettingRoutes(ctx),
     fleetWatchRoutes(ctx),
