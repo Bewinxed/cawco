@@ -24,8 +24,8 @@
  */
 
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import { downOf } from "../../../packages/core/src/preview/proxy";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
+import { downOf } from "../../../packages/preview/src/proxy";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, pressIn, type Spec } from "../kit";
