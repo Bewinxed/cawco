@@ -34,7 +34,6 @@
 import type {
   ConfigInspection,
   DiscoveredMcp,
-  FleetConfig,
   FleetMcpConfig,
   FleetMcpServer,
 } from "./fleet";
@@ -221,11 +220,6 @@ export const maskMcpConfig = (config: FleetMcpConfig): FleetMcpConfigView => {
   }
   const { env, ...rest } = config as McpStdioServerConfig;
   return { ...rest, ...(env ? { env: allSet(env) } : {}) };
-};
-
-/** The fleet's config as `GET /api/fleet` reads it: its servers as a read says them. */
-export type FleetConfigRead = Omit<FleetConfig, "mcp"> & {
-  mcp: FleetMcpServerView[];
 };
 
 /** A machine's own server as a read says it. */

@@ -792,11 +792,11 @@ export interface FleetHook extends FleetPlacement {
 /**
  * One superseded version of one hook, as a listing reads it — without the
  * material. A hook is kept every time it is saved or deleted over one that
- * already existed, so this is a full edit history. `createdAt` is a `Date` in
- * the hub and its ISO string on the wire (`GET /api/fleet/hooks/history`).
+ * already existed, so this is a full edit history (`GET /api/fleet/hooks/history`).
  */
 export interface HookVersion {
-  createdAt: Date;
+  /** When it was kept, ISO, as the answer carries it. */
+  createdAt: string;
   hash: string;
   hookId: string;
   id: number;
