@@ -51,6 +51,8 @@ reply-composer-no-fleet/cawco/transcript/planted.ts:3:1 reply-composer-no-fleet
 reply-composer-no-fleet/cawco/transcript/planted.ts:4:1 reply-composer-no-fleet
 reply-composer-no-fleet/cawco/transcript/planted.ts:5:1 reply-composer-no-fleet
 reply-composer-no-fleet/cawco/transcript/planted.ts:7:1 reply-composer-no-fleet
+reply-composer-no-fleet/cawco/transcript/planted.ts:8:1 reply-composer-no-fleet
+reply-composer-no-fleet/cawco/transcript/planted.ts:10:1 reply-composer-no-fleet
 tool-answer-from-last/scripts/planted.ts:9:1 tool-answer-from-last
 tool-answer-from-last/scripts/planted.ts:10:1 tool-answer-from-last
 tool-answer-from-last/scripts/planted.ts:11:1 tool-answer-from-last
