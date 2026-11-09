@@ -22,7 +22,7 @@ import { workWords } from "@cawco/core/words/work";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { isLive } from "./work-items";
+import { isLive } from "./work-item-state";
 
 /**
  * How long a work item may sit in its provider's retry: our call, the half
