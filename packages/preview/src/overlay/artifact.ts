@@ -61,6 +61,7 @@ import {
 import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
 import type { MapDoc } from "@cawco/core/doc-maps";
 import { PIN_MAPS } from "@cawco/core/doc-maps";
+import { docMeta } from "@cawco/core/doc-meta";
 import { commentWords } from "@cawco/core/words/comments";
 import { here } from "./boot";
 import type { DeviceCopy, FromWorker, ToWorker } from "./doc-wire";
@@ -346,7 +347,7 @@ let syncedOnce = new Promise<void>((resolve) => {
 mirror.getMap("state").observe((event) => {
   watchers?.state(new Set([...event.keysChanged]), !event.transaction.local);
 });
-mirror.getMap("meta").observe(() => watchers?.meta());
+docMeta(mirror).observe(() => watchers?.meta());
 for (const name of ["ink", "moved", ...PIN_MAPS]) {
   mirror.getMap(name).observe((event) => {
     watchers?.ink(
@@ -803,18 +804,18 @@ export const artifact = {
   state: (): State => mirror.getMap("state").toJSON() as State,
 
   meta: () => {
-    const meta = mirror.getMap("meta");
+    const meta = docMeta(mirror);
     return {
-      pageHash: (meta.get("pageHash") as string | undefined) ?? null,
+      pageHash: meta.get("pageHash") ?? null,
       /** The last piece a decision page shows that moved to another version, and that version (hub artifacts service `versionMoved`); null before. */
-      mediaAt: (meta.get("mediaAt") as string | undefined) ?? null,
-      revision: (meta.get("revision") as number | undefined) ?? null,
+      mediaAt: meta.get("mediaAt") ?? null,
+      revision: meta.get("revision") ?? null,
       /** When the session last changed it, a revision or a new ask; null before. */
-      revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
+      revisedAt: meta.get("revisedAt") ?? null,
       /** Its name, as the hub stamps it (artifacts service `stampMeta`); null before. */
-      name: (meta.get("name") as string | undefined) ?? null,
+      name: meta.get("name") ?? null,
       /** When the person last pressed Send, as the hub stamped it (artifacts service `send`); null before. */
-      sentAt: (meta.get("sentAt") as string | null | undefined) ?? null,
+      sentAt: meta.get("sentAt") ?? null,
     };
   },
 
