@@ -500,7 +500,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Stat tile** (`StatTile.svelte`): a 10px card holding a recessed well 7px in (The Measured Exception Rule): the label over the value in the KPI role, `ink-stat`, its unit in meta on the same baseline. A new value morphs digit by digit (The Steady Swap Rule).
 
 ### Badges, chips and pills
-- **Badge:** `radius-xs`, label role, recess; `live`, `done` and `fail` take their status pairs, `attn` its Status dot before the word.
+- **Badge:** `radius-xs`, label role, recess; `live`, `done` and `fail` take their status pairs, `attn` its Status dot before the word. A badge says what no mark, weight or layout can.
 - **State pill:** fully round, status tint, no glyph; Needs you wears the Status dot instead of a tint, idle wears nothing.
 - **Setting chip:** `radius-sm`, a glyph and a chevron. A setting that can't change where it is shown is the same chip sunk (`surface-recess`, `border-hairline`, no chevron), never plain text.
 - **Option chip:** the one way an answer is picked: a keycap digit; picked, the coral edge, a recessed fill and a vermillion keycap (`chip-chosen-bg`), never the attn hue.
