@@ -18,7 +18,6 @@ import {
   ownKeeperOwed,
   reasonsOf,
   recordDecision,
-  saidUnknown,
 } from "./decisions";
 import { liveAt } from "./holding";
 import {
@@ -487,3 +486,6 @@ const handOver = async (
   closeWhenIdle(ref.id);
   return fresh;
 };
+
+/** The boundary each workspace's unknown grant was last said for ({@link ensure}): said once per boundary. */
+const saidUnknown = new Map<string, number>();
