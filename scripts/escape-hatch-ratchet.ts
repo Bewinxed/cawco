@@ -1,7 +1,7 @@
 /**
- * `bun scripts/swallow-cast-ratchet.ts` (part of `bun run check`): the
- * shapes that swallow a failure or step around the type checker, counted
- * per file off each file's syntax (lib/parse-source.ts), comments and
+ * `bun scripts/escape-hatch-ratchet.ts` (part of `bun run check`): the
+ * shapes that swallow a failure, step around the type checker or silence a
+ * check, counted per file off each file's syntax (lib/parse-source.ts),
  * strings never read as code. Each file's count of each may fall, never
  * rise (lib/ratchet.ts).
  *
@@ -13,17 +13,21 @@
  * - **as-any**: a value asserted to `any` (`x as any`, `<any>x`).
  * - **as-unknown-as**: a value asserted through `unknown` to another type
  *   (`x as unknown as T`), which TypeScript accepts whatever the two types.
+ * - **suppression**: a comment that silences a check where it stands
+ *   (`biome-ignore`, `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck`,
+ *   `eslint-disable`, `oxlint-disable`, `svelte-ignore`), in code, a
+ *   component's markup or a stylesheet.
  *
  * Generated modules are left out: what they hold is their generator's.
  *
- *   bun scripts/swallow-cast-ratchet.ts                   exits 1 on a rise or a fall
- *   bun scripts/swallow-cast-ratchet.ts --write-baseline  after a fix lowers a count
- *   bun scripts/swallow-cast-ratchet.ts --list <kind>     each place of one kind
+ *   bun scripts/escape-hatch-ratchet.ts                   exits 1 on a rise or a fall
+ *   bun scripts/escape-hatch-ratchet.ts --write-baseline  after a fix lowers a count
+ *   bun scripts/escape-hatch-ratchet.ts --list <kind>     each place of one kind
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { parsed } from "./lib/parse-source";
+import { commentsOf, parsed } from "./lib/parse-source";
 import { holdRatchet } from "./lib/ratchet";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
@@ -34,10 +38,16 @@ const KINDS = {
   "as-any": "no assertion to any: type the value",
   "as-unknown-as":
     "no assertion through unknown: parse the value (a schema) or type it",
+  suppression:
+    "no new silenced check: meet the rule, or take its exception to the owner",
 };
 type Kind = keyof typeof KINDS;
 
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
+const READ = /\.(?:[cm]?[jt]sx?|svelte|css)$/u;
+/** A directive that silences a check, at the start of a comment's words. */
+const DIRECTIVE =
+  /^(?:\/\/|\/\*+|<!--)?[\s*]*(?:biome-ignore(?!-end)|@ts-expect-error|@ts-ignore|@ts-nocheck|eslint-disable|oxlint-disable|svelte-ignore)\b/u;
 const SCOPE = /^(?:apps\/(?:dashboard|cawrier)|packages|scripts|site)\//u;
 /** Planted mistakes, pages copied as they were, and generated modules. */
 const SKIPPED =
@@ -125,27 +135,43 @@ const counts: Record<Kind, Record<string, number>> = {
   "empty-catch": {},
   "as-any": {},
   "as-unknown-as": {},
+  suppression: {},
 };
 const places = new Map<string, string[]>();
 
+const found = (kind: Kind, file: string, line: number): void => {
+  counts[kind][file] = (counts[kind][file] ?? 0) + 1;
+  const key = `${kind}\0${file}`;
+  places.set(key, [...(places.get(key) ?? []), `${file}:${line}`]);
+};
+
 for (const file of repoFiles().filter(
-  (path) => CODE.test(path) && SCOPE.test(path) && !SKIPPED.test(path)
+  (path) => READ.test(path) && SCOPE.test(path) && !SKIPPED.test(path)
 )) {
-  const source = parsed(file, readFileSync(join(ROOT, file), "utf8"));
+  const text = readFileSync(join(ROOT, file), "utf8");
+  for (const comment of commentsOf(file, text)) {
+    if (DIRECTIVE.test(comment.text)) {
+      found("suppression", file, text.slice(0, comment.at).split("\n").length);
+    }
+  }
+  if (!CODE.test(file)) {
+    continue;
+  }
+  const source = parsed(file, text);
   const visit = (node: ts.Node): void => {
     const kind = kindOf(node);
     if (kind) {
-      counts[kind][file] = (counts[kind][file] ?? 0) + 1;
       // A call's place is its `.catch` or `.then`, not the chain's start.
       const at =
         ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression)
           ? node.expression.name
           : node;
-      const line =
-        source.getLineAndCharacterOfPosition(at.getStart(source)).line + 1;
-      const key = `${kind}\0${file}`;
-      places.set(key, [...(places.get(key) ?? []), `${file}:${line}`]);
+      found(
+        kind,
+        file,
+        source.getLineAndCharacterOfPosition(at.getStart(source)).line + 1
+      );
     }
     ts.forEachChild(node, visit);
   };
@@ -162,8 +188,8 @@ if (listed >= 0) {
   }
 } else {
   holdRatchet(counts, {
-    name: "swallow-cast-ratchet",
-    baseline: join(ROOT, "scripts/swallow-cast-ratchet.baseline.json"),
+    name: "escape-hatch-ratchet",
+    baseline: join(ROOT, "scripts/escape-hatch-ratchet.baseline.json"),
     rules: KINDS,
     places: (kind, file) => places.get(`${kind}\0${file}`) ?? [],
   });
