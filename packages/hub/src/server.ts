@@ -1119,6 +1119,7 @@ import { makesRoutines, talksWithPerson } from "./roles";
 import { agentListRoutes, agentMediaRoutes } from "./routes/agents";
 import { bearerOf } from "./routes/bearer";
 import { delegationRoutes } from "./routes/delegation";
+import { followupStateRoutes } from "./routes/followup-state";
 import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
 import { lfsRoutes } from "./routes/lfs";
@@ -33507,48 +33508,9 @@ export const createServer = (
       // Every session's pulse, the daemon's now-state, as the socket's first
       // `instances` frame seeds it: the dashboard's server load reads it so a
       // page's first paint draws a working session working.
-      .get("/api/pulses", () => Object.fromEntries(pulses))
-      .post(
-        "/api/followup-state",
-        {
-          ...hidden,
-          body: t.Object({
-            instanceId: t.Optional(t.String()),
-            workspace: t.Optional(t.String()),
-            /** The message or brief the caller would send: Attach or fresh's question, with Jev on. */
-            message: t.Optional(t.String()),
-          }),
-        },
-        async ({ body, status }) => {
-          let { instanceId } = body;
-          if (body.workspace) {
-            const workspaces = db.workspacesNamed(body.workspace.trim());
-            if (workspaces.length !== 1) {
-              return status(404, `No unique workspace "${body.workspace}".`);
-            }
-            instanceId = db.workItemsIn(workspaces[0].id)[0]?.instanceId;
-          }
-          const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
-          if (!row) {
-            return {
-              row: null,
-              midTurn: false,
-              hasTurns: false,
-              lastTurnAt: null,
-              activityBound: false,
-            };
-          }
-          const state = followupState(row);
-          return {
-            row,
-            midTurn: state.midTurn,
-            hasTurns: state.hasTurns,
-            lastTurnAt: state.lastTurnAt,
-            activityBound: state.activityBound,
-            ...(await coldReading(row, state, body.message)),
-          };
-        }
-      )
+      .get("/api/pulses", () => Object.fromEntries(pulses)),
+    followupStateRoutes(ctx),
+    new Elysia()
       // Moves a session to another account of its provider, whole: its
       // conversation is carried into the account's store and resumed there,
       // with no summary. Now when it is at rest, else at its turn's end
