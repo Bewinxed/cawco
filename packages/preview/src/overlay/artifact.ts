@@ -62,6 +62,7 @@ import { deviceDocName, tendDeviceDocs } from "@cawco/core/doc-link";
 import type { MapDoc } from "@cawco/core/doc-maps";
 import { PIN_MAPS } from "@cawco/core/doc-maps";
 import { docMeta } from "@cawco/core/doc-meta";
+import { refusalWords } from "@cawco/core/hub-refusal";
 import { commentWords } from "@cawco/core/words/comments";
 import { here } from "./boot";
 import type { DeviceCopy, FromWorker, ToWorker } from "./doc-wire";
@@ -886,8 +887,10 @@ export const artifact = {
           return null;
         }
         if (response && !DOOR_FAILED(response.status)) {
-          const said = await response.text().catch(() => "");
-          return said.slice(0, 300) || "The hub refused the send.";
+          return refusalWords(
+            await response.text().catch(() => ""),
+            response.status
+          );
         }
         fresh = true;
       }
@@ -925,10 +928,7 @@ export const artifact = {
       body: JSON.stringify(body),
     });
     if (!response.ok) {
-      throw new Error(
-        (await response.text()).slice(0, 300) ||
-          "The hub refused the marks' pictures."
-      );
+      throw new Error(refusalWords(await response.text(), response.status));
     }
   },
 };
