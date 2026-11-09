@@ -88,7 +88,7 @@ export class KeeperRefused extends Error {
 /**
  * What an update must wait for: the keeper's live children, less the agent's
  * own helpers: the OpenCode server, alive whenever the agent is, and the
- * workspaces' judges, alive whenever a workspace is (boundary.ts `judgeFor`).
+ * workspaces' judges, alive whenever a workspace is (boundary/lifecycle.ts `judgeFor`).
  * Counting them would keep the keeper from ever moving on a machine that runs
  * OpenCode or holds a workspace. Busy sessions are the busy check's to refuse.
  */
