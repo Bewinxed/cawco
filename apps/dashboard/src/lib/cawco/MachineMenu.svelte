@@ -29,7 +29,6 @@
   import {
     cawco,
     loadCatalog,
-    type Machine,
     pauseMachine,
     removeMachine,
   } from "./client.svelte";
@@ -37,6 +36,7 @@
   import { pauseChoices } from "./machine-pause";
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
+  import { boardStore, type Machine } from "./stores/board.svelte";
   import UnlockKeychain from "./UnlockKeychain.svelte";
   import { updates } from "./updates/updates.svelte";
 
@@ -64,7 +64,7 @@
 
   /** Its sessions, as the rail nests them, each with its last word. */
   const sessionsOn = (machineId: string): AskItem[] =>
-    cawco.instances
+    boardStore.instances
       .filter((row) => row.machineId === machineId)
       .map((row) => {
         const status = sessionStatus(row);
