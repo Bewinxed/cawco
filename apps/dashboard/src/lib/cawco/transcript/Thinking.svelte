@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import Markdown from "#lib/cawco/Markdown.svelte";
   import { ThinkingIndicator } from "#lib/components/ui/thinking-indicator/index.js";
   import {
     ThinkingStep,
@@ -264,7 +265,7 @@
           enters={drawn && fades}
           {fades}
           isLast={i === paragraphs.length - 1}
-          markdown
+          markdown={Markdown}
           status={live && i === paragraphs.length - 1 ? "active" : "complete"}
         />
       {/each}
