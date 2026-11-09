@@ -40,9 +40,9 @@ import {
   PRESENCE_BEAT_MS,
   type PresenceBeat,
 } from "@cawco/core/notifications";
-import { hubFetch } from "#lib/cawco/hub-read.js";
-import { newId } from "#lib/cawco/id.js";
-import { store, stored } from "#lib/cawco/storage.js";
+import { hubFetch } from "#lib/platform/hub-read.js";
+import { newId } from "#lib/platform/id.js";
+import { store, stored } from "#lib/platform/storage.js";
 import { lastInputAt, onInput } from "./reload.svelte";
 
 /** Per tab: sessionStorage outlives a reload and is the tab's own. */

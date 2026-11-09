@@ -68,15 +68,15 @@
     IconRenew as Working,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
+  import { CURVE, dur, motionOk } from "../platform/motion/curves.svelte";
+  import { echoBeat } from "../platform/motion/echo.svelte";
+  import { fold, unfold } from "../platform/motion/fold.svelte";
+  import { glyphIn, glyphOut } from "../platform/motion/glyph";
+  import { departBox, land } from "../platform/motion/share.svelte";
   import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import FromDiskBox from "./FromDiskBox.svelte";
   import { resolveSessionTitle } from "./links";
   import { sessionSprite } from "./mark";
-  import { CURVE, dur, motionOk } from "./motion/curves.svelte";
-  import { echoBeat } from "./motion/echo.svelte";
-  import { fold, unfold } from "./motion/fold.svelte";
-  import { glyphIn, glyphOut } from "./motion/glyph";
-  import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import type { StopJob, StopRow } from "./stop-work.svelte";
   import TreeLine from "./TreeLine.svelte";

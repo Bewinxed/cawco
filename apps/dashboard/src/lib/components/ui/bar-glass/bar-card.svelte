@@ -27,9 +27,9 @@
    * open air, and the overlay's 48px drop ended there in a hard line.
    */
   import type { ComponentProps, Snippet } from "svelte";
-  import { popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
+  import { popOut } from "#lib/platform/motion/pop.svelte.js";
   import { cn } from "#lib/utils.js";
   import { hungFromGlass } from "./hung.svelte";
 

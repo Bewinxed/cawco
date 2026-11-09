@@ -14,7 +14,7 @@
  * destroyed with the layout box and comes back at zero.
  */
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { frameObserver } from "#lib/cawco/frame-observer.js";
+import { frameObserver } from "#lib/platform/frame-observer.js";
 
 /**
  * Each tab's slot, by conversation id: where its pane is docked. Changes only

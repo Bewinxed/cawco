@@ -3,12 +3,12 @@
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChevronRight } from "#lib/icons.js";
+  import { tickingClock } from "#lib/platform/motion/clock.svelte.js";
   import type { SubagentState } from "#lib/utils/flow-types.js";
   import { formatDuration } from "#lib/utils/time.js";
   import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
-  import { tickingClock } from "../motion/clock.svelte.js";
   /**
    * A harness subagent — the run a Task call spawned in-process, folded onto
    * the parent's spine as a branch you can watch rather than a paragraph you

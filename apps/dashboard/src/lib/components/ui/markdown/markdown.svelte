@@ -37,7 +37,6 @@
     plainReferenceOf,
     writtenLabel,
   } from "#lib/cawco/markdown-fleet.js";
-  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { outsideCode } from "#lib/cawco/outside-code.js";
   import {
     markSkills,
@@ -45,8 +44,9 @@
     skillsHere,
     skillWords,
   } from "#lib/cawco/skill-chips.js";
-  import { track } from "#lib/cawco/track.js";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import { PROSE } from "#lib/prose.js";
   import { cn } from "#lib/utils.js";
   import { draw, stepping } from "../collapsible/draw";

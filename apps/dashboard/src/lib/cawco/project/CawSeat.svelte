@@ -14,6 +14,8 @@
 </script>
 
 <script lang="ts">
+  import Caw from "#lib/cawco/home/Caw.svelte";
+  import { IconFolder } from "#lib/icons.js";
   /**
    * Caw in the project's head: the page's one live Caw, at 48px, as a
    * button. A press opens his panel floating over the page (CawFloat) and
@@ -27,10 +29,8 @@
    * shows the project's folder glyph, so every seat draws something to
    * press, at any size and wherever it stands.
    */
-  import { cawLoop } from "#lib/cawco/feel.svelte.js";
-  import Caw from "#lib/cawco/home/Caw.svelte";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
-  import { IconFolder } from "#lib/icons.js";
+  import { cawLoop } from "#lib/platform/feel.svelte.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
   import type { CawLead } from "./caw-lead.svelte";
 
   let {

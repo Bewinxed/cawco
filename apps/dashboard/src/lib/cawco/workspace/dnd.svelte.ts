@@ -27,8 +27,8 @@ import {
 } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
+import { depart } from "#lib/platform/motion/share.svelte.js";
 import { bareDrag, internalData } from "../internal-drag";
-import { depart } from "../motion/share.svelte";
 import { workingSet } from "../working-set.svelte";
 import { type AskedContext, workspace } from "./workspace.svelte";
 

@@ -42,7 +42,6 @@
    * under the pointer to press back.
    */
   import { type Snippet, untrack } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
     BarGlass,
     BarItem,
@@ -59,6 +58,7 @@
     IconMinimizeLinear,
     IconMoreLinear,
   } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import { cn } from "#lib/utils.js";
   import { sideExpand } from "./expand";
   import {

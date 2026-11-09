@@ -47,10 +47,7 @@
     type PendingPermission,
     type SendExtras,
   } from "#lib/cawco/client.svelte.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
-  import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
     type ProjectStarter,
@@ -88,6 +85,9 @@
     IconMoveTabLinear,
     IconPlus,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { crossIn } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { barGlass } from "../bar-glass.svelte";
   import { dropStart } from "../spawn/parked.svelte";
   import CawAtWork from "./CawAtWork.svelte";

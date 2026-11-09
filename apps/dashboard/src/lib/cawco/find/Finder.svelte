@@ -37,9 +37,9 @@
     IconServerAlt as Server,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
+  import { crossIn, crossOut } from "../../platform/motion/curves.svelte";
+  import { reflow } from "../../platform/motion/rows.svelte";
   import Choice from "../config/Choice.svelte";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import RowFault from "../RowFault.svelte";
   import FindField from "./FindField.svelte";
   import FindPeek from "./FindPeek.svelte";

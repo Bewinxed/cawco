@@ -51,10 +51,6 @@
   import type { TunedRecord } from "@cawco/core/tuned";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { onMount, type Snippet, untrack } from "svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { motionOk, rise } from "#lib/cawco/motion/curves.svelte.js";
-  import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
-  import { track } from "#lib/cawco/track.js";
   import {
     BarGlass,
     BarItem,
@@ -84,6 +80,10 @@
     IconTuningLinear,
     IconWideLinear,
   } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { motionOk, rise } from "#lib/platform/motion/curves.svelte.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import PreviewTools from "../preview/PreviewTools.svelte";
   import type { SheetInspector } from "../preview/sheet-inspector.svelte";
   import ThreadSheet from "../preview/ThreadSheet.svelte";

@@ -12,8 +12,9 @@
  * - `ipad`     layout-policy.svelte.ts and SessionSurface (deck or grid)
  * - `answer`   NeedsCard.svelte
  */
+
+import { store, stored } from "#lib/platform/storage.js";
 import { browser, dev } from "$app/env";
-import { store, stored } from "../storage";
 
 export interface Choices {
   /** One answer form on the needs-you cards: (a) Approve/Deny, (b) open only. */

@@ -20,13 +20,13 @@
     type BlockedRequest,
     submitCommand,
   } from "#lib/cawco/client.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
   import { QUESTION_KEYS } from "#lib/cawco/question.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import Prompt from "#lib/cawco/transcript/Prompt.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   import { IconColumns } from "#lib/icons.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import SetupDraft from "./SetupDraft.svelte";
 
   let {
