@@ -15,9 +15,9 @@
  */
 
 import { DAY_MS } from "@cawco/core/time";
-import { cawco } from "./client.svelte";
 import type { BoardRow } from "./links";
 import { sessionStatus } from "./session-status";
+import { asksStore } from "./stores/asks.svelte";
 import { boardStore } from "./stores/board.svelte";
 
 /** A project lists every session that moved in the last day. */
@@ -53,7 +53,7 @@ export function listedOf(
   window: number
 ): Set<string> {
   const pressing = (row: BoardRow): boolean =>
-    running.has(row.id) || cawco.activityOf(row.id) === "blocked";
+    running.has(row.id) || asksStore.activityOf(row.id) === "blocked";
   const listed = new Set<string>();
   const rest: BoardRow[] = [];
   for (const row of rows) {
