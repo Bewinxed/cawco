@@ -25,9 +25,9 @@
  */
 import { join } from "node:path";
 import { hubRequest } from "../../../packages/core/src/hub-request";
-import { downOf } from "../../../packages/core/src/preview/proxy";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { previewWords } from "../../../packages/core/src/words/preview";
+import { downOf } from "../../../packages/preview/src/proxy";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import { passedFetch } from "../preview-pass";

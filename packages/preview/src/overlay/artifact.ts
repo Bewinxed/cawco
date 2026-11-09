@@ -66,7 +66,7 @@ import { here } from "./boot";
 import type { DeviceCopy, FromWorker, ToWorker } from "./doc-wire";
 import { Mirror } from "./mirror";
 
-/** The doc worker's bundle (doc-worker.ts), its text put in by the overlay's build (core preview-proxy.ts `bundleOverlay`). */
+/** The doc worker's bundle (doc-worker.ts), its text put in by the overlay's build (preview proxy.ts `bundleOverlay`). */
 declare const __CAWCO_DOC_WORKER__: string;
 
 /** Where an artifact's doc is synced: the listener's path, under the dashboard's preview prefix in its frame. */
