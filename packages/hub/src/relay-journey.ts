@@ -59,6 +59,7 @@ import {
 } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
 import { Elysia, t } from "elysia";
+import { problemResponse } from "elysia/error";
 import {
   addRecord,
   isCloudflareAddress,
@@ -1258,7 +1259,11 @@ export const browserKey = (userAgent: string | null): string =>
 /** Answers a refusal with its status and sentence; anything else goes on as an error. */
 const refused = (error: unknown): Response => {
   if (error instanceof RelayRefusal) {
-    return new Response(error.message, { status: error.status });
+    return problemResponse({
+      status: error.status,
+      code: "message",
+      detail: error.message,
+    });
   }
   throw error;
 };
