@@ -18,7 +18,7 @@ import {
 } from "@cawco/agent/hub-client";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
-import { ownerClient } from "./owner";
+import { ownerCall } from "./owner";
 
 const ROUTE_LINE = {
   typesafe: "Jev goes to TypeSafe directly with this key.",
@@ -36,15 +36,14 @@ const callHub = async <A extends HubAnswer>(
   refused: string
 ): Promise<HubData<A>> =>
   unwrap(
-    await request(
-      ownerClient(
-        hub,
-        "cawco jev",
-        30_000,
-        ConnectionKeyError,
-        (seconds) =>
-          `${hub} did not answer within ${seconds}s, so what it did with the TypeSafe key is not known`
-      )
+    await ownerCall(
+      hub,
+      "cawco jev",
+      30_000,
+      ConnectionKeyError,
+      (seconds) =>
+        `${hub} did not answer within ${seconds}s, so what it did with the TypeSafe key is not known`,
+      request
     ),
     (refusal) =>
       new ConnectionKeyError(
