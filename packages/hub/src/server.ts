@@ -843,10 +843,7 @@ import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import { githubReposOf } from "./github";
 import { createHandedInputs } from "./handed-inputs";
 import { handleId, isHandle } from "./handles";
-import {
-  HARNESS_CONFIG_BODY,
-  type HarnessConfigBody,
-} from "./harness-config-body";
+import type { HarnessConfigBody } from "./harness-config-body";
 import { hidden } from "./hidden";
 import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { type HubContext, hubContextOf } from "./hub-context";
@@ -1040,6 +1037,7 @@ import { fileRoutes } from "./routes/files";
 import { findRoutes } from "./routes/find";
 import { fleetRoutes } from "./routes/fleet";
 import { fleetAgentRoutes } from "./routes/fleet-agents";
+import { fleetHarnessConfigRoutes } from "./routes/fleet-harness-configs";
 import { fleetMarketplaceRoutes } from "./routes/fleet-marketplaces";
 import { fleetMcpRoutes } from "./routes/fleet-mcp";
 import { fleetMemoryRoutes } from "./routes/fleet-memory";
@@ -33938,55 +33936,9 @@ export const createServer = (
         }
         fleetChanged();
         return undoable(trashed);
-      })
-      /**
-       * The fleet's Claude Code settings, OpenCode plugins and pi extensions
-       * (core harness-config.ts), each kind at its own routes beside the
-       * hooks': a list, a partial put by name, a delete the trash keeps for
-       * its undo. Only the admin tools call them (admin-tools.ts).
-       */
-      .get("/api/fleet/claude-settings", hidden, () =>
-        harnessConfigList("claudeSettings")
-      )
-      .put(
-        "/api/fleet/claude-settings/:name",
-        { ...hidden, body: HARNESS_CONFIG_BODY },
-        ({ params, body, status }) =>
-          harnessConfigPut("claudeSettings", params.name, body, status)
-      )
-      .delete(
-        "/api/fleet/claude-settings/:name",
-        hidden,
-        ({ params, status }) =>
-          harnessConfigDelete("claudeSettings", params.name, status)
-      )
-      .get("/api/fleet/opencode-plugins", hidden, () =>
-        harnessConfigList("opencodePlugins")
-      )
-      .put(
-        "/api/fleet/opencode-plugins/:name",
-        { ...hidden, body: HARNESS_CONFIG_BODY },
-        ({ params, body, status }) =>
-          harnessConfigPut("opencodePlugins", params.name, body, status)
-      )
-      .delete(
-        "/api/fleet/opencode-plugins/:name",
-        hidden,
-        ({ params, status }) =>
-          harnessConfigDelete("opencodePlugins", params.name, status)
-      )
-      .get("/api/fleet/pi-extensions", hidden, () =>
-        harnessConfigList("piExtensions")
-      )
-      .put(
-        "/api/fleet/pi-extensions/:name",
-        { ...hidden, body: HARNESS_CONFIG_BODY },
-        ({ params, body, status }) =>
-          harnessConfigPut("piExtensions", params.name, body, status)
-      )
-      .delete("/api/fleet/pi-extensions/:name", hidden, ({ params, status }) =>
-        harnessConfigDelete("piExtensions", params.name, status)
-      )
+      }),
+    fleetHarnessConfigRoutes(ctx),
+    new Elysia()
       // What one hook used to be, newest first, without the material. `?hookId=`
       // narrows to that hook's own history; nothing named lists every hook's,
       // for a fleet-wide undo panel.
