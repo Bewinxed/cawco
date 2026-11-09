@@ -9,30 +9,27 @@ import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { recordAgentState } from "../agent-state";
 import { boundaryProcId, isBoundaryOf, isJudgeOf } from "../proc-id";
-import { armHook } from "./arm";
+import { addAccount, addSpill, behindGate } from "./decisions";
 import {
   armedWorkspaces,
+  armHook,
   armingOf,
   armPhase,
   armStep,
+  closeWhenIdle,
   ensureBoundary,
+  lookOnce,
+  lookUnderWay,
   nextReading,
-  unasked,
-} from "./arming";
-import { addAccount, addSpill, behindGate } from "./decisions";
+  replaceSoon,
+  start,
+  unaskedCalls,
+} from "./ensure";
 import { closedWhile, liveWhy, recentlyHeld } from "./holding";
 import { closeQuietly, liveFacts, setProject } from "./looks";
 import { workLeft } from "./narrowing";
 import { commandsEnded } from "./processes";
-import {
-  closeWhenIdle,
-  isStale,
-  lookOnce,
-  lookUnderWay,
-  replaceSoon,
-  sayWhyLeft,
-} from "./staleness";
-import { start } from "./start";
+import { isStale, sayWhyLeft } from "./staleness";
 import {
   type Boundary,
   type Held,
@@ -82,14 +79,14 @@ export const settleGonePlaces = async (): Promise<void> => {
  * form, as the agent starts (fd2d7601): a running CLI reads its workspace's
  * hook on every tool call, so one an earlier build wrote must not outlive
  * that build's runtime, and no session is adopted or launched in a
- * workspace before its own is rewritten (arming.ts `hookArmed`).
+ * workspace before its own is rewritten (ensure.ts `hookArmed`).
  *
  * Nothing else waits on it: the agent registers and takes custody of other
  * sessions meanwhile (it took 78 s on obelisk with 421 folders, one at a
  * time, and the update nearly rolled back). The workspaces whose boundary
  * runs, on any keeper, read once from the keepers' listing, and in which a
  * session's process is attached or a command is on its way in
- * (holding.ts `inUse`), are armed now, arming.ts `REARM_CONCURRENCY` at a time: that
+ * (holding.ts `inUse`), are armed now, ensure.ts `REARM_CONCURRENCY` at a time: that
  * is where a CLI runs, and one of an older form is handed over there. One a
  * session's process runs in with no boundary is started again. Any other has
  * no command to run: it is armed the moment a session there is adopted or
@@ -161,7 +158,7 @@ export const boundaryFor = async (
 /**
  * At start-up: the older boundaries an earlier agent left running beside the
  * current one (or alone) in every workspace the start-up reading listed, each
- * closed now if nothing runs in it (stale-look.ts `closeIdle`), once the workspaces
+ * closed now if nothing runs in it (ensure.ts `closeIdle`), once the workspaces
  * armed now are armed; one that still runs something is left to close once it
  * ends. Answers how many were closed. Without it an older one nothing ran in
  * ran on until its workspace's quiet close: in r361 (2026-10-25) fifteen idle
@@ -179,13 +176,13 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
     return 0;
   }
   for (const id of left) {
-    closeWhenIdle(id, unasked);
+    closeWhenIdle(id, unaskedCalls);
   }
   // A look begun before they were added may have passed them by.
   await lookUnderWay();
-  await lookOnce(unasked);
+  await lookOnce(unaskedCalls);
   // A look passes over a workspace whose boundary is starting
-  // (stale-look.ts `closeRetiring`), as one is while a session there is launched
+  // (ensure.ts `closeRetiring`), as one is while a session there is launched
   // again at start-up (a turn its killed process left): the pass waits that
   // start out and looks again, so it closes what it leaves behind idle.
   const pending = left.flatMap((id) => {
@@ -195,7 +192,7 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
   if (pending.length > 0) {
     await Promise.all(pending);
     await lookUnderWay();
-    await lookOnce(unasked);
+    await lookOnce(unaskedCalls);
   }
   const after = await Promise.all(
     left.map(async (id) => (await readRetiring(id)).length)
@@ -269,7 +266,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
       console.info(
         `[workspace] ${id}: its boundary runs on a retiring session keeper, and is handed over to one on the current keeper`
       );
-      replaceSoon({ id, path: held.path }, unasked);
+      replaceSoon({ id, path: held.path }, unaskedCalls);
     }
     const judged = (procsOn: typeof procs) =>
       procsOn.some((proc) => isJudgeOf(proc.procId, id));
@@ -280,7 +277,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
       console.info(
         `[workspace] ${id}: its judge runs on a retiring session keeper; its hook is armed again, with a judge on the current one`
       );
-      await armHook(id, held, unasked).catch((error: unknown) => {
+      await armHook(id, held, unaskedCalls).catch((error: unknown) => {
         console.warn(
           `[workspace] ${id}: its judge could not be started on the current session keeper: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -298,7 +295,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
  * outside the boundary ends too: a session's CLI in its clone, an executor
  * on its way in (stop.ts `endUsers`). Its record goes (`boundary.json`, each
  * older one's), so its executor says the boundary is not running and a
- * judge's exit arms nothing again (judge-process.ts `watchJudge`); then its judges go,
+ * judge's exit arms nothing again (ensure.ts `watchJudge`); then its judges go,
  * on every keeper that runs one, unless something stop.ts `endUsers` ended
  * outlived its SIGKILL, which its judge goes on answering. Never starts one: a
  * boundary already down, or one that never started, leaves nothing to do.
@@ -372,7 +369,7 @@ export type SandboxDown<T> = { readonly ran: T } | { readonly busy: string };
  * hold against starts ({@link closedWhile}), the boundary is stopped only
  * when nothing runs in it ({@link commandsEnded}, {@link workLeft}, no older
  * generation beside it), as a boundary held over a stand-in is replaced
- * (stale-look.ts `restartIfIdle`); on Linux `work` runs once its sandbox is gone. Its
+ * (ensure.ts `restartIfIdle`); on Linux `work` runs once its sandbox is gone. Its
  * judge, doors and hook stay, and a new boundary of the same policy starts
  * after `work`, its or not. One that still runs something answers `busy`, in
  * words, and nothing is stopped. With no boundary running, `work` runs as it
@@ -402,7 +399,7 @@ export const whileSandboxDown = <T>(
       try {
         return { ran: await work() };
       } finally {
-        const fresh = await start(await sessiond(), ref, unasked);
+        const fresh = await start(await sessiond(), ref, unaskedCalls);
         console.info(
           `[workspace] ${ref.id}: its boundary ${held.pid} was down while the host wrote its clone, and ${fresh.pid} runs now`
         );
