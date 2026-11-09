@@ -108,6 +108,7 @@ import type { createBrowsers } from "./browsers";
 import type { Caw, createCaw } from "./caw";
 import type { createConnectAsks } from "./connect-asks";
 import type { createConnections } from "./connections";
+import type { ContinueOutcome } from "./continuations";
 import type { damagedRecordsOf } from "./damaged-rows";
 import type { DbShape } from "./db";
 import type { LoginMove } from "./db/accounts";
@@ -400,6 +401,7 @@ export interface HubContext {
     row: Parameters<HubContext["accountToPlace"]>[1]
   ) => { accountId?: string } | { refusal: string };
   cloneForContinuation: (sourceId: string) => Promise<() => void>;
+  closePreview: (instanceId: string) => { instanceId: string; state: "closed" };
   coldReading: (
     row: KeepAliveRow & { projectId: string | null; workItemId: string | null },
     state: { lastTurnAt: string | null; midTurn: boolean },
@@ -845,6 +847,7 @@ export interface HubContext {
   openInstance: (row: Parameters<DbShape["openInstance"]>[0]) => void;
   openItems: ReturnType<typeof createOpenItems>;
   originKeyOf: (id: string) => string | undefined;
+  outcomeOf: (row: ContinuationRow) => ContinueOutcome;
   owedAfterBoard: (
     broken: ReturnType<HubContext["laws"]["broken"]>
   ) => FramePayload[];
@@ -1122,6 +1125,7 @@ export interface HubContext {
   }) => string;
   sessionStartOf: (where: SessionLocation) => Promise<string>;
   sessionWorkspace: (row: InstanceRow) => WorkspaceRef | undefined;
+  settledContinuation: (id: string) => Promise<ContinuationRow | undefined>;
   settleMode: (
     machineId: string,
     payload: NamedSpawn,
