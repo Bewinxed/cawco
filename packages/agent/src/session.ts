@@ -3543,7 +3543,7 @@ export class SessionSupervisor {
     // workspace's: its boundary reads that project's folder.
     const boundary = await boundaryFor(
       place,
-      traitsOf(spec.harness).accountModel === "dir"
+      traitsOf(spec.harness).accountDir
         ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
         : undefined,
       spec.workspace ? spec.projectId : undefined,
