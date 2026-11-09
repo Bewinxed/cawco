@@ -13,7 +13,11 @@
  */
 
 import type { FoldBox } from "#lib/platform/motion/fold-path.js";
-import { keepPrefs, PREF_VALUE_LIMIT, type Pref } from "#lib/platform/prefs.js";
+import {
+  FOLD_BOXES_PREF,
+  keepPrefs,
+  PREF_VALUE_LIMIT,
+} from "#lib/platform/prefs.js";
 import { store, stored as storedIn } from "#lib/platform/storage.js";
 
 /** A tab's measured shape: its box, and its rim's stroke and taper. */
@@ -22,7 +26,6 @@ export interface FoldMeasure {
   ink: { ease: number; stroke: number; taper: number };
 }
 
-export const FOLD_BOXES_PREF = "cawco-tab-boxes" satisfies Pref;
 const KEPT = 40;
 const STORED_LENGTH = 9;
 /**
