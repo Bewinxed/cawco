@@ -22,6 +22,7 @@ import { hubJson, hubSend } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { cawco, type SendExtras } from "./client.svelte";
 import { spawning } from "./spawn/new-session.svelte";
+import { boardStore } from "./stores/board.svelte";
 import { contextOf } from "./workspace/workspace.svelte";
 
 /** The session a continuation starts from, as the form shows and sends it. */
@@ -139,7 +140,7 @@ export function continueSourceOf(
   title: string
 ): ContinueSource | null {
   const session = cawco.session(sessionId);
-  const row = cawco.instanceIndex.byId.get(sessionId);
+  const row = boardStore.instanceIndex.byId.get(sessionId);
   const context = contextOf(sessionId);
   const machineId = session?.machineId || row?.machineId || context?.machine;
   const harness = row?.harness ?? context?.harness ?? session?.harness;

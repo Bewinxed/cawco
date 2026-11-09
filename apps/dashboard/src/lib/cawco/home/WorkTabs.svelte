@@ -79,13 +79,14 @@
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { cawco, isFailed } from "../client.svelte";
+  import { cawco } from "../client.svelte";
   import { type BoardRow, conversationHref } from "../links";
   import OlderRows from "../OlderRows.svelte";
   import OsMark from "../OsMark.svelte";
   import { failedWords } from "../older";
   import { rail } from "../rail.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
+  import { boardStore, isFailed } from "../stores/board.svelte";
   import { type TreeLine, tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
   import { GroupRelay } from "./group-relay.svelte";
@@ -186,7 +187,7 @@
   };
   /** A session the tab does not list, to stand in for a delegate's parent. */
   const known = (id: string): BoardRow | undefined =>
-    cawco.instanceIndex.byId.get(id);
+    boardStore.instanceIndex.byId.get(id);
   /**
    * Each tab as its tree (tree.ts): every session followed by its
    * delegates, and each ancestor the tab does not list drawn as a context
@@ -260,7 +261,7 @@
 
   /** The machines' order, the one every list keeps (`byMachine`). */
   const place = (id: string): number => {
-    const at = cawco.machines.findIndex((m) => m.machineId === id);
+    const at = boardStore.machines.findIndex((m) => m.machineId === id);
     return at === -1 ? Number.MAX_SAFE_INTEGER : at;
   };
 
@@ -498,7 +499,7 @@
   }
   function age(row: BoardRow, tab: WorkTab): string {
     if (tab === "working") {
-      const since = cawco.turnSince(row.id);
+      const since = boardStore.turnSince(row.id);
       return since ? span(clock.now - since) : "";
     }
     return formatAgeShort(lastAt(row), clock.now);
@@ -549,7 +550,7 @@
     {context}
     done={tab === "finished"}
     fold={views[tab].foldOf(row.id)}
-    href={conversationHref(row.id, cawco.instanceIndex)}
+    href={conversationHref(row.id, boardStore.instanceIndex)}
     instance={row}
     line={context ? "" : metaLine(row, tab, group)}
     machineId={row.machineId}
