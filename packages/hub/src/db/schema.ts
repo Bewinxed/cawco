@@ -4974,8 +4974,7 @@ export const routines = sqliteTable(
  * starts when the runs before it end), being started, running, ended, or
  * skipped (nothing started).
  */
-export type RoutineRunState =
-  import("@cawco/core/routine-kinds").RoutineRunState;
+type RoutineRunState = import("@cawco/core/routine-kinds").RoutineRunState;
 
 /**
  * How a run ended, by its delegate's `finish_item` summary or Caw's

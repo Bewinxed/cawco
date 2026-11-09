@@ -55,7 +55,7 @@ import type { RelayFrame, RelayJourneyFrame } from "./stream-relay";
 import type { TailnetHttps, TailnetOrigin } from "./tailnet-https";
 import type { AccountLimits, MachineGoLimits, UsageSpend } from "./usage/types";
 
-export interface FleetMcpFrame {
+interface FleetMcpFrame {
   kind: "fleet_mcp";
   servers: FleetMcpServer[];
 }
@@ -176,7 +176,7 @@ export interface ArtifactSessionFrame {
   working: boolean;
 }
 
-export interface MessageFrame {
+interface MessageFrame {
   harness: HarnessKind;
   instanceId: string;
   keepAlive?: true;
@@ -184,7 +184,7 @@ export interface MessageFrame {
   message: NeutralMessage;
 }
 
-export interface SendFrame {
+interface SendFrame {
   instanceId: string;
   keepAlive?: true;
   /** Hub-originated: a send's record, as it stands after its latest change. */
@@ -199,7 +199,7 @@ export interface SendFrame {
  * before reading it. Whole, as it was sent, under the hand-off it was given
  * (`SendPayload.delivery`); the hub owes it to the session's next process.
  */
-export interface HeldSendFrame {
+interface HeldSendFrame {
   instanceId: string;
   kind: "held_send";
   send: import("./protocol").SendPayload;
@@ -210,13 +210,13 @@ export interface HeldSendFrame {
  * already (agent taken-sends.ts). No turn started on it; its record is read,
  * and no turn follows that read.
  */
-export interface TakenSendFrame {
+interface TakenSendFrame {
   instanceId: string;
   kind: "taken_send";
   uuid: string;
 }
 
-export interface RejectedFrame {
+interface RejectedFrame {
   error: string;
   instanceId: string;
   /** Daemon-originated: one send did not go; its record fails and the session goes on. */
@@ -224,7 +224,7 @@ export interface RejectedFrame {
   uuid: string;
 }
 
-export interface InstancesFrame {
+interface InstancesFrame {
   agents: AgentRow[];
   continuations: ContinuationJob[];
   /**
@@ -267,7 +267,7 @@ export interface InstancesFrame {
   pulses: Record<string, SessionPulse>;
 }
 
-export interface InstancesDeltaFrame {
+interface InstancesDeltaFrame {
   /** Changed machines only; omitted when no machine moved. */
   agents?: AgentRow[];
   continuations?: ContinuationJob[];
@@ -433,7 +433,7 @@ export interface PermissionSettledFrame {
   toolName?: string;
 }
 
-export interface UsageFrame {
+interface UsageFrame {
   /** Hub-originated: every Claude account's own limits, every machine's Go plan, and the fleet's spend. */
   claude: AccountLimits[];
   kind: "usage";
@@ -441,7 +441,7 @@ export interface UsageFrame {
   spend: UsageSpend;
 }
 
-export interface StoppedFrame {
+interface StoppedFrame {
   discard: boolean;
   /** Positive server-session receipt; absent receipts cannot confirm OpenCode. */
   ended?: {
@@ -468,7 +468,7 @@ export interface AsleepFrame {
   kind: "asleep";
 }
 
-export interface RecoveryUnavailableFrame {
+interface RecoveryUnavailableFrame {
   instanceId: string;
   /** Recovery found no live handle; stored conversations remain resumable. */
   kind: "recovery_unavailable";
@@ -495,7 +495,7 @@ export interface HarnessFailed {
  * path an `fs` request names is not there (its error's `ENOENT`);
  * `unknown`, any other refusal, its message as it was said.
  */
-export type ControlRefusal =
+type ControlRefusal =
   | { kind: "not-running"; message: string }
   | { kind: "missing"; message: string }
   | { kind: "unknown"; message: string };
@@ -532,14 +532,14 @@ export interface ErrorFrame {
   verb?: Verb;
 }
 
-export interface SessionAddressFrame {
+interface SessionAddressFrame {
   instanceId: string;
   kind: "session_address";
   processGeneration: string;
   sessionId: string;
 }
 
-export interface ScratchWorktreeFrame {
+interface ScratchWorktreeFrame {
   instanceId: string;
   kind: "scratch_worktree";
   processGeneration: string;
@@ -553,7 +553,7 @@ export interface PulseFrame {
   pulse: SessionPulse;
 }
 
-export interface WorkItemFrame {
+interface WorkItemFrame {
   instanceId: string;
   item: WorkItemSummary;
   /** Hub-originated: a delegate work item's state; `instanceId` is its parent's. */
@@ -595,7 +595,7 @@ export interface AcceptResult {
 /** What "Create project" on an offer did, as the dashboard names it. */
 export type ProjectOfferAccepted = AcceptResult;
 
-export interface ProjectOfferFrame {
+interface ProjectOfferFrame {
   instanceId: string;
   /** Hub-originated: the session's standing offer, or null once it was answered. */
   kind: "project_offer";
@@ -649,7 +649,7 @@ export interface HubRestartFrame {
   } | null;
 }
 
-export interface ProjectsChangedFrame {
+interface ProjectsChangedFrame {
   instanceId?: undefined;
   /**
    * Hub-originated: the projects changed (one was made or forgotten, or a
@@ -665,7 +665,7 @@ export interface ProjectsChangedFrame {
  * name began or stopped answering. Every dashboard takes it at once, so its
  * onboarding row in Needs you shows the step that stands, or ticks.
  */
-export interface TailnetHttpsFrame {
+interface TailnetHttpsFrame {
   instanceId?: undefined;
   kind: "tailnet.https";
   tailnet: TailnetHttps;
@@ -699,7 +699,7 @@ export interface FleetFetchFrame {
   skill?: FleetSkillMeta;
 }
 
-export interface TasksChangedFrame {
+interface TasksChangedFrame {
   instanceId?: undefined;
   /**
    * Hub-originated: a project's tasks changed (one was created or moved, or
@@ -722,14 +722,14 @@ export interface TasksChangedFrame {
  * moved without anything in Needs you moving, so a screen listing a
  * session's questions (core session-questions.ts) reads them again.
  */
-export interface QuestionsMovedFrame {
+interface QuestionsMovedFrame {
   /** The artifact that asked it. */
   artifactId: string;
   instanceId?: undefined;
   kind: "questions.moved";
 }
 
-export interface DecisionsChangedFrame {
+interface DecisionsChangedFrame {
   instanceId?: undefined;
   /**
    * Hub-originated: a project's decision pages changed (one was built,
@@ -740,7 +740,7 @@ export interface DecisionsChangedFrame {
   projectId: string;
 }
 
-export interface BlocksChangedFrame {
+interface BlocksChangedFrame {
   instanceId?: undefined;
   /**
    * Hub-originated: a project's arrangement of blocks changed (a block
@@ -751,7 +751,7 @@ export interface BlocksChangedFrame {
   projectId: string;
 }
 
-export interface DelegateEventFrame {
+interface DelegateEventFrame {
   event: DelegateEvent;
   instanceId: string;
   /** Hub-originated: delegate traffic; `instanceId` is the delegate's. */
