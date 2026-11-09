@@ -251,8 +251,11 @@ export interface Pin {
   anchor: Anchor;
   at: string;
   by: "person";
+  // Ids first: the Swift client names this union's members by position
+  // (openapi.json writes them as written here), and the apps read `value2`
+  // as the page's elements.
   /** The page's elements under it (a comment: the one tapped); a canvas's, by id. */
-  elements: PinnedElement[] | string[];
+  elements: string[] | PinnedElement[];
   /** What of it the session was last told ({@link pinSaid}); the hub stamps it on delivery. */
   heard?: string;
   id: string;
