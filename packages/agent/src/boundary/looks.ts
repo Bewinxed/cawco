@@ -20,6 +20,7 @@ import { closeGitDoor } from "../hub-git";
 import type { HeldProc } from "../keepers";
 import { isBoundaryOf, isJudgeOf, judgeProcId } from "../proc-id";
 import { closeToolDoor } from "../tool-door";
+import { armState, ensureBoundary, rearming } from "./arming";
 import {
   behindGate,
   decided,
@@ -44,13 +45,7 @@ import {
   judgeScripts,
 } from "./hook-judge";
 import { settling } from "./judge-process";
-import {
-  armState,
-  ensureBoundary,
-  ensureNow,
-  rearming,
-  replaceNarrowed,
-} from "./lifecycle";
+import { ensureNow, replaceNarrowed } from "./lifecycle";
 import {
   NARROW_CAUSE_WORDS,
   NARROW_LOOK_MS,
