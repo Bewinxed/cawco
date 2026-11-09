@@ -1,7 +1,7 @@
 language js
 
 // An artifact's row goes one way: db/artifacts.ts `dropArtifactRows`,
-// through db/index.ts `dropArtifacts`, which reads each id first (a held
+// through db/artifacts.ts `artifactEvents`, which reads each id first (a held
 // next version's too, which its foreign key cascades unseen) and tells
 // `onArtifactsGone` once the write is done. That is what ends the
 // artifact's preview origin (hub server.ts `endArtifactOrigin`); a delete
@@ -9,5 +9,5 @@ language js
 `$db.delete(artifacts)` as $hit where {
   $filename <: includes "packages/",
   $filename <: not includes "packages/hub/src/db/artifacts.ts",
-  register_diagnostic(span=$hit, message="Delete artifacts with dropArtifacts (db/index.ts), never delete(artifacts): it tells onArtifactsGone, which ends each one's preview origin.")
+  register_diagnostic(span=$hit, message="Delete artifacts with dropArtifacts (db/artifacts.ts), never delete(artifacts): it tells onArtifactsGone, which ends each one's preview origin.")
 }
