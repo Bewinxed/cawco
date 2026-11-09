@@ -58,6 +58,7 @@
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
+  import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
   import { tickersStore } from "#lib/cawco/stores/tickers.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -199,7 +200,7 @@
    * no panel, the project's page draws it; core `setupLanding`.)
    */
   const previewOpen = $derived(
-    shown !== null && cawco.previews[shown]?.state === "open"
+    shown !== null && previewsStore.previews[shown]?.state === "open"
   );
   // Caw showing something brings Preview to the front, and so does a card
   // of his pressed in the transcript: each a reveal (client `revealPreview`),
@@ -208,12 +209,12 @@
   // conversation: another one coming on show is no reveal. With nothing left
   // to show the panel is his conversation.
   let revealsSeen = untrack(() => ({
-    count: shown ? cawco.previewRequests[shown] : undefined,
+    count: shown ? previewsStore.previewRequests[shown] : undefined,
     id: shown,
   }));
   $effect(() => {
     const id = shown;
-    const count = id ? cawco.previewRequests[id] : undefined;
+    const count = id ? previewsStore.previewRequests[id] : undefined;
     const open = previewOpen;
     untrack(() => {
       const seen = revealsSeen;
