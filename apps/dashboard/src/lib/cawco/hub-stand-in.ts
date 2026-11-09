@@ -8,7 +8,8 @@
  * answered from `answers` by path, and refused for any other path in words
  * that say so.
  */
-import type { HubRequest } from "@cawco/core/hub-request";
+
+import { hubThrough } from "#lib/platform/hub.js";
 import HubStandIn from "./HubStandIn.svelte";
 import type { HubState } from "./hub/socket.svelte";
 import type { HubSeam } from "./hub-seam";
@@ -23,12 +24,20 @@ export const hubAs =
     const seam: HubSeam = {
       state,
       machineOffline: machine.offline,
-      read: <T>({ path }: HubRequest): Promise<T> =>
-        path in answers
-          ? Promise.resolve(answers[path] as T)
-          : Promise.reject(
-              new Error(`The stand-in hub has no answer for ${path}.`)
-            ),
+      // Eden's client, its fetch answered from `answers` by the path it
+      // asks (a proxy of fetch, so it keeps what else fetch carries).
+      client: hubThrough(
+        new Proxy(fetch, {
+          apply: (_fetch, _this, [input]: Parameters<typeof fetch>) => {
+            const path = String(input);
+            return path in answers
+              ? Promise.resolve(Response.json(answers[path]))
+              : Promise.reject(
+                  new Error(`The stand-in hub has no answer for ${path}.`)
+                );
+          },
+        })
+      ),
     };
     return { Component: HubStandIn, props: { seam } };
   };

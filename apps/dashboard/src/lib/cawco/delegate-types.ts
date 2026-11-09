@@ -1,7 +1,6 @@
 import type { DelegateType } from "@cawco/core/delegate-types";
-import type { Deleted } from "@cawco/core/fleet";
-import { hubRequest } from "@cawco/core/hub-request";
-import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { couldNotOrAway } from "#lib/platform/hub-read.js";
 
 /**
  * The dashboard's side of delegate types: fetch wrappers in the shape
@@ -14,10 +13,6 @@ import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
  */
 
 export type { DelegateType } from "@cawco/core/delegate-types";
-
-export interface DelegateTypesPayload {
-  types: DelegateType[];
-}
 
 /**
  * A type a project's `delegates/` folder holds (hub project-delegate-types.ts):
@@ -35,15 +30,6 @@ interface TypeFileProblem {
   problem: string;
 }
 
-/**
- * `GET /api/projects/:id/delegate-types`: the project's types first, then
- * the fleet types they leave, and the files that kept themselves out.
- */
-export interface ProjectCatalogPayload {
-  problems: TypeFileProblem[];
-  types: (ProjectDelegateType | (DelegateType & { source: "fleet" }))[];
-}
-
 /** One project's own types, under the project they apply in, with its files that made none. */
 export interface ProjectTypes {
   problems: TypeFileProblem[];
@@ -56,31 +42,32 @@ export interface ProjectTypes {
  * body is the fields the route takes: the name rides the path, and `role`
  * is a project type file's alone (core `DelegateType`).
  */
-export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
-  hubJson<DelegateType>(
-    hubRequest("PUT /api/delegate-types/:name", {
-      path: { name: draft.name },
-      body: {
-        description: draft.description,
-        harness: draft.harness,
-        model: draft.model,
-        effort: draft.effort,
-        skills: draft.skills,
-        denyTools: draft.denyTools,
-        mayStart: draft.mayStart,
-        account: draft.account,
-        connections: draft.connections,
-      },
-    }),
-    { failure: couldNotOrAway(`save ${draft.name || "the delegate type"}`) }
-  );
+export const saveDelegateType = async (draft: DelegateType) => {
+  const answer = await hub.api["delegate-types"]({ name: draft.name }).put({
+    description: draft.description,
+    harness: draft.harness,
+    model: draft.model,
+    effort: draft.effort,
+    skills: draft.skills,
+    denyTools: draft.denyTools,
+    mayStart: draft.mayStart,
+    account: draft.account,
+    connections: draft.connections,
+  });
+  if (answer.error) {
+    throw couldNotOrAway(`save ${draft.name || "the delegate type"}`)(answer);
+  }
+  return answer.data;
+};
 
 /** Deletes a type, into the hub's trash for its Undo (config/undo.ts). */
-export const removeDelegateType = (name: string): Promise<Deleted> =>
-  hubJson<Deleted>(
-    hubRequest("DELETE /api/delegate-types/:name", { path: { name } }),
-    { failure: couldNotOrAway(`delete ${name}`) }
-  );
+export const removeDelegateType = async (name: string) => {
+  const answer = await hub.api["delegate-types"]({ name }).delete();
+  if (answer.error) {
+    throw couldNotOrAway(`delete ${name}`)(answer);
+  }
+  return answer.data;
+};
 
 /** A blank draft, on the defaults that make the common case one field of typing. */
 export const blankDelegateType = (): DelegateType => ({

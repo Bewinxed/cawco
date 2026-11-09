@@ -69,7 +69,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiPreviewSettings200"
+                  "$ref": "#/components/schemas/PreviewSettings"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiPreviewSettings 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -77,9 +87,24 @@
           "422": {
             "description": "putApiPreviewSettings 422",
             "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiPreviewSettings 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -148,6 +173,36 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "postApiInstancesByIdPreviewAddress 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdPreviewAddress 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiInstancesByIdPreviewAddress 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -189,6 +244,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PreviewAddress"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdPreviewAddress 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdPreviewAddress 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdPreviewAddress 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -44197,12 +44282,12 @@
         ]
       },
       "HookVersion": {
-        "description": "One superseded version of one hook, as a listing reads it — without the\nmaterial. A hook is kept every time it is saved or deleted over one that\nalready existed, so this is a full edit history. `createdAt` is a `Date` in\nthe hub and its ISO string on the wire (`GET /api/fleet/hooks/history`).",
+        "description": "One superseded version of one hook, as a listing reads it — without the\nmaterial. A hook is kept every time it is saved or deleted over one that\nalready existed, so this is a full edit history (`GET /api/fleet/hooks/history`).",
         "type": "object",
         "properties": {
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "When it was kept, ISO, as the answer carries it.",
+            "type": "string"
           },
           "hash": {
             "type": "string"
@@ -46936,8 +47021,8 @@
             "description": "The sessions it is loaded into; absent is a linked document under `~/.claude/memories/`."
           },
           "updatedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "When it was last stored, ISO, as the answer carries it.",
+            "type": "string"
           }
         },
         "required": [
@@ -46993,15 +47078,15 @@
         ]
       },
       "MemoryVersion": {
-        "description": "One superseded version of the fleet's memory, as a listing reads it —\nwithout its content. `createdAt` is a `Date` in the hub and its ISO string\non the wire (`GET /api/fleet/memory/history`).",
+        "description": "One superseded version of the fleet's memory, as a listing reads it —\nwithout its content (`GET /api/fleet/memory/history`).",
         "type": "object",
         "properties": {
           "bytes": {
             "type": "number"
           },
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "When it was kept, ISO, as the answer carries it.",
+            "type": "string"
           },
           "hash": {
             "type": "string"
@@ -56223,8 +56308,8 @@
             "type": "number"
           },
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "When it was kept, ISO, as the answer carries it.",
+            "type": "string"
           },
           "hash": {
             "type": "string"
@@ -63385,8 +63470,7 @@
                 "type": "string"
               },
               "updatedAt": {
-                "type": "string",
-                "format": "date-time"
+                "type": "string"
               }
             },
             "required": [
@@ -65649,8 +65733,8 @@
             "type": "string"
           },
           "updatedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "ISO, as the answer carries it.",
+            "type": "string"
           }
         },
         "required": [
@@ -65680,8 +65764,8 @@
             "type": "string"
           },
           "updatedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "ISO, as the answer carries it.",
+            "type": "string"
           }
         },
         "required": [
@@ -67442,8 +67526,8 @@
             "type": "string"
           },
           "updatedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "ISO, as the answer carries it.",
+            "type": "string"
           }
         },
         "required": [
@@ -67462,8 +67546,7 @@
             "type": "string"
           },
           "updatedAt": {
-            "type": "string",
-            "format": "date-time"
+            "type": "string"
           }
         },
         "required": [
@@ -67489,8 +67572,8 @@
             "description": "The sessions it is loaded into; absent is a linked document under `~/.claude/memories/`."
           },
           "updatedAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "When it was last stored, ISO, as the answer carries it.",
+            "type": "string"
           }
         },
         "required": [
@@ -67541,54 +67624,6 @@
         },
         "required": [
           "suggestWhileTyping"
-        ]
-      },
-      "putApiPreviewSettings200": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "host"
-                ]
-              },
-              "passDomain": {
-                "type": "string"
-              },
-              "pattern": {
-                "type": "string"
-              },
-              "ports": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "mode",
-              "passDomain",
-              "pattern",
-              "ports"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "port"
-                ]
-              },
-              "ports": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "mode",
-              "ports"
-            ]
-          }
         ]
       },
       "putApiProjectsByIdAccounts200": {
