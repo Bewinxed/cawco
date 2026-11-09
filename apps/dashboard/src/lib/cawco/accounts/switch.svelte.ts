@@ -11,12 +11,8 @@
 import type { Account, AccountProvider } from "@cawco/core/accounts";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
-import {
-  type BoardRow,
-  cawco,
-  machineConnected,
-  moveInstanceAccount,
-} from "../client.svelte";
+import { cawco, machineConnected, moveInstanceAccount } from "../client.svelte";
+import type { BoardRow } from "../links";
 import { faultOn, pendingOn } from "../session-acts.svelte";
 import { accountsOf, nameOf, signinState } from "./model.svelte";
 

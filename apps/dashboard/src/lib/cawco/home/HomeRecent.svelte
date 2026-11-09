@@ -31,8 +31,8 @@
   import { store, stored } from "#lib/platform/storage.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { type BoardRow, cawco, loadCatalog } from "../client.svelte";
-  import { conversationHref } from "../links";
+  import { cawco, loadCatalog } from "../client.svelte";
+  import { type BoardRow, conversationHref } from "../links";
   import { runningWords } from "../older";
   import RowFault from "../RowFault.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";

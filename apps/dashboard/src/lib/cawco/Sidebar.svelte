@@ -59,7 +59,6 @@
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
   import {
-    type BoardRow,
     cawco,
     isFailed,
     isResumable,
@@ -73,7 +72,7 @@
   import Home from "./home/Home.svelte";
   import HomeRecent from "./home/HomeRecent.svelte";
   import { home, lastAt } from "./home/home-state.svelte";
-  import { rowHref } from "./links";
+  import { type BoardRow, rowHref } from "./links";
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { markHue } from "./mark";

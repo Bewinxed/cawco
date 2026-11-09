@@ -14,7 +14,7 @@
  * Rows are immutable and replaced whole (client.svelte.ts `hubRows`), so a
  * nested value that differs by identity alone is compared by what it holds.
  */
-import type { BoardRow } from "./client.svelte";
+import type { BoardRow } from "./links";
 
 /** One field of two rows: the same value, or nested values holding the same. */
 const sameField = (a: unknown, b: unknown): boolean =>

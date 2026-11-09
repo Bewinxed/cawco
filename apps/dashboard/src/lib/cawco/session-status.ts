@@ -8,7 +8,8 @@
 import type { CawStatus } from "@cawco/core/project-conversation";
 import { commonWords } from "@cawco/core/words/common";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
-import { type BoardRow, cawco, isFailed, isStale } from "./client.svelte";
+import { cawco, isFailed, isStale } from "./client.svelte";
+import type { BoardRow } from "./links";
 import type { MarkStatus } from "./TreeMark.svelte";
 
 const STATUS_WORD: Record<MarkStatus, string> = {
