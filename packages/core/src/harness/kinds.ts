@@ -196,7 +196,11 @@ export const ACT_ORIGIN = "act";
 
 /* --------------------------------------------------------------- models — */
 
-/** One model a harness offers. `value` is the wire id; `resolvedModel` the alias. */
+/**
+ * One model a harness offers. `value` is the wire id; `resolvedModel` the alias.
+ *
+ * @socketFrame fromHub
+ */
 export interface ModelInfo {
   /**
    * The tokens one request to the model may send, as the harness reports it:

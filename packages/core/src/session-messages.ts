@@ -35,6 +35,7 @@ export interface McpHttpServerConfig {
   url: string;
 }
 
+/** @socketFrame fromHub */
 export interface McpServerStatus {
   config?: Record<string, unknown>;
   error?: string;
@@ -70,6 +71,8 @@ export interface SlashCommand {
  * What {@link CONTROL_SUPPORTED_COMMANDS} answers, on every harness: the
  * session's `/` menu. A harness with no slash commands (pi) answers an empty
  * list, never nothing, so the menu reads one shape whoever answered.
+ *
+ * @socketFrame fromHub
  */
 export type SupportedCommands = SlashCommand[];
 
@@ -104,6 +107,8 @@ export type PermissionUpdate =
  * account's credentials in the login keychain, and a daemon outside the GUI
  * session is refused the secret (`errSecInteractionNotAllowed`). Generalized:
  * every harness reports its own auth word through the same three states.
+ *
+ * @socketFrame fromHub
  */
 export type AuthState =
   "authenticated" | "unauthenticated" | "unreadable-credentials";
@@ -180,7 +185,11 @@ export type UserQuestionResult = UserQuestionAnswered | UserQuestionDismissed;
 
 /* ------------------------------------------------------------- sessions — */
 
-/** A stored session as the catalog lists it. `harness` says who owns the id. */
+/**
+ * A stored session as the catalog lists it. `harness` says who owns the id.
+ *
+ * @socketFrame fromHub
+ */
 export interface NeutralSessionInfo {
   createdAt?: number;
   customTitle?: string;
@@ -1086,6 +1095,7 @@ interface NeutralRawMessage {
   uuid?: string;
 }
 
+/** @socketFrame fromHub */
 export type NeutralMessage = (
   | NeutralAssistantMessage
   | NeutralUserMessage
