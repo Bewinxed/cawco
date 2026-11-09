@@ -366,7 +366,7 @@ export const agentHarnesses = sqliteTable(
  * The permission mode the person last chose for a harness on a machine: the
  * mode a start from the dashboard's or the app's form went out on, written
  * as it goes. A revive of a session whose row records no mode runs on it
- * (server.ts `settleMode`); with none here it is refused.
+ * (launches.ts `settleMode`); with none here it is refused.
  */
 export const chosenModes = sqliteTable(
   "chosen_modes",
@@ -880,7 +880,7 @@ export const projectPlaces = sqliteTable(
      * A checkout's root commit, the one its HEAD reaches by first parents:
      * which repository it is, the same in every clone on any machine (core
      * hub-repo.ts). Read with its origin as it is added and at each register
-     * of its machine (server.ts `learnCheckout`), so a move knows whether a
+     * of its machine (machine-commands.ts `learnCheckout`), so a move knows whether a
      * checkout on the target is the source's repository with the source's
      * machine away (moves.ts `plan`). Null: not read yet, or no commit.
      */
@@ -979,7 +979,7 @@ export const instances = sqliteTable("instances", {
    * interrupted one too. Older than `spawnedAt`: the turn ran in a launch
    * that is gone and nothing ended it. Every start but a restore clears it,
    * so that is a turn a restart cut, which the restored process is handed
-   * back once (server.ts `resumeCutTurn`). {@link TURN_UNRECORDED} on a row
+   * back once (cut-turns.ts `resumeCutTurn`). {@link TURN_UNRECORDED} on a row
    * from before the hub kept it, until its next turn.
    */
   turnOpenAt: integer("turn_open_at"),
@@ -1220,7 +1220,7 @@ export const instances = sqliteTable("instances", {
   delegateTypeProject: text("delegate_type_project"),
   /**
    * Started clean (core `SpawnPayload.clean`): written by its first spawn and
-   * never after, and every spawn of the row goes clean (server.ts `bounded`).
+   * never after, and every spawn of the row goes clean (launches.ts `bounded`).
    */
   clean: integer("clean", { mode: "boolean" }).notNull().default(false),
   /**
@@ -2506,7 +2506,7 @@ export const accountLeaves = sqliteTable(
 /**
  * A session a person's removal of its account (or sign-out of it on its
  * machine) left on no account, as no other could take it: stopped, its
- * line says so (server.ts `strandedStall`), until a launch of it is placed
+ * line says so (limit-moves.ts `strandedStall`), until a launch of it is placed
  * on an account. `accountName` is the account as it was named then: a
  * removed one has no row left to name it by.
  */
@@ -2747,7 +2747,7 @@ export const moveEndings = sqliteTable("move_endings", {
  * time, ambient ones left out), each kept from when the hub first heard of
  * it. A process restarted or killed takes them with it, and Claude Code
  * restores none on resume: the session is told each was interrupted, its
- * outcome unknown, with its output so far (server.ts `tellCutTasks`).
+ * outcome unknown, with its output so far (cut-turns.ts `tellCutTasks`).
  */
 export const sessionTasks = sqliteTable(
   "session_tasks",
@@ -2846,7 +2846,7 @@ export const limitCompactions = sqliteTable("limit_compactions", {
  * context-filing.ts): one per session,
  * written as its filing turn at the threshold is sent and kept after it
  * ends, so one rise files once; any compaction boundary its harness says
- * takes it away, re-arming the threshold (server.ts `observeCompaction`).
+ * takes it away, re-arming the threshold (compaction.ts `observeCompaction`).
  * A harness's compaction that failed after its boundary writes it back
  * (`lineId` that compaction's line), so a session that cannot compact is
  * not asked to file every turn.
@@ -2862,7 +2862,7 @@ export const contextRises = sqliteTable("context_rises", {
 
 /**
  * A session its harness compacted that has answered no request of its own
- * since (server.ts `observeCompaction`): written at every compaction
+ * since (compaction.ts `observeCompaction`): written at every compaction
  * boundary, a move's included, and taken away by the session's next answer
  * of its own (a top-level assistant message that is no compaction summary).
  * While it stands no filing starts: the compaction's own turn (a
@@ -3642,7 +3642,7 @@ export const continuations = sqliteTable("continuations", {
   /**
    * Who asked for it. A person's own Continue starts a separate session;
    * anything else's continuation is folded into one session with its source
-   * once its opening has gone (server.ts `foldContinued`).
+   * once its opening has gone (continuations.ts `foldContinued`).
    */
   askedBy: storedJson(ContinuationAskerSchema)("asked_by")
     .notNull()
@@ -3651,7 +3651,7 @@ export const continuations = sqliteTable("continuations", {
    * While the job waits (`waiting`): the work in flight its source's process
    * holds, which ending it would lose (core `CONTROL_WORK_IN_FLIGHT`), since
    * when that has run (null when not known), and since when the job has
-   * waited, the bound counting from then (server.ts `waitStep`).
+   * waited, the bound counting from then (continuations.ts `waitStep`).
    */
   waiting: storedJson(
     z.object({
@@ -3722,7 +3722,7 @@ export const sessionLines = sqliteTable(
  * or in a read that placed it by its clock (one written before this table,
  * or while its transcript could not be read), and read by every read after,
  * so a line stands where it was first shown however the transcript is read
- * again (server.ts `readHistory`).
+ * again (history.ts `readHistory`).
  */
 export const lineAnchors = sqliteTable(
   "line_anchors",
@@ -3781,7 +3781,7 @@ export const instanceConversations = sqliteTable(
 /**
  * The ids a session had before the hub folded its continuations into it:
  * each continuation anything but the person's own Continue asked for
- * (server.ts `foldContinued`), and those a hub before migration 0128 started
+ * (continuations.ts `foldContinued`), and those a hub before migration 0128 started
  * at an account's limit. Each is one session, under the id of the one that
  * runs (`instanceId`). Anything that names a former id — a link, a tab, a
  * session's memory of its parent — is that session. `folded`: the former
@@ -4529,7 +4529,7 @@ export const artifacts = sqliteTable(
      * folder of a session with no workspace, whose stage runs there. No
      * workspace row is ever made for a place (archiving one deletes its
      * folder), so it is no key: the hub finds it through the session that
-     * names it (server.ts `stageWhere`).
+     * names it (artifact-events.ts `stageWhere`).
      */
     sourcePlace: text("source_place"),
     /** A sheet's: the stage's toolchain root and its story file, from the clone's root. */
