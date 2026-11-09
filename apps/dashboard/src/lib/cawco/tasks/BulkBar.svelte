@@ -1,17 +1,6 @@
-<script lang="ts" module>
-  /** A bulk change in flight: what it does, how far it is, where it stopped. */
-  export interface BulkRun {
-    done: number;
-    /** The task the hub refused, and its words; the rest stay picked. */
-    failed: { id: string; text: string } | null;
-    total: number;
-    /** "Moving", "Labelling", "Archiving", "Dropping". */
-    verb: string;
-  }
-</script>
-
 <script lang="ts">
   import { commonWords } from "@cawco/core/words/common";
+  import type { BulkRun } from "#lib/cawco/project/project-board.svelte.js";
   /**
    * What acts on the picked tasks, floating at the page's foot while any
    * are picked. "N selected · Move to ▾ · Label ▾ · Archive · Drop
