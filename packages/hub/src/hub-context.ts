@@ -84,7 +84,7 @@ import type { createArtifactSessions } from "./artifact-session";
 import type { createArtifactLane } from "./artifacts/lane";
 import type { Artifacts } from "./artifacts/service";
 import type { createAsks } from "./asks";
-import type { createAtLimit, Kept, TakenUpBy } from "./at-limit";
+import type { createAtLimit, Kept, Stall, TakenUpBy } from "./at-limit";
 import type { createBrowserAsks } from "./browser-tools";
 import type { Caw, createCaw } from "./caw";
 import type { createConnectAsks } from "./connect-asks";
@@ -111,7 +111,7 @@ import type { DelegateTypesShape } from "./delegate-types";
 import type { DelegateResult } from "./delegation-actions";
 import type { createDelegationMcp } from "./delegation-mcp";
 import type { createDesignSystem } from "./design-system";
-import type { AttemptAsk } from "./dispatch";
+import type { AttemptAsk, createDispatcher } from "./dispatch";
 import type { createFind } from "./find";
 import type { FleetMcp } from "./fleet-mcp";
 import type { FleetMcpChanges } from "./fleet-mcp-changes";
@@ -207,6 +207,7 @@ export interface HubContext {
     row: Parameters<HubContext["launchAccount"]>[1],
     session: string
   ) => string | undefined;
+  accountsMoved: () => void;
   accountToPlace: (
     machineId: string,
     row: {
@@ -411,6 +412,7 @@ export interface HubContext {
     id: string,
     arg2?: { approved?: boolean }
   ) => Promise<string>;
+  dispatcher: ReturnType<typeof createDispatcher>;
   dropCompaction: (
     instanceId: string,
     plan: ReturnType<DbShape["atLimit"]["compaction"]>
@@ -972,6 +974,8 @@ export interface HubContext {
   speaksContract: (range: { max: number; min: number } | undefined) => boolean;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
+  stalledNow: () => string[];
+  stallOf: (_instanceId: string) => Stall | undefined;
   startCompaction: (
     row: { id: string; machineId: string },
     line: string,
@@ -1078,6 +1082,7 @@ export interface HubContext {
     answer: Unanswered,
     what: string
   ) => Error;
+  unansweredFault: (machineId: string, answer: Unanswered) => string;
   unansweredStatus: (
     set: RouteSet,
     machineId: string,
