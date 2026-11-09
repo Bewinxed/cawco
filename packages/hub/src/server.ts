@@ -1124,6 +1124,7 @@ import { makesRoutines, talksWithPerson } from "./roles";
 import { bearerOf } from "./routes/bearer";
 import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
+import { mcpRoutes } from "./routes/mcp";
 import { continueBody, permissionModeSchema } from "./routes/session-bodies";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
@@ -1184,11 +1185,7 @@ import {
   taskRoutes,
   YOU_ACTOR,
 } from "./tasks";
-import {
-  createToolCallKeys,
-  mcpRefused,
-  toolResultRefused,
-} from "./tool-call-keys";
+import { createToolCallKeys, toolResultRefused } from "./tool-call-keys";
 import { releaseTarget, ToolReleases, updatesOwed } from "./tool-releases";
 import { createTrackers, trackerRoutes } from "./tracker";
 import type { HubLine } from "./transcript";
@@ -33080,24 +33077,8 @@ export const createServer = (
   // app run the checker past its instantiation depth (TS2589; see the list
   // above), where one more plugin does not.
   const hubRoutes = new Elysia().use([
+    mcpRoutes(ctx),
     new Elysia()
-      .all("/mcp/cawco", hidden, ({ request, body, server }) => {
-        // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.
-        server?.timeout(request, 0);
-        return toolCallKeys.once(
-          request,
-          () => delegationMcp.handle(request, body),
-          (words) => mcpRefused(body, words)
-        );
-      })
-      .all(
-        "/mcp/fleet/:name",
-        { ...hidden, parse: "none" },
-        ({ params, request, server }) => {
-          server?.timeout(request, 0);
-          return fleetMcp.forward(params.name, request);
-        }
-      )
       .get(
         "/api/delegation/tools",
         {
