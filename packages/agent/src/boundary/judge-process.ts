@@ -18,11 +18,9 @@ import {
   bunRuntime,
   JUDGE_SCRIPT,
   JUDGE_SERVER,
-  type JudgeAt,
   judgeBuildOf,
   judgeHanded,
   judgeScripts,
-  socketAddress,
 } from "./hook-judge";
 import { JUDGE_PROTOCOL_FILE, JUDGE_READY, judgeArgv } from "./protocol";
 import {
@@ -99,9 +97,8 @@ export const judgeFor = async (
   id: string,
   held: Pick<Held, "exec">,
   hook: string,
-  policy: string,
-  unasked: UnaskedCalls
-): Promise<JudgeAt> => {
+  policy: string
+): Promise<{ readonly procId: string; readonly socket: string }> => {
   const runtime = await bunRuntime(id);
   const scripts = await judgeScripts();
   const [judgeText, serverText, protocolText] = scripts;
@@ -178,8 +175,7 @@ export const judgeFor = async (
     judging.set(procId, started);
   }
   await started;
-  await watchJudge(id, procId, unasked);
-  return { socket, address: await socketAddress(id, socket) };
+  return { procId, socket };
 };
 
 /**
@@ -189,7 +185,7 @@ export const judgeFor = async (
  * the workspace closed, finds the current one running, or no workspace. A
  * watch lives on its sessiond connection, so a new connection watches again.
  */
-const watchJudge = async (
+export const watchJudge = async (
   id: string,
   procId: string,
   unasked: UnaskedCalls
