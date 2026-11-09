@@ -65,7 +65,7 @@ const AT_REST: ReadonlySet<InstanceStatus> = new Set([
 ]);
 
 /** A session's row as the hub stores it. */
-type StoredRow = ReturnType<DbShape["getInstancesByIds"]>[number];
+export type StoredRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
 /** A session's row as a mover reads it. */
 type MoverRow = ReturnType<DbShape["getInstancesByIds"]>[number];
