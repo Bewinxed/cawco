@@ -15,8 +15,9 @@
   import { failureClause } from "#lib/platform/hub-read.js";
   import { showArtifact } from "../artifact-api";
   import { barGlass } from "../bar-glass.svelte";
-  import { cawco } from "../client.svelte";
+
   import { refusals } from "../refusals.svelte";
+  import { previewsStore } from "../stores/previews.svelte";
   import { askOpenAt } from "../transcript/open-at.svelte";
   import FilesList from "./FilesList.svelte";
   import {
@@ -72,7 +73,7 @@
     }
   }
   $effect(() => {
-    const frame = instanceId ? cawco.previews[instanceId] : undefined;
+    const frame = instanceId ? previewsStore.previews[instanceId] : undefined;
     if (
       showing &&
       frame?.state === "open" &&

@@ -19,6 +19,7 @@ import { type ContextRead, cawco, refreshContext } from "./client.svelte";
 import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
 import { boardStore, isFailed } from "./stores/board.svelte";
+import { catalogStore } from "./stores/catalog.svelte";
 
 const HARNESS: Record<string, string> = accountsWords.harnesses;
 
@@ -131,7 +132,7 @@ export async function sessionsCsv(spend: SessionSpend): Promise<string> {
     ];
   });
   const stored = boardStore.machines.flatMap((machine) =>
-    cawco
+    catalogStore
       .catalogOf(machine.machineId)
       .filter((info) => !seen.has(info.sessionId))
       .map((info) => {
