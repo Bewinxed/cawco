@@ -22,6 +22,7 @@ import type {
   MarketplaceRead,
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
+import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
 import type { FramePayload } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type {
@@ -262,10 +263,22 @@ export interface HubContext {
     words?: { next?: boolean }
   ) => string;
   machineFleetItems: (machineId: string) => FleetItems;
+  /** The unmanaged MCP server a machine has under a name, config and keys as it holds them: what an adoption takes into the fleet. */
+  machineMcpConfig: (
+    machineId: string,
+    name: string,
+    cwd: string | undefined,
+    set: RouteSet
+  ) => Promise<
+    | { ok: true; config: Record<string, unknown> }
+    | { ok: false; code: 400 | 404 | 503 | 504; said: string }
+  >;
   machineName: (machineId: string) => string;
   machinePause: MachinePause;
   machineRow: (machineId: string) => AgentRow | undefined;
   marketplaceLinks: Map<string, MarketplaceLink>;
+  /** A fleet server as a read says it: every secret as set. */
+  maskedMcp: (name: string) => FleetMcpServerView | undefined;
   mcpReady: Promise<unknown>;
   moves: ReturnType<typeof createMoves>;
   noteFetch: (
