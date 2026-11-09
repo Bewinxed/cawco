@@ -3,8 +3,8 @@ import { basename } from "node:path";
 import { costForUsage } from "@cawco/core/usage/pricing";
 import { totalTokens } from "@cawco/core/usage/tokens";
 import type { UsageTokens } from "@cawco/core/usage/types";
-import { scanRanges } from "@cawco/jsonl-parser/opencode";
 import { z } from "zod";
+import { scanRanges } from "../harnesses/opencode-docs";
 import type { ScannedRecord } from "./types";
 
 /**
