@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import { type SessionPlan, todoProgress } from "@cawco/core/plan";
   import { planWords } from "@cawco/core/words/plan";
+  import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
   import { stepsTree, todosTree } from "./PlanTree.svelte";
   /** How far a plan has got: its steps, else its task's agreed to-dos. */
   export function planProgress(plan: SessionPlan): {
@@ -70,7 +71,6 @@
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
-  import { send } from "../project-tasks";
   import { planAsked, takePlan } from "../reference-things.svelte";
   import {
     holdComposerLayer,
@@ -111,9 +111,9 @@
     if (!untrack(() => plan?.awayUnseen)) {
       return;
     }
-    send(
-      hubRequest("POST /api/instances/:id/plan/seen", { path: { id } })
-    ).catch((error: unknown) => {
+    hubJson(hubRequest("POST /api/instances/:id/plan/seen", { path: { id } }), {
+      failure: refusedOrUnreached,
+    }).catch((error: unknown) => {
       console.warn("[cawco] marking the away notes seen failed:", error);
     });
   });
