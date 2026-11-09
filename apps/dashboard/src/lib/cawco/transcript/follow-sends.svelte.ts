@@ -6,7 +6,7 @@
  */
 
 import { untrack } from "svelte";
-import { clearRestore, pendingRestore } from "../client.svelte";
+import { clearRestore, pendingRestore } from "../stores/commands.svelte";
 import { latestCommandFor } from "../stores/ledger.svelte";
 import type { ComposerDraft } from "./composer-draft.svelte";
 
