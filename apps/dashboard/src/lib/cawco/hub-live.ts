@@ -3,7 +3,7 @@
  * says it, and the network. A reader of the live store takes it where
  * nothing above provides a stand-in.
  */
-import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
 import { connectionStore } from "./hub/socket.svelte";
 
 import { type HubSeam, hubAbove } from "./hub-seam";
@@ -12,7 +12,7 @@ const live: HubSeam = {
   get state() {
     return connectionStore.hub;
   },
-  read: (request) => hubJson(request, { failure: refusedOrUnreached }),
+  client: hub,
 };
 
 /** The hub as this component reads it: a stand-in provided above it, else the live client. */
