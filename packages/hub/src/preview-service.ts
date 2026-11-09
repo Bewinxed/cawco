@@ -19,12 +19,12 @@ import { isFolderGone, startRefused } from "@cawco/preview/proxy";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { originOfKey } from "./db/previews";
 import {
-  embedKey,
   loadedOnce,
   type MachineRow,
   type PreviewReach,
   servedByMachine,
 } from "./preview";
+import { embedKey } from "./preview-origin";
 
 /** What a machine's agent answered a control call. */
 interface Answered {
