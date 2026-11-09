@@ -1,7 +1,7 @@
 /**
  * A task whose merge checks need a Mac, with no Mac online, waits for one
  * and never fails for the want of it; a Mac coming online wakes it, and it
- * lands (hub work-items.ts `landSubmitted` → `declareWait`, `waitingTurn`,
+ * lands (hub landing-run.ts `landSubmitted` → `declareWait`, `waitingTurn`,
  * `wakeCapable`; gate-file.ts `capableRefusal`, `capableWaitReason`,
  * `capableOnline`). On a scratch fleet (real hub, agent and sessiond; Claude
  * Code against the mock model). This spec delegates, so its fleet cuts

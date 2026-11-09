@@ -1,6 +1,6 @@
 /**
  * A workspace is held only while it holds work that is nowhere else, and only
- * the session that started that work deals with it (hub work-items.ts
+ * the session that started that work deals with it (hub landing-run.ts
  * `vouchLanded`, `leftoversIn`, `heldNotice`, `discardFor`; agent
  * workspace.ts `holding`). On 2026-10-18 the owner retired 38 held
  * workspaces by hand: some had every commit on main, rebased; some held only
@@ -297,7 +297,7 @@ const heldPhase = async (kit: Kit, scene: Scene): Promise<Workspace> => {
       scene.parentId,
       s.instanceId
     );
-  // S's own report names its workspace too (work-items.ts `reportLine`):
+  // S's own report names its workspace too (landing-run.ts `reportLine`):
   // the hold is the notice that names it, by its handle as agents read it.
   const handle = ws.id.slice(0, 8);
   const isHoldNotice = (row: { body: string | null; notice: number | null }) =>

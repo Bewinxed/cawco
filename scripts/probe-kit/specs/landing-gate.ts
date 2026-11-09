@@ -1,7 +1,7 @@
 /**
  * The merge checks run exactly what the project declares, for any language
  * or toolchain, and the report says so when it declares nothing (hub gate-file.ts,
- * work-items.ts `gateSteps`); no session declares what the hub runs, and the
+ * gate.ts `gateSteps`); no session declares what the hub runs, and the
  * report is the proof. On a scratch fleet (real hub, agent and sessiond;
  * Claude Code against the mock model). This spec delegates, so its fleet
  * cuts workspaces: it runs on the host, outside every boundary.
@@ -60,11 +60,11 @@ const FIX_B = "export const b: number = 2;";
 const GO_B = "probe-gate-go-B";
 /** tsc's words for B's error. */
 const TS_ERROR = "src/b.ts(1,14): error TS2322";
-/** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
+/** How finish_item answers a failed gate (landing-run.ts `gateFailedText`). */
 const NOT_LANDED = "Not landed: the merge checks ran on";
 /** P's declaration. */
 const PY_GATE = "---\nuv sync\nuv run pytest -q\n---\n";
-/** What a landing of a project that declares no gate says (work-items.ts `NO_CHECKS`). */
+/** What a landing of a project that declares no gate says (landing-run.ts `NO_CHECKS`). */
 const NO_CHECKS = "merged with no checks: this project declares none";
 
 const steps: Partial<

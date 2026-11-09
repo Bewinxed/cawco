@@ -2,7 +2,7 @@
  * A delegate gets its own private copy of any folder, of one of two kinds
  * (agent workspace.ts `kindAt`): a git repository's is a clone of its own at
  * `~/.worktrees/<repo>-<id8>`, which lands by git; any other folder's is its
- * layer (agent layer.ts), which lands by its change set (hub work-items.ts
+ * layer (agent layer.ts), which lands by its change set (hub landing-run.ts
  * `landFolder`). On a scratch fleet (real hub, agent and sessiond; Claude
  * Code, OpenCode and pi against the mock model). This spec delegates, so its
  * fleet makes workspaces: it runs on the host, outside every boundary.
@@ -83,7 +83,7 @@ import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-FOLDER-(A|B|C1|C2|C3|E|F|P)\b/u;
-/** How finish_item answers a folder landing's conflict (hub work-items.ts `conflictText`). */
+/** How finish_item answers a folder landing's conflict (hub landing-run.ts `conflictText`). */
 const CONFLICT = "Not landed: a file you changed";
 type Tag = "A" | "B" | "C1" | "C2" | "C3" | "E" | "F" | "P";
 /** What the person writes in the checkout while g's delegate works there. */

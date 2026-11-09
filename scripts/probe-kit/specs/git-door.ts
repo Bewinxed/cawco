@@ -301,7 +301,7 @@ const spec: Spec = {
      * pushes it (hub landing.ts `branchPushCheck` before the gate, then
      * `pushBranch`), every command run in the clone with the door's
      * environment, as the hub's are in a workspace. `last` is the commit the
-     * hub last pushed there (work-items.ts `lastBranchPush`).
+     * hub last pushed there (landing-run.ts `lastBranchPush`).
      */
     const branchLegs = async (): Promise<void> => {
       const { branchPushCheck, landingQueue, pushBranch } =

@@ -156,12 +156,12 @@ export const workWords = {
   /** Why it is held: since when it sleeps (`since`, "2026-09-15 10:00 UTC") and the limit it slept past. */
   heldAsleep: (since: string, limit: string) =>
     `Its session has been asleep since ${since}, longer than ${limit}, so the hub no longer wakes it by itself. Write to it to carry the work on, or stop it.`,
-  /** Where a retired workspace's commits went (hub work-items.ts `carryNotice`): its carry's folder on its machine. */
+  /** Where a retired workspace's commits went (hub workspaces.ts `carryNotice`): its carry's folder on its machine. */
   carriedTo: (carry: string) =>
     `the commits it held on no remote were saved to the carry ${carry}`,
   /**
    * The notice to the session that started a workspace's work, as it
-   * retires with its commits in a carry (hub work-items.ts `carryNotice`):
+   * retires with its commits in a carry (hub workspaces.ts `carryNotice`):
    * `ws` its handle, `title` its latest item's.
    */
   carriedNotice: (
@@ -224,7 +224,7 @@ export const workWords = {
   /** `stop_delegate`'s word when what the workspace holds could not be read as it stopped. */
   stopUnread: (ws: string, error: string) =>
     `What its workspace ${ws} holds could not be read now (${error}): if it holds work that is nowhere else it is held as its session ends, and you are told then.`,
-  /** The hub's log line for a settle whose close failed (hub work-items.ts `settle`): `reason` its machine's words. */
+  /** The hub's log line for a settle whose close failed (hub workspaces.ts `settle`): `reason` its machine's words. */
   notRetired: (reason: string) => `not retired: ${reason}`,
   /** What follows {@link workWords.notRetired} in that line: when the sweep tries it again. */
   retriedIn: (minutes: number) =>
@@ -282,7 +282,7 @@ export const workWords = {
    */
   discardAskReason:
     "discard_workspace with ask: true needs a `reason`: one sentence on why, for which task. The person reads it on the approval; nothing was asked.",
-  /** The hub's log line as a settle ends what an ended item's awake sessions left running (hub work-items.ts `endLeftWork`). */
+  /** The hub's log line as a settle ends what an ended item's awake sessions left running (hub workspaces.ts `endLeftWork`). */
   workEnding: (sessions: readonly string[], hold: string) =>
     `its items have all ended, so what ${sessions.length === 1 ? `its session ${sessions[0]}` : `its sessions ${sessions.join(", ")}`} left running there ends; not retired while ${hold}`,
   /** The hub's log line for that end, failed: `reason` its machine's words. */

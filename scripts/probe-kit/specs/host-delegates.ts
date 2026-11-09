@@ -381,7 +381,7 @@ const probe = async (
  * h9's rule for one host delegate: its `TMPDIR` is its host workspace's
  * scratch dir under `home`, and the file it left in `$TMPDIR/outputs/` is
  * in its item's assets folder, at the path its parent's report lists
- * (hub work-items.ts `collectOutputs`), holding what it wrote.
+ * (hub landing-run.ts `collectOutputs`), holding what it wrote.
  */
 const handsBack = async (
   kit: Kit,

@@ -2,7 +2,7 @@
  * What sessions once did on the person's routes, as their own tools, so a
  * hub that requires paired devices still lets them (hub-auth.ts). No
  * session archives a workspace: a landed one retires itself, and a held one
- * ends only by the person's Continue or Discard (work-items.ts `settle`).
+ * ends only by the person's Continue or Discard (workspaces.ts `settle`).
  *
  * - `update_machines`, for `POST /api/binary-updates/check` and `POST
  *   /api/agents/:id/update`: the check runs at once; installing asks the
