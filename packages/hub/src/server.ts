@@ -802,6 +802,7 @@ import {
 import { PlaceRefusal } from "./place-refusal";
 import { createPlaceRepos } from "./place-repo";
 import {
+  accountFacts,
   noAccountRefusal,
   onAccountMachines,
   type PlacementInput,
@@ -2547,6 +2548,37 @@ export interface ServerOptions {
 /** A thrown value in its own words. */
 const thrownWords = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+/** Each machine's paced launches: when the last went, those waiting their turn (each kept on its row, `db.oweSpawn`), and the timer that sends the next. */
+interface Pacing {
+  last: number;
+  queue: string[];
+  timer: HubTimer | undefined;
+}
+/**
+ * Whether a launch's account is only asked about (`ask`: what would it run
+ * on, or why not, placing nothing) or taken for a launch that goes now
+ * (`claim`: a row with no account is placed on one, {@link claimAccount}).
+ */
+type AccountUse = "ask" | "claim";
+
+/** A spawn as it leaves the hub ({@link settleMode}): its harness named, and every folder it names a path on its machine. */
+type SettledSpawn = NamedSpawn & {
+  cwd: MachinePath;
+  bootstrap?: { repo: string; baseDir: MachinePath };
+  scratch?: { worktree?: boolean; baseCwd?: MachinePath };
+};
+/** A socket the hub may close, and the address it came from. */
+type AuthSocket = HubSocket & {
+  close: (code?: number, reason?: string) => void;
+  /** Its upgrade's headers: the SSH door's mark among them (ssh-door.ts). */
+  readonly headers?: Record<string, string | undefined>;
+  readonly remoteAddress?: string;
+};
+/**
+ * What a skill fetch came to for the machines: the fleet's copy changed
+ * (they were told), stayed as it was, or the fetch failed.
+ */
+type SkillFetch = "changed" | "same" | "failed";
 
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
@@ -4192,12 +4224,6 @@ export const createServer = (
    * cut turns from landing on the machine at once.
    */
   const SPAWN_PACE_MS = 1500;
-  /** Each machine's paced launches: when the last went, those waiting their turn (each kept on its row, `db.oweSpawn`), and the timer that sends the next. */
-  interface Pacing {
-    last: number;
-    queue: string[];
-    timer: HubTimer | undefined;
-  }
   const pacings = new Map<string, Pacing>();
   const pacingOf = (machineId: string): Pacing => {
     const known = pacings.get(machineId);
@@ -4941,12 +4967,6 @@ export const createServer = (
     use === "claim"
       ? claimAccount(machineId, row)
       : accountToPlace(machineId, row);
-  /**
-   * Whether a launch's account is only asked about (`ask`: what would it run
-   * on, or why not, placing nothing) or taken for a launch that goes now
-   * (`claim`: a row with no account is placed on one, {@link claimAccount}).
-   */
-  type AccountUse = "ask" | "claim";
   const launchAccount = (
     machineId: string,
     row: Parameters<typeof accountLaunch>[1],
@@ -6612,13 +6632,6 @@ export const createServer = (
       ...workItems.spawnPlace(row),
       ...(payload.reattachOnly ? where : {}),
     };
-  };
-
-  /** A spawn as it leaves the hub ({@link settleMode}): its harness named, and every folder it names a path on its machine. */
-  type SettledSpawn = NamedSpawn & {
-    cwd: MachinePath;
-    bootstrap?: { repo: string; baseDir: MachinePath };
-    scratch?: { worktree?: boolean; baseCwd?: MachinePath };
   };
 
   /** Each folder a spawn names, as a path on `machineId`; throws the gate's refusal. */
@@ -9938,12 +9951,7 @@ export const createServer = (
     const routing = db.accounts.routing(provider);
     const now = Date.now();
     return {
-      accounts: db.accounts
-        .list()
-        .filter((account) => account.provider === provider),
-      signins: db.accounts.signins(),
-      readings: db.accounts.readings(),
-      bench: db.accounts.bench(),
+      ...accountFacts(db, provider),
       routing,
       machineId,
       machineName: db
@@ -12514,13 +12522,6 @@ export const createServer = (
    * says (join.ts `settle`). A register it takes clears its record's.
    */
   const sshAddHeard = new Map<string, string>();
-  /** A socket the hub may close, and the address it came from. */
-  type AuthSocket = HubSocket & {
-    close: (code?: number, reason?: string) => void;
-    /** Its upgrade's headers: the SSH door's mark among them (ssh-door.ts). */
-    readonly headers?: Record<string, string | undefined>;
-    readonly remoteAddress?: string;
-  };
   /** The mode a machine's socket is held to: always paired through a machine's SSH forward (hub-auth.ts `modeFor`). */
   const socketMode = (ws: AuthSocket) =>
     hubAuth.modeFor((name) => ws.headers?.[name]);
@@ -14468,11 +14469,6 @@ export const createServer = (
    * fetched joins the fetch under way.
    */
   const fetches = new Map<string, Promise<unknown>>();
-  /**
-   * What a skill fetch came to for the machines: the fleet's copy changed
-   * (they were told), stayed as it was, or the fetch failed.
-   */
-  type SkillFetch = "changed" | "same" | "failed";
   /** What an ambiguous source's last fetch could have meant, by skill name. */
   const skillChoices = new Map<string, string[]>();
 
