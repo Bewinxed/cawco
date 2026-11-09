@@ -62,7 +62,6 @@ import {
   writeEntry,
   writeResolve,
 } from "@cawco/core/comments/model";
-import type { Member } from "@cawco/core/decides";
 import {
   type DecisionCard,
   pickMade,
@@ -137,7 +136,6 @@ import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
 import { ElysiaStatus } from "elysia";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
-import { SettleRefusal } from "../decides-file";
 import { type BuiltProgram, mergeProgram, readKept } from "../decision-program";
 import { HANDLE_MIN } from "../handles";
 import { sessionLabel } from "../labels";
@@ -1471,21 +1469,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
     }
     return { row, card, option };
-  };
-
-  /** The member `instance` settles `card` for (settling.ts `settler`), its refusal an artifact refusal. */
-  const settlerOf = async (
-    instance: InstanceRow,
-    row: ArtifactRow,
-    card: DecisionCard
-  ): Promise<Pick<SettledBy, "by" | "name" | "runs"> & { member: Member }> => {
-    try {
-      return await deps.decides.settler(instance, row, card);
-    } catch (error) {
-      throw error instanceof SettleRefusal
-        ? new ArtifactRefusal(error.status, error.message)
-        : error;
-    }
   };
 
   /** What a create answers of a decision page: its decisions, and the components it dropped. */
@@ -3536,7 +3519,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<Settled> => {
       const instance = sessionOf(instanceId);
       const { row, card, option } = cardToSettle(instance, page, asked);
-      const { member, ...signed } = await settlerOf(instance, row, card);
+      const { member, ...signed } = await deps.decides.settler(
+        instance,
+        row,
+        card
+      );
       const doc = docs.doc(row.id);
       const before = stateOf(doc)[card.id];
       if (pickMade(card, before)) {
