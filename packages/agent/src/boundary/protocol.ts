@@ -30,17 +30,9 @@ const JUDGE_ARGS = [
   "build",
 ] as const;
 
-/** The end of an argument's name a usage line leaves out. */
-const USAGE_SUFFIX = /(?:File|Line)$/u;
-
-const USAGE_WORD = /[A-Z]/gu;
-
-/** Argument `name` as a usage line spells it: `graceS`, `GRACE_S`; `policyFile`, `POLICY`. */
-const usageName = (name: string): string =>
-  name.replace(USAGE_SUFFIX, "").replace(USAGE_WORD, "_$&").toUpperCase();
-
-/** What the judge says when an argument is missing or empty. */
-export const JUDGE_USAGE = `usage: boundary-judge.ts ${JUDGE_ARGS.map(usageName).join(" ")}`;
+/** What the judge says when an argument is missing or empty, its arguments spelt by hand, in {@link JUDGE_ARGS}'s order. */
+export const JUDGE_USAGE =
+  "usage: boundary-judge.ts SOCKET HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY CAT RM BUILD";
 
 /** The judge's arguments, by name. */
 export type JudgeArgs = Readonly<Record<(typeof JUDGE_ARGS)[number], string>>;
@@ -74,8 +66,11 @@ export const JUDGE_BUILD_QUESTION = "cawco-judge-build";
  */
 export const JUDGE_ANSWER_END = "\0";
 
-/** {@link JUDGE_ANSWER_END}, as an escape in the hook's perl spells it. */
-export const JUDGE_ANSWER_END_PERL = `\\${JUDGE_ANSWER_END.codePointAt(0)}`;
+/**
+ * {@link JUDGE_ANSWER_END}, as an escape in the hook's perl spells it: written
+ * out, because perl reads `\N` as octal and only NUL spells the same in both.
+ */
+export const JUDGE_ANSWER_END_PERL = "\\0";
 
 /** What the first line of every judge's answer begins with when the call may run. */
 export const JUDGE_ALLOWS = "0";
@@ -99,8 +94,9 @@ const HOST_ARGS = [
   "deniesFile",
 ] as const;
 
-/** What the srt host says when an argument is missing or empty. */
-export const HOST_USAGE = `usage: boundary-host.ts ${HOST_ARGS.map(usageName).join(" ")} [PLACE...]`;
+/** What the srt host says when an argument is missing or empty, its arguments spelt by hand, in {@link HOST_ARGS}'s order, its places last. */
+export const HOST_USAGE =
+  "usage: boundary-host.ts SETTINGS RUNNER FIFO CLONE READY DENIES [PLACE...]";
 
 /** The srt host's arguments, by name, and the places it binds. */
 export type HostArgs = Readonly<
