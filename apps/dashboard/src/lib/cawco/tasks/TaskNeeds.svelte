@@ -33,9 +33,9 @@
     IconNeedsYou,
     IconTick,
   } from "#lib/icons.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { decideAction } from "../client.svelte";
-  import { failureWords as message } from "../hub-read";
   import { rowHref } from "../links";
   import {
     moveTask,

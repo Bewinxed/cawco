@@ -20,11 +20,11 @@
    * breathes; the words still change.
    */
   import type { Snippet } from "svelte";
-  import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconNeedsYou } from "#lib/icons.js";
+  import { cawLoop } from "#lib/platform/feel.svelte.js";
 
   let {
     children,

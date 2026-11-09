@@ -8,7 +8,7 @@ import {
   ruleSettings,
 } from "@cawco/core/rules";
 import { routinesWords } from "@cawco/core/words/routines";
-import { hubCall } from "#lib/cawco/hub-read.js";
+import { hubCall } from "#lib/platform/hub-read.js";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`

@@ -43,7 +43,7 @@ interface Pair {
 }
 
 const WRAPPER = "[data-bits-floating-content-wrapper]";
-/** The kit's scrims, each marking the root with `scrimMark` (cawco/page-marks). */
+/** The kit's scrims, each marking the root with `scrimMark` (platform/page-marks). */
 const SCRIM =
   ':is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="drawer-overlay"], [data-slot="sheet-overlay"])';
 const NEW_SESSION = /^(New session|Start session)$/u;

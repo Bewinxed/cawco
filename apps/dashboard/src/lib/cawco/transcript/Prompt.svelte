@@ -57,8 +57,6 @@
    * as the shape grows (`shown`), and sink back as it folds.
    */
   import { tick, untrack } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -77,6 +75,8 @@
     IconShield,
     IconTick,
   } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import {
     cawco,
     commandRecord,

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import { failureWords as message } from "./hub-read";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { loadRuleActivity, type RuleActivity, since, times } from "./rules";
 
   /**
