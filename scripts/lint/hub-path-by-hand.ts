@@ -60,6 +60,8 @@ const OWN: Record<string, string> = {
   "packages/core/src/hub-request.ts": "the door itself",
   "packages/core/src/hub-routes.gen.ts":
     "the route table's types, generated, keyed by each route's path",
+  "packages/core/src/attachments.ts":
+    "a shown file's `ref` is the stored form the hub writes (routes/files.ts) and a message keeps: data, sent by nothing here",
   "apps/dashboard/src/routes/api/[...path]/+server.ts":
     "the dashboard's `/api` proxy, which forwards every hub path as it came",
   "packages/core/src/tool-presentation.ts":
