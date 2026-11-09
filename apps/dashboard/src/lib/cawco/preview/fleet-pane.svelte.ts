@@ -9,6 +9,7 @@ import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { cawco, closePreview, didntAnswer, machineFs } from "../client.svelte";
 import { conversationHref } from "../links";
+import { boardStore } from "../stores/board.svelte";
 import { browsersStore } from "../stores/browsers.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
@@ -36,7 +37,7 @@ const fleetFolders: FolderReader = {
 };
 
 const machines = $derived<PaneMachine[]>(
-  cawco.machines.map((machine) => ({
+  boardStore.machines.map((machine) => ({
     machineId: machine.machineId,
     hostname: machine.hostname,
     os: machine.os,
@@ -55,7 +56,7 @@ export const fleetPane: PaneFleet = {
       "page" in shown.source
         ? shown.source.page
         : null;
-    const machineId = cawco.instanceIndex.byId.get(instanceId)?.machineId;
+    const machineId = boardStore.instanceIndex.byId.get(instanceId)?.machineId;
     return (
       (key &&
         browsersStore.browsers?.find(
@@ -65,20 +66,22 @@ export const fleetPane: PaneFleet = {
     );
   },
   preview: (instanceId) => cawco.previews[instanceId],
-  session: (instanceId) => cawco.instanceIndex.byId.get(instanceId),
+  session: (instanceId) => boardStore.instanceIndex.byId.get(instanceId),
   get machines() {
     return machines;
   },
   working: (instanceId) => cawco.activityOf(instanceId) === "working",
   sessionHref: (instanceId) =>
-    conversationHref(instanceId, cawco.instanceIndex),
+    conversationHref(instanceId, boardStore.instanceIndex),
   closePreview,
   // The conversation's composer beside the pane, while it stands.
   composer: (instanceId) => {
     const draft = paneDrafts.get(instanceId);
     return draft
       ? {
-          agent: speakerName(cawco.instanceIndex.byId.get(instanceId)?.harness),
+          agent: speakerName(
+            boardStore.instanceIndex.byId.get(instanceId)?.harness
+          ),
           ask: (words) => draft.ask(words),
         }
       : undefined;

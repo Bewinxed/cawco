@@ -31,6 +31,7 @@ import {
 } from "#lib/icons.js";
 import { cawco } from "../client.svelte";
 import { cawOf } from "../session-status";
+import { boardStore } from "../stores/board.svelte";
 import { askOpenAt } from "../transcript/open-at.svelte";
 import { speakerName } from "../transcript/speaker";
 import type { Message } from "../types";
@@ -543,7 +544,7 @@ export class ConversationFind {
   #machine(): string {
     const machineId = cawco.session(this.viewId)?.machineId ?? "";
     return (
-      cawco.machines.find((machine) => machine.machineId === machineId)
+      boardStore.machines.find((machine) => machine.machineId === machineId)
         ?.hostname ?? machineId
     );
   }
