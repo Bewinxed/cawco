@@ -18,12 +18,12 @@ import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
 import { hubFetch } from "#lib/platform/hub-read.js";
-import { cawco } from "./client.svelte";
 import { planProgress } from "./plan/PlanPane.svelte";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
 import type { Routine } from "./routines/routines-api";
 import { boardStore } from "./stores/board.svelte";
 import { plansStore } from "./stores/plans.svelte";
+import { projectsStore } from "./stores/projects.svelte";
 import { tickersStore } from "./stores/tickers.svelte";
 
 /** The kinds this module names. */
@@ -129,7 +129,7 @@ const projectHref = (project: string) =>
 /** Each kind's reading: the thing its id names, undefined while asked, null when there is none. */
 const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
   project: (id) => {
-    const project = cawco.project(id);
+    const project = projectsStore.project(id);
     return project
       ? {
           label: project.name,
@@ -164,7 +164,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
       label: view.title,
       state: stageLabel(view.stage),
       peek: [
-        `${view.id} · ${cawco.project(project)?.name ?? project}`,
+        `${view.id} · ${projectsStore.project(project)?.name ?? project}`,
         view.description.split("\n").find((line) => line.trim()) ?? "",
       ].filter(Boolean),
       place: {
