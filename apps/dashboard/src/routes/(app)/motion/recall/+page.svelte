@@ -15,7 +15,10 @@
    * was sent, in order.
    */
   import type { AvailableCommand } from "@cawco/core/fleet";
-  import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
+  import {
+    blankSession,
+    type SessionState,
+  } from "#lib/cawco/stores/sessions.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
