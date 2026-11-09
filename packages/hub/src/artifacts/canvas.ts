@@ -28,6 +28,7 @@ import {
 import { injectOverlay } from "@cawco/core/preview/proxy";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { until } from "@cawco/core/until";
 import { Map as YMap } from "yjs";
 import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
 import { type ArtifactDocs, elementsOf } from "./docs";
@@ -88,13 +89,11 @@ export const screenJoined = async (
   docs: ArtifactDocs,
   artifactId: string,
   ms: number
-): Promise<boolean> => {
-  const until = Date.now() + ms;
-  while (docs.screens(artifactId) === 0 && Date.now() < until) {
-    await Bun.sleep(100);
-  }
-  return docs.screens(artifactId) > 0;
-};
+): Promise<boolean> =>
+  until(() => docs.screens(artifactId) > 0, {
+    deadline: Date.now() + ms,
+    every: 100,
+  });
 
 /**
  * The agent's write changed the scene now ({@link CANVAS_WROTE_AT}): the
