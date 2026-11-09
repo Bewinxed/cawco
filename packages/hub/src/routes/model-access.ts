@@ -2,7 +2,7 @@
  * The hub's model access: the OpenRouter connection and its OAuth exchange, Jev's model route, and the composer's suggestion.
  */
 
-import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
+import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth/pkce";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
