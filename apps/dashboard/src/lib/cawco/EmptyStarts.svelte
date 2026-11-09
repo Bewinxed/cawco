@@ -42,6 +42,7 @@
   } from "#lib/cawco/empty-asks.js";
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import EmptyState from "#lib/components/ui/empty/empty-state.svelte";
   import {
     IconAlert,
     IconChat,
@@ -50,7 +51,6 @@
     IconSearch,
     IconTerminal,
   } from "#lib/icons.js";
-  import EmptyState from "./empty-state.svelte";
 
   let {
     site,
