@@ -236,10 +236,10 @@ export type NarrowCause =
  *
  * - `kept`, `handed-over`, `replaced`: of a boundary not of this build's
  *   form, on a retiring keeper, or whose grant is not comparable (ensure.ts `replaceOlder`): kept as it is, handed over to one started beside it
- *   (ensure.ts `handOver`), or replaced by one once nothing ran in it (stale-look.ts `restartIfIdle`), with `reasons` and the boundary that took its place
+ *   (ensure.ts `handOver`), or replaced by one once nothing ran in it (ensure.ts `restartIfIdle`), with `reasons` and the boundary that took its place
  *   (`to`).
  * - `older-closed`: an older generation beside the current one closed
- *   (stale-look.ts `closeIdle`): nothing ran in it (`idle`), it was gone, or a newer
+ *   (ensure.ts `closeIdle`): nothing ran in it (`idle`), it was gone, or a newer
  *   generation listens on every port its work listened on (`superseded`).
  * - `narrowed-stopped`: the generations whose access narrowed are stopped
  *   (ensure.ts `replaceNarrowed`), and the boundary that runs after (`runs`).
@@ -249,10 +249,10 @@ export type NarrowCause =
  *   clone, the workspace going or settled (control.ts `stopWorkspaceBoundary`).
  * - `host-restarted`: its srt host stopped its sandbox, with everything in
  *   it, and started it again, a path it guards (`path`) changed on the host
- *   (boundary-host.ts `guard`), as the host records it (watch.ts `recordHostRestarts`); `inner` the init of the sandbox it stopped.
+ *   (boundary-host.ts `guard`), as the host records it (ensure.ts `recordHostRestarts`); `inner` the init of the sandbox it stopped.
  * - `restarted-unasked`: the boundary ended with nothing of the agent's
- *   ending it, and was started again (`to`, watch.ts `restartUnasked`).
- * - `left-down`: it ended unasked again within watch.ts `UNASKED_RESTART_MS`
+ *   ending it, and was started again (`to`, ensure.ts `restartUnasked`).
+ * - `left-down`: it ended unasked again within ensure.ts `UNASKED_RESTART_MS`
  *   of being started again, and is left down.
  */
 export type BoundaryDecision =
@@ -409,7 +409,7 @@ const gatesDown = new Map<string, Promise<void>>();
  * Runs `step` with workspace `id`'s gate up ({@link gateOf}): an executor that
  * looks at it meanwhile waits, then runs through whichever boundary is
  * current once it is down (exec.ts `execScript`). Counted: a step inside
- * another (the start-up rewrite's ensure, arming.ts `rearmOne`, handing a
+ * another (the start-up rewrite's ensure, ensure.ts `rearmOne`, handing a
  * boundary over) leaves it up for the outer one, and it comes down once the
  * last of them ends, never while one still runs.
  */
