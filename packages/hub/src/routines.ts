@@ -45,7 +45,7 @@
  *   `tell`), as any event is, and run on. Caw answers with
  *   `routine_result` under the same output contract, settled the same way,
  *   save that a delivered result, his own words, is a note.
- *   The turn that read the wake (server.ts `changeSend`) ending without that
+ *   The turn that read the wake (sends.ts `changeSend`) ending without that
  *   answer fails the run; so does a wake his session never reads.
  * - **Event runs**: an inbound event a route sends here (ingress.ts) runs the
  *   routine once, slot `event:<event id>`, the event carried after the
@@ -1713,7 +1713,7 @@ export const createRoutines = ({
   };
 
   /**
-   * A send left `pending` (server.ts `changeSend`). A conversation run's wake (its
+   * A send left `pending` (sends.ts `changeSend`). A conversation run's wake (its
    * origin `routine:<id>`; a routine has one run going at a time, so the
    * routine names it) read by Caw's harness makes the run that session's
    * turn's, and the end of the turn ends it; one never to be read fails the
