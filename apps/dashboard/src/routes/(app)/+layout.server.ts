@@ -13,6 +13,7 @@ import type {
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import { servedBoardOf } from "#lib/cawco/first-paint.js";
 import { askOpens, landingOf, type Wait } from "#lib/cawco/landing.js";
+import { clampRail } from "#lib/cawco/rail.js";
 import type { Area, ServedBoard } from "#lib/cawco/served-board.js";
 import { routedToParent } from "#lib/cawco/transcript/present.js";
 import {
@@ -32,37 +33,20 @@ import {
   showIn,
   type WorkspaceV1,
 } from "#lib/cawco/workspace/tree.js";
+import { parseFoldBoxes } from "#lib/components/ui/fluid-tabs/fold-memory.js";
+import { type HubRead, readHub } from "#lib/platform/hub-read.js";
 import {
   FOLD_BOXES_PREF,
-  parseFoldBoxes,
-} from "#lib/components/ui/fluid-tabs/fold-memory.js";
-import { type HubRead, readHub } from "#lib/platform/hub-read.js";
-import { KEPT, type Pref, prefCookie } from "#lib/platform/prefs.js";
+  KEPT,
+  NARROW_PREF,
+  type Pref,
+  prefCookie,
+  RAIL_HIDDEN_PREF,
+  RAIL_PREF,
+  WORKSPACE_CTX_PREF,
+  WORKSPACE_PREF,
+} from "#lib/platform/prefs.js";
 import type { LayoutServerLoad } from "./$types";
-
-/**
- * The sidebar rail's width is this browser's preference, not the fleet's. It is
- * read here from a cookie so the server renders the resolved width into the
- * first paint — before this, the width lived only in localStorage, so SSR drew
- * the default and the rail visibly jumped once the client read the real value
- * on mount. The bounds mirror Shell.svelte's clamp. No cookie is null: the
- * shell then draws the `c-sidebar-w` token, the default's one source.
- */
-const RAIL_KEY = "cawco-rail-width";
-const RAIL_MIN = 216;
-const RAIL_HIDDEN_KEY = "cawco-rail-hidden";
-const RAIL_MAX = 520;
-
-/**
- * The server's copy of the workspace localStorage keeps (workspace.svelte.ts,
- * Persistence): the whole tree or none, never a part. The first client render
- * draws from what this load gives it, so hydration keeps what was served.
- * Read with the tree's own module (workspace/tree.ts), which the server
- * imports without the client store and its module-level `$state`.
- */
-const WORKSPACE_KEY = "cawco-workspace";
-/** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
-const WORKSPACE_CTX_KEY = "cawco-workspace-ctx";
 
 /**
  * Whether this browser is a phone, for the session surface's first paint.
@@ -74,7 +58,6 @@ const WORKSPACE_CTX_KEY = "cawco-workspace-ctx";
  * Macintosh UA. The first client render draws this answer too, and the query
  * takes over a frame later (lib/platform/first-render.svelte.ts).
  */
-const NARROW_KEY = "cawco-narrow";
 const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/iu;
 
 function narrowOf(cookie: string | undefined, headers: Headers): boolean {
@@ -181,7 +164,7 @@ export const load: LayoutServerLoad = async ({
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: first-paint reconciliation of the workspace cookie against the URL — one pass, not split in this pass
 }) => {
   const pref = (name: Pref) => cookies.get(prefCookie(name, url));
-  const narrow = narrowOf(pref(NARROW_KEY), request.headers);
+  const narrow = narrowOf(pref(NARROW_PREF), request.headers);
   // Untrack URL access: a switch between conversations is a shallow pushState
   // and the client store is authoritative once it has restored. This load exists
   // for the first paint only — re-running it on every navigation would repeat
@@ -235,13 +218,11 @@ export const load: LayoutServerLoad = async ({
           stored: storedRead.value,
         })
       : null;
-  const railKept = Number(pref(RAIL_KEY));
+  const railKept = Number(pref(RAIL_PREF));
   const railWidth =
-    Number.isFinite(railKept) && railKept > 0
-      ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(railKept)))
-      : null;
+    Number.isFinite(railKept) && railKept > 0 ? clampRail(railKept) : null;
   /** The sidebar put away on a desk (Shell's Hide sidebar), drawn so from the first paint. */
-  const railHidden = pref(RAIL_HIDDEN_KEY) === "1";
+  const railHidden = pref(RAIL_HIDDEN_PREF) === "1";
 
   // How the sidebar's lists are grouped, folded, pinned and unfolded, as
   // this browser last sent them (kept.svelte.ts): the first paint groups
@@ -258,9 +239,9 @@ export const load: LayoutServerLoad = async ({
   // the first paint (fluid-tabs/fold-memory.ts).
   const foldBoxes = parseFoldBoxes(pref(FOLD_BOXES_PREF));
 
-  let workspace = parseWorkspace(pref(WORKSPACE_KEY));
+  let workspace = parseWorkspace(pref(WORKSPACE_PREF));
   if (workspace) {
-    workspace.ctx = parseContexts(pref(WORKSPACE_CTX_KEY));
+    workspace.ctx = parseContexts(pref(WORKSPACE_CTX_PREF));
   }
 
   // The tab the URL names: a conversation, a project, or none.
