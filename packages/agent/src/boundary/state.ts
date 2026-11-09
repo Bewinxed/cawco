@@ -7,6 +7,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { KeeperName } from "@cawco/core/keepers";
 import { machineEndpoint } from "@cawco/core/keepers";
 import {
   workspaceReadOnlyDir,
@@ -225,7 +226,19 @@ export const sessiondPath = machineEndpoint;
  * boundary or a judge starts on the current keeper, and one a retiring keeper
  * holds is found and stopped there.
  */
-export const keepers = new KeeperPool();
+const keepers = new KeeperPool();
+
+/** Every process every keeper holds. */
+export const procsHeld = (): Promise<HeldProc[]> => keepers.held();
+
+/** The keeper's process holding `procId`, on whichever keeper holds it. */
+export const heldProc = (procId: string): Promise<HeldProc | undefined> =>
+  keepers.holding(procId);
+
+/** A connection to the keeper named `keeper`, if it is there. */
+export const keeperOf = (
+  keeper: KeeperName
+): Promise<SessiondClient | undefined> => keepers.of(keeper);
 
 /**
  * The three calls that go up boundary/'s files, each made when nobody just
@@ -293,7 +306,7 @@ export const readHeld = (id: string): Promise<Held | undefined> =>
 
 /** Whether a keeper, the current one or a retiring one, holds a live process under `procId`. */
 export const holding = async (procId: string): Promise<boolean> =>
-  Boolean(await keepers.holding(procId));
+  Boolean(await heldProc(procId));
 
 /**
  * The keeper's process running the boundary `held` names, on whichever keeper
@@ -303,7 +316,7 @@ export const running = async (
   id: string,
   held: Held
 ): Promise<HeldProc | undefined> => {
-  const proc = await keepers.holding(boundaryProcId(id, held.gen));
+  const proc = await heldProc(boundaryProcId(id, held.gen));
   return proc?.pid === held.pid ? proc : undefined;
 };
 
