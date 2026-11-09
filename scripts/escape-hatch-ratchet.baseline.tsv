@@ -307,6 +307,7 @@ as-unknown-as	Db	scripts/probe-kit/specs/preview-reclaim.ts	1
 as-unknown-as	Deps	scripts/probe-kit/specs/preview-query.ts	1
 as-unknown-as	Deps	scripts/probe-kit/specs/preview-reclaim.ts	1
 as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
+as-unknown-as	DocMeta["drawn"]	scripts/probe-kit/specs/answered-pages.ts	1
 as-unknown-as	DocumentRequests	scripts/probe-kit/specs/canvas-cost.ts	3
 as-unknown-as	ElementNode	apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte	1
 as-unknown-as	ExcalidrawElementSkeleton[]	packages/agent/src/canvas-host/scene.ts	2
@@ -328,6 +329,7 @@ as-unknown-as	Listeners[2]	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	Listeners[3]	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	Listeners[4]	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	MapCardData	apps/dashboard/src/lib/cawco/preview/map/MapNode.svelte	1
+as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
 as-unknown-as	NativeClass	apps/dashboard/src/lib/cawco/frame-observer.ts	1
 as-unknown-as	NeutralAssistantMessage	packages/hub/src/sends.ts	1
