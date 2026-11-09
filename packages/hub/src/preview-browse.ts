@@ -10,6 +10,7 @@ import { secondsOf } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import type { WorkspaceSaved } from "@cawco/core/workspace/controls";
 import { CONTROL_WORKSPACE_SAVE } from "@cawco/core/workspace/controls";
+import { problemResponse } from "elysia/error";
 import { ArtifactRefusal } from "./artifacts/refusals";
 import type { Browsed } from "./artifacts/shapes";
 import { dashboardUrl } from "./dashboard-url";
@@ -58,18 +59,24 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     artifactId: string
   ): Promise<Response> => {
     if (request.method !== "POST") {
-      return new Response("Open a canvas with a POST.", {
-        status: 405,
-        headers: { allow: "POST" },
-      });
+      return problemResponse(
+        {
+          status: 405,
+          code: "open-canvas-post",
+          detail: "Open a canvas with a POST.",
+        },
+        { allow: "POST" }
+      );
     }
     const page = ctx.db.artifacts.get(artifactId);
     if (
       page?.kind !== "page" ||
       ctx.artifacts.program(artifactId) === undefined
     ) {
-      return new Response("Only a decision page's Diagram opens as a canvas.", {
+      return problemResponse({
         status: 409,
+        code: "only-decision-pages-diagram",
+        detail: "Only a decision page's Diagram opens as a canvas.",
       });
     }
     const body = (await request.json().catch(() => null)) as {
@@ -77,8 +84,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       mermaid?: unknown;
     } | null;
     if (typeof body?.mermaid !== "string" || !body.mermaid.trim()) {
-      return new Response("Name the Diagram's Mermaid to draw.", {
+      return problemResponse({
         status: 400,
+        code: "name-diagrams-mermaid-draw",
+        detail: "Name the Diagram's Mermaid to draw.",
       });
     }
     const of =
@@ -101,7 +110,11 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       return Response.json({ id: made.id, name: made.name }, { status: 201 });
     } catch (error) {
       if (error instanceof ArtifactRefusal) {
-        return new Response(error.message, { status: error.status });
+        return problemResponse({
+          status: error.status,
+          code: "message",
+          detail: error.message,
+        });
       }
       throw error;
     }
