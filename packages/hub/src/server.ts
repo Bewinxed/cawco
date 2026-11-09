@@ -9774,7 +9774,7 @@ export const createServer = (
     const turns = db.recordedTurns(row.id);
     const activityBound =
       turns.unbounded ||
-      (traitsOf(row.harness).unrecordedTurnsBoundByActivity &&
+      (traitsOf(row.harness).promptCacheMaxMs !== null &&
         !!row.sessionId &&
         !turns.hasTurns);
     // Activity writes are throttled; the closing pulse can land within that window.
@@ -14573,7 +14573,7 @@ export const createServer = (
                   }
                 } else if (neutral.type === "result") {
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
-                  if (traitsOf(cacheRow?.harness).keepAlive) {
+                  if (traitsOf(cacheRow?.harness).promptCacheMaxMs !== null) {
                     db.updateKeepAlive(
                       cacheRow.id,
                       keepAliveResult(
@@ -14593,8 +14593,8 @@ export const createServer = (
                     // A compaction after a move: its next step, or its end.
                     compactionTurnEnded(cacheRow.id);
                   } else if (cacheRow) {
-                    // A pi or OpenCode session's context, as its harness
-                    // reported its last request.
+                    // The context of a session whose results report no
+                    // prompt cache, as its harness reported its last request.
                     if (neutral.contextTokens !== undefined) {
                       db.updateKeepAlive(cacheRow.id, {
                         contextTokens: neutral.contextTokens,
