@@ -705,17 +705,17 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
   };
 
   return {
-    MOVE_TICK_MS,
     SLEEP_TIMEOUT_MS,
-    advanceMove,
-    answerBorrow,
-    carryOnMoves,
-    homeMovedAccountOn,
-    lendToWaiting,
-    liveFrom,
-    mayRun,
-    moveResults,
     sleepFinished,
+    MOVE_TICK_MS,
+    moveResults,
+    mayRun,
+    liveFrom,
+    answerBorrow,
+    lendToWaiting,
+    homeMovedAccountOn,
+    advanceMove,
     tickMoves,
+    carryOnMoves,
   };
 };
