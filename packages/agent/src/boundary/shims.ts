@@ -32,7 +32,7 @@ export const scriptText = (embedded: string, source: string): Promise<string> =>
 
 /**
  * Writes one of the plain Bun scripts the boundary runs into `dir`, under its
- * source name: from this checkout (`source`, by default beside this file),
+ * source name: from this checkout (`source`, by default in the agent's src, beside boundary/),
  * or as the binary install embedded it.
  */
 const writeScript = async (
