@@ -92,13 +92,14 @@
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
   import { ACTIVITY_LABEL, FAILED_LABEL, UNKNOWN_LABEL } from "../activity";
-  import { cawco } from "../client.svelte";
+
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import { conversationHref } from "../links";
   import { markHue } from "../mark";
   import { folderOf } from "../projects";
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";
+  import { asksStore } from "../stores/asks.svelte";
   import { boardStore, isFailed, isStale } from "../stores/board.svelte";
   import { projectsStore } from "../stores/projects.svelte";
   import TreeMark from "../TreeMark.svelte";
@@ -195,10 +196,10 @@
     const row = boardStore.instanceIndex.byId.get(id);
     const ctx = contextOf(id);
     const { label, named } = sessionName(id, servedNames);
-    const activity = cawco.activityOf(id);
+    const activity = asksStore.activityOf(id);
     const failed = row ? isFailed(row) : false;
     const stale = row ? isStale(row) : false;
-    const tool = cawco.currentToolOf(id)?.name;
+    const tool = asksStore.currentToolOf(id)?.name;
     let status = "";
     if (failed) {
       status = FAILED_LABEL;
