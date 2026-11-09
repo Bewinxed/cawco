@@ -3,6 +3,7 @@
  */
 import { Elysia, t } from "elysia";
 import type { HubContext } from "../hub-context";
+import { machineOut } from "../machine-out";
 import { refusal } from "../refusal";
 
 export const machinePauseRoutes = ({
@@ -63,7 +64,7 @@ export const machinePauseRoutes = ({
           );
         }
         publishInstances(params.machineId);
-        return row;
+        return machineOut(row);
       }
     )
     // Ends a machine's pause now: what it was kept goes, in order.
@@ -77,8 +78,7 @@ export const machinePauseRoutes = ({
       }
       machinePause.resume(params.machineId);
       const row = machineRow(params.machineId);
-      return (
-        row ??
-        refusal(404, "no-machine", "No machine with that id on this hub.")
-      );
+      return row
+        ? machineOut(row)
+        : refusal(404, "no-machine", "No machine with that id on this hub.");
     });

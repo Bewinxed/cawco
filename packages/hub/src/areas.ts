@@ -52,11 +52,6 @@ import {
 } from "./project-folder";
 import { refusal, schemaRefusal } from "./refusal";
 
-/** An area as the API answers it: its row and the projects in it, oldest first. */
-export interface AreaView extends Area {
-  projects: string[];
-}
-
 /** What an area's settings write asks: any field, null clearing it. */
 export interface AreaSettingsAsk {
   account?: string | null;
@@ -145,18 +140,20 @@ export const createAreas = ({
   const known = (id: string) =>
     db.areas.get(id) ?? refusal(404, "no-area", areaWords.noArea(id));
 
+  /** An area as the API answers it: its projects, and its time the ISO string it is sent as. */
+  const viewOf = (area: Area) => ({
+    ...area,
+    createdAt: area.createdAt.toISOString(),
+    projects: db.areas.projectsIn(area.id),
+  });
+
   const view = (id: string) => {
     const area = known(id);
-    return area instanceof ElysiaStatus
-      ? area
-      : { ...area, projects: db.areas.projectsIn(id) };
+    return area instanceof ElysiaStatus ? area : viewOf(area);
   };
 
   /** Every area, each as {@link view} answers it. */
-  const views = (): AreaView[] =>
-    db.areas
-      .list()
-      .map((area) => ({ ...area, projects: db.areas.projectsIn(area.id) }));
+  const views = () => db.areas.list().map(viewOf);
 
   /** Where each setting of a project comes from now. */
   const sourcesOf = async (project: ProjectRow): Promise<Sources> => {

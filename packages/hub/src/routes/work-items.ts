@@ -16,6 +16,7 @@ import {
   WorkItemRefusal,
 } from "../work-item-state";
 import { SESSION_TITLE_DESCRIPTION } from "../work-items";
+import { workItemOut } from "../work-out";
 import { harnessSchema } from "./harness-schema";
 import { sessionCallerRefusal } from "./session-caller";
 
@@ -359,9 +360,9 @@ export const workItemRoutes = (
       )
       .get("/api/work-items/:id", hidden, ({ params }) => {
         const item = workItems.item(params.id);
-        return (
-          item ?? refusal(404, "no-work-item", `no work item ${params.id}`)
-        );
+        return item
+          ? workItemOut(item)
+          : refusal(404, "no-work-item", `no work item ${params.id}`);
       })
       // What the item's workspace holds on no remote now (workspaces.ts
       // `unlandedOf`), or why it could not be read: what `stop_delegate`
