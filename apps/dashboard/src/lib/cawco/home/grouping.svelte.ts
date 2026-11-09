@@ -8,8 +8,8 @@
  * too, by their path: Older starts folded, every other group open.
  */
 import { z } from "zod";
+import { parseJson, stored, writeJson } from "../../platform/storage";
 import { drawnFrom } from "../kept.svelte";
-import { parseJson, stored, writeJson } from "../storage";
 
 /** What one level of Recent groups its sessions by. */
 export type GroupBy = "day" | "project" | "area" | "machine";

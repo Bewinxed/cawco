@@ -34,8 +34,8 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { appearOnMount } from "#lib/platform/motion/curves.svelte.js";
   import type { PendingPermission } from "../client.svelte";
-  import { appearOnMount } from "../motion/curves.svelte";
   import { stopWork } from "../stop-work.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import ProjectConversation from "./ProjectConversation.svelte";

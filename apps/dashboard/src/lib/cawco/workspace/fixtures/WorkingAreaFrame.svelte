@@ -268,14 +268,12 @@
   import { canvasPath } from "@cawco/core/stage";
   import { untrack } from "svelte";
   import { blankSession } from "#lib/cawco/client.svelte.js";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import {
     type PanePreview,
     setPaneFleet,
   } from "#lib/cawco/preview/pane-fleet.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
-  import { store } from "#lib/cawco/storage.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import { entered } from "#lib/cawco/transcript/tray.svelte.js";
@@ -287,6 +285,8 @@
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { store } from "#lib/platform/storage.js";
 
   let {
     path = canvasPath(["src/lib/cawco/transcript/Prompt.stories.ts"], {}),

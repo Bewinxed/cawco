@@ -72,9 +72,14 @@
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
-  import { frameObserver } from "./frame-observer";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { cawNotices } from "./home/caw-notices.svelte";
@@ -83,7 +88,6 @@
     CAW_STILL_BLEED,
     cawStill,
   } from "./home/caw-still.svelte";
-  import { dur, easeOut, motionOk } from "./motion/curves.svelte";
 
   /**
    * His head's side, px: the compacted still fills it, drawn at that size.

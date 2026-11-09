@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
   /**
    * A write popover's foot: why the hub refused the ask, when it did, over
    * the submit, which runs while the ask is under way (`pending`) and is
    * disabled, saying why as its title, while the hub cannot take a write
    * (`down`) or the form is not ready.
    */
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
 
   let {
     failed,

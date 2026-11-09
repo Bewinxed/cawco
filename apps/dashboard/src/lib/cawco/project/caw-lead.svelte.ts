@@ -40,8 +40,10 @@ import {
 import type { StarterPlace } from "@cawco/core/starters";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import { untrack } from "svelte";
-import { failureWords } from "#lib/cawco/hub-read.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 import { browser } from "$app/env";
+import { dur } from "../../platform/motion/curves.svelte";
+import { store, stored } from "../../platform/storage";
 import {
   type BlockedRequest,
   type BoardRow,
@@ -51,10 +53,8 @@ import {
   type ProjectRow,
 } from "../client.svelte";
 import { minimizedAsks } from "../minimized-asks.svelte";
-import { dur } from "../motion/curves.svelte";
 import type { TaskSummary } from "../project-tasks";
 import { QUESTION_KEYS } from "../question";
-import { store, stored } from "../storage";
 import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { echoBeat } from "../platform/motion/echo.svelte";
   /**
    * What a heavy question reaches, named (AskHere's `items`): each thing as
    * the rail draws a row, its lead mark, its title and its status word at
@@ -8,7 +9,6 @@
    * pushing its buttons out of reach.
    */
   import type { AskItem } from "./ask-here.svelte";
-  import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
   import SessionMark from "./SessionMark.svelte";
   import TreeLine from "./TreeLine.svelte";

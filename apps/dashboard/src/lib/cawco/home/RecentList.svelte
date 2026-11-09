@@ -33,11 +33,14 @@
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
+  import {
+    type BranchOptions,
+    branch,
+  } from "../../platform/motion/branch.svelte";
+  import { echoBeat } from "../../platform/motion/echo.svelte";
+  import { regroup, regroupPrimer } from "../../platform/motion/share.svelte";
   import { type BoardRow, isFailed } from "../client.svelte";
   import { rowHref, sessionTitle } from "../links";
-  import { type BranchOptions, branch } from "../motion/branch.svelte";
-  import { echoBeat } from "../motion/echo.svelte";
-  import { regroup, regroupPrimer } from "../motion/share.svelte";
   import { olderOut } from "../OlderRows.svelte";
   import { type Reading, runningIds } from "../older";
   import { openTrees, type TreeList } from "../open-trees.svelte";

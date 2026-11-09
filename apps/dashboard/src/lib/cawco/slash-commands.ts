@@ -14,7 +14,7 @@ import type {
   SlashCommand,
   SupportedCommands,
 } from "@cawco/core/session-messages";
-import { hubCall } from "#lib/cawco/hub-read.js";
+import { hubCall } from "#lib/platform/hub-read.js";
 
 /**
  * What one session answers behind `/` (NEW.md §11), from its two sources: every
