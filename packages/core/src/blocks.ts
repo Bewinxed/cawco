@@ -61,7 +61,7 @@ export interface BlockPlace {
 }
 
 /** A block a page holds by itself: its id and the width it starts at. */
-export interface BuiltInBlock {
+interface BuiltInBlock {
   block: string;
   width: BlockWidth;
 }
