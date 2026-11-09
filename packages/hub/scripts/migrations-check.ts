@@ -44,6 +44,7 @@ import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { applyUpdate, Doc } from "yjs";
 import { type TitleSource, titleFor, titlesSaid } from "../src/artifact-titles";
+import { MIGRATION_STEP_TAGS } from "../src/db/migration-names";
 import { PROGRAM_FILE } from "../src/decision-program";
 import { hubInProcess } from "./hub-in-process";
 import { storedRows, storedRowsReport } from "./stored-rows";
@@ -388,6 +389,14 @@ try {
   const { entries } = (await Bun.file(
     join(HUB, "drizzle/meta/_journal.json")
   ).json()) as { entries: { idx: number; tag: string; when: number }[] };
+  const untagged = MIGRATION_STEP_TAGS.filter(
+    (tag) => !entries.some((entry) => entry.tag === tag)
+  );
+  if (untagged.length) {
+    throw new Error(
+      `A code migration step (db/migrate.ts) names a journal tag no migration has: ${untagged.join(", ")}`
+    );
+  }
   const sorted = entries.toSorted((a, b) => a.idx - b.idx);
   const disordered = outOfOrder(sorted);
   if (disordered.length) {
