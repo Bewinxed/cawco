@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import { Asker, type AskHereRequest, type AskItem } from "./ask-here.svelte";
+  import { projectsStore } from "./stores/projects.svelte";
 
   /** One question about the machines at a time, under the row it is about. */
   const machineAsks = new Asker<AskHereRequest>();
@@ -26,13 +27,14 @@
    * a session. What it asks stands under the row (`AskHere`).
    */
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
-  import { cawco, pauseMachine, removeMachine } from "./client.svelte";
   import { resolveSessionTitle } from "./links";
   import { pauseChoices } from "./machine-pause";
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
   import { boardStore, type Machine } from "./stores/board.svelte";
   import { loadCatalog } from "./stores/catalog.svelte";
+
+  import { pauseMachine, removeMachine } from "./stores/machines";
   import UnlockKeychain from "./UnlockKeychain.svelte";
   import { updates } from "./updates/updates.svelte";
 
@@ -93,7 +95,7 @@
   async function askRemove() {
     const { machineId, hostname } = machine;
     // Every project keeps its folder on the hub: only its places here go.
-    const projects = cawco.projects.filter((row) =>
+    const projects = projectsStore.projects.filter((row) =>
       row.places.some((place) => place.machineId === machineId)
     ).length;
     const sessions = sessionsOn(machineId).length;

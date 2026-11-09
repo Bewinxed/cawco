@@ -58,7 +58,7 @@
   import { stored } from "#lib/platform/storage.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { cawco, type ProjectRow } from "./client.svelte";
+  import { cawco } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import { files, filesCount } from "./files/files.svelte";
@@ -98,6 +98,7 @@
     isStale,
   } from "./stores/board.svelte";
   import { catalogStore } from "./stores/catalog.svelte";
+  import { type ProjectRow, projectsStore } from "./stores/projects.svelte";
   import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { projectTab, tabOfPath } from "./workspace/tabs";
@@ -274,7 +275,7 @@
   const running = $derived(boardStore.runningInstances);
 
   const orderedProjects = $derived.by(() =>
-    [...cawco.projects].sort((a, b) => {
+    [...projectsStore.projects].sort((a, b) => {
       const pa = rail.isPinned(a.id) ? 0 : 1;
       const pb = rail.isPinned(b.id) ? 0 : 1;
       if (pa !== pb) {
