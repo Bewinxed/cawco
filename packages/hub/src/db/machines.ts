@@ -1,4 +1,3 @@
-import { GO_WITH_MACHINE, walkOwned } from "./owned-rows";
 /** Machines: each one's row, what its daemon reports, and re-keying and removing one. */
 
 import type {
@@ -23,6 +22,7 @@ import type { ToolStatus } from "@cawco/core/tools";
 import { stoppedWords } from "@cawco/core/words/machine-pause";
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { DbCore } from "./core";
+import { GO_WITH_MACHINE, walkOwned } from "./owned-rows";
 import {
   agentHarnesses,
   agents,
@@ -48,11 +48,6 @@ const naming = (tx: Tx, table: string, column: string, from: string) =>
     sql`SELECT count(*) AS n FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} = ${from}`
   )[0]?.n ?? 0;
 
-/**
- * The machine's row, with what its daemon last reported, onto `to`, unless
- * `to` registered already: then that row is the current one, and `from`'s
- * goes with its reports.
- */
 /** Whether the hub keeps a row for the machine. */
 const machineKept = (tx: Tx, machineId: string): boolean =>
   tx
@@ -227,6 +222,11 @@ export interface MachinesDb {
 export const machinesDb = (core: DbCore): MachinesDb => {
   const { db } = core;
 
+  /**
+   * The machine's row, with what its daemon last reported, onto `to`, unless
+   * `to` registered already: then that row is the current one, and `from`'s
+   * goes with its reports.
+   */
   const moveMachineRow = (tx: Tx, from: string, to: string, note: Moved) => {
     const row = tx
       .select()
