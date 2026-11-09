@@ -88,9 +88,16 @@ export const holdRatchet = (counts: Counts, ratchet: Ratchet): void => {
     : {};
   const { rose, fell } = changes(now, held, ratchet);
   if (process.argv.includes("--write-baseline")) {
-    if (rose.length > 0 && exists) {
+    // A rule the baseline does not hold yet starts at what it measures.
+    const heldRules = changes(now, held, {
+      ...ratchet,
+      rules: Object.fromEntries(
+        Object.entries(ratchet.rules).filter(([rule]) => rule in held)
+      ),
+    });
+    if (heldRules.rose.length > 0 && exists) {
       say(
-        `${ratchet.name}: a count rose; the baseline is only written down:\n${rose.join("\n")}`
+        `${ratchet.name}: a count rose; the baseline is only written down:\n${heldRules.rose.join("\n")}`
       );
       process.exitCode = 1;
       return;
