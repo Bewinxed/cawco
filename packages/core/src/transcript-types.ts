@@ -83,7 +83,7 @@ export interface BlockMetadata {
     | import("./attachments").ShownFile
   >;
   compactError?: string;
-  /** {@link compactError} typed, as its harness typed the error ({@link import("./harness").CompactionFailure}). */
+  /** {@link compactError} typed, as its harness typed the error ({@link import("./session-messages").CompactionFailure}). */
   compactFailure?: import("./session-messages").CompactionFailure;
   /**
    * A compaction boundary read back from a harness that stores how it ended
