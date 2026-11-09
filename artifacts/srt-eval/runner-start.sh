@@ -27,7 +27,7 @@ cd "$clone"
 srt_tmp=${TMPDIR:-/tmp}
 if [ -s "$state/srt-host-tmp" ]; then srt_tmp=$(cat "$state/srt-host-tmp"); mkdir -p "$srt_tmp"; fi
 # CAWCO_WORKSPACE: the marker every process of the workspace inherits, which is
-# how macOS (no pid namespace) finds them all to stop them (boundary.ts killMarked).
+# how macOS (no pid namespace) finds them all to stop them (boundary/ killMarked).
 TMPDIR=$srt_tmp CAWCO_WORKSPACE=$state CLAUDE_CODE_TMPDIR=$state/tmp XDG_CACHE_HOME=$state/cache BUN_INSTALL_CACHE_DIR=$state/cache/bun npm_config_cache=$state/cache/npm \
   nohup "$srt" --settings "$settings" -c "$ro/runner.sh $ro/runner.fifo" > "$state/runner.log" 2>&1 &
 echo $! > "$state/srt.pid"
