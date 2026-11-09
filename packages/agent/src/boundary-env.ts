@@ -58,7 +58,7 @@ export const hostCaEnv = (): Record<string, string> => {
 
 /**
  * A workspace's own XDG config, data and state homes, in its scratch dir: so
- * made with it and gone with it (boundary.ts `makeDirs`, `closeBoundary`). A
+ * made with it and gone with it (boundary/package-managers.ts `makeDirs`, `closeBoundary`). A
  * CLI that writes its own state there as it starts (OpenCode makes
  * `$XDG_DATA_HOME/opencode/log` at boot) runs inside the boundary, and the
  * person's real ones (OpenCode's `auth.json`, its `opencode.json`, its
@@ -85,7 +85,7 @@ export const workspaceXdgDirs = (
  * Pythons and its tools (`uv python dir`, `uv tool dir` follow
  * `XDG_DATA_HOME`), so `uv` finds the interpreters it found before and never
  * downloads one per workspace. Git's own config dir goes on being read
- * through a link in the config home (boundary.ts `makeDirs`).
+ * through a link in the config home (boundary/package-managers.ts `makeDirs`).
  */
 export const workspaceXdgEnv = (id: string): Record<string, string> => {
   const own = workspaceXdgDirs(id);
@@ -184,7 +184,7 @@ export const workspaceCacheEnv = (): Record<string, string> => {
 
 /**
  * Every workspace command's `XDG_RUNTIME_DIR`: `run/` in the workspaces'
- * cache, mode 0700 (boundary.ts `makeDirs`), one for all workspaces. pnpm 12
+ * cache, mode 0700 (boundary/package-managers.ts `makeDirs`), one for all workspaces. pnpm 12
  * keeps the locks that coordinate processes sharing a store outside the
  * store, in `$XDG_RUNTIME_DIR/pnpm-store-operation-locks-<uid>`, else under
  * `/tmp` ("A sandbox that blocks writes to `/tmp` can set `XDG_RUNTIME_DIR` to
@@ -199,7 +199,7 @@ export const workspaceCacheEnv = (): Record<string, string> => {
  * ("Failed to open the store operation lock at \"pnpm-store-operation-locks\":
  * Read-only file system"); and on macOS Seatbelt refuses writes to `/tmp`.
  * Here every workspace takes its locks beside the others', for the store they
- * share (boundary.ts `writePnpmConfig`). Like everything else in the cache, a
+ * share (boundary/package-managers.ts `writePnpmConfig`). Like everything else in the cache, a
  * socket one workspace binds here another can reach.
  */
 export const workspaceRuntimeDir = (): string =>

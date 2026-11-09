@@ -19,7 +19,7 @@ import { join } from "node:path";
  * agent before a socket goes in it, tool-door.ts `socketPlace`). A real path,
  * as the Seatbelt profile matches paths (`/tmp` is a link to it), and one
  * whose sockets a workspace reaches only by name: the profile denies every
- * socket under `/private/tmp` (boundary.ts `LAUNCHD_SOCKETS`) but the doors
+ * socket under `/private/tmp` (boundary/runner.ts `LAUNCHD_SOCKETS`) but the doors
  * it names, and a workspace writes nothing there.
  */
 export const darwinSocketRoot = (): string => {
