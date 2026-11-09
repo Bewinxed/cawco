@@ -1310,7 +1310,7 @@
   const failedRow = $derived.by(() => {
     const row =
       fleet && recallOf
-        ? fleet.cawco.instanceIndex.byId.get(recallOf)
+        ? fleet.boardStore.instanceIndex.byId.get(recallOf)
         : undefined;
     return row?.status === "error" && row.harness !== null ? row : undefined;
   });
@@ -1326,7 +1326,7 @@
     if (!(fleet && row?.harness)) {
       return null;
     }
-    const machine = fleet.cawco.machines.find(
+    const machine = fleet.boardStore.machines.find(
       (one) => one.machineId === row.machineId
     );
     const block = machine ? fleet.harnessBlockOf(machine, row.harness) : null;
@@ -1353,7 +1353,7 @@
   // Any session this tab saw refused whose machine's harness now runs goes
   // again, whichever composer is on screen.
   $effect(() => {
-    fleet?.relaunchUnblocked(fleet.cawco.machines);
+    fleet?.relaunchUnblocked(fleet.boardStore.machines);
   });
   // A session that went on some other way has no refusal left to say.
   $effect(() => {
