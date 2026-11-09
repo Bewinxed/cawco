@@ -154,6 +154,7 @@ import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
 import { handle } from "./presenters/words";
 import { FolderRefusal, folderPath } from "./project-folder";
+import type { Refused } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
 import type { Todo } from "./task-file";
@@ -809,9 +810,9 @@ interface WorkItemDeps extends Pick<
   /**
    * The session's plan steps as its plan panel reads them (plans.ts):
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
-   * these.
+   * these; or its refusal.
    */
-  readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
+  readonly planSteps: (instanceId: string) => Promise<PlanStep[] | Refused>;
   /**
    * A project's first work item on `machineId`, which holds no checkout of
    * it: the machine is sent the project's rows from now on (server.ts
@@ -2432,7 +2433,10 @@ export const createWorkItems = ({
 
   /** The item's session's plan as its panel reads it; undefined when it cannot be read now. */
   const planFor = (item: WorkItemRow): Promise<PlanStep[] | undefined> =>
-    planSteps(item.instanceId).catch(() => undefined);
+    planSteps(item.instanceId).then(
+      (steps) => (Array.isArray(steps) ? steps : undefined),
+      () => undefined
+    );
 
   /** The task an item is an attempt at, when the plan link can reach it. */
   const taskOf = (
