@@ -14,7 +14,7 @@
   import { Portal } from "bits-ui";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { ChipPanel } from "./chip-panel.svelte";
-  import { cawco } from "./client.svelte";
+
   import HoverPanel from "./HoverPanel.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { sessionName } from "./home/home-state.svelte";
@@ -23,6 +23,7 @@
   import SessionCard from "./SessionCard.svelte";
   import { sessionPlace } from "./session-names.svelte";
   import { cawOf } from "./session-status";
+  import { boardStore } from "./stores/board.svelte";
 
   /**
    * The session, as the instance index holds it or the hub's names answered
@@ -83,7 +84,7 @@
     {#snippet children(shown)}
       <SessionCard
         id={shown}
-        open={conversationHref(shown, cawco.instanceIndex)}
+        open={conversationHref(shown, boardStore.instanceIndex)}
       />
     {/snippet}
   </HoverPanel>
