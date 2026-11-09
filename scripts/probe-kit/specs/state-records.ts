@@ -5,7 +5,7 @@
  * run it where a workspace boundary can start (not inside another one).
  *
  * Two delegates cut workspaces A and B, each held by the parent's preview
- * so its ended item does not retire it (hub work-items.ts `settle`); a
+ * so its ended item does not retire it (hub workspaces.ts `settle`); a
  * third session, Quiet, is stopped;
  * a notice is acknowledged, so the hub keeps its notices record. Then
  * everything stops as a crash stops it (sessiond and its sessions killed,
@@ -120,7 +120,7 @@ const delegate = async (
   // Its item fails on its third quiet turn, in under a second against the
   // mock model, and its session sleeps as its item ends (hub server.ts
   // `sleepFinished`): running, or asleep after it ran, it started. The
-  // parent's preview of its server holds the workspace (hub work-items.ts
+  // parent's preview of its server holds the workspace (hub workspaces.ts
   // `settle`), so it stands with its records for the crash and the archive
   // below.
   const now = Date.now();
