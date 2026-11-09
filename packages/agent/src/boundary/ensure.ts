@@ -113,11 +113,12 @@ import {
   forgetRetiring,
   forgetStale,
   forgetStubbed,
-  keptRunning,
+  isStale,
+  isStubbed,
+  keptRunningOf,
+  markKeptRunning,
   replaceSoon,
   restartWhenIdle,
-  stale,
-  stubbed,
 } from "./staleness";
 import { start } from "./start";
 import {
@@ -319,7 +320,7 @@ const replaceOlder = async (
     // takes the endpoint: the boundary runs on as it is, armed, and is
     // handed over once, at the first look after this build's keeper is
     // the machine's (stale-look.ts `handOverStale`).
-    if (!stale.has(ref.id)) {
+    if (!isStale(ref.id)) {
       console.info(
         `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is handed over once this build's session keeper is the machine's`
       );
@@ -337,7 +338,7 @@ const replaceOlder = async (
     // A boundary started beside it would bind the same mount point and
     // keep it; this one is replaced whole once nothing runs in it.
     forgetStale(ref.id);
-    if (!stubbed.has(ref.id)) {
+    if (!isStubbed(ref.id)) {
       await recordDecision(ref.id, {
         ...decided(held),
         decision: "kept",
@@ -373,7 +374,7 @@ const replaceOlder = async (
   }
   const work = tried.kept;
   replaceSoon(ref);
-  if (keptRunning.get(ref.id)?.said !== work.words) {
+  if (keptRunningOf(ref.id)?.said !== work.words) {
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work.words}, and handed over once that ends${await formMoveWords(ref, held)}`
     );
@@ -389,7 +390,7 @@ const replaceOlder = async (
       to: null,
     });
   }
-  keptRunning.set(ref.id, { said: work.words, commands: work.commands });
+  markKeptRunning(ref.id, { said: work.words, commands: work.commands });
   return armHook(ref.id, held);
 };
 
