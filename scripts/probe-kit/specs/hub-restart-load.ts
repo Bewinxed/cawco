@@ -3,7 +3,7 @@
  * fleet's load, the hub answers what the updater's trial probes, `GET
  * /health` and this machine's row, within a second, every second of the
  * trial, so a good build is never rolled back. (The trial's probe waits on
- * each request far longer, core binary-health.ts `PROBE_TIMEOUT_MS`, since
+ * each request far longer, cli binary-health.ts `PROBE_TIMEOUT_MS`, since
  * 6796 on 2026-11-05; this bar is the hub's own speed, from the days it
  * waited 3 s.)
  *
