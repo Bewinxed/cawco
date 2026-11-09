@@ -17,7 +17,7 @@
    * neither CSS nor distinct — three categories share one — so the swatches
    * come from this app's chart ramp instead.
    */
-  import type { ContextUsage } from "./client.svelte";
+  import type { ContextUsage } from "./stores/sessions.svelte";
 
   interface Props {
     compaction: {
