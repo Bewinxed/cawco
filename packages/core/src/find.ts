@@ -14,7 +14,7 @@ import type { StageKind } from "./views";
 // The index's own words (jsonl-parser text.ts `DocAuthor`); an `Extract` of its
 // own, so the wire schema keeps naming it `TranscriptAuthor`.
 /** Who a transcript's words are (the index's `author`): only `owner` is "said by me". */
-export type TranscriptAuthor = Extract<DocAuthor, string>;
+type TranscriptAuthor = Extract<DocAuthor, string>;
 
 /** What the hub asks each machine's transcript index (`searchTranscripts`). */
 export interface TranscriptQuery {
@@ -52,7 +52,7 @@ export interface TranscriptQuery {
 }
 
 /** One place in a machine's transcript that matched. */
-export interface TranscriptMoment {
+interface TranscriptMoment {
   author: TranscriptAuthor;
   /**
    * The words its snippet was cut from, a thousand characters either side,
@@ -70,7 +70,7 @@ export interface TranscriptMoment {
 }
 
 /** A conversation a machine's transcript index matched, with its best moments. */
-export interface TranscriptConversation {
+interface TranscriptConversation {
   cwd: string | null;
   harness: string;
   model: string | null;
@@ -486,7 +486,7 @@ export interface FindAnswer {
 }
 
 /** What waits on the person's eyes (`GET /api/find/waiting`). */
-export type WaitingKind = "artifact" | "decision" | "report" | "task";
+type WaitingKind = "artifact" | "decision" | "report" | "task";
 
 export interface WaitingItem {
   /** For an artifact or decision: which kind of artifact. */

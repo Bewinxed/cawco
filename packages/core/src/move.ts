@@ -322,7 +322,7 @@ export interface MoveInspection {
  * which of its repositories (agent move.ts `snapshotRepo`) and builds the
  * URL from its own hub address.
  */
-export interface MoveHubRemote {
+interface MoveHubRemote {
   projectId: string;
 }
 
