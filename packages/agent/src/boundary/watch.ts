@@ -14,7 +14,7 @@ import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { keepStandInsListed } from "../stand-ins";
 import { decided, readDecisions, recordDecision } from "./decisions";
-import { attachedIn, commandsNow } from "./holding";
+import { attachedIn, commandsNow, hubLiveNow } from "./holding";
 import { executors } from "./processes";
 import { HOST_FILES, HOST_GONE_STATUS } from "./protocol";
 import {
@@ -235,7 +235,7 @@ const recordHostRestarts = async (
 
 /**
  * What still holds workspace `ref` on this machine, in words, or nothing:
- * a live work item of the hub's ({@link hubLive}; not known until the hub
+ * a live work item of the hub's (holding.ts `hubLive`; not known until the hub
  * answers a beat, and then everything holds it), a boundary of it alive on
  * any keeper, a session process in its clone ({@link attachedIn}), or a
  * command on its way in ({@link executors}). For a folder the agent would
@@ -244,6 +244,7 @@ const recordHostRestarts = async (
 export const heldBy = async (
   ref: WorkspaceRef
 ): Promise<string | undefined> => {
+  const hubLive = hubLiveNow();
   if (!hubLive) {
     return "the hub has not said yet which workspaces have a live work item";
   }
@@ -268,23 +269,6 @@ const UNASKED_RESTART_MS = 60_000;
 
 /** When each workspace's boundary was last started again unasked ({@link restartUnasked}). */
 const unaskedAt = new Map<string, number>();
-
-/**
- * The workspaces with a live work item on this machine, as the hub said on
- * its last answer to a beat (`HeartbeatAckPayload.liveWorkspaces`); none yet
- * until it has said, and nothing closes until then.
- */
-let hubLive: ReadonlySet<string> | undefined;
-
-/** What {@link hubLive} holds now. */
-export const hubLiveNow = (): ReadonlySet<string> | undefined => hubLive;
-
-/** Takes the hub's list of workspaces with a live work item ({@link hubLive}); anything but a list is ignored. */
-export const liveWorkItems = (ids: unknown): void => {
-  if (Array.isArray(ids)) {
-    hubLive = new Set(ids.filter((id): id is string => typeof id === "string"));
-  }
-};
 
 /**
  * Follows workspace `id`'s boundary `held`, its srt host on Linux and its
