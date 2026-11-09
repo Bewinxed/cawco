@@ -20,7 +20,7 @@ import {
 
 /**
  * How long a workspace's boundary runs on with nothing holding it
- * ({@link liveWhy}) before it closes ({@link closeQuietly}). Our call: the hub
+ * ({@link liveWhy}) before it closes (looks.ts `closeQuietly`). Our call: the hub
  * puts a finished delegate's session to sleep at once and lands its work
  * right after, each of its commands a use; a handoff that soon after finds
  * the boundary still up. Past that, a closed one costs its next command one
@@ -56,7 +56,7 @@ export const forgetHeld = (id: string): void => {
  * Runs an archive's close of workspace `id` (`close`) as one step against its
  * starts: after the start under way, if any, has ended and the close before
  * it has finished, and with an ensure arriving meanwhile waiting until it is
- * done ({@link ensureNow}). A start the close did not wait for would run on
+ * done (ensure.ts `ensureNow`). A start the close did not wait for would run on
  * with its generation's dir, FIFO and state dir taken from under it, or start
  * a boundary the close has already passed.
  */
@@ -75,7 +75,7 @@ export const closedWhile = <T>(
 
 /**
  * What the agent knows holds a workspace that this module cannot read for
- * itself, handed in by the daemon ({@link watchQuietBoundaries}).
+ * itself, handed in by the daemon (looks.ts `watchQuietBoundaries`).
  */
 export interface BoundaryHolders {
   /** The workspaces whose port a preview this agent serves names (preview.ts `servingPreviews`). */
@@ -156,7 +156,7 @@ export const attachedProcs = (
   });
 };
 
-/** Whether a session's process is attached in workspace `id` or a command is on its way into it: the start's own test, before the hub or the sessions are heard ({@link rearmHooks}). */
+/** Whether a session's process is attached in workspace `id` or a command is on its way into it: the start's own test, before the hub or the sessions are heard (control.ts `rearmHooks`). */
 export const inUse = (
   id: string,
   path: string,
