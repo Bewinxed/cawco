@@ -74,7 +74,7 @@ const HEAVY_SLOTS_DIR = join(workspaceCacheDir(), "heavy-slots");
 /**
  * Set for every process a lease's holder starts: they run under that lease
  * ("slot 3 of 8, <who>"). The agent sets it in a merge check's environment,
- * which a workspace's executor carries into its boundary (boundary.ts: "The
+ * which a workspace's executor carries into its boundary (boundary/: "The
  * caller's environment").
  */
 export const HEAVY_SLOT_ENV = "CAWCO_HEAVY_SLOT";
