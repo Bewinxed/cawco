@@ -142,11 +142,11 @@
         kind: "comment",
         by: "person",
         at: "2026-11-12T09:14:00Z",
-        anchor: { kind: "element", selector: "h1" },
+        anchor: { selector: "h1", source: null },
         elements: [],
         thread: [],
         title: "the heading's second line",
-      } as unknown as Pin,
+      } satisfies Pin,
     ],
   });
 

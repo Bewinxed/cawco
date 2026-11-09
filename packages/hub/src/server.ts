@@ -311,9 +311,9 @@ import { createArtifactSessions } from "./artifact-session";
 import { titlesSaid, titleUntitledOnce } from "./artifact-titles";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
+import { ArtifactRefusal } from "./artifacts/refusals";
 import { artifactRoutes } from "./artifacts/routes";
 import {
-  ArtifactRefusal,
   type Artifacts,
   boardOf,
   createArtifacts,
