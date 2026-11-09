@@ -48,9 +48,10 @@ import {
 import { start } from "./start";
 import {
   type Boundary,
-  closing,
+  closeUnderWay,
   type Held,
   keepers,
+  markStarting,
   type Retiring,
   readHeld,
   readRetiring,
@@ -58,7 +59,8 @@ import {
   retiringFileOf,
   running,
   sessiond,
-  starting,
+  startEnded,
+  startUnderWay,
   writeWhole,
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
@@ -71,18 +73,18 @@ import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
  */
 export const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
   liveAt.set(ref.id, Date.now());
-  const pending = starting.get(ref.id);
+  const pending = startUnderWay(ref.id);
   if (pending) {
     return pending;
   }
   const started = (async () => {
-    await closing.get(ref.id);
+    await closeUnderWay(ref.id);
     return await ensure(ref);
   })().finally(() => {
-    starting.delete(ref.id);
+    startEnded(ref.id);
     liveAt.set(ref.id, Date.now());
   });
-  starting.set(ref.id, started);
+  markStarting(ref.id, started);
   return started;
 };
 
