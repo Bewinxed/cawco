@@ -6,7 +6,7 @@
  *   `.ts` and `.svelte` file;
  * - `golar lint`: the rules below, over the files the change reaches.
  *
- * The rules: the hub-path ban (scripts/lint/hub-path-door.ts) over every
+ * The rules: the hub-path ban (scripts/lint/hub-path-by-hand.ts) over every
  * caller of the hub's source; the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
  * files, every script's (scripts/, each package's and the dashboard's
@@ -22,7 +22,7 @@ import { execFileSync } from "node:child_process";
 import { getEnvironmentData, isMainThread } from "node:worker_threads";
 import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
-import { hubPathDoor } from "./scripts/lint/hub-path-door.ts";
+import { hubPathByHand } from "./scripts/lint/hub-path-by-hand.ts";
 import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
 
@@ -82,7 +82,7 @@ const switched = within(
   )
 ).filter((path) => !path.startsWith(LINT_FIXTURES));
 // Every caller of the hub but the hub itself: the dashboard, the scripts,
-// and the agent's, the CLI's and core's source (scripts/lint/hub-path-door.ts).
+// and the agent's, the CLI's and core's source (scripts/lint/hub-path-by-hand.ts).
 const hubCallers = within(
   tracked(
     "apps/dashboard/src/**/*.ts",
@@ -122,7 +122,7 @@ export default defineConfig({
       },
       {
         files: [...hubCallers.map(literal), HUB_PATH_FIXTURES],
-        rules: [hubPathDoor],
+        rules: [hubPathByHand],
       },
       {
         files: [...hubCallers.map(literal), FETCH_ALIAS_FIXTURES],
