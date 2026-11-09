@@ -33,15 +33,16 @@ import {
 import { start } from "./start";
 import {
   type Boundary,
-  closing,
   type Held,
+  isClosing,
+  isStarting,
   keepers,
   readHeld,
   readRetiring,
   refusal,
   STOP_TIMEOUT_MS,
   sessiond,
-  starting,
+  startUnderWay,
 } from "./state";
 import {
   sandboxesGone,
@@ -186,7 +187,7 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
   // again at start-up (a turn its killed process left): the pass waits that
   // start out and looks again, so it closes what it leaves behind idle.
   const pending = left.flatMap((id) => {
-    const begun = starting.get(id);
+    const begun = startUnderWay(id);
     return begun ? [begun.catch(() => undefined)] : [];
   });
   if (pending.length > 0) {
@@ -244,7 +245,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
   }
   const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
   for (const id of ids) {
-    if (starting.has(id) || closing.has(id)) {
+    if (isStarting(id) || isClosing(id)) {
       continue;
     }
     const held = await readHeld(id).catch(() => undefined);
