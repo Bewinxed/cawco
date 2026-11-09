@@ -81,6 +81,7 @@
   import RowFault from "../RowFault.svelte";
   import { sessionPlace } from "../session-names.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import { composerLayerOf } from "./composer-layer.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import { layoutScale } from "./grown";
@@ -163,7 +164,7 @@
   const items = $derived(cawco.trayOf(parentId));
 
   const toChip = (item: TrayChild): Chip => {
-    const pending = cawco.session(item.instanceId)?.pending ?? [];
+    const pending = sessionsStore.session(item.instanceId)?.pending ?? [];
     const own = pending.filter((each) => !each.routedTo);
     const routed = pending.filter((each) => each.routedTo === "parent");
     let tone: Tone;
@@ -305,7 +306,7 @@
 
   /** The delegate's newest report in this session's transcript. */
   const reportOf = (item: TrayChild) =>
-    (cawco.session(parentId)?.messages ?? []).findLast(
+    (sessionsStore.session(parentId)?.messages ?? []).findLast(
       (m) =>
         m.type === "user.peer" &&
         m.metadata?.reportKind !== undefined &&
