@@ -12,12 +12,7 @@
  * it streams; `stall` reads its process and turn state instead (the second
  * source): a turn running with nothing streamed while its process lives.
  */
-export const FLEET_WATCH_SIGNALS = [
-  "error",
-  "repeat",
-  "quiet",
-  "stall",
-] as const;
+const FLEET_WATCH_SIGNALS = ["error", "repeat", "quiet", "stall"] as const;
 export type FleetWatchSignal = (typeof FLEET_WATCH_SIGNALS)[number];
 
 /**
