@@ -1,3 +1,9 @@
+/**
+ * git on this host, in a folder of the person's or a workspace's copy, as
+ * every git call there runs (`safe-git.ts`), and the remote's default branch
+ * fetched into a checkout.
+ */
+
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { runCaptured } from "@cawco/core/run-captured";
@@ -12,12 +18,6 @@ import { unhandled } from "@cawco/core/unhandled";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import { cloneHolding } from "../workspace-records";
 import { withoutCredential } from "./hub-credential";
-
-/**
- * git on this host, in a folder of the person's or a workspace's copy, as
- * every git call there runs (`safe-git.ts`), and the remote's default branch
- * fetched into a checkout.
- */
 
 /**
  * git in `dir`, on this host, as every git call there runs (`safe-git.ts`).
@@ -108,10 +108,15 @@ export const fetchDefaultBranch = async (
 export type Git = (root: string, ...args: string[]) => Promise<string>;
 
 /** An argv run in a workspace's copy, in a directory there, with the directory its spawn starts in (workspace.ts `CopyAccess`). */
-export type CopyRun = (
+type CopyRun = (
   cwd: string,
   argv: readonly string[]
 ) => { argv: string[]; cwd: string };
+
+/** How a git call reaches a workspace's copy (workspace.ts `CopyAccess`). */
+export interface CopyRunner {
+  run: CopyRun;
+}
 
 /**
  * git on this host as `safe-git.ts` says, its stdout trimmed, within the
@@ -124,7 +129,7 @@ export const gitUntil =
   (
     deadline: number,
     env: Record<string, string> = hostEnvironment(),
-    access?: { run: CopyRun },
+    access?: CopyRunner,
     input?: string
   ): Git =>
   async (root, ...args) => {
