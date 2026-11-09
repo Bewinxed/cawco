@@ -13,6 +13,7 @@ import type { AccountHue } from "@cawco/core/accounts/kinds";
 import type { CapPeriod, OnCap } from "@cawco/core/areas";
 import { ASK_STORED, type AskState } from "@cawco/core/asks";
 import type { BlockPage, BlockWidth } from "@cawco/core/blocks";
+import type { ConnectionState } from "@cawco/core/connections";
 import { CAW_POSE_IDS, HEARS } from "@cawco/core/decides";
 import type { MemoryRole } from "@cawco/core/fleet";
 import type { FleetScope } from "@cawco/core/fleet-placement";
@@ -5058,9 +5059,7 @@ export const connections = sqliteTable("connections", {
     .notNull(),
   /** For `header` auth: the header (stdio: the environment variable) the key goes in. */
   header: text("header"),
-  state: text("state")
-    .$type<import("@cawco/core/connections").ConnectionState>()
-    .notNull(),
+  state: text("state").$type<ConnectionState>().notNull(),
   reason: text("reason"),
   /** Its key, or its OAuth tokens, client and a sign-in's verifier: sealed. */
   secret: sealedJson(ConnectionSecretSchema)("sealed"),
