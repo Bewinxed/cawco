@@ -48,12 +48,7 @@ import type {
 import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
-import {
-  followsNetwork,
-  type MachineNetwork,
-  machineNetwork,
-  startAgainDue,
-} from "./egress";
+import { followsNetwork, machineNetwork, startAgainDue } from "./egress";
 import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
@@ -72,6 +67,7 @@ import {
   browserDir,
   browsersDir,
   forgetBrowser,
+  type MachineNetwork,
   type Progress,
   portsOf,
   portsTaken,
