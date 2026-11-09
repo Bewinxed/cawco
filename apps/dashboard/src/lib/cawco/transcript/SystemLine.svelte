@@ -3,7 +3,7 @@
   import { ARTIFACT_RESPONSES, MOVED_HERE } from "@cawco/core/harness";
   import type { Component } from "svelte";
   import { showArtifact } from "#lib/cawco/artifact-api.js";
-  import { revealPreview } from "#lib/cawco/client.svelte.js";
+  import { revealPreview } from "#lib/cawco/stores/previews.svelte.js";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
     IconArtifactCanvas,

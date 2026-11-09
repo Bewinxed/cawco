@@ -31,8 +31,6 @@ import type {
   ConnectAskFrame,
   FleetFetchFrame,
   FramePayload,
-  HarnessFailed,
-  HarnessUnanswered,
   ProjectStopFrame,
 } from "@cawco/core/frames";
 import type {
@@ -52,7 +50,6 @@ import type { LandsMode } from "@cawco/core/injected";
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
 import type { PlaceProject } from "@cawco/core/place-nesting";
 
-import type { PreviewSettings } from "@cawco/core/preview/routes";
 import type {
   CawInitiated,
   CawStart,
@@ -77,11 +74,10 @@ import type {
 import { DELEGATE_SUMMARIES_LIMIT } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import { relaunchOf } from "@cawco/core/relaunch";
-import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
+
 import { CONTROL_SUPPORTED_COMMANDS } from "@cawco/core/session/controls";
 import type {
   McpServerStatus,
-  NeutralSessionInfo,
   NeutralStatus,
   PermissionResult,
   PermissionUpdate,
@@ -91,7 +87,7 @@ import type {
 
 import type { CommandKind, SessionStreamFrame } from "@cawco/core/stream";
 
-import { HOUR_MS, secondsOf } from "@cawco/core/time";
+import { HOUR_MS } from "@cawco/core/time";
 import type {
   ToolGlance,
   TranscriptBlock,
@@ -107,7 +103,6 @@ import type { UsageLimitsResponse } from "@cawco/core/usage/types";
 import type { StagesTemplate } from "@cawco/core/views";
 import { accountsWords } from "@cawco/core/words/accounts";
 
-import { catalogWords } from "@cawco/core/words/catalog";
 import { machineWords } from "@cawco/core/words/machine";
 import { machineFaultWords } from "@cawco/core/words/machine-names";
 
@@ -121,7 +116,6 @@ import { SvelteMap } from "svelte/reactivity";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
-  SESSION_CATALOG_LIMIT,
   TRANSCRIPT_OLDER_PAGE,
 } from "#lib/config.js";
 import {
@@ -142,13 +136,14 @@ import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 
 import { activityOf, sessionActivity } from "./activity";
-import { deletePreview } from "./artifact-api";
+
 import type { PulseReading } from "./board.svelte";
 import { currentClientId } from "./client-id";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { type DelegateRecord, delegateRecord } from "./delegate-record";
 import { devDebug } from "./dev-debug";
 import { heardFrame, heardSince, readLeaves } from "./heard";
+import { askMachine, didntAnswer } from "./hub/control";
 import {
   type BoardFrame,
   type FrameKind,
@@ -166,7 +161,6 @@ import {
   connectionState,
   hubRun,
   inflight,
-  type LeftOut,
   leaveHub,
   ModeUnchosen,
   openHub,
@@ -222,6 +216,7 @@ import {
   takePulse,
 } from "./stores/board.svelte";
 import { takeBrowsers } from "./stores/browsers.svelte";
+import { loadCatalog, refreshCatalogs } from "./stores/catalog.svelte";
 import { ahead, minute } from "./stores/clock.svelte";
 import { takeBoardContinuations } from "./stores/continuations.svelte";
 import { takeFleetMcp } from "./stores/mcp-servers.svelte";
@@ -238,6 +233,11 @@ import {
 } from "./stores/needs.svelte";
 import { readProjectOffers, takeProjectOffer } from "./stores/offers.svelte";
 import { plansState } from "./stores/plans.svelte";
+import {
+  takeBoardPreviews,
+  takePreview,
+  takePreviewSettings,
+} from "./stores/previews.svelte";
 import { keepRelayJourney, readRelayJourney } from "./stores/relay.svelte";
 import { equal, patchRows, reconcileRows } from "./stores/same";
 import { readTailnetHttps, takeTailnet } from "./stores/tailnet.svelte";
@@ -290,7 +290,6 @@ import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
 import { speakerName } from "./transcript/speaker";
 import type { Message } from "./types";
-import { type MissedRead, TRY_AGAIN, unansweredWords } from "./unanswered";
 import { updates } from "./updates/updates.svelte";
 import { contextOf, workspace } from "./workspace/workspace.svelte";
 
@@ -354,14 +353,6 @@ export interface ProjectRow {
   /** Review before done: only you move a task to done, and landed work waits in review. */
   review: boolean;
 }
-
-/**
- * A spin-off is history nobody asked for until they keep it, and the agent
- * tags its SDK session on the way out to say so. The tag is the whole test —
- * the directory a session ran in says nothing about whether it was a spin-off.
- */
-const listedInHistory = (info: NeutralSessionInfo): boolean =>
-  info.tag !== CAWCO_SCRATCH_TAG;
 
 export interface PendingPermission {
   /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Deny and Take over. */
@@ -652,18 +643,6 @@ export interface SessionState {
 }
 
 /**
- * Stored sessions per machine, newest first (`listSessions` through the
- * tunnel). Raw state: the catalogue is read whole and replaced whole, and a
- * deep proxy over its hundreds of rows was the 100ms+ flush every connect
- * paid for, with nothing ever mutating a row in place.
- */
-let catalog = $state.raw<Record<string, NeutralSessionInfo[]>>({});
-/** Per machine, a sentence for each harness its last listing left out: not in time ({@link harnessDidntAnswer}) or failed ({@link harnessCouldntList}). */
-let catalogLeftOut = $state.raw<Record<string, string[]>>({});
-/** The machines whose stored sessions have been asked for and answered, or failed. */
-const catalogsTried = $state<Record<string, true>>({});
-
-/**
  * What each hub row's session needs from you ({@link activityNow}), held
  * per row: every list asks it of every row it holds, and asked afresh each
  * time, a turn ending somewhere re-ran it for the whole board. Each is
@@ -811,28 +790,6 @@ const sessionChild = (row: InstanceRow): TrayChild => {
     work: null,
   };
 };
-
-const previewsState = $state({
-  previews: {} as Record<
-    string,
-    Extract<FramePayload, { kind: "preview" }> & {
-      title?: string;
-      path?: string;
-      /** The page's capture in each scheme (PageThumb draws the reader's). */
-      thumbnail?: import("./preview/wire").PageThumbnail;
-      /** The revision the thumbnail was taken of. */
-      thumbnailRevision?: string;
-      /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */
-      thumbnailWanted?: boolean;
-    }
-  >,
-  previewRequests: {} as Record<string, number>,
-  /**
-   * The fleet's preview mode, from the board: a switch moves every preview
-   * origin, so a page loaded on its own (decisions PageFrame) loads again.
-   */
-  previewSettings: null as PreviewSettings | null,
-});
 
 const projectsState = $state({
   projects: [] as ProjectRow[],
@@ -2243,15 +2200,6 @@ function readFleet(delay = 1000): void {
   );
 }
 
-/** Every online machine's stored sessions — the sidebar's contents on arrival. */
-function refreshCatalogs(): void {
-  for (const machine of boardState.machines) {
-    if (machine.status === "online") {
-      detach(loadCatalog(machine.machineId), "loadCatalog");
-    }
-  }
-}
-
 /**
  * The hub's word on the machines, pushed with every `instances` frame. A
  * machine that comes online after the connect-time read has its stored
@@ -2402,30 +2350,6 @@ function takePermissionSettled(frame: FrameOf<"permission_settled">): void {
   }
 }
 
-function takePreview(frame: FrameOf<"preview">): void {
-  heardFrame(`preview:${frame.instanceId}`);
-  const previous = previewsState.previews[frame.instanceId];
-  const sameRevision = previous?.revision === frame.revision;
-  const next = {
-    ...(sameRevision ? previous : {}),
-    ...frame,
-  };
-  if (!equal(previous, next)) {
-    previewsState.previews[frame.instanceId] = next;
-  }
-  // A show: one opened, or moved on, after the page's first read of the
-  // fleet. What that read finds open was open before the page came, and is
-  // no show to bring forward (ProjectConversation's Preview, ProjectPage's
-  // Decisions, SideSheet's snap all follow `previewRequests`).
-  if (
-    boardState.liveRead &&
-    frame.state === "open" &&
-    (previous?.state !== "open" || !sameRevision)
-  ) {
-    revealPreview(frame.instanceId);
-  }
-}
-
 /** The board, whole (`instances`) or as what moved (`instances_delta`), and what rides along with it. */
 function takeBoard(frame: BoardFrame): void {
   takeBoardPreviews(frame);
@@ -2437,23 +2361,6 @@ function takeBoard(frame: BoardFrame): void {
   takeBoardRows(frame);
   settleOpenings();
   takeBoardPulses(frame);
-}
-
-/** The previews the board lists; one it no longer lists is closed. */
-function takeBoardPreviews(frame: BoardFrame): void {
-  if (!frame.previews) {
-    return;
-  }
-  const current = new Set(frame.previews.map((preview) => preview.instanceId));
-  for (const [id, preview] of Object.entries(previewsState.previews)) {
-    if (!current.has(id) && preview.state !== "closed") {
-      heardFrame(`preview:${id}`);
-      previewsState.previews[id] = { ...preview, state: "closed" };
-    }
-  }
-  for (const preview of frame.previews) {
-    takePreview(preview);
-  }
 }
 
 /**
@@ -2472,16 +2379,6 @@ function takeBoardMachines(frame: BoardFrame): void {
         (row) => row.machineId
       )
     );
-  }
-}
-
-/** The fleet's preview mode, as the board carries it. */
-function takePreviewSettings(frame: BoardFrame): void {
-  if (
-    frame.previewSettings &&
-    !equal(previewsState.previewSettings, frame.previewSettings)
-  ) {
-    previewsState.previewSettings = frame.previewSettings;
   }
 }
 
@@ -5255,31 +5152,6 @@ function settleStopped(instanceId: string): void {
 }
 
 /**
- * Asks the session's preview to be brought into view: a phone's sheet comes
- * back to its middle snap from wherever the reader left it, Caw's panel comes
- * to Preview. Said for a show heard after the page's first read, and for a
- * card of it pressed; never for what was open as the page came.
- */
-export function revealPreview(instanceId: string): void {
-  previewsState.previewRequests[instanceId] =
-    (previewsState.previewRequests[instanceId] ?? 0) + 1;
-}
-
-/**
- * Closes the session's preview. The hub's `closed` frame goes out before its
- * answer whenever it had one shown; the answer closes it here only when no
- * preview frame came since, so a preview shown again meanwhile stays.
- */
-export async function closePreview(instanceId: string): Promise<void> {
-  const mark = readLeaves();
-  await deletePreview(instanceId);
-  const previous = previewsState.previews[instanceId];
-  if (previous && !heardSince(`preview:${instanceId}`, mark)) {
-    previewsState.previews[instanceId] = { ...previous, state: "closed" };
-  }
-}
-
-/**
  * A control call about the machine rather than a session — the SDK's module-level
  * session functions. The reply is correlated by `requestId`, which the hub routes
  * back to this socket alone.
@@ -5941,166 +5813,6 @@ export async function removeSession(instanceId: string): Promise<void> {
     throw await hubRefusal(response, sidebarWords.sessionNotRemovedThen);
   }
   await rereadHub();
-}
-
-/**
- * {@link ask}, of a machine: refused here, with the hub's words for it, while
- * {@link machineConnected} says the machine is not back, never sent to be
- * refused there.
- */
-function askMachine<T>(
-  machineId: string,
-  requestId: string,
-  timeoutMs: number,
-  dispatch: () => void,
-  readAnswer?: (result: unknown, leftOut?: LeftOut) => T
-): Promise<Bounded<T>> {
-  if (!machineConnected(machineId)) {
-    return Promise.reject(
-      new Error(machineFaultWords(machineName(machineId), "offline"))
-    );
-  }
-  return ask<T>(requestId, timeoutMs, dispatch, readAnswer);
-}
-
-/** A read no answer came back to in time. */
-export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
-
-/**
- * What the person reads when a read of `machineId` didn't answer in time
- * (unanswered.ts): what didn't answer and when it is asked again while the
- * hub says the machine is online ({@link machineConnected}), "It may be
- * offline" only once it has lost it.
- */
-export function didntAnswer(
-  machineId: string,
-  missed: Unanswered,
-  words: Omit<MissedRead, "machine" | "online" | "after">
-): string {
-  return unansweredWords({
-    machine: machineName(machineId),
-    online: machineConnected(machineId),
-    after: missed.after,
-    ...words,
-  });
-}
-
-/**
- * A read as an action the person started takes it, for the actions whose
- * one way to say something is the sentence they throw (a menu item, a
- * confirm dialog): the answer, or {@link didntAnswer}'s sentence thrown.
- * `outcome` says what is now not known, when something is.
- */
-export function answeredOr<T>(
-  machineId: string,
-  read: Bounded<T>,
-  outcome?: string
-): T {
-  switch (read.kind) {
-    case "answered":
-      return read.value;
-    case "unanswered":
-      throw new Error(
-        didntAnswer(machineId, read, { outcome, again: TRY_AGAIN })
-      );
-    default:
-      unhandled("read", read);
-  }
-}
-
-/**
- * What the person reads when one harness on `machineId` didn't list its
- * stored sessions in time, in {@link didntAnswer}'s voice: its sessions are
- * the ones it listed last.
- */
-function harnessDidntAnswer(
-  machineId: string,
-  { harness, after }: HarnessUnanswered
-): string {
-  return catalogWords.harnessDidntAnswer(
-    accountsWords.harnesses[harness] ?? harness,
-    machineName(machineId),
-    secondsOf(after)
-  );
-}
-
-/**
- * What the person reads when one harness on `machineId` couldn't list its
- * stored sessions (its listing threw), in {@link harnessDidntAnswer}'s voice.
- */
-function harnessCouldntList(
-  machineId: string,
-  { harness, error }: HarnessFailed
-): string {
-  return catalogWords.harnessCouldntList(
-    accountsWords.harnesses[harness] ?? harness,
-    machineName(machineId),
-    error
-  );
-}
-
-/**
- * The machine's stored sessions, newest first. A harness that did not list
- * in time, or whose listing threw, keeps the sessions it listed last; it is
- * kept on {@link catalogLeftOut} in {@link harnessDidntAnswer}'s and
- * {@link harnessCouldntList}'s words, and said over Recent's stored
- * sessions (HomeRecent), with Try again, until a load leaves none out;
- * never a toast (DESIGN.md, The Work Outlives Its Surface Rule).
- */
-export async function loadCatalog(machineId: string): Promise<void> {
-  try {
-    await waitForHub();
-    const requestId = newId();
-    const payload: ControlPayload = {
-      requestId,
-      method: "listSessions",
-      args: [SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {}],
-    };
-    const listed = await askMachine(
-      machineId,
-      requestId,
-      CONTROL_TIMEOUT_MS,
-      () => send({ verb: "control", machineId, requestId, payload }),
-      (result, leftOut) => ({
-        sessions: result as NeutralSessionInfo[],
-        unanswered: leftOut?.unanswered ?? [],
-        failed: leftOut?.failed ?? [],
-      })
-    );
-    switch (listed.kind) {
-      case "unanswered":
-        // The catalog it last listed stands.
-        console.warn(
-          `[cawco] listSessions on ${machineId}: ${didntAnswer(machineId, listed, { missed: "its list of stored sessions didn't come back", again: "The list it gave last stands until the next load." })}`
-        );
-        break;
-      case "answered": {
-        const { sessions, unanswered, failed } = listed.value;
-        const silent = new Set(
-          [...unanswered, ...failed].map((one) => one.harness)
-        );
-        const kept = (catalog[machineId] ?? []).filter((info) =>
-          silent.has(info.harness)
-        );
-        const said = [
-          ...unanswered.map((one) => harnessDidntAnswer(machineId, one)),
-          ...failed.map((one) => harnessCouldntList(machineId, one)),
-        ];
-        for (const sentence of said) {
-          console.warn(`[cawco] ${sentence}`);
-        }
-        catalog = { ...catalog, [machineId]: [...sessions, ...kept] };
-        catalogLeftOut = { ...catalogLeftOut, [machineId]: said };
-        break;
-      }
-      default:
-        unhandled("read", listed);
-    }
-  } catch (error) {
-    console.error(`[cawco] listSessions on ${machineId} failed:`, error);
-  } finally {
-    catalogsTried[machineId] = true;
-  }
 }
 
 /**
@@ -7538,37 +7250,6 @@ const sameAsk = (a: BlockedRequest, b: BlockedRequest | undefined): boolean =>
   a.stale === b.stale;
 
 export const cawco = {
-  /** Every online machine's stored sessions have been read, or failed to be. */
-  get catalogsRead() {
-    return (
-      boardState.fleetRead &&
-      boardState.machines
-        .filter((machine) => machine.status === "online")
-        .every((machine) => catalogsTried[machine.machineId])
-    );
-  },
-  /** One machine's stored sessions have been read, or failed to be. */
-  catalogRead: (machineId: string): boolean =>
-    catalogsTried[machineId] === true,
-  /** The fleet's preview mode, as the board last carried it; null before the first board. */
-  get previewSettings(): PreviewSettings | null {
-    return previewsState.previewSettings;
-  },
-  get previews() {
-    return previewsState.previews;
-  },
-  get previewRequests() {
-    return previewsState.previewRequests;
-  },
-  /** Stored sessions on one machine, minus the spin-offs hiding among them. */
-  catalogOf: (machineId: string): NeutralSessionInfo[] =>
-    (catalog[machineId] ?? []).filter(listedInHistory),
-  /** The harnesses on `machineId` its last listing left out (not in time, or failed), each as a sentence; said over Recent's stored sessions (HomeRecent). */
-  catalogLeftOutOf: (machineId: string): string[] =>
-    catalogLeftOut[machineId] ?? [],
-  /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
-  hasStored: (machineId: string): boolean =>
-    (catalog[machineId] ?? []).some(listedInHistory),
   get projects() {
     return projectsState.projects;
   },
