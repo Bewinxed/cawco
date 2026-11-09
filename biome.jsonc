@@ -48,6 +48,8 @@
     "./scripts/lint/no-hand-shell-quote.grit",
     // core's frames.ts holds frame types alone (packages/core/src/frames.ts).
     "./scripts/lint/frames-types-only.grit",
+    // An artifact doc's meta map is reached through core doc-meta.ts.
+    "./scripts/lint/doc-meta-door.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

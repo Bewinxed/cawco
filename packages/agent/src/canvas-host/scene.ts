@@ -6,6 +6,7 @@ import {
   type CanvasRequestResult,
   keptOnRemake,
 } from "@cawco/core/canvas";
+import { docMeta } from "@cawco/core/doc-meta";
 import { toSegment } from "@cawco/core/shapes";
 /**
  * The canvas's scene on its doc (Projects spec §5.10, D23–D25): Excalidraw
@@ -434,7 +435,7 @@ export function bindScene(
   stops.push(() => sceneElements.unobserveDeep(observer));
 
   // Pen mode, once a pen touched the canvas, is the canvas's (its meta).
-  const meta = scene.getMap("meta");
+  const meta = docMeta(scene);
   stops.push(
     api.onChange((_elements, state) => {
       if (

@@ -63,3 +63,5 @@ no-hand-shell-quote/planted.ts:4:28 no-hand-shell-quote
 no-hand-shell-quote/planted.ts:5:31 no-hand-shell-quote
 frames-types-only/packages/core/src/frames.ts:5:1 frames-types-only
 frames-types-only/packages/core/src/frames.ts:6:1 frames-types-only
+doc-meta-door/planted.ts:4:23 doc-meta-door
+doc-meta-door/planted.ts:5:21 doc-meta-door
