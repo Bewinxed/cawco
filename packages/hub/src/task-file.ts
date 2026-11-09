@@ -80,7 +80,7 @@ import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import type { TaskTodo } from "@cawco/core/plan";
 import { TASK_EDGES } from "@cawco/core/task-edges";
-import { TASK_MOVERS } from "@cawco/core/views";
+import { TASK_MOVERS, type TaskMover } from "@cawco/core/views";
 import { waitHandle, waitTarget } from "@cawco/core/wait-targets";
 import type { WorkBudget } from "./db/stored-types";
 
@@ -166,8 +166,8 @@ interface TaskSection {
 export interface TaskCommentAuthor {
   /** The session's instance id, or the approved action's; null when none. */
   id: string | null;
-  /** The mover they wrote as (`you`, `lead`, `session`, …); null when the heading names none it knows. */
-  mover: string | null;
+  /** The mover they wrote as (`you`, `session`, …); null when the heading names none it knows. */
+  mover: TaskMover | null;
   /** The commit author's name: you, Caw, the session's title. */
   name: string;
 }
@@ -748,8 +748,6 @@ const isComments = (heading: string): boolean =>
 const COMMENT_HEADING = /^###\s+(.+)$/u;
 const COMMENT_SEPARATOR = " · ";
 const MIDDLE_DOT = /·/gu;
-const COMMENT_MOVERS: ReadonlySet<string> = new Set(TASK_MOVERS);
-
 /** A carried comment's source and URL, from its heading's middle slots; null for any other. */
 const viaOf = (
   name: string,
@@ -788,7 +786,7 @@ const commentHeading = (
     at,
     author: {
       name,
-      mover: COMMENT_MOVERS.has(mover) ? mover : null,
+      mover: TASK_MOVERS.find((one) => one === mover) ?? null,
       id: via ? null : id,
     },
     via,
