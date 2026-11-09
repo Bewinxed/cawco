@@ -245,6 +245,12 @@ import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { onVersionAnswered } from "./claude-version";
 import { readConfig, writeConfig } from "./config";
+import {
+  commandLane,
+  moveLane,
+  workspaceCreateLane,
+  workspaceLane,
+} from "./control-lanes";
 import { damagedRecords, sweepRecords } from "./damaged-records";
 import { convergeDeniedTools } from "./denied-tools";
 import { hubIdAt, rediscoverHub, toHttpBase, toWsUrl } from "./discovery";
@@ -840,11 +846,10 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       providerAccountsChanged();
       return result;
     };
-  supervisor.registerDaemonFunction(
-    CONTROL_BEGIN_PROVIDER_LOGIN,
-    (id, provider) => beginProviderLogin(id as string, provider as string)
+  supervisor.declareControl(CONTROL_BEGIN_PROVIDER_LOGIN, (id, provider) =>
+    beginProviderLogin(id as string, provider as string)
   );
-  supervisor.registerDaemonFunction(
+  supervisor.declareControl(
     CONTROL_COMPLETE_PROVIDER_LOGIN,
     async (code, id, expected) => {
       const result = await completeProviderLogin(
@@ -858,7 +863,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       return result;
     }
   );
-  supervisor.registerDaemonFunction(
+  supervisor.declareControl(
     CONTROL_SET_PROVIDER_KEY,
     (id, provider, key, expected) =>
       changing(() =>
@@ -870,16 +875,16 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
         )
       )()
   );
-  supervisor.registerDaemonFunction(CONTROL_FORGET_PROVIDER_ACCOUNT, (id) =>
+  supervisor.declareControl(CONTROL_FORGET_PROVIDER_ACCOUNT, (id) =>
     changing(async () => {
       await forgetProviderAccount(id as string);
       return { forgotten: true };
     })()
   );
-  supervisor.registerDaemonFunction(CONTROL_READ_HOME_CREDENTIALS, () =>
+  supervisor.declareControl(CONTROL_READ_HOME_CREDENTIALS, () =>
     readHomeCredentials()
   );
-  supervisor.registerDaemonFunction(
+  supervisor.declareControl(
     CONTROL_JOIN_PROVIDER_ACCOUNT,
     (from, into, expected) =>
       changing(() =>
@@ -890,7 +895,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
         )
       )()
   );
-  supervisor.registerDaemonFunction(
+  supervisor.declareControl(
     CONTROL_MOVE_HOME_CREDENTIAL,
     (id, store, storeProvider, expected) =>
       changing(() =>
@@ -902,10 +907,10 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
         )
       )()
   );
-  supervisor.registerDaemonFunction(CONTROL_LEND_ACCOUNT, (id) =>
+  supervisor.declareControl(CONTROL_LEND_ACCOUNT, (id) =>
     lendAccount(id as string)
   );
-  supervisor.registerDaemonFunction(
+  supervisor.declareControl(
     CONTROL_BORROW_ACCOUNT,
     (id, lender, lent, store, storeProvider, expected) =>
       changing(() =>
@@ -919,7 +924,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
         )
       )()
   );
-  supervisor.registerDaemonFunction(
+  supervisor.declareControl(
     CONTROL_ACCOUNT_LENT,
     (requestId, answer, accountId) =>
       accountLent(
@@ -2290,7 +2295,7 @@ const attach = (
      * machine's menu stops offering Unlock), not at the agent's next connect.
      * Answers the machine's word on Claude, which the dashboard's step says.
      */
-    supervisor.registerDaemonFunction("unlockKeychain", async (password) => {
+    supervisor.declareControl("unlockKeychain", async (password) => {
       await unlockKeychain(password as string);
       const claude = harness("claude");
       if (!claude) {
@@ -2529,20 +2534,18 @@ const attach = (
      * unavailable there, its sends owed (`recovery_unavailable`).
      */
     const reattaching: Envelope[] = [];
-    supervisor.registerDaemonFunction("sessionCustody", async () => ({
+    supervisor.declareControl("sessionCustody", async () => ({
       custody: await readCustody(supervisor.stopSequence, [
         ...supervisor.custodyInstanceIds,
         ...undecided.keys(),
       ]),
       attached: supervisor.instanceIds,
     }));
-    supervisor.registerDaemonFunction(
-      "removedSessionCustody",
-      (rows, claimed) =>
-        supervisor.removedSessionCustody(
-          rows as { id: string; sessionId: string | null; cwd: string }[],
-          claimed as string[]
-        )
+    supervisor.declareControl("removedSessionCustody", (rows, claimed) =>
+      supervisor.removedSessionCustody(
+        rows as { id: string; sessionId: string | null; cwd: string }[],
+        claimed as string[]
+      )
     );
 
     /**
@@ -3451,22 +3454,20 @@ const startDaemon = (rediscover = false) =>
     // The usage scanner outlives connections too: its store (usage.db) is the
     // machine's, so a reconnect picks up where the last scan stopped.
     const scanner = yield* Effect.sync(() => new UsageScans());
-    supervisor.registerDaemonFunction("probeCapabilities", probeCapabilities);
+    supervisor.declareControl("probeCapabilities", probeCapabilities);
 
     // Updates arrive only as signed builds from the hub: this one object owns
     // the update tick, the "Install now" command and the policy the hub pushes.
     const updater = new BinaryUpdater(reportBinaryUpdate);
-    supervisor.registerDaemonFunction(UPDATE_CAWCO, (command) =>
+    supervisor.declareControl(UPDATE_CAWCO, (command) =>
       updater.installNow(
         (command ?? {}) as { commandId?: string; version?: string }
       )
     );
-    supervisor.registerDaemonFunction(CONFIGURE_BINARY_UPDATES, () =>
+    supervisor.declareControl(CONFIGURE_BINARY_UPDATES, () =>
       updater.configure()
     );
-    supervisor.registerDaemonFunction(CANCEL_BINARY_UPDATE, () =>
-      updater.cancel()
-    );
+    supervisor.declareControl(CANCEL_BINARY_UPDATE, () => updater.cancel());
     yield* Effect.addFinalizer(() => Effect.sync(() => updater.stop()));
     yield* Effect.forkScoped(Effect.promise(() => updater.start()));
 
@@ -3546,19 +3547,20 @@ const startDaemon = (rediscover = false) =>
     setCommandQueue((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_RUN_COMMAND,
       (cwd, cmd, timeoutMs, workspace, run) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : runHubCommand(cwd, cmd, timeoutMs, workspace, run)
+          : runHubCommand(cwd, cmd, timeoutMs, workspace, run),
+      commandLane
     );
     // A cancel ends a command already running, so it is taken behind a raised fence too.
-    supervisor.registerDaemonFunction(CONTROL_CANCEL_COMMAND, async (runId) =>
+    supervisor.declareControl(CONTROL_CANCEL_COMMAND, async (runId) =>
       cancelCommand(runId)
     );
     // A workspace is cut in this process, so a restart would cut it too: none starts behind a raised fence.
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_WORKSPACE_CREATE,
       (cwd, id, projectId, account, at, first) =>
         fenced()
@@ -3571,111 +3573,114 @@ const startDaemon = (rediscover = false) =>
               account,
               at,
               first
-            )
+            ),
+      workspaceCreateLane
     );
     // A place's first commit writes its folder: none starts behind a raised fence.
-    supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path) =>
+    supervisor.declareControl(CONTROL_PLACE_REPO, (path) =>
       fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : placeRepo(path)
     );
     // A folder of a project deleted for good, held to this machine's floor
     // (remove-folder.ts) after the hub held it to the project's places.
-    supervisor.registerDaemonFunction(CONTROL_REMOVE_FOLDER, (asked) =>
+    supervisor.declareControl(CONTROL_REMOVE_FOLDER, (asked) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : removeFolder(asked as RemoveFolder)
     );
     // The checkout a folder is in, as a workspace cut there reads it: read only.
-    supervisor.registerDaemonFunction(CONTROL_REPO_ROOT, (path) =>
-      repoRoot(path)
-    );
+    supervisor.declareControl(CONTROL_REPO_ROOT, (path) => repoRoot(path));
     // The clone a folder is inside, as a spawn there would be bounded to it: read only.
-    supervisor.registerDaemonFunction(CONTROL_CLONE_HOLDING, async (path) => {
+    supervisor.declareControl(CONTROL_CLONE_HOLDING, async (path) => {
       if (typeof path !== "string" || !path) {
         throw new Error("cloneHolding names no folder");
       }
       return (await cloneHolding(path)) ?? null;
     });
     // A place's left-out large files through Git LFS, once the person accepted: a second commit.
-    supervisor.registerDaemonFunction(CONTROL_PLACE_LFS, (path, rows) =>
+    supervisor.declareControl(CONTROL_PLACE_LFS, (path, rows) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : placeLfs(path, rows)
     );
     // A place published to GitHub goes through the hub's remote first.
-    supervisor.registerDaemonFunction(
-      CONTROL_PLACE_PUSH,
-      (path, projectId, dryRun) =>
-        fenced()
-          ? Promise.reject(new Error(AGENT_RESTARTING))
-          : placePush(path, projectId, dryRun)
+    supervisor.declareControl(CONTROL_PLACE_PUSH, (path, projectId, dryRun) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : placePush(path, projectId, dryRun)
     );
-    supervisor.registerDaemonFunction(
-      CONTROL_WORKSPACE_BOUNDARY,
-      workspaceBoundary
-    );
+    supervisor.declareControl(CONTROL_WORKSPACE_BOUNDARY, workspaceBoundary);
     // An archive ends the workspace's stage first: nothing of it is left to
     // serve. A place's stage clone waits for its stage to sleep (stage.ts
     // `closingStages`).
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_ARCHIVE, (ref) =>
-      closingStages(
-        ref as { id?: string; path?: string; skip?: string[] } | null,
-        archiveWorkspace
-      )
+    supervisor.declareControl(
+      CONTROL_WORKSPACE_ARCHIVE,
+      (ref) =>
+        closingStages(
+          ref as { id?: string; path?: string; skip?: string[] } | null,
+          archiveWorkspace
+        ),
+      workspaceLane
     );
     // A closing workspace's `$TMPDIR/outputs/`, read on this host with its
     // boundary killed first, before the hub archives it.
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_WORKSPACE_OUTPUTS,
-      workspaceOutputs
+      workspaceOutputs,
+      workspaceLane
     );
     // A host-scope delegate's `$TMPDIR/outputs/`, read as it stands, and
     // its scratch dir removed once those are kept (host-scratch.ts).
-    supervisor.registerDaemonFunction(CONTROL_HOST_OUTPUTS, hostOutputs);
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(CONTROL_HOST_OUTPUTS, hostOutputs, workspaceLane);
+    supervisor.declareControl(
       CONTROL_HOST_SCRATCH_REMOVE,
-      removeHostScratch
+      removeHostScratch,
+      workspaceLane
     );
     // The hub's sweep: which folders under ~/.worktrees stand, so an
     // archived workspace whose clone is still there is closed again.
-    supervisor.registerDaemonFunction(
-      CONTROL_WORKSPACE_CLONES,
-      worktreeFolders
-    );
+    supervisor.declareControl(CONTROL_WORKSPACE_CLONES, worktreeFolders);
     // An archive whose unlanded work a person let go: a carry first.
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) =>
-      closingStages(
-        ref as { id?: string; path?: string; skip?: string[] } | null,
-        discardWorkspace
-      )
+    supervisor.declareControl(
+      CONTROL_WORKSPACE_DISCARD,
+      (ref) =>
+        closingStages(
+          ref as { id?: string; path?: string; skip?: string[] } | null,
+          discardWorkspace
+        ),
+      workspaceLane
     );
     // A workspace whose items have all ended: what their sessions left
     // running in its boundary ends, the boundary and the sessions running on
     // (hub workspaces.ts `settle`).
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_WORK_END, (asked) => {
-      const { id, instanceIds } = (asked ?? {}) as Partial<WorkspaceWorkEnd>;
-      if (!(
-        typeof id === "string" &&
-        id &&
-        Array.isArray(instanceIds) &&
-        instanceIds.every((one) => typeof one === "string" && one)
-      )) {
-        return Promise.reject(
-          new Error("workspaceWorkEnd takes a workspace id and its sessions")
-        );
-      }
-      return supervisor.endFinishedWork(id, instanceIds);
-    });
+    supervisor.declareControl(
+      CONTROL_WORKSPACE_WORK_END,
+      (asked) => {
+        const { id, instanceIds } = (asked ?? {}) as Partial<WorkspaceWorkEnd>;
+        if (!(
+          typeof id === "string" &&
+          id &&
+          Array.isArray(instanceIds) &&
+          instanceIds.every((one) => typeof one === "string" && one)
+        )) {
+          return Promise.reject(
+            new Error("workspaceWorkEnd takes a workspace id and its sessions")
+          );
+        }
+        return supervisor.endFinishedWork(id, instanceIds);
+      },
+      workspaceLane
+    );
     // The hub's gh connections (hub connections.ts): the accounts this
     // machine's gh is signed in to, and one account's token, read each time.
-    supervisor.registerDaemonFunction(CONTROL_GH_ACCOUNTS, () => ghAccounts());
-    supervisor.registerDaemonFunction(CONTROL_GH_TOKEN, (host, login) =>
+    supervisor.declareControl(CONTROL_GH_ACCOUNTS, () => ghAccounts());
+    supervisor.declareControl(CONTROL_GH_TOKEN, (host, login) =>
       typeof host === "string" && typeof login === "string"
         ? ghAccountToken(host, login)
         : Promise.reject(new Error("ghToken takes a host and a login"))
     );
     // A session's forge write, or a landing's pull or merge request
     // (forges/forge.ts): made here with this machine's own sign-in.
-    supervisor.registerDaemonFunction(CONTROL_FORGE_POST, (ask) => {
+    supervisor.declareControl(CONTROL_FORGE_POST, (ask) => {
       const read = readForgeAsk(ask);
       if (!read) {
         return Promise.reject(new Error("forgePost takes a forge write"));
@@ -3687,15 +3692,15 @@ const startDaemon = (rediscover = false) =>
     setBrowserSink(machineIdValue, (frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
-    supervisor.registerDaemonFunction(BROWSER_START, (args) =>
+    supervisor.declareControl(BROWSER_START, (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : startBrowser(args as BrowserStartArgs)
     );
-    supervisor.registerDaemonFunction(BROWSER_STOP, async (args) =>
+    supervisor.declareControl(BROWSER_STOP, async (args) =>
       stopBrowser(browserKeyOf(args))
     );
-    supervisor.registerDaemonFunction(BROWSER_REMOVE, async (args) =>
+    supervisor.declareControl(BROWSER_REMOVE, async (args) =>
       removeBrowser(browserKeyOf(args))
     );
     // The person takes a browser over privately and hands it back
@@ -3704,7 +3709,7 @@ const startDaemon = (rediscover = false) =>
     setShieldSink(machineIdValue, (frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
-    supervisor.registerDaemonFunction(BROWSER_SHIELD, (args) =>
+    supervisor.declareControl(BROWSER_SHIELD, (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : shieldBrowser({
@@ -3712,12 +3717,12 @@ const startDaemon = (rediscover = false) =>
             key: browserKeyOf(args),
           })
     );
-    supervisor.registerDaemonFunction(BROWSER_HANDBACK, async (args) =>
+    supervisor.declareControl(BROWSER_HANDBACK, async (args) =>
       handBackBrowser(browserKeyOf(args))
     );
     // A browser ask as it parks: the asking door's page on the asked origin,
     // which a take-over brings to the front (browser/shield.ts).
-    supervisor.registerDaemonFunction(BROWSER_PAGE, (args) => {
+    supervisor.declareControl(BROWSER_PAGE, (args) => {
       const { origin, workspaceId } = (args ?? {}) as Partial<BrowserPageArgs>;
       if (!(typeof origin === "string" && typeof workspaceId === "string")) {
         return Promise.reject(
@@ -3729,16 +3734,16 @@ const startDaemon = (rediscover = false) =>
     // The person's view of a browser, through the hub (hub
     // browser-routes.ts): the machine's one browser listener, and a neko
     // session of its own for each viewer.
-    supervisor.registerDaemonFunction(BROWSER_LISTEN, async (args) =>
+    supervisor.declareControl(BROWSER_LISTEN, async (args) =>
       listenBrowsers(args)
     );
-    supervisor.registerDaemonFunction(BROWSER_VIEWER_TOKEN, async (args) =>
+    supervisor.declareControl(BROWSER_VIEWER_TOKEN, async (args) =>
       viewerSession(browserKeyOf(args))
     );
     // The machine's browsers whole, as its records hold them: what the hub
     // reads as the machine registers (its take-overs are the machine's own).
-    supervisor.registerDaemonFunction(BROWSER_ROWS, () => browserFrame());
-    supervisor.registerDaemonFunction(BROWSER_VIEWERS, (args) => {
+    supervisor.declareControl(BROWSER_ROWS, () => browserFrame());
+    supervisor.declareControl(BROWSER_VIEWERS, (args) => {
       const { count } = args as BrowserViewersArgs;
       const key = browserKeyOf(args);
       const views = typeof count === "number" ? count : 0;
@@ -3792,14 +3797,14 @@ const startDaemon = (rediscover = false) =>
     setRelaySink(machineIdValue, (frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
-    supervisor.registerDaemonFunction(RELAY_START, async (args) =>
+    supervisor.declareControl(RELAY_START, async (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : startRelay(relayStartOf(args))
     );
-    supervisor.registerDaemonFunction(RELAY_STOP, () => stopRelay());
-    supervisor.registerDaemonFunction(RELAY_REMOVE, () => removeRelay());
-    supervisor.registerDaemonFunction(RELAY_RENEW, (args) => {
+    supervisor.declareControl(RELAY_STOP, () => stopRelay());
+    supervisor.declareControl(RELAY_REMOVE, () => removeRelay());
+    supervisor.declareControl(RELAY_RENEW, (args) => {
       const token = (args as { cloudflareToken?: unknown } | null)
         ?.cloudflareToken;
       if (typeof token !== "string") {
@@ -3809,11 +3814,11 @@ const startDaemon = (rediscover = false) =>
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
     // runtime read, and a binding from here through it.
-    supervisor.registerDaemonFunction(RELAY_CERTIFY, (args) =>
+    supervisor.declareControl(RELAY_CERTIFY, (args) =>
       certifyRelay(relayCertifyOf(args))
     );
-    supervisor.registerDaemonFunction(RELAY_RUNTIME, () => relayRuntimeRead());
-    supervisor.registerDaemonFunction(RELAY_PROVE, (args) => {
+    supervisor.declareControl(RELAY_RUNTIME, () => relayRuntimeRead());
+    supervisor.declareControl(RELAY_PROVE, (args) => {
       const urls = (args as { urls?: unknown } | null)?.urls;
       return proveRelay(
         Array.isArray(urls) ? urls.filter((one) => typeof one === "string") : []
@@ -3840,7 +3845,7 @@ const startDaemon = (rediscover = false) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
     // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads; `opening` as the canvas is made.
-    supervisor.registerDaemonFunction(STAGE_ENSURE, (ref, file) => {
+    supervisor.declareControl(STAGE_ENSURE, (ref, file) => {
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
@@ -3856,7 +3861,7 @@ const startDaemon = (rediscover = false) =>
           );
     });
     // A stage warmed for a decision page as it goes out: answered at once, the warm-up run after and never failing (stage.ts `warmStage`).
-    supervisor.registerDaemonFunction(STAGE_WARM, (ref, warm) => {
+    supervisor.declareControl(STAGE_WARM, (ref, warm) => {
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
@@ -3864,19 +3869,19 @@ const startDaemon = (rediscover = false) =>
       return Promise.resolve();
     });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
-    supervisor.registerDaemonFunction(STAGE_WRITE, (ref, write) =>
+    supervisor.declareControl(STAGE_WRITE, (ref, write) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : writeSheet(ref as WorkspaceRef, write as SheetWrite)
     );
     // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
-    supervisor.registerDaemonFunction(STAGE_RENDER, (ref, ask) =>
+    supervisor.declareControl(STAGE_RENDER, (ref, ask) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : renderStage(ref as WorkspaceRef, ask as RenderAsk)
     );
     // A toolchain root's components, as its stage finds them (spec §6's discovery).
-    supervisor.registerDaemonFunction(STAGE_COMPONENTS, (ref, dir) =>
+    supervisor.declareControl(STAGE_COMPONENTS, (ref, dir) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : stageComponents(
@@ -3885,7 +3890,7 @@ const startDaemon = (rediscover = false) =>
           )
     );
     // A workspace preview's server, started or woken and kept up there (stage.ts).
-    supervisor.registerDaemonFunction(STAGE_SERVE, async (workspace, serve) => {
+    supervisor.declareControl(STAGE_SERVE, async (workspace, serve) => {
       if (fenced()) {
         throw new Error(AGENT_RESTARTING);
       }
@@ -3895,32 +3900,34 @@ const startDaemon = (rediscover = false) =>
       }
       return ensureServed(ref, serve as ServeSpec);
     });
-    supervisor.registerDaemonFunction(STAGE_UNSERVE, (workspace, port) =>
+    supervisor.declareControl(STAGE_UNSERVE, (workspace, port) =>
       stopServed(String(workspace), Number(port))
     );
     // A check that names another machine: the commit leaves here, and arrives there.
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_WORKSPACE_BUNDLE,
-      workspaceBundle
+      workspaceBundle,
+      workspaceLane
     );
     // A folder workspace's landing: its change set read, then put into its
     // folder by this agent, outside every wall.
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_CHANGES, (ref) =>
+    supervisor.declareControl(CONTROL_WORKSPACE_CHANGES, (ref) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : workspaceChanges(ref)
     );
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_APPLY, (ref) =>
+    supervisor.declareControl(CONTROL_WORKSPACE_APPLY, (ref) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : workspaceApply(ref)
     );
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_WORKSPACE_AT,
       (ref, base, at, from) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : workspaceAt(ref, base, at, from)
+          : workspaceAt(ref, base, at, from),
+      workspaceLane
     );
     // Host checks are gone (2026-10-16): the checkouts a crashed run of one
     // left under ~/.cawco/host-checks go, as the agent's start once cleared them.
@@ -3935,12 +3942,12 @@ const startDaemon = (rediscover = false) =>
       )
     );
     // A delegate's inputs: read here for a parent here, written here into a workspace here.
-    supervisor.registerDaemonFunction(CONTROL_INPUTS_ADMIT, admitInputs);
-    supervisor.registerDaemonFunction(CONTROL_INPUTS_COPY, copyInputs);
-    supervisor.registerDaemonFunction(CONTROL_INPUTS_READ, readInputs);
-    supervisor.registerDaemonFunction(CONTROL_INPUTS_WRITE, writeInputs);
+    supervisor.declareControl(CONTROL_INPUTS_ADMIT, admitInputs);
+    supervisor.declareControl(CONTROL_INPUTS_COPY, copyInputs);
+    supervisor.declareControl(CONTROL_INPUTS_READ, readInputs);
+    supervisor.declareControl(CONTROL_INPUTS_WRITE, writeInputs);
     // A picture artifact_read drew, kept in a workspace here by the same writer.
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_SAVE, savePicture);
+    supervisor.declareControl(CONTROL_WORKSPACE_SAVE, savePicture);
     // A project move's steps (move.ts). Each runs as this process's child, so
     // none starts behind a raised fence; the hub runs it again after a restart.
     const unfenced =
@@ -3950,39 +3957,43 @@ const startDaemon = (rediscover = false) =>
     setMoveProgress((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
-    supervisor.registerDaemonFunction(CONTROL_MOVE_INSPECT, (path) =>
+    supervisor.declareControl(CONTROL_MOVE_INSPECT, (path) =>
       moveInspect(path as string)
     );
-    supervisor.registerDaemonFunction(CONTROL_MOVE_REMOTE_CREDENTIAL, (path) =>
+    supervisor.declareControl(CONTROL_MOVE_REMOTE_CREDENTIAL, (path) =>
       moveRemoteCredential(path as string)
     );
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_MOVE_PREPARE,
       unfenced((request) =>
         movePrepare(request as Parameters<typeof movePrepare>[0])
-      )
+      ),
+      moveLane
     );
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_MOVE_SNAPSHOT,
       unfenced((request) =>
         moveSnapshot(request as Parameters<typeof moveSnapshot>[0])
-      )
+      ),
+      moveLane
     );
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_MOVE_CLONE,
       unfenced((request) =>
         moveClone(request as Parameters<typeof moveClone>[0])
-      )
+      ),
+      moveLane
     );
-    supervisor.registerDaemonFunction(
+    supervisor.declareControl(
       CONTROL_MOVE_LFS,
-      unfenced((request) => moveLfs(request as Parameters<typeof moveLfs>[0]))
+      unfenced((request) => moveLfs(request as Parameters<typeof moveLfs>[0])),
+      moveLane
     );
-    supervisor.registerDaemonFunction(CONTROL_MOVE_CANCEL, (jobId) =>
+    supervisor.declareControl(CONTROL_MOVE_CANCEL, (jobId) =>
       moveCancel(jobId as string)
     );
     // Stopped where they run once the hub lets them go (CONTROL_ABANDON).
-    supervisor.registerAbandonable(
+    supervisor.declareRead(
       CONTROL_SEARCH_TRANSCRIPTS,
       (signal, query, options) =>
         search.search(
@@ -3991,10 +4002,10 @@ const startDaemon = (rediscover = false) =>
           signal
         )
     );
-    supervisor.registerAbandonable(CONTROL_TRANSCRIPT_TURNS, (signal, query) =>
+    supervisor.declareRead(CONTROL_TRANSCRIPT_TURNS, (signal, query) =>
       search.turns(query as TranscriptTurnsQuery, signal)
     );
-    supervisor.registerAbandonable(CONTROL_TRANSCRIPT_PLACES, (signal, query) =>
+    supervisor.declareRead(CONTROL_TRANSCRIPT_PLACES, (signal, query) =>
       search.places(query as TranscriptPlacesQuery, signal)
     );
 
