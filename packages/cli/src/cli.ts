@@ -480,7 +480,7 @@ const up = async (args: Args): Promise<number> => {
 
   // The daemon reads its hub from the environment, so this is the handoff.
   process.env[CAWCO_ENV.hubUrl] = hub.wsUrl;
-  const { runDaemon } = await import("@cawco/agent");
+  const { runDaemon } = await import("@cawco/agent/daemon");
   // A hub the operator named is never swapped; only a discovered one may be
   // rediscovered on sustained reconnect failure.
   runDaemon(hub.source !== "flag" && hub.source !== "env");
