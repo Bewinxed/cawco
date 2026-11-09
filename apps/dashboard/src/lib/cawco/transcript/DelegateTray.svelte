@@ -44,6 +44,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconAsk,
     IconChevronDown,
@@ -937,7 +938,7 @@
    */
   function capRows(node: HTMLElement) {
     const take = () => {
-      const compact = matchMedia("(width < 640px), (pointer: coarse)").matches;
+      const compact = matchMedia(`${PHONE_QUERY}, (pointer: coarse)`).matches;
       const rows = [
         ...node.querySelectorAll<HTMLElement>(':scope > [data-slot="srow"]'),
       ].filter((one) => !one.inert);
