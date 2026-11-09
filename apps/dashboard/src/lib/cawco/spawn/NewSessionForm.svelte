@@ -80,7 +80,7 @@
   import {
     awayOf,
     failureWords,
-    hubFetch,
+    hubJson,
     hubRefusal,
   } from "#lib/platform/hub-read.js";
   import { newId } from "#lib/platform/id.js";
@@ -1424,18 +1424,20 @@
     const current = () => request === submission && asked === carry;
     try {
       const [sized] = await Promise.all([
-        waits.run("estimate", async () => {
-          const response = await hubFetch(
-            hubRequest("GET /api/instances/:id/continue", {
-              path: { id: instanceId },
-              ...(asked === "asks" ? { query: { asks: true } } : {}),
-            })
-          );
-          if (!response.ok) {
-            throw (await awayOf(response)) ?? (await hubRefusal(response));
-          }
-          return (await response.json()) as NonNullable<typeof estimate>;
-        }),
+        waits.run(
+          "estimate",
+          async () =>
+            await hubJson<NonNullable<typeof estimate>>(
+              hubRequest("GET /api/instances/:id/continue", {
+                path: { id: instanceId },
+                ...(asked === "asks" ? { query: { asks: true } } : {}),
+              }),
+              {
+                failure: async (refused) =>
+                  (await awayOf(refused)) ?? (await hubRefusal(refused)),
+              }
+            )
+        ),
         loadModelWindows(),
       ]);
       if (current()) {

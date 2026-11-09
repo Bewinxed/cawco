@@ -36,6 +36,7 @@
     failureClause,
     failureWords,
     hubFetch,
+    hubJson,
     hubRefusal,
     hubSaid,
   } from "#lib/platform/hub-read.js";
@@ -79,12 +80,9 @@
 
   async function readOpenRouter() {
     try {
-      const response = await hubFetch(hubRequest("GET /api/openrouter"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-
-      openrouter = (await response.json()) as OpenRouterState;
+      openrouter = await hubJson<OpenRouterState>(
+        hubRequest("GET /api/openrouter")
+      );
     } catch (error) {
       openrouterError = `Could not read the OpenRouter connection — ${failureClause(error)}.`;
     }
@@ -106,11 +104,7 @@
 
   async function readJev() {
     try {
-      const response = await hubFetch(hubRequest("GET /api/jev"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      takeJev((await response.json()) as JevState);
+      takeJev(await hubJson<JevState>(hubRequest("GET /api/jev")));
     } catch (error) {
       jevError = `Could not read Jev's settings — ${failureClause(error)}.`;
     }
@@ -256,11 +250,9 @@
 
   async function readWatch() {
     try {
-      const response = await hubFetch(hubRequest("GET /api/fleet-watch"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      watch = (await response.json()) as FleetWatchSettings;
+      watch = await hubJson<FleetWatchSettings>(
+        hubRequest("GET /api/fleet-watch")
+      );
     } catch (error) {
       watchError = `Could not read fleet watch — ${failureClause(error)}.`;
     }
@@ -299,11 +291,9 @@
 
   async function readImage() {
     try {
-      const response = await hubFetch(hubRequest("GET /api/image-settings"));
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-      image = (await response.json()) as ImageSettings;
+      image = await hubJson<ImageSettings>(
+        hubRequest("GET /api/image-settings")
+      );
       imageShown = image;
     } catch (error) {
       imageUnread = imageSettingsWords.unread(failureClause(error));
