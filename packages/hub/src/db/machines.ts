@@ -1,4 +1,4 @@
-import { GO_WITH_MACHINE, MACHINE_MOVED } from "./owned-rows";
+import { GO_WITH_MACHINE, walkOwned } from "./owned-rows";
 /** Machines: each one's row, what its daemon reports, and re-keying and removing one. */
 
 import type {
@@ -753,29 +753,39 @@ export const machinesDb = (core: DbCore): MachinesDb => {
             moved[what] = (moved[what] ?? 0) + count;
           }
         };
-        moveMachineRow(tx, from, to, note);
-        for (const { table, column, rekey } of MACHINE_MOVED) {
-          const name = sql.identifier(table);
-          const by = sql.identifier(column);
-          const before = naming(tx, table, column, from);
-          tx.run(
-            sql`UPDATE OR IGNORE ${name} SET ${by} = ${to} WHERE ${by} = ${from}`
-          );
-          if (rekey === "keyed") {
-            tx.run(sql`DELETE FROM ${name} WHERE ${by} = ${from}`);
+        walkOwned(
+          "rekey",
+          {
+            agents: () => moveMachineRow(tx, from, to, note),
+            // A bucket's id leads with its machine's (`putUsageBuckets`), so a
+            // re-report from the new id lands on the bucket it moved to.
+            usage_buckets: () => {
+              note(
+                "usage_buckets",
+                naming(tx, "usage_buckets", "machine_id", from)
+              );
+              tx.run(
+                sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to}, id = ${to} || substr(id, ${from.length + 1}) WHERE machine_id = ${from} AND substr(id, 1, ${from.length + 1}) = ${`${from}:`}`
+              );
+              tx.run(
+                sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to} WHERE machine_id = ${from}`
+              );
+              tx.run(sql`DELETE FROM usage_buckets WHERE machine_id = ${from}`);
+            },
+          },
+          ({ table, column, rekey }) => {
+            const name = sql.identifier(table);
+            const by = sql.identifier(column);
+            const before = naming(tx, table, column, from);
+            tx.run(
+              sql`UPDATE OR IGNORE ${name} SET ${by} = ${to} WHERE ${by} = ${from}`
+            );
+            if (rekey === "keyed") {
+              tx.run(sql`DELETE FROM ${name} WHERE ${by} = ${from}`);
+            }
+            note(table, before);
           }
-          note(table, before);
-        }
-        // A bucket's id leads with its machine's (`putUsageBuckets`), so a
-        // re-report from the new id lands on the bucket it moved to.
-        note("usage_buckets", naming(tx, "usage_buckets", "machine_id", from));
-        tx.run(
-          sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to}, id = ${to} || substr(id, ${from.length + 1}) WHERE machine_id = ${from} AND substr(id, 1, ${from.length + 1}) = ${`${from}:`}`
         );
-        tx.run(
-          sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to} WHERE machine_id = ${from}`
-        );
-        tx.run(sql`DELETE FROM usage_buckets WHERE machine_id = ${from}`);
         return moved;
       }),
     removedMachines: () => db.select().from(removedMachines).all(),
