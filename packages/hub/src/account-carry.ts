@@ -69,7 +69,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
 
   /**
    * `instanceId` is placed on an account: whatever left it on none
-   * ({@link strandedStall}) is over.
+   * (`strandedStall`) is over.
    */
   const unstrand = (instanceId: string): void => {
     if (ctx.db.accounts.unstrand(instanceId)) {
@@ -101,7 +101,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    * monitor, a wake-up) keeps it: the move ends that work, and the session
    * is told on its new account what ended ({@link tellEndedByMove}). That is
    * the one rule for every move of a stopped session, whoever started it
-   * ({@link stoppedNow}): a person's pick (`moveByHand`), a person's or the
+   * (`stoppedNow`): a person's pick (`moveByHand`), a person's or the
    * limit's owed move carried at a look or at the refusal
    * (`takeUpOwedMove`), and the at-limit controller's own move (at the
    * refusal, at a look a held message or a reconnect asks for, at a reset:
@@ -182,7 +182,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    * A carried move's word on what it ended with `instanceId`'s process,
    * kept (db `move_endings`) for its next launch to tell
    * ({@link tellEndedByMove}); what the hub kept of its background tasks is
-   * the move's to tell now, never a cut's too ({@link tellCutTasks}).
+   * the move's to tell now, never a cut's too (`tellCutTasks`).
    */
   const keepEnded = (
     instanceId: string,
@@ -338,7 +338,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
 
   /**
    * The words a session reads of the background tasks its process took with
-   * it ({@link tellCutTasks}): what cut them, each task by its id, kind and
+   * it (`tellCutTasks`): what cut them, each task by its id, kind and
    * description with its output line ({@link endedTaskOutputWords}),
    * interrupted with its outcome unknown.
    */
@@ -453,7 +453,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    * share one conversation and disagree on its account are left out: their
    * data cannot be in both dirs. So is one whose row owes a move to another
    * account ({@link owedMoves}): the move carries it, behind this
-   * ack ({@link takeUpMovesOn}), and a machine refuses a carry of a
+   * ack (`takeUpMovesOn`), and a machine refuses a carry of a
    * conversation another carry is moving, so the sweep's would drop the
    * move (2026-10-21, a sleeping session moved while its machine was away).
    */
@@ -656,7 +656,7 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
    * `carrySessions`: "The caller makes sure no process of a session runs
    * while its data moves"). A process that owes a move goes at its turn's
    * end ({@link oweMoveOff}); one that owes none is put to sleep at rest,
-   * as a moved login's are ({@link sleepMovedFrom}). Then its rows there
+   * as a moved login's are (`sleepMovedFrom`). Then its rows there
    * name no account, as a removal's on a machine with nothing running do. A
    * machine away, or one whose sign-out fails, is asked again at the next
    * tick.
