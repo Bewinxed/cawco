@@ -8,9 +8,9 @@ import { folderSync, ownFolderSync } from "../layer";
 import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { keepStandInsListed } from "../stand-ins";
+import { ensureBoundary } from "./arming";
 import { decided, readDecisions, recordDecision } from "./decisions";
 import { attachedIn, commandsNow } from "./holding";
-import { ensureBoundary } from "./lifecycle";
 import { executors } from "./processes";
 import { HOST_FILES, HOST_GONE_STATUS } from "./protocol";
 import {
