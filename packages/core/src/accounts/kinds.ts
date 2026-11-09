@@ -26,12 +26,12 @@ export type AccountHue = (typeof ACCOUNT_HUES)[number];
 export type PlacementStrategy =
   "pinned" | "fill-first" | "spread" | "soonest-reset";
 
-export const PLACEMENT_STRATEGIES: readonly PlacementStrategy[] = [
+export const PLACEMENT_STRATEGIES = [
   "pinned",
   "fill-first",
   "spread",
   "soonest-reset",
-];
+] as const satisfies readonly PlacementStrategy[];
 
 /**
  * How a session's context is made small as it moves to another organization,
@@ -42,8 +42,8 @@ export const PLACEMENT_STRATEGIES: readonly PlacementStrategy[] = [
  */
 export type CompactMethod = "native" | "summary" | "whole";
 
-export const COMPACT_METHODS: readonly CompactMethod[] = [
+export const COMPACT_METHODS = [
   "native",
   "summary",
   "whole",
-];
+] as const satisfies readonly CompactMethod[];
