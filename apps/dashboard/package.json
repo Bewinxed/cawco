@@ -23,6 +23,7 @@
     "@atlaskit/pragmatic-drag-and-drop": "^4.0.0",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "^3.0.0",
     "@cawco/core": "workspace:*",
+    "@cawco/design-tokens": "workspace:*",
     "@cawco/icons": "workspace:*",
     "@dagrejs/dagre": "3.1.3",
     "@event-calendar/core": "5.16.0",
