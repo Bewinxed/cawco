@@ -65,7 +65,7 @@ import { listedPid, signalGroup } from "../../../packages/core/src/signal";
 import type {
   ArtifactList,
   Browsed,
-} from "../../../packages/hub/src/artifacts/service";
+} from "../../../packages/hub/src/artifacts/shapes";
 import { until } from "../../scratch-fleet";
 import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
