@@ -122,7 +122,7 @@ export interface BrowsersDeps {
     userId: string,
     ttlMs: number
   ) => import("@cawco/core/browser").BrowserRelay | null;
-  /** Brings an artifact to the front of its session's panel (server.ts `openPreview`). */
+  /** Brings an artifact to the front of its session's panel (artifact-pages.ts `openPreview`). */
   open: (artifact: ArtifactRow) => Promise<{ ok: boolean; error?: string }>;
   /** Sends every dashboard the fleet's browsers, whole (core `BrowserListFrame`). */
   publish: (frame: BrowserListFrame) => void;
