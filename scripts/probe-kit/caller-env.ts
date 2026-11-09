@@ -17,7 +17,7 @@
  * - Claude Code's, in a Claude session's shell: `CLAUDECODE`, every
  *   `CLAUDE_CODE_*` (its `CLAUDE_CODE_SHELL_PREFIX` would run each command of
  *   a Claude Code a spec starts in that session's workspace), and
- *   `CLAUDE_CONFIG_DIR`, the session's account, which core paths.ts
+ *   `CLAUDE_CONFIG_DIR`, the session's account, which core paths/claude.ts
  *   `claudeConfigDirs` reads as one of the machine's Claude dirs, its
  *   credentials included.
  *

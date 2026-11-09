@@ -1,6 +1,6 @@
 // The design system's class and style rules @shadcn/lint 0.2.3 held for the
 // dashboard under ESLint, moved to Golar with the options they ran with
-// (apps/dashboard/eslint.config.mjs at the move). Biome holds no-raw-colors
+// (its ESLint config at the move). Biome holds no-raw-colors
 // for classes (biome.jsonc); these are the ones Biome's rules cannot hold:
 //
 // - no-raw-svg-colors: no-raw-colors' other half, a colour written into an

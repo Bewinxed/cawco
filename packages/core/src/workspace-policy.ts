@@ -1113,7 +1113,7 @@ export const workspacePolicy = async (
       // marketplaces Claude Code runs the fleet's plugins from (without them
       // every hook of such a plugin failed, `python3: can't open file
       // '…/cawco-marketplaces/axiom-marketplace/plugins/axiom/hooks/…'`),
-      // pi's memory, the user layer's files (core paths.ts
+      // pi's memory, the user layer's files (core paths/fleet.ts
       // `fleetSyncedPaths`).
       ...fleetSyncedPaths(),
       ...(mac
