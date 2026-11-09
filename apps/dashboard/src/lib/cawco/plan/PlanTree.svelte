@@ -1,76 +1,3 @@
-<script lang="ts" module>
-  import {
-    type PlanStepStatus,
-    type SessionPlan,
-    todoGroups,
-  } from "@cawco/core/plan";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  /** One row of a plan's tree: a step or a to-do, its children under it. */
-  export interface PlanNode {
-    children: PlanNode[];
-    id: string;
-    status: PlanStepStatus;
-    text: string;
-  }
-
-  /**
-   * Rows written flat with a nesting depth (a plan's steps, a task file's
-   * to-dos), as the tree they are: each row hangs under the nearest row
-   * before it that stands one level up.
-   */
-  function treeOf(
-    rows: {
-      id: string;
-      depth: number;
-      status: PlanNode["status"];
-      text: string;
-    }[]
-  ): PlanNode[] {
-    const roots: PlanNode[] = [];
-    const open: { depth: number; node: PlanNode }[] = [];
-    for (const row of rows) {
-      const node: PlanNode = {
-        id: row.id,
-        status: row.status,
-        text: row.text,
-        children: [],
-      };
-      while (open.length > 0 && (open.at(-1)?.depth ?? 0) >= row.depth) {
-        open.pop();
-      }
-      const parent = open.at(-1);
-      (parent ? parent.node.children : roots).push(node);
-      open.push({ depth: row.depth, node });
-    }
-    return roots;
-  }
-
-  /** A plan's steps, as their tree. */
-  export const stepsTree = (plan: SessionPlan | undefined): PlanNode[] =>
-    treeOf(
-      (plan?.steps ?? []).map((step) => ({
-        id: step.id,
-        depth: step.depth,
-        status: step.status,
-        text: step.content,
-      }))
-    );
-
-  /**
-   * A task attempt's agreed to-dos, as their tree: ticked is completed. The
-   * offered ones are left out until agreed, as the plan's ring leaves them.
-   */
-  export const todosTree = (plan: SessionPlan | undefined): PlanNode[] =>
-    treeOf(
-      todoGroups(plan?.todos ?? []).agreed.map((todo) => ({
-        id: todo.id ?? todo.path,
-        depth: todo.depth,
-        status: todo.done ? ("completed" as const) : ("pending" as const),
-        text: todo.text,
-      }))
-    );
-</script>
-
 <script lang="ts">
   /**
    * A plan's rows as a tree on the app's nesting lines, each ticked as it
@@ -78,9 +5,11 @@
    * under way; rows that arrive or move reflow in place. The plan's panel
    * (PlanPane) and the board's peek draw a plan with it.
    */
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconTick } from "#lib/icons.js";
   import { branch, nestFrom } from "#lib/platform/motion/branch.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
+  import type { PlanNode } from "../plan";
 
   let { nodes }: { nodes: PlanNode[] } = $props();
 </script>

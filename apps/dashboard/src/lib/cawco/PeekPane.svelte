@@ -72,8 +72,8 @@
   import { conversationHref } from "./links";
   import OsMark from "./OsMark.svelte";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
-  import { planProgress } from "./plan/PlanPane.svelte";
-  import PlanTree, { stepsTree, todosTree } from "./plan/PlanTree.svelte";
+  import { planProgress, stepsTree, todosTree } from "./plan";
+  import PlanTree from "./plan/PlanTree.svelte";
   import RowFault from "./RowFault.svelte";
   import { refusals } from "./refusals.svelte";
   import SessionMark from "./SessionMark.svelte";
