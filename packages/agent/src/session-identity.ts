@@ -1,7 +1,6 @@
-import { refusalWords } from "@cawco/core/hub-refusal";
-import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { delegationHubUrl } from "./delegation";
 import { hubAnswer } from "./hub-away";
+import { hubClient, refusalText, unwrap } from "./hub-client";
 
 /**
  * The hub refused the credential an ACK carried (HTTP 401): it does not know
@@ -24,19 +23,21 @@ const NOT_ACKNOWLEDGED = "Session credential installation was not acknowledged";
 export const acknowledgeSessionCredential = async (
   credential: string
 ): Promise<void> => {
-  const response = await hubAnswer(
-    ...hubAt(
-      delegationHubUrl(),
-      hubRequest("POST /api/session-identities/ack", { body: {} }),
-      { headers: { Authorization: `Bearer ${credential}` } }
-    ),
-    15_000,
-    NOT_ACKNOWLEDGED
-  );
-  if (!response.ok) {
-    const said = `${NOT_ACKNOWLEDGED}: ${refusalWords(await response.text(), response.status)}`;
-    throw response.status === 401
+  const answer = await hubClient(delegationHubUrl(), (url, init) =>
+    hubAnswer(
+      url,
+      {
+        ...init,
+        headers: { ...init.headers, Authorization: `Bearer ${credential}` },
+      },
+      15_000,
+      NOT_ACKNOWLEDGED
+    )
+  ).api["session-identities"].ack.post({});
+  unwrap(answer, (refusal) => {
+    const said = `${NOT_ACKNOWLEDGED}: ${refusalText(refusal)}`;
+    return refusal.status === 401
       ? new CredentialUnknown(said)
       : new Error(said);
-  }
+  });
 };

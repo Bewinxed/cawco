@@ -7,6 +7,7 @@ import { END_TURN_META } from "@cawco/core/no-reply";
 import { CAWCO_HUB_PORT, mcpGatewayPort } from "@cawco/core/ports";
 import { unhandled } from "@cawco/core/unhandled";
 import { hubAnswer } from "./hub-away";
+import { hubClient, hubPath, unwrap } from "./hub-client";
 
 export const MCP_SERVER_NAME = "cawco";
 const WS_SCHEME = /^ws/u;
@@ -53,30 +54,17 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
  * ({@link hubAnswer}) rather than failing the start.
  */
 export async function delegationTools(instanceId?: string, lister?: "pi") {
-  const response = await hubAnswer(
-    ...hubAt(
-      harnessMcpUrl(""),
-      hubRequest("GET /api/delegation/tools", {
-        query: {
-          ...(instanceId ? { instanceId } : {}),
-          ...(lister ? { lister } : {}),
-        },
-      })
-    ),
-    5000,
-    "Could not discover CawCo tools"
-  );
-  if (!response.ok) {
-    throw new Error(`Could not discover CawCo tools: HTTP ${response.status}`);
-  }
-  return (
-    (await response.json()) as {
-      tools: {
-        name: string;
-        description: string;
-        inputSchema: Record<string, unknown>;
-      }[];
-    }
+  const answer = await hubClient(harnessMcpUrl(""), (url, init) =>
+    hubAnswer(url, init, 5000, "Could not discover CawCo tools")
+  ).api.delegation.tools.get({
+    query: {
+      ...(instanceId ? { instanceId } : {}),
+      ...(lister ? { lister } : {}),
+    },
+  });
+  return unwrap(
+    answer,
+    ({ status }) => new Error(`Could not discover CawCo tools: HTTP ${status}`)
   ).tools;
 }
 
@@ -109,10 +97,9 @@ export const OPEN_ITEMS_TOOL = "open_items";
  * after it: {@link callDelegationTool}'s, and CawCo's OpenCode plugin's,
  * which hands the open items' words to the model as they are.
  */
-export const TOOL_DOOR = hubRequest("POST /api/delegation/call/:instanceId", {
-  path: { instanceId: "" },
-  body: {},
-}).path;
+export const TOOL_DOOR = hubPath.api.delegation.call({ instanceId: "" })[
+  "~path"
+];
 
 export async function callDelegationTool(
   instanceId: string,
