@@ -30,7 +30,7 @@
 
 import { detach } from "@cawco/core/detach";
 import { taskLink } from "@cawco/core/references";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
@@ -775,7 +775,7 @@ export const phoneRequestRoutes = (jevTasks: JevTasks) =>
         return await jevTasks.phoneRequest(params.id, body.text, body.taskId);
       } catch (error) {
         if (error instanceof FolderRefusal) {
-          return status(error.status, error.message);
+          return refusal(error.status, "folder-refused", error.message);
         }
         return refusal(502, "jev-folder", words(error));
       }
