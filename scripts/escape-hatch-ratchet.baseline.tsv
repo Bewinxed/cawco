@@ -198,9 +198,9 @@ catch-drops-reason	empty	packages/agent/src/harnesses/opencode-session.ts	1
 catch-drops-reason	empty	packages/agent/src/harnesses/pi-runtime.ts	2
 catch-drops-reason	empty	packages/agent/src/preview-bridge.ts	2
 catch-drops-reason	empty	packages/agent/src/search/index.ts	2
+catch-drops-reason	empty	packages/agent/src/service-manager/install.ts	3
 catch-drops-reason	empty	packages/agent/src/session.ts	3
 catch-drops-reason	empty	packages/agent/src/sessiond-client.ts	2
-catch-drops-reason	empty	packages/cli/src/service.ts	3
 catch-drops-reason	empty	packages/hub/src/fleet-watch.ts	1
 catch-drops-reason	empty	packages/hub/src/project-stops.ts	1
 catch-drops-reason	empty	packages/hub/src/tailnet-door.ts	1
