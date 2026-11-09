@@ -15,8 +15,9 @@
 import { machineLabel } from "@cawco/core/machine-names";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { goto } from "$app/navigation";
-import { actOnRelay, cawco } from "../client.svelte";
+import { cawco } from "../client.svelte";
 import { connect } from "../connect/installs.svelte";
+import { actOnRelay, relayStore } from "../stores/relay.svelte";
 import type { FirstRunState } from "./FirstRun.svelte";
 import { home } from "./home-state.svelte";
 
@@ -55,7 +56,7 @@ function harnessOf(): FirstRunState["harness"] {
 
 /** The relay offered and answered (Set up, or Later), or set up and live. */
 function relayOf(): FirstRunState["relay"] {
-  const journey = cawco.relayJourney;
+  const journey = relayStore.relayJourney;
   if (journey?.done) {
     return "done";
   }

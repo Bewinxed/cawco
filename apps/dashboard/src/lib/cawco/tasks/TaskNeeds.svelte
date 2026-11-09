@@ -35,7 +35,6 @@
   } from "#lib/icons.js";
   import { failureWords as message } from "#lib/platform/hub-read.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
-  import { decideAction } from "../client.svelte";
   import { rowHref } from "../links";
   import {
     moveTask,
@@ -46,6 +45,7 @@
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
   import { referenceOf } from "../references";
+  import { decideAction } from "../stores/needs.svelte";
   import { actionsOf, asksOf } from "./needs.svelte";
 
   let {
