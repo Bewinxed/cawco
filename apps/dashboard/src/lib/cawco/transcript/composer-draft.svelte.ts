@@ -17,7 +17,7 @@ import { SvelteSet } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import type { DraftContent } from "../draft-store";
-import type { SendExtras } from "../stores/commands.svelte";
+import type { SendExtras } from "../send-store";
 import { uploadFile } from "./file-upload";
 
 /** A paste longer than this rides as a named attachment, not inline text. */

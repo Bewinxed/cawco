@@ -79,7 +79,7 @@
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
   import { keysChecked } from "../repeated-keys";
-  import type { SendExtras } from "../stores/commands.svelte";
+  import type { SendExtras } from "../send-store";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import DocThumb from "../transcript/DocThumb.svelte";
   import Shot from "../transcript/Shot.svelte";
