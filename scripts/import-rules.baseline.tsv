@@ -1,0 +1,100 @@
+# Written by the check that reads it (lib/ratchet.ts); never edited by hand.
+cycle	@cawco/agent	packages/agent/src/boundary.ts	1
+cycle	@cawco/agent	packages/agent/src/browser/media-forwarding.ts	1
+cycle	@cawco/agent	packages/agent/src/browser/runtime.ts	1
+cycle	@cawco/agent	packages/agent/src/fleet-harness-set.ts	1
+cycle	@cawco/agent	packages/agent/src/fleet-place-set.ts	1
+cycle	@cawco/agent	packages/agent/src/forges/forge.ts	3
+cycle	@cawco/agent	packages/agent/src/forges/gitea.ts	1
+cycle	@cawco/agent	packages/agent/src/forges/github.ts	1
+cycle	@cawco/agent	packages/agent/src/forges/gitlab.ts	1
+cycle	@cawco/agent	packages/agent/src/host-lfs.ts	1
+cycle	@cawco/agent	packages/agent/src/hub-command.ts	1
+cycle	@cawco/agent	packages/agent/src/hub-git.ts	2
+cycle	@cawco/agent	packages/agent/src/move.ts	2
+cycle	@cawco/agent	packages/agent/src/place-repo.ts	1
+cycle	@cawco/agent	packages/agent/src/stage-host/canvas/runtime.ts	1
+cycle	@cawco/agent	packages/agent/src/stage-host/canvas/stage.ts	1
+cycle	@cawco/agent	packages/agent/src/workspace.ts	4
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/client.svelte.ts	4
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/draft-store.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/graph/WholeCard.svelte	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/plan/PlanPane.svelte	2
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/project-end.svelte.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/projects.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/reference-open.svelte.ts	2
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/reference-things.svelte.ts	2
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/send-store.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/stop-work.svelte.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/transcript/Delegate.svelte	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/transcript/InlineTranscript.svelte	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/transcript/open-at.svelte.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/transcript/rows.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/working-set.svelte.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/workspace/workspace.svelte.ts	4
+cycle	@cawco/dashboard	apps/dashboard/src/lib/components/ui/dialog/dialog-content.svelte	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/components/ui/dialog/index.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/components/ui/machine-row/index.ts	1
+cycle	@cawco/dashboard	apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte	1
+cycle	@cawco/hub	packages/hub/src/admission.ts	1
+cycle	@cawco/hub	packages/hub/src/artifacts/canvas.ts	1
+cycle	@cawco/hub	packages/hub/src/artifacts/service.ts	3
+cycle	@cawco/hub	packages/hub/src/artifacts/sync.ts	1
+cycle	@cawco/hub	packages/hub/src/at-limit.ts	2
+cycle	@cawco/hub	packages/hub/src/caw-own.ts	1
+cycle	@cawco/hub	packages/hub/src/caw.ts	6
+cycle	@cawco/hub	packages/hub/src/connections.ts	1
+cycle	@cawco/hub	packages/hub/src/design-offers.ts	1
+cycle	@cawco/hub	packages/hub/src/design-system.ts	1
+cycle	@cawco/hub	packages/hub/src/design-verify.ts	5
+cycle	@cawco/hub	packages/hub/src/dispatch.ts	4
+cycle	@cawco/hub	packages/hub/src/external-items.ts	2
+cycle	@cawco/hub	packages/hub/src/find-tool.ts	1
+cycle	@cawco/hub	packages/hub/src/forecast.ts	1
+cycle	@cawco/hub	packages/hub/src/github.ts	1
+cycle	@cawco/hub	packages/hub/src/handed-inputs.ts	1
+cycle	@cawco/hub	packages/hub/src/hub-tools.ts	3
+cycle	@cawco/hub	packages/hub/src/ingress.ts	8
+cycle	@cawco/hub	packages/hub/src/installs.ts	1
+cycle	@cawco/hub	packages/hub/src/jev-tasks.ts	4
+cycle	@cawco/hub	packages/hub/src/join.ts	1
+cycle	@cawco/hub	packages/hub/src/memory.ts	3
+cycle	@cawco/hub	packages/hub/src/placement.ts	1
+cycle	@cawco/hub	packages/hub/src/plans.ts	1
+cycle	@cawco/hub	packages/hub/src/presenters/hub.ts	1
+cycle	@cawco/hub	packages/hub/src/presenters/project.ts	3
+cycle	@cawco/hub	packages/hub/src/presenters/tasks.ts	2
+cycle	@cawco/hub	packages/hub/src/push.ts	3
+cycle	@cawco/hub	packages/hub/src/rebalance.ts	2
+cycle	@cawco/hub	packages/hub/src/relay.ts	4
+cycle	@cawco/hub	packages/hub/src/roles.ts	1
+cycle	@cawco/hub	packages/hub/src/routines.ts	8
+cycle	@cawco/hub	packages/hub/src/settling.ts	1
+cycle	@cawco/hub	packages/hub/src/task-tools.ts	5
+cycle	@cawco/hub	packages/hub/src/tasks.ts	1
+cycle	@cawco/hub	packages/hub/src/views.ts	3
+cycle	@cawco/hub	packages/hub/src/work-items.ts	2
+cycle	@cawco/preview	packages/preview/src/overlay/ink.ts	1
+cycle	@cawco/preview	packages/preview/src/overlay/pins.ts	1
+cycle	cawco	scripts/probe-kit/anim.ts	1
+cycle	cawco	scripts/probe-kit/kit.ts	3
+kit-reaches-up		apps/dashboard/src/lib/components/ui/context-menu/context-menu-copy-item.svelte	1
+kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyOnAxis.svelte	1
+kit-reaches-up		apps/dashboard/src/lib/components/ui/empty/EmptyStarts.svelte	2
+kit-reaches-up		apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte	1
+kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-card-tab-frame.svelte	1
+kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte	1
+kit-reaches-up		apps/dashboard/src/lib/components/ui/hang-card/hang-outline.ts	2
+kit-reaches-up		apps/dashboard/src/lib/components/ui/markdown/markdown.svelte	1
+reaches-in		apps/cawrier/src/index.ts	2
+reaches-in		apps/cawrier/src/pairing.ts	1
+reaches-in		apps/cawrier/src/storekit.ts	1
+reaches-in		apps/dashboard/scripts/build-tokens-apple.ts	2
+reaches-in		apps/dashboard/scripts/build-tokens.ts	3
+reaches-in		apps/dashboard/scripts/role-order.ts	1
+reaches-in		apps/dashboard/scripts/tab-icon-art.ts	1
+reaches-in		apps/dashboard/scripts/theme-ladder.ts	1
+reaches-in		apps/dashboard/scripts/token-groups.ts	1
+reaches-in		packages/cli/src/cli.ts	1
