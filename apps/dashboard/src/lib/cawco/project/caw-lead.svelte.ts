@@ -40,6 +40,7 @@ import {
 import type { StarterPlace } from "@cawco/core/starters";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import { untrack } from "svelte";
+import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { msOf } from "#lib/platform/motion/time.js";
@@ -270,7 +271,7 @@ export class CawLead {
    * keys go to the draft bar's act (Set up, or Answer Caw), in view.
    */
   async reviewDraft(): Promise<void> {
-    if (matchMedia("(width < 640px)").matches) {
+    if (matchMedia(PHONE_QUERY).matches) {
       this.open = false;
     }
     await new Promise((done) => requestAnimationFrame(done));
