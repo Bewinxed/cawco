@@ -40,7 +40,8 @@ import {
   fifoOf,
   generationDir,
   type Held,
-  keepers,
+  heldProc,
+  procsHeld,
   readHeld,
   readPlace,
   readRetiring,
@@ -68,7 +69,7 @@ export const settleGonePlace = async (ref: WorkspaceRef): Promise<boolean> => {
   if (folder?.isDirectory()) {
     return false;
   }
-  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const procs = (await procsHeld()).filter((proc) => proc.alive);
   if (
     procs.some((proc) => isBoundaryOf(proc.procId, ref.id)) ||
     attachedIn(ref.id, ref.path, procs, await commandsNow())
@@ -115,7 +116,7 @@ export const stopBoundary = async (
   if (place && (await isBwrap(place.outer))) {
     // The host alone, never its tree as the keeper signals one: the stop is
     // the host's to make, its sandbox's end then the one it asked for.
-    const host = await keepers.holding(procId);
+    const host = await heldProc(procId);
     if (host) {
       signalPid(listedPid(host.pid), "SIGTERM");
     }
@@ -126,7 +127,7 @@ export const stopBoundary = async (
       await goneWithin(procId, STOP_TIMEOUT_MS);
     }
   }
-  const left = await keepers.holding(procId);
+  const left = await heldProc(procId);
   if (left) {
     await left.client.signal(procId, "SIGKILL");
   }
@@ -173,7 +174,7 @@ const signalHeld = async (
   owned: (procId: string) => boolean
 ): Promise<void> => {
   await Promise.all(
-    (await keepers.held())
+    (await procsHeld())
       .filter((proc) => proc.alive && owned(proc.procId))
       .map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
   );
@@ -209,7 +210,7 @@ export const endUsers = async (
   }
   const users = async () => {
     const commands = await commandsNow();
-    const procs = (await keepers.held()).filter((proc) => proc.alive);
+    const procs = (await procsHeld()).filter((proc) => proc.alive);
     const clis = attachedProcs(ref.id, ref.path, procs, commands);
     const execs = executors(commands.lines, ref.id);
     return {
