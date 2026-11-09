@@ -71,13 +71,8 @@ import { designShaped } from "./design-offers";
 import { designOnBase, ownLandings, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
 import { hubActor, type Tasks } from "./tasks";
-import {
-  isLive,
-  type Parent,
-  verifierParent,
-  type WorkItemRequest,
-  type WorkItemStart,
-} from "./work-items";
+import { isLive, type Parent, verifierParent } from "./work-item-state";
+import type { WorkItemRequest, WorkItemStart } from "./work-items";
 
 /** What the builder's chip says while a verifier works. */
 const CHECKING = "being checked against the design system";
