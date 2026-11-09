@@ -50,6 +50,7 @@ import {
 } from "@cawco/preview/proxy";
 import type { ServerWebSocket } from "bun";
 import { Elysia } from "elysia";
+import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import { answered, BrowserRefusal } from "./browsers";
 import type { ArtifactRow } from "./db/artifacts";
@@ -547,10 +548,11 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       );
     } catch (error) {
       forgetListener(place.machineId, at);
-      return new Response(
-        `${deps.machineName(place.machineId)}'s browser listener didn't answer the hub: ${causeOf(error)}`,
-        { status: 502 }
-      );
+      return problemResponse({
+        status: 502,
+        code: "browser-listener-didnt-answer",
+        detail: `${deps.machineName(place.machineId)}'s browser listener didn't answer the hub: ${causeOf(error)}`,
+      });
     }
     // neko no longer knows the session (its container was made again): the
     // viewer's next request is given a new one.
