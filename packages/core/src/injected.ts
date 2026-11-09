@@ -808,7 +808,7 @@ const namedBy =
   };
 
 /** Every notice CawCo sends a session on the artifact origin, by kind. */
-export type ArtifactNoticeKind =
+type ArtifactNoticeKind =
   "responses" | "comments" | "errors" | "saves" | "handed";
 
 /** One artifact notice read back: what it is, the artifact it names, and the words its row says before that name. */
