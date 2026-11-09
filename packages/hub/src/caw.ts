@@ -563,7 +563,7 @@ export interface CawDeps {
     name: (machineId: string) => string;
     online: () => string[];
   };
-  /** A project note placed in a conversation's transcript as it is written (server.ts `noteProject`). */
+  /** A project note placed in a conversation's transcript as it is written (session-notes.ts `noteProject`). */
   readonly noted: (
     instanceId: string,
     note: { at: number; id: string; note: ProjectNote }
@@ -746,7 +746,7 @@ export const createCaw = ({
    * it, its routine's, the project's in effect (its own, its area's, the
    * fleet's: db `inEffect`). Undefined: none is set,
    * and the start takes the mode the person last chose for its harness on
-   * that machine (server.ts `settleMode`).
+   * that machine (launches.ts `settleMode`).
    */
   const modeFor = (
     project: ReturnType<typeof projectOf>,

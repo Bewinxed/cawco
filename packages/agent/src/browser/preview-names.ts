@@ -1,7 +1,7 @@
 /**
  * The hub's preview names as a browser container must resolve them, so a
  * session's browser opens what `artifact_browse` hands it (hub
- * server.ts `browseAt`). A container's loopback is its own: a name this
+ * preview-browse.ts `browseAt`). A container's loopback is its own: a name this
  * machine resolves to its loopback (a `localtest.me` name, a hosts entry, a
  * proxy on the machine) reaches nothing in there. Those names are mapped to
  * the machine as the container sees it, by Chromium's own resolver ("MAP
