@@ -32,7 +32,7 @@
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
-  import { cawco } from "../../client.svelte";
+
   import { adoptHook, peekHook, pushHook } from "../../fleet";
   import { causeOf } from "../../fleet-faults";
   import HookTester from "../../HookTester.svelte";
@@ -49,6 +49,7 @@
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
   import { boardStore, type Machine } from "../../stores/board.svelte";
+  import { projectsStore } from "../../stores/projects.svelte";
   import Choice from "../Choice.svelte";
   import { deleteHook } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
@@ -266,7 +267,7 @@
     if (!scoped) {
       return boardStore.machines;
     }
-    const project = cawco.projects.find(
+    const project = projectsStore.projects.find(
       (candidate) => candidate.id === draft.projectId
     );
     const on = new Set(project?.places.map((place) => place.machineId) ?? []);
@@ -759,7 +760,7 @@
         onpick={setProject}
         options={[
           { value: "", label: "Every machine in the fleet" },
-          ...cawco.projects.map((project) => ({
+          ...projectsStore.projects.map((project) => ({
             value: project.id,
             label: project.name,
           })),
