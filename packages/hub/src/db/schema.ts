@@ -139,6 +139,7 @@ import {
 import { z } from "zod";
 import { hubSecrets, openOrNull } from "../secret-box";
 import { storedJson } from "../stored-json";
+import { machineColumn, projectColumn, sessionColumn } from "./owner-columns";
 import {
   AuthorizationServerMetadataSchema,
   ConnectionSecretSchema,
@@ -174,7 +175,7 @@ const stampedNow = (column: string) =>
     .$defaultFn(() => new Date());
 /** The project a row is of, deleted with it. */
 const projectKey = () =>
-  text("project_id")
+  projectColumn("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" });
 
@@ -192,7 +193,9 @@ const fleetRowArea = () =>
  * `unbound`), never brought back bound to nothing.
  */
 const fleetRowProject = () =>
-  text("project_id").references(() => projects.id, { onDelete: "cascade" });
+  projectColumn("project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  });
 
 /** A row that goes with its area: deleted when the area is. */
 const areaKey = () =>
@@ -252,7 +255,7 @@ export const agents = sqliteTable("agents", {
   machineCapabilities: storedJson(MachineCapabilitiesSchema)(
     "machine_capabilities"
   ),
-  machineId: text("machine_id").primaryKey(),
+  machineId: machineColumn("machine_id").primaryKey(),
   hostname: text("hostname").notNull(),
   /**
    * The machine's home folder, absolute, as its daemon reported at register.
@@ -329,7 +332,7 @@ export const agents = sqliteTable("agents", {
 export const agentTools = sqliteTable(
   "agent_tools",
   {
-    machineId: text("machine_id")
+    machineId: machineColumn("machine_id")
       .notNull()
       .references(() => agents.machineId, { onDelete: "cascade" }),
     toolId: text("tool_id").notNull(),
@@ -353,7 +356,7 @@ export const agentTools = sqliteTable(
 export const agentHarnesses = sqliteTable(
   "agent_harnesses",
   {
-    machineId: text("machine_id")
+    machineId: machineColumn("machine_id")
       .notNull()
       .references(() => agents.machineId, { onDelete: "cascade" }),
     harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
@@ -371,7 +374,7 @@ export const agentHarnesses = sqliteTable(
 export const chosenModes = sqliteTable(
   "chosen_modes",
   {
-    machineId: text("machine_id").notNull(),
+    machineId: machineColumn("machine_id").notNull(),
     harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
     permissionMode: text("permission_mode").$type<PermissionMode>().notNull(),
     chosenAt: timestamp("chosen_at").notNull(),
@@ -386,7 +389,7 @@ export const chosenModes = sqliteTable(
  * them say it was. A register under its id takes it back off the list.
  */
 export const removedMachines = sqliteTable("removed_machines", {
-  machineId: text("machine_id").primaryKey(),
+  machineId: machineColumn("machine_id").primaryKey(),
   hostname: text("hostname").notNull(),
   removedAt: timestamp("removed_at").notNull(),
 });
@@ -430,7 +433,7 @@ export const sshMachines = sqliteTable(
      * `endStale`).
      */
     boxSession: text("box_session"),
-    machineId: text("machine_id"),
+    machineId: machineColumn("machine_id"),
     /**
      * The machine key the last add wrote to the machine (ssh-tunnels.ts
      * `admit`), sealed, until the machine proves it under the id it
@@ -503,7 +506,7 @@ export const projects = sqliteTable("projects", {
    * attempts the dispatcher starts on its own report to it. Null: no session
    * yet, and nothing is dispatched without someone asking.
    */
-  conversationInstanceId: text("conversation_instance_id"),
+  conversationInstanceId: sessionColumn("conversation_instance_id"),
   /**
    * Whether the project's events reach a conversation: on, the hub sends
    * each to its conversation, starting one when none runs (caw.ts). On for
@@ -663,13 +666,13 @@ export type Tracker = import("@cawco/core/trackers").Tracker;
 export const queuedTaskStarts = sqliteTable(
   "queued_task_starts",
   {
-    projectId: text("project_id").notNull(),
+    projectId: projectColumn("project_id").notNull(),
     /** The task, `tsk-12`. */
     taskId: text("task_id").notNull(),
     /** The stage whose hook asked for it. */
     stage: text("stage").notNull(),
     /** The session that moved the task in, which takes the report; null: the project's conversation. */
-    parentInstanceId: text("parent_instance_id"),
+    parentInstanceId: sessionColumn("parent_instance_id"),
     /**
      * Why it waits: `cap`, the project runs `max_attempts` already; `owns`,
      * a live work item owns files this attempt's task owns too.
@@ -757,7 +760,7 @@ export type TaskEdgeKind = "waits_on";
 export const projectTaskEdges = sqliteTable(
   "project_task_edges",
   {
-    projectId: text("project_id").notNull(),
+    projectId: projectColumn("project_id").notNull(),
     /** The task's file: its index row's key with `projectId`. */
     path: text("path").notNull(),
     kind: text("kind").$type<TaskEdgeKind>().notNull(),
@@ -785,7 +788,7 @@ export const projectTaskEdges = sqliteTable(
 export const projectTaskLabels = sqliteTable(
   "project_task_labels",
   {
-    projectId: text("project_id").notNull(),
+    projectId: projectColumn("project_id").notNull(),
     path: text("path").notNull(),
     label: text("label").notNull(),
   },
@@ -806,7 +809,7 @@ export const projectTaskLabels = sqliteTable(
 export const projectTaskFields = sqliteTable(
   "project_task_fields",
   {
-    projectId: text("project_id").notNull(),
+    projectId: projectColumn("project_id").notNull(),
     path: text("path").notNull(),
     key: text("key").notNull(),
     value: text("value").notNull(),
@@ -864,7 +867,7 @@ export const projectPlaces = sqliteTable(
     id: text("id").primaryKey(),
     projectId: projectKey(),
     /** Not a reference: a machine's places go with it in `deleteMachine`. */
-    machineId: text("machine_id").notNull(),
+    machineId: machineColumn("machine_id").notNull(),
     /** Absolute on its machine; the hub's own folder (kind `hub`) is relative to the hub's data. */
     path: text("path").$type<PlacePath>().notNull(),
     kind: text("kind").$type<PlaceKind>().notNull(),
@@ -938,7 +941,7 @@ export const projectRepositories = sqliteTable(
   {
     projectId: projectKey(),
     /** Not a reference: a machine's repositories go with it in `deleteMachine`. */
-    machineId: text("machine_id").notNull(),
+    machineId: machineColumn("machine_id").notNull(),
     path: text("path").$type<MachinePath>().notNull(),
     recordedAt: stampedNow("recorded_at"),
   },
@@ -1023,9 +1026,9 @@ export const instances = sqliteTable("instances", {
    * The machine it runs on. Not a foreign key: a removed machine's sessions
    * stay, `machineRemoved`, under its id, and come back if it rejoins.
    */
-  machineId: text("machine_id").notNull(),
+  machineId: machineColumn("machine_id").notNull(),
   /** Its project; a deleted project's sessions outlive it, just not as its. */
-  projectId: text("project_id").references(() => projects.id, {
+  projectId: projectColumn("project_id").references(() => projects.id, {
     onDelete: "set null",
   }),
   /** SDK session id, absent until the first init frame arrives. */
@@ -1050,12 +1053,12 @@ export const instances = sqliteTable("instances", {
    * The session this one was forked from, when it was: it reads that
    * session's cache, so it never moves to another account on its own.
    */
-  forkedFrom: text("forked_from"),
+  forkedFrom: sessionColumn("forked_from"),
   /**
    * The session that started this one (`delegate`, `start_session`): nested under it in every rail. Null on a session
    * a person started. Whether it is delegated work is {@link workItemId}'s.
    */
-  parentInstanceId: text("parent_instance_id"),
+  parentInstanceId: sessionColumn("parent_instance_id"),
   /**
    * Who started it (core `SessionOrigin`), stamped once as its row opens
    * from who asked for the start, never from the start's payload: `person`,
@@ -1196,7 +1199,7 @@ export const instances = sqliteTable("instances", {
    */
   delegateType: text("delegate_type"),
   /** The project whose catalog `delegateType` came from; null: the fleet's. */
-  delegateTypeProject: text("delegate_type_project"),
+  delegateTypeProject: projectColumn("delegate_type_project"),
   /**
    * Started clean (core `SpawnPayload.clean`): written by its first spawn and
    * never after, and every spawn of the row goes clean (launches.ts `bounded`).
@@ -1246,12 +1249,12 @@ export const instances = sqliteTable("instances", {
    * `retireContinued`): this one never runs again (core `relaunchOf`
    * refuses it), and what is sent to it goes there. Null on every other.
    */
-  continuedInto: text("continued_into"),
+  continuedInto: sessionColumn("continued_into"),
 });
 
 /** Only hashes reach disk; installing a replacement does not revoke a live credential before ACK. */
 export const sessionIdentities = sqliteTable("session_identities", {
-  instanceId: text("instance_id").primaryKey(),
+  instanceId: sessionColumn("instance_id").primaryKey(),
   credentialHash: text("credential_hash").unique(),
   pendingHash: text("pending_hash").unique(),
   installedAt: timestamp("installed_at"),
@@ -1274,7 +1277,7 @@ export const mcpToolListings = sqliteTable("mcp_tool_listings", {
 export const completedTurns = sqliteTable(
   "completed_turns",
   {
-    instanceId: text("instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
     resultId: text("result_id").notNull(),
     completedAt: text("completed_at"),
     adoptedWithoutReport: integer("adopted_without_report", {
@@ -1299,7 +1302,7 @@ export type WorkspaceState = "active" | "held" | "archived";
 /** Unfiled creates owned by the hub until filed, or acknowledged discarded by their machine. */
 export const workspaceCreates = sqliteTable("workspace_creates", {
   id: text("id").primaryKey(),
-  machineId: text("machine_id").notNull(),
+  machineId: machineColumn("machine_id").notNull(),
 });
 
 /**
@@ -1312,7 +1315,7 @@ export const workspaceCreates = sqliteTable("workspace_creates", {
  */
 export const workspaces = sqliteTable("workspaces", {
   id: text("id").primaryKey(),
-  machineId: text("machine_id").notNull(),
+  machineId: machineColumn("machine_id").notNull(),
   /** The folder the workspace was made from: a repository's root, or any folder (agent layer.ts). */
   repoRoot: text("repo_root").$type<MachinePath>().notNull(),
   /**
@@ -1350,7 +1353,7 @@ export const workspaces = sqliteTable("workspaces", {
    * cut before this was recorded.
    */
   tmp: text("tmp"),
-  createdByInstanceId: text("created_by_instance_id").notNull(),
+  createdByInstanceId: sessionColumn("created_by_instance_id").notNull(),
   /**
    * The workspace whose landing gate step this one runs on a machine other
    * than that one's (the iOS build on a Mac): a gate workspace, cut there the
@@ -1471,9 +1474,9 @@ export const workItems = sqliteTable(
       .notNull()
       .references(() => workspaces.id),
     /** The session that delegated it, and that its reports go to. */
-    parentInstanceId: text("parent_instance_id").notNull(),
+    parentInstanceId: sessionColumn("parent_instance_id").notNull(),
     /** Its one session. */
-    instanceId: text("instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
     brief: text("brief").notNull(),
     title: text("title").notNull(),
     /** The delegate type it was asked for by name, if any. */
@@ -1488,7 +1491,7 @@ export const workItems = sqliteTable(
      * Kept on the item so a task's attempts, and where its outputs go, are
      * found by the item alone, whatever becomes of its session.
      */
-    projectId: text("project_id"),
+    projectId: projectColumn("project_id"),
     /**
      * Whose work it is (Caw on / Caw off): `you` when it began with
      * the person's words, whoever carries it out (a session's ask, an attempt
@@ -1735,11 +1738,11 @@ export const treeStops = sqliteTable(
   "tree_stops",
   {
     /** The session this row stops. */
-    instanceId: text("instance_id").primaryKey(),
+    instanceId: sessionColumn("instance_id").primaryKey(),
     /** The session the stop was asked of: the top of the walk. */
-    rootId: text("root_id").notNull(),
+    rootId: sessionColumn("root_id").notNull(),
     /** The session above it in the walk, whose end waits on this one's; null for the root. */
-    parentId: text("parent_id"),
+    parentId: sessionColumn("parent_id"),
     /** Who asked for the stop (core `EndedBy`). */
     by: storedJson(EndedBySchema)("by").notNull(),
     askedAt: timestamp("asked_at").notNull(),
@@ -1761,7 +1764,7 @@ export const treeStops = sqliteTable(
 export const queuedWorkItems = sqliteTable("queued_work_items", {
   /** The id its item takes when it starts (`queuedAs.id`). */
   id: text("id").primaryKey(),
-  parentInstanceId: text("parent_instance_id").notNull(),
+  parentInstanceId: sessionColumn("parent_instance_id").notNull(),
   /**
    * The request as `delegate` made it (work-items.ts `WorkItemRequest`),
    * read whole; what the queue reads of it is its own columns: the task it
@@ -1769,13 +1772,13 @@ export const queuedWorkItems = sqliteTable("queued_work_items", {
    */
   request: storedJson(z.unknown())("request").notNull(),
   /** The project of the task it starts (`task.projectId`); null for no task. */
-  projectId: text("project_id").references(() => projects.id, {
+  projectId: projectColumn("project_id").references(() => projects.id, {
     onDelete: "cascade",
   }),
   /** The task it starts (`task.id`), `tsk-…`. */
   taskId: text("task_id"),
   /** The session id it stands under while it waits (`queuedAs.instanceId`): minted, no row yet. */
-  queuedInstanceId: text("queued_instance_id").notNull(),
+  queuedInstanceId: sessionColumn("queued_instance_id").notNull(),
   title: text("title").notNull(),
   queuedAt: stampedNow("queued_at"),
 });
@@ -1819,8 +1822,8 @@ export const delegateEvents = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     /** The delegate the traffic is about — never the parent, on any of the kinds. */
-    instanceId: text("instance_id").notNull(),
-    parentInstanceId: text("parent_instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
+    parentInstanceId: sessionColumn("parent_instance_id").notNull(),
     kind: text("kind").$type<DelegateEventKind>().notNull(),
     /** The permission request an ask and its answer share. Null on a report. */
     requestId: text("request_id"),
@@ -1858,7 +1861,7 @@ export const sentMessages = sqliteTable(
     /** The send's own uuid (`SentMessage.uuid`), the id it keeps everywhere. */
     uuid: text("uuid").primaryKey(),
     /** The session it went to. */
-    instanceId: text("instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
     acceptedAt: timestamp("accepted_at").notNull(),
     /** When its reader read it (`readSend`). Null until then. */
     readAt: timestamp("read_at"),
@@ -2269,7 +2272,7 @@ export const fleetMemoryDocTypes = sqliteTable(
 export const memoryBriefings = sqliteTable(
   "memory_briefings",
   {
-    instanceId: text("instance_id")
+    instanceId: sessionColumn("instance_id")
       .notNull()
       .references(() => instances.id, { onDelete: "cascade" }),
     path: text("path")
@@ -2344,7 +2347,7 @@ export const usageBuckets = sqliteTable(
   {
     /** `${machineId}:${harness}:${sessionId}:${model}:${start}` */
     id: text("id").primaryKey(),
-    machineId: text("machine_id").notNull(),
+    machineId: machineColumn("machine_id").notNull(),
     harness: text("harness").$type<"claude" | "opencode">().notNull(),
     start: integer("start").notNull(),
     spanMs: integer("span_ms").notNull().default(HOUR_MS),
@@ -2381,7 +2384,7 @@ export const usageBuckets = sqliteTable(
  * ({@link accountReadings}).
  */
 export const usageLimits = sqliteTable("usage_limits", {
-  machineId: text("machine_id").primaryKey(),
+  machineId: machineColumn("machine_id").primaryKey(),
   /** The OpenCode Go plan's windows; null on a machine with no Go key. */
   openCodeGo: storedJson(OpenCodeGoLimitsSchema)("open_code_go"),
   fetchedAt: stampedNow("fetched_at"),
@@ -2466,7 +2469,7 @@ export const accountLeaves = sqliteTable(
   "account_leaves",
   {
     accountId: text("account_id").notNull(),
-    machineId: text("machine_id").notNull(),
+    machineId: machineColumn("machine_id").notNull(),
     /** The removed account's provider: which harness signs it out. */
     provider: text("provider").$type<AccountProvider>().notNull(),
     since: timestamp("since").notNull(),
@@ -2482,7 +2485,7 @@ export const accountLeaves = sqliteTable(
  * removed one has no row left to name it by.
  */
 export const strandedSessions = sqliteTable("stranded_sessions", {
-  instanceId: text("instance_id")
+  instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   accountName: text("account_name").notNull(),
@@ -2497,7 +2500,7 @@ export const accountSignins = sqliteTable(
     accountId: text("account_id")
       .notNull()
       .references(() => accounts.id, { onDelete: "cascade" }),
-    machineId: text("machine_id").notNull(),
+    machineId: machineColumn("machine_id").notNull(),
     state: text("state").$type<SigninState>().notNull(),
     /** When a credential from one of the machine's own stores was moved into this account there; null for a sign-in made in CawCo. */
     movedAt: timestamp("moved_at"),
@@ -2520,7 +2523,7 @@ export const accountSignins = sqliteTable(
 export const loginMoves = sqliteTable(
   "login_moves",
   {
-    machineId: text("machine_id").notNull(),
+    machineId: machineColumn("machine_id").notNull(),
     /** `claude` (`~/.claude`), `pi` or `opencode` (their own `auth.json`). */
     store: text("store").$type<HomeStore>().notNull(),
     /** The provider's id in the store it leaves (OpenCode's `openai` for ChatGPT). */
@@ -2548,10 +2551,10 @@ export const loginMoves = sqliteTable(
  * is gone. Kept here so a hub restart still puts them to sleep.
  */
 export const movedFromSessions = sqliteTable("moved_from_sessions", {
-  instanceId: text("instance_id")
+  instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
-  machineId: text("machine_id").notNull(),
+  machineId: machineColumn("machine_id").notNull(),
 });
 
 /** Each provider's routing (core `ProviderRouting`); a provider with no row uses the defaults. */
@@ -2674,7 +2677,7 @@ export const accountBench = sqliteTable(
  * on until a person or its parent writes; null while it is carried on.
  */
 export const limitHolds = sqliteTable("limit_holds", {
-  instanceId: text("instance_id").primaryKey(),
+  instanceId: sessionColumn("instance_id").primaryKey(),
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
   until: timestamp("until"),
@@ -2694,7 +2697,7 @@ export const limitHolds = sqliteTable("limit_holds", {
  * machine's own sign-in.
  */
 export const limitStops = sqliteTable("limit_stops", {
-  instanceId: text("instance_id").primaryKey(),
+  instanceId: sessionColumn("instance_id").primaryKey(),
   accountId: text("account_id"),
   at: timestamp("at").notNull(),
 });
@@ -2705,7 +2708,7 @@ export const limitStops = sqliteTable("limit_stops", {
  * `tellEndedByMove`, at its next launch): a hub restart in between keeps it.
  */
 export const moveEndings = sqliteTable("move_endings", {
-  instanceId: text("instance_id")
+  instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   ended: storedJson(MoveEndedSchema)("ended").notNull(),
@@ -2723,7 +2726,7 @@ export const moveEndings = sqliteTable("move_endings", {
 export const sessionTasks = sqliteTable(
   "session_tasks",
   {
-    instanceId: text("instance_id")
+    instanceId: sessionColumn("instance_id")
       .notNull()
       .references(() => instances.id, { onDelete: "cascade" }),
     taskId: text("task_id").notNull(),
@@ -2747,7 +2750,7 @@ export const sessionTasks = sqliteTable(
  * newer move, or with the session's row.
  */
 export const owedMoves = sqliteTable("owed_moves", {
-  instanceId: text("instance_id")
+  instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   toAccountId: text("to_account_id").references(() => accounts.id, {
@@ -2776,7 +2779,7 @@ export const owedMoves = sqliteTable("owed_moves", {
  * Kept here so a hub restart carries it on from where its sends stand.
  */
 export const limitCompactions = sqliteTable("limit_compactions", {
-  instanceId: text("instance_id").primaryKey(),
+  instanceId: sessionColumn("instance_id").primaryKey(),
   /** `carrying`: its carry-on answers the turn its limit refused, before it files anything. */
   stage: text("stage").$type<"carrying" | "filing" | "compacting">().notNull(),
   /**
@@ -2823,7 +2826,7 @@ export const limitCompactions = sqliteTable("limit_compactions", {
  * not asked to file every turn.
  */
 export const contextRises = sqliteTable("context_rises", {
-  instanceId: text("instance_id")
+  instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   /** The `session_lines` id (kind `context`) of the line that says it: its filing's, else the failed compaction's. */
@@ -2843,7 +2846,7 @@ export const contextRises = sqliteTable("context_rises", {
  * own work has ended within the room.
  */
 export const contextCompactions = sqliteTable("context_compactions", {
-  instanceId: text("instance_id")
+  instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   /** When its harness said the boundary. */
@@ -2860,7 +2863,7 @@ export const limitEvents = sqliteTable(
   "limit_events",
   {
     id: text("id").primaryKey(),
-    instanceId: text("instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
     at: timestamp("at").notNull(),
     move: storedJson(AccountMoveSchema)("move").notNull(),
   },
@@ -2916,7 +2919,7 @@ export const usageLimitHistory = sqliteTable(
 export const turnUsage = sqliteTable(
   "turn_usage",
   {
-    instanceId: text("instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
     /** The harness's result identity, the one `completed_turns` claims. */
     resultId: text("result_id").notNull(),
     /** As the harness names it: Claude's id, `provider/model` for OpenCode and pi. */
@@ -2985,7 +2988,7 @@ export const turnCuts = sqliteTable(
   "turn_cuts",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    instanceId: text("instance_id")
+    instanceId: sessionColumn("instance_id")
       .notNull()
       .references(() => instances.id, { onDelete: "cascade" }),
     /** When the hub sent the interrupt. */
@@ -3041,14 +3044,17 @@ export const rules = sqliteTable("rules", {
    * new id takes its rules along (db `rekeyMachine`), and one removed for good
    * keeps them, read as orphaned (`removed_machines`).
    */
-  scopeMachineId: text("scope_machine_id"),
+  scopeMachineId: machineColumn("scope_machine_id"),
   /**
    * The project it fires in. The rule goes with its project, never widened
    * to every project, and follows it into the project a merge folds it into.
    */
-  scopeProjectId: text("scope_project_id").references(() => projects.id, {
-    onDelete: "cascade",
-  }),
+  scopeProjectId: projectColumn("scope_project_id").references(
+    () => projects.id,
+    {
+      onDelete: "cascade",
+    }
+  ),
   /**
    * The area it fires in: every project in it, as read. It goes with its
    * area, never widened to every project.
@@ -3084,7 +3090,7 @@ export const ruleState = sqliteTable(
     /** `${ruleId}:${instanceId}` */
     id: text("id").primaryKey(),
     ruleId: text("rule_id").notNull(),
-    instanceId: text("instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
     status: text("status")
       .$type<"armed" | "pending">()
       .notNull()
@@ -3163,7 +3169,7 @@ const hookColumns = () => ({
   /** sha256 hex of the material a machine compares before writing. */
   hash: text("hash").notNull(),
   scope: text("scope").$type<FleetScope>(),
-  projectId: text("project_id"),
+  projectId: projectColumn("project_id"),
   /** Bound to every project in one area instead (core `FleetPlacement.areaId`). */
   areaId: text("area_id"),
 });
@@ -3454,11 +3460,11 @@ export const cardSettlings = sqliteTable(
     /** The member's id. */
     route: text("route").notNull(),
     /** The member's session for it; null when it came to him. */
-    instanceId: text("instance_id"),
+    instanceId: sessionColumn("instance_id"),
     /** The run's work item; null for Caw's conversation or a card that came to him. */
     workItemId: text("work_item_id"),
     /** The session that wrote the card. */
-    askedBy: text("asked_by").notNull(),
+    askedBy: sessionColumn("asked_by").notNull(),
     createdAt: timestamp("created_at").notNull(),
     /** The line a card that came to him carries: "Mira can't be reached until Slack or email is connected". */
     signed: text("signed"),
@@ -3489,10 +3495,10 @@ export const fleetWatchSettings = sqliteTable("fleet_watch_settings", {
  * per session; gone when you act on the session or it moves on.
  */
 export const fleetWatchNotices = sqliteTable("fleet_watch_notices", {
-  instanceId: text("instance_id").primaryKey(),
+  instanceId: sessionColumn("instance_id").primaryKey(),
   id: text("id").notNull(),
-  machineId: text("machine_id").notNull(),
-  projectId: text("project_id"),
+  machineId: machineColumn("machine_id").notNull(),
+  projectId: projectColumn("project_id"),
   title: text("title").notNull(),
   body: text("body").notNull(),
   at: timestamp("at").notNull(),
@@ -3577,14 +3583,14 @@ export const claudeContextWindows = sqliteTable("claude_context_windows", {
  */
 export const continuations = sqliteTable("continuations", {
   id: text("id").primaryKey(),
-  sourceInstanceId: text("source_instance_id").notNull(),
+  sourceInstanceId: sessionColumn("source_instance_id").notNull(),
   /** The request as asked, and its inputs as read then (continuations.ts). */
   request: storedJson(ContinueRequestSchema)("request").notNull(),
   prepared: storedJson(PreparedContinuationSchema)("prepared").notNull(),
   /** The summariser answering now; a resumed job may have replaced it. */
-  summariserInstanceId: text("summariser_instance_id"),
+  summariserInstanceId: sessionColumn("summariser_instance_id"),
   /** Minted when the job is: the new session is started under this id. */
-  targetInstanceId: text("target_instance_id").notNull(),
+  targetInstanceId: sessionColumn("target_instance_id").notNull(),
   /** The send the opening goes out as, so it is sent once whatever restarts. */
   openingUuid: text("opening_uuid").notNull(),
   /** The summariser's answer, kept once read so a restart never asks again. */
@@ -3653,7 +3659,7 @@ export type MachineLineKind = Extract<
 export const sessionLines = sqliteTable(
   "session_lines",
   {
-    instanceId: text("instance_id")
+    instanceId: sessionColumn("instance_id")
       .notNull()
       .references(() => instances.id, { onDelete: "cascade" }),
     kind: text("kind").$type<SessionLineKind>().notNull(),
@@ -3681,7 +3687,7 @@ export const sessionLines = sqliteTable(
 export const lineAnchors = sqliteTable(
   "line_anchors",
   {
-    instanceId: text("instance_id")
+    instanceId: sessionColumn("instance_id")
       .notNull()
       .references(() => instances.id, { onDelete: "cascade" }),
     /** The line's block id: `limit-<event>`, a machine line's or a watch line's id, `fresh-start-<instance>`. */
@@ -3703,7 +3709,7 @@ export const lineAnchors = sqliteTable(
 export const instanceConversations = sqliteTable(
   "instance_conversations",
   {
-    instanceId: text("instance_id")
+    instanceId: sessionColumn("instance_id")
       .notNull()
       .references(() => instances.id, { onDelete: "cascade" }),
     /** Its place, oldest first. */
@@ -3743,8 +3749,8 @@ export const instanceConversations = sqliteTable(
  * (db `foldContinued`, `foldFormerSessions`).
  */
 export const instanceAliases = sqliteTable("instance_aliases", {
-  id: text("id").primaryKey(),
-  instanceId: text("instance_id").notNull(),
+  id: sessionColumn("id").primaryKey(),
+  instanceId: sessionColumn("instance_id").notNull(),
   folded: integer("folded", { mode: "boolean" }).notNull().default(false),
 });
 
@@ -3783,9 +3789,9 @@ export const moves = sqliteTable(
       })
     )("state").notNull(),
     /** The machine the project moves from (`MoveState.sourceMachineId`). */
-    sourceMachineId: text("source_machine_id").notNull(),
+    sourceMachineId: machineColumn("source_machine_id").notNull(),
     /** The machine it moves to (`MoveState.targetMachineId`). */
-    targetMachineId: text("target_machine_id").notNull(),
+    targetMachineId: machineColumn("target_machine_id").notNull(),
     /** A Cancel the machine running its step has not heard yet: told at its register. */
     stopOn: text("stop_on"),
     /** The request as asked: the target and the spawn New session sent, its harness named. */
@@ -3888,7 +3894,7 @@ export const previewPasses = sqliteTable(
       onDelete: "cascade",
     }),
     /** The session a scoped pass was given to; null for the person's own. */
-    instanceId: text("instance_id").references(() => instances.id, {
+    instanceId: sessionColumn("instance_id").references(() => instances.id, {
       onDelete: "cascade",
     }),
     /** The preview origins (their keys) a session's pass opens; null for the person's, which opens every one. */
@@ -3910,7 +3916,7 @@ export const previewPasses = sqliteTable(
  * hub needs the key itself, never a hash. Emptied when pairing is turned off.
  */
 export const machineKeys = sqliteTable("machine_keys", {
-  machineId: text("machine_id").primaryKey(),
+  machineId: machineColumn("machine_id").primaryKey(),
   key: sealedText("key").notNull(),
   admittedAt: timestamp("admitted_at").notNull(),
 });
@@ -4002,7 +4008,7 @@ export const presenceClients = sqliteTable("presence_clients", {
   /** A phone or tablet. */
   handheld: integer("handheld", { mode: "boolean" }).notNull(),
   /** The machine it is, or runs on, as the hub tied it; null when no one machine is. */
-  machineId: text("machine_id"),
+  machineId: machineColumn("machine_id"),
   /** The person's last input on it, on the hub's clock; null when it never said. */
   inputAt: timestamp("input_at"),
   /** A tab's computer's last input, as its Idle Detection reads it; null while it reads none. */
@@ -4039,7 +4045,7 @@ export const findSettings = sqliteTable("find_settings", {
  * is off: a machine's activity counts only once they opt it in.
  */
 export const presenceDevices = sqliteTable("presence_devices", {
-  machineId: text("machine_id").primaryKey(),
+  machineId: machineColumn("machine_id").primaryKey(),
   counts: integer("counts", { mode: "boolean" }).notNull(),
 });
 
@@ -4049,7 +4055,7 @@ export const presenceDevices = sqliteTable("presence_devices", {
  * offered again; `answer` stays null while the offer stands.
  */
 export const projectOffers = sqliteTable("project_offers", {
-  instanceId: text("instance_id").primaryKey(),
+  instanceId: sessionColumn("instance_id").primaryKey(),
   /** Which signal made it: `delegates`, `days`, `plan` or `repo`; `caw` when Caw asked in conversation. */
   reason: text("reason")
     .$type<import("@cawco/core/frames").ProjectOfferReason>()
@@ -4060,7 +4066,7 @@ export const projectOffers = sqliteTable("project_offers", {
   answer: text("answer").$type<"accepted" | "dismissed">(),
   answeredAt: timestamp("answered_at"),
   /** The project accepting made or joined. */
-  projectId: text("project_id"),
+  projectId: projectColumn("project_id"),
 });
 
 /**
@@ -4070,7 +4076,7 @@ export const projectOffers = sqliteTable("project_offers", {
  * the person does.
  */
 export const designOffers = sqliteTable("design_offers", {
-  projectId: text("project_id").primaryKey(),
+  projectId: projectColumn("project_id").primaryKey(),
   /** The task whose move into an active stage raised it. */
   taskId: text("task_id").notNull(),
   offeredAt: timestamp("offered_at").notNull(),
@@ -4088,8 +4094,8 @@ export const designOffers = sqliteTable("design_offers", {
  */
 export const lfsOffers = sqliteTable("lfs_offers", {
   id: text("id").primaryKey(),
-  projectId: text("project_id").notNull(),
-  machineId: text("machine_id").notNull(),
+  projectId: projectColumn("project_id").notNull(),
+  machineId: machineColumn("machine_id").notNull(),
   /** The folder made a repository, on its machine. */
   root: text("root").notNull(),
   /** What is offered, a row per pattern (core `PlaceLfsRow`). */
@@ -4110,7 +4116,7 @@ export const lfsOffers = sqliteTable("lfs_offers", {
 export const lfsRefusals = sqliteTable(
   "lfs_refusals",
   {
-    projectId: text("project_id").notNull(),
+    projectId: projectColumn("project_id").notNull(),
     endpoint: text("endpoint").notNull(),
     notedAt: timestamp("noted_at").notNull(),
   },
@@ -4129,7 +4135,7 @@ export const designChecks = sqliteTable(
   "design_checks",
   {
     id: text("id").primaryKey(),
-    projectId: text("project_id").notNull(),
+    projectId: projectColumn("project_id").notNull(),
     taskId: text("task_id").notNull(),
     /** The builder's work item: the attempt whose result is judged. */
     itemId: text("item_id").notNull(),
@@ -4146,7 +4152,7 @@ export const designChecks = sqliteTable(
      */
     artifactId: text("artifact_id"),
     /** The session that asked a chat round: it hears the verdict. Null for a task's round. */
-    requesterId: text("requester_id"),
+    requesterId: sessionColumn("requester_id"),
     state: text("state")
       .$type<"checking" | "passed" | "findings" | "failed">()
       .notNull(),
@@ -4168,11 +4174,11 @@ export const designChecks = sqliteTable(
  */
 export const designProposals = sqliteTable("design_proposals", {
   id: text("id").primaryKey(),
-  projectId: text("project_id").notNull(),
+  projectId: projectColumn("project_id").notNull(),
   /** The proposing session. */
-  instanceId: text("instance_id").notNull(),
+  instanceId: sessionColumn("instance_id").notNull(),
   /** Where design/ is written: a repository's root on a machine; both null for the project's folder. */
-  machineId: text("machine_id"),
+  machineId: machineColumn("machine_id"),
   root: text("root"),
   why: text("why").notNull(),
   /**
@@ -4223,7 +4229,7 @@ export const projectStarterSets = sqliteTable(
 export const projectStarters = sqliteTable(
   "project_starters",
   {
-    projectId: text("project_id").notNull(),
+    projectId: projectColumn("project_id").notNull(),
     place: text("place").$type<StarterPlace>().notNull(),
     position: integer("position").notNull(),
     text: text("text").notNull(),
@@ -4243,7 +4249,7 @@ export const projectStarters = sqliteTable(
 export const projectStarterSources = sqliteTable(
   "project_starter_sources",
   {
-    projectId: text("project_id").notNull(),
+    projectId: projectColumn("project_id").notNull(),
     place: text("place").$type<StarterPlace>().notNull(),
     position: integer("position").notNull(),
     seq: integer("seq").notNull(),
@@ -4292,7 +4298,7 @@ export const starterOutcomes = sqliteTable(
  * stored here.
  */
 export const sessionPlans = sqliteTable("session_plans", {
-  instanceId: text("instance_id").primaryKey(),
+  instanceId: sessionColumn("instance_id").primaryKey(),
   steps: storedJson(z.array(PlanStepSchema))("steps").notNull(),
   /** The person's step comments whose step's words a write of the session's left out (core plan.ts `OrphanedComments`). */
   orphanedComments: storedJson(z.array(OrphanedCommentsSchema))(
@@ -4324,7 +4330,7 @@ export const planChanges = sqliteTable(
   {
     id: text("id").primaryKey(),
     /** The session whose plan it changed. */
-    instanceId: text("instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
     /** Who hears it: `session:<instance id>` or `caw:<project id>`. */
     receiver: text("receiver").notNull(),
     kind: text("kind")
@@ -4375,7 +4381,7 @@ export const artifacts = sqliteTable(
      * places kept. Every other artifact goes with its session
      * (db/core.ts `dropInstances`).
      */
-    instanceId: text("instance_id").references(() => instances.id, {
+    instanceId: sessionColumn("instance_id").references(() => instances.id, {
       onDelete: "set null",
     }),
     /**
@@ -4384,7 +4390,7 @@ export const artifacts = sqliteTable(
      * go on updating and reading it. Null on one made before it
      * was kept.
      */
-    madeBy: text("made_by").references(() => instances.id, {
+    madeBy: sessionColumn("made_by").references(() => instances.id, {
       onDelete: "set null",
     }),
     /**
@@ -4412,7 +4418,7 @@ export const artifacts = sqliteTable(
      * A project's delete takes its pages first (db/index.ts
      * `deleteProject`); anything else of it outlives it with no project.
      */
-    projectId: text("project_id").references(() => projects.id, {
+    projectId: projectColumn("project_id").references(() => projects.id, {
       onDelete: "set null",
     }),
     kind: text("kind")
@@ -4435,7 +4441,7 @@ export const artifacts = sqliteTable(
      */
     composer: integer("composer", { mode: "boolean" }).notNull().default(false),
     /** The machine a preview's dev server or folder is on; null for a page, which the hub serves. */
-    machineId: text("machine_id"),
+    machineId: machineColumn("machine_id"),
     /**
      * What the panel shows (core `PreviewSource`), exactly one of: a page by
      * name (served from `artifacts/<id>/`), a folder, or a dev server's port.
@@ -4528,7 +4534,7 @@ export const artifactChanges = sqliteTable(
  * Null on a row kept before it was; its first restore keeps one.
  */
 export const shownPreviews = sqliteTable("shown_previews", {
-  instanceId: text("instance_id")
+  instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   artifactId: text("artifact_id")
@@ -4553,10 +4559,10 @@ export const previewPorts = sqliteTable(
   "preview_ports",
   {
     port: integer("port").primaryKey(),
-    instanceId: text("instance_id")
+    instanceId: sessionColumn("instance_id")
       .unique()
       .references(() => instances.id, { onDelete: "cascade" }),
-    projectId: text("project_id")
+    projectId: projectColumn("project_id")
       .unique()
       .references(() => projects.id, { onDelete: "cascade" }),
     /**
@@ -4598,7 +4604,7 @@ export const STREAM_RELAY_ID = "relay";
 export const streamRelay = sqliteTable("stream_relay", {
   /** Always `'relay'`. */
   id: text("id").primaryKey(),
-  machineId: text("machine_id")
+  machineId: machineColumn("machine_id")
     .notNull()
     .references(() => agents.machineId, { onDelete: "cascade" }),
   /** The address its URLs name. */
@@ -4638,11 +4644,11 @@ export const browsers = sqliteTable(
     key: text("key")
       .$type<import("@cawco/core/browser").BrowserKey>()
       .notNull(),
-    machineId: text("machine_id")
+    machineId: machineColumn("machine_id")
       .notNull()
       .references(() => agents.machineId, { onDelete: "cascade" }),
     /** The project of a `project:` key; null for a machine's own browser. */
-    projectId: text("project_id"),
+    projectId: projectColumn("project_id"),
     name: text("name").notNull(),
     host: text("host")
       .$type<import("@cawco/core/browser").BrowserHostKind>()
@@ -4677,7 +4683,7 @@ export const streamRelayJourney = sqliteTable("stream_relay_journey", {
   /** Always `'journey'`. */
   id: text("id").primaryKey(),
   /** The machine picked; null before a pick. */
-  machineId: text("machine_id").references(() => agents.machineId, {
+  machineId: machineColumn("machine_id").references(() => agents.machineId, {
     onDelete: "set null",
   }),
   /** Its public address, and its address on its router's network when behind one, as last found. */
@@ -4782,7 +4788,7 @@ export interface OpenSubagent {
  * `subagents` until each ends on its own.
  */
 export const sessionTaints = sqliteTable("session_taints", {
-  instanceId: text("instance_id")
+  instanceId: sessionColumn("instance_id")
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   /** It read the web: every later note of the session is tainted `web`. */
@@ -4800,7 +4806,7 @@ export const sessionTaints = sqliteTable("session_taints", {
 export const sessionSubagents = sqliteTable(
   "session_subagents",
   {
-    instanceId: text("instance_id")
+    instanceId: sessionColumn("instance_id")
       .notNull()
       .references(() => sessionTaints.instanceId, { onDelete: "cascade" }),
     /** The harness's task id. */
@@ -4858,7 +4864,7 @@ export const declinedRewrites = sqliteTable(
 export const purgedSessions = sqliteTable(
   "purged_sessions",
   {
-    machineId: text("machine_id").notNull(),
+    machineId: machineColumn("machine_id").notNull(),
     sessionId: text("session_id").notNull(),
     purgedAt: timestamp("purged_at").notNull(),
   },
@@ -4878,7 +4884,7 @@ export const projectNotes = sqliteTable(
     id: text("id").primaryKey(),
     projectId: projectKey(),
     /** The conversation it is a line of; null until the project has one. */
-    instanceId: text("instance_id"),
+    instanceId: sessionColumn("instance_id"),
     at: timestamp("at").notNull(),
     note: storedJson(ProjectNoteSchema)("note").notNull(),
   },
@@ -4909,7 +4915,7 @@ export const routines = sqliteTable(
   {
     id: text("id").primaryKey(),
     /** Its project; null for a routine of the fleet, run in the hub's own checkout. */
-    projectId: text("project_id").references(() => projects.id, {
+    projectId: projectColumn("project_id").references(() => projects.id, {
       onDelete: "cascade",
     }),
     name: text("name").notNull(),
@@ -4937,12 +4943,12 @@ export const routines = sqliteTable(
     /** Why it is off, when the hub turned it off (it expired). */
     disabledReason: text("disabled_reason"),
     /** `owner`, or the id of the session that made it. */
-    createdBy: text("created_by").notNull(),
+    createdBy: sessionColumn("created_by").notNull(),
     /**
      * The session whose `routine_create` call made it; null for yours, the
      * hub's, and routines made before the hub kept where.
      */
-    madeInInstance: text("made_in_instance"),
+    madeInInstance: sessionColumn("made_in_instance"),
     /**
      * What the making turn said just before its `routine_create` call, one
      * paragraph; null when it said nothing, or the routine is not an agent's.
@@ -5006,7 +5012,7 @@ export const routineRuns = sqliteTable(
      * the turn that took it ends the run, with its `routine_result` or
      * failed.
      */
-    instanceId: text("instance_id"),
+    instanceId: sessionColumn("instance_id"),
     outcome: text("outcome").$type<RoutineOutcome>(),
     /** What its delegate said, when it said more than the contract's words. */
     output: text("output"),
@@ -5173,7 +5179,7 @@ export const eventRoutes = sqliteTable(
      */
     mode: text("mode").$type<OfferedMode>(),
     /** `owner`, or the id of the session that made it. */
-    createdBy: text("created_by").notNull(),
+    createdBy: sessionColumn("created_by").notNull(),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("event_routes_project").on(table.projectId)]
@@ -5212,7 +5218,7 @@ export type GitHubResource =
  * restart neither re-delivers nor misses.
  */
 export const githubPollers = sqliteTable("github_pollers", {
-  projectId: text("project_id")
+  projectId: projectColumn("project_id")
     .primaryKey()
     .references(() => projects.id, { onDelete: "cascade" }),
   /** The connection (service `github`, one that reads GitHub's API: core `readsGitHubApi`) it polls with. */
@@ -5228,7 +5234,7 @@ export const githubPollers = sqliteTable("github_pollers", {
 export const githubPollCursors = sqliteTable(
   "github_poll_cursors",
   {
-    projectId: text("project_id")
+    projectId: projectColumn("project_id")
       .notNull()
       .references(() => githubPollers.projectId, { onDelete: "cascade" }),
     /** `owner/repo`, one of the project's links. */
@@ -5273,7 +5279,7 @@ export const connectorPolls = sqliteTable(
     seenAt: timestamp("seen_at"),
     reason: text("reason"),
     polledAt: timestamp("polled_at"),
-    createdBy: text("created_by").notNull(),
+    createdBy: sessionColumn("created_by").notNull(),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("connector_polls_project").on(table.projectId)]
@@ -5299,7 +5305,7 @@ export const connectorPollItems = sqliteTable(
  * tasks in CawCo's files alone.
  */
 export const trackerBindings = sqliteTable("tracker_bindings", {
-  projectId: text("project_id")
+  projectId: projectColumn("project_id")
     .primaryKey()
     .references(() => projects.id, { onDelete: "cascade" }),
   provider: text("provider")
@@ -5496,7 +5502,7 @@ export const actions = sqliteTable(
     /** The proposer's one sentence: why. */
     reason: text("reason").notNull(),
     /** The session that proposed it. */
-    proposedBy: text("proposed_by").notNull(),
+    proposedBy: sessionColumn("proposed_by").notNull(),
     /** The routine whose run proposed it (that run's session, or one it started); null outside any routine. */
     routineId: text("routine_id").references(() => routines.id, {
       onDelete: "set null",
@@ -5575,7 +5581,7 @@ export const relays = sqliteTable(
     testedAt: timestamp("tested_at"),
     lastDeliveryAt: timestamp("last_delivery_at"),
     /** `owner`, or the id of the session whose ask the owner approved. */
-    createdBy: text("created_by").notNull(),
+    createdBy: sessionColumn("created_by").notNull(),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("relays_project").on(table.projectId)]
@@ -5591,8 +5597,8 @@ export const parkedAsks = sqliteTable(
   "parked_asks",
   {
     requestId: text("request_id").primaryKey(),
-    instanceId: text("instance_id"),
-    machineId: text("machine_id").notNull(),
+    instanceId: sessionColumn("instance_id"),
+    machineId: machineColumn("machine_id").notNull(),
     /** The `permission_request` envelope, `raisedAt` stamped on its payload. */
     envelope: storedJson(EnvelopeSchema)("envelope").notNull(),
   },
@@ -5610,7 +5616,7 @@ export const asks = sqliteTable(
   "asks",
   {
     id: text("id").primaryKey(),
-    instanceId: text("instance_id").notNull(),
+    instanceId: sessionColumn("instance_id").notNull(),
     state: text("state").$type<AskState>().notNull(),
     raisedAt: integer("raised_at").notNull(),
     record: storedJson(ASK_STORED)("record").notNull(),
