@@ -82,7 +82,7 @@ import {
   YOU,
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
-import { isLive } from "./work-items";
+import { isLive } from "./work-item-state";
 
 const DESIGN_DIR = "design";
 /** The most files one `design_write` takes. */
