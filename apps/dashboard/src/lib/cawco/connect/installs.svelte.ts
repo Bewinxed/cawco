@@ -38,7 +38,7 @@ import type { JoinInfo } from "@cawco/core/join";
 import { MediaQuery } from "svelte/reactivity";
 import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 import { hub } from "#lib/platform/hub.js";
-import { failureWords, hubData, hubRefusal } from "#lib/platform/hub-read.js";
+import { failureWords, hubData } from "#lib/platform/hub-read.js";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { currentClientId } from "../client-id";
@@ -394,12 +394,8 @@ class Connect {
     const sending = this.#unsaved;
     this.#unsaved = {};
     this.#sending = sending;
-    this.#send(sending)
-      .then((answer) => {
-        if (answer.error) {
-          throw hubRefusal(answer);
-        }
-        const read = answer.data;
+    hubData(this.#send(sending))
+      .then((read) => {
         this.#sending = null;
         this.#saveRetryMs = RETRY_FIRST_MS;
         // An answer older than a frame already taken still ends the save.
