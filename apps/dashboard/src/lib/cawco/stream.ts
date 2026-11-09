@@ -945,7 +945,7 @@ function openRecord(
  * So the caller catches its own pre-dispatch throw and registers the failure
  * here instead of re-throwing. Doing it through this function rather than by
  * writing into `state.commands` directly is the whole point: the record is
- * swept, TTL'd, visible to {@link sessionCommands} and announced through
+ * swept, TTL'd, visible to client.svelte.ts's `commandRecord` and announced through
  * {@link StreamHost.noteFailure} exactly like one that failed on the wire —
  * one bookkeeping path, not two.
  */
