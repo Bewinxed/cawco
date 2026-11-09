@@ -23,12 +23,12 @@
     iconCardsVariants,
     iconCardVariants,
   } from "#lib/components/ui/icon-card/index.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
+  import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { barGlass } from "./bar-glass.svelte";
   import { connect } from "./connect/installs.svelte";
   import { CONNECT_WAYS } from "./connect/ways";
   import Caw from "./home/Caw.svelte";
-  import { crossIn, crossOut } from "./motion/curves.svelte";
-  import { ListSwap } from "./motion/list-swap.svelte";
   import CardFace from "./project/CardFace.svelte";
 
   let {

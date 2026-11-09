@@ -86,13 +86,13 @@
   import { Dialog as DialogPrimitive } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconClose } from "#lib/icons.js";
+  import { dragToDismiss } from "#lib/platform/motion/drag.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import DialogPortal from "./dialog-portal.svelte";
   import { HeadRoom, provideHeadRoom } from "./head-room.svelte.js";

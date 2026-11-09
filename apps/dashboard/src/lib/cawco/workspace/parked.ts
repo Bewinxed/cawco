@@ -4,7 +4,7 @@
  * elements the stylesheet parks beside the one in front, and a settle a
  * press stops and its release lets go on.
  */
-import { type Sample, sampleAt } from "../motion/spring";
+import { type Sample, sampleAt } from "#lib/platform/motion/spring.js";
 
 /** One element in view: it and its distance from the one in front. */
 export interface Parked {

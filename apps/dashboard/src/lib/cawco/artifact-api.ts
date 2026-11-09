@@ -17,7 +17,7 @@ import type {
 } from "@cawco/core/protocol";
 import { type PageLinks, pageLinksOf } from "@cawco/core/reference-faces";
 import type { SheetRead, StoryOp } from "@cawco/core/stage";
-import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import { goto } from "$app/navigation";
 import { currentClientId } from "./client-id";
 
