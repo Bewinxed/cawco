@@ -1,5 +1,5 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { PROJECT_MOVED } from "./owned-rows";
+import { walkOwned } from "./owned-rows";
 import { singleton, singletonColumn } from "./singleton";
 /** Projects: their rows, places, links, offers, spend and notes, and folding one into another. */
 
@@ -1052,204 +1052,247 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
       return "removed";
     },
     foldProject: (dupId, keepId, taskIds) =>
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction moves every project-scoped table, so a fold is all or nothing
       db.transaction((tx) => {
         const renamed = (taskId: string | null): string | null =>
           taskId ? (taskIds.get(taskId) ?? taskId) : null;
-        // Places: the duplicate's checkouts and workspaces join, each folder
-        // once; its hub folder is its own, and goes with it.
-        const kept = tx
-          .select()
-          .from(projectPlaces)
-          .where(eq(projectPlaces.projectId, keepId))
-          .all();
-        const where = new Set(kept.map((p) => `${p.machineId}\0${p.path}`));
-        let primary = kept.some((p) => p.isPrimary);
-        let places = 0;
-        for (const place of tx
-          .select()
-          .from(projectPlaces)
-          .where(eq(projectPlaces.projectId, dupId))
-          .orderBy(asc(projectPlaces.createdAt))
-          .all()) {
-          const key = `${place.machineId}\0${place.path}`;
-          if (place.kind === "hub" || where.has(key)) {
-            continue;
-          }
-          const first = !primary && place.kind === "checkout";
-          primary ||= first;
-          where.add(key);
-          tx.insert(projectPlaces)
-            .values({
-              ...place,
-              id: crypto.randomUUID(),
-              projectId: keepId,
-              isPrimary: first,
-            })
-            .run();
-          places += 1;
-        }
-        // Its links: each repository it linked, the kept project's too.
-        for (const link of tx
-          .select()
-          .from(projectLinks)
-          .where(eq(projectLinks.projectId, dupId))
-          .all()) {
-          tx.insert(projectLinks)
-            .values({ ...link, projectId: keepId })
-            .onConflictDoNothing()
-            .run();
-        }
-        // Its repository on a machine where the kept project records none.
-        const machines = new Set(
-          tx
-            .select({ machineId: projectRepositories.machineId })
-            .from(projectRepositories)
-            .where(eq(projectRepositories.projectId, keepId))
-            .all()
-            .map((row) => row.machineId)
-        );
-        for (const repository of tx
-          .select()
-          .from(projectRepositories)
-          .where(eq(projectRepositories.projectId, dupId))
-          .all()) {
-          if (!machines.has(repository.machineId)) {
-            tx.insert(projectRepositories)
-              .values({ ...repository, projectId: keepId })
-              .run();
-          }
-        }
-        const sessions = tx
-          .select({ id: instances.id })
-          .from(instances)
-          .where(eq(instances.projectId, dupId))
-          .all().length;
-        tx.update(instances)
-          .set({ projectId: keepId })
-          .where(eq(instances.projectId, dupId))
-          .run();
-        const items = tx
-          .select({ id: workItems.id, taskId: workItems.taskId })
-          .from(workItems)
-          .where(eq(workItems.projectId, dupId))
-          .all();
-        for (const item of items) {
-          tx.update(workItems)
-            .set({ projectId: keepId, taskId: renamed(item.taskId) })
-            .where(eq(workItems.id, item.id))
-            .run();
-        }
-        // An action names its task by the duplicate's number.
-        for (const action of tx
-          .select({ id: actions.id, taskId: actions.taskId })
-          .from(actions)
-          .where(and(eq(actions.projectId, dupId), isNotNull(actions.taskId)))
-          .all()) {
-          tx.update(actions)
-            .set({ taskId: renamed(action.taskId) })
-            .where(eq(actions.id, action.id))
-            .run();
-        }
-        // A page of a name the kept project has goes: the kept project's
-        // source of that name stood (project-merge.ts copies only the files
-        // it lacks), and a project's page is the project's by its name.
-        const keptNames = tx
-          .select({ name: artifacts.name })
-          .from(artifacts)
-          .where(and(projectPage, eq(artifacts.projectId, keepId)));
-        dropArtifacts(
-          tx,
-          and(
-            projectPage,
-            eq(artifacts.projectId, dupId),
-            inArray(artifacts.name, keptNames)
-          )
-        );
-        // Its notes each where they stand, a rule scoped to it, its routines
-        // with their routes and polls, the events it took in, its actions,
-        // relays and moves, Caw's turns and calls, its artifacts, notices,
-        // hooks, servers, skills and its offer: the kept project's from now
-        // on, where the duplicate's row going would have taken them or left
-        // them naming it (owned-rows.ts).
-        for (const { table, column } of PROJECT_MOVED) {
+        /** The duplicate's rows of `table`, by `column`, the kept project's. */
+        const moveRows = (table: string, column: string): void => {
           tx.run(
             sql`UPDATE ${sql.identifier(table)} SET ${sql.identifier(column)} = ${keepId} WHERE ${sql.identifier(column)} = ${dupId}`
           );
-        }
-        // The connections it was granted go with its row: project-merge.ts
-        // grants them to the kept project through connections.ts.
-        tx.delete(connectionProjects)
-          .where(eq(connectionProjects.projectId, dupId))
-          .run();
-        // Its GitHub poller, with its cursors, where the kept project polls
-        // none: both poll the one repository they share.
-        const poller = tx
-          .select()
-          .from(githubPollers)
-          .where(eq(githubPollers.projectId, dupId))
-          .get();
-        if (
-          poller &&
-          !tx
-            .select({ projectId: githubPollers.projectId })
-            .from(githubPollers)
-            .where(eq(githubPollers.projectId, keepId))
-            .get()
-        ) {
-          tx.insert(githubPollers)
-            .values({ ...poller, projectId: keepId })
-            .run();
-          tx.update(githubPollCursors)
-            .set({ projectId: keepId })
-            .where(eq(githubPollCursors.projectId, dupId))
-            .run();
-        }
-        // A memory document of both stays one link to the kept project.
-        for (const link of tx
-          .select()
-          .from(fleetMemoryDocProjects)
-          .where(eq(fleetMemoryDocProjects.projectId, dupId))
-          .all()) {
-          tx.insert(fleetMemoryDocProjects)
-            .values({ path: link.path, projectId: keepId })
-            .onConflictDoNothing()
-            .run();
-        }
-        tx.delete(fleetMemoryDocProjects)
-          .where(eq(fleetMemoryDocProjects.projectId, dupId))
-          .run();
-        for (const queued of tx
-          .select()
-          .from(queuedTaskStarts)
-          .where(eq(queuedTaskStarts.projectId, dupId))
-          .all()) {
-          tx.insert(queuedTaskStarts)
-            .values({
-              ...queued,
-              projectId: keepId,
-              taskId: renamed(queued.taskId) ?? queued.taskId,
-            })
-            .onConflictDoNothing()
-            .run();
-        }
-        tx.delete(queuedTaskStarts)
-          .where(eq(queuedTaskStarts.projectId, dupId))
-          .run();
-        // A queued delegate for one of its tasks starts the task it is now.
-        for (const queued of tx
-          .select({ id: queuedWorkItems.id, taskId: queuedWorkItems.taskId })
-          .from(queuedWorkItems)
-          .where(eq(queuedWorkItems.projectId, dupId))
-          .all()) {
-          tx.update(queuedWorkItems)
-            .set({ projectId: keepId, taskId: renamed(queued.taskId) })
-            .where(eq(queuedWorkItems.id, queued.id))
-            .run();
-        }
+        };
+        let places = 0;
+        let sessions = 0;
+        let items = 0;
+        walkOwned(
+          "foldProject",
+          {
+            // Places: the duplicate's checkouts and workspaces join, each
+            // folder once; its hub folder is its own, and goes with it.
+            project_places: () => {
+              const kept = tx
+                .select()
+                .from(projectPlaces)
+                .where(eq(projectPlaces.projectId, keepId))
+                .all();
+              const where = new Set(
+                kept.map((p) => `${p.machineId}\0${p.path}`)
+              );
+              let primary = kept.some((p) => p.isPrimary);
+              for (const place of tx
+                .select()
+                .from(projectPlaces)
+                .where(eq(projectPlaces.projectId, dupId))
+                .orderBy(asc(projectPlaces.createdAt))
+                .all()) {
+                const key = `${place.machineId}\0${place.path}`;
+                if (place.kind === "hub" || where.has(key)) {
+                  continue;
+                }
+                const first = !primary && place.kind === "checkout";
+                primary ||= first;
+                where.add(key);
+                tx.insert(projectPlaces)
+                  .values({
+                    ...place,
+                    id: crypto.randomUUID(),
+                    projectId: keepId,
+                    isPrimary: first,
+                  })
+                  .run();
+                places += 1;
+              }
+            },
+            // Its links: each repository it linked, the kept project's too.
+            project_links: () => {
+              for (const link of tx
+                .select()
+                .from(projectLinks)
+                .where(eq(projectLinks.projectId, dupId))
+                .all()) {
+                tx.insert(projectLinks)
+                  .values({ ...link, projectId: keepId })
+                  .onConflictDoNothing()
+                  .run();
+              }
+            },
+            // Its repository on a machine where the kept project records none.
+            project_repositories: () => {
+              const machines = new Set(
+                tx
+                  .select({ machineId: projectRepositories.machineId })
+                  .from(projectRepositories)
+                  .where(eq(projectRepositories.projectId, keepId))
+                  .all()
+                  .map((row) => row.machineId)
+              );
+              for (const repository of tx
+                .select()
+                .from(projectRepositories)
+                .where(eq(projectRepositories.projectId, dupId))
+                .all()) {
+                if (!machines.has(repository.machineId)) {
+                  tx.insert(projectRepositories)
+                    .values({ ...repository, projectId: keepId })
+                    .run();
+                }
+              }
+            },
+            instances: () => {
+              sessions = tx
+                .select({ id: instances.id })
+                .from(instances)
+                .where(eq(instances.projectId, dupId))
+                .all().length;
+              tx.update(instances)
+                .set({ projectId: keepId })
+                .where(eq(instances.projectId, dupId))
+                .run();
+            },
+            work_items: () => {
+              const moved = tx
+                .select({ id: workItems.id, taskId: workItems.taskId })
+                .from(workItems)
+                .where(eq(workItems.projectId, dupId))
+                .all();
+              for (const item of moved) {
+                tx.update(workItems)
+                  .set({ projectId: keepId, taskId: renamed(item.taskId) })
+                  .where(eq(workItems.id, item.id))
+                  .run();
+              }
+              items = moved.length;
+            },
+            // An action names its task by the duplicate's number.
+            actions: () => {
+              for (const action of tx
+                .select({ id: actions.id, taskId: actions.taskId })
+                .from(actions)
+                .where(
+                  and(eq(actions.projectId, dupId), isNotNull(actions.taskId))
+                )
+                .all()) {
+                tx.update(actions)
+                  .set({ taskId: renamed(action.taskId) })
+                  .where(eq(actions.id, action.id))
+                  .run();
+              }
+              moveRows("actions", "project_id");
+            },
+            // A page of a name the kept project has goes: the kept project's
+            // source of that name stood (project-merge.ts copies only the
+            // files it lacks), and a project's page is the project's by its
+            // name.
+            artifacts: () => {
+              const keptNames = tx
+                .select({ name: artifacts.name })
+                .from(artifacts)
+                .where(and(projectPage, eq(artifacts.projectId, keepId)));
+              dropArtifacts(
+                tx,
+                and(
+                  projectPage,
+                  eq(artifacts.projectId, dupId),
+                  inArray(artifacts.name, keptNames)
+                )
+              );
+              moveRows("artifacts", "project_id");
+            },
+            // The connections it was granted go with its row: project-merge.ts
+            // grants them to the kept project through connections.ts.
+            connection_projects: () => {
+              tx.delete(connectionProjects)
+                .where(eq(connectionProjects.projectId, dupId))
+                .run();
+            },
+            // Its GitHub poller, with its cursors, where the kept project
+            // polls none: both poll the one repository they share.
+            github_pollers: () => {
+              const poller = tx
+                .select()
+                .from(githubPollers)
+                .where(eq(githubPollers.projectId, dupId))
+                .get();
+              if (
+                poller &&
+                !tx
+                  .select({ projectId: githubPollers.projectId })
+                  .from(githubPollers)
+                  .where(eq(githubPollers.projectId, keepId))
+                  .get()
+              ) {
+                tx.insert(githubPollers)
+                  .values({ ...poller, projectId: keepId })
+                  .run();
+                tx.update(githubPollCursors)
+                  .set({ projectId: keepId })
+                  .where(eq(githubPollCursors.projectId, dupId))
+                  .run();
+              }
+            },
+            // A memory document of both stays one link to the kept project.
+            fleet_memory_doc_projects: () => {
+              for (const link of tx
+                .select()
+                .from(fleetMemoryDocProjects)
+                .where(eq(fleetMemoryDocProjects.projectId, dupId))
+                .all()) {
+                tx.insert(fleetMemoryDocProjects)
+                  .values({ path: link.path, projectId: keepId })
+                  .onConflictDoNothing()
+                  .run();
+              }
+              tx.delete(fleetMemoryDocProjects)
+                .where(eq(fleetMemoryDocProjects.projectId, dupId))
+                .run();
+            },
+            queued_task_starts: () => {
+              for (const queued of tx
+                .select()
+                .from(queuedTaskStarts)
+                .where(eq(queuedTaskStarts.projectId, dupId))
+                .all()) {
+                tx.insert(queuedTaskStarts)
+                  .values({
+                    ...queued,
+                    projectId: keepId,
+                    taskId: renamed(queued.taskId) ?? queued.taskId,
+                  })
+                  .onConflictDoNothing()
+                  .run();
+              }
+              tx.delete(queuedTaskStarts)
+                .where(eq(queuedTaskStarts.projectId, dupId))
+                .run();
+            },
+            // A queued delegate for one of its tasks starts the task it is now.
+            queued_work_items: () => {
+              for (const queued of tx
+                .select({
+                  id: queuedWorkItems.id,
+                  taskId: queuedWorkItems.taskId,
+                })
+                .from(queuedWorkItems)
+                .where(eq(queuedWorkItems.projectId, dupId))
+                .all()) {
+                tx.update(queuedWorkItems)
+                  .set({ projectId: keepId, taskId: renamed(queued.taskId) })
+                  .where(eq(queuedWorkItems.id, queued.id))
+                  .run();
+              }
+            },
+          },
+          // Its notes each where they stand, a rule scoped to it, its
+          // routines with their routes and polls, the events it took in, its
+          // relays and moves, Caw's turns and calls, its notices, hooks,
+          // servers, skills and its offer: the kept project's from now on,
+          // where the duplicate's row going would have taken them or left
+          // them naming it.
+          ({ table, column }) => moveRows(table, column)
+        );
         // Its index rows and the rest of its own rows go with it (cascade).
         tx.delete(projects).where(eq(projects.id, dupId)).run();
-        return { places, sessions, workItems: items.length };
+        return { places, sessions, workItems: items };
       }),
   };
 };
