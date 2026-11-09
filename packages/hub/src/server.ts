@@ -180,15 +180,7 @@ import { deliverableKind } from "@cawco/core/deliverables";
 import { detach } from "@cawco/core/detach";
 import { everyOf } from "@cawco/core/every-of";
 import { hashFiles } from "@cawco/core/file-hash";
-import type {
-  FindPlace,
-  FindPlacesAnswer,
-  FindSettings,
-  PlacesHeard,
-  TranscriptAnswer,
-  TranscriptPlacesQuery,
-  TranscriptTurns,
-} from "@cawco/core/find";
+import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
 import type {
   FleetConvergeFrame,
   FleetHeld,
@@ -480,7 +472,6 @@ import {
   CONTROL_SET_MODEL,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
-  CONTROL_TRANSCRIPT_PLACES,
   CONTROL_TRANSCRIPT_TURNS,
   CONTROL_WORK_IN_FLIGHT,
   type WorkInFlight,
@@ -882,9 +873,7 @@ import { createDesignVerify } from "./design-verify";
 import { type AttemptAsk, createDispatcher, dispatchRoutes } from "./dispatch";
 import { createExternalItems } from "./external-items";
 import { faviconRoutes } from "./favicon";
-import { answerFind, createFind, FIND_PLACES_QUERY, FIND_QUERY } from "./find";
-import { PLACES_LIMIT, placesForScreens, placesHeard } from "./find-places";
-import { forScreens } from "./find-secrets";
+import { createFind } from "./find";
 import { createFindTool } from "./find-tool";
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
@@ -1108,6 +1097,7 @@ import { agentListRoutes, agentMediaRoutes } from "./routes/agents";
 import { bearerOf } from "./routes/bearer";
 import { delegationRoutes } from "./routes/delegation";
 import { fileRoutes } from "./routes/files";
+import { findRoutes } from "./routes/find";
 import { followupStateRoutes } from "./routes/followup-state";
 import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
@@ -1309,14 +1299,7 @@ const GH_ASK_MS = 20_000;
  * search/index.ts `SYNC_WAIT_MS`). Our call.
  */
 const FIND_TURNS_MS = 5000;
-/**
- * How long the person's find in a conversation waits on its machine for
- * the places (find-places.ts): one phrase read of the index, a sync first
- * when it is stale (agent search/index.ts `SYNC_WAIT_MS`). Past it, the
- * places in the turns loaded stand, the machine named. Our call, as
- * {@link FIND_TURNS_MS}.
- */
-const FIND_PLACES_MS = 5000;
+
 /** How long a machine is given to hear that the hub let a read go (core `CONTROL_ABANDON`): one map lookup there. */
 const ABANDON_MS = 5000;
 /**
@@ -1338,18 +1321,6 @@ const tookOf = (answer: Bounded<ControlResult>): FleetMcpTook => {
   return servers ? { kind: "taken", servers } : { kind: "unanswered" };
 };
 
-/**
- * Who asks `GET /api/find`, as the hub's log names a slow machine's search
- * by: the app's Jump (its URLSession says CFNetwork and Darwin, no browser)
- * or the dashboard's Find (⌘K; the composer's `@` asks names alone,
- * `transcripts=0`, so no machine).
- */
-const findCaller = (request: Request): string => {
-  const agent = request.headers.get("user-agent") ?? "";
-  return agent.includes("Darwin") && !agent.includes("Mozilla")
-    ? "the app's Jump"
-    : "the dashboard's Find (⌘K)";
-};
 /** How long a states file's read in its workspace may take before a handed input is refused: a `cat` of one source file. Our call. */
 const WORKSPACE_READ_MS = 15_000;
 /** How often the hub reads every skill's and plugin's source for an update. */
@@ -33980,91 +33951,9 @@ export const createServer = (
           publishInstances(result.row.machineId);
           return `Named this session "${title}".`;
         }
-      )
-      // The fleet's one finding engine (find.ts): names and transcripts under
-      // one ranking, and what waits on your eyes: read from the looks
-      // (`/api/seen`) and the `shown` acks the screens already send.
-      // While "Hide secrets in Find" is on, each answer names where its
-      // secrets stand (find-secrets.ts), for every screen to draw as dots.
-      .get("/api/find", { query: FIND_QUERY }, async ({ query, request }) => {
-        const hide = db.findSettings.hideSecrets();
-        return forScreens(
-          await answerFind(find, query, hide, {
-            caller: findCaller(request),
-            signal: request.signal,
-          }),
-          hide
-        );
-      })
-      .get("/api/find/waiting", () => find.waiting())
-      // The person's find in one conversation (find-places.ts): every place
-      // its machine's transcript index holds the words in, oldest first,
-      // what tools answered included. A machine that does not answer is
-      // said so, by name, never as a conversation without the words.
-      .get(
-        "/api/find/places",
-        { query: FIND_PLACES_QUERY },
-        async ({ query, request, status }) => {
-          const [row] = db.find.instances([query.session]);
-          if (!row) {
-            return status(404, `no session ${query.session}`);
-          }
-          const named = (
-            took: PlacesHeard,
-            places: FindPlace[] = []
-          ): FindPlacesAnswer => ({
-            machine: {
-              heard: took,
-              id: row.machineId,
-              name: machineName(row.machineId),
-            },
-            places,
-          });
-          const sessions = [row.sessionId, ...row.priorSessionIds].filter(
-            (each): each is string => !!each
-          );
-          const words = query.q.trim();
-          if (sessions.length === 0 || words === "") {
-            return named("answered");
-          }
-          const answer = await readStoppable(
-            row.machineId,
-            CONTROL_TRANSCRIPT_PLACES,
-            [
-              {
-                sessions,
-                words,
-                limit: PLACES_LIMIT,
-              } satisfies TranscriptPlacesQuery,
-            ],
-            FIND_PLACES_MS,
-            {
-              caller: "the person's find in a conversation",
-              signal: request.signal,
-            }
-          );
-          const heard = placesHeard(answer);
-          if (heard.heard !== "answered") {
-            return named(heard.heard);
-          }
-          return named(
-            "answered",
-            await placesForScreens(heard.places, db.findSettings.hideSecrets())
-          );
-        }
-      )
-      // The person's Find settings, the same on every screen: kept at the hub.
-      .get("/api/find/settings", (): FindSettings => ({
-        hideSecrets: db.findSettings.hideSecrets(),
-      }))
-      .put(
-        "/api/find/settings",
-        { body: t.Object({ hideSecrets: t.Boolean() }) },
-        ({ body }): FindSettings => {
-          db.findSettings.setHideSecrets(body.hideSecrets, new Date());
-          return { hideSecrets: db.findSettings.hideSecrets() };
-        }
-      )
+      ),
+    findRoutes(ctx),
+    new Elysia()
       // What a delegate and its parent said to each other, one page at a time,
       // oldest first within it: the newest page, then each older one by the
       // lowest id of the last (`before`). No dashboard reads it; it stands
