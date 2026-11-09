@@ -58,6 +58,7 @@ import {
 } from "../../../packages/core/src/asks";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
+import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import {
   fetchHub,
   type HubRequest,
@@ -157,7 +158,9 @@ const ask = async (
     const response = await fetchHub(fetch, base, request, { ...init, signal });
     return {
       status: response.status,
-      text: await response.text(),
+      text: response.ok
+        ? await response.text()
+        : refusalWords(await response.text(), response.status),
       headers: response.headers,
     };
   });
@@ -950,7 +953,9 @@ const spec: Spec = {
         ]);
         posted.push({
           status: answered.status(),
-          text: await answered.text(),
+          text: answered.ok()
+            ? await answered.text()
+            : refusalWords(await answered.text(), answered.status()),
         });
       }
       const still = await fleet.api<{ userCode: string }[]>(
