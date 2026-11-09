@@ -929,3 +929,5 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
     }
   },
 });
+
+export const routeOf = (id: string) => `/__cawco/artifact/${id}`;
