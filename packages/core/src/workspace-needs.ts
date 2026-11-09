@@ -6,7 +6,7 @@
  * started ({@link STARTED_PATH}): the PATH the OS's service manager starts
  * CawCo's agent with, which `cawco service install` writes into the unit
  * from the installing shell's and the service manager's own (cli
- * service.ts `servicePath`). That PATH is the OS's own answer to where its
+ * service-manager/units.ts `servicePath`). That PATH is the OS's own answer to where its
  * programs are; CawCo keeps no list of directories. `getconf PATH` is not
  * that answer: it names only POSIX's standard utilities ("a value for the
  * PATH environment variable that accesses all of the standard utilities of
