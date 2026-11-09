@@ -4438,10 +4438,26 @@ export const createServer = (
     seen: (artifactId, card) => push.decidedSeen(artifactId, card),
   });
   const artifacts: Artifacts = createArtifacts({
+    // Settling returns its refusals; the artifacts still throw theirs: a
+    // settler's 403 as the artifact's refusal, the folder's refusal of the
+    // table as the ProjectRefusal it was.
     decides: {
-      routed: (asker, row, cards, all, state) =>
-        settling.routed(asker, row, cards, all, state),
-      settler: (settler, row, card) => settling.settler(settler, row, card),
+      routed: async (asker, row, cards, all, state) => {
+        const routed = await settling.routed(asker, row, cards, all, state);
+        if (routed instanceof ElysiaStatus) {
+          throw projectRefusalOf(routed);
+        }
+        return routed;
+      },
+      settler: async (settler, row, card) => {
+        const signs = await settling.settler(settler, row, card);
+        if (!(signs instanceof ElysiaStatus)) {
+          return signs;
+        }
+        throw signs.status === 403
+          ? new ArtifactRefusal(signs.status, signs.response.detail)
+          : projectRefusalOf(signs);
+      },
       settled: (row, card, member, answer) =>
         settling.settled(row, card, member, answer),
     },

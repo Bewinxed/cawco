@@ -34,10 +34,6 @@ import {
 } from "@cawco/core/decides";
 import { ElysiaStatus } from "elysia";
 import { areaFolder, readFolderFile } from "./project-folder";
-import { StatusRefusal } from "./refusal";
-
-/** A refusal of `settle`, in one sentence. */
-export class SettleRefusal extends StatusRefusal<403 | 409> {}
 
 /** The file in the project's folder that declares its Who decides. */
 export const DECIDES_FILE = "decides.md";
