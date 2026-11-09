@@ -43,15 +43,7 @@ import {
 } from "@cawco/core/choices";
 import { pinsToTell } from "@cawco/core/comments/deliver";
 import {
-  ACTIVITY_LIMIT,
-  activityLines,
-  activityOf,
-  answerChanges,
-  answeredLines,
-  bindChanges,
-  CHANGES_LIMIT,
   COMMENT_LIMITS,
-  carryChanges,
   type MarkPictures,
   newAnswer,
   type Pin,
@@ -62,7 +54,6 @@ import {
   SEND_CONTROLS,
   type SendBody,
   seeChanges,
-  seenOf,
   seePin,
   stampHeard,
   type ThreadEntry,
@@ -82,11 +73,9 @@ import type { PictureSize } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
 import {
   type ArtifactAsked,
-  type ArtifactChanges,
   type ChangedItem,
   docMeta,
   getMeta,
-  type MetaMap,
   type QuestionClose,
   type SentBy,
   setMeta,
@@ -116,7 +105,6 @@ import type {
 } from "@cawco/core/protocol";
 import {
   artifactLink,
-  changeLink,
   decisionLink,
   decisionReference,
   parseReference,
@@ -142,13 +130,11 @@ import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
-import { applyPatch } from "rfc6902";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
 import { SettleRefusal } from "../decides-file";
 import {
   type BuiltProgram,
-  keptImagePaths,
   mergeProgram,
   ProgramRefusal,
   readKept,
@@ -173,6 +159,7 @@ import type { ArtifactServiceDeps } from "./deps";
 import { createFacts, metaOf, stateOf } from "./facts";
 import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind, sheetOf } from "./kinds/component";
+import { createPageKind, newestHash, refusedProgram } from "./kinds/page";
 import { createPreviewKind, servedOf } from "./kinds/preview";
 import { createMarks, labelOf, linkOfPin } from "./marks";
 import {
@@ -189,13 +176,7 @@ import {
   sendsOnChange,
   unheardKeys,
 } from "./needs";
-import { answersReplaced, testedKeys } from "./overwrite";
-import {
-  cardChanges,
-  cssEscape,
-  htmlChanges,
-  pictureChanges,
-} from "./page-changes";
+import { answersReplaced } from "./overwrite";
 import { createPageStore } from "./page-store";
 import { type Question, stillAsked } from "./questions";
 import { ArtifactRefusal, NothingNewToSend } from "./refusals";
@@ -211,15 +192,12 @@ import {
   type CommentRead,
   type ComponentWritten,
   type Created,
-  type DecisionAnswer,
   type HandedArtifactFile,
   type Making,
   type Opened,
   type PageBroken,
   type PageChange,
-  type PageFrom,
   type PageHearer,
-  type PageWas,
   type PanelHand,
   type PictureAsk,
   type Placed,
@@ -241,9 +219,6 @@ import { routeOf } from "./sync";
 import { LIST_PAGE } from "./tools";
 import { createVersions } from "./versions";
 
-/** A program the hub can't keep, refused as the artifact's (decision-program.ts). */
-const refusedProgram = (error: ProgramRefusal): ArtifactRefusal =>
-  new ArtifactRefusal(error.status, error.message, { cause: error });
 /** Statements lang-core could not merge into the program: nothing was changed. */
 const unmerged = (error: unknown): ArtifactRefusal =>
   new ArtifactRefusal(
@@ -526,92 +501,6 @@ const answeredAtOf = (state: Record<string, ChoiceEntry>): string | null =>
 /** The words a page's `cawco.send(text)` sent with the person's last send; none when it sent none. */
 const sentTextOf = (doc: Doc): string | null =>
   getMeta(doc, "sentText") ?? null;
-
-/** How the person answered one choice a page asks ({@link DecisionAnswer}), from its entry in the doc's state. */
-const answerOf = (
-  asked: { card?: DecisionCard; id: string },
-  entry: ChoiceEntry | undefined,
-  current: string | null
-): DecisionAnswer => {
-  const { card, id } = asked;
-  const question = card ? { question: card.question } : {};
-  if (!entry) {
-    return { id, ...question, answer: "open" };
-  }
-  const said = {
-    at: entry.at,
-    ...(current && entry.pageHash !== current
-      ? { earlierRevision: true as const }
-      : {}),
-    ...(noteText(entry.note) ? { note: noteText(entry.note) as string } : {}),
-  };
-  if (entry.options.length === 0) {
-    // A note with no pick is still open; a pick taken back, cleared.
-    return said.note
-      ? { id, ...question, answer: "open", note: said.note }
-      : { id, ...question, answer: "cleared", ...said };
-  }
-  // Picked by the one rule every count reads (core `pickMade`); else a pick on options a revision took out.
-  if (!pickMade(card, entry)) {
-    return {
-      id,
-      ...question,
-      answer: "gone",
-      options: entry.options,
-      gone: card ? pickOf(card, entry).gone : [],
-      ...said,
-    };
-  }
-  return {
-    id,
-    ...question,
-    answer: "picked",
-    options: entry.options.map((option) => {
-      const label = card?.options.find((one) => one.id === option)?.label;
-      return label ? { id: option, label } : { id: option };
-    }),
-    ...said,
-    ...(entry.settled ? { settled: entry.settled } : {}),
-  };
-};
-
-/** The page hash the newest entry was made on: a preview's, which the hub never built. */
-const newestHash = (state: Record<string, ChoiceEntry>): string | null =>
-  Object.values(state).sort((a, b) => b.at.localeCompare(a.at))[0]?.pageHash ??
-  null;
-/**
- * The entries a patched `state` (`after`) makes of `before`: each changed key
- * whole, the fields the agent left out filled in (no note, no value, the
- * page it was made on), stamped `at`; refused whole at the first one out of
- * the bridge's bounds.
- */
-const patchedEntries = (
-  before: Record<string, ChoiceEntry>,
-  after: Record<string, unknown>,
-  hash: string,
-  at: string
-): Record<string, ChoiceEntry> => {
-  const next: Record<string, ChoiceEntry> = {};
-  for (const [key, value] of Object.entries(after)) {
-    if (JSON.stringify(value) === JSON.stringify(before[key])) {
-      continue;
-    }
-    const given = (value ?? {}) as Partial<ChoiceEntry>;
-    const entry: ChoiceEntry = {
-      options: given.options ?? [],
-      note: noteText(given.note),
-      value: given.value ?? null,
-      pageHash: given.pageHash ?? before[key]?.pageHash ?? hash,
-      at,
-    };
-    const problem = choiceEntryProblem(key, entry);
-    if (problem) {
-      throw new ArtifactRefusal(422, `${problem} Nothing was changed.`);
-    }
-    next[key] = entry;
-  }
-  return next;
-};
 /**
  * Why `row` can't be read as `ask` asks, or nothing: a state's link draws a
  * preview or a page, a frame is a component's, and the project's browser
@@ -1176,169 +1065,58 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     }
   };
+  const {
+    answeredHere,
+    createdPage,
+    decisionsOf,
+    keepPublishedSources,
+    keptAsMedia,
+    markChanges,
+    markRevision,
+    markedLinks,
+    pageChanged,
+    pageChanges,
+    pageHashOf,
+    pageNow,
+    programOf,
+    programRevised,
+    writePage,
+  } = createPageKind({
+    get answersHad() {
+      return answersHad;
+    },
+    get brokenBy() {
+      return brokenBy;
+    },
+    get cardLinks() {
+      return cardLinks;
+    },
+    get choicesAsked() {
+      return choicesAsked;
+    },
+    db,
+    deps,
+    docs,
+    holder,
+    holdsChange,
+    get mediaHeld() {
+      return mediaHeld;
+    },
+    namedFor,
+    get read() {
+      return read;
+    },
+    get routedOn() {
+      return routedOn;
+    },
+    get stampMeta() {
+      return stampMeta;
+    },
+    store,
+    warmPreviews,
+    whole,
+  });
 
-  /**
-   * A page's files in its folder: its HTML, and a decision page's program
-   * and the files its Images show (an earlier revision's go first); an HTML
-   * page keeps no program.
-   */
-  const writePage = (id: string, html: string, program?: BuiltProgram) => {
-    // The Canvases and Previews this revision drops stay the page's pictures (needs.ts).
-    const page = db.get(id);
-    const was = page ? store.program(id) : undefined;
-    if (page && was !== undefined) {
-      const kept = new Set(
-        program ? readKept(program.program).artifacts.map((one) => one.id) : []
-      );
-      keptAsMedia(
-        page,
-        readKept(was)
-          .artifacts.map((one) => one.id)
-          .filter((one) => !kept.has(one))
-      );
-    }
-    store.write(id, html, program);
-    if (program && page) {
-      warmPreviews(page, program.read);
-    }
-  };
-
-  /**
-   * Marks each of `ids`, an option's media on decision page `page` of its
-   * own session, as that page's (doc meta `mediaOf`): the page went, or a
-   * revision of it dropped them, and they ask nothing of their own still.
-   */
-  const keptAsMedia = (page: ArtifactRow, ids: readonly string[]): void => {
-    for (const id of ids) {
-      const media = db.get(id);
-      if (
-        media?.instanceId === page.instanceId &&
-        !docMeta(docs.doc(id)).has("mediaOf")
-      ) {
-        docs.transact(id, "hub", (doc) => setMeta(doc, "mediaOf", page.id));
-      }
-    }
-  };
-
-  /**
-   * What a page's revision changed (page-changes.ts): a decision page's
-   * cards, else an HTML page's elements, told at the elements its pins
-   * stand on where a change falls inside one.
-   */
-  const pageChanges = (
-    id: string,
-    was: PageWas,
-    now: { html: string; program?: BuiltProgram | undefined }
-  ): ChangedItem[] => {
-    if (now.program && was.program !== undefined) {
-      return [
-        ...cardChanges(readKept(was.program).cards, now.program.read.cards),
-        ...pictureChanges(was.files, now.program.files),
-      ];
-    }
-    const anchors = [...readPins(docs.doc(id)).values()].flatMap((pin) =>
-      "selector" in pin.anchor && !pin.anchor.frames?.length
-        ? [pin.anchor.selector]
-        : []
-    );
-    return htmlChanges(was.html, now.html, anchors);
-  };
-
-  /**
-   * The agent answered pin `pin` at `at`, after the latest update: that
-   * update's changes are its answer (core `answerChanges`), marked so on the
-   * set and in the pin's lines.
-   */
-  const answeredHere = (doc: Doc, pin: string, at: string) => {
-    const meta = docMeta(doc);
-    const changes = meta.get("changes");
-    if (!changes) {
-      return;
-    }
-    const { items, bound } = answerChanges(
-      changes,
-      readPins(doc).values(),
-      pin
-    );
-    if (bound.length === 0) {
-      return;
-    }
-    meta.set("changes", { ...changes, items });
-    const activity = activityOf(doc);
-    activity.set(pin, answeredLines(activity.get(pin) ?? [], bound, at));
-  };
-
-  /**
-   * What an agent's update changed (`items`, page-changes.ts), marked in the
-   * doc's meta under `revision` (core `ArtifactChanges`) until the person
-   * has looked: each tied to the comment it answers or stands under (core
-   * `bindChanges`, a reply since the update before it being the answer),
-   * and what the last set held that he hasn't looked at carried in (core
-   * `carryChanges`), so the set is everything since he looked. Each pin's
-   * thread gains a line per change made for it (the doc's `activity`, core
-   * `activityLines`), kept after he has looked.
-   */
-  const markRevision = (
-    row: ArtifactRow,
-    items: ChangedItem[],
-    revision: (meta: MetaMap) => number
-  ): ChangedItem[] => {
-    let bound: ChangedItem[] = [];
-    docs.transact(row.id, "hub", (doc) => {
-      const meta = docMeta(doc);
-      const was = meta.get("changes");
-      const seen = new Set(
-        was ? (seenOf(doc).get(String(was.revision)) ?? []) : []
-      );
-      const at = new Date().toISOString();
-      const since = was?.at ?? row.createdAt.toISOString();
-      const next = revision(meta);
-      const fresh = bindChanges(items, readPins(doc).values(), since, next);
-      bound = fresh;
-      const changes: ArtifactChanges = {
-        revision: next,
-        at,
-        since,
-        items: carryChanges(was?.items ?? [], seen, fresh),
-      };
-      meta.set("changes", changes);
-      const activity = activityOf(doc);
-      for (const [pin, lines] of activityLines(fresh, at)) {
-        activity.set(
-          pin,
-          [...(activity.get(pin) ?? []), ...lines].slice(-ACTIVITY_LIMIT)
-        );
-      }
-    });
-    return bound;
-  };
-
-  /**
-   * What an update marked, each by its link (core `changeLink`): what the
-   * agent names each to the person by, and what the turn's row draws as its
-   * chips; a thing taken out has no place to open, and is left out.
-   */
-  const markedLinks = (
-    id: string,
-    items: readonly ChangedItem[]
-  ): { marked?: string[] } => {
-    const links = items
-      .filter((item) => item.kind !== "removed")
-      .map((item) =>
-        changeLink(
-          id,
-          item.anchor,
-          item.element && item.element !== item.label
-            ? `${item.element} · ${item.label}`
-            : item.label
-        )
-      );
-    return links.length > 0 ? { marked: links } : {};
-  };
-
-  /** Page `row`'s revision changed `items`: marked under its revision ({@link markRevision}). */
-  const markChanges = (row: ArtifactRow, items: ChangedItem[]): ChangedItem[] =>
-    markRevision(row, items.slice(0, CHANGES_LIMIT), () => row.revision);
   const {
     canvasFile,
     canvasNow,
@@ -1409,10 +1187,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     Object.fromEntries(
       cards.map((card) => [card.id, decisionLink(id, card.id, card.question)])
     );
-
-  /** A decision page's program as the hub keeps it; undefined for an HTML page or any other artifact. */
-  const programOf = (row: ArtifactRow): string | undefined =>
-    row.kind === "page" ? store.program(row.id) : undefined;
 
   /**
    * The artifacts a program's Canvas and Preview pieces name, each one the
@@ -1533,129 +1307,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
   };
 
-  /** A page's hash: its program's for a decision page, else its HTML's; none for anything else. */
-  const pageHashOf = (
-    html: string | null,
-    program: BuiltProgram | undefined
-  ): string | null => {
-    if (program) {
-      return pageHash(program.program);
-    }
-    return html === null ? null : pageHash(html);
-  };
-
-  /**
-   * Where a decision page's Image files stand, kept in its doc's meta for
-   * its revisions: the work folder it was last published from (`dir`, none
-   * for one published inline or from the project's folder) and the machine
-   * that folder is on (`machine`, its publishing session's), and the
-   * machine each picture it shows was read on (`read`), a path naming a
-   * file on that machine alone.
-   */
-  const keepPictureSources = (
-    row: ArtifactRow,
-    program: BuiltProgram,
-    sources: {
-      folder?: { dir: string | undefined; machine: string };
-      read: (file: string) => string | undefined;
-    }
-  ) => {
-    const read: Record<string, string> = {};
-    for (const name of keptImagePaths(program.program).keys()) {
-      const machine = sources.read(name);
-      if (machine) {
-        read[name] = machine;
-      }
-    }
-    docs.transact(row.id, "hub", (doc) => {
-      const meta = docMeta(doc);
-      meta.set("pictureMachines", read);
-      const { folder } = sources;
-      if (!folder) {
-        return;
-      }
-      if (folder.dir === undefined) {
-        meta.delete("programDir");
-        meta.delete("programMachine");
-      } else {
-        meta.set("programDir", folder.dir);
-        meta.set("programMachine", folder.machine);
-      }
-    });
-  };
-
-  /** A published decision page's picture sources ({@link keepPictureSources}): each read on its maker's machine, where its folder `dir` is too. */
-  const keepPublishedSources = (
-    row: ArtifactRow,
-    program: BuiltProgram | undefined,
-    dir: string | undefined,
-    maker: InstanceRow
-  ) => {
-    if (program) {
-      keepPictureSources(row, program, {
-        folder: { dir, machine: maker.machineId },
-        read: () => maker.machineId,
-      });
-    }
-  };
-
-  /**
-   * The machine a revision of decision page `row` by session `reviser`
-   * reads Image `file` on: the one a picture the page shows was read on;
-   * for a name new to the page, the folder's machine (a relative name,
-   * beside the program it was published from) or the reviser's (an
-   * absolute one, which the reviser wrote). None for a picture the page
-   * shows with no machine kept (a page published before machines were) or
-   * a relative name with no folder's machine: the page keeps the one, the
-   * other is refused.
-   */
-  const revisionReadsOn = (
-    row: ArtifactRow,
-    reviser: InstanceRow,
-    shown: ReadonlyMap<string, Uint8Array>
-  ): ((file: string) => string | undefined) => {
-    const meta = docMeta(docs.doc(row.id));
-    const read = meta.get("pictureMachines") ?? {};
-    const folder = meta.get("programMachine");
-    return (file) => {
-      if (Object.hasOwn(read, file)) {
-        return read[file];
-      }
-      if (shown.has(file)) {
-        return;
-      }
-      if (file.startsWith("/")) {
-        return reviser.machineId;
-      }
-      return typeof folder === "string" ? folder : undefined;
-    };
-  };
-
-  /**
-   * A page's next revision, for new HTML. A view joined to it morphs to the
-   * new HTML in place, so the person has that revision on screen without a
-   * new show.
-   */
-  const nextRevision = (row: ArtifactRow) => ({
-    revision: row.revision + 1,
-    updatedAt: new Date(),
-    ...(docs.viewers(row.id) > 0 ? { openedRevision: row.revision + 1 } : {}),
-  });
-
-  /** A read's `decisions`: each choice the page asks, answered or not, on every read (one `since` a seq too); nothing for a page that asks none. */
-  const decisionsOf = (
-    row: ArtifactRow,
-    state: Record<string, ChoiceEntry>,
-    current: string | null
-  ): Pick<ArtifactRead, "decisions"> => {
-    const asked = choicesAsked(row);
-    return asked.length > 0
-      ? {
-          decisions: asked.map((one) => answerOf(one, state[one.id], current)),
-        }
-      : {};
-  };
-
   /**
    * The seq a read of `row` that returned the keys of its state `returned`
    * names counts as its session's read through (needs.ts `readThrough`).
@@ -1752,62 +1403,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : {}),
       ...faultsOf(row, doc),
     };
-  };
-
-  /**
-   * A page built from what a create names: its HTML, and a decision page's
-   * program, the artifacts its media show checked against `owner`'s panel.
-   */
-  const pageBuilt = async (
-    instance: InstanceRow,
-    input: Pick<ArtifactInput, "name" | "html" | "dir" | "program">,
-    owner: InstanceRow,
-    keep: boolean
-  ): Promise<{ html: string; program?: BuiltProgram }> => {
-    const given = [input.program, input.html, input.dir].filter(
-      (one) => one !== undefined
-    ).length;
-    if (given > 1) {
-      throw new ArtifactRefusal(
-        400,
-        "A page takes one of program, html or dir."
-      );
-    }
-    if (given === 0 && !instance.projectId) {
-      throw new ArtifactRefusal(
-        400,
-        "A page takes program (a decision page, decision-page skill), html, or dir with your work folder."
-      );
-    }
-    let from: PageFrom = { folder: true };
-    if (input.program !== undefined) {
-      from = { program: input.program };
-    } else if (input.html !== undefined) {
-      from = { html: input.html };
-    } else if (input.dir !== undefined) {
-      from = { dir: input.dir };
-    }
-    const page = await built(instance, input.name, from, keep);
-    if (page.program) {
-      mediaHeld(owner, page.program);
-    }
-    return page;
-  };
-
-  /** Refuses new HTML for what takes none: an artifact that is no page, or a decision page written as a program. */
-  const takesHtml = (row: ArtifactRow): void => {
-    if (row.kind !== "page") {
-      throw new ArtifactRefusal(
-        409,
-        `${row.name} is a ${row.kind}: only a page takes new HTML.`
-      );
-    }
-    if (programOf(row) !== undefined) {
-      throw new ArtifactRefusal(
-        409,
-        `${row.name} is a decision page written as a program: revise it with statements.`
-      );
-    }
   };
 
   /** Each of `cards` (of all `all` on artifact `id`), routed by Who decides and said as a line ({@link ArtifactServiceDeps.decides}). */
@@ -1944,61 +1539,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...(links.unlinked.length > 0 ? { unlinked: links.unlinked } : {}),
     };
     return Object.keys(broken).length > 0 ? broken : undefined;
-  };
-
-  /**
-   * A create's page built, and what its program leaves broken on the picks
-   * of the page it replaces and on the project's links between pages. A re-create held
-   * for the parent is kept in its project's folder when they open it.
-   */
-  const createdPage = async (
-    { maker, owner }: Making,
-    input: ArtifactInput
-  ): Promise<{
-    broken: PageBroken | undefined;
-    html: string;
-    program?: BuiltProgram;
-  }> => {
-    const was = namedFor(owner, "page", input.name);
-    // Another session's page of the project's is the owner's once made again (placed).
-    const page = await pageBuilt(
-      maker,
-      input,
-      owner,
-      !(was && holdsChange(maker, { ...was, instanceId: owner.id }))
-    );
-    const broken = page.program
-      ? await brokenBy(
-          { id: was?.id, name: input.name, projectId: owner.projectId ?? null },
-          page.program.read.cards
-        )
-      : undefined;
-    return { ...page, broken };
-  };
-
-  /**
-   * `deps.page`'s build, its refusal (and a program's) thrown as the
-   * artifact's; kept in the project's folder unless it is a held next
-   * version's (`keep` false), which {@link promote} keeps there.
-   */
-  const built = async (
-    instance: InstanceRow,
-    name: string,
-    from: PageFrom,
-    keep = true
-  ): Promise<{ html: string; program?: BuiltProgram }> => {
-    let page: Awaited<ReturnType<ArtifactServiceDeps["page"]>>;
-    try {
-      page = await deps.page(instance, name, from, keep, (asked) =>
-        whole(instance, asked)
-      );
-    } catch (error) {
-      throw error instanceof ProgramRefusal ? refusedProgram(error) : error;
-    }
-    if ("refused" in page) {
-      throw new ArtifactRefusal(page.status, page.refused);
-    }
-    return page;
   };
 
   /*
@@ -2711,32 +2251,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       : {};
 
   /**
-   * Page or preview `row` as `artifact_read` reads it: the person's picks,
-   * notes and Sends on the version they have before them, the server and
-   * stage its newest version's, `now` ({@link newestVersion}), `held` naming
-   * that one when its panel hasn't opened it.
-   */
-  const pageNow = (
-    row: ArtifactRow,
-    now: ArtifactRow,
-    since: number | undefined,
-    ownersRead: boolean
-  ): ArtifactRead => {
-    const theirs = read(row, since, ownersRead);
-    if (now === row) {
-      return theirs;
-    }
-    const { stage: _stage, workspace: _workspace, ...done } = theirs;
-    const { stage, workspace } = read(now, undefined, false);
-    return {
-      ...done,
-      ...(stage === undefined ? {} : { stage }),
-      ...(workspace === undefined ? {} : { workspace }),
-      held: now.id,
-    };
-  };
-
-  /**
    * `artifact_read` of `row` for `instance`, its picture drawn when `drawn`:
    * a canvas's latest; a preview or a page now, at its state's link when
    * `ask` names one; a component's frames by its stage. What it is (its
@@ -2839,164 +2353,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       how = "held";
     }
     throw new ArtifactRefusal(409, artifactToolWords.answersStand(said, how));
-  };
-
-  /**
-   * New HTML for page `row` (its revision moves and every open view morphs
-   * to it, its state kept), or a JSON Patch (RFC 6902) over its `state`
-   * applied as one transaction; its read after, as `ownersRead` says.
-   */
-  const pageChanged = async (
-    instance: InstanceRow,
-    row: ArtifactRow,
-    change: Exclude<PageChange, { statements: string }>,
-    ownersRead: boolean
-  ): Promise<ArtifactRead> => {
-    if ("html" in change) {
-      takesHtml(row);
-      const { html } = await built(
-        instance,
-        row.name,
-        { html: change.html },
-        row.heldFor === null
-      );
-      const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
-      const was = store.revision(moved.id);
-      writePage(moved.id, html);
-      // Every page open on it hears the new revision in the doc and morphs
-      // in place (the overlay); nothing reloads.
-      stampMeta(moved, pageHash(html));
-      const fresh = markChanges(
-        moved,
-        was ? pageChanges(moved.id, was, { html }) : []
-      );
-      return {
-        ...read(moved, undefined, ownersRead),
-        ...markedLinks(moved.heldFor ?? moved.id, fresh),
-      };
-    }
-    const doc = docs.doc(row.id);
-    const before = stateOf(doc);
-    const after = structuredClone(before) as Record<string, unknown>;
-    const errors = applyPatch(after, change.patch);
-    const program = programOf(row);
-    const carded = program
-      ? readKept(program)
-          .cards.map((card) => card.id)
-          .filter(
-            (card) =>
-              JSON.stringify(after[card]) !== JSON.stringify(before[card])
-          )
-      : [];
-    if (carded.length > 0) {
-      throw new ArtifactRefusal(
-        409,
-        `${carded.join(", ")} ${carded.length === 1 ? "is a decision card" : "are decision cards"}: a card's pick is the person's, or settle's by the project's Who decides. Nothing was changed.`
-      );
-    }
-    const failed = errors.findIndex((error) => error !== null);
-    if (failed !== -1) {
-      throw new ArtifactRefusal(
-        422,
-        `Operation ${failed} of the patch failed: ${errors[failed]?.message ?? "it does not apply"}. Nothing was changed.`
-      );
-    }
-    answersHad(instance, row, {
-      before,
-      after,
-      tested: testedKeys(change.patch, before),
-    });
-    const next = patchedEntries(
-      before,
-      after,
-      metaOf(doc).pageHash ?? newestHash(before) ?? "0".repeat(64),
-      new Date().toISOString()
-    );
-    const gone = Object.keys(before).filter((key) => !(key in after));
-    docs.transact(row.id, "agent", (live) => {
-      const state = live.getMap("state");
-      for (const [key, entry] of Object.entries(next)) {
-        state.set(key, entry);
-      }
-      for (const key of gone) {
-        state.delete(key);
-      }
-    });
-    return read(db.get(row.id) as ArtifactRow, undefined, ownersRead);
-  };
-
-  /** Decision page `row`'s program `existing` revised as `merged`, built, checked and written; what changed. */
-  const programRevised = async (
-    instance: InstanceRow,
-    row: ArtifactRow,
-    existing: string,
-    merged: ReturnType<typeof mergeProgram>
-  ): Promise<Revised> => {
-    // Said before anything is written: the merged program's cards against the person's picks and the project's pages.
-    const broken = await brokenBy(row, readKept(merged.merged).cards);
-    const dir = getMeta(docs.doc(row.id), "programDir");
-    const shown = store.shownPictures(row.id, existing);
-    const readOn = revisionReadsOn(row, instance, shown);
-    const page = await built(
-      instance,
-      row.name,
-      {
-        program: merged.merged,
-        dir: typeof dir === "string" ? dir : undefined,
-        shown,
-        readOn,
-      },
-      row.heldFor === null
-    );
-    const program = page.program as BuiltProgram;
-    mediaHeld(holder(row) ?? instance, program);
-    const kept = readKept(existing).cards;
-    const before = new Set(kept.map((card) => card.id));
-    const after = program.read.cards.map((card) => card.id);
-    const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
-    const was = store.revision(moved.id);
-    writePage(moved.id, page.html, program);
-    keepPictureSources(moved, program, { read: readOn });
-    const hash = pageHash(program.program);
-    stampMeta(moved, hash);
-    const changes = [
-      ...cardChanges(kept, program.read.cards),
-      ...pictureChanges(was?.files ?? new Map(), program.files),
-    ];
-    const fresh = markChanges(moved, changes);
-    const touched = new Set(
-      changes.filter((item) => item.kind === "card").map((item) => item.anchor)
-    );
-    const routes = await routedOn(
-      instance,
-      moved.heldFor ?? moved.id,
-      program.read.cards.filter((card) =>
-        touched.has(`#decision-${cssEscape(card.id)}`)
-      ),
-      program.read.cards
-    );
-    return {
-      ...(Object.keys(routes).length > 0 ? { routes } : {}),
-      id: moved.id,
-      revision: moved.revision,
-      pageHash: hash,
-      statements: merged.change,
-      decisions: after,
-      // The cards it put in or rewrote, each by its link: what the agent names them by.
-      cards: cardLinks(
-        moved.heldFor ?? moved.id,
-        program.read.cards.filter((card) =>
-          touched.has(`#decision-${cssEscape(card.id)}`)
-        )
-      ),
-      moved: {
-        added: after.filter((card) => !before.has(card)),
-        removed: [...before].filter((card) => !after.includes(card)),
-      },
-      ...markedLinks(moved.heldFor ?? moved.id, fresh),
-      ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
-      ...(broken ? { broken } : {}),
-    };
   };
   const {
     askOf,
