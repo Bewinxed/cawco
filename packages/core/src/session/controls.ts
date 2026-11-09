@@ -184,7 +184,7 @@ export const CONTROL_SEARCH_TRANSCRIPTS = "searchTranscripts";
  * The hub stopped waiting for a read it asked a machine (its deadline
  * passed, or the person's Find asked something newer): args `[requestId]`,
  * the read's own. The machine stops that read where it runs (agent
- * session.ts `registerAbandonable`: {@link CONTROL_SEARCH_TRANSCRIPTS},
+ * session.ts `declareRead`: {@link CONTROL_SEARCH_TRANSCRIPTS},
  * {@link CONTROL_TRANSCRIPT_TURNS} and {@link CONTROL_TRANSCRIPT_PLACES}),
  * and answers `{ stopped }`, whether it
  * held it. Machine-scoped.

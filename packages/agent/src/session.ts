@@ -68,7 +68,6 @@ import { GENERATE_IMAGE } from "@cawco/core/image-generation";
 import { withWorktreeLine } from "@cawco/core/injected";
 import { inFlight } from "@cawco/core/loop-watch";
 import { machineLabel } from "@cawco/core/machine-names";
-import { MOVE_STEPS } from "@cawco/core/move";
 import { sessionScratchDir } from "@cawco/core/paths/workspace";
 import {
   PREVIEW_FOLDERS,
@@ -159,14 +158,6 @@ import { processLimitSentence } from "@cawco/core/words/sessiond";
 import { turnWords } from "@cawco/core/words/turns";
 import { workWords } from "@cawco/core/words/work";
 import {
-  CONTROL_HOST_OUTPUTS,
-  CONTROL_HOST_SCRATCH_REMOVE,
-  CONTROL_WORKSPACE_ARCHIVE,
-  CONTROL_WORKSPACE_AT,
-  CONTROL_WORKSPACE_BUNDLE,
-  CONTROL_WORKSPACE_CREATE,
-  CONTROL_WORKSPACE_DISCARD,
-  CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
@@ -189,6 +180,12 @@ import {
   closeCanvasScreens,
   openCanvasScreen,
 } from "./canvas-screen";
+import {
+  type ControlLane,
+  type ControlMethod,
+  imageLane,
+  type MachineControl,
+} from "./control-lanes";
 import { reportDamaged } from "./damaged-records";
 import { forgetFirstSession } from "./first-session";
 import { FleetConverger } from "./fleet-converger";
@@ -424,9 +421,6 @@ class NotRunning extends Error {
     this.name = "NotRunning";
   }
 }
-
-/** A control reached by name through `control`. */
-type ControlMethod = (...args: unknown[]) => unknown;
 
 /** How many requests the hub let go before they began here are kept, to refuse each as it begins. */
 const LET_GO_KEPT = 256;
@@ -967,71 +961,138 @@ export class SessionSupervisor {
     { adapter: Harness; sessionKey: string; cwd: string }
   >();
 
-  readonly #daemonFunctions: Record<string, ControlMethod> = {
+  /**
+   * EVERY MACHINE-SCOPED CONTROL, DECLARED ONCE WITH ITS LANE: what it runs,
+   * and the queue it waits in ({@link dispatch}); one that names no lane
+   * waits behind its own kind (`machine:<method>`). The supervisor declares
+   * its own here, the daemon the rest as it starts ({@link declareControl},
+   * {@link declareRead}). A session's own controls go to its process
+   * ({@link #call}), and the session catalog's to the harness it names.
+   */
+  readonly #controls: Record<string, MachineControl> = {
     // A generation runs in this process, so a restart cuts it: none starts behind a raised fence.
-    [GENERATE_IMAGE]: (_instanceId, cwd, input, bound, project) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : generateImage(cwd as string, input, bound, project),
-    [PREVIEW_START]: (options) =>
-      startPreview(options as Parameters<typeof startPreview>[0]),
-    [PREVIEW_STOP]: (options) =>
-      stopPreview(options as Parameters<typeof stopPreview>[0]),
-    [PREVIEW_WEIGHT]: (dir, path) => previewWeight(dir, path),
+    // A slow image request must not block machine busy probes or other
+    // controls.
+    [GENERATE_IMAGE]: {
+      lane: imageLane,
+      call: (_instanceId, cwd, input, bound, project) =>
+        fenced()
+          ? Promise.reject(new Error(AGENT_RESTARTING))
+          : generateImage(cwd as string, input, bound, project),
+    },
+    [PREVIEW_START]: {
+      call: (options) =>
+        startPreview(options as Parameters<typeof startPreview>[0]),
+    },
+    [PREVIEW_STOP]: {
+      call: (options) =>
+        stopPreview(options as Parameters<typeof stopPreview>[0]),
+    },
+    [PREVIEW_WEIGHT]: { call: (dir, path) => previewWeight(dir, path) },
     // A read of folders, as a machine registers: nothing starts (preview.ts `foldersThere`).
-    [PREVIEW_FOLDERS]: (dirs) => foldersThere(dirs),
+    [PREVIEW_FOLDERS]: { call: (dirs) => foldersThere(dirs) },
     // A canvas no person's screen shows, drawn by this machine's Chromium (canvas-screen.ts).
-    [CANVAS_SCREEN_OPEN]: (options) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : openCanvasScreen(options as Parameters<typeof openCanvasScreen>[0]),
-    [CANVAS_SCREEN_CLOSE]: (options) =>
-      closeCanvasScreen(options as Parameters<typeof closeCanvasScreen>[0]),
+    [CANVAS_SCREEN_OPEN]: {
+      call: (options) =>
+        fenced()
+          ? Promise.reject(new Error(AGENT_RESTARTING))
+          : openCanvasScreen(options as Parameters<typeof openCanvasScreen>[0]),
+    },
+    [CANVAS_SCREEN_CLOSE]: {
+      call: (options) =>
+        closeCanvasScreen(options as Parameters<typeof closeCanvasScreen>[0]),
+    },
     // A preview or a page drawn as the panel draws it, for artifact_read's png (artifact-picture.ts).
-    [ARTIFACT_PICTURE]: (options) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : drawArtifact(options as Parameters<typeof drawArtifact>[0]),
-    [AGENT_BUSY]: () => this.busyNow(),
+    [ARTIFACT_PICTURE]: {
+      call: (options) =>
+        fenced()
+          ? Promise.reject(new Error(AGENT_RESTARTING))
+          : drawArtifact(options as Parameters<typeof drawArtifact>[0]),
+    },
+    [AGENT_BUSY]: { call: () => this.busyNow() },
+    [CONTROL_ABANDON]: {
+      call: (requestId) => this.#abandon(String(requestId)),
+    },
+    [CONTROL_RESTLESS]: { call: (ids) => this.#restless(ids as string[]) },
+    // The hub revoked these credentials: they grant nothing now.
+    [CONTROL_FORGET_CREDENTIALS]: {
+      call: (ids) => ({ forgotten: forgetRevoked(ids as string[]) }),
+    },
+    // Each carry in a lane of its own: one session's carry never waits on
+    // another's. A second carry of a conversation one is still carrying is
+    // refused with that reason (claude-carry.ts `carrySessions`).
+    [CONTROL_CARRY_SESSIONS]: {
+      lane: (control) => `carry:${control.requestId}`,
+      call: (requests) =>
+        this.carrier.carrySessions(requests as CarrySessionRequest[]),
+    },
+    [CONTROL_SPIN_OFF_HELD]: {
+      call: (instanceId) => this.#spinOffs.spinOffHeld(String(instanceId)),
+    },
+    [CONTROL_GIT_CHANGES]: {
+      call: (dir, since) => gitChanges(dir as string, since as string),
+    },
+    listTools: { call: () => probeTools() },
+    [CONTROL_BEGIN_TOOL_SIGNIN]: {
+      call: (tool) => beginToolSignin(String(tool)),
+    },
+    [CONTROL_COMPLETE_TOOL_SIGNIN]: {
+      call: (tool, code) =>
+        completeToolSignin(String(tool), String(code ?? "")),
+    },
+    installTool: { call: (...args) => this.#installTool(args) },
+    // A delta, held as it arrived and kept on disk (#holdDelta): answered
+    // at once with the generation kept (ACK; READY for a welcome), its
+    // policy and items applied after (#writePolicy, #convergeSoon), each
+    // said as it moves. Only the machine's agent holds the hub's link, and
+    // so only it is sent one.
+    // Deltas in a lane of their own, in the order they came: an answer
+    // (ACK means kept on disk) never waits behind the machine's other
+    // controls, as a just-started agent's welcome waited 14 to 51 s
+    // behind its start-up work (2026-10-25 17:39-17:43).
+    [FLEET_DELTA]: {
+      lane: () => "fleet",
+      call: (delta) => this.#fleet.answerDelta(delta as FleetDelta),
+    },
+    [FLEET_STATUS]: { call: () => this.#fleet.status() },
   };
 
-  /** Register a machine-scoped control method, callable without an instanceId. */
-  registerDaemonFunction(name: string, fn: ControlMethod): void {
-    this.#daemonFunctions[name] = fn;
+  /**
+   * Declares machine-scoped control `name` ({@link #controls}), callable
+   * without an instanceId, waiting in `lane` when it names one.
+   */
+  declareControl(name: string, call: ControlMethod, lane?: ControlLane): void {
+    this.#controls[name] = { call, ...(lane ? { lane } : {}) };
   }
 
   /**
-   * Machine-scoped reads the hub may stop waiting for ({@link CONTROL_ABANDON}):
-   * each runs in a lane of its own and is handed a signal that aborts when
-   * the hub says it let its request go.
+   * Declares a machine-scoped read the hub may stop waiting for
+   * ({@link CONTROL_ABANDON}): it runs in a lane of its own and is handed a
+   * signal that aborts when the hub says it let its request go. A read
+   * the hub may let go runs beside every other: one search never waits on
+   * another, nor the hub's word that it let one go on it.
    */
-  readonly #abandonable: Record<
-    string,
-    (signal: AbortSignal, ...args: unknown[]) => unknown
-  > = {};
+  declareRead(
+    name: string,
+    read: (signal: AbortSignal, ...args: unknown[]) => unknown
+  ): void {
+    this.#controls[name] = {
+      lane: (control) => `read:${control.requestId}`,
+      read,
+    };
+  }
+
   /** Each abandonable read running, by the hub's request id. */
   readonly #reads = new Map<string, AbortController>();
   /** Requests the hub let go before they began here, oldest first: each refused as it begins. */
   readonly #letGo = new Set<string>();
 
-  /** Register a machine-scoped read the hub can stop waiting for, and so stop here ({@link CONTROL_ABANDON}). */
-  registerAbandonable(
-    name: string,
-    fn: (signal: AbortSignal, ...args: unknown[]) => unknown
-  ): void {
-    this.#abandonable[name] = fn;
-  }
-
-  /** Read `method`, stopped when the hub lets `requestId` go. */
+  /** `read`, stopped when the hub lets `requestId` go. */
   async #abandonableRead(
-    method: string,
+    read: (signal: AbortSignal, ...args: unknown[]) => unknown,
     requestId: string | undefined,
     args: unknown[]
   ): Promise<unknown> {
-    const read = this.#abandonable[method];
-    if (!read) {
-      throw new Error(`${method} is no read the hub can let go`);
-    }
     if (requestId && this.#letGo.delete(requestId)) {
       throw new Error("the hub let this read go before it began");
     }
@@ -1239,48 +1300,15 @@ export class SessionSupervisor {
     }
     const imageRequest =
       control?.method === GENERATE_IMAGE ? control.requestId : undefined;
+    let key = envelope.instanceId ?? "";
     // A slow image request must not block machine busy probes or other
     // controls. Nor may a command the hub runs (a check, a landing gate step, up
     // to an hour): commands in one directory run one after another, and
-    // nothing else waits for them.
-    let key = envelope.instanceId ?? "";
-    if (imageRequest) {
-      key = `image:${imageRequest}`;
-    } else if (control?.method === CONTROL_RUN_COMMAND) {
-      key = `command:${String(control.args?.[0])}`;
-    } else if (control && MOVE_STEPS.has(control.method)) {
-      // A move's steps queue per job: two jobs never wait on each other, and
-      // a hub asking again for a step in flight waits on that one run.
-      key = `move:${(control.args?.[0] as { jobId?: string } | undefined)?.jobId}`;
-    } else if (control && control.method in this.#abandonable) {
-      // A read the hub may let go runs beside every other: one search never
-      // waits on another, nor the hub's word that it let one go on it.
-      key = `read:${control.requestId}`;
-    } else if (control?.method === FLEET_DELTA) {
-      // Deltas in a lane of their own, in the order they came: an answer
-      // (ACK means kept on disk) never waits behind the machine's other
-      // controls, as a just-started agent's welcome waited 14 to 51 s
-      // behind its start-up work (2026-10-25 17:39-17:43).
-      key = "fleet";
-    } else if (control?.method === CONTROL_CARRY_SESSIONS) {
-      // Each carry in a lane of its own: one session's carry never waits on
-      // another's. A second carry of a conversation one is still carrying is
-      // refused with that reason (claude-carry.ts `carrySessions`).
-      key = `carry:${control.requestId}`;
-    } else if (control?.method === CONTROL_WORKSPACE_CREATE) {
-      // A late create must finish before its discard; different workspace ids do not queue together.
-      key = `workspace:${String(control.args?.[1])}`;
-    } else if (
-      control?.method === CONTROL_WORKSPACE_ARCHIVE ||
-      control?.method === CONTROL_WORKSPACE_DISCARD ||
-      control?.method === CONTROL_WORKSPACE_OUTPUTS ||
-      control?.method === CONTROL_HOST_OUTPUTS ||
-      control?.method === CONTROL_HOST_SCRATCH_REMOVE ||
-      control?.method === CONTROL_WORKSPACE_WORK_END ||
-      control?.method === CONTROL_WORKSPACE_BUNDLE ||
-      control?.method === CONTROL_WORKSPACE_AT
-    ) {
-      key = `workspace:${(control.args?.[0] as { id?: string } | undefined)?.id}`;
+    // nothing else waits for them. Each control's lane is declared with it
+    // ({@link #controls}).
+    const lane = control && this.#controls[control.method]?.lane?.(control);
+    if (lane !== undefined) {
+      key = lane;
     } else if (
       control &&
       !envelope.instanceId &&
@@ -4687,74 +4715,11 @@ export class SessionSupervisor {
     requestId?: string
   ): Promise<unknown> {
     if (instanceId === undefined) {
-      const daemonFn = this.#daemonFunctions[method];
-      if (daemonFn) {
-        return await daemonFn(...args);
-      }
-      if (method in this.#abandonable) {
-        return await this.#abandonableRead(method, requestId, args);
-      }
-      if (method === CONTROL_ABANDON) {
-        return this.#abandon(String(args[0]));
-      }
-
-      if (method === CONTROL_RESTLESS) {
-        return await this.#restless(args[0] as string[]);
-      }
-      // The hub revoked these credentials: they grant nothing now.
-      if (method === CONTROL_FORGET_CREDENTIALS) {
-        return { forgotten: forgetRevoked(args[0] as string[]) };
-      }
-      if (method === CONTROL_CARRY_SESSIONS) {
-        return await this.carrier.carrySessions(
-          args[0] as CarrySessionRequest[]
-        );
-      }
-      if (method === CONTROL_SPIN_OFF_HELD) {
-        return await this.#spinOffs.spinOffHeld(String(args[0]));
-      }
-      if (method === CONTROL_GIT_CHANGES) {
-        return await gitChanges(args[0] as string, args[1] as string);
-      }
-      if (method === "listTools") {
-        return await probeTools();
-      }
-      if (method === CONTROL_BEGIN_TOOL_SIGNIN) {
-        return await beginToolSignin(String(args[0]));
-      }
-      if (method === CONTROL_COMPLETE_TOOL_SIGNIN) {
-        return await completeToolSignin(String(args[0]), String(args[1] ?? ""));
-      }
-      if (method === "installTool") {
-        // The policy's pin, the newest release the hub sends a tool it keeps
-        // current to reach, and whether the hub sent it to keep it current
-        // rather than a press (hub tool-releases.ts); JSON says an absent
-        // one as null.
-        const said = (at: number): string | undefined =>
-          typeof args[at] === "string" ? (args[at] as string) : undefined;
-        const newest = said(2);
-        const installed = await installTool(args[0] as string, said(1), {
-          ...(newest ? { newest } : {}),
-          automatic: args[3] === true,
-        });
-        // A harness CLI installed here converges what the machine holds of
-        // the fleet, as every harness already here did.
-        if (harnesses().some((adapter) => adapter.kind === args[0])) {
-          this.#fleet.reconverge();
-        }
-        return installed;
-      }
-
-      // A delta, held as it arrived and kept on disk (#holdDelta): answered
-      // at once with the generation kept (ACK; READY for a welcome), its
-      // policy and items applied after (#writePolicy, #convergeSoon), each
-      // said as it moves. Only the machine's agent holds the hub's link, and
-      // so only it is sent one.
-      if (method === FLEET_DELTA) {
-        return this.#fleet.answerDelta(args[0] as FleetDelta);
-      }
-      if (method === FLEET_STATUS) {
-        return await this.#fleet.status();
+      const declared = this.#controls[method];
+      if (declared) {
+        return "read" in declared
+          ? await this.#abandonableRead(declared.read, requestId, args)
+          : await declared.call(...args);
       }
 
       if (CATALOG_METHODS.has(method)) {
@@ -4903,6 +4868,27 @@ export class SessionSupervisor {
       rememberCredential(instanceId, String(args[0]));
     }
     return await session.control(method, args);
+  }
+
+  /** {@link installTool} of the tool `args` names, as the hub asked. */
+  async #installTool(args: unknown[]): Promise<unknown> {
+    // The policy's pin, the newest release the hub sends a tool it keeps
+    // current to reach, and whether the hub sent it to keep it current
+    // rather than a press (hub tool-releases.ts); JSON says an absent
+    // one as null.
+    const said = (at: number): string | undefined =>
+      typeof args[at] === "string" ? (args[at] as string) : undefined;
+    const newest = said(2);
+    const installed = await installTool(args[0] as string, said(1), {
+      ...(newest ? { newest } : {}),
+      automatic: args[3] === true,
+    });
+    // A harness CLI installed here converges what the machine holds of
+    // the fleet, as every harness already here did.
+    if (harnesses().some((adapter) => adapter.kind === args[0])) {
+      this.#fleet.reconverge();
+    }
+    return installed;
   }
 
   /**
