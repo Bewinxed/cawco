@@ -12,7 +12,7 @@
  * tears its content down at once (svelte boundary.js `#handle_error`; a
  * branch that throws while it is built is torn down as it throws,
  * effects.js `create_effect`) and calls `transformError` only a microtask
- * later. {@link RegionHeld} sits first inside each boundary, and its
+ * later. `RegionHeld` sits first inside each boundary, and its
  * teardown counts one drop. A drop no `handleError` claims within the task
  * was an ordinary unmount (a tab closed) and lapses.
  */
