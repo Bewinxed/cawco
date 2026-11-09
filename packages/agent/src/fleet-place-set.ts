@@ -5,8 +5,8 @@
  * `.claude/skills`, `.claude/rules/cawco`). One file per place, in a dir of
  * CawCo's own (core paths/fleet.ts `fleetPlacesDir`), named by the place key
  * (core `placeKeyOf`): the fleet's converge writes each place's
- * (fleet.ts `converge`, session.ts `#syncFleet`), a workspace's cut writes
- * its clone's alone (session.ts `placeClone`), and an archive removes it
+ * (fleet.ts `converge`, fleet-converger.ts `#syncFleet`), a workspace's cut writes
+ * its clone's alone (fleet-converger.ts `placeClone`), and an archive removes it
  * with the clone. No place's content is in a file every session on the
  * machine reads (fleet-mcp-set.ts, fleet-harness-set.ts hold the fleet's
  * own), so a workspace's cut or archive moves nothing machine-wide.
