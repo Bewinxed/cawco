@@ -1,9 +1,7 @@
 /**
  * Add machine's words: the window's controls, its output's, and what the
  * hub and the installer say to a machine on its way in. The dashboard, the
- * hub and the install script render them from here, and the probe kit
- * finds them by these same words (scripts/probe-words-check.ts refuses a
- * copy).
+ * hub and the install script render them from here.
  */
 import { configurePage } from "./configure";
 

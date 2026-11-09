@@ -1,8 +1,6 @@
 /**
  * What a session's Files panel says: a search that matches nothing, a list
- * the hub couldn't read. The dashboard renders them from here, and the probe
- * kit finds them by these same words (scripts/probe-words-check.ts refuses a
- * copy).
+ * the hub couldn't read. The dashboard renders them from here.
  */
 export const filesWords = {
   /** A project file the hub refused to read: what came of it, said after the hub's sentence (`hubRefusal`). */

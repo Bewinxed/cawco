@@ -640,7 +640,7 @@ h1 {
 
 /*
  * A scene is the product, drawn as the product draws itself. These are the
- * app's own light-theme tokens (apps/dashboard/src/lib/tokens/tokens.css), so
+ * app's own light-theme tokens (apps/dashboard/src/lib/tokens/theme.css), so
  * the needs-you pill is the app's needs-you yellow and nothing else is.
  */
 .scene-frame {

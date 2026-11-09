@@ -4,7 +4,7 @@
  * import, "a direct static matching and replacement without any special
  * handling for file extensions" (nodejs.org/api/packages.html, Subpath
  * patterns), so the specifier spells the file: a `.ts` module as `.js`, the
- * way TypeScript reads it (`#lib/tokens/tokens.js`), a component as
+ * way TypeScript reads it (`#lib/cawco/id.js`), a component as
  * `.svelte`. An extensionless one is no file to TypeScript: what it imports
  * reads as `any`, and a prop typed with it gets no control in a sheet's
  * inspector. Every import already names its file (one spelling per module,

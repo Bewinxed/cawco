@@ -2,8 +2,8 @@
  * Every row of every stored JSON column (hub stored-json.ts `storedJson`)
  * in a hub database, read as the hub reads it: parsed and checked against
  * the column's schema. A row that fails is a migration missing, since the hub
- * would throw reading it. Used by scripts/stored-json-check.ts on any
- * database, and by migrations:check on the migrated fixture.
+ * would throw reading it. Used by migrations:check on the migrated
+ * fixture.
  *
  * The schema module is imported only when asked: its modules read the
  * environment (CAWCO_DB_PATH), which the caller sets first.

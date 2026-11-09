@@ -4835,7 +4835,7 @@ export const previewSettings = sqliteTable("preview_settings", {
 
 /**
  * An artifact's Yjs document as its update log: every update appended in
- * order; every {@link ARTIFACT_COMPACT_EVERY} updates the log is replaced by
+ * order; every `COMPACT_EVERY` (hub artifacts/docs.ts) updates the log is replaced by
  * one snapshot (`Y.encodeStateAsUpdate`).
  */
 export const artifactUpdates = sqliteTable(
