@@ -59,6 +59,7 @@
     reveal,
     revealOut,
   } from "#lib/platform/motion/curves.svelte.js";
+  import { newestRead } from "#lib/platform/newest-read.js";
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
   import { artifactNamed } from "../artifact-names.svelte";
   import { cawco } from "../client.svelte";
@@ -282,20 +283,19 @@
    * answer is kept. A write's answer counts as the newest read of the task,
    * and the hub's `tasks.changed` after it reads the task again.
    */
-  let taskReads = 0;
-  let historyReads = 0;
+  const taskReads = newestRead();
+  const historyReads = newestRead();
   async function read(id: string) {
     readProblem = null;
-    taskReads += 1;
-    const ticket = taskReads;
+    const newest = taskReads.next();
     detach(readActivity(id), "readActivity");
     try {
       const fresh = await readTask(projectId, id);
-      if (taskId === id && ticket === taskReads) {
+      if (taskId === id && newest()) {
         task = fresh;
       }
     } catch (error) {
-      if (taskId === id && ticket === taskReads) {
+      if (taskId === id && newest()) {
         readProblem = message(error);
       }
     }
@@ -304,15 +304,14 @@
   /** Its file's history; a refusal is said over the activity, in the hub's words. */
   async function readActivity(id: string) {
     historyProblem = null;
-    historyReads += 1;
-    const ticket = historyReads;
+    const newest = historyReads.next();
     try {
       const answered = await readHistory(projectId, id);
-      if (taskId === id && ticket === historyReads) {
+      if (taskId === id && newest()) {
         history = answered.events;
       }
     } catch (error) {
-      if (taskId === id && ticket === historyReads) {
+      if (taskId === id && newest()) {
         historyProblem = message(error);
       }
     }
@@ -320,7 +319,7 @@
 
   /** Every write answers with the task as the hub wrote it, and is a commit in its history. */
   function took(next: TaskView) {
-    taskReads += 1;
+    taskReads.next();
     task = next;
     onchanged(next);
     detach(readActivity(next.id), "readActivity");
@@ -351,7 +350,7 @@
     }
     const moved = await onmove(shown.id, stage);
     if (moved.id === taskId) {
-      taskReads += 1;
+      taskReads.next();
       task = moved;
       detach(readActivity(moved.id), "readActivity");
     }
