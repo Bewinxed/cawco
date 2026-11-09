@@ -295,8 +295,11 @@ export const nekoStream = (
     at.onmessage = (event) => {
       try {
         heard(NekoMessageSchema.parse(JSON.parse(String(event.data))));
-      } catch {
+      } catch (error) {
         // Not neko's JSON: nothing to act on.
+        if (!(error instanceof SyntaxError || error instanceof z.ZodError)) {
+          throw error;
+        }
       }
     };
     at.onclose = (event) => {
@@ -583,8 +586,11 @@ export const cdpStream = (
       }
       size = { width, height };
       drawn(width, height);
-    } catch {
+    } catch (error) {
       // A frame that doesn't decode is skipped; the next one draws.
+      if (!(error instanceof DOMException)) {
+        throw error;
+      }
     } finally {
       decoding = false;
       const waiting = next;
@@ -601,8 +607,11 @@ export const cdpStream = (
       if (said.success) {
         focus(said.data);
       }
-    } catch {
+    } catch (error) {
       // Not the daemon's JSON: nothing to act on.
+      if (!(error instanceof SyntaxError)) {
+        throw error;
+      }
     }
   };
 
