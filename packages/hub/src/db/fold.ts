@@ -1,4 +1,5 @@
-import { FOLD_DROPPED, FOLD_MOVED, idList } from "./owned-rows";
+import { idList } from "./id-list";
+import { FOLD_DROPPED, FOLD_MOVED } from "./owned-rows";
 /** Folding sessions into one: every kind of row a session owns moved onto the survivor. */
 
 import { CONTINUATION_ORIGIN } from "@cawco/core/harness/kinds";
