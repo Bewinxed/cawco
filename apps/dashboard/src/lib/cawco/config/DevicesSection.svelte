@@ -1,0 +1,454 @@
+<script lang="ts">
+  import { detach } from "@cawco/core/detach";
+  /**
+   * Who may run the fleet (hub hub-auth.ts): the one setting, "Require
+   * paired devices", off unless the person turns it on; the paired devices,
+   * each removable; and what waits on the person: devices asking to pair,
+   * machines waiting to be admitted (also in Needs you).
+   *
+   * Turning it on or off asks first, in place, and says plainly what each
+   * other device will see: nobody is locked out by surprise.
+   *
+   * And what every screen of yours shows: "Hide secrets in Find" (hub
+   * find-secrets.ts), on unless you turn it off, kept at the hub so a reload
+   * and every other device read the same.
+   */
+  import type { FindSettings } from "@cawco/core/find";
+  import type { OwnerDevice } from "@cawco/core/hub-auth";
+  import { hubRequest } from "@cawco/core/hub-request";
+  import { findSecretWords } from "@cawco/core/words/find-secrets";
+  import { onMount } from "svelte";
+  import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import SwitchField from "#lib/cawco/config/SwitchField.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import {
+    answerMachine,
+    answerPairing,
+    hubAuth,
+    readAuth,
+    setPairingRequired,
+  } from "#lib/cawco/hub-auth.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { IconClock, IconLaptop, IconLock, IconSearch } from "#lib/icons.js";
+  import {
+    failureClause,
+    failureWords,
+    hubJson,
+    hubSend,
+  } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
+
+  const section = sectionOf("devices");
+  const HUE = section.hue;
+
+  let devices = $state<OwnerDevice[]>([]);
+  let current = $state<string | null>(null);
+  let loaded = $state(false);
+  let readError = $state<string | null>(null);
+  /** The change the person is about to confirm, if any. */
+  let confirming = $state<"on" | "off" | null>(null);
+  let saving = $state(false);
+  let problem = $state<string | null>(null);
+  /** A pairing, machine or device answer on its way, by its key. */
+  let busy = $state<string | null>(null);
+
+  const required = $derived(hubAuth.mode === "pairing");
+
+  async function read() {
+    try {
+      await readAuth();
+      ({ devices, current } = (await hubJson(
+        hubRequest("GET /api/devices")
+      )) as {
+        current: string | null;
+        devices: OwnerDevice[];
+      });
+      loaded = true;
+    } catch (error) {
+      readError = `Could not read the paired devices — ${failureClause(error)}.`;
+    }
+  }
+
+  /** "Hide secrets in Find", as the hub keeps it for every screen; null until read. */
+  let hideSecrets = $state<boolean | null>(null);
+  let findProblem = $state<string | null>(null);
+  let findSaving = $state(false);
+
+  async function readFind() {
+    try {
+      ({ hideSecrets } = await hubJson<FindSettings>(
+        hubRequest("GET /api/find/settings")
+      ));
+    } catch (error) {
+      findProblem = findSecretWords.unread(failureClause(error));
+    }
+  }
+
+  async function setHideSecrets(next: boolean) {
+    findSaving = true;
+    findProblem = null;
+    try {
+      ({ hideSecrets } = await hubJson<FindSettings>(
+        hubRequest("PUT /api/find/settings", {
+          body: { hideSecrets: next } satisfies FindSettings,
+        })
+      ));
+    } catch (error) {
+      findProblem = failureWords(error);
+    } finally {
+      findSaving = false;
+    }
+  }
+
+  async function confirm() {
+    if (!confirming) {
+      return;
+    }
+    saving = true;
+    problem = null;
+    try {
+      await setPairingRequired(confirming === "on");
+      confirming = null;
+      await read();
+    } catch (error) {
+      problem = failureWords(error);
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function act(key: string, work: () => Promise<void>) {
+    busy = key;
+    problem = null;
+    try {
+      await work();
+      await read();
+    } catch (error) {
+      problem = failureWords(error);
+    } finally {
+      busy = null;
+    }
+  }
+
+  async function remove(device: OwnerDevice) {
+    await act(`device:${device.id}`, async () => {
+      await hubSend(
+        hubRequest("DELETE /api/devices/:id", { path: { id: device.id } })
+      );
+    });
+  }
+
+  const KINDS: Record<OwnerDevice["kind"], string> = {
+    browser: "Browser",
+    app: "CawCo app",
+    cli: "Command line",
+  };
+
+  onMount(() => {
+    detach(read(), "read");
+    detach(readFind(), "readFind");
+  });
+</script>
+
+<SectionFrame problem={loaded ? null : readError} ready={loaded} {section}>
+  <div data-slot="group" class="flex flex-col gap-space-2">
+    <SectionHeader hue={HUE} icon={IconLock} label="Pairing" />
+    <!-- The switch shows the change while it is confirmed, and goes back on Cancel. -->
+    <SwitchField
+      checked={confirming === null ? required : confirming === "on"}
+      disabled={saving || confirming !== null}
+      hint={required
+        ? "On: the fleet answers paired devices and admitted machines. Anything else sees a code to approve."
+        : "Off: every device on your network reaches the fleet, as it does now."}
+      id="require-paired-devices"
+      label="Require paired devices"
+      onchange={(next) => {
+        confirming = next ? "on" : "off";
+      }}
+    />
+    {#if confirming === "on"}
+      <div
+        class="flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+        transition:unfold
+      >
+        <p data-slot="lead" class="type-body text-ink-strong">
+          Require paired devices? From the moment you confirm:
+        </p>
+        <ul
+          class="type-body flex list-disc flex-col gap-space-1 ps-space-5 text-ink-muted"
+        >
+          <li>This browser is the first paired device.</li>
+          <li>
+            The machines connected now are admitted and keep running their
+            sessions.
+          </li>
+          <li>
+            Every other browser shows a code until you approve it here or in
+            Needs you. Each address it opens the dashboard at pairs once.
+          </li>
+          <li>A new machine waits until you admit it on the Machines list.</li>
+          <li>
+            The CawCo app on your phone can't pair yet: it stops reaching the
+            hub until its update arrives.
+          </li>
+          <li>
+            Each run of <code class="type-code text-ink-strong"
+              >cawco connections</code
+            >, <code class="type-code text-ink-strong">relay</code> or
+            <code class="type-code text-ink-strong">jev</code> asks you to approve
+            it once.
+          </li>
+          <li>Sessions keep their tools.</li>
+        </ul>
+        <div class="flex justify-end gap-space-2">
+          <Button
+            disabled={saving}
+            label="Cancel"
+            onclick={() => {
+              confirming = null;
+            }}
+            size="sm"
+            variant="ghost"
+          />
+          <Button
+            label="Require paired devices"
+            onclick={confirm}
+            pending={saving}
+            pendingLabel="Pairing this browser…"
+            size="sm"
+          />
+        </div>
+      </div>
+    {:else if confirming === "off"}
+      <div
+        class="flex max-w-c-measure flex-col gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+        transition:unfold
+      >
+        <p data-slot="lead" class="type-body text-ink-strong">
+          Stop requiring paired devices? Every device on your network reaches
+          the fleet again. The paired devices and machine keys are forgotten:
+          turning it on again starts from the device that does.
+        </p>
+        <div class="flex justify-end gap-space-2">
+          <Button
+            disabled={saving}
+            label="Cancel"
+            onclick={() => {
+              confirming = null;
+            }}
+            size="sm"
+            variant="ghost"
+          />
+          <Button
+            label="Stop requiring paired devices"
+            onclick={confirm}
+            pending={saving}
+            pendingLabel="Stopping…"
+            size="sm"
+            variant="grant"
+          />
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <div data-slot="group" class="mt-space-6 flex flex-col gap-space-2">
+    <SectionHeader hue={HUE} icon={IconSearch} label={findSecretWords.group} />
+    <SwitchField
+      checked={hideSecrets ?? true}
+      disabled={hideSecrets === null || findSaving}
+      hint={(hideSecrets ?? true)
+        ? findSecretWords.settingOn
+        : findSecretWords.settingOff}
+      id="hide-secrets-in-find"
+      label={findSecretWords.setting}
+      onchange={setHideSecrets}
+    />
+    {#if findProblem}
+      <p
+        class="type-meta wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+        role="alert"
+        transition:unfold
+      >
+        {findProblem}
+      </p>
+    {/if}
+  </div>
+
+  {#if required && (hubAuth.requests.length > 0 || hubAuth.waiting.length > 0)}
+    <div
+      data-slot="group"
+      class="mt-space-6 flex flex-col gap-space-2"
+      transition:unfold
+    >
+      <SectionHeader hue={HUE} icon={IconClock} label="Waiting for you" />
+      <ul class="flex flex-col">
+        {#each hubAuth.requests as request (request.userCode)}
+          <li
+            data-slot="row"
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
+          >
+            <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
+              <span data-slot="name" class="type-body text-ink-strong"
+                >{request.name}</span
+              >
+              <span
+                data-num
+                data-slot="meta"
+                class="num type-meta wrap-anywhere text-ink-muted"
+              >
+                Code <span data-slot="code" class="type-code text-ink-strong"
+                  >{request.userCode}</span
+                >{request.address ? ` · ${request.address}` : ""} · asked {formatDistanceToNow(
+                  new Date(request.at)
+                )}
+              </span>
+              <span
+                data-slot="meta"
+                class="type-meta wrap-anywhere text-ink-muted"
+              >
+                Approve only if this is the code on the device in front of you.
+              </span>
+            </div>
+            <Button
+              aria-label="Deny {request.name}, code {request.userCode}"
+              disabled={busy !== null}
+              label="Deny"
+              onclick={() =>
+                act(`pair:${request.userCode}`, () =>
+                  answerPairing(request.userCode, false)
+                )}
+              size="sm"
+              variant="ghost"
+            />
+            <Button
+              aria-label="Approve {request.name}, code {request.userCode}"
+              disabled={busy !== null}
+              label="Approve"
+              onclick={() =>
+                act(`pair:${request.userCode}`, () =>
+                  answerPairing(request.userCode, true)
+                )}
+              pending={busy === `pair:${request.userCode}`}
+              size="sm"
+              variant="secondary"
+            />
+          </li>
+        {/each}
+        {#each hubAuth.waiting as machine (machine.machineId)}
+          <li
+            data-slot="row"
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
+          >
+            <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
+              <span data-slot="name" class="type-body text-ink-strong"
+                >{machine.hostname ?? machine.machineId}</span
+              >
+              <span
+                data-num
+                data-slot="meta"
+                class="num type-meta wrap-anywhere text-ink-muted"
+              >
+                Machine{machine.platform
+                  ? ` · ${machine.platform}`
+                  : ""}{machine.address ? ` · ${machine.address}` : ""} · waiting
+                {formatDistanceToNow(new Date(machine.since))}
+              </span>
+            </div>
+            <Button
+              aria-label="Deny {machine.hostname ?? machine.machineId}"
+              disabled={busy !== null}
+              label="Deny"
+              onclick={() =>
+                act(`machine:${machine.machineId}`, () =>
+                  answerMachine(machine.machineId, false)
+                )}
+              size="sm"
+              variant="ghost"
+            />
+            <Button
+              aria-label="Admit {machine.hostname ?? machine.machineId}"
+              disabled={busy !== null}
+              label="Admit"
+              onclick={() =>
+                act(`machine:${machine.machineId}`, () =>
+                  answerMachine(machine.machineId, true)
+                )}
+              pending={busy === `machine:${machine.machineId}`}
+              size="sm"
+              variant="secondary"
+            />
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+
+  {#if required}
+    <div
+      data-slot="group"
+      class="mt-space-6 flex flex-col gap-space-2"
+      transition:unfold
+    >
+      <SectionHeader hue={HUE} icon={IconLaptop} label="Paired devices" />
+      <ul class="flex flex-col">
+        {#each devices as device (device.id)}
+          <li
+            data-slot="row"
+            data-devices
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
+          >
+            <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
+              <span data-slot="name" class="type-body text-ink-strong"
+                >{device.name}{device.id === current
+                  ? " · this browser"
+                  : ""}</span
+              >
+              <span
+                data-num
+                data-slot="meta"
+                class="num type-meta wrap-anywhere text-ink-muted"
+              >
+                {KINDS[device.kind]} · paired {formatDistanceToNow(
+                  new Date(device.createdAt)
+                )}{device.lastUsedAt
+                  ? ` · last used ${formatDistanceToNow(new Date(device.lastUsedAt))}`
+                  : ""}{device.lastAddress ? ` · ${device.lastAddress}` : ""}
+              </span>
+            </div>
+            <Button
+              aria-label="Remove {device.name}"
+              disabled={busy !== null || devices.length === 1}
+              label="Remove"
+              onclick={() => remove(device)}
+              pending={busy === `device:${device.id}`}
+              size="sm"
+              variant="ghost"
+            />
+          </li>
+        {/each}
+      </ul>
+      {#if devices.length === 1}
+        <p
+          data-slot="note"
+          class="type-meta max-w-c-measure wrap-anywhere text-ink-muted"
+        >
+          The only paired device stays until you pair another or turn pairing
+          off, so the fleet always has someone who can approve.
+        </p>
+      {/if}
+    </div>
+  {/if}
+
+  {#if problem}
+    <p
+      class="type-meta mt-space-4 wrap-anywhere whitespace-pre-wrap text-status-fail-ink"
+      role="alert"
+      transition:unfold
+    >
+      {problem}
+    </p>
+  {/if}
+</SectionFrame>
