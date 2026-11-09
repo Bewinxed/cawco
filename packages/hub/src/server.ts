@@ -4,15 +4,14 @@ import { isIP } from "node:net";
 import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join } from "node:path";
 import {
-  type AccountBorrowFrame,
   accountNameAmong,
   CLAUDE_PROVIDER,
   type EndedBy,
   LIMITED_PROVIDERS,
-  type ProviderAccountReading,
   sameIdentity,
 } from "@cawco/core/accounts";
 import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
+import { binaryUpdateOf, decodeAgentFrame } from "@cawco/core/agent-frame";
 import type { ArchiveView } from "@cawco/core/archive";
 import { type ArtifactNeed, unparked } from "@cawco/core/artifact-needs";
 import {
@@ -27,8 +26,6 @@ import {
 } from "@cawco/core/asks";
 import {
   AGENT_RESTARTING,
-  BINARY_UPDATE_PHASES,
-  type BinaryUpdatePhase,
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
@@ -37,8 +34,6 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   BROWSER_PAGE,
   type BrowserAskedPage,
-  type BrowserFrame,
-  type BrowserHandedBackFrame,
   type BrowserPageArgs,
 } from "@cawco/core/browser";
 import {
@@ -54,8 +49,8 @@ import {
   CANVAS_SCREEN_CLOSE,
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
+import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { ChoiceEntry } from "@cawco/core/choices";
-import type { CommandQueueFrame } from "@cawco/core/commands/controls";
 import { compressAnswer } from "@cawco/core/compress-answer";
 import {
   CONTROL_GH_ACCOUNTS,
@@ -68,20 +63,14 @@ import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { sessionMayStart, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
 import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
-import type {
-  FleetConvergeFrame,
-  FleetHeld,
-  FleetSyncReport,
-} from "@cawco/core/fleet";
+import type { FleetSyncReport } from "@cawco/core/fleet";
 import { FLEET_DELTA, machinePlatform, mcpRunsOn } from "@cawco/core/fleet";
 import { CONTROL_FORGE_POST, type ForgeVerdict } from "@cawco/core/forge-post";
 import type {
   ArtifactSessionFrame,
   ErrorFrame,
-  FleetReportFrame,
   FramePayload,
   PermissionRequestFrame,
-  PermissionSettledFrame,
 } from "@cawco/core/frames";
 import {
   type HandoverCommand,
@@ -93,7 +82,6 @@ import {
 import type {
   AgentBusyReport,
   HarnessReport,
-  MachineHarnessReport,
   SessionCredentialInstall,
 } from "@cawco/core/harness";
 import {
@@ -159,7 +147,6 @@ import {
   namedModels,
   unlistedModelRefusal,
 } from "@cawco/core/model-names";
-import type { MoveProgressFrame } from "@cawco/core/move";
 import {
   type HubPreviewOrigins,
   isHubPreview,
@@ -167,7 +154,6 @@ import {
 } from "@cawco/core/preview/hub-previews";
 import { PREVIEW_WEIGHT } from "@cawco/core/preview/protocol";
 import { previewEnterUrl } from "@cawco/core/preview/routes";
-import type { ServingPreview } from "@cawco/core/preview/upstream";
 import type {
   AdmissionPayload,
   AgentRow,
@@ -177,22 +163,17 @@ import type {
   DeliveryMark,
   Envelope,
   HeartbeatAckPayload,
-  HeartbeatPayload,
   IngestMark,
   InstanceRow,
   InstanceStatus,
-  LaunchAsk,
   LaunchGrant,
   NamedSpawn,
   SendPayload,
   SessionAddress,
-  SessionCommands,
   SessionCustody,
   SessionEndIntent,
   SessionLimits,
   SessionOrigin,
-  SessionPulse,
-  SessionTooling,
   SpawnPayload,
 } from "@cawco/core/protocol";
 import {
@@ -257,7 +238,6 @@ import {
   STAGE_UNSERVE,
   STAGE_WARM,
   STAGE_WRITE,
-  type StageCloneFrame,
   type StageFrame,
   type StageOpened,
   type StageRendered,
@@ -282,18 +262,13 @@ import {
   type StreamHeartbeat,
   WIRE_PROTOCOL,
 } from "@cawco/core/stream";
-import type { RelayFrame } from "@cawco/core/stream-relay";
 import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { ToolStatus } from "@cawco/core/tools";
 import { toolSpec } from "@cawco/core/tools";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
-import type {
-  OpenCodeGoLimits,
-  UsageBucket,
-  UsageSpend,
-} from "@cawco/core/usage/types";
+import type { UsageSpend } from "@cawco/core/usage/types";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import {
   accountMoveSentence,
@@ -435,7 +410,7 @@ import {
   MACHINE_LINE_SUBTYPE,
   peek,
 } from "./cut-turns";
-import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
+import { damagedRecordsOf } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
 import {
   dashboardUrl,
@@ -545,7 +520,6 @@ import { createLimitMoves } from "./limit-moves";
 import { createLoginMoves } from "./login-moves";
 import {
   type ControlResult,
-  isToolStatus,
   peekToolStatus,
   type Unanswered,
 } from "./machine-answers";
@@ -1230,109 +1204,12 @@ const registerAck = (
 const failure = (envelope: Envelope, message: string): Envelope<ErrorFrame> =>
   refusalFrame(envelope, message, envelope.verb);
 
-/** The report beat's word on what each harness adapter on the machine can do. */
-const peekHarnesses = (
-  payload: unknown
-): MachineHarnessReport[] | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const value = (payload as { harnesses?: unknown }).harnesses;
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  return value.filter(
-    (report): report is MachineHarnessReport =>
-      typeof report === "object" &&
-      report !== null &&
-      typeof (report as MachineHarnessReport).harness === "string"
-  );
-};
-
 /** The states a daemon is allowed to claim; anything else is a daemon we do not know. */
 const AUTH_STATES: readonly AgentAuth[] = [
   "authenticated",
   "unauthenticated",
   "unreadable-credentials",
 ];
-
-/** `register`'s list of the sessions the daemon still has running. */
-const peekInstances = (payload: unknown): string[] => {
-  if (typeof payload !== "object" || payload === null) {
-    return [];
-  }
-  const value = (payload as { instances?: unknown }).instances;
-  return Array.isArray(value)
-    ? value.filter((id): id is string => typeof id === "string")
-    : [];
-};
-
-/**
- * The credential hashes a registering agent's redaction store holds
- * (agent daemon.ts `RegisterPayload.credentialHashes`), each a sha256 in hex
- * as the hub keeps them; none from an agent that sends none.
- */
-const credentialHashesOf = (payload: unknown): string[] => {
-  if (typeof payload !== "object" || payload === null) {
-    return [];
-  }
-  const value = (payload as { credentialHashes?: unknown }).credentialHashes;
-  return Array.isArray(value)
-    ? value.filter(
-        (hash): hash is string =>
-          typeof hash === "string" && CREDENTIAL_HASH.test(hash)
-      )
-    : [];
-};
-const CREDENTIAL_HASH = /^[0-9a-f]{64}$/u;
-
-/**
- * The preview listeners a registering daemon is still serving. One reported
- * without its start's token can't be relayed to (core `RELAY_HEADER`), and
- * one without the source key it was started for can't be squared with its
- * row (preview-service.ts `reconcile`), so neither is one: the origin's next
- * request starts a listener again. A daemon from before the key reports
- * none, so each of its listeners is started again once.
- */
-const peekPreviews = (payload: unknown): ServingPreview[] => {
-  const value = (payload as { previews?: unknown } | null)?.previews;
-  return Array.isArray(value)
-    ? value.filter(
-        (item): item is ServingPreview =>
-          typeof (item as Partial<ServingPreview>).instanceId === "string" &&
-          typeof (item as Partial<ServingPreview>).port === "number" &&
-          typeof (item as Partial<ServingPreview>).token === "string" &&
-          typeof (item as Partial<ServingPreview>).for === "string"
-      )
-    : [];
-};
-
-/** First-hand process custody, separate from the daemon's attached live list. */
-const peekCustody = (payload: unknown): SessionCustody => {
-  const value = (payload as { custody?: unknown } | null)?.custody;
-  if ((value as { state?: unknown } | null)?.state !== "available") {
-    return {
-      state: "unavailable",
-      error: peek(value, "error") ?? "No sessiond custody read was supplied.",
-    };
-  }
-  return {
-    state: "available",
-    instances: peekInstances(value),
-    opencode: (value as { opencode?: unknown } | null)?.opencode === true,
-    ...(Number.isSafeInteger((value as { stopSequence?: unknown }).stopSequence)
-      ? { stopSequence: (value as { stopSequence: number }).stopSequence }
-      : {}),
-    pending: Array.isArray((value as { pending?: unknown }).pending)
-      ? (value as { pending: unknown[] }).pending.filter(
-          (id): id is string => typeof id === "string"
-        )
-      : [],
-    ...(typeof (value as { readStartedAt?: unknown }).readStartedAt === "number"
-      ? { readStartedAt: (value as { readStartedAt: number }).readStartedAt }
-      : {}),
-  };
-};
 
 /**
  * The sessions whose process sessiond holds alive on a machine, attached to
@@ -1377,118 +1254,33 @@ const reattachable = (
   restored: readonly string[]
 ): string[] => [...new Set([...reported, ...restored])];
 
-/**
- * And of the SDK sessions it could resume. Absent from a daemon that could not
- * read its catalog, which is not the same as a machine with nothing to resume.
- */
-const peekResumable = (payload: unknown): string[] | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const value = (payload as { resumable?: unknown }).resumable;
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  return value.filter((id): id is string => typeof id === "string");
-};
+/** What is kept of a build a machine reported (a key this hub's type does not declare is left out). */
+const keptBuild = (build: BuildInfo | undefined): BuildInfo | undefined =>
+  build && received(BuildInfoSchema, build, "a machine's register (its build)");
 
-/**
- * `register`'s word on when each stored conversation last changed, session id
- * to ms epoch. A daemon older than the field sends nothing, and the rows keep
- * whatever the hub last wrote about them.
- */
-const peekResumableAt = (
-  payload: unknown
-): Record<string, number> | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const value = (payload as { resumableAt?: unknown }).resumableAt;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  const at: Record<string, number> = {};
-  for (const [id, when] of Object.entries(value)) {
-    if (typeof when === "number" && Number.isFinite(when) && when > 0) {
-      at[id] = when;
-    }
-  }
-  return at;
-};
+/** What is kept of a tool's status a machine reported. */
+const keptToolStatus = (tool: ToolStatus): ToolStatus =>
+  tool.signin
+    ? {
+        ...tool,
+        signin: received(
+          ToolSigninSchema,
+          tool.signin,
+          "a machine's report beat (a tool's sign-in)"
+        ),
+      }
+    : tool;
 
-/**
- * `register`'s word on the cawco the daemon is running (NEW.md §12). Absent
- * from the re-announce, and the row keeps what it had.
- */
-const peekBuild = (payload: unknown): BuildInfo | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const { build } = payload as { build?: unknown };
-  if (typeof build !== "object" || build === null) {
-    return undefined;
-  }
-  return typeof (build as BuildInfo).version === "string"
-    ? received(BuildInfoSchema, build, "a machine's register (its build)")
-    : undefined;
-};
-
-/** The machine's home folder its register says, when it is an absolute path. */
-const peekHome = (payload: unknown): string | undefined => {
-  const home = peek(payload, "home");
-  return home?.startsWith("/") ? home : undefined;
-};
-
-const peekMachineCapabilities = (
-  payload: unknown
-): import("@cawco/core/capabilities").MachineCapabilities | undefined => {
-  const value = (
-    payload as {
-      machineCapabilities?: import("@cawco/core/capabilities").MachineCapabilities;
-    } | null
-  )?.machineCapabilities;
-  if (
-    !value ||
-    typeof value.platform !== "string" ||
-    !Number.isFinite(value.at) ||
-    !Array.isArray(value.items)
-  ) {
-    return undefined;
-  }
-  return value.items.every(
-    (item) =>
-      item &&
-      typeof item.id === "string" &&
-      typeof item.available === "boolean" &&
-      typeof item.installCommand === "string"
-  )
-    ? received(
-        MachineCapabilitiesSchema,
-        value,
-        "a machine's report beat (its capabilities)"
-      )
-    : undefined;
-};
-
-/**
- * A machine's word on its binary update, off a `register` or any heartbeat.
- * Absent from a daemon that is not a binary install; a phase this hub does not
- * know is dropped rather than passed through to a board that cannot render it.
- */
-const peekBinaryUpdate = (payload: unknown): BinaryUpdateState | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const { binaryUpdate } = payload as { binaryUpdate?: unknown };
-  if (typeof binaryUpdate !== "object" || binaryUpdate === null) {
-    return undefined;
-  }
-  const state = binaryUpdate as Partial<BinaryUpdateState>;
-  return BINARY_UPDATE_PHASES.includes(state.phase as BinaryUpdatePhase) &&
-    typeof state.installedVersion === "string"
-    ? ({ ...state, hostsHub: state.hostsHub === true } as BinaryUpdateState)
-    : undefined;
-};
+/** What is kept of what a machine reported it can do. */
+const keptCapabilities = (
+  capabilities: MachineCapabilities | undefined
+): MachineCapabilities | undefined =>
+  capabilities &&
+  received(
+    MachineCapabilitiesSchema,
+    capabilities,
+    "a machine's report beat (its capabilities)"
+  );
 
 /** Whether two update states say the same thing; `updatedAt` alone is not news. */
 const sameBinaryUpdate = (
@@ -1497,33 +1289,6 @@ const sameBinaryUpdate = (
 ): boolean =>
   JSON.stringify({ ...a, updatedAt: 0 }) ===
   JSON.stringify({ ...b, updatedAt: 0 });
-
-/**
- * The report beat's word on what the machine has of the tool catalog (NEW.md §10).
- * Empty from a beat sent before the machine's probe has asked its tools, which
- * is not the same as a machine with none of them — the difference is what
- * stops the hub installing the whole catalog onto a machine not yet probed.
- */
-const peekTools = (payload: unknown): ToolStatus[] => {
-  if (typeof payload !== "object" || payload === null) {
-    return [];
-  }
-  const value = (payload as { tools?: unknown }).tools;
-  return Array.isArray(value)
-    ? value.filter(isToolStatus).map((tool) =>
-        tool.signin
-          ? {
-              ...tool,
-              signin: received(
-                ToolSigninSchema,
-                tool.signin,
-                "a machine's report beat (a tool's sign-in)"
-              ),
-            }
-          : tool
-      )
-    : [];
-};
 
 /** The chosen option labels an answer to a question carries, when it is one. */
 const peekAnswers = (result: unknown): Record<string, unknown> | undefined => {
@@ -1589,90 +1354,6 @@ const refusedStart = (
   return settled.ask
     ? { ...refused, payload: { ...refused.payload, modeAsk: settled.ask } }
     : refused;
-};
-
-/**
- * The conversation a frame says its session is writing, when it says so. Two
- * frames do: every `init` — a new process, a fork, a `/clear` that starts a
- * new conversation in the same process, and each later turn — and the
- * `held` an agent opens with when it takes over a claude child that outlived
- * the agent before it, which carries the key off the child's own output
- * because the child writes no `init` until its next turn. Each one is the
- * harness's current word, so the row follows it whether or not it changed.
- */
-const peekSessionKey = (
-  payload: unknown
-):
-  | {
-      sessionId: string;
-      cwd?: string;
-      tooling?: SessionTooling;
-      commands?: SessionCommands;
-      /** An `init`: a process answering right now. */
-      init: boolean;
-    }
-  | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const { message } = payload as { message?: unknown };
-  if (typeof message !== "object" || message === null) {
-    return undefined;
-  }
-  const sdk = message as Record<string, unknown>;
-  if (
-    sdk.type !== "system" ||
-    !(sdk.subtype === "init" || sdk.subtype === MESSAGES_HELD) ||
-    typeof sdk.session_id !== "string"
-  ) {
-    return undefined;
-  }
-  if (sdk.subtype === MESSAGES_HELD) {
-    return { sessionId: sdk.session_id, init: false };
-  }
-  return {
-    sessionId: sdk.session_id,
-    cwd: typeof sdk.cwd === "string" ? sdk.cwd : undefined,
-    tooling: initTooling(sdk),
-    commands: initCommands(sdk),
-    init: true,
-  };
-};
-
-/**
- * What an `init` listed behind `/`: Claude's `slash_commands`, and which of
- * them are its `skills`. A harness whose `init` lists none keeps none.
- */
-const initCommands = (
-  sdk: Record<string, unknown>
-): SessionCommands | undefined => {
-  if (!Array.isArray(sdk.slash_commands)) {
-    return undefined;
-  }
-  return {
-    names: sdk.slash_commands as string[],
-    skills: Array.isArray(sdk.skills) ? (sdk.skills as string[]) : [],
-  };
-};
-
-/**
- * The MCP servers (name and status) and tool names an `init` announced. Claude
- * sends both on every `init`; OpenCode and pi send neither, and their rows keep
- * no tooling.
- */
-const initTooling = (
-  sdk: Record<string, unknown>
-): SessionTooling | undefined => {
-  if (!Array.isArray(sdk.tools)) {
-    return undefined;
-  }
-  const servers = Array.isArray(sdk.mcp_servers)
-    ? (sdk.mcp_servers as { name: string; status: string }[])
-    : [];
-  return {
-    servers: servers.map(({ name, status }) => ({ name, status })),
-    tools: sdk.tools as string[],
-  };
 };
 
 /** `stop { discard: true }`: the spin-off is being thrown away, not paused. */
@@ -3472,18 +3153,6 @@ export const createServer = (
     if (custody.state === "available" && was !== "available") {
       soon(() => workItems.followSessions());
     }
-  };
-  const addressClaims = (payload: unknown): SessionAddress[] => {
-    const value = (payload as { sessionAddresses?: unknown } | null)
-      ?.sessionAddresses;
-    return Array.isArray(value)
-      ? value.filter(
-          (claim): claim is SessionAddress =>
-            !!claim &&
-            typeof claim.instanceId === "string" &&
-            typeof claim.sessionId === "string"
-        )
-      : [];
   };
   const recordSessionAddress = (
     agent: HubSocket,
@@ -5872,12 +5541,13 @@ export const createServer = (
               console.error(
                 `[hub] ${message.verb} for ${message.instanceId ?? "the machine"} failed: ${reason}`
               );
+              const { kind, sessionAddresses } = decodeAgentFrame(
+                message.payload
+              );
               const awaitsAddress =
-                message.verb === "frames" &&
-                peek(message.payload, "kind") === "session_address";
+                message.verb === "frames" && kind === "session_address";
               const replaysAddresses =
-                message.verb === "heartbeat" &&
-                addressClaims(message.payload).length > 0;
+                message.verb === "heartbeat" && sessionAddresses.length > 0;
               if (
                 message.verb === "register" ||
                 awaitsAddress ||
@@ -11734,7 +11404,7 @@ export const createServer = (
         .filter((row) => registry.agent(row.machineId))
         .map((row) => row.machineId),
     setState: (machineId, state) => {
-      const known = peekBinaryUpdate({ binaryUpdate: state });
+      const known = binaryUpdateOf(state);
       if (known) {
         const moved = !sameBinaryUpdate(
           binaryUpdateStates.get(machineId),
@@ -12134,6 +11804,7 @@ export const createServer = (
             sendFrame(ws, refusalFrame(message, fault));
             return;
           }
+          const agentFrame = decodeAgentFrame(message.payload);
           // Only the machine's registered connection speaks for it: a
           // superseded, unregistered or unproven one is not acted on, and is
           // told so. A connection speaks for the one machine it registered
@@ -12169,7 +11840,7 @@ export const createServer = (
           contact.heard(
             message.machineId,
             message.verb === "heartbeat"
-              ? peekInstances(message.payload).length > 0
+              ? agentFrame.instances.length > 0
               : undefined
           );
           const refuseVerb = () => {
@@ -12188,7 +11859,7 @@ export const createServer = (
                 break;
               }
               lifecycle.disconnect(message.machineId);
-              for (const claim of addressClaims(message.payload)) {
+              for (const claim of agentFrame.sessionAddresses) {
                 recordSessionAddress(ws, message.machineId, claim);
               }
               for (const [id, held] of heldSessions) {
@@ -12237,7 +11908,7 @@ export const createServer = (
               previewService.reconcile(
                 message.machineId,
                 ws.remoteAddress,
-                peekPreviews(message.payload)
+                agentFrame.previews
               );
               // Each connection moves what the machine's own stores hold
               // once its first report says how they stand.
@@ -12252,7 +11923,7 @@ export const createServer = (
               }
               // Its catalog, as this register reads it: what it keeps while
               // it is away. A register that could not read it keeps the last.
-              const resumable = peekResumable(message.payload);
+              const { resumable } = agentFrame;
               if (resumable) {
                 keptOn.set(message.machineId, new Set(resumable));
               }
@@ -12260,40 +11931,31 @@ export const createServer = (
               // written the fleet's policy its welcome carries (READY,
               // fleet-sync.ts); one older is online as it registers, its
               // starts held until it installs this hub's build (`startHold`).
-              const speaks = speaksContract(
-                peekBuild(message.payload)?.protocol
-              );
+              const speaks = speaksContract(agentFrame.build?.protocol);
               db.upsertAgent({
                 machineId: message.machineId,
-                hostname:
-                  peek(message.payload, "hostname") ?? message.machineId,
-                os: peek(message.payload, "os") ?? "unknown",
-                build: peekBuild(message.payload),
-                home: peekHome(message.payload),
+                hostname: agentFrame.hostname ?? message.machineId,
+                os: agentFrame.os ?? "unknown",
+                build: keptBuild(agentFrame.build),
+                home: agentFrame.home,
                 online: !speaks,
               });
               // Its welcome first, before anything the register starts
               // there: the policy it carries is what a start reads.
               if (speaks) {
                 fleetSyncs.gone(message.machineId);
-                fleetSyncs.welcome(
-                  message.machineId,
-                  (message.payload as { fleetHeld?: FleetHeld }).fleetHeld
-                );
+                fleetSyncs.welcome(message.machineId, agentFrame.fleetHeld);
               }
               // A register from a daemon with nothing to say leaves standing what
               // the beats said — the same tolerance `build` gets on the row.
-              const registered = peekBinaryUpdate(message.payload);
+              const { binaryUpdate: registered } = agentFrame;
               if (registered) {
                 binaryUpdateStates.set(message.machineId, registered);
                 restarts.note(registered);
               }
               // The contract this connection's agent speaks, read before any
               // start goes to it ({@link startHold}).
-              agentProtocols.set(
-                message.machineId,
-                peekBuild(message.payload)?.protocol
-              );
+              agentProtocols.set(message.machineId, agentFrame.build?.protocol);
               flushOwedStarts(message.machineId);
               // The relay's machine back: a relay that should run starts again
               // (kept as it is when its container runs).
@@ -12313,14 +11975,14 @@ export const createServer = (
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
               // dashboard that connects and fail on click.
-              const registrationCustody = peekCustody(message.payload);
+              const { custody: registrationCustody } = agentFrame;
               const returningRemoved = new Set(
                 db.removedOn(message.machineId).map((row) => row.id)
               );
               db.restoreRemovedSessions(
                 message.machineId,
                 [
-                  ...peekInstances(message.payload),
+                  ...agentFrame.instances,
                   ...(registrationCustody.state === "available"
                     ? registrationCustody.instances
                     : []),
@@ -12334,34 +11996,31 @@ export const createServer = (
               // does not have is over, and the restore below starts it anew.
               settleLaunchesOn(
                 message.machineId,
-                peekInstances(message.payload),
+                agentFrame.instances,
                 registrationCustody,
                 0
               );
               const settled = db.settleInstances(
                 message.machineId,
-                peekInstances(message.payload),
+                agentFrame.instances,
                 [
                   ...heldProcesses(registrationCustody),
                   ...launchingOn(message.machineId),
                 ],
-                peekResumable(message.payload),
-                peekResumableAt(message.payload)
+                agentFrame.resumable,
+                agentFrame.resumableAt
               );
               // What this machine runs is built now, so opening any of it is
               // a page off what is built rather than a read of its machine;
               // what an agent on another commit read is read again.
               transcripts
-                .machineRegistered(
-                  message.machineId,
-                  peekInstances(message.payload)
-                )
+                .machineRegistered(message.machineId, agentFrame.instances)
                 .catch((error: unknown) =>
                   console.warn(
                     `[hub] building ${message.machineId}'s transcripts failed: ${error instanceof Error ? error.message : String(error)}`
                   )
                 );
-              const custody = peekCustody(message.payload);
+              const { custody } = agentFrame;
               keepCustody(message.machineId, custody);
               const heldIds = new Set(
                 custody.state === "available" ? custody.instances : []
@@ -12430,7 +12089,7 @@ export const createServer = (
               // happened meanwhile was framed to nobody, and the transcript
               // says it happened. The rest goes again behind the ack
               // ({@link handAgain}).
-              for (const instanceId of peekInstances(message.payload)) {
+              for (const instanceId of agentFrame.instances) {
                 settlePending(instanceId, UNREAD.ended, "wait");
               }
               // The daemon went away and came back. A session whose turn it
@@ -12464,7 +12123,7 @@ export const createServer = (
               // row here could run again is named in this register's
               // restores; whatever custody cannot attach is listed by the agent.
               const justSettled = new Set(settled.map(({ row }) => row.id));
-              const listedLive = new Set(peekInstances(message.payload));
+              const listedLive = new Set(agentFrame.instances);
               const filedAway = db
                 .ownedByIds(message.machineId, [...heldIds])
                 .filter(
@@ -12536,7 +12195,7 @@ export const createServer = (
               const toEnd = db
                 .ownedByIds(
                   message.machineId,
-                  reattachable([...heldIds], peekInstances(message.payload))
+                  reattachable([...heldIds], agentFrame.instances)
                 )
                 .filter(
                   (row) =>
@@ -12593,16 +12252,13 @@ export const createServer = (
               // it names exactly the sessions a reattach can act on — see
               // {@link reattachable} for why the restores have to be in it.
               const reattaching = reattachable(
-                peekInstances(message.payload),
+                agentFrame.instances,
                 revivable.map((orphan) => orphan.row.id)
               );
               freshAccountReports(message.machineId);
               // Whether this connection's workspaces reach the hub's preview
               // origins through their relays (agent proxy-relay.ts).
-              if (
-                (message.payload as { relaysHubPreviews?: unknown } | null)
-                  ?.relaysHubPreviews === true
-              ) {
+              if (agentFrame.relaysHubPreviews) {
                 relayingPreviews.add(message.machineId);
               } else {
                 relayingPreviews.delete(message.machineId);
@@ -12614,7 +12270,7 @@ export const createServer = (
                   streams.ingestedFor(reattaching),
                   // What this hub took of each session the agent holds: it
                   // sends again what it kept past each mark.
-                  streams.deliveredFor(peekInstances(message.payload)),
+                  streams.deliveredFor(agentFrame.instances),
                   unknownAccountsOf(message.machineId, message.payload),
                   claudeSessionsOn(message.machineId),
                   // Every session this hub has on the machine: what it kept
@@ -12628,7 +12284,7 @@ export const createServer = (
                   await isHubMachine(message.machineId),
                   // Which of the credentials its redaction store holds the
                   // hub has revoked since: those leave the store.
-                  db.revokedAmong(credentialHashesOf(message.payload)),
+                  db.revokedAmong(agentFrame.credentialHashes),
                   hubGitOrigins(),
                   hubPreviewOrigins(),
                   tailnetHttps.serving()
@@ -12637,7 +12293,7 @@ export const createServer = (
               // Behind its ack, which it waits for to take requests: what
               // was held for it while it was away goes again.
               resendHeld(message.machineId);
-              handAgain(message.machineId, peekInstances(message.payload));
+              handAgain(message.machineId, agentFrame.instances);
               for (const row of toEnd) {
                 endSession(row.id, "stop", {
                   kind: "hub",
@@ -12648,7 +12304,7 @@ export const createServer = (
                 message.machineId,
                 {
                   custody,
-                  attached: peekInstances(message.payload),
+                  attached: agentFrame.instances,
                 },
                 false
               );
@@ -12669,7 +12325,7 @@ export const createServer = (
               // Behind what it was owed, which is its next turn when it has
               // any: a process a hub restored and then died before it handed
               // the cut turn back is up now, and hears of it here.
-              for (const id of peekInstances(message.payload)) {
+              for (const id of agentFrame.instances) {
                 resumeCutTurn(id);
               }
               // Its sessions answer again: each wait their delegates hold
@@ -12703,15 +12359,14 @@ export const createServer = (
               break;
             }
             case "heartbeat": {
-              for (const claim of addressClaims(message.payload)) {
+              for (const claim of agentFrame.sessionAddresses) {
                 recordSessionAddress(ws, message.machineId, claim);
               }
               db.touchAgent(message.machineId);
               // A delta it did not acknowledge goes again (fleet-sync.ts).
               fleetSyncs.heartbeat(message.machineId);
               // The machine's desktop, toward whether the person is here.
-              const { activity, activityReadable } =
-                message.payload as HeartbeatPayload;
+              const { activity, activityReadable } = agentFrame.heartbeat;
               if (activityReadable !== undefined) {
                 notifications.readable(message.machineId, activityReadable);
               }
@@ -12724,14 +12379,14 @@ export const createServer = (
               // are ignored; fresh reads and stored row intent alone drive lifetime.
               // Once a beat: a fresh custody's reconcile does all a cached
               // one would, and each reads every row the machine has.
-              if ((message.payload as HeartbeatPayload).custody === undefined) {
+              if (agentFrame.heartbeat.custody === undefined) {
                 lifecycle.reconcile(message.machineId);
               } else {
-                const custody = peekCustody(message.payload);
+                const { custody } = agentFrame;
                 keepCustody(message.machineId, custody);
                 lifecycle.reconcile(message.machineId, {
                   custody,
-                  attached: peekInstances(message.payload),
+                  attached: agentFrame.instances,
                 });
               }
               // The beat is the truth (contract C4). Every 15s the machine says
@@ -12754,17 +12409,17 @@ export const createServer = (
               // settles ({@link launches}). Filed asleep instead, it was owed
               // its sends again and woken by each one, every launch minting
               // over the last (2026-10-10).
-              if ((message.payload as HeartbeatPayload).custody !== undefined) {
+              if (agentFrame.heartbeat.custody !== undefined) {
                 settleLaunchesOn(
                   message.machineId,
-                  peekInstances(message.payload),
-                  peekCustody(message.payload),
+                  agentFrame.instances,
+                  agentFrame.custody,
                   HEARTBEAT_SETTLE_GRACE_MS
                 );
               }
               const beat = db.reconcileHeartbeat(
                 message.machineId,
-                peekInstances(message.payload),
+                agentFrame.instances,
                 [
                   ...heldProcesses(machineCustody.get(message.machineId)),
                   ...launchingOn(message.machineId),
@@ -12786,7 +12441,7 @@ export const createServer = (
               }
               // A session its machine lists attached has a process to take
               // what was handed back meanwhile.
-              for (const id of peekInstances(message.payload)) {
+              for (const id of agentFrame.instances) {
                 if (waitingForProcess.has(id) && processEvent(id)) {
                   releaseOwed({ instanceId: id });
                 }
@@ -12802,7 +12457,7 @@ export const createServer = (
               // back into custody when its agent came up again. The row keeps
               // the decision; this ends the process behind it. Not a respawn,
               // and sent once per connection, so no beat repeats it.
-              const beatIds = peekInstances(message.payload);
+              const { instances: beatIds } = agentFrame;
               // An outlived session whose sends could not be decided because
               // the machine did not answer the read is asked again.
               for (const [instanceId, held] of inCustody) {
@@ -12813,7 +12468,7 @@ export const createServer = (
               // The update state rides the beat. A change in it is board news on
               // its own, so it joins the session reconciliation in deciding to
               // republish.
-              const beaten = peekBinaryUpdate(message.payload);
+              const { binaryUpdate: beaten } = agentFrame;
               const moved =
                 beaten !== undefined &&
                 !sameBinaryUpdate(
@@ -12827,7 +12482,7 @@ export const createServer = (
               // The machine's damaged records: the rows they belong to say so
               // from the next publish, and stop saying it once the machine's
               // list drops them (the workspace archived, the session ended).
-              const damaged = peekDamagedRecords(message.payload);
+              const { damagedRecords: damaged } = agentFrame;
               const damageMoved =
                 damaged !== undefined &&
                 damagedRecords.heard(message.machineId, damaged);
@@ -12842,7 +12497,7 @@ export const createServer = (
               // those probes, and the register is what puts a machine back in
               // the registry. So everything that reads a machine's harnesses
               // or tools runs here, off the part it reads.
-              const reported = peekHarnesses(message.payload);
+              const { harnesses: reported } = agentFrame;
               if (reported) {
                 // A report with no word (Claude's, its dirs unanswered) is
                 // filed with the last word kept of that harness; with none
@@ -12897,14 +12552,16 @@ export const createServer = (
                   });
                 }
               }
-              const tools = peekTools(message.payload);
+              const tools = agentFrame.tools.map(keptToolStatus);
               if (tools.length > 0) {
                 db.mergeAgentTools(message.machineId, tools);
                 autoInstall(message.machineId, ws);
               }
               // What the machine has installed, on its own beat once its probe
               // has asked every tool for its version.
-              const capabilities = peekMachineCapabilities(message.payload);
+              const capabilities = keptCapabilities(
+                agentFrame.machineCapabilities
+              );
               if (capabilities) {
                 const before = db
                   .listAgents()
@@ -12929,7 +12586,7 @@ export const createServer = (
               // What the machine's own pi and OpenCode stores hold, moved into
               // accounts on each connection and whenever they change under it
               // (a login made there with `opencode auth login`).
-              const { homeStores } = message.payload as HeartbeatPayload;
+              const { homeStores } = agentFrame.heartbeat;
               if (
                 homeStores !== undefined &&
                 homeStamps.get(message.machineId) !== homeStores
@@ -12941,8 +12598,7 @@ export const createServer = (
               lendToWaiting(message.machineId);
               // Every other provider's accounts on this machine, as their
               // stores there say, and the providers it knows.
-              const { providerAccounts, providers } =
-                message.payload as HeartbeatPayload;
+              const { providerAccounts, providers } = agentFrame.heartbeat;
               if (providerAccounts) {
                 syncAccounts(message.machineId, "providers", {
                   reports: providerAccounts,
@@ -12958,7 +12614,7 @@ export const createServer = (
               // When the conversations a harness's server lists last moved,
               // read after the register so the register never waits on that
               // server's start. They join the machine's catalog.
-              const served = peekResumableAt(message.payload);
+              const { resumableAt: served } = agentFrame;
               if (served) {
                 const kept = keptOn.get(message.machineId) ?? new Set();
                 for (const key of Object.keys(served)) {
@@ -13008,11 +12664,7 @@ export const createServer = (
             // — the dashboard pulls the heavy aggregates over REST. Claude's
             // limits are its accounts', which its sessions report.
             case "usage": {
-              const { buckets, openCodeGo, accounts } = message.payload as {
-                accounts?: ProviderAccountReading[];
-                buckets?: UsageBucket[];
-                openCodeGo?: OpenCodeGoLimits | null;
-              };
+              const { buckets, openCodeGo, accounts } = agentFrame.usage;
               // Each metered account's windows as the machine just read them.
               for (const reading of accounts ?? []) {
                 noteProviderReading(db, message.machineId, reading);
@@ -13046,7 +12698,7 @@ export const createServer = (
                 grant = grantLaunch(
                   message.machineId,
                   message.instanceId,
-                  message.payload as LaunchAsk | undefined
+                  agentFrame.launchAsk
                 );
               } catch (error) {
                 grant = {
@@ -13068,22 +12720,22 @@ export const createServer = (
               break;
             }
             case "frames": {
-              const kind = peek(message.payload, "kind");
+              const { kind, body } = agentFrame;
               if (kind === "command_queue") {
-                const { runId, queue } = message.payload as CommandQueueFrame;
+                const { runId, queue } = body;
                 commandQueues.get(runId)?.(queue);
                 break;
               }
               // A workspace's stage changed: each of its sheets keeps the state.
               if (kind === "stage") {
-                const frame = message.payload as StageFrame;
+                const frame = body;
                 artifacts.staged(message.machineId, frame);
                 stageHeard(frame);
                 break;
               }
               // A place's stage clone is cut and in step: filed as a workspace.
               if (kind === "stage-clone") {
-                const frame = message.payload as StageCloneFrame;
+                const frame = body;
                 const by = db
                   .listInstances()
                   .find(
@@ -13108,22 +12760,15 @@ export const createServer = (
               // (browsers.ts, Projects spec §5.11), which tells every
               // dashboard the fleet's browsers whole (`browser_list`).
               if (kind === "browsers") {
-                browsers.heard(
-                  message.machineId,
-                  message.payload as BrowserFrame
-                );
-                browserStream.heard(
-                  message.machineId,
-                  message.payload as BrowserFrame
-                );
+                browsers.heard(message.machineId, body);
+                browserStream.heard(message.machineId, body);
                 break;
               }
               // The machine's fleet report, sent unasked as a converge ends or
               // a reading moved with no fleet change: kept, and the fleet MCP
               // changes its last delta carried go to the sessions there.
               if (kind === "fleet_report") {
-                const { report, generation, convergedGeneration } =
-                  message.payload as FleetReportFrame;
+                const { report, generation, convergedGeneration } = body;
                 welcomeConverge.reported(
                   message.machineId,
                   convergedGeneration
@@ -13140,8 +12785,7 @@ export const createServer = (
               }
               // Its items as they converge (fleet-sync.ts): kept on its row.
               if (kind === "fleet_converge") {
-                const { items, generation } =
-                  message.payload as FleetConvergeFrame;
+                const { items, generation } = body;
                 if (Array.isArray(items)) {
                   fleetSyncs.converged(message.machineId, items);
                   welcomeConverge.converging(
@@ -13155,7 +12799,7 @@ export const createServer = (
               // A take-over its machine ended itself: the ask's call answers.
               if (kind === "browser_handback") {
                 browsers.heardHandback({
-                  ...(message.payload as BrowserHandedBackFrame),
+                  ...body,
                   machineId: message.machineId,
                 });
                 break;
@@ -13163,27 +12807,21 @@ export const createServer = (
               // The stream relay on its machine: the relay's record follows it.
               if (kind === "stream_relay") {
                 streamRelay.heard({
-                  ...(message.payload as RelayFrame),
+                  ...body,
                   machineId: message.machineId,
                 });
                 break;
               }
               if (kind === "move_progress") {
-                moves.progress(
-                  message.machineId,
-                  message.payload as MoveProgressFrame
-                );
+                moves.progress(message.machineId, body);
                 break;
               }
               if (kind === "account_borrow") {
-                answerBorrow(
-                  message.machineId,
-                  message.payload as AccountBorrowFrame
-                ).catch(console.error);
+                answerBorrow(message.machineId, body).catch(console.error);
                 break;
               }
               if (kind === "control_result" && !message.requestId) {
-                message.requestId = peek(message.payload, "requestId");
+                message.requestId = agentFrame.requestId;
               }
               const hubReply =
                 kind === "control_result" &&
@@ -13195,10 +12833,7 @@ export const createServer = (
                   message.instanceId,
                   message.machineId
                 );
-                const frame = message.payload as Extract<
-                  FramePayload,
-                  { kind: "scratch_worktree" }
-                >;
+                const frame = body;
                 const dir =
                   row &&
                   frame.processGeneration === processGeneration(row) &&
@@ -13219,8 +12854,8 @@ export const createServer = (
               if (kind === "session_address" && message.instanceId) {
                 recordSessionAddress(ws, message.machineId, {
                   instanceId: message.instanceId,
-                  sessionId: peek(message.payload, "sessionId") ?? "",
-                  processGeneration: peek(message.payload, "processGeneration"),
+                  sessionId: agentFrame.sessionId ?? "",
+                  processGeneration: agentFrame.processGeneration,
                 });
                 break;
               }
@@ -13242,9 +12877,7 @@ export const createServer = (
               // it once their stop timeouts have run, after its stop was
               // confirmed (r180: the agent's line was there, the hub's never).
               if (kind === "frame" && message.instanceId) {
-                const said = (
-                  message.payload as FramePayload & { kind: "frame" }
-                ).message;
+                const said = body.message;
                 if (
                   said.type === "system" &&
                   (said.subtype === CONTAINERS_ENDED ||
@@ -13271,34 +12904,30 @@ export const createServer = (
               // Reconciliation keeps failed end delivery pending; it is not a session failure.
               if (
                 kind === "error" &&
-                peek(message.payload, "verb") === "stop" &&
+                agentFrame.errorVerb === "stop" &&
                 message.instanceId
               ) {
                 lifecycle.deliveryFailed(message.instanceId);
               }
               if (
                 kind === "error" &&
-                peek(message.payload, "verb") === "stop" &&
+                agentFrame.errorVerb === "stop" &&
                 ownedSession?.endIntent &&
-                peek(message.payload, "processGeneration") ===
-                  processGeneration(ownedSession)
+                agentFrame.processGeneration === processGeneration(ownedSession)
               ) {
-                const reason = peek(message.payload, "endReason");
+                const reason = agentFrame.endReason;
                 if (reason) {
                   db.noteEndReason(ownedSession.id, reason);
                 }
               }
               if (
                 kind === "error" &&
-                peek(message.payload, "verb") === "stop" &&
+                agentFrame.errorVerb === "stop" &&
                 ownedSession?.endIntent
               ) {
                 // A forget waiting on it says why; the stop stays owed, and a
                 // later confirmation still reports it stopped.
-                projectStops.failed(
-                  ownedSession.id,
-                  (message.payload as ErrorFrame).message
-                );
+                projectStops.failed(ownedSession.id, body.message);
                 break;
               }
               // A continuation's summariser: an internal worker only its
@@ -13308,9 +12937,7 @@ export const createServer = (
                 summarisers.has(message.instanceId);
               // One send did not go: its record says so, and nothing else does.
               if (kind === "rejected" && message.instanceId) {
-                const { uuid, error } = message.payload as FramePayload & {
-                  kind: "rejected";
-                };
+                const { uuid, error } = body;
                 takeSendSignal(message.instanceId, {
                   kind: "rejected",
                   uuid,
@@ -13321,18 +12948,14 @@ export const createServer = (
               // A send no process took, handed back whole by its machine: owed
               // again for the session's next process ({@link takeBack}).
               if (kind === "held_send" && message.instanceId) {
-                const { send } = message.payload as FramePayload & {
-                  kind: "held_send";
-                };
+                const { send } = body;
                 takeBack(message.machineId, message.instanceId, send);
                 break;
               }
               // A send handed over again that the session took already: read,
               // and no turn follows ({@link takeTaken}).
               if (kind === "taken_send" && message.instanceId) {
-                const { uuid } = message.payload as FramePayload & {
-                  kind: "taken_send";
-                };
+                const { uuid } = body;
                 takeTaken(message.instanceId, uuid);
                 break;
               }
@@ -13341,7 +12964,7 @@ export const createServer = (
                   !lifecycle.confirm(
                     message.machineId,
                     message.instanceId,
-                    message.payload as Parameters<typeof lifecycle.confirm>[2]
+                    body
                   )
                 ) {
                   break;
@@ -13378,12 +13001,9 @@ export const createServer = (
                 const [process] = db.getInstancesByIds([message.instanceId]);
                 if (
                   process &&
-                  peek(message.payload, "processGeneration") ===
-                    processGeneration(process)
+                  agentFrame.processGeneration === processGeneration(process)
                 ) {
-                  const { died } = message.payload as FramePayload & {
-                    kind: "asleep";
-                  };
+                  const { died } = body;
                   // Its process is gone: the credential it ran on grants
                   // nothing from here, wherever that credential was printed
                   // (a shell's env, a transcript). Its wake, a resume or a
@@ -13408,8 +13028,7 @@ export const createServer = (
                 const [process] = db.getInstancesByIds([message.instanceId]);
                 if (
                   !process ||
-                  peek(message.payload, "processGeneration") !==
-                    processGeneration(process)
+                  agentFrame.processGeneration !== processGeneration(process)
                 ) {
                   break;
                 }
@@ -13428,9 +13047,7 @@ export const createServer = (
                 break;
               }
               if (kind === "frame" && message.instanceId) {
-                const frame = message.payload as FramePayload & {
-                  kind: "frame";
-                };
+                const frame = body;
                 if (
                   frame.message.type === "system" &&
                   frame.message.subtype === CUSTODY_HELD
@@ -13569,9 +13186,7 @@ export const createServer = (
               // admitted frame, before any path below leaves early, so a
               // keep-alive's result ends its turn too.
               if (kind === "frame" && message.instanceId) {
-                const admitted = message.payload as FramePayload & {
-                  kind: "frame";
-                };
+                const admitted = body;
                 memoryWatch.frame(
                   message.instanceId,
                   admitted.message,
@@ -13597,10 +13212,7 @@ export const createServer = (
                 (kind === "frame" || kind === "pulse")
               ) {
                 const [row] = db.getInstancesByIds([message.instanceId]);
-                const frame =
-                  kind === "frame"
-                    ? (message.payload as FramePayload & { kind: "frame" })
-                    : undefined;
+                const frame = kind === "frame" ? body : undefined;
                 const signal = frame ? peekSendSignal(frame) : undefined;
                 const quiet = !!row?.keepAliveTurn || frame?.keepAlive === true;
                 if (quiet && row) {
@@ -13660,9 +13272,7 @@ export const createServer = (
               // read before anything below can consume the frame, since a
               // `held` naming it is also a send signal.
               if (kind === "frame" && message.instanceId) {
-                const neutral = (
-                  message.payload as FramePayload & { kind: "frame" }
-                ).message;
+                const neutral = body.message;
                 if (neutral.type === "result") {
                   if (!neutral.uuid) {
                     console.error(
@@ -13699,7 +13309,7 @@ export const createServer = (
                     turnOver(message.instanceId);
                   }
                 }
-                const named = peekSessionKey(message.payload);
+                const named = agentFrame.sessionKey();
                 if (named) {
                   db.noteInstanceSession(
                     message.instanceId,
@@ -13747,9 +13357,7 @@ export const createServer = (
               // Everything else the session says is read for what its turn
               // makes of the sends it read (rule b).
               if (kind === "frame" && message.instanceId) {
-                const frame = message.payload as FramePayload & {
-                  kind: "frame";
-                };
+                const frame = body;
                 const signal = peekSendSignal(frame);
                 if (signal) {
                   // Its harness taking up a send is its turn starting, but
@@ -13771,8 +13379,7 @@ export const createServer = (
                   const [row] = db.getInstancesByIds([message.instanceId]);
                   if (
                     row &&
-                    peek(message.payload, "processGeneration") ===
-                      processGeneration(row)
+                    agentFrame.processGeneration === processGeneration(row)
                   ) {
                     landSessionDir(row, frame.message.account_id ?? null);
                   }
@@ -13843,8 +13450,7 @@ export const createServer = (
                   // has now, as a move waits for it ({@link owedMoves}).
                   if (
                     !row ||
-                    peek(message.payload, "processGeneration") !==
-                      processGeneration(row)
+                    agentFrame.processGeneration !== processGeneration(row)
                   ) {
                     break;
                   }
@@ -13954,7 +13560,7 @@ export const createServer = (
                   const word = settleRefusal(
                     message.machineId,
                     message.instanceId,
-                    peek(message.payload, "processGeneration"),
+                    agentFrame.processGeneration,
                     frame.message.error,
                     frame.message.message.content
                       .flatMap((block) =>
@@ -13983,7 +13589,7 @@ export const createServer = (
                 const refusal = askRefusal(owner, message);
                 if (refusal) {
                   console.warn(
-                    `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${peek(message.payload, "toolName") ?? "unknown"}: ${refusal}`
+                    `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${agentFrame.toolName ?? "unknown"}: ${refusal}`
                   );
                   // A prompt kept as a permit stays the person's: only the
                   // late process is told.
@@ -14035,8 +13641,7 @@ export const createServer = (
                 // restart, and the permit kept when its process goes (asks.ts
                 // `keep`), stay the parent's.
                 if (routed) {
-                  (message.payload as Record<string, unknown>).routedTo =
-                    "parent";
+                  (body as { routedTo?: string }).routedTo = "parent";
                 }
                 // Its publish is the fan-out below, which every frame no
                 // transcript folds goes out by, after its routing here.
@@ -14077,24 +13682,20 @@ export const createServer = (
                   parked?.instanceId === message.instanceId &&
                   parked?.machineId === message.machineId &&
                   peek(parked.payload, "processGeneration") ===
-                    peek(message.payload, "processGeneration") &&
+                    agentFrame.processGeneration &&
                   // A prompt its ended process took with it stays for the
                   // session's next process ({@link keepPrompt}).
-                  !(
-                    (message.payload as Partial<PermissionSettledFrame>)
-                      .processEnded === true && keepPrompt(parked)
-                  )
+                  !(body.processEnded === true && keepPrompt(parked))
                 ) {
                   // Answered with no answer of the hub's in flight: by Full
                   // Send as its session entered it, when the harness says
                   // so (its frame's `answer`), else taken in the harness's
                   // own interface, which says not how. One in flight is that
                   // answer's, and says itself (`answeringPermissions`).
-                  const { answer } =
-                    message.payload as Partial<PermissionSettledFrame>;
+                  const { answer } = body;
                   pending.resolve(
                     message.requestId,
-                    peek(message.payload, "outcome") === "cancelled"
+                    agentFrame.outcome === "cancelled"
                       ? "cancelled"
                       : "answered",
                     {
@@ -14108,7 +13709,7 @@ export const createServer = (
                 break;
               }
               if (kind === "pulse" && message.instanceId) {
-                const { pulse } = message.payload as { pulse?: SessionPulse };
+                const { pulse } = body;
                 if (pulse) {
                   pulses.set(message.instanceId, pulse);
                   artifactSessions.refresh(message.instanceId);
@@ -14130,16 +13731,14 @@ export const createServer = (
                 nameFromLiveTurn(
                   message.machineId,
                   message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
+                  body.message
                 );
               }
               // A continuation's summariser: its turn's end settles the
               // continuation's wait, and what it answered is read from its
               // transcript. Nothing else answers or hears an internal session.
               if (kind === "frame" && message.instanceId && internal) {
-                const neutral = (
-                  message.payload as FramePayload & { kind: "frame" }
-                ).message;
+                const neutral = body.message;
                 const waiter = turnWaiters.get(message.instanceId);
                 if (neutral.type === "result" && waiter) {
                   const { errors } = neutral as { errors?: string[] };
@@ -14159,9 +13758,7 @@ export const createServer = (
               }
               // A provider refused a session's turn and waits to try again.
               if (kind === "frame" && message.instanceId) {
-                const neutral = (
-                  message.payload as FramePayload & { kind: "frame" }
-                ).message;
+                const neutral = body.message;
                 // A summariser whose provider refuses it at its usage limit
                 // is refused: its harness would retry until the limit resets
                 // (OpenCode answers Go's monthly limit with a `retry` status,
@@ -14205,9 +13802,7 @@ export const createServer = (
               // turn that ends the work (aborted turns carry no answer and are
               // skipped).
               if (kind === "frame" && message.instanceId && !internal) {
-                const neutral = (
-                  message.payload as FramePayload & { kind: "frame" }
-                ).message;
+                const neutral = body.message;
                 // A pi or OpenCode turn its account's limit refused, as its
                 // harness typed the refusal it ended on.
                 if (
@@ -14356,10 +13951,7 @@ export const createServer = (
                   // Claude reports each model's window only here; kept so a
                   // picker can say whether a model fits (claude's catalog
                   // carries no window of its own).
-                  if (
-                    traitsOf(peek(message.payload, "harness")).contextWindow ===
-                    "hub"
-                  ) {
+                  if (traitsOf(agentFrame.harness).contextWindow === "hub") {
                     const { modelUsage } = neutral as {
                       modelUsage?: Record<string, { contextWindow?: number }>;
                     };
@@ -14569,44 +14161,24 @@ export const createServer = (
               // Standing instructions read the frames inside a turn as the
               // dashboards do; a turn's end is answered above.
               if (kind === "frame" && message.instanceId && !internal) {
-                ruleEngine.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                keepTasks(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                observeCompaction(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                usageCounter.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                watch?.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                briefingsObserve(
-                  db,
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
+                ruleEngine.observe(message.instanceId, body.message);
+                keepTasks(message.instanceId, body.message);
+                observeCompaction(message.instanceId, body.message);
+                usageCounter.observe(message.instanceId, body.message);
+                watch?.observe(message.instanceId, body.message);
+                briefingsObserve(db, message.instanceId, body.message);
               }
               // An agent only frames an error about a session that failed to start
               // or died on its own, so the row records it for whoever looks later.
               if (
                 kind === "error" &&
                 message.instanceId &&
-                peek(message.payload, "verb") === "spawn"
+                agentFrame.errorVerb === "spawn"
               ) {
                 const [process] = db.getInstancesByIds([message.instanceId]);
                 if (
                   !process ||
-                  peek(message.payload, "processGeneration") !==
-                    processGeneration(process)
+                  agentFrame.processGeneration !== processGeneration(process)
                 ) {
                   break;
                 }
@@ -14618,9 +14190,9 @@ export const createServer = (
                 processFailed(
                   message.machineId,
                   message.instanceId,
-                  peek(message.payload, "message")?.trim() ||
+                  agentFrame.errorMessage?.trim() ||
                     `The session's process on ${machineName(message.machineId)} failed, and its agent sent no words for why.`,
-                  asLastErrorKind(peek(message.payload, "lastErrorKind"))
+                  asLastErrorKind(agentFrame.lastErrorKind)
                 );
               }
               // An install answering, whoever asked for it: the cell is the hub's
@@ -14658,26 +14230,17 @@ export const createServer = (
                 kind === "control_result" &&
                 fleetSyncs.has(message.requestId)
               ) {
-                fleetSyncs.answered(
-                  message.requestId,
-                  message.payload as ControlResult
-                );
-                welcomeConverge.answered(
-                  message.machineId,
-                  message.payload as ControlResult
-                );
+                fleetSyncs.answered(message.requestId, body);
+                welcomeConverge.answered(message.machineId, body);
               }
               // A control a route is waiting on: the reply is that request's
               // answer and nobody else's news.
               if (kind === "control_result" && message.requestId) {
-                lifecycle.answered(
-                  message.requestId,
-                  (message.payload as ControlResult).ok
-                );
+                lifecycle.answered(message.requestId, body.ok);
                 const answering = waiting.get(message.requestId);
                 if (answering) {
                   waiting.delete(message.requestId);
-                  answering(message.payload as ControlResult);
+                  answering(body);
                   break;
                 }
                 // One whose caller was told no answer came is nobody's: said
@@ -14699,10 +14262,7 @@ export const createServer = (
               const settled =
                 kind === "control_result" &&
                 message.requestId !== undefined &&
-                streams.settleCommand(
-                  message.requestId,
-                  message.payload as ControlResult
-                );
+                streams.settleCommand(message.requestId, body);
               // A rewind that never started: its transcript was never cut.
               const rewound =
                 kind === "control_result" && message.requestId
@@ -14710,7 +14270,7 @@ export const createServer = (
                   : undefined;
               if (rewound && message.requestId) {
                 rewinds.delete(message.requestId);
-                if (!(message.payload as ControlResult).ok) {
+                if (kind === "control_result" && !body.ok) {
                   transcripts.reread(rewound);
                 }
               }
