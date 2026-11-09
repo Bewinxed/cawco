@@ -20,6 +20,7 @@ import type {
   SessionMessage,
 } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
+import { accountsWords } from "@cawco/core/words/accounts";
 import { machineAccount } from "./accounts";
 import { finishedAnswer } from "./continuation-words";
 import { CONTINUATION_CANCELLED } from "./continuations";
@@ -209,8 +210,8 @@ export const createContextReads = (ctx: ContextReadsContext) => {
 
   /**
    * The context a session's last real request sent, as it last reported it:
-   * the row's `context_tokens` (every result writes it), else for a Claude
-   * session its stored transcript's last request, read on its machine and
+   * the row's `context_tokens` (every result writes it), else for a session
+   * whose harness reads stored context back its stored transcript's last request, read on its machine and
    * kept on the row. A reason when it never reported one.
    */
   const reportedContextOf = async (
@@ -224,15 +225,22 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         readAt: (row.contextReadAt as Date).getTime(),
       };
     }
-    if (!(traitsOf(row.harness).readsStoredContext && row.sessionId)) {
-      return { reason: "no stored Claude conversation" };
+    if (!traitsOf(row.harness).readsStoredContext) {
+      return {
+        reason: `${accountsWords.harnesses[row.harness]} keeps no context its machine can read back`,
+      };
+    }
+    if (!row.sessionId) {
+      return {
+        reason: `no stored ${accountsWords.harnesses[row.harness]} conversation`,
+      };
     }
     const answer = await ctx.readAgent(
       row.machineId,
       CONTROL_READ_SESSION_CONTEXT,
       [row.sessionId, row.cwd],
       2000,
-      "claude"
+      row.harness
     );
     switch (answer.kind) {
       case "unanswered":
