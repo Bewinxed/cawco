@@ -5,6 +5,7 @@ import {
   type ForgeWrite,
 } from "@cawco/core/forge-post";
 import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
+import { machineCalled } from "@cawco/core/machine-names";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -554,44 +555,14 @@ const unpushed = (
  */
 export const LANDING_ENDED = { landingSince: null, submission: null } as const;
 
-export interface LandingRunDeps
-  extends
-    Pick<WorkspacesDeps, "call" | "command" | "db">,
-    Pick<
-      GateDeps,
-      | "machineFree"
-      | "machineName"
-      | "machinePaused"
-      | "online"
-      | "update"
-      | "workspaces"
-    > {
-  readonly closeTurn: (item: WorkItemRow, turnOver: boolean) => void;
-  readonly declareWait: (
-    item: WorkItemRow,
-    minutes: number,
-    reason: string
-  ) => WorkItemRow;
-  readonly finish: (
-    item: WorkItemRow,
-    change: Parameters<DbShape["updateWorkItem"]>[1],
-    how?: { stopped?: boolean }
-  ) => WorkItemRow;
-  readonly finishing: Set<string>;
-  readonly heldForGroup: (ended: WorkItemRow) => boolean;
+/**
+ * What a landing run and its gate read of the hub that work items read
+ * nothing of: the hub hands it to createWorkItems as one `forLandings`,
+ * passed on whole.
+ */
+export interface LandingsHub extends Pick<GateDeps, "machineFree"> {
   /** The machine the hub runs on, once read (server.ts `ownMachineIdRead`): where a project ships from (ship.ts). */
   readonly hubMachineId: () => string | undefined;
-  readonly published: (
-    item: WorkItemRow | undefined
-  ) => WorkItemRow | undefined;
-  readonly report: (
-    row: InstanceRow,
-    body: string,
-    failed: boolean,
-    notice?: boolean,
-    headline?: string,
-    outputs?: string[]
-  ) => void;
   /**
    * Where a reader opens a session in the dashboard: the link a pull request
    * carries back, and each landed commit's `Agent-Logs-Url` trailer.
@@ -604,27 +575,56 @@ export interface LandingRunDeps
   ) => string | undefined;
 }
 
-export const createLandingRun = ({
-  call,
-  closeTurn,
-  command,
-  db,
-  declareWait,
-  finish,
-  finishing,
-  heldForGroup,
-  hubMachineId,
-  machineFree,
-  machineName,
-  machinePaused,
-  online,
-  published,
-  report,
-  sessionUrl,
-  taskTitle,
-  update,
-  workspaces,
-}: LandingRunDeps) => {
+interface LandingRunDeps
+  extends
+    LandingsHub,
+    Pick<WorkspacesDeps, "call" | "command" | "db">,
+    Pick<GateDeps, "machinePaused" | "online" | "update" | "workspaces"> {
+  readonly closeTurn: (item: WorkItemRow, turnOver: boolean) => void;
+  readonly declareWait: (
+    item: WorkItemRow,
+    minutes: number,
+    reason: string
+  ) => WorkItemRow;
+  readonly finish: (
+    item: WorkItemRow,
+    change: Parameters<DbShape["updateWorkItem"]>[1],
+    how?: { stopped?: boolean }
+  ) => WorkItemRow;
+  readonly heldForGroup: (ended: WorkItemRow) => boolean;
+  readonly published: (
+    item: WorkItemRow | undefined
+  ) => WorkItemRow | undefined;
+  readonly report: (
+    row: InstanceRow,
+    body: string,
+    failed: boolean,
+    notice?: boolean,
+    headline?: string,
+    outputs?: string[]
+  ) => void;
+}
+
+export const createLandingRun = (deps: LandingRunDeps) => {
+  const {
+    call,
+    closeTurn,
+    command,
+    db,
+    declareWait,
+    finish,
+    heldForGroup,
+    hubMachineId,
+    published,
+    report,
+    sessionUrl,
+    taskTitle,
+    update,
+    workspaces,
+  } = deps;
+  /** A machine as a landing's line names it: its hostname as the fleet shows it. */
+  const machineName = (machineId: string): string =>
+    machineCalled(machineId, db.listAgents());
   /**
    * Each landing this hub process runs, by item: aborted as its item ends
    * ({@link finish}), which cancels every command the landing has running,
@@ -634,6 +634,12 @@ export const createLandingRun = ({
    * iOS steps waited on in the Mac's queue, one for 1 h 22 m.
    */
   const landingStops = new Map<string, AbortController>();
+  /** Whether this hub process runs item `itemId`'s landing now ({@link settleLanding}): a resume leaves it to that run. */
+  const landingRuns = (itemId: string): boolean => landingStops.has(itemId);
+  /** Item `itemId`'s landing, if this hub runs one, cancelled as its item ends: every command of it stops ({@link landingStops}). */
+  const stopLanding = (itemId: string): void => {
+    landingStops.get(itemId)?.abort();
+  };
   /**
    * Items whose landing waits for something now: what its status says, and
    * since when. In memory: a hub that starts says it again as the landing
@@ -757,16 +763,8 @@ export const createLandingRun = ({
         }
       );
   const gateRun = createGate({
-    call,
-    command,
-    db,
-    machineFree,
-    machineName,
-    machinePaused,
-    online,
-    update,
-    workspaces,
-    landingStops,
+    ...deps,
+    landingStop: (itemId) => landingStops.get(itemId)?.signal,
     runIn,
   });
 
@@ -1679,7 +1677,6 @@ export const createLandingRun = ({
     item: WorkItemRow,
     submission: WorkItemSubmission
   ): Promise<{ done: boolean; text: string }> => {
-    finishing.add(item.id);
     const stop = new AbortController();
     landingStops.set(item.id, stop);
     try {
@@ -1692,7 +1689,6 @@ export const createLandingRun = ({
       throw error;
     } finally {
       landingStops.delete(item.id);
-      finishing.delete(item.id);
       // A wait an error cut short leaves no words behind it.
       landingWait(item.id, null);
       // An item stopped while it landed was not settled for it (workspaces.ts `holdsOf`).
@@ -1836,10 +1832,13 @@ export const createLandingRun = ({
   };
 
   return {
-    landingWaits,
+    /** While item `itemId`'s landing waits (a shared machine slot, a pause, its turn to land): what its status says, and since when ({@link landingWait}). */
+    landingWaitOf: (itemId: string): { words: string; since: number } | null =>
+      landingWaits.get(itemId) ?? null,
     landingWait,
+    landingRuns,
+    stopLanding,
     settleLanding,
-    landingStops,
     runIn,
     passesOf: gateRun.passesOf,
   };
