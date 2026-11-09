@@ -109,10 +109,7 @@ export const fleetMcpRoutes = ({
              * machine. Left out: as it was.
              */
             platforms: t.Optional(
-              t.Union([
-                t.Array(t.Union(MCP_PLATFORMS.map((one) => t.Literal(one)))),
-                t.Null(),
-              ])
+              t.Union([t.Array(t.UnionEnum(MCP_PLATFORMS)), t.Null()])
             ),
             /**
              * One instance on each machine for all its sessions, started at
