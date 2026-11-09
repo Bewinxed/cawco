@@ -1277,7 +1277,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * once they end ({@link compactFirst}). From a summary: the same session
    * goes on in a fresh conversation on `accountId` ({@link continueAsMove});
    * one that can't leaves it where it is, as does a compaction before the
-   * move that compacted nothing ({@link compactFirstFailed}): a move goes
+   * move that compacted nothing (`compactFirstFailed`): a move goes
    * the way its plan says or not at all. Every mover calls this: the
    * at-limit controller, the rebalance, a person's move and a move owed to a
    * turn's end.
@@ -1338,7 +1338,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * Compacts `row` where it is, warm, before its move (core `AccountMove`
    * `compactFirst`): its line is written now, then its filing turn and its
    * harness's `/compact` run ({@link startCompaction}); the move to the
-   * account the line names follows their end ({@link moveCompacted}).
+   * account the line names follows their end (`moveCompacted`).
    */
   const compactFirst = (row: MoverRow, how: MoveHow): void => {
     ctx.noteAtLimit(row, how.move, how.line);
@@ -1432,7 +1432,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
 
   /**
    * A summary its move asked for failed after its job was filed (`row`, in
-   * the failure's words), its new session removed ({@link undoStart}): the
+   * the failure's words), its new session removed (`undoStart`): the
    * session stays where it is, the failure said in its transcript and to
    * its parent, and, stopped at its limit, held there as any session no
    * account took. Nothing moves it some other way. Nothing when the source
@@ -1482,7 +1482,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
 
   /**
    * Who answers the end of a turn of `instanceId` its live launch's Claude
-   * Code ended on its account's credential ({@link settleRefusal}): the
+   * Code ended on its account's credential (`settleRefusal`): the
    * at-limit controller ({@link credentialTurns}), or the turn's end as any
    * failed turn's. A refusal moves the session and carries it on, but a work item's session only from a
    * turn that called no tool, once per item, and only with an account to
@@ -1666,7 +1666,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * nothing runs on it name no account (their data went into the machine's
    * own dir with its store), and `leavesOn`, the machines where a process
    * still runs in its store, sign it out once none does
-   * ({@link leaveAccounts}). One whose process is up between turns moves
+   * (`leaveAccounts`). One whose process is up between turns moves
    * now, as at a turn's end; one in a turn at that end.
    */
   const removeWithSessions = (
@@ -1724,7 +1724,7 @@ export const createLimitMoves = (ctx: LimitMovesContext) => {
    * Signs `account` (`named`) out on `machineId` alone, as a person asked:
    * every session on it there owes its move ({@link moveOff}). With a
    * process there still running in its store (`leaves`), its sign-in goes
-   * now and its store once none does ({@link leaveAccounts}), the rows at
+   * now and its store once none does (`leaveAccounts`), the rows at
    * rest there naming no account at once; otherwise the machine has
    * already signed it out, and every row there names no account. A row that
    * names no account is placed at its next wake like a new session, among

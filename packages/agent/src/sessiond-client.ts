@@ -15,7 +15,7 @@
  *  3. {@link sessiondBridge} — the SDK's `spawnClaudeCodeProcess` hook
  *     (`sdk.d.ts:2053`, "Custom spawn logic for VM execution"). It hands us the
  *     command line it built; we forward it to sessiond and return a
- *     {@link SpawnedProcess} whose `stdin`/`stdout` are shims over the socket.
+ *     `SpawnedProcess` whose `stdin`/`stdout` are shims over the socket.
  *     The SDK cannot tell the difference — that is the contract the option
  *     exists to provide — but the child now lives under sessiond and outlives
  *     this process.
@@ -890,7 +890,7 @@ export class SessiondClient {
 
   /**
    * Tells this connection's keeper that the dead child `pid` under `procId`
-   * is settled here, so it lets the child go ({@link SessiondRelease}): sent
+   * is settled here, so it lets the child go (`SessiondRelease`): sent
    * by whatever follows the child once it has read the end it waited on, and
    * by nothing earlier. A keeper whose welcome does not say
    * {@link SESSIOND_RELEASE} is sent nothing: it keeps its dead children, as
