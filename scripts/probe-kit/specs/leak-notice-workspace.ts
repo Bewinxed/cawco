@@ -4,7 +4,7 @@
  * workspace's boundary, boundary.ts `sandboxOf`); once its item has ended,
  * what it left running there ends (hub work-items.ts `endLeftWork`, agent
  * boundary.ts `endSessionWork`) and its parent is told of no leftover (hub
- * server.ts `tellLeak`). leak-notice proves the watcher for a session's own
+ * session-notes.ts `tellLeak`). leak-notice proves the watcher for a session's own
  * processes; this is the boundary's half. On a scratch fleet (real hub,
  * agent and sessiond; Claude Code against the mock model), boundaries
  * included: it delegates, so it runs on the host, outside every workspace.
@@ -44,7 +44,7 @@
  * - (w4) Within {@link ENDED_WAIT_MS} of its item's end, `sleep 600.0961`
  *   and `leak-probe-W` are gone while the workspace's boundary still runs on
  *   the keeper (or closed with the session's sleep, which the hub asks of a
- *   delegate whose item is over, server.ts `sleepFinished`) and the session
+ *   delegate whose item is over, login-moves.ts `sleepFinished`) and the session
  *   was not stopped, and the agent's log says the session `finished`, naming
  *   the leaker's pid among those it ended.
  * - (w5) The browser ran with its crash handlers, which ended with it, and
@@ -344,7 +344,7 @@ const endedCheck = async (
     gone !== undefined &&
       seconds <= ENDED_WAIT_MS / 1000 &&
       // A delegate whose item is over is put to sleep once at rest (hub
-      // server.ts `sleepFinished`), and its sleep closes the boundary: on a
+      // login-moves.ts `sleepFinished`), and its sleep closes the boundary: on a
       // Mac host run that came within the same read as the work's end. The
       // agent's line is what says the work's end took them, not the sleep.
       (gone.boundary || status === "sleeping") &&

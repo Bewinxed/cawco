@@ -1,6 +1,6 @@
 /**
  * What a session starts and leaks, the session is told, and nothing is
- * stopped (agent leak-watch.ts, hub server.ts `tellLeak`). On a scratch
+ * stopped (agent leak-watch.ts, hub session-notes.ts `tellLeak`). On a scratch
  * fleet (real hub, agent and sessiond; Claude Code against the mock model),
  * with no workspace: it runs inside one.
  *
