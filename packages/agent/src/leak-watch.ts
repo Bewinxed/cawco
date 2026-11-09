@@ -37,7 +37,7 @@
  * leftover: what its session left running in its workspace ends as the hub
  * settles that workspace (hub work-items.ts `endLeftWork`), or is kept while
  * an artifact shows it. Its parent is told of a climb in memory alone (hub
- * server.ts `tellLeak`).
+ * session-notes.ts `tellLeak`).
  *
  * The same reading says which children are working (agent awake.ts holds
  * idle sleep off for them): a child whose processes, itself aside, used at

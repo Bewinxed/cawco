@@ -1,6 +1,6 @@
 /**
  * When the person comes back from being away, each session holding news for
- * them starts a turn on its recap by itself (hub server.ts `tellBack`): its
+ * them starts a turn on its recap by itself (hub sends.ts `tellBack`): its
  * reply is the news, and nothing waits on them to ask.
  *
  * 2026-11-05: two sessions kept their news in their plans under "Since

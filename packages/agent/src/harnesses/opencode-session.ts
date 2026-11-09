@@ -251,7 +251,7 @@ const parseCommand = (
   }
   const rest = text.slice(1);
   // Its name ends at the first whitespace: the hub hands every send with its
-  // reminder block after its text (server.ts `presenced`), so a bare
+  // reminder block after its text (sends.ts `presenced`), so a bare
   // `/compact` arrives as "/compact\n\n<system-reminder>…".
   const sp = rest.search(WHITESPACE);
   return sp === -1

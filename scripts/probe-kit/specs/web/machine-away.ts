@@ -2,7 +2,7 @@
  * A read the dashboard asks of one machine, whose machine goes away while it
  * is out, is waited out as a transcript is (machine-wait.svelte.ts
  * `MachineWait`, MachineAway.svelte): the hub answers it at the read's
- * deadline as the machine away (503 naming it, server.ts `awayStatus`), the
+ * deadline as the machine away (503 naming it, history.ts `awayStatus`), the
  * surface says so in place, a line of its own (`[data-slot=machine-away]`:
  * the machine reconnecting or offline, and that it reads again by itself),
  * never the hub's refusal, and once the machine is back the read runs again
