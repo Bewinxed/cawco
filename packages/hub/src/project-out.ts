@@ -3,8 +3,15 @@ import type { BridgedHeldPlace } from "./bridged-held-place";
 import type { DbShape } from "./db";
 import { checkoutOf, type PlaceRow, type ProjectRow } from "./db/projects";
 
+/** A place as the API answers it: its time the ISO string it is sent as. */
+export const placeOut = (place: PlaceRow) => ({
+  ...place,
+  createdAt: place.createdAt.toISOString(),
+});
+
 /**
- * A project as the API answers it: its places, and its primary checkout's
+ * A project as the API answers it, its times the ISO strings they are sent
+ * as: its places, and its primary checkout's
  * id (`primaryPlaceId`, null while it has none). A held workspace is no
  * decision of the person's: the session that started its work is told
  * (workspaces.ts `heldNotice`). Each place's `held` is null, sent only
@@ -17,8 +24,9 @@ export const createProjectOut =
   (db: DbShape) =>
   (project: ProjectRow, live: readonly ProjectRow[] = db.listProjects()) => ({
     ...project,
+    createdAt: project.createdAt.toISOString(),
     places: project.places.map((place) => ({
-      ...place,
+      ...placeOut(place),
       held: null as BridgedHeldPlace | null,
       within:
         place.kind === "checkout"
@@ -41,4 +49,4 @@ export const placeAddedOf = (
   project: ReturnType<ReturnType<typeof createProjectOut>>,
   place: PlaceRow,
   added: boolean
-) => ({ ...project, place, placeAdded: added });
+) => ({ ...project, place: placeOut(place), placeAdded: added });

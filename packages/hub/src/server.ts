@@ -449,6 +449,7 @@ import { type AuthSocket, MachineAway } from "./hub-shapes";
 import { createHubTools, installBuild } from "./hub-tools";
 import { createIngress, type Ingress, ingressRoutes } from "./ingress";
 import { createInstalls } from "./installs";
+import { instanceTimes } from "./instance-out";
 import { jevAccess } from "./jev";
 import { JevFailed, jevAttach, jevType, offLine } from "./jev-placement";
 import { createJevTasks, phoneRequestRoutes } from "./jev-tasks";
@@ -11399,7 +11400,9 @@ export const createServer = (
     instanceDeleteRoutes(ctx),
     machinePauseRoutes(ctx),
     agentControlRoutes(ctx),
-    new Elysia().get("/api/instances", () => laws.raise(boardRows)),
+    new Elysia().get("/api/instances", () =>
+      laws.raise(boardRows).map((row) => ({ ...row, ...instanceTimes(row) }))
+    ),
     pulseRoutes(ctx),
     followupStateRoutes(ctx),
     instanceTitleRoutes(ctx),
