@@ -7,9 +7,9 @@
 import type { FsEntry } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
-import { cawco } from "../client.svelte";
 import { didntAnswer } from "../hub/control";
 import { conversationHref } from "../links";
+import { asksStore } from "../stores/asks.svelte";
 import { boardStore } from "../stores/board.svelte";
 import { browsersStore } from "../stores/browsers.svelte";
 import { catalogStore } from "../stores/catalog.svelte";
@@ -74,7 +74,7 @@ export const fleetPane: PaneFleet = {
   get machines() {
     return machines;
   },
-  working: (instanceId) => cawco.activityOf(instanceId) === "working",
+  working: (instanceId) => asksStore.activityOf(instanceId) === "working",
   sessionHref: (instanceId) =>
     conversationHref(instanceId, boardStore.instanceIndex),
   closePreview,

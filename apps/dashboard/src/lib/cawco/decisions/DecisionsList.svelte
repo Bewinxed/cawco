@@ -28,7 +28,8 @@
    * pointer is on the row; on a phone it is the page's own.
    */
   import { decisionsWords as words } from "@cawco/core/words/decisions";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { asksStore } from "#lib/cawco/stores/asks.svelte.js";
+
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
@@ -130,7 +131,7 @@
   const anyFound = $derived(groups.some((group) => group.pages.length > 0));
 
   const working = (page: DecisionPageSummary) =>
-    !!page.writer && cawco.activityOf(page.writer.instanceId) === "working";
+    !!page.writer && asksStore.activityOf(page.writer.instanceId) === "working";
 
   /** Make tasks pressed on a row: the page it is running on, and a refusal by page. */
   let making = $state<string | null>(null);
