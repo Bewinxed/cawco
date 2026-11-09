@@ -19,7 +19,7 @@
  * - (a1) After A's item ends, and after a sweep, its server still answers
  *   and its workspace is kept, and the agent's log says nothing of A's work
  *   ended: the artifact keeps it (the sweep names A's awake session, the
- *   first hold it reads, hub work-items.ts `holdOn`).
+ *   first hold it reads, hub workspaces.ts `holdsOf`).
  * - (a2) The parent reads the server's climb in memory, naming A's item and
  *   the server, as A takes no word (the old leak-notice-workspace (w3)).
  * - (a2b) The parent's person's transcript draws that as CawCo's notice
