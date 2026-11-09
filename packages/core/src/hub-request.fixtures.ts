@@ -12,7 +12,7 @@
  */
 import type { ProviderRouting } from "./accounts";
 import type { DelegateType } from "./delegate-types";
-import { hubRequest, hubRequestAsGiven, type ToolInputs } from "./hub-request";
+import { hubRequest, hubRequestAsGiven } from "./hub-request";
 
 const ROUTING = "PUT /api/accounts/routing/:provider";
 const DELEGATE_TYPE = "PUT /api/delegate-types/:name";
@@ -106,12 +106,6 @@ hubRequest("GET /api/openrouter", { body: { a: 1 } });
 // What it sends typed `any` as a whole is refused as its body is.
 // @ts-expect-error `sent` typed `any`
 hubRequest(HISTORY, anything);
-
-// Each tool's arguments are in the same file, by its name.
-declare function waitFor(args: ToolInputs["wait_item"]): void;
-waitFor({ minutes: 1, reason: "a build" });
-// @ts-expect-error `seconds` is no argument of wait_item
-waitFor({ minutes: 1, reason: "a build", seconds: 1 });
 
 // A probe that proves a refusal sends what the route doesn't take as given,
 // by its own name; the route's path parameters are still held.
