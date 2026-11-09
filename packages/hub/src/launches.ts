@@ -115,7 +115,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
    * sleeps or stops, when its machine's socket closes, and when its machine
    * names it nowhere any more ({@link settleLaunchesOn}). A start kept while
    * its machine installs an update is in flight from when it is kept
-   * (`db.owesSpawn`), and minted when it goes ({@link flushOwedStarts}).
+   * (`db.owesSpawn`), and minted when it goes (`flushOwedStarts`).
    */
   const launches = new Map<
     string,
@@ -812,7 +812,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     agent: NonNullable<ReturnType<typeof ctx.registry.agent>>,
     machineId: string,
     instanceId: string,
-    /** The hub's own wake of many at once (the person back, {@link tellBack}): it goes in its turn ({@link paceSpawn}). */
+    /** The hub's own wake of many at once (the person back, `tellBack`): it goes in its turn (`paceSpawn`). */
     paced = false
   ): void => {
     const [row] = ctx.db.getInstancesByIds([instanceId]);
@@ -928,7 +928,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
     row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
     /** The process is replaced even if the machine still runs one: a move to another account. */
     relaunch = false,
-    /** The hub's own launch: it goes in its turn ({@link paceSpawn}). A relaunch is one. */
+    /** The hub's own launch: it goes in its turn (`paceSpawn`). A relaunch is one. */
     paced = relaunch
   ): void => {
     const instanceId = row.id;

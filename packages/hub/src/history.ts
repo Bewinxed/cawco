@@ -708,7 +708,7 @@ export const createHistory = (ctx: HistoryContext) => {
    * `HubLine`, `line_anchors`): the account lines but the one between two of
    * its conversations, which stands between them already ({@link readOlder}),
    * the lines its machine said ({@link noteMachineLine}), fleet watch's
-   * ({@link noteWatch}), its context's ({@link noteContext}), and where it
+   * (`noteWatch`), its context's (`noteContext`), and where it
    * started again fresh ({@link noteFreshStart}).
    */
   const readRowHistory = (
