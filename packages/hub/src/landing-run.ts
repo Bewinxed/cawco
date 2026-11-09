@@ -187,7 +187,7 @@ interface CheckoutHead {
 }
 /**
  * How long an item waits for a machine its gate needs before the hub wakes
- * it to try again (the {@link WAIT_ITEM_LIMIT} ceiling); one coming online
+ * it to try again (the work-items.ts `WAIT_ITEM_LIMIT` ceiling); one coming online
  * wakes it sooner, at the sweep.
  */
 const CAPABLE_WAIT_MINUTES = 120;
@@ -682,7 +682,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
   const endLanding = (id: string): WorkItemRow | undefined =>
     update(id, LANDING_ENDED);
   /**
-   * Whether the landing `item` is in was stopped ({@link LandingDeps.stopped}):
+   * Whether the landing `item` is in was stopped (landing.ts `LandingDeps.stopped`):
    * the item ended (a stop cancels it and clears its `landingSince`), or its
    * row marks a landing other than the one `item` was read in.
    */
@@ -788,7 +788,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
    * The landing rebased workspace `id`'s commits onto origin's `base`, HEAD
    * going `from` → `to` (landing.ts `onBase`, landed or not): its row's
    * `movedUntold` says so to the next message its session reads
-   * ({@link WorkItems.movedTold}), when the move changed a file. A stamp
+   * (work-items.ts `movedTold`), when the move changed a file. A stamp
    * alone (landing.ts `stampCommand`, every commit's first landing) rewrites
    * each commit's message and leaves the tree as it was: HEAD moved, no file
    * did, and there is nothing to install again, so it is told nothing. One
@@ -1477,7 +1477,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
   };
   /**
    * After `workspace`'s item landed on its base: the commit each workspace
-   * up its `from` chain was cut at ({@link cutFrom}) is vouched landed when
+   * up its `from` chain was cut at (workspaces.ts `cutFrom`) is vouched landed when
    * `git cherry` in this clone, against the branch it just pushed, finds
    * every patch of it there (no `+` line), and that workspace is read again
    * (workspaces.ts `resettleSoon`). A landing rebases a workspace's own commits, so
