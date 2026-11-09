@@ -4737,7 +4737,7 @@ export const createWorkItems = ({
    * RUNS OR AN ARTIFACT SHOWS. Settled while an awake session of its items is
    * all that holds it (`hold`, {@link sessionsHold}), its machine ends what
    * those sessions left running in its boundary (core
-   * {@link CONTROL_WORKSPACE_WORK_END}: agent boundary.ts `endSessionWork`,
+   * {@link CONTROL_WORKSPACE_WORK_END}: agent boundary/work.ts `endSessionWork`,
    * as an interrupt and a stop do), once per set of ended items; the
    * boundary and the sessions run on, so a handoff resumes one there. Not
    * while its landing runs (`finishing`), an artifact shows what it serves
