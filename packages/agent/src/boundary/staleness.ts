@@ -1,10 +1,11 @@
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { lookAtStale } from "./lifecycle";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
 import { readRetiring, starting } from "./state";
 
 /** How often the boundaries of an older form are looked at. */
-export const STALE_LOOK_MS = 5000;
+const STALE_LOOK_MS = 5000;
 
 /** The workspaces whose boundary is of an older form, to hand over. */
 export const stale = new Map<string, WorkspaceRef>();
@@ -51,4 +52,97 @@ export const sayWhyLeft = async (ids: readonly string[]): Promise<void> => {
       );
     }
   }
+};
+
+/**
+ * The workspaces whose boundary of an older form, or on a retiring keeper,
+ * is kept as it is because its work still runs (lifecycle.ts `replaceOlder`), each
+ * with what it runs as last said ({@link workLeft}), said once per change,
+ * and the commands running at the last look that kept it ({@link
+ * drainable}). Each stays {@link stale}, looked at until the last of its
+ * work ends, then handed over.
+ */
+export const keptRunning = new Map<
+  string,
+  { readonly said: string; readonly commands: readonly number[] }
+>();
+
+let staleTimer: ReturnType<typeof setInterval> | undefined;
+
+/** Replaces workspace `ref`'s boundary once nothing runs in it ({@link stubbed}). */
+export const restartWhenIdle = (ref: WorkspaceRef): void => {
+  if (!stubbed.has(ref.id)) {
+    stubbed.set(ref.id, { ref, commands: [] });
+  }
+  lookSoon();
+};
+
+export const forgetStubbed = (id: string): void => {
+  stubbed.delete(id);
+  stopLooking();
+};
+
+/** The look at the older boundaries under way ({@link lookAtStale}): one at a time. */
+export let staleLook: Promise<void> | undefined;
+
+/** A look at the older boundaries: the one under way, or one begun now. Never throws: what fails is said. */
+export const lookOnce = (): Promise<void> => {
+  staleLook ??= lookAtStale()
+    .catch((error: unknown) => {
+      console.warn(
+        `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+      );
+    })
+    .finally(() => {
+      staleLook = undefined;
+    });
+  return staleLook;
+};
+
+/** Looks at the older boundaries each {@link STALE_LOOK_MS} while there are any ({@link lookAtStale}). */
+const lookSoon = (): void => {
+  if (staleTimer) {
+    return;
+  }
+  staleTimer = setInterval(() => {
+    if (!staleLook) {
+      lookOnce();
+    }
+  }, STALE_LOOK_MS);
+  staleTimer.unref();
+};
+
+/** Hands workspace `ref`'s boundary, of an older form, over at the next look. */
+export const replaceSoon = (ref: WorkspaceRef): void => {
+  stale.set(ref.id, ref);
+  lookSoon();
+};
+
+/** Closes workspace `id`'s older boundaries as nothing runs in each any more. */
+export const closeWhenIdle = (id: string): void => {
+  retiring.add(id);
+  lookSoon();
+};
+
+const stopLooking = (): void => {
+  if (
+    stale.size === 0 &&
+    retiring.size === 0 &&
+    stubbed.size === 0 &&
+    staleTimer
+  ) {
+    clearInterval(staleTimer);
+    staleTimer = undefined;
+  }
+};
+
+export const forgetStale = (id: string): void => {
+  stale.delete(id);
+  keptRunning.delete(id);
+  stopLooking();
+};
+
+export const forgetRetiring = (id: string): void => {
+  retiring.delete(id);
+  stopLooking();
 };
