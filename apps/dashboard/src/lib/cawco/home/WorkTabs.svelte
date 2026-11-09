@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { StatusPair } from "@cawco/core/views";
+  import { untrack } from "svelte";
   /**
    * Working and Finished, as one switch over one list: the sidebar's and the
    * phone home's, reading one remembered choice (work-tab). The header is the
@@ -48,8 +50,7 @@
    * each under the session that started it; a parent the tab does not list
    * stands in as a quiet context line, not counted and taking no room.
    */
-  import type { StatusPair } from "@cawco/core/views";
-  import { untrack } from "svelte";
+  import { WORK_STRIP } from "#lib/cawco/tab-strips.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
@@ -687,7 +688,7 @@
             .foldBoxes}
           fill="none"
           onValueChange={(id: string) => choose(id as WorkTab)}
-          strip="work"
+          strip={WORK_STRIP}
           value={workTab.current}
           values={TAB_IDS}
           variant="folder"
