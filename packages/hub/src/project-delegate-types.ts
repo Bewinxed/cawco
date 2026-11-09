@@ -50,6 +50,7 @@ import { delegateTypesWords } from "@cawco/core/words/delegate-types";
 import { Elysia } from "elysia";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { areaFolder, FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
+import { refusal } from "./refusal";
 import { listOf, scalarOf } from "./task-file";
 
 /**
@@ -437,9 +438,13 @@ export const projectDelegateTypesRoutes = (
   types: ProjectDelegateTypes,
   projectExists: (id: string) => boolean
 ) =>
-  new Elysia().get("/api/projects/:id/delegate-types", ({ params, status }) => {
+  new Elysia().get("/api/projects/:id/delegate-types", ({ params }) => {
     if (!projectExists(params.id)) {
-      return status(404, `The hub keeps no project ${params.id}.`);
+      return refusal(
+        404,
+        "no-project",
+        `The hub keeps no project ${params.id}.`
+      );
     }
     return types.catalog(params.id);
   });

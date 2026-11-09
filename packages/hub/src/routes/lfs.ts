@@ -7,6 +7,7 @@ import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
 import { machineName } from "../machine-name";
+import { refusal } from "../refusal";
 
 export const lfsRoutes = ({
   caw,
@@ -46,8 +47,9 @@ export const lfsRoutes = ({
             },
           };
         } catch (error) {
-          return status(
+          return refusal(
             409,
+            "large-files-live-but",
             `${project.row.name}'s large files live at ${lfsUrl}, but its connection can't sign in there: ${error instanceof Error ? error.message : String(error)}`
           );
         }
