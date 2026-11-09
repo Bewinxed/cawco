@@ -49,7 +49,7 @@ const OTHER = "held-requests-other";
 const RESENT = "request(s) held for it sent again under their own ids";
 /** The hub's words for a write whose deadline passed with its machine away: never a read's. */
 const UNKNOWN = "whether it ran is not known";
-/** The hub's read deadline (server.ts `READ_TIMEOUT_MS`). */
+/** The hub's read deadline (machine-read-timeouts.ts `READ_TIMEOUT_MS`). */
 const READ_DEADLINE_MS = 10_000;
 /** The git read leg's session, and its turn before it is sized. */
 const GIT_TITLE = "PROBE-held git read";
