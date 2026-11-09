@@ -19,12 +19,12 @@ import { newId } from "#lib/platform/id.js";
 import { ask, rereadHub, send, settle } from "../hub/socket.svelte";
 import { instanceForSession } from "../links";
 import { unpickedMode } from "../permission-modes";
+import type { SendExtras } from "../send-store";
 import { subscribeSession } from "../stream";
 import { boardState, instanceIndex } from "./board.svelte";
 import {
   dropSendEcho,
   noteSendSubmitted,
-  type SendExtras,
   submitCommand,
 } from "./commands.svelte";
 import { streamHost, streamState } from "./ledger.svelte";
