@@ -1,3 +1,4 @@
+import { singleton } from "./singleton";
 /** The fleet's catalog: skills, plugins, marketplaces, agents, hooks, harness config and memory, and each one's history. */
 
 import { hashFiles } from "@cawco/core/file-hash";
@@ -47,6 +48,7 @@ import {
   fleetMemoryDocTypes,
   fleetMemoryHistory,
   fleetSkillHistory,
+  MEMORY_ID,
   marketplaces,
   mcpServers,
   memoryBriefings,
@@ -297,9 +299,6 @@ const harnessConfigOf = (
           ...bindingOf(row, "project"),
         },
       ];
-
-/** The one row the fleet's memory ever takes: there is one document, not a list. */
-export const MEMORY_ID = "memory";
 
 /**
  * How far back a memory document, a hook or a skill can be taken, each within
@@ -661,11 +660,7 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
   };
 
   const getFleetMemory = () => {
-    const row = db
-      .select()
-      .from(fleetMemory)
-      .where(eq(fleetMemory.id, MEMORY_ID))
-      .get();
+    const row = singleton(db, fleetMemory, MEMORY_ID);
     return row
       ? { content: row.content, hash: row.hash, updatedAt: row.updatedAt }
       : undefined;
