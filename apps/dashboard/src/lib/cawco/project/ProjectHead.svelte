@@ -72,6 +72,7 @@
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconArchive,
     IconChatAddLinear,
@@ -131,7 +132,7 @@
     detailsAfterChecks?: Snippet;
   } = $props();
 
-  const narrow = new MediaQuery("(max-width: 639px)");
+  const narrow = new MediaQuery(PHONE_QUERY);
   /** Caw's settings rise as the bottom sheet on touch, as the head's other sheets do. */
   const touch = new MediaQuery(
     "(hover: none), (pointer: coarse), (max-width: 640px)"
