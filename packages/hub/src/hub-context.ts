@@ -116,7 +116,6 @@ import type { createBrowsers } from "./browsers";
 import type { Caw, createCaw } from "./caw";
 import type { createConnectAsks } from "./connect-asks";
 import type { createConnections } from "./connections";
-import type { ContinueOutcome } from "./continuations";
 import type { damagedRecordsOf } from "./damaged-rows";
 import type { DbShape } from "./db";
 import type { LoginMove } from "./db/accounts";
@@ -156,20 +155,23 @@ import type { HarnessConfigBody } from "./harness-config-body";
 import type { Caller, createHubAuth } from "./hub-auth";
 import type {
   AccountUse,
+  ContinueOutcome,
   FetchedCopy,
   FolderSkillBody,
   Located,
   LoginMoveResults,
   MachineAway,
+  MoveOffWhy,
   ReportTold,
   SessionLocation,
   SettledSpawn,
+  StoredRow,
+  Unstored,
 } from "./hub-shapes";
 import type { createKeepAliveScheduler, KeepAliveRow } from "./keep-alive";
 import type { LabelledRow } from "./labels";
 import type { createLaws } from "./laws";
 import type { HubLifetimeShape } from "./lifetime";
-import type { MoveOffWhy, StoredRow } from "./limit-moves";
 import type {
   ControlResult,
   MemoryRead,
@@ -207,7 +209,6 @@ import type { RegistryShape } from "./registry";
 import type { Routines } from "./routines";
 import type { createRuleRows } from "./rule-rows";
 import type { RuleEngine } from "./rules";
-import type { Unstored } from "./sends";
 import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SkillFolderReader } from "./skills";
