@@ -134,15 +134,11 @@ import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
+import { ElysiaStatus } from "elysia";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
 import { SettleRefusal } from "../decides-file";
-import {
-  type BuiltProgram,
-  mergeProgram,
-  ProgramRefusal,
-  readKept,
-} from "../decision-program";
+import { type BuiltProgram, mergeProgram, readKept } from "../decision-program";
 import { HANDLE_MIN } from "../handles";
 import { sessionLabel } from "../labels";
 import {
@@ -163,7 +159,7 @@ import type { ArtifactServiceDeps } from "./deps";
 import { createFacts, metaOf, stateOf } from "./facts";
 import { createCanvasKind } from "./kinds/canvas";
 import { createComponentKind, sheetOf } from "./kinds/component";
-import { createPageKind, newestHash, refusedProgram } from "./kinds/page";
+import { createPageKind, newestHash } from "./kinds/page";
 import { createPreviewKind, servedOf } from "./kinds/preview";
 import { createMarks, labelOf, linkOfPin } from "./marks";
 import {
@@ -230,6 +226,14 @@ const unmerged = (error: unknown): ArtifactRefusal =>
     `The statements did not merge: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.`,
     { cause: error }
   );
+/** `statements` merged into `existing` (decision-program.ts `mergeProgram`), or its refusal; what lang-core could not merge is thrown {@link unmerged}. */
+const merging = (existing: string, statements: string) => {
+  try {
+    return mergeProgram(existing, statements);
+  } catch (error) {
+    throw unmerged(error);
+  }
+};
 /** The fields each kind takes, and what its refusal says it takes. */
 const KIND_FIELDS = {
   page: { fields: ["program", "html", "dir"], takes: "program, html or dir" },
@@ -3620,13 +3624,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const revisedOn = (row: ArtifactRow): Promise<Revised> => {
         // A next version is made from its artifact whole (holdNext), so it holds a program.
         const existing = programOf(row) as string;
-        let merged: ReturnType<typeof mergeProgram>;
-        try {
-          merged = mergeProgram(existing, statements);
-        } catch (error) {
-          throw error instanceof ProgramRefusal
-            ? refusedProgram(error)
-            : unmerged(error);
+        const merged = merging(existing, statements);
+        // A program's refusal, thrown as the artifact's.
+        if (merged instanceof ElysiaStatus) {
+          throw new ArtifactRefusal(merged.status, merged.response.detail);
         }
         return programRevised(instance, row, existing, merged);
       };
