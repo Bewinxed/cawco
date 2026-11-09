@@ -430,7 +430,7 @@ catch-drops-reason	block	packages/agent/src/harnesses/opencode-session.ts	1
 catch-drops-reason	block	packages/agent/src/keepers.ts	1
 catch-drops-reason	block	packages/agent/src/place-push.ts	2
 catch-drops-reason	block	packages/agent/src/stage-host/host.ts	2
-catch-drops-reason	block	packages/hub/src/artifacts/service.ts	1
+catch-drops-reason	block	packages/hub/src/artifacts/kinds/canvas.ts	1
 catch-drops-reason	block	packages/hub/src/browser-routes.ts	1
 catch-drops-reason	block	packages/hub/src/fleet-mcp-relay.ts	2
 catch-drops-reason	block	packages/hub/src/ssh-tunnels.ts	1
