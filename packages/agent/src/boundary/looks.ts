@@ -40,6 +40,7 @@ import {
   commandsNow,
   forgetHeld,
   heldSince,
+  hubLiveNow,
   inUse,
   type LiveFacts,
   liveWhy,
@@ -87,7 +88,7 @@ import {
   writeWhole,
 } from "./state";
 import { cleanGeneration, endUsers, stopBoundary } from "./stop";
-import { hubLiveNow, lookAtEveryFolder } from "./watch";
+import { lookAtEveryFolder } from "./watch";
 
 /**
  * Keeps `project` as the project workspace `id`'s work belongs to
