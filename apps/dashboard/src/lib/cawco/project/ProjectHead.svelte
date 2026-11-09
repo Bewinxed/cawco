@@ -54,7 +54,6 @@
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { viewsWords } from "@cawco/core/words/views";
   import { type Snippet, untrack } from "svelte";
-  import { editProject, type ProjectRow } from "#lib/cawco/client.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import ProjectEndTray from "#lib/cawco/ProjectEndTray.svelte";
   import { askEnd, endHost } from "#lib/cawco/project-end.svelte.js";
@@ -63,6 +62,10 @@
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
   import type { Machine } from "#lib/cawco/stores/board.svelte.js";
+  import {
+    editProject,
+    type ProjectRow,
+  } from "#lib/cawco/stores/projects.svelte.js";
   import {
     BarGlass,
     BarItem,
