@@ -4,7 +4,7 @@
  * credential, for the hub to publish to GitHub with a token only it holds
  * (hub project-settings.ts `create_repo`). A place with no origin gets the
  * hub's remote of it as its origin, as a workspace's cut gives it
- * (workspace.ts `hubRepoOf`), and the push names that repository; one whose
+ * (git/hub-remote.ts `hubRepoOf`), and the push names that repository; one whose
  * origin is anywhere else is refused, so nothing goes where the person did
  * not point it. A dry run reads the branch, the commit and its tree's files
  * and bytes, and the hub repository its origin names when it has one, and
@@ -16,10 +16,10 @@ import {
   type PlacePush,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
+import { hubGitEnv, hubRepo, hubRepoOf, isHubRemote } from "./git/hub-remote";
+import { gitUntil } from "./git/run";
 import { useHubCredentialHelper } from "./git-credential";
-import { hubGitEnv, hubRepo, isHubRemote } from "./move";
 import { publishCheck } from "./place-repo";
-import { gitUntil, hubRepoOf } from "./workspace";
 
 const LINE = /\r?\n/u;
 /** `git ls-tree -r -l` line: mode, type, object, size, then a tab and the path. */
