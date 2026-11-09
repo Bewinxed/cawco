@@ -3,7 +3,7 @@
  * origin reaches exactly the source the artifact's row names now (hub
  * preview-service.ts `reach`, db artifacts.ts `resource`), and a workspace
  * that serves something still waiting on the person can't be discarded
- * (hub work-items.ts `waitingFrom`). On 2026-11-04 most of the owner's
+ * (hub workspaces.ts `waitingFrom`). On 2026-11-04 most of the owner's
  * previews answered 502: a re-hand rewrote the row's workspace, the old
  * workspace retired, and every request still went down a cached chain to
  * it ("No workspace … is on this machine").
