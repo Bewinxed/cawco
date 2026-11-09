@@ -27,16 +27,22 @@ const OPENER = /\{@link(?:code|plain)?\s+import\(/gu;
 const LINK =
   /\{@link(?:code|plain)?\s+import\((["'])([^"']+)\1\)\.([\w$]+)(?:\.[\w$.]+)?(?:(?:\s*\|\s*|\s+)[^}]*)?\}/gu;
 
+/** What the check found wrong, one line each. */
+const stale: string[] = [];
+
 /**
  * The names `export * from "<specifier>"` brings in: not the other module's
- * default. One that does not resolve, or names a package, adds nothing: the
- * compiler refuses the first, and a package's names are no link's target.
+ * default. One that does not resolve is a problem of its own; one that names a
+ * package adds nothing, for a package's names are no link's target.
  */
 const starExports = (file: string, specifier: string): string[] => {
   let target: string;
   try {
     target = Bun.resolveSync(specifier, dirname(file));
   } catch {
+    stale.push(
+      `${relative(ROOT, file)}: export * from "${specifier}" does not resolve`
+    );
     return [];
   }
   return target.includes("/node_modules/")
@@ -97,7 +103,7 @@ function exported(file: string): Set<string> {
   }
   const names = new Set<string>();
   if (reading.has(file)) {
-    // Two modules exporting each other's `*` end here, with what is known so far.
+    // Two modules exporting each other's `*` end here, with an empty set (the caller does not cache what it read around it).
     cuts += 1;
     return names;
   }
@@ -121,7 +127,6 @@ function exported(file: string): Set<string> {
   return names;
 }
 
-const stale: string[] = [];
 const files = [...new Bun.Glob("**/*.{ts,svelte}").scanSync({ cwd: ROOT })]
   .filter(
     (path) =>
@@ -160,7 +165,7 @@ for (const path of files) {
 }
 if (stale.length) {
   console.error(
-    `A doc comment links a name its module does not export; point each at the module that does:\n${stale.join("\n")}`
+    `A doc link names a module or name that does not resolve; point each at the module that exports it:\n${[...new Set(stale)].join("\n")}`
   );
   process.exit(1);
 }
