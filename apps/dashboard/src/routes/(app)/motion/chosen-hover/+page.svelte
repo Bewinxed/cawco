@@ -17,7 +17,7 @@
    * on a half pixel under a list's ghost and pill (`data-probe="half"`).
    */
   import { CAPABILITIES_NONE } from "@cawco/core/harness";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
   import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
   import FolderFiles from "#lib/cawco/project/FolderFiles.svelte";
@@ -28,6 +28,7 @@
   import type { MachineItem, ProjectItem } from "#lib/cawco/spawn/ns-types.js";
   import PermissionSection from "#lib/cawco/spawn/PermissionSection.svelte";
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
+  import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -109,10 +110,10 @@
   // The model list's catalogue: one machine reporting two Claude models.
   // Stood once, in the browser: the board never comes over a bench's hub.
   $effect(() => {
-    if (cawco.machines.some((one) => one.machineId === "bench-models")) {
+    if (boardStore.machines.some((one) => one.machineId === "bench-models")) {
       return;
     }
-    cawco.machines.push({
+    boardStore.machines.push({
       auth: "unknown",
       harnesses: [
         {

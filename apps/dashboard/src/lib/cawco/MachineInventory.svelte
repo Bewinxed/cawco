@@ -15,13 +15,13 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconChevronDown, IconChevronRight, IconLaptop } from "#lib/icons.js";
   import { failureWords as message } from "#lib/platform/hub-read.js";
-  import type { Machine } from "./client.svelte";
   import NoMachines from "./config/NoMachines.svelte";
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
   import MachineAway from "./MachineAway.svelte";
   import { MachineWait } from "./machine-wait.svelte";
   import OsMark from "./OsMark.svelte";
   import RowFault from "./RowFault.svelte";
+  import type { Machine } from "./stores/board.svelte";
 
   let {
     machines,
