@@ -158,7 +158,7 @@ import {
   tailOf,
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
-import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
+import { ProjectRefusal } from "./project-refusal";
 import { refusal } from "./refusal";
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
@@ -373,8 +373,8 @@ const NO_LEAD =
 const SAFETY_MS = 5 * 60_000;
 const MAX_ATTEMPTS_LIMIT = 20;
 const REVIEW_LIMIT_LIMIT = 100;
-const refuse = (code: FolderRefusalStatus, message: string): never => {
-  throw new FolderRefusal(code, message);
+const refuse = (code: ProjectRefusal["status"], message: string): never => {
+  throw new ProjectRefusal(code, message);
 };
 
 const short = (id: string): string => id.slice(0, 8);
@@ -812,9 +812,9 @@ class GuidanceFirst extends WorkItemRefusal {
 /** A failure to start, as the words a caller reads and the status a route answers. */
 const failure = (
   error: unknown
-): { code: FolderRefusalStatus | 502; message: string } => {
+): { code: ProjectRefusal["status"] | 502; message: string } => {
   const message = error instanceof Error ? error.message : String(error);
-  if (error instanceof FolderRefusal) {
+  if (error instanceof ProjectRefusal) {
     return { code: error.status, message };
   }
   if (error instanceof WorkItemRefusal) {

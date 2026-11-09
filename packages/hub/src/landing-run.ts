@@ -20,6 +20,7 @@ import {
   type WorkspaceChanges,
   type WorkspaceConflict,
 } from "@cawco/core/workspace/controls";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
 import type { LandingPhase } from "./db/schema";
@@ -54,9 +55,9 @@ import { handle } from "./presenters/words";
 import {
   FOLDER_FILE_LIMIT,
   type FolderCommits,
-  projectRoot,
   writeFolderFiles,
 } from "./project-folder";
+import { projectRefusalOf, projectRootOf } from "./project-refusal";
 import { shipLanded } from "./ship";
 import { LIVE, WAIT_ITEM_MAX_MINUTES } from "./work-item-state";
 import type { WorkspacesDeps } from "./workspaces";
@@ -1425,10 +1426,14 @@ export const createLandingRun = ({
     if (files.length === 0) {
       return null;
     }
-    return await writeFolderFiles(item.projectId, files, {
+    const written = await writeFolderFiles(item.projectId, files, {
       author: { name: item.title },
       message: `assets: ${item.taskId ? `outputs of ${item.taskId}, attempt ${item.id.slice(0, 8)}` : `outputs of work item ${item.id.slice(0, 8)}`}`,
     });
+    if (written instanceof ElysiaStatus) {
+      throw projectRefusalOf(written);
+    }
+    return written;
   };
   /**
    * Copies the item's outputs from its workspace into its project's folder,
@@ -1460,7 +1465,7 @@ export const createLandingRun = ({
       // Absolute, as the project's workspaces on the hub's machine read them
       // (core workspace-policy.ts `projectFolder`); a delegate on any machine
       // reads them by the folder path with `folder_read`.
-      const root = projectRoot(projectId);
+      const root = projectRootOf(projectId);
       return {
         ok: true,
         paths: written.paths,

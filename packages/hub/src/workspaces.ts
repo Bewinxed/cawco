@@ -40,6 +40,7 @@ import {
   type WorkspaceUnlanded,
   type WorkspaceWorkEnd,
 } from "@cawco/core/workspace/controls";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
@@ -48,6 +49,7 @@ import { machineName } from "./machine-name";
 import type { CommandOptions } from "./machine-pause";
 import { handle } from "./presenters/words";
 import { makeProjectFolder, writeFolderFiles } from "./project-folder";
+import { projectRefusalOf } from "./project-refusal";
 import { received } from "./stored-json";
 import { LIVE, type Parent, WorkItemRefusal } from "./work-item-state";
 
@@ -649,6 +651,9 @@ export const createWorkspaces = ({
         author: { name: item.title },
         message: `assets: ${SCRATCH_OUTPUTS} of work item ${item.id.slice(0, 8)}, kept as its workspace closed`,
       });
+      if (written instanceof ElysiaStatus) {
+        throw projectRefusalOf(written);
+      }
       console.log(
         `[workspaces] ${workspace.id}: ${SCRATCH_OUTPUTS} copied into ${folder}/ before it closed ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}: ${written.paths.join(", ")}`
       );
@@ -1811,7 +1816,10 @@ export const createWorkspaces = ({
   ): Promise<WorkspaceCheckout> => {
     const [, , projectId] = args;
     if (projectId) {
-      await makeProjectFolder(projectId);
+      const made = await makeProjectFolder(projectId);
+      if (made instanceof ElysiaStatus) {
+        throw projectRefusalOf(made);
+      }
     }
     return (await call(
       machineId,
