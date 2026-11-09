@@ -38,6 +38,12 @@
  */
 import { hostname, userInfo } from "node:os";
 import { detach } from "@cawco/core/detach";
+import type {
+  TailnetHttps,
+  TailnetHttpsTodo,
+  TailnetOrigin,
+} from "@cawco/core/tailnet-https";
+import { secondsOf } from "@cawco/core/time";
 import {
   causeOf,
   forwardRequest,
@@ -46,13 +52,7 @@ import {
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
-} from "@cawco/core/preview/proxy";
-import type {
-  TailnetHttps,
-  TailnetHttpsTodo,
-  TailnetOrigin,
-} from "@cawco/core/tailnet-https";
-import { secondsOf } from "@cawco/core/time";
+} from "@cawco/preview/proxy";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
 import { openTailnetDoor, type TailnetDoor } from "./tailnet-door";
