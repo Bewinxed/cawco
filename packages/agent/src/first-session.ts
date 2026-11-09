@@ -2,7 +2,7 @@
  * The spill folder of a workspace's first session, placed as the workspace
  * is cut (workspace.ts `createWorkspace`) so its boundary starts once: a
  * harness saves a tool result too large to hand the model in a folder of the
- * session's own, which the boundary reads (boundary.ts `addSpill`), and one
+ * session's own, which the boundary reads (boundary/decisions.ts `addSpill`), and one
  * added at the spawn changes the boundary's form and hands it over to a new
  * generation. Every harness's folder is known before its spawn:
  *
