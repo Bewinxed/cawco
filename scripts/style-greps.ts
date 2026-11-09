@@ -31,7 +31,7 @@
  *    (scripts/lint/design/clip-move.mjs, which holds scripts to the same).
  *    Read whole, not by line: a block spans lines.
  *  - a `kit-nest` list without `ps-(--nest-pad)`: a nested tree is inset by
- *    the house nesting pad, as SessionTree, WorkTabs and Sidebar write it;
+ *    the house nesting pad, as home/NestList writes it;
  *    without it a child row stands flush with its parent. Read from each
  *    `class="…"` attribute whole, so it may span lines.
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.

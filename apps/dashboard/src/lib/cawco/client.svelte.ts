@@ -7928,9 +7928,9 @@ interface LeftOut {
  * The machine's stored sessions, newest first. A harness that did not list
  * in time, or whose listing threw, keeps the sessions it listed last; it is
  * kept on {@link catalogLeftOut} in {@link harnessDidntAnswer}'s and
- * {@link harnessCouldntList}'s words, and said over Recent's stored
- * sessions (HomeRecent), with Try again, until a load leaves none out;
- * never a toast (DESIGN.md, The Work Outlives Its Surface Rule).
+ * {@link harnessCouldntList}'s words, for wherever the stored sessions
+ * are listed to say, with Try again, until a load leaves none out; never a
+ * toast (DESIGN.md, The Work Outlives Its Surface Rule).
  */
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
@@ -9662,7 +9662,7 @@ export const cawco = {
   /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),
-  /** The harnesses on `machineId` its last listing left out (not in time, or failed), each as a sentence; said over Recent's stored sessions (HomeRecent). */
+  /** The harnesses on `machineId` its last listing left out (not in time, or failed), each as a sentence, for wherever the stored sessions are listed to say. */
   catalogLeftOutOf: (machineId: string): string[] =>
     catalogLeftOut[machineId] ?? [],
   /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
@@ -9914,12 +9914,6 @@ export const cawco = {
     Object.values(state.sessions[instanceId]?.subagents ?? {})
       .filter(isRealSubagent)
       .sort(branchOrder),
-  /**
-   * The person's sends the session has not read yet, where this page holds
-   * its transcript (an open tab, the peek): one will start its next turn.
-   */
-  queuedOf: (instanceId: string): number =>
-    state.sessions[instanceId]?.queued.length ?? 0,
   /** Background tasks that are not real subagents. */
   backgroundTasksOf: (instanceId: string): number =>
     Object.values(state.sessions[instanceId]?.subagents ?? {}).filter(

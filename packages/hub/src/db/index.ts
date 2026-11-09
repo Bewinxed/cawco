@@ -1776,6 +1776,8 @@ export interface DbShape {
       continuedInto?: string;
     }
   ) => PublicInstanceRow | undefined;
+  /** Every send still pending (accepted, not yet read by its session), each session's oldest first. */
+  readonly pendingSends: () => SentMessageRow[];
   /**
    * The person's last message to the session, when it has no reply after it:
    * `read`, the session has it, or `pending`, it waits to reach it. His last
@@ -9529,6 +9531,13 @@ const make = async (path: string): Promise<DbShape> => {
       db.insert(sentMessages).values(send).returning().get(),
     sendRecord: (uuid) =>
       db.select().from(sentMessages).where(eq(sentMessages.uuid, uuid)).get(),
+    pendingSends: () =>
+      db
+        .select()
+        .from(sentMessages)
+        .where(eq(sentMessages.state, "pending"))
+        .orderBy(asc(sentMessages.acceptedAt))
+        .all(),
     sendsIn: (instanceId, states) =>
       db
         .select()

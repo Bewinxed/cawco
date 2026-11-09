@@ -33604,6 +33604,9 @@
                 "string"
               ]
             },
+            "queuedSends": {
+              "type": "number"
+            },
             "role": {
               "$ref": "#/components/schemas/DelegateTypeRole"
             },
@@ -64923,6 +64926,10 @@
               "null",
               "string"
             ]
+          },
+          "queuedSends": {
+            "description": "The sends waiting for it (accepted, not yet read by its session; a keep-\nalive ping aside): one starts its next turn. Laid over by the hub from\nits send records, never stored; absent at none. The sidebar counts a\nsession with one as still working.",
+            "type": "number"
           },
           "role": {
             "$ref": "#/components/schemas/DelegateTypeRole",

@@ -17,10 +17,9 @@ export type TabsVariant = "segmented" | "folder";
 /**
  * A host strip the track stands in, by role: `session`, a pane's session
  * tabs on their own shelf (PaneTabs); `hosted`, the same tabs standing in a
- * host's row, which draws the shelf; `work`, the home's Working and
- * Finished tabs (WorkTabs).
+ * host's row, which draws the shelf.
  */
-export type TabsStrip = "session" | "hosted" | "work";
+export type TabsStrip = "session" | "hosted";
 /**
  * The indicator part-way from the chosen item toward another, by a fraction
  * of the way: a gesture in progress, driving it by hand.

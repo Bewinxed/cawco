@@ -1187,6 +1187,13 @@ export interface InstanceRow {
    */
   projectId?: string | null;
   /**
+   * The sends waiting for it (accepted, not yet read by its session; a keep-
+   * alive ping aside): one starts its next turn. Laid over by the hub from
+   * its send records, never stored; absent at none. The sidebar counts a
+   * session with one as still working.
+   */
+  queuedSends?: number;
+  /**
    * The toolset it runs in, when its spawn named one; null: derived from
    * how it started.
    */

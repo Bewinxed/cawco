@@ -3462,6 +3462,47 @@ const delegated = (
         text: started.text,
       };
 
+/**
+ * Each session's sends still pending (accepted, not yet read by it), keep-
+ * alive pings aside, by uuid: a send that will start its next turn. Laid on
+ * its board row as `queuedSends` (createServer `boardRows`), so every screen
+ * counts a session with one waiting as still working, not only the page that
+ * holds its transcript. Seeded from the database as the hub starts; every
+ * record's change passes `publishSend`, which keeps it (`note`, whether that
+ * session's count moved).
+ */
+const pendingSends = (seed: SentMessageRow[]) => {
+  const byInstance = new Map<string, Set<string>>();
+  const note = (row: SentMessageRow): boolean => {
+    if (isKeepAlive(row.body)) {
+      return false;
+    }
+    const held = byInstance.get(row.instanceId);
+    const was = held?.has(row.uuid) ?? false;
+    const now = row.state === "pending";
+    if (was === now) {
+      return false;
+    }
+    if (now) {
+      byInstance.set(row.instanceId, new Set([...(held ?? []), row.uuid]));
+    } else if (held) {
+      held.delete(row.uuid);
+      if (held.size === 0) {
+        byInstance.delete(row.instanceId);
+      }
+    }
+    return true;
+  };
+  for (const row of seed) {
+    note(row);
+  }
+  return {
+    note,
+    count: (instanceId: string): number =>
+      byInstance.get(instanceId)?.size ?? 0,
+  };
+};
+
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
   { serves = true }: ServerOptions = {}
@@ -6588,8 +6629,18 @@ export const createServer = (
   /** Pending sends a transcript read is deciding, so none is decided twice. */
   const deciding = new Set<string>();
 
+  /** Each session's sends still pending, kept as their records change ({@link pendingSends}). */
+  const sendsPending = pendingSends(db.pendingSends());
+
   /** A record's latest state onto its session's stream: where every screen hears it. */
   const publishSend = (row: SentMessageRow): void => {
+    // A send coming or going from pending moves its session's board row.
+    if (sendsPending.note(row)) {
+      const [session] = db.getInstancesByIds([row.instanceId]);
+      if (session) {
+        publishInstances(session.machineId);
+      }
+    }
     if (isKeepAlive(row.body)) {
       streams.sequence(row.instanceId, {
         kind: "send",
@@ -20408,8 +20459,10 @@ export const createServer = (
     ).map((row) => {
       const one = owed.get(row.id);
       const stall = stalled.has(row.id) ? stallOf(row.id) : undefined;
+      const queued = sendsPending.count(row.id);
       return {
         ...row,
+        ...(queued > 0 ? { queuedSends: queued } : {}),
         ...(one?.to !== undefined && one.byHand
           ? { owedMove: { accountId: one.to, waits: one.waits } }
           : {}),
@@ -21131,6 +21184,7 @@ export const createServer = (
       row.keepAlive,
       "owedMove" in row ? row.owedMove : null,
       "stalled" in row ? row.stalled : null,
+      "queuedSends" in row ? row.queuedSends : null,
     ]);
   // Seeded from the board as the hub boots: every dashboard connects after
   // this and is handed a snapshot at least this fresh, so the first publish

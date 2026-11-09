@@ -13,7 +13,7 @@
  *   conversation are copied into the rest. Most stand in trees (a session
  *   and the delegates it started, up to four deep), as the owner's
  *   orchestrators' do; a few are stopped or failed; a handful ended unseen,
- *   so Finished lists them. Each tree is in the project but one in seven.
+ *   so Recent marks them unread. Each tree is in the project but one in seven.
  *   The newest asleep is an orchestrator on a long conversation of its own
  *   (`LONG_MB`, claude-transcripts.ts): the session a cold load opens;
  * - live: `STREAMS` sessions in a tool loop that never ends (a call every
@@ -44,7 +44,7 @@ const TURNS = 2;
 const TURN_EVERY_MS = 8000;
 /** Rows stopped by the person; the rest of the ones not asleep and not live failed. */
 const STOPPED = 35;
-/** Ended after the owner last looked: what Finished lists. */
+/** Ended after the owner last looked: what Recent marks unread. */
 const UNSEEN = 8;
 /** How far back the seeded rows were started. */
 const HISTORY_MS = 40 * DAY_MS;

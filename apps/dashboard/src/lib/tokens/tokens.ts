@@ -538,8 +538,6 @@ export type TokenSize =
   | "size.c-decision-code"
   | "size.c-media-max-h"
   | "size.c-artifact-card-min"
-  | "size.c-work-tabs-roomy-w"
-  | "size.c-work-tabs-squeeze"
   | "size.c-caw-list-h"
   | "size.c-caw-list-clear"
   | "size.c-caw-list-clear-phone"

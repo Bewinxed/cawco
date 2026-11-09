@@ -5776,22 +5776,6 @@
       },
       "$description": "The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name."
     },
-    "c-work-tabs-roomy-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 280,
-        "unit": "px"
-      },
-      "$description": "The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest."
-    },
-    "c-work-tabs-squeeze": {
-      "$type": "dimension",
-      "$value": {
-        "value": 33,
-        "unit": "px"
-      },
-      "$description": "The most the Working/Finished header's spacing gives back, at the narrowest rail."
-    },
     "c-caw-list-h": {
       "$type": "dimension",
       "$value": {

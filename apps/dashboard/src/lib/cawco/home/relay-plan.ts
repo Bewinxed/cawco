@@ -1,6 +1,6 @@
 /**
- * The relay WorkTabs runs when what the list shows changes (a tab, or "N
- * more"), as data: which lines leave and when each is gone, which arrive
+ * The relay a grouped list runs when what it shows changes (group-relay,
+ * usage's Where it goes), as data: which lines leave and when each is gone, which arrive
  * and the earliest each may start. A new row takes the place of the old
  * row at the same place in its machine, so it waits for that row (its
  * baton); a machine the new list lacks takes its header with it, and a

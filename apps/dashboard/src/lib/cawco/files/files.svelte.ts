@@ -420,7 +420,7 @@ const view = $state<{ shown: ArtifactsView }>({
 
 /**
  * Thumbnails or list, the person's pick, kept in this browser as the
- * home's Working or Finished is (home/work-tab): the bar's card, the
+ * sidebar's groupings are (home/grouping): the bar's card, the
  * phone's drawer and every session's Files read the one answer, and a
  * reload keeps it. Thumbnails until the person picks.
  */

@@ -34,17 +34,7 @@
    *   pointer its transparent padding grows into an equal negative margin,
    *   so the controls' touch areas sit inside its clip; on a phone's own bar
    *   the tabs are a row's height, on the bar's floor, the ends fading over
-   *   a short run so a tab slides under the toggle and Caw. `work`
-   *   (WorkTabs): its tabs' pad and the label's gap to its count close up
-   *   as the rail narrows (`--tight`), a tab after the first starts its
-   *   label past the overlap, a tab before another ends its label or count
-   *   no nearer its end than the overlap (`--px-end`: the squeezed pad had
-   *   left Working's count under Finished's sheet, the owner's audit), and
-   *   a tab is as wide as its label and count
-   *   together while they fit: the header's spacing gives way first, then
-   *   the list shrinks with its row and each label gives way inside its own
-   *   ellipsis, the count standing whole (DESIGN.md, The Truncate Inside
-   *   Rule).
+   *   a short run so a tab slides under the toggle and Caw.
    */
   const tabsListVariants = tv({
     base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--space-row)] [--icon:var(--icon-md)] [--px:var(--c-tab-px)] [--text:var(--text-label)] coarse:[--item:var(--space-8)]",
@@ -74,7 +64,6 @@
           "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)]",
         hosted:
           "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)]",
-        work: "min-w-0 flex-[0_1_auto] [--item:var(--space-8)] [--px:calc(var(--space-2)_-_var(--tight)_*_0.15)] [--sheet:light-dark(var(--surface-raised),var(--surface-hover))] [--tab-fill:var(--surface-recess)] [--tab-hover:light-dark(var(--surface-hover),color-mix(in_oklch,var(--surface-fill)_50%,transparent))] coarse:[--item:var(--space-8)] [&_[data-slot=ff-tab]]:[--gap:max(0px,var(--space-row)_-_var(--tight)_*_0.06)] [&_[data-slot=ff-tab]~[data-slot=ff-tab]]:[--px-start:calc(var(--overlap)_+_var(--px))] [&_[data-slot=ff-tab]:has(~[data-slot=ff-tab])]:[--px-end:max(var(--px),var(--overlap))]",
       },
     },
     compoundVariants: [

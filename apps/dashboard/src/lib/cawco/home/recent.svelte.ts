@@ -7,7 +7,7 @@
  * - Working: the agent writes a reply, or work it started still runs (its
  *   delegates, its project moving it), or its turn ended with work of its
  *   own that will start it again (the hub's `wakesItself`, core
- *   `waitsOnItself`) or a send of the person's waiting for it.
+ *   `waitsOnItself`) or a send waiting for it (the hub's `queuedSends`).
  * - Needs you: an ask waits on the person, or it failed, or it stopped at
  *   its account's limit.
  * - Your turn: its turn ended and nothing will start it again.
@@ -100,7 +100,7 @@ function statusOf(row: BoardRow): RecentStatus {
     row.status === "starting" ||
     row.status === "moving" ||
     cawco.activityOf(row.id) === "working" ||
-    (live && (row.wakesItself === true || cawco.queuedOf(row.id) > 0))
+    (live && (row.wakesItself === true || (row.queuedSends ?? 0) > 0))
   ) {
     return "working";
   }

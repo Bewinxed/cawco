@@ -1012,10 +1012,6 @@ public enum Size {
     public static let cMediaMaxH: Double = 675.2
     /// The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name.
     public static let cArtifactCardMin: Double = 148
-    /// The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest.
-    public static let cWorkTabsRoomyW: Double = 280
-    /// The most the Working/Finished header's spacing gives back, at the narrowest rail.
-    public static let cWorkTabsSqueeze: Double = 33
     /// Caw's panel's list cap.
     public static let cCawListH: Double = 560
     /// The viewport room kept clear above Caw's panel's list on a wide screen.

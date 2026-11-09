@@ -61,8 +61,8 @@
  *   and whether the rows drawn fill it, the server's first screen handing
  *   its place to the list, the page's own transcript reads, layout shifts
  *   and what moved, long tasks; the HTML by part, each page's kept in the
- *   out folder), then the home's common presses: Finished, Recent open and
- *   shut, a project.
+ *   out folder), then the rail's common presses: Recent regrouped by
+ *   machine and back, Older open and shut, a project.
  * - memory: thirty tab switches between two readings of the heap after a
  *   collection, the DOM's nodes and the listeners (DevTools `Memory`).
  *   Chromium only, as scroll is: both read the heap through the DevTools
@@ -80,9 +80,8 @@
  * HTML and a project's stay under their budgets, and their paints within
  * theirs (`coldBudgets`). A hub message
  * costs what it changed, never the fleet's size: at rest a pulse's handling
- * within `PULSE_MS` and a board delta's within `DELTA_MS` on average; no
- * held list's reorder timer (motion/held-order) runs `HELD_ORDER_MS` in a
- * long frame; and no tab switch's frame (the long frame its press ran in)
+ * within `PULSE_MS` and a board delta's within `DELTA_MS` on average; and
+ * no tab switch's frame (the long frame its press ran in)
  * handles a hub message before it renders: neither the socket's handler
  * nor the store's take of what it said. Every number is written to
  * `numbers.json` in the spec's out folder.
@@ -109,6 +108,7 @@ import {
   hubRequest,
 } from "../../../packages/core/src/hub-request";
 import { HUB_TAKE_MEASURE } from "../../../packages/core/src/stream";
+import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { LIVE_ASLEEP, LIVE_ROWS, scaleFleet } from "../fleet-scale";
 import { type MainThread, OWN_PASS, traceMain } from "../frames";
@@ -160,8 +160,6 @@ const KIND_BUDGETS = [
   ["pulse", PULSE_MS],
   ["instances_delta", DELTA_MS],
 ] as const;
-/** A held list's reorder timer in a long frame (7433e2b3, mechanism 7). */
-const HELD_ORDER_MS = 5;
 /*
  * A cold load's budgets, held on the scale fleet at the desk's 1440×900
  * (`coldBudgets`). The numbers they come from, Chromium / WebKit, before
@@ -214,8 +212,6 @@ const handlesHub = (script: LoafScript, maps: string | undefined): boolean =>
     CLIENT.test((script.url && sourceAt(maps, script.url, script.pos)) || ""));
 /** A sampled frame of the dashboard's own source, as a source map names it. */
 const OWN_SOURCE = /@src\/lib\//u;
-/** The held lists' module, as a source map names it. */
-const HELD_ORDER = /held-order\.svelte\.ts/u;
 /** How long a page is left to stand after it opens before it is read. */
 const SETTLE_MS = 12_000;
 /** How long after a press its frames and tasks are its own. */
@@ -424,7 +420,8 @@ const TRAILING_SLASH = /\/$/u;
 /** A box that scrolls its own content. */
 const SCROLLS = /(auto|scroll)/u;
 /** The home's Recent disclosure, by its name and count. */
-const RECENT = /^Recent/u;
+const GROUP_SESSIONS = sidebarWords.groupSessions;
+const OLDER = new RegExp(`^${sidebarWords.older}`, "u");
 
 /** What every leg is given: the run's page, how to open more, and where its numbers go. */
 interface Live {
@@ -1216,22 +1213,6 @@ async function idleLeg(live: Live, quiet: string) {
         : "none heard"
     );
   }
-  const { maps } = live;
-  if (TRACES && maps) {
-    const timers = state.loaf
-      .flatMap((frame) => frame.scripts)
-      .filter((script) =>
-        HELD_ORDER.test(
-          (script.url && sourceAt(maps, script.url, script.pos)) || ""
-        )
-      );
-    const longest = Math.max(0, ...timers.map((script) => script.ms));
-    kit.check(
-      `idle: no held list's reorder runs ${HELD_ORDER_MS}ms in a long frame`,
-      longest < HELD_ORDER_MS,
-      `${timers.length} in long frames, the longest ${round(longest)}ms`
-    );
-  }
 }
 
 /** What a cold page's first frames said of its transcript ({@link watchNewestRow}). */
@@ -1508,21 +1489,19 @@ const htmlParts = (html: string) => {
 };
 
 /**
- * What the rail's home lists say: its tabs (each with its count), Recent's
- * header (its count, and what a shut one says still runs inside), and how
- * many trees an open Recent draws. Read the same way before a change and
- * after it, the two say whether a person sees the same lists.
+ * What the rail's Recent says: its group parents, in order, and how many
+ * session rows it draws. Read the same way before a change and after it,
+ * the two say whether a person sees the same list.
  */
 const homeSays = () => {
   const words = (el: Element | null | undefined) =>
     el?.textContent?.replace(/\s+/gu, " ").trim() ?? null;
-  const rail = document.querySelector("aside");
+  const recent = document.querySelector('aside [data-slot="recent"]');
   return {
-    tabs: [...(rail?.querySelectorAll("[role=tab]") ?? [])].map(words),
-    recent: words(rail?.querySelector('[data-slot="recent"] > button')),
-    recentTrees:
-      rail?.querySelectorAll('[data-slot="home-recent-session-tree"] > *')
-        .length ?? 0,
+    groups: [...(recent?.querySelectorAll("[data-regroup-parent]") ?? [])].map(
+      words
+    ),
+    rows: recent?.querySelectorAll("[data-session-row]").length ?? 0,
   };
 };
 
@@ -1640,14 +1619,19 @@ async function navLeg(live: Live, session: string | undefined) {
       interactionMs: interaction ? round(interaction.ms, 0) : null,
     });
   };
-  await pressed("Finished", () =>
-    page.getByRole("tab", { name: "Finished" }).first().click()
-  );
-  const recent = page.getByRole("button", { name: RECENT }).first();
+  // Recent's groupings: its menu, the first level's Machine, then Day back.
+  const recent = page.locator('aside [data-slot="recent"]');
+  const level = (name: string) =>
+    page.getByRole("menuitemcheckbox", { name }).first();
   const shut = await page.evaluate(homeSays);
-  await pressed("Recent, open", () => recent.click());
+  await recent.getByRole("button", { name: GROUP_SESSIONS }).click();
+  await pressed("Recent, by machine", () => level("Machine").click());
   const open = await page.evaluate(homeSays);
-  await pressed("Recent, shut", () => recent.click());
+  await pressed("Recent, by day", () => level("Day").click());
+  await page.keyboard.press("Escape");
+  const older = recent.getByRole("button", { name: OLDER }).first();
+  await pressed("Older, open", () => older.click());
+  await pressed("Older, shut", () => older.click());
   await pressed("a project", () =>
     page.locator('aside a[href^="/project/"]').first().click()
   );
@@ -1659,7 +1643,7 @@ async function navLeg(live: Live, session: string | undefined) {
     coldBudgets(kit, loads);
   }
   kit.note(
-    `nav: the rail's home says, Recent shut ${JSON.stringify(shut)}, Recent open ${JSON.stringify(open)}`
+    `nav: the rail's Recent says, by day ${JSON.stringify(shut)}, by machine ${JSON.stringify(open)}`
   );
   const slow = presses.filter(
     (one) => (one.interactionMs ?? Number.POSITIVE_INFINITY) > INTERACTION_MS

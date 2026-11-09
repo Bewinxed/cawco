@@ -117,10 +117,7 @@ const INLINE_STYLES = {
   "src/lib/cawco/config/SectionRow.svelte": ["color"],
   "src/lib/cawco/decisions/DecisionsView.svelte": ["animation"],
   "src/lib/cawco/find/MentionField.svelte": ["left", "top"],
-  "src/lib/cawco/home/HomeRecent.svelte": ["inline-size"],
   "src/lib/cawco/home/NeedsCard.svelte": ["color"],
-  "src/lib/cawco/home/SessionTree.svelte": ["animation"],
-  "src/lib/cawco/home/WorkTabs.svelte": ["animation", "opacity"],
   "src/lib/cawco/lightbox/Lightbox.svelte": ["pointer-events"],
   "src/lib/cawco/motion/Rail.svelte": [
     "height",

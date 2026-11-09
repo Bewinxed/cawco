@@ -525,6 +525,8 @@ interface Stretch {
   height: number;
   li: HTMLElement;
   pseudo: "::before" | "::after";
+  /** Laid out right to left: its rail is its right edge, its arm runs left. */
+  rtl: boolean;
   /** In the group's frame. */
   top: number;
   width: number;
@@ -656,6 +658,7 @@ function railsOf(li: HTMLElement, frame: DOMRect, line: Line): Stretch[] {
       li,
       pseudo,
       top: at,
+      rtl: style.direction === "rtl",
       x: box.left + Number.parseFloat(style.left),
       y,
       from: line.base + (at - line.at),
@@ -744,9 +747,13 @@ function rideOf(
   const before = elbow.from - line.base;
   const turn = centre.y - radius;
   const down = turn - elbow.y;
-  const rail = elbow.x + (corner - radius);
-  const arm = elbow.x + corner;
-  const length = before + down + arc + Math.max(0, centre.x - arm);
+  // Right to left the rail is the elbow's right edge and the arm runs left
+  // (app.css .kit-nest, on the inline axis): every step across mirrored.
+  const way = elbow.rtl ? -1 : 1;
+  const start = elbow.rtl ? elbow.x + elbow.width : elbow.x;
+  const rail = start + way * (corner - radius);
+  const arm = start + way * corner;
+  const length = before + down + arc + Math.max(0, way * (centre.x - arm));
   return {
     ...ride,
     bends: Array.from(
@@ -762,11 +769,11 @@ function rideOf(
       if (along <= down + arc) {
         const turned = radius > 0 ? (along - down) / radius : Math.PI / 2;
         return [
-          arm - radius * Math.cos(turned) - centre.x,
+          arm - way * radius * Math.cos(turned) - centre.x,
           turn + radius * Math.sin(turned) - centre.y,
         ];
       }
-      return [arm + (along - down - arc) - centre.x, 0];
+      return [arm + way * (along - down - arc) - centre.x, 0];
     },
   };
 }

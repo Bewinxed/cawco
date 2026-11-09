@@ -1603,7 +1603,7 @@ function trackAnimation(
 
 /**
  * Sent (`reread`) to a `reflow` container, and every one around it, by an
- * owner that moves its contents itself (WorkTabs' tab swap, a fold): every
+ * owner that moves its contents itself (a group relay, a fold): every
  * place is re-read as it now stands, so what that owner removed and added
  * is not taken for a change to animate.
  */
