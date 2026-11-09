@@ -18,7 +18,7 @@
  * again, is removed.
  *
  * Neither while its unit holds a process that is not the keeper's or in one
- * of its children's trees (keeper-jobs.ts `UnitStop`): a wedged keeper
+ * of its children's trees (service-manager/keeper-job.ts `UnitStop`): a wedged keeper
  * answers no listing, so its children are its child processes in the process
  * table. Such a keeper is left as it is, said in the log and in the
  * machine's state the dashboard reads (`sessiondKept`, or its
@@ -50,7 +50,11 @@ import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
-import { type KeeperJob, KeeperKept, keeperJob } from "./keeper-jobs";
+import {
+  type KeeperJob,
+  KeeperKept,
+  keeperJob,
+} from "./service-manager/keeper-job";
 import { dialKeeper, KEEPER_WELCOME_MS } from "./sessiond-client";
 
 /**
