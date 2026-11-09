@@ -2855,7 +2855,7 @@ export class SessionSupervisor {
   }
 
   /**
-   * A launch waits here while its machine's room on memory fails (core
+   * A launch waits here while its machine's room on memory fails (agent
    * machine-room.ts `measureMemoryRoom`: Linux's memory available and the
    * room under the memory limit above the cgroup the current keeper starts
    * its children in, as its welcome names it; the Mac's pressure level),
