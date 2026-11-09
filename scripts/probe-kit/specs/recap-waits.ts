@@ -46,6 +46,10 @@
 import type { ArtifactNeed } from "../../../packages/core/src/artifact-needs";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
 import type { DecisionCard } from "../../../packages/core/src/decisions";
+import type {
+  ArtifactAsked,
+  QuestionClose,
+} from "../../../packages/core/src/doc-meta";
 import {
   type PresenceSaid,
   presenceLine,
@@ -61,7 +65,6 @@ import {
 import type { InstanceRow } from "../../../packages/core/src/protocol";
 import { waitArtifact } from "../../../packages/core/src/wait-targets";
 import {
-  type ArtifactAsked,
   type ArtifactFacts,
   type ArtifactSessions,
   movedOn,
@@ -71,7 +74,6 @@ import {
 import {
   answersOf,
   noneOpen,
-  type QuestionClose,
   questionsOf,
 } from "../../../packages/hub/src/artifacts/questions";
 import type { ArtifactRow } from "../../../packages/hub/src/db/artifacts";
