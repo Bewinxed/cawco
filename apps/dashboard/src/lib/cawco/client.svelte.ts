@@ -4,12 +4,6 @@
  * changes its stream carries (NEW.md §6).
  */
 
-import {
-  type Activity,
-  sessionChain,
-  waitingOnYou,
-} from "@cawco/core/activity";
-
 import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -28,17 +22,14 @@ import { hubRequest } from "@cawco/core/hub-request";
 
 import type {
   ControlPayload,
-  DelegateEvent,
-  DelegateSummary,
   Envelope,
   InstanceRow,
   NamedSpawn,
   SendPayload,
   SpawnPayload,
   StopRequest,
-  WorkItemSummary,
 } from "@cawco/core/protocol";
-import { DELEGATE_SUMMARIES_LIMIT } from "@cawco/core/protocol";
+
 import { questionsOf } from "@cawco/core/question";
 import { relaunchOf } from "@cawco/core/relaunch";
 
@@ -64,11 +55,9 @@ import {
 } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 
-import { sessionActivity } from "./activity";
-
 import { currentClientId } from "./client-id";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
-import { type DelegateRecord, delegateRecord } from "./delegate-record";
+
 import { devDebug } from "./dev-debug";
 import { heardSince } from "./heard";
 
@@ -100,7 +89,7 @@ import {
   wireHub,
 } from "./hub/socket.svelte";
 import { takeAuthFrame } from "./hub-auth.svelte";
-import { instanceForSession, resolveSessionTitle } from "./links";
+import { instanceForSession } from "./links";
 import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
@@ -113,26 +102,29 @@ import { checkServedBuild } from "./served-build.svelte";
 
 import { readAccounts } from "./stores/accounts.svelte";
 import {
+  adoptAskMachine,
+  adoptPending,
+  asksHeard,
+  hearSettled,
+  holdActivities,
+  takePermissionRequest,
+} from "./stores/asks.svelte";
+import {
   adoptRows,
   boardState,
-  boardStore,
   holdMachines,
   instanceIndex,
-  isStale,
   type Machine,
   machineConnected,
   patchBoardRows,
-  pulseOf,
   pulses,
-  type RowsMoved,
-  rowsById,
   takePulse,
 } from "./stores/board.svelte";
 import { takeBrowsers } from "./stores/browsers.svelte";
 import { loadCatalog, refreshCatalogs } from "./stores/catalog.svelte";
-
 import { takeBoardContinuations } from "./stores/continuations.svelte";
-import { isSubscribed, watchedIds } from "./stores/follows.svelte";
+import { hearDelegateEvent, rereadDelegates } from "./stores/delegates.svelte";
+import { watchedIds } from "./stores/follows.svelte";
 import {
   commandRecord,
   latestCommandFor,
@@ -149,7 +141,6 @@ import {
 import { takeFleetMcp } from "./stores/mcp-servers.svelte";
 import { takeBoardMoves, takeMoves } from "./stores/moves.svelte";
 import {
-  needsStore,
   readWaitingActions,
   readWatchNotices,
   takeActions,
@@ -183,10 +174,8 @@ import {
 } from "./stores/session-detail.svelte";
 import {
   applyPulse,
-  type BlockedRequest,
   clearTurnPhase,
   hydrate,
-  type PendingPermission,
   type SessionState,
   session,
   sessionsState,
@@ -250,171 +239,6 @@ import type { Message } from "./types";
 import { updates } from "./updates/updates.svelte";
 
 /**
- * What each hub row's session needs from you ({@link activityNow}), held
- * per row: every list asks it of every row it holds, and asked afresh each
- * time, a turn ending somewhere re-ran it for the whole board. Each is
- * worked out again only when what it reads moves (its row, its pulse's
- * activity, its parked asks, its subscription). Made as the row arrives,
- * in the socket's or a read's handler, outside every component, so no
- * component's teardown takes it.
- */
-class RowActivity {
-  readonly id: string;
-  readonly value = $derived.by(() => activityNow(this.id));
-  constructor(id: string) {
-    this.id = id;
-  }
-}
-const rowActivity = new Map<string, RowActivity>();
-
-/** Each row the board took holds its activity, and each row it let go lets its go. */
-function holdActivities({ moved, gone }: RowsMoved): void {
-  for (const id of gone) {
-    rowActivity.delete(id);
-  }
-  for (const row of moved) {
-    if (!rowActivity.has(row.id)) {
-      rowActivity.set(row.id, new RowActivity(row.id));
-    }
-  }
-}
-
-/**
- * One child a session's tray lists (DelegateTray): a delegate, by its work
- * item, or a session it started with `start_session`, which runs none. The
- * chip and its panel read only this; the acts on a failure (retry, replaced
- * by, dismiss) are a work item's, and only a chip with `work` offers them.
- */
-export interface TrayChild {
-  /** The work item's landing wait (WorkItemSummary `checkQueue`); null on a started session. */
-  checkQueue: WorkItemSummary["checkQueue"];
-  createdAt: number;
-  dismissedAt: number | null;
-  endedAt: number | null;
-  /** Why it failed, first lines; "" when it has not, or said nothing. */
-  error: string;
-  /** Its chip's key: the work item's id, or the started session's own. */
-  id: string;
-  instanceId: string;
-  /** Its machine's pause, while it holds the work item's session; null on a started session. */
-  machinePaused: string | null;
-  /** What the work item waits for to start; null on a started session. */
-  queued: WorkItemSummary["queued"];
-  /** Its account's limit stopping the work item's session, in words; null on a started session. */
-  stalled: string | null;
-  state: WorkItemSummary["state"];
-  title: string;
-  /** The delegate's work item; null on a started session. */
-  work: WorkItemSummary | null;
-}
-
-/**
- * A session another one started with `start_session` (or a continuation
- * of one): it names its starter and runs no work item, the one thing that
- * tells it from a delegate (core `InstanceRow.workItemId`).
- */
-const isStarted = (row: InstanceRow): boolean =>
-  !!row.parentInstanceId && !row.workItemId;
-
-/** The sessions each session started that run no work item, by their starter. */
-const startedBy = $derived.by(() => {
-  const by = new Map<string, InstanceRow[]>();
-  for (const row of boardStore.instances) {
-    if (isStarted(row)) {
-      const parent = row.parentInstanceId as string;
-      by.set(parent, [...(by.get(parent) ?? []), row]);
-    }
-  }
-  return by;
-});
-
-const epochMs = (at: string | number | Date | null | undefined): number =>
-  at === null || at === undefined ? 0 : new Date(at).getTime() || 0;
-
-const itemChild = (item: WorkItemSummary): TrayChild => ({
-  id: item.id,
-  instanceId: item.instanceId,
-  title: item.title,
-  state: item.state,
-  createdAt: item.createdAt,
-  endedAt: item.endedAt,
-  dismissedAt: item.dismissedAt,
-  error: item.firstLines.error,
-  queued: item.queued,
-  checkQueue: item.checkQueue,
-  machinePaused: item.machinePaused,
-  stalled: item.stalled,
-  work: item,
-});
-
-/**
- * A started session as its tray says it: what its turn is doing. It is
- * persistent, so its "done" is a turn that ended (and a later turn takes
- * the chip back, DelegateTray `admitWaiting`); stopped is "cancelled", and
- * a session that errored "failed", with no work item to retry or dismiss.
- */
-const sessionChild = (row: InstanceRow): TrayChild => {
-  const state = ((): TrayChild["state"] => {
-    switch (row.status) {
-      case "starting":
-        return "starting";
-      case "error":
-        return "failed";
-      case "stopping":
-      case "stopped":
-      case "discarded":
-        return "cancelled";
-      case "moving":
-      case "running":
-      case "sleeping":
-      case "unknown":
-        break;
-    }
-    return activityFor(row.id) === "idle" ? "done" : "running";
-  })();
-  return {
-    id: row.id,
-    instanceId: row.id,
-    title: resolveSessionTitle({
-      title: row.title ?? row.derivedTitle,
-      cwd: row.cwd,
-      id: row.id,
-    }),
-    state,
-    createdAt: epochMs(row.createdAt),
-    // A turn ends at its own time; a stop or a failure when the row last moved.
-    endedAt:
-      state === "starting" || state === "running"
-        ? null
-        : (state === "done" && epochMs(row.turnEndedAt)) ||
-          epochMs(row.updatedAt),
-    dismissedAt: null,
-    error: state === "failed" ? (row.lastError ?? "") : "",
-    queued: null,
-    checkQueue: null,
-    machinePaused: null,
-    stalled: null,
-    work: null,
-  };
-};
-
-const delegatesState = $state({
-  /**
-   * What the hub summed up of each delegate whose card came on screen, keyed
-   * by the delegate ({@link readDelegate}). Kept apart from the session it
-   * belongs to because the reader of this traffic is the *parent*: a
-   * delegate card renders its child's exchange, not its own.
-   */
-  delegateRead: {} as Record<string, DelegateSummary>,
-  /**
-   * The delegate events pushed while this page stood, keyed by the delegate
-   * they are about, in id order; those a later read already counts are
-   * dropped as it lands.
-   */
-  delegateHeard: {} as Record<string, DelegateEvent[]>,
-});
-
-/**
  * Spawns the hub has not answered yet: the request each waits on, by the
  * instance it asked for. The hub refuses one with an error frame under that
  * request, and takes one by opening its row ({@link spawnSession}).
@@ -448,112 +272,6 @@ function standHub(answer: BenchHub): void {
   // What the bench stood in is the fleet as read, live and stored alike.
   boardState.fleetRead = true;
   boardState.liveRead = true;
-}
-
-/**
- * The delegates whose summaries this connection read or is reading, by the
- * parent whose transcript draws their cards: each is read once per
- * connection, and pushes keep it after that.
- */
-const delegatesRead = new Map<string, Set<string>>();
-/** The delegates asked for since the last batch left, by parent. */
-const delegatesAsked = new Map<string, Set<string>>();
-
-/**
- * A delegate card came on screen: its summary is read with every other card
- * that came on screen in the same task, a batch per parent of at most
- * {@link DELEGATE_SUMMARIES_LIMIT}. The cold load reads what the screen
- * draws, never every delegate the parent ever ran.
- */
-export function readDelegate(parent: string, instanceId: string): void {
-  const read = delegatesRead.get(parent) ?? new Set<string>();
-  if (read.has(instanceId)) {
-    return;
-  }
-  delegatesRead.set(parent, read.add(instanceId));
-  const asked = delegatesAsked.get(parent) ?? new Set<string>();
-  if (delegatesAsked.size === 0) {
-    queueMicrotask(sendDelegateReads);
-  }
-  delegatesAsked.set(parent, asked.add(instanceId));
-}
-
-/**
- * A reconnect: the delegate events broadcast while the socket was away are
- * lost, so every summary read so far is read again.
- */
-function rereadDelegates(): void {
-  const read = [...delegatesRead];
-  delegatesRead.clear();
-  for (const [parent, delegates] of read) {
-    for (const instanceId of delegates) {
-      readDelegate(parent, instanceId);
-    }
-  }
-}
-
-function sendDelegateReads(): void {
-  const asked = [...delegatesAsked];
-  delegatesAsked.clear();
-  for (const [parent, delegates] of asked) {
-    const all = [...delegates];
-    for (let at = 0; at < all.length; at += DELEGATE_SUMMARIES_LIMIT) {
-      detach(
-        loadDelegates(parent, all.slice(at, at + DELEGATE_SUMMARIES_LIMIT)),
-        "loadDelegates"
-      );
-    }
-  }
-}
-
-/**
- * What these delegates asked their parent, what it answered and what they
- * reported, before their cards came on screen (`POST /api/delegate-summaries`).
- * Broadcast as it happens *and* readable here, for the same reason the
- * hand-offs are: an exchange that settled an hour ago is still the record,
- * and a settled ask is never pushed again. A read that fails leaves the
- * cards on the transcript markers, and the next time they come on screen
- * tries again.
- */
-async function loadDelegates(
-  parent: string,
-  delegates: string[]
-): Promise<void> {
-  let summaries: DelegateSummary[];
-  try {
-    const response = await hubFetch(
-      hubRequest("POST /api/delegate-summaries", {
-        body: { parent, instances: delegates },
-      })
-    );
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
-    }
-    summaries = (await response.json()) as DelegateSummary[];
-  } catch (error) {
-    console.error("[cawco] /api/delegate-summaries failed:", error);
-    const read = delegatesRead.get(parent);
-    for (const instanceId of delegates) {
-      read?.delete(instanceId);
-    }
-    return;
-  }
-  for (const summary of summaries) {
-    // A reconnect's read can land before the one it replaced: the newer stays.
-    if (
-      (delegatesState.delegateRead[summary.instanceId]?.through ?? 0) >
-      summary.through
-    ) {
-      continue;
-    }
-    delegatesState.delegateRead[summary.instanceId] = summary;
-    const heard = delegatesState.delegateHeard[summary.instanceId];
-    if (heard) {
-      delegatesState.delegateHeard[summary.instanceId] = heard.filter(
-        (event) => event.id > summary.through
-      );
-    }
-  }
 }
 
 /**
@@ -594,77 +312,6 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
 }
 
 /**
- * The order this device hears the hub's word on asks in: each ask parked and
- * each ask settled takes the next number. A read of `/api/pending` notes the
- * number it was asked for at, and what was heard after that is newer than it.
- */
-let askHeard = 0;
-const hearAsk = (): number => {
-  askHeard += 1;
-  return askHeard;
-};
-/** The asks heard settled, by request id, with when; the oldest go past a few hundred. */
-const askSettledHeard = new Map<string, number>();
-const SETTLED_HEARD_KEPT = 512;
-const hearSettled = (requestId: string): void => {
-  askSettledHeard.delete(requestId);
-  askSettledHeard.set(requestId, hearAsk());
-  if (askSettledHeard.size > SETTLED_HEARD_KEPT) {
-    const [oldest] = askSettledHeard.keys();
-    askSettledHeard.delete(oldest);
-  }
-};
-
-/**
- * The hub's parked asks as `/api/pending` answered, read when `readFrom` was
- * heard. The read is the whole truth as of then: an ask settled while this
- * tab was away sent its `permission_settled` to nobody listening. What the
- * socket said since is newer than the read: an ask parked meanwhile (a
- * restarted hub hearing its agents replay theirs) stays, and one settled
- * meanwhile is not put back.
- */
-function adoptPending(
-  pending: Envelope<FramePayload>[],
-  readFrom: number
-): void {
-  const parked = new Set(pending.map((envelope) => envelope.requestId));
-  const stands = (p: PendingPermission): boolean =>
-    parked.has(p.requestId) || p.heard > readFrom;
-  for (const target of Object.values(sessionsState.sessions)) {
-    if (!target.pending.every(stands)) {
-      target.pending = target.pending.filter(stands);
-      trackWorking(target);
-    }
-  }
-  for (const envelope of pending) {
-    if ((askSettledHeard.get(envelope.requestId ?? "") ?? 0) <= readFrom) {
-      adoptAskMachine(envelope);
-      takeFrame(envelope.payload);
-    }
-  }
-}
-
-/**
- * An ask the hub parked for no session it keeps a row for (a project's
- * memory proposal, hub memory.ts): its answer names the envelope's machine,
- * since no row says one.
- */
-function adoptAskMachine(envelope: Envelope<FramePayload>): void {
-  const frame = envelope.payload;
-  if (
-    frame.kind !== "permission_request" ||
-    !envelope.machineId ||
-    instanceIndex.byId.has(frame.instanceId)
-  ) {
-    return;
-  }
-  const target = session(frame.instanceId);
-  if (!target.machineId) {
-    target.machineId = envelope.machineId;
-  }
-}
-
-/**
  * Registry reads: on connect and again after every reconnect. True once the
  * projects, the one read the board waits on, landed.
  *
@@ -693,7 +340,7 @@ async function refresh(): Promise<boolean> {
   // The stream relay's journey: Needs you's row and Settings › Browsers.
   readRelayJourney().catch(() => undefined);
   // What the socket says about asks from here on is newer than the read.
-  const readFrom = askHeard;
+  const readFrom = asksHeard();
   const asked = projectsLeave();
   const { mark } = asked;
   const [projects, pending, usage] = await Promise.all([
@@ -795,34 +442,6 @@ function adoptMachines(incoming: Machine[]): void {
     if (machine.status === "online" && !wasOnline.has(machine.machineId)) {
       detach(loadCatalog(machine.machineId), "loadCatalog");
     }
-  }
-}
-
-/**
- * Files one of the hub's pushed delegate events under the delegate it is
- * about, in id order. The read and the pushes overlap by however long the
- * read was out: a row already held, or one the delegate's read summary
- * already counts, is dropped ({@link delegateRecord} folds the rest).
- */
-function hearDelegateEvent(event: DelegateEvent): void {
-  if (
-    event.id <= (delegatesState.delegateRead[event.instanceId]?.through ?? 0)
-  ) {
-    return;
-  }
-  // Written, then read back: a `$state` write lands on the proxy and never on
-  // the literal, so filing into the literal would put the row where the UI
-  // cannot see it.
-  delegatesState.delegateHeard[event.instanceId] ??= [];
-  const list = delegatesState.delegateHeard[event.instanceId];
-  if (list.some((row) => row.id === event.id)) {
-    return;
-  }
-  const after = list.findIndex((row) => row.id > event.id);
-  if (after === -1) {
-    list.push(event);
-  } else {
-    list.splice(after, 0, event);
   }
 }
 
@@ -1020,59 +639,6 @@ function takeControlResult(frame: FrameOf<"control_result">): void {
       )
     );
   }
-}
-
-/**
- * An ask the hub parked: on its session, and off any other it stood on
- * before (its session folded into the one it went on in).
- */
-function takePermissionRequest(frame: FrameOf<"permission_request">): void {
-  const target = session(frame.instanceId);
-  const { routedTo } = frame as { routedTo?: "parent" };
-  // An ask is parked in one session: one the hub parked again under
-  // another (its session folded into the one it went on in) leaves
-  // the session it stood in.
-  for (const other of Object.values(sessionsState.sessions)) {
-    if (
-      other !== target &&
-      other.pending.some((p) => p.requestId === frame.requestId)
-    ) {
-      other.pending = other.pending.filter(
-        (p) => p.requestId !== frame.requestId
-      );
-      trackWorking(other);
-    }
-  }
-  const existing = target.pending.find((p) => p.requestId === frame.requestId);
-  if (existing) {
-    // A re-broadcast (the parent died) clears the tag, so the ask returns
-    // to the user's queue; a fresh arrival keeps it out. Either way the
-    // stored entry follows the latest word from the hub.
-    existing.routedTo = routedTo;
-    existing.raisedAt = frame.raisedAt;
-    existing.presentation = frame.presentation;
-    // A proposal's session moved on (a fold): its card follows.
-    existing.originInstanceId = frame.originInstanceId;
-    existing.heard = hearAsk();
-  } else {
-    target.pending.push({
-      heard: hearAsk(),
-      requestId: frame.requestId,
-      instanceId: frame.instanceId,
-      toolName: frame.toolName,
-      input: frame.input,
-      presentation: frame.presentation,
-      suggestions: frame.suggestions,
-      routedTo,
-      toolUseId: frame.toolUseId,
-      raisedAt: frame.raisedAt,
-      originInstanceId: frame.originInstanceId,
-      browserAsk: frame.browserAsk,
-      connectAsk: frame.connectAsk,
-    });
-  }
-  trackWorking(target);
-  target.lastActivityAt = new Date();
 }
 
 /** Every kind of frame the socket delivers, routed to what takes it. */
@@ -3519,248 +3085,3 @@ export async function editAndResend(
     detach(rereadHub(), "rereadHub");
   }
 }
-
-/** The answers a permission card offers — the keyboard has one key for each. */
-export type PermissionAnswer = "allow" | "deny" | "always";
-
-/**
- * What an answer means on the wire. `always` hands the SDK's own suggestions
- * back as `updatedPermissions`: they are what stops the next identical call
- * from asking again, and the SDK is the only one that knows how to phrase them.
- */
-export function permissionAnswer(
-  request: PendingPermission,
-  answer: PermissionAnswer
-): PermissionResult {
-  // A browser ask's Deny refuses and says nothing more: its card takes no words.
-  if (answer === "deny") {
-    return {
-      behavior: "deny",
-      message: request.browserAsk ? "" : "User denied permission",
-    };
-  }
-  return {
-    behavior: "allow",
-    updatedInput: request.input,
-    ...(answer === "always" && { updatedPermissions: request.suggestions }),
-  };
-}
-
-/**
- * Who started each delegate, by its instance id, from its work item: a
- * delegate's row may not be on the board (asleep, its item over and taken
- * up again) while its ask stands, and its work item still names its parent.
- */
-const itemParents = $derived(
-  new Map(
-    Object.values(workItemsState.workItems).map((item) => [
-      item.instanceId,
-      item.parentInstanceId,
-    ])
-  )
-);
-
-/** The session that started `instanceId`, by its row, else by its work item; null for none. */
-function parentOf(instanceId: string): string | null {
-  return (
-    rowsById.get(instanceId)?.parentInstanceId ??
-    itemParents.get(instanceId) ??
-    null
-  );
-}
-
-/**
- * The sessions waiting on the person (core `waitingOnYou`): an ask parked
- * under it for the person (not one routed to its parent), its delegates'
- * at any depth included, or an artifact of it in Needs you. The set it gave
- * before while it holds the same sessions, so a frame that moved an ask's
- * words wakes no row's activity.
- */
-const waiting = $derived.by((): ReadonlySet<string> => {
-  const now = waitingOnYou({
-    asks: Object.values(sessionsState.sessions).flatMap((target) =>
-      target.pending.map((request) => ({
-        instanceId: target.instanceId,
-        routedTo: request.routedTo,
-      }))
-    ),
-    artifacts: needsStore.artifactNeedsOpen,
-    parentOf,
-  });
-  if (
-    now.size === waitingWas.size &&
-    [...now].every((id) => waitingWas.has(id))
-  ) {
-    return waitingWas;
-  }
-  waitingWas = now;
-  return now;
-});
-let waitingWas: ReadonlySet<string> = new Set();
-
-/**
- * What a session needs from you — `idle` for one nothing has been heard
- * from. A hub row's is held per row ({@link RowActivity}).
- */
-function activityFor(instanceId: string): Activity {
-  return rowActivity.get(instanceId)?.value ?? activityNow(instanceId);
-}
-
-/** What a session needs from you — `idle` for one nothing has been heard from. */
-function activityNow(instanceId: string): Activity {
-  const row = rowsById.get(instanceId);
-  return sessionActivity({
-    waiting: waiting.has(instanceId),
-    moving: row?.status === "moving",
-    runningDelegates: row?.runningDelegates ?? 0,
-    session: sessionsState.sessions[instanceId],
-    subscribed: isSubscribed(instanceId),
-    pulse: pulseOf(instanceId)?.activity,
-  });
-}
-
-/**
- * Every permission waiting on the user, across every machine. This is the
- * question the fleet view exists to answer, so it is derived from the sessions
- * themselves rather than tracked separately: once per change to what it
- * reads, each asking session's own row read by its id.
- */
-const blocked = $derived.by((): BlockedRequest[] => {
-  const rows: BlockedRequest[] = [];
-  for (const target of Object.values(sessionsState.sessions)) {
-    if (target.pending.length === 0) {
-      continue;
-    }
-    // Every ask the hub holds is listed, whatever its session's row says:
-    // the hub settles the asks of a process that ended, and keeps the ones
-    // that outlive it (a question `ask` put, a post held for you) until they
-    // are answered or the session ends for good. One whose machine the hub
-    // cannot reach (`unknown`) is marked stale. Across a reconnect the asks
-    // hold as last read until the hub's read replaces them (`adoptPending`).
-    const row = rowsById.get(target.instanceId);
-    const machine = boardState.machines.find(
-      (one) => one.machineId === target.machineId
-    );
-    for (const request of target.pending) {
-      // A delegate's ask is the parent's to answer, not the user's: it stays on
-      // the delegate's own transcript but never lands in this queue.
-      if (routedToParent(request)) {
-        continue;
-      }
-      rows.push({
-        instanceId: target.instanceId,
-        machineId: target.machineId,
-        hostname: machine?.hostname ?? target.machineId,
-        cwd: target.cwd,
-        request,
-        stale: row !== undefined && isStale(row),
-      });
-    }
-  }
-  // The very list it gave before while it says the same asks the same
-  // way: a frame that moved a session's transcript re-asks this, and a
-  // new list woke every list that leaves the asks out.
-  if (
-    rows.length === blockedWas.length &&
-    rows.every((one, i) => sameAsk(one, blockedWas[i]))
-  ) {
-    return blockedWas;
-  }
-  blockedWas = rows;
-  return rows;
-});
-let blockedWas: BlockedRequest[] = [];
-const sameAsk = (a: BlockedRequest, b: BlockedRequest | undefined): boolean =>
-  b !== undefined &&
-  a.request === b.request &&
-  a.instanceId === b.instanceId &&
-  a.machineId === b.machineId &&
-  a.hostname === b.hostname &&
-  a.cwd === b.cwd &&
-  a.stale === b.stale;
-
-export const cawco = {
-  /**
-   * What one delegate's card draws of its exchange with its parent, once
-   * {@link readDelegate} asked for it. Empty for a delegate whose traffic
-   * predates the table: its card falls back to reading the markers out of
-   * the parent's transcript.
-   */
-  delegateOf: (instanceId: string): DelegateRecord =>
-    delegateRecord(
-      delegatesState.delegateRead[instanceId],
-      delegatesState.delegateHeard[instanceId] ?? []
-    ),
-  /**
-   * What a session's tray lists, oldest first: the work items it delegated,
-   * and the sessions it started that run none ({@link startedBy}). Only what
-   * it made: a project's conversation does not list its project's other
-   * work (hub work-items.ts `trayOf`).
-   */
-  trayOf: (instanceId: string): TrayChild[] =>
-    [
-      ...Object.values(workItemsState.workItems)
-        .filter((item) => item.parentInstanceId === instanceId)
-        .map(itemChild),
-      ...(startedBy.get(instanceId) ?? []).map(sessionChild),
-    ].sort((a, b) => a.createdAt - b.createdAt),
-  /** A delegate's or a started session's tray entry, by its instance id. */
-  trayChildFor: (instanceId: string): TrayChild | undefined => {
-    const item = Object.values(workItemsState.workItems).find(
-      (each) => each.instanceId === instanceId
-    );
-    if (item) {
-      return itemChild(item);
-    }
-    const row = rowsById.get(instanceId);
-    return row && isStarted(row) ? sessionChild(row) : undefined;
-  },
-  /**
-   * What a session needs from you — `idle` for one nothing has been heard
-   * from. A hub row's is held per row ({@link RowActivity}).
-   */
-  activityOf: activityFor,
-  /**
-   * Whether the session's own main loop is in a turn, its delegates and
-   * subagents aside: what a project's Caw is doing himself, where
-   * `activityOf` counts a conversation as working while any attempt it parents runs.
-   * The same sources as `activityOf`: an open session's frames, else the
-   * daemon's pulse.
-   */
-  busyOf: (instanceId: string): boolean => {
-    const target = sessionsState.sessions[instanceId];
-    if (target && isSubscribed(instanceId)) {
-      return target.busy;
-    }
-    return pulseOf(instanceId)?.busy ?? false;
-  },
-  currentToolOf: (
-    instanceId: string
-  ): { name: string; glance: string } | null => {
-    const target = sessionsState.sessions[instanceId];
-    if (target && isSubscribed(instanceId)) {
-      return target.currentTool;
-    }
-    return pulseOf(instanceId)?.currentTool ?? null;
-  },
-  get blocked(): BlockedRequest[] {
-    return blocked;
-  },
-  /**
-   * The asks for the person that delegates of `instanceId` parked, at any
-   * depth under it: its pane draws each as its own (core `waitingOnYou`'s
-   * `parentOf`), so an ask asked two deep reaches the session the person
-   * talks to as it is asked.
-   */
-  asksUnder(instanceId: string): BlockedRequest[] {
-    return blocked.filter(
-      (row) =>
-        row.instanceId !== instanceId &&
-        sessionChain(row.instanceId, parentOf).includes(instanceId)
-    );
-  },
-  /** How many sessions wait on the person (core `waitingOnYou`): asks for them, cards and canvases in Needs you. */
-  get waitingCount(): number {
-    return waiting.size;
-  },
-};

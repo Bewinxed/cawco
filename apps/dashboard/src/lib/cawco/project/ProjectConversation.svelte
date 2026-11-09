@@ -41,11 +41,7 @@
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import {
-    cawco,
-    type HeldSend,
-    type SendExtras,
-  } from "#lib/cawco/client.svelte.js";
+  import type { HeldSend, SendExtras } from "#lib/cawco/client.svelte.js";
   import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { rowHref } from "#lib/cawco/links.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
@@ -56,6 +52,7 @@
   } from "#lib/cawco/project-tasks.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { asksStore } from "#lib/cawco/stores/asks.svelte.js";
   import { boardStore } from "#lib/cawco/stores/board.svelte.js";
   import { previewsStore } from "#lib/cawco/stores/previews.svelte.js";
   import type { PendingPermission } from "#lib/cawco/stores/sessions.svelte.js";
@@ -160,17 +157,19 @@
    * his start making it (the person's words drawn, his session on its way).
    * He stands after its rows (CawAtWork) in the bare working line's place.
    */
-  const atWork = $derived(shown !== null && (unborn || cawco.busyOf(shown)));
+  const atWork = $derived(
+    shown !== null && (unborn || asksStore.busyOf(shown))
+  );
   /** Waiting on you while at work: a question of his holds him. */
   const heldOnYou = $derived(
-    shown !== null && cawco.activityOf(shown) === "blocked"
+    shown !== null && asksStore.activityOf(shown) === "blocked"
   );
   /** What he is on now, under him: the tool under way, else at work. */
   const doing = $derived.by(() => {
     if (heldOnYou) {
       return conversationWords.status.waiting;
     }
-    const tool = shown ? cawco.currentToolOf(shown) : null;
+    const tool = shown ? asksStore.currentToolOf(shown) : null;
     return tool
       ? [tool.name, tool.glance].filter(Boolean).join(" · ")
       : conversationWords.status.working;

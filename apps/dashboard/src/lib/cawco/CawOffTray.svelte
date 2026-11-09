@@ -11,7 +11,7 @@
    * line as it goes and back out of it on a press there. A reload brings it
    * back as it stood.
    */
-  import { cawco } from "./client.svelte";
+
   import { machineName } from "./home/home-state.svelte";
   import { resolveSessionTitle } from "./links";
   import StopTrayPick, {
@@ -26,6 +26,7 @@
     stopShare,
     stopWork,
   } from "./stop-work.svelte";
+  import { asksStore } from "./stores/asks.svelte";
 
   let {
     class: className,
@@ -79,7 +80,7 @@
       href: row.view.href,
       machineName: machineName(row.s.machineId),
       offline: row.s.offline,
-      activity: cawco.activityOf(row.s.id),
+      activity: asksStore.activityOf(row.s.id),
       ran: trailOf(job, row, stands.now),
       stop: step === "pick" ? null : (STOPS[row.state] ?? null),
       landed: row.arrived && row.state !== "kept",

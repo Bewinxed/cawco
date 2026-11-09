@@ -8,8 +8,8 @@
 import type { CawStatus } from "@cawco/core/project-conversation";
 import { commonWords } from "@cawco/core/words/common";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
-import { cawco } from "./client.svelte";
 import type { BoardRow } from "./links";
+import { asksStore } from "./stores/asks.svelte";
 import { boardStore, isFailed, isStale } from "./stores/board.svelte";
 import { projectsStore } from "./stores/projects.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
@@ -74,7 +74,7 @@ export function sessionStatus(
   ) {
     return done ? "done" : "idle";
   }
-  const activity = cawco.activityOf(instance.id);
+  const activity = asksStore.activityOf(instance.id);
   if (activity === "blocked") {
     return "attn";
   }
@@ -97,7 +97,7 @@ export const cawOf = (id: string): CawStatus | null => {
   ) {
     return null;
   }
-  const activity = cawco.activityOf(id);
+  const activity = asksStore.activityOf(id);
   if (activity === "blocked") {
     return "needs-you";
   }

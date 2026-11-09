@@ -12,8 +12,8 @@
  * action names its task within its project.
  */
 import { getContext, setContext } from "svelte";
-import { cawco } from "../client.svelte";
 import type { TaskSummary, TaskView } from "../project-tasks";
+import { asksStore } from "../stores/asks.svelte";
 import { needsStore } from "../stores/needs.svelte";
 
 type Attempted = Pick<TaskSummary | TaskView, "attempts">;
@@ -21,7 +21,9 @@ type Attempted = Pick<TaskSummary | TaskView, "attempts">;
 /** The asks its attempts' sessions stand on. */
 export const asksOf = (task: Attempted) => {
   const sessions = new Set(task.attempts.map((attempt) => attempt.instanceId));
-  return cawco.blocked.filter((blocked) => sessions.has(blocked.instanceId));
+  return asksStore.blocked.filter((blocked) =>
+    sessions.has(blocked.instanceId)
+  );
 };
 
 /** The cards and canvases its attempts' sessions have in Needs you. */

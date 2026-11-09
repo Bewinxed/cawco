@@ -20,7 +20,7 @@
   import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatDuration } from "#lib/utils/time.js";
-  import { cawco, readDelegate } from "../client.svelte";
+
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
@@ -30,7 +30,9 @@
     sessionPlace,
     sessionTitle,
   } from "../session-names.svelte";
+  import { asksStore } from "../stores/asks.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import { delegatesStore, readDelegate } from "../stores/delegates.svelte";
   import { sessionsStore } from "../stores/sessions.svelte";
   import {
     unwatchDelegate,
@@ -101,7 +103,9 @@
       readDelegate(message.instanceId, id);
     }
   });
-  const record = $derived(id && !elsewhere ? cawco.delegateOf(id) : null);
+  const record = $derived(
+    id && !elsewhere ? delegatesStore.delegateOf(id) : null
+  );
   const parent = $derived(sessionsStore.session(message.instanceId));
 
   const toolInput = $derived.by((): Record<string, unknown> => {
@@ -264,8 +268,8 @@
   const live = $derived(
     row?.status === "running" || row?.status === "starting"
   );
-  const activity = $derived(id ? cawco.activityOf(id) : "idle");
-  const currentTool = $derived(id ? cawco.currentToolOf(id) : null);
+  const activity = $derived(id ? asksStore.activityOf(id) : "idle");
+  const currentTool = $derived(id ? asksStore.currentToolOf(id) : null);
 
   /** A delegate card's phase: what its session is doing, or where it is in its life. */
   type Phase =
