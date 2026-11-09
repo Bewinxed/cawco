@@ -18,6 +18,7 @@
   "include": ["src", ".storybook/preview.ts"],
   "references": [
     { "path": "../../packages/core" },
-    { "path": "../../packages/icons" }
+    { "path": "../../packages/icons" },
+    { "path": "../../packages/hub" }
   ]
 }
