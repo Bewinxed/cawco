@@ -37217,6 +37217,10 @@
                   },
                   "message": {
                     "type": "string"
+                  },
+                  "down": {
+                    "$ref": "#/components/schemas/PreviewDown",
+                    "description": "A preview's start the machine refused: the hop that is down (core preview/protocol.ts `PreviewStartDown`). A daemon from before it said one says it in its words alone (core preview/proxy.ts `startRefused`)."
                   }
                 },
                 "required": [

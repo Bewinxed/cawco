@@ -30,7 +30,7 @@ import type { LawsBrokenFrame } from "./invariant";
 import type { MoveJob, MoveProgressFrame, MovesFrame } from "./move";
 import type { DeskAlertFrame, PersonFrame } from "./notifications";
 import type { PermissionPresentation } from "./permission-presentation";
-import type { PreviewSource } from "./preview/protocol";
+import type { PreviewDown, PreviewSource } from "./preview/protocol";
 import type { PreviewSettings } from "./preview/routes";
 import type {
   AgentRow,
@@ -498,7 +498,12 @@ export interface HarnessFailed {
 export type ControlRefusal =
   | { kind: "not-running"; message: string }
   | { kind: "missing"; message: string }
-  | { kind: "unknown"; message: string };
+  | {
+      kind: "unknown";
+      message: string;
+      /** A preview's start the machine refused: the hop that is down (core preview/protocol.ts `PreviewStartDown`). A daemon from before it said one says it in its words alone (core preview/proxy.ts `startRefused`). */
+      down?: PreviewDown;
+    };
 
 export interface ControlResultFrame {
   /** A refusal's words, as said; {@link refusal} is what a reader decides on. */
