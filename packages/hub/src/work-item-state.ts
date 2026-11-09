@@ -127,4 +127,4 @@ export class WorkItemRefusal extends Error {
  */
 export const WAIT_ITEM_MAX_MINUTES = 120;
 
-export const WAIT_ITEM_LIMIT = `Wait not set. Use whole minutes from 1 to ${WAIT_ITEM_MAX_MINUTES} and a non-empty reason for waiting on a command you started.`;
+export const WAIT_ITEM_LIMIT = `Wait not set. Use whole minutes from 1 to ${WAIT_ITEM_MAX_MINUTES} and a non-empty reason saying what you wait for.`;
