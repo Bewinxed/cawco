@@ -9,11 +9,7 @@
   import { detach } from "@cawco/core/detach";
   import type { ForgottenProject } from "@cawco/core/forgotten-project";
   import { projectEndWords } from "@cawco/core/words/project-ends";
-  import {
-    cawco,
-    deleteProjectForGood,
-    readForgottenProjects,
-  } from "#lib/cawco/client.svelte.js";
+
   import ForgottenPage from "#lib/cawco/forgotten/ForgottenPage.svelte";
   import {
     bringBack,
@@ -21,6 +17,11 @@
     bringBackRefusal,
   } from "#lib/cawco/project-end.svelte.js";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
+  import {
+    deleteProjectForGood,
+    projectsStore,
+    readForgottenProjects,
+  } from "#lib/cawco/stores/projects.svelte.js";
   import { failureWords } from "#lib/platform/hub-read.js";
 
   let list = $state<ForgottenProject[] | null>(null);
@@ -46,7 +47,7 @@
 
   // Read as it opens, and again as the projects change.
   $effect(() => {
-    if (cawco.projects) {
+    if (projectsStore.projects) {
       detach(read(), "forgotten");
     }
   });
@@ -58,7 +59,7 @@
     const mine = new Set(
       one.places.map((place) => `${place.machineId}\0${place.path}`)
     );
-    const holder = cawco.projects.find((project) =>
+    const holder = projectsStore.projects.find((project) =>
       project.places.some((place) =>
         mine.has(`${place.machineId}\0${place.path}`)
       )
