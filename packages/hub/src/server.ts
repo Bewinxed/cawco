@@ -1948,6 +1948,7 @@ export const createServer = (
 ) => {
   // What the route families read of this closure (hub-context.ts).
   const ctx: HubContext = hubContextOf({
+    readSessionProcess: () => readSessionProcess,
     TOOL_SIGNIN_BEGIN_MS: () => TOOL_SIGNIN_BEGIN_MS,
     TOOL_SIGNIN_COMPLETE_MS: () => TOOL_SIGNIN_COMPLETE_MS,
     agentMoved: () => agentMoved,
@@ -4949,6 +4950,23 @@ export const createServer = (
       ? { kind: "unanswered", reason: "dead", after: 0 }
       : answer;
 
+  /** Asks a session's process `method` directly and reads its answer ({@link asRead}). */
+  const readSessionProcess = async (
+    row: { id: string; machineId: string },
+    method: string,
+    args: unknown[]
+  ): Promise<Bounded<ControlResult>> => {
+    const requestId = crypto.randomUUID();
+    return asRead(
+      await awaitReply(row.machineId, requestId, READ_TIMEOUT_MS, () => {
+        const agent = registry.agent(row.machineId);
+        return agent
+          ? sendAnswerable(agent, sessionControl(row, requestId, method, args))
+          : undefined;
+      })
+    );
+  };
+
   /** {@link callAgent} for a method that only reads: its answer {@link asRead}. */
   const readAgent = async (
     ...ask: Parameters<typeof callAgent>
@@ -7871,18 +7889,7 @@ export const createServer = (
 
   /** How many tokens a running session holds right now, as its harness reads it. */
   const liveContextTokensOf = async (row: InstanceRow): Promise<number> => {
-    const requestId = crypto.randomUUID();
-    const answer = asRead(
-      await awaitReply(row.machineId, requestId, READ_TIMEOUT_MS, () => {
-        const agent = registry.agent(row.machineId);
-        return agent
-          ? sendAnswerable(
-              agent,
-              sessionControl(row, requestId, CONTROL_CONTEXT_USAGE, [])
-            )
-          : undefined;
-      })
-    );
+    const answer = await readSessionProcess(row, CONTROL_CONTEXT_USAGE, []);
     switch (answer.kind) {
       case "unanswered":
         throw answer.reason === "dead"
