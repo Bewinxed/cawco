@@ -87,15 +87,7 @@ import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
 import { leaveRetiringKeepers } from "./boundary";
-import {
-  HELPER_START_MS,
-  type HelperJob,
-  helperJobSays,
-  launchHelper,
-  removeFinishedHelpers,
-} from "./helper-jobs";
 import { provenFetch } from "./hub-proof";
-import { KeeperKept, keeperJob, keeperJobsHere } from "./keeper-jobs";
 import {
   type KeeperConnection,
   type UnansweredKeeper,
@@ -104,6 +96,18 @@ import {
 } from "./keepers";
 import { runBinaryPins } from "./pin-record";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
+import {
+  KeeperKept,
+  keeperJob,
+  keeperJobsHere,
+} from "./service-manager/keeper-job";
+import {
+  HELPER_START_MS,
+  type HelperJob,
+  helperJobSays,
+  launchHelper,
+  removeFinishedHelpers,
+} from "./service-manager/transient-job";
 import { heldSessions } from "./sessiond-client";
 
 const POLL_MS = 60_000;
@@ -1021,7 +1025,7 @@ export class BinaryUpdater {
   /**
    * Each retiring keeper that has held no live child for
    * {@link RETIRING_EMPTY_MS} is removed (its job ends and leaves the machine;
-   * keeper-jobs.ts), and what no process runs any more is pruned. One holding
+   * service-manager/keeper-job.ts), and what no process runs any more is pruned. One holding
    * anything is never signalled, and neither is one whose unit holds a
    * process that is not its own: its stop is refused ({@link KeeperKept}),
    * said, and tried again on the next look. The machine's endpoint is made to name the
