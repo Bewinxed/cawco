@@ -193,9 +193,6 @@ export const viewOfBoundary = async (
   return { ...spec, command: command as string, args };
 };
 
-/** The boundary each workspace's unknown grant was last said for ({@link ensure}): said once per boundary. */
-export const saidUnknown = new Map<string, number>();
-
 /** The file in a workspace's state dir that holds its {@link BoundaryDecision}s. */
 const DECISIONS_FILE = "boundary-decisions.json";
 
