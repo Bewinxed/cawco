@@ -11,7 +11,7 @@
  * checked the old one; Home kept a row across a change of project, and a
  * stored transcript's place read the project it had left.
  *
- * Rows are immutable and replaced whole (client.svelte.ts `hubRows`), so a
+ * Rows are immutable and replaced whole (stores/board.svelte.ts `hubRows`), so a
  * nested value that differs by identity alone is compared by what it holds.
  */
 import type { BoardRow } from "./links";
