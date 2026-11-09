@@ -70,7 +70,7 @@ export interface JudgeAt {
 /**
  * The workspace's PreToolUse hook, run before every tool call it is matched
  * to (launched-hook.ts `HOOKED_TOOLS`). It hands the call to the workspace's judge
- * (`boundary-judge.ts`, lifecycle.ts `judgeFor`), with the shell prefix its CLI runs
+ * (`boundary-judge.ts`, judge-process.ts `judgeFor`), with the shell prefix its CLI runs
  * under (`CLAUDE_CODE_SHELL_PREFIX`, from the CLI's environment, which a
  * settings file's `env` changes), and says what the judge answered: for a
  * shell call no decision, so the CLI's own permission rules judge the
@@ -96,12 +96,12 @@ export interface JudgeAt {
  * says so (`-` for the prefix), and the judge runs that CLI's shell call
  * inside the boundary the way the build before did, by rewriting it, so a
  * turn running across a deploy goes on; the CLI is relaunched onto the
- * prefix as that turn ends ({@link hookFailsOpen}).
+ * prefix as that turn ends (launched-hook.ts `hookFailsOpen`).
  *
  * The CLI runs it in exec form, never through the prefix it judges, and
  * blocks the call on any failure of it, a script that cannot start, a crash
  * or a timeout among them (`onFailure: "block"`,
- * {@link claudeBoundaryOptions}). It exits 0 only when the judge allowed the
+ * launched-hook.ts `claudeBoundaryOptions`). It exits 0 only when the judge allowed the
  * call and its answer reached the CLI whole, and 2 otherwise, a perl error
  * too: a judge that is not there or answers nothing, and an answer not in by
  * {@link HOOK_LIMIT_S} ({@link BOUNDARY_HOOK_SLOW}), each refuse that call
@@ -166,7 +166,7 @@ export const claudePrefixOf = (id: string): string =>
  * (code.claude.com/docs/en/env-vars). The CLI applies it after its permission
  * rules have judged the call, so every rule a person, repository or
  * organisation wrote matches the command as the model wrote it, and every
- * one of those commands runs inside the boundary ({@link execScript}'s
+ * one of those commands runs inside the boundary (exec.ts `execScript`'s
  * `--claude`). It is a script with no flag of its own: Claude Code 2.1.302
  * splits a prefix at its last " -" for a Bash call, but spawns the whole
  * value as one program for a stdio MCP server (`posix_spawn '<path>
@@ -264,7 +264,7 @@ export type JudgeHanded = Omit<JudgeArgs, "socket" | "build">;
 
 /**
  * What workspace `id`'s judge is handed besides its socket and its build
- * ({@link judgeArgv}), for the executor at `exec`, the hook at `hook` and
+ * (protocol.ts `judgeArgv`), for the executor at `exec`, the hook at `hook` and
  * the policy at `policy`.
  */
 export const judgeHanded = (
