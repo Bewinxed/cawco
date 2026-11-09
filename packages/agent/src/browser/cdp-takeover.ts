@@ -311,8 +311,11 @@ export const cdpInputOf = (text: string): TakeoverInput | undefined => {
   try {
     const read = InputSchema.safeParse(JSON.parse(text));
     return read.success ? read.data : undefined;
-  } catch {
+  } catch (error) {
     // Not JSON: no input.
+    if (!(error instanceof SyntaxError)) {
+      throw error;
+    }
   }
 };
 
