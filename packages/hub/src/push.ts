@@ -126,6 +126,7 @@ import {
   taskCollapseId,
   turnCollapseId,
 } from "./notifications";
+import { refusal } from "./refusal";
 import type { Decided } from "./settling";
 import type { TaskEvent } from "./tasks";
 
@@ -827,7 +828,7 @@ const removeDevice = async (
   if (!device) {
     return false;
   }
-  let refusal: string | undefined;
+  let why: string | undefined;
   try {
     const asked = await readWithin(REQUEST_TIMEOUT_MS, async (signal) => {
       const response = await fetch(`${CAWRIER}/v1/unenroll`, {
@@ -849,20 +850,20 @@ const removeDevice = async (
     });
     switch (asked.kind) {
       case "answered":
-        refusal = asked.value;
+        why = asked.value;
         break;
       case "unanswered":
-        refusal = cawrierSilent(asked.after);
+        why = cawrierSilent(asked.after);
         break;
       default:
         unhandled("read", asked);
     }
   } catch (error) {
-    refusal = `Cawrier not reached: ${error instanceof Error ? error.message : String(error)}`;
+    why = `Cawrier not reached: ${error instanceof Error ? error.message : String(error)}`;
   }
-  if (refusal) {
+  if (why) {
     console.warn(
-      `[push] ${device.name}: unenroll — ${refusal}; removed here, its seat frees at the pairing's alarm`
+      `[push] ${device.name}: unenroll — ${why}; removed here, its seat frees at the pairing's alarm`
     );
   }
   return db.push.dropDevice(pairingId);
@@ -2531,19 +2532,24 @@ export const pushRoutes = (db: DbShape, push: Push) =>
     .post(
       "/api/push/test",
       { body: t.Optional(t.Object({ pairingId: t.Optional(t.String()) })) },
-      async ({ body, status }) => {
+      async ({ body }) => {
         const devices = db.push.devices();
         const pairingId = body?.pairingId;
         if (pairingId !== undefined) {
           const device = devices.find((row) => row.pairingId === pairingId);
           return device
             ? await push.test([device])
-            : status(404, "That device is no longer registered.");
+            : refusal(
+                404,
+                "device-no-longer-registered",
+                "That device is no longer registered."
+              );
         }
         return devices.length > 0
           ? await push.test(devices)
-          : status(
+          : refusal(
               409,
+              "no-phone-registered-yet",
               "No phone is registered yet. Open CawCo on your phone and allow notifications."
             );
       }
@@ -2551,15 +2557,23 @@ export const pushRoutes = (db: DbShape, push: Push) =>
     .put(
       "/api/push/devices/:id",
       { body: t.Object({ quiet: t.Boolean() }) },
-      ({ params, body, status }) =>
+      ({ params, body }) =>
         db.push.setQuiet(params.id, body.quiet)
           ? { ok: true }
-          : status(404, "That device is no longer registered.")
+          : refusal(
+              404,
+              "device-no-longer-registered",
+              "That device is no longer registered."
+            )
     )
-    .delete("/api/push/devices/:id", async ({ params, status }) =>
+    .delete("/api/push/devices/:id", async ({ params }) =>
       (await removeDevice(db, params.id))
         ? { ok: true }
-        : status(404, "That device is no longer registered.")
+        : refusal(
+            404,
+            "device-no-longer-registered",
+            "That device is no longer registered."
+          )
     )
     // ── The app: register and unregister its pairing (hidden) ────────────
     .post(
@@ -2579,19 +2593,25 @@ export const pushRoutes = (db: DbShape, push: Push) =>
           quiet: t.Optional(t.Boolean()),
         }),
       },
-      ({ body, status }) => {
+      ({ body }) => {
         if (!PAIRING_ID.test(body.pairingId)) {
-          return status(400, "The pairing id is not a lowercase v4 uuid.");
+          return refusal(
+            400,
+            "pairing-id-not-lowercase",
+            "The pairing id is not a lowercase v4 uuid."
+          );
         }
         if (!SECRET.test(body.secret)) {
-          return status(
+          return refusal(
             400,
+            "pairing-secret-not-32",
             "The pairing secret is not 32 bytes in base64url (43 characters)."
           );
         }
         if (!KEY.test(body.key)) {
-          return status(
+          return refusal(
             400,
+            "push-key-not-32",
             "The push key is not 32 bytes in padded base64 (44 characters)."
           );
         }

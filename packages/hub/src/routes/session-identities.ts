@@ -6,6 +6,7 @@ import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
+import { refusal } from "../refusal";
 
 export const sessionIdentityRoutes = ({
   db,
@@ -55,19 +56,21 @@ export const sessionIdentityRoutes = ({
     .post(
       "/api/session-identities/ack",
       { ...hidden, body: t.Object({}) },
-      ({ request, status }) => {
+      ({ request }) => {
         const authorization = request.headers.get("authorization");
         const identity = identities.resolve(authorization);
         if (!identity) {
-          return status(
+          return refusal(
             401,
+            "valid-delivered-session-credential",
             "A valid delivered session credential is required for installation ACK"
           );
         }
         const acknowledged = identities.acknowledge(authorization);
         if (!acknowledged) {
-          return status(
+          return refusal(
             409,
+            "credential-installation-no-longer",
             "This credential installation is no longer pending"
           );
         }
@@ -93,7 +96,7 @@ export const sessionIdentityRoutes = ({
       // minted onto that machine's socket, so only the machine asks, and
       // only for its own sessions. The person may too while the hub
       // trusts its network.
-      async ({ body, request, server, status }) => {
+      async ({ body, request, server }) => {
         const caller = hubAuth.callerOf(request, addressOf(server, request));
         if (caller.kind === "machine") {
           const others = db
@@ -101,8 +104,9 @@ export const sessionIdentityRoutes = ({
             .filter((row) => row.machineId !== caller.machineId)
             .map((row) => row.id);
           if (others.length > 0) {
-            return status(
+            return refusal(
               403,
+              "installs-credentials-own-sessions",
               `${machineName(caller.machineId)} installs credentials for its own sessions only; not ${others.join(", ")}.`
             );
           }
