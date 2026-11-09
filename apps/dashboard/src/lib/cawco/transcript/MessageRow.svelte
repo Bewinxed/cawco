@@ -14,15 +14,6 @@
   import type { HarnessKind, PermissionMode } from "@cawco/core/harness/kinds";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { tick, untrack } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { folds } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import {
-    departBox,
-    waiting as departed,
-    land,
-  } from "#lib/cawco/motion/share.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -33,6 +24,15 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import { IconCopy, IconFork, IconPenLine } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+  import { folds } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import {
+    departBox,
+    waiting as departed,
+    land,
+  } from "#lib/platform/motion/share.svelte.js";
   import { goto } from "$app/navigation";
   import { hueVar, nameOf } from "../accounts/model.svelte";
   import { moveTo, movingTo } from "../accounts/switch.svelte";

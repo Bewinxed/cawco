@@ -8,9 +8,6 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { memoryWords as words } from "@cawco/core/words/memory";
   import MachineAway from "#lib/cawco/MachineAway.svelte";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -20,6 +17,9 @@
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import type { Machine } from "../client.svelte";
   import type { MachineCopies } from "./machine-copies.svelte";
 

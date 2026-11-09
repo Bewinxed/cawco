@@ -27,9 +27,6 @@
    */
   import type { FsEntry } from "@cawco/core/protocol";
   import { spawnWords } from "@cawco/core/words/spawn";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { CURVE, dur, staggered } from "#lib/cawco/motion/curves.svelte.js";
-  import { folds } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
@@ -43,6 +40,9 @@
     IconSearch as Search,
     IconChevronUp as Up,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { CURVE, dur, staggered } from "#lib/platform/motion/curves.svelte.js";
+  import { folds } from "#lib/platform/motion/fold.svelte.js";
   import { didntAnswer, machineFs } from "../client.svelte";
   import { TRY_AGAIN } from "../unanswered";
 
