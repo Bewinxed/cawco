@@ -96,8 +96,8 @@ export function holdReadsWhileLeaving(): void {
   const leave = () => {
     leaving = true;
   };
-  addEventListener("beforeunload", leave);
-  addEventListener("pagehide", leave);
+  window.addEventListener("beforeunload", leave);
+  window.addEventListener("pagehide", leave);
   // A browser without the Navigation API has no `navigation`; there this
   // signal does not start.
   globalThis.navigation?.addEventListener("navigate", (event) => {
@@ -105,7 +105,7 @@ export function holdReadsWhileLeaving(): void {
       leave();
     }
   });
-  addEventListener("pageshow", (event) => {
+  window.addEventListener("pageshow", (event) => {
     if (event.persisted) {
       leaving = false;
       for (const told of onReturn.splice(0)) {
@@ -122,7 +122,10 @@ export function holdReadsWhileLeaving(): void {
         ? heldUntilBack<T>(() => Promise.reject(error))
         : Promise.reject(error);
     });
-  const gated: typeof fetch = (input, init) => {
+  const gated = (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1]
+  ): Promise<Response> => {
     const outlivesThePage =
       init?.keepalive ?? (input instanceof Request && input.keepalive);
     if (outlivesThePage) {
@@ -143,7 +146,12 @@ export function holdReadsWhileLeaving(): void {
       return response;
     });
   };
-  globalThis.fetch = gated;
+  // A proxy of the native fetch, so what else it carries (Bun types its
+  // `preconnect`) stays as it is.
+  globalThis.fetch = new Proxy(globalThis.fetch, {
+    apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) =>
+      gated(input, init),
+  });
 }
 
 /**
