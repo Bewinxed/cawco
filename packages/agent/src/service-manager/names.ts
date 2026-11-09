@@ -17,11 +17,20 @@ export const unitName = (name: string): string => `cawco-${name}.service`;
 
 export const label = (name: string): string => `dev.cawco.${name}`;
 
-const SYSTEMD_DIR = join(
-  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-  "systemd",
-  "user"
-);
+/** The user's systemd unit folder, as the environment names it now. */
+export const systemdDir = (): string =>
+  join(
+    process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+    "systemd",
+    "user"
+  );
+
+/** The user's LaunchAgents folder, where a job's plist loads at login from. */
+export const launchAgentsDir = (): string =>
+  join(homedir(), "Library", "LaunchAgents");
+
+/** The user's systemd unit folder as this process started with it: where an install writes. */
+const SYSTEMD_DIR = systemdDir();
 
 export const systemdPath = (name: string): string =>
   join(SYSTEMD_DIR, unitName(name));
@@ -33,9 +42,18 @@ export const socketPath = (base: string): string =>
   join(SYSTEMD_DIR, socketName(base));
 
 export const launchAgentPath = (name: string): string =>
-  join(homedir(), "Library", "LaunchAgents", `${label(name)}.plist`);
+  join(launchAgentsDir(), `${label(name)}.plist`);
 
-export const xml = (value: string): string =>
-  value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
+/** A keeper's unit and its launchd label, and the service name each carries (core keepers.ts `keeperService`). */
+export const KEEPER_UNIT = /^cawco-(sessiond(?:-.+)?)\.service$/u;
+export const KEEPER_PLIST = /^dev\.cawco\.(sessiond(?:-.+)?)\.plist$/u;
+export const KEEPER_LABEL = /^dev\.cawco\.(sessiond(?:-.+)?)$/u;
+
+/** Every update helper's launchd label and plist name start so: `dev.cawco.binary-apply.<ms>`. */
+export const HELPER_LABEL_PREFIX = label("binary-apply.");
+
+/** An update helper's transient systemd unit: `cawco-binary-apply-<ms>`. */
+export const helperUnit = (stamp: number): string =>
+  `cawco-binary-apply-${stamp}`;
 
 export const guiDomain = (): string => `gui/${process.getuid?.() ?? 0}`;
