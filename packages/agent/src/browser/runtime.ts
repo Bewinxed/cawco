@@ -138,7 +138,7 @@ const usualSockets = (): string[] => {
  * Every socket {@link findRuntime} may dial on this machine: `DOCKER_HOST`'s
  * unix path, the current Docker context's and each runtime's usual one
  * (Colima's under {@link colimaHome}), wherever each lives. The boundary
- * keeps every workspace from connecting to any of them (boundary.ts
+ * keeps every workspace from connecting to any of them (boundary/
  * `containerSockets`): a command that reached one would run a container of
  * its own beside a project's browser, or into it.
  */

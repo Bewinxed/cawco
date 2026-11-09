@@ -3,7 +3,7 @@
  * sandbox (agent boundary-host.ts): srt throws its reasons (a profile past
  * bwrap's cap, `LinuxSandboxProfileError`; its dependencies missing) where
  * they would reach stderr alone, and the agent names a boundary that did not
- * start by the lines it heard on stdout (boundary.ts `ready`), so the host
+ * start by the lines it heard on stdout (boundary/exec.ts `ready`), so the host
  * says srt's own words there, after this. Dependency-free: the boundary's
  * srt host imports it.
  */
