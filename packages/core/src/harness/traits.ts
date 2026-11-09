@@ -11,6 +11,7 @@
  * one", never as a failure ({@link UNKNOWN_TRAITS}).
  */
 
+import { HOUR_MS } from "../time";
 import { HARNESSES, type HarnessKind, harnessNamed } from "./kinds";
 
 export interface HarnessTraits {
@@ -61,8 +62,6 @@ export interface HarnessTraits {
    * `credentials`: a store holding a credential per provider.
    */
   readonly homeLogin: "dir" | "credentials";
-  /** Whether an idle session's prompt cache is kept warm by keep-alive turns: only a measured cache lifetime can be. */
-  readonly keepAlive: boolean;
   /** Whether a machine's listing names every conversation it holds, so one it doesn't name is gone; a filtered listing proves nothing by leaving one out. */
   readonly listsAllConversations: boolean;
   /** Whether a live session reloads its skills and reinitializes in place (hub server.ts: these are Claude Code's `Query` methods). */
@@ -76,6 +75,15 @@ export interface HarnessTraits {
   readonly ownProviderIds: boolean;
   /** Whether it takes a permission mode at all. */
   readonly permissionModes: boolean;
+  /**
+   * The longest its prompt cache lives after a request, for a harness whose
+   * results report the cache's use; null for one whose don't. The hub times
+   * an idle session's cache from those reports and keeps it warm with
+   * keep-alive turns; a session with no measurement, or no recorded turn,
+   * reads its cache as expired at the latest this long after its last
+   * activity.
+   */
+  readonly promptCacheMaxMs: number | null;
   /**
    * Which provider limit a session reads against. `account`: the account's
    * own windows. `go`: OpenCode Go's, for models under its prefix. `none`:
@@ -100,8 +108,6 @@ export interface HarnessTraits {
   readonly soleProvider: string | null;
   /** A row can start with no conversation of its own and take one at its first send; until then it is never started, not ended. */
   readonly startsWithoutConversation: boolean;
-  /** A session whose turns were not recorded is bounded by its last activity instead (hub server.ts `followupState`). */
-  readonly unrecordedTurnsBoundByActivity: boolean;
   /** Whether a send still pending can be taken back from the harness's own queue (CLI's `withdrawSend`). */
   readonly withdrawSend: boolean;
 }
@@ -117,13 +123,13 @@ const CLAUDE_TRAITS = {
   costMeaning: "estimated",
   custody: "keeper",
   defaultModelFromDirectory: false,
-  keepAlive: true,
   listsAllConversations: true,
   liveSkillReload: true,
   modelCatalog: "account",
   ownProviderIds: false,
   homeLogin: "dir",
   permissionModes: true,
+  promptCacheMaxMs: HOUR_MS,
   providerLimit: "account",
   queuesSends: true,
   readsStoredContext: true,
@@ -131,7 +137,6 @@ const CLAUDE_TRAITS = {
   rewindAnchor: "assistant-before",
   soleProvider: "anthropic",
   startsWithoutConversation: false,
-  unrecordedTurnsBoundByActivity: true,
   withdrawSend: true,
 } as const satisfies HarnessTraits;
 
@@ -146,13 +151,13 @@ const OPENCODE_TRAITS = {
   costMeaning: "real",
   custody: "server",
   defaultModelFromDirectory: false,
-  keepAlive: false,
   listsAllConversations: false,
   liveSkillReload: false,
   modelCatalog: "machine",
   ownProviderIds: true,
   homeLogin: "credentials",
   permissionModes: true,
+  promptCacheMaxMs: null,
   providerLimit: "go",
   queuesSends: false,
   readsStoredContext: false,
@@ -160,7 +165,6 @@ const OPENCODE_TRAITS = {
   rewindAnchor: "user-turn",
   soleProvider: null,
   startsWithoutConversation: true,
-  unrecordedTurnsBoundByActivity: false,
   withdrawSend: false,
 } as const satisfies HarnessTraits;
 
@@ -175,13 +179,13 @@ const PI_TRAITS = {
   costMeaning: "real",
   custody: "keeper",
   defaultModelFromDirectory: true,
-  keepAlive: false,
   listsAllConversations: true,
   liveSkillReload: false,
   modelCatalog: "machine",
   ownProviderIds: false,
   homeLogin: "credentials",
   permissionModes: false,
+  promptCacheMaxMs: null,
   providerLimit: "none",
   queuesSends: false,
   readsStoredContext: false,
@@ -189,7 +193,6 @@ const PI_TRAITS = {
   rewindAnchor: "assistant-before",
   soleProvider: null,
   startsWithoutConversation: false,
-  unrecordedTurnsBoundByActivity: false,
   withdrawSend: false,
 } as const satisfies HarnessTraits;
 
@@ -217,13 +220,13 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   costMeaning: "real",
   custody: "keeper",
   defaultModelFromDirectory: false,
-  keepAlive: false,
   listsAllConversations: true,
   liveSkillReload: false,
   modelCatalog: "machine",
   ownProviderIds: false,
   homeLogin: "credentials",
   permissionModes: true,
+  promptCacheMaxMs: null,
   providerLimit: "none",
   queuesSends: false,
   readsStoredContext: false,
@@ -231,7 +234,6 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   rewindAnchor: "assistant-before",
   soleProvider: null,
   startsWithoutConversation: false,
-  unrecordedTurnsBoundByActivity: false,
   withdrawSend: false,
 };
 
