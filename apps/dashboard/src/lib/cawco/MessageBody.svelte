@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Markdown from "#lib/cawco/Markdown.svelte";
   /**
    * A turn's words — plain running text at 74ch, no card, no bubble. Markdown
    * so a fenced block or a list reads as one, and the `.msg` frame carries the
@@ -12,7 +13,6 @@
    * and then immediately overridden. The scale lives on the token sheet, not in
    * the typography plugin, so the root is restated here.
    */
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { REPLY_FRAME } from "./transcript/reply-frame";
 
   let {
