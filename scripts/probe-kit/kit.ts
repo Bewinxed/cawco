@@ -1642,7 +1642,7 @@ function readiness(): { step: string | null; boxes: string } {
  * at `load` and two frames saw was the server's first paint (NeedsCaw's head
  * the cookie's 20px guess where the hydrated page at 390 draws 24px).
  *
- * 1. Hydrated: Svelte has adopted some of the page ({@link adopted}).
+ * 1. Hydrated: Svelte has adopted some of the page (`adopted`).
  * 2. The Shell's first-render release: no `[data-first-paint]` stands
  *    (Shell.svelte, first-render.svelte.ts). A page with no Shell has none.
  * 3. Still: every element's layout box (`offset*`, which a transform does
