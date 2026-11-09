@@ -1,6 +1,6 @@
 /**
  * What a delegate leaves running in its boundary keeps running across its
- * turns, and stays where its next command finds it (agent boundary/
+ * turns, and stays where its next command finds it (agent boundary/lifecycle.ts
  * `replaceOlder`, `workLeft`). On a scratch fleet (real hub, agent and
  * sessiond; Claude Code against the mock model), boundaries included: run it
  * where a workspace boundary can start (not inside another one).
