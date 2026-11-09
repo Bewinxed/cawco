@@ -1,13 +1,7 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { FILE_HASH_SCHEME } from "@cawco/core/file-hash";
-import type { SkillFile } from "@cawco/core/fleet";
-import { ownIdentity } from "@cawco/core/process-identity";
-import { runtimeTree, standalone } from "@cawco/core/runtime";
-import { writeStateFileSync } from "@cawco/core/state-file";
-import { eq, getTableName } from "drizzle-orm";
+import { getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import { Context, Effect, Layer } from "effect";
 import { DB_PATH } from "../config";
 import { type DelegateTypesShape, makeDelegateTypes } from "../delegate-types";
@@ -38,20 +32,12 @@ import { type DelegateEventsDb, delegateEventsDb } from "./delegate-events";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import {
-  dropGraphPlaces,
-  GRAPH_PLACES_MIGRATION_WHEN,
-} from "./drop-graph-places";
-import {
   type FindDb,
   type FindSettingsDb,
   findDb,
   findSettingsDb,
 } from "./find";
-import {
-  type FleetCatalogDb,
-  fleetCatalogDb,
-  storedHash,
-} from "./fleet-catalog";
+import { type FleetCatalogDb, fleetCatalogDb } from "./fleet-catalog";
 import { type FoldDb, foldDb } from "./fold";
 import { type ForgetDb, forgetDb } from "./forget";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
@@ -63,9 +49,11 @@ import { type MachinesDb, machinesDb } from "./machines";
 import { type McpServersDb, mcpServersDb } from "./mcp-servers";
 import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
 import {
-  mergeProjectPages,
-  PROJECT_PAGES_MIGRATION_WHEN,
-} from "./merge-project-pages";
+  applyMigrations,
+  type DataMigrationsDb,
+  dataMigrationsDb,
+  runOpenedSteps,
+} from "./migrate";
 import { type MoveEndingsDb, moveEndingsDb } from "./move-endings";
 import { type MovesDb, movesDb } from "./moves";
 import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
@@ -82,8 +70,6 @@ import { type ProjectsDb, projectsDb } from "./projects";
 import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
 import { type RulesDb, rulesDb } from "./rules";
-import { dataMigrations, fleetSkillHistory, plugins, skills } from "./schema";
-import { sealAtRest } from "./seal-at-rest";
 import { type SendsDb, sendsDb } from "./sends";
 import type { Revocations } from "./session-identity";
 import { type SessionIdentityDb, sessionIdentityDb } from "./session-identity";
@@ -104,22 +90,6 @@ import { type TurnCutsDb, turnCutsDb } from "./turn-cuts";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 import { type UsageDb, usageDb } from "./usage";
 import { closeWal, useWal } from "./wal";
-
-/**
- * Defined only in the published package's bundle (scripts/build-binary.ts),
- * where this module is `cli.js` and the migrations sit beside it.
- */
-declare const __CAWCO_RELEASE__: boolean | undefined;
-
-/** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
-const MIGRATIONS_DIR = standalone
-  ? runtimeTree("drizzle")
-  : Bun.fileURLToPath(
-      new URL(
-        typeof __CAWCO_RELEASE__ === "boolean" ? "./drizzle" : "../../drizzle",
-        import.meta.url
-      )
-    );
 
 export type { MachineLineKind } from "./schema";
 
@@ -153,14 +123,6 @@ interface HubStore {
   readonly close: () => void;
   /** Connections and the projects that grant them (connections.ts). */
   readonly connections: ConnectionsDb;
-  /**
-   * Runs the one-time migration `name` over every stored send, in one
-   * transaction, unless it has run (`data_migrations`): `rewrite` answers a
-   * send's message as it is to be kept, or null to leave it as it is. How
-   * many sends it changed; null when it had run already.
-   */
-  /** Whether the one-time data migration `name` has run (`data_migrations`). */
-  readonly dataMigrated: (name: string) => boolean;
   /** Who decides: the fleet's table, its members and kinds, and where every card went (decides.ts). */
   readonly decides: DecidesDb;
   /** The fleet's delegate types (delegate-types.ts), on this connection. */
@@ -182,8 +144,6 @@ interface HubStore {
   readonly ingress: IngressDb;
   /** Git LFS offered for a place's left-out large files (lfs-offers.ts). */
   readonly lfsOffers: LfsOffersDb;
-  /** Marks the one-time data migration `name` run: it never runs again. */
-  readonly markDataMigrated: (name: string) => void;
   /** A project's fact uses and declined rewrites (memory.ts). */
   readonly memoryFacts: MemoryFactsDb;
   /** What each session's move ended, until it is told (move-endings.ts). */
@@ -227,7 +187,8 @@ interface HubStore {
   readonly turnUsage: TurnUsageDb;
 }
 
-export type DbShape = FoldDb &
+export type DbShape = DataMigrationsDb &
+  FoldDb &
   InstancesDb &
   MachinesDb &
   WorkRowsDb &
@@ -300,158 +261,19 @@ const make = async (path: string): Promise<DbShape> => {
   // single write does; a nested one is a savepoint inside it.
   const deferredTransaction = db.transaction.bind(db);
   db.transaction = (run) => deferredTransaction(run, { behavior: "immediate" });
-  // A marker for the update helper: while it names a live process the hub is
-  // migrating, and the helper's wait for a healthy start does not run down.
-  const migrating = `${path}.migrating`;
-  writeStateFileSync(
-    migrating,
-    JSON.stringify({ ...(await ownIdentity()), startedAt: Date.now() })
-  );
-  // Migrations rebuild tables, which SQLite does with foreign keys off; they
-  // run in one transaction, where the pragma cannot change, so it is set on
-  // the connection around them. From then on every key the schema declares
-  // holds, and its cascades run.
-  db.$client.run("PRAGMA foreign_keys = OFF");
-  try {
-    // Every migration before 0275, then a project's page rows of one name
-    // folded into one (merge-project-pages.ts), then 0275 makes its name the
-    // project's; every migration before 0317, then the decision graph's
-    // places taken out of each page's state (drop-graph-places.ts), then
-    // 0317 and the rest: drizzle applies only what is newer than the last
-    // one applied, so each runs once, in order.
-    const migrations = readMigrationFiles({ migrationsFolder: MIGRATIONS_DIR });
-    // What drizzle's bun-sqlite `migrate` is (its migrator.js), whose
-    // dialect and session its types keep internal.
-    const { dialect, session } = db as unknown as {
-      dialect: {
-        migrate: (
-          migrations: MigrationMeta[],
-          session: unknown,
-          config: { migrationsFolder: string }
-        ) => void;
-      };
-      session: unknown;
-    };
-    dialect.migrate(
-      migrations.filter(
-        (one) => one.folderMillis < PROJECT_PAGES_MIGRATION_WHEN
-      ),
-      session,
-      { migrationsFolder: MIGRATIONS_DIR }
-    );
-    mergeProjectPages(db.$client);
-    dialect.migrate(
-      migrations.filter(
-        (one) => one.folderMillis < GRAPH_PLACES_MIGRATION_WHEN
-      ),
-      session,
-      { migrationsFolder: MIGRATIONS_DIR }
-    );
-    dropGraphPlaces(db.$client);
-    dialect.migrate(migrations, session, { migrationsFolder: MIGRATIONS_DIR });
-  } finally {
-    rmSync(migrating, { force: true });
-  }
-  db.$client.run("PRAGMA foreign_keys = ON");
-  // Secrets kept as plain text before they were sealed are sealed now, before
-  // anything reads them (seal-at-rest.ts).
-  const sealed = sealAtRest(db.$client);
-  console.info(
-    Object.keys(sealed).length > 0
-      ? `[seal-at-rest] sealed in place: ${Object.entries(sealed)
-          .map(([column, count]) => `${column} ${count}`)
-          .join(", ")}`
-      : "[seal-at-rest] every secret is sealed already"
-  );
+  await applyMigrations(db, db.$client, path);
 
   const core: DbCore = dbCore(db, boardChangeLog(db.$client));
   // The fleet's delegate types: their own table, on this connection, the
   // hub's one writer to its file.
   const delegateTypes = makeDelegateTypes(db.$client);
 
-  /** Each of `rows` whose stored hash is not its files' own, written its own through `write`. */
-  const rehashRows = <
-    Row extends { files: SkillFile[] | null; hash: string | null },
-  >(
-    rows: Row[],
-    write: (row: Row, hash: string | null) => void
-  ): void => {
-    for (const row of rows) {
-      const hash = storedHash(row.files, row.hash);
-      if (hash !== row.hash) {
-        write(row, hash);
-      }
-    }
-  };
-
-  /** The repair below, once per hashFiles scheme. */
-  function rehashStoredFilesOnce(): void {
-    const name = `file_hashes:${FILE_HASH_SCHEME}`;
-    db.transaction((tx) => {
-      if (
-        tx
-          .select()
-          .from(dataMigrations)
-          .where(eq(dataMigrations.name, name))
-          .get()
-      ) {
-        return;
-      }
-      rehashRows(
-        tx
-          .select({ name: skills.name, hash: skills.hash, files: skills.files })
-          .from(skills)
-          .all(),
-        (row, hash) =>
-          tx.update(skills).set({ hash }).where(eq(skills.name, row.name)).run()
-      );
-      rehashRows(
-        tx
-          .select({ id: plugins.id, hash: plugins.hash, files: plugins.files })
-          .from(plugins)
-          .all(),
-        (row, hash) =>
-          tx.update(plugins).set({ hash }).where(eq(plugins.id, row.id)).run()
-      );
-      rehashRows(
-        tx
-          .select({
-            id: fleetSkillHistory.id,
-            hash: fleetSkillHistory.hash,
-            files: fleetSkillHistory.files,
-          })
-          .from(fleetSkillHistory)
-          .all(),
-        (row, hash) =>
-          tx
-            .update(fleetSkillHistory)
-            .set({ hash: hash ?? row.hash })
-            .where(eq(fleetSkillHistory.id, row.id))
-            .run()
-      );
-      tx.insert(dataMigrations).values({ name, at: new Date() }).run();
-    });
-  }
-
-  // A stored skill's or plugin's hash is what its files hash to with the
-  // hashFiles this hub runs, because that is the hash every machine takes of
-  // its disk. a1c94e85 put each file's execute bit into it, and the rows
-  // resolved before that kept the old hash: no machine's untouched copy ever
-  // matched it, so each one read as edited and a vendored plugin as missing
-  // its bytes. Every row whose hash and files disagree is rehashed, with no
-  // history row, since its bytes did not move: once for each hashFiles
-  // scheme (`FILE_HASH_SCHEME`), recorded in `data_migrations`. Run at every
-  // open, it read and hashed every file the fleet holds and ever held, about
-  // 78 MB and 300 ms of each start on the live hub (2026-10-23). A row
-  // written since cannot disagree: every write of files takes its hash from
-  // them here ({@link storedHash}), so a skill's or plugin's hash changes
-  // exactly when its files do, which is also what fleetConfig's files kept
-  // by hash rest on (`keptFiles`).
-  rehashStoredFilesOnce();
+  runOpenedSteps(db);
 
   /** A project's forget and restore, over every table its keys reach (forget.ts). */
   const forgetting = forgetDb(db, core.dropArtifacts);
   const store: DbShape = {
+    ...dataMigrationsDb(core),
     ...foldDb(core),
     ...instancesDb(core),
     ...machinesDb(core),
@@ -480,18 +302,6 @@ const make = async (path: string): Promise<DbShape> => {
     close: () => closeWal(db.$client),
     delegateTypes,
     atomically: (run) => db.transaction(() => run()),
-    dataMigrated: (name) =>
-      db
-        .select()
-        .from(dataMigrations)
-        .where(eq(dataMigrations.name, name))
-        .get() !== undefined,
-    markDataMigrated: (name) => {
-      db.insert(dataMigrations)
-        .values({ name, at: new Date() })
-        .onConflictDoNothing()
-        .run();
-    },
     accounts: accountsDb(db),
     areas: core.areasStore,
     turnUsage: turnUsageDb(db),
