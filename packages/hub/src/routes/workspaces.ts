@@ -8,7 +8,7 @@ import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
 import { WorkItemRefusal } from "../work-items";
-import { bearerOf } from "./bearer";
+import { sessionCallerRefusal } from "./session-caller";
 
 export const workspaceRoutes = ({
   discardAsked,
@@ -133,18 +133,15 @@ export const workspaceRoutes = ({
         }),
       },
       async ({ params, body, request, status }) => {
-        // A session's own credential, or none: the gate let through only
-        // a session, the person, or the hub acting for a session's tool.
-        const authorization = bearerOf(request);
-        const identity = identities.resolve(authorization);
-        if (authorization !== null && !identity) {
-          return status(401, "Invalid session credential");
-        }
-        if (identity && identity.instanceId !== body.from) {
-          return status(
-            403,
-            "Session credential does not belong to the discard's requester"
-          );
+        const stranger = sessionCallerRefusal(
+          identities,
+          request,
+          body.from,
+          "Session credential does not belong to the discard's requester",
+          status
+        );
+        if (stranger !== undefined) {
+          return stranger;
         }
         try {
           const asked = body.ask
