@@ -74,7 +74,7 @@ export const CONTINUATION_CANCELLED = "the continuation was cancelled";
 
 /**
  * A start the hub's own work asked of a machine that is connected but takes
- * no start now (server.ts `startHold`: paused by its owner, installing an
+ * no start now (start-holds.ts `startHold`: paused by its owner, installing an
  * update, or on a build older than its hub's). Not the machine away: a
  * continuation waits for the hold to end (`flushOwedStarts`), never for a
  * register that is not coming.
