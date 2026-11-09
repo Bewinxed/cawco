@@ -316,7 +316,7 @@ setting, "Require paired devices" (Configure › Devices):
 What a session once did on the person's routes is its own tool now: `update_machines`,
 which asks the person first in pairing mode. No session archives a workspace: a landed
 one retires itself, and a held one ends only by the person's Continue or Discard. Sessiond's unix socket still authorizes by filesystem permission alone —
-`0600` inside a `0700` directory, design §9 (`packages/sessiond/src/server.ts:151-166`).
+`0600` inside a `0700` directory, design §9 (`packages/sessiond/src/server.ts` `listen`).
 
 What is left in both modes: on the hub's machine, an unboundaried session runs as the
 hub's own Unix user and can open its database and `secrets.key`; on a machine with a
