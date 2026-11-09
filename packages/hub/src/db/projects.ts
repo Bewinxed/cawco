@@ -1,4 +1,5 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { PROJECT_MOVED } from "./owned-rows";
 import { singleton, singletonColumn } from "./singleton";
 /** Projects: their rows, places, links, offers, spend and notes, and folding one into another. */
 
@@ -33,19 +34,11 @@ import {
   areas,
   artifacts,
   connectionProjects,
-  connectorPolls,
-  eventRoutes,
-  fleetHookHistory,
-  fleetHooks,
   fleetMemoryDocProjects,
-  fleetWatchNotices,
   githubPollCursors,
   githubPollers,
   type HubFolder,
-  inboundEvents,
   instances,
-  mcpServers,
-  moves,
   type OpenSubagent,
   projectAccounts,
   projectLinks,
@@ -56,15 +49,11 @@ import {
   projects,
   queuedTaskStarts,
   queuedWorkItems,
-  relays,
-  routines,
-  rules,
   SESSION_LIMITS_ID,
   SPEND_SETTINGS_ID,
   sessionLimits,
   sessionSubagents,
   sessionTaints,
-  skills,
   spendSettings,
   taskCommentIds,
   usageBuckets,
@@ -1151,16 +1140,6 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
             .where(eq(workItems.id, item.id))
             .run();
         }
-        // Its notes are the kept project's, each where it stands.
-        tx.update(projectNotes)
-          .set({ projectId: keepId })
-          .where(eq(projectNotes.projectId, dupId))
-          .run();
-        // A rule scoped to it fires in the kept project from now on.
-        tx.update(rules)
-          .set({ scopeProjectId: keepId })
-          .where(eq(rules.scopeProjectId, dupId))
-          .run();
         // An action names its task by the duplicate's number.
         for (const action of tx
           .select({ id: actions.id, taskId: actions.taskId })
@@ -1187,30 +1166,17 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
             inArray(artifacts.name, keptNames)
           )
         );
-        // Its routines with their routes and polls, the events it took in,
-        // its actions, relays and moves, Caw's turns and calls, its
-        // artifacts and notices: the kept project's from now on, where the
-        // duplicate's row going would have taken them or left them naming it.
-        for (const table of [
-          routines,
-          eventRoutes,
-          connectorPolls,
-          inboundEvents,
-          actions,
-          relays,
-          moves,
-          artifacts,
-          fleetWatchNotices,
-        ]) {
-          tx.update(table)
-            .set({ projectId: keepId })
-            .where(eq(table.projectId, dupId))
-            .run();
+        // Its notes each where they stand, a rule scoped to it, its routines
+        // with their routes and polls, the events it took in, its actions,
+        // relays and moves, Caw's turns and calls, its artifacts, notices,
+        // hooks, servers, skills and its offer: the kept project's from now
+        // on, where the duplicate's row going would have taken them or left
+        // them naming it (owned-rows.ts).
+        for (const { table, column } of PROJECT_MOVED) {
+          tx.run(
+            sql`UPDATE ${sql.identifier(table)} SET ${sql.identifier(column)} = ${keepId} WHERE ${sql.identifier(column)} = ${dupId}`
+          );
         }
-        tx.update(instances)
-          .set({ delegateTypeProject: keepId })
-          .where(eq(instances.delegateTypeProject, dupId))
-          .run();
         // The connections it was granted go with its row: project-merge.ts
         // grants them to the kept project through connections.ts.
         tx.delete(connectionProjects)
@@ -1239,17 +1205,6 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
             .where(eq(githubPollCursors.projectId, dupId))
             .run();
         }
-        for (const table of [
-          fleetHooks,
-          fleetHookHistory,
-          mcpServers,
-          skills,
-        ]) {
-          tx.update(table)
-            .set({ projectId: keepId })
-            .where(eq(table.projectId, dupId))
-            .run();
-        }
         // A memory document of both stays one link to the kept project.
         for (const link of tx
           .select()
@@ -1263,10 +1218,6 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         }
         tx.delete(fleetMemoryDocProjects)
           .where(eq(fleetMemoryDocProjects.projectId, dupId))
-          .run();
-        tx.update(projectOffers)
-          .set({ projectId: keepId })
-          .where(eq(projectOffers.projectId, dupId))
           .run();
         for (const queued of tx
           .select()
