@@ -1,9 +1,5 @@
 import type { AccountBorrowFrame, HomeLoginMoved } from "@cawco/core/accounts";
-import {
-  ACCOUNT_RULES,
-  accountNameAmong,
-  CLAUDE_PROVIDER,
-} from "@cawco/core/accounts";
+import { ACCOUNT_RULES, accountNameAmong } from "@cawco/core/accounts";
 import {
   CONTROL_ACCOUNT_LENT,
   CONTROL_BORROW_ACCOUNT,
@@ -149,7 +145,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       store,
       storeProvider: move.storeProvider,
     };
-    const what = `${machine}'s own ${store} ${traitsOf(store).accountModel === "dir" ? "login" : move.storeProvider}`;
+    const what = `${machine}'s own ${store} ${traitsOf(store).homeLogin === "dir" ? "login" : move.storeProvider}`;
     switch (answer.kind) {
       case "unanswered":
         // Not known to have moved or not: the move stays pending and the
@@ -172,7 +168,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     }
     const kept = (answer.value.result as HomeLoginMoved).store;
     const repinned =
-      traitsOf(store).accountModel === "dir" ? ranOnHomeLogin(move) : [];
+      traitsOf(store).homeLogin === "dir" ? ranOnHomeLogin(move) : [];
     ctx.db.accounts.putSignin({
       accountId: move.accountId,
       machineId,
@@ -426,7 +422,8 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       .filter(
         (row) =>
           row.machineId === move.machineId &&
-          traitsOf(row.harness).accountModel === "dir" &&
+          row.harness === move.store &&
+          traitsOf(row.harness).accountDir &&
           row.accountId !== move.accountId &&
           !(row.accountId && ctx.placedOn(move.machineId, row.accountId))
       );
@@ -478,8 +475,9 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       .filter(
         (one) =>
           one.machineId === machineId &&
-          traitsOf(one.movedFrom).accountModel === "dir" &&
-          ctx.db.accounts.get(one.accountId)?.provider === CLAUDE_PROVIDER
+          traitsOf(one.movedFrom).homeLogin === "dir" &&
+          ctx.db.accounts.get(one.accountId)?.provider ===
+            traitsOf(one.movedFrom).soleProvider
       )
       .sort((a, b) => (b.movedAt ?? 0) - (a.movedAt ?? 0))[0]?.accountId;
 
@@ -498,8 +496,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
     const [row] = ctx.db.getInstancesByIds([instanceId]);
     const into = homeMovedAccountOn(machineId);
     if (
-      !(row && into) ||
-      traitsOf(row.harness).accountModel !== "dir" ||
+      !(row && into && traitsOf(row.harness).accountDir) ||
       row.accountId === into
     ) {
       ctx.db.accounts.removeMovedFrom(instanceId);
@@ -627,13 +624,13 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
       }
     }
     const answer =
-      traitsOf(move.store).accountModel === "dir"
+      traitsOf(move.store).homeLogin === "dir"
         ? await ctx.callAgent(
             machineId,
             CONTROL_MOVE_HOME_LOGIN,
             [move.accountId, move.identity],
             MOVE_TIMEOUT_MS,
-            "claude"
+            move.store
           )
         : await ctx.callAgent(
             machineId,
