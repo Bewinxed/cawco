@@ -1,6 +1,6 @@
 /**
  * A decision page's pictures are read on the machine their files are on
- * (hub artifacts/service.ts `revisionReadsOn`, server.ts `imageFile`): a
+ * (hub artifacts/service.ts `revisionReadsOn`, artifact-pages.ts `imageFile`): a
  * path names a file on one machine. A page published by a session on one
  * machine and revised by a session of its project on another reads its
  * relative Image in the folder it was published from, and its absolute
