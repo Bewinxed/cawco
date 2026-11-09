@@ -6038,8 +6038,8 @@ let keptSendsResumed = false;
  * hub it names (vite.config.ts `CAWCO_DEV_HUB_URL`), so the page draws that
  * hub's records. Its handshake holds the browser's one-at-a-time lock per
  * address (RFC 6455 §4.1.2) for the hub's own answer alone, never the dev
- * server's: the preview proxy answers 101 before it dials onward (core
- * preview-proxy.ts `upgradePreview`, `previewWebSocket.open`), and 503 at
+ * server's: the preview proxy answers 101 before it dials onward (preview
+ * proxy.ts `upgradePreview`, `previewWebSocket.open`), and 503 at
  * once while the preview isn't up (`notUpYet`). A dev server with no hub
  * closes it, and the retries back off as any refused socket's do.
  */
