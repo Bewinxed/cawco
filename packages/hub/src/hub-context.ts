@@ -86,6 +86,7 @@ import type {
 } from "@cawco/core/session-messages";
 import type { ToolSigninChallenge } from "@cawco/core/tools";
 import type { UsageSpend } from "@cawco/core/usage/types";
+import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { createAdmission } from "./admission";
 import type { createArtifactSessions } from "./artifact-session";
 import type { createArtifactLane } from "./artifacts/lane";
@@ -441,6 +442,7 @@ export interface HubContext {
     plan: ReturnType<DbShape["atLimit"]["compaction"]>
   ) => void;
   dropMarketplaceLink: (source: string) => boolean;
+  embedKeyOf: (id: string) => string | undefined;
   endSession: (
     instanceId: string,
     intent: SessionEndIntent,
@@ -747,6 +749,7 @@ export interface HubContext {
   online: (machineId: string) => boolean;
   openInstance: (row: Parameters<DbShape["openInstance"]>[0]) => void;
   openItems: ReturnType<typeof createOpenItems>;
+  originKeyOf: (id: string) => string | undefined;
   owedAfterBoard: (
     broken: ReturnType<HubContext["laws"]["broken"]>
   ) => FramePayload[];
@@ -765,6 +768,7 @@ export interface HubContext {
     accountId: string,
     why: MoveOffWhy
   ) => boolean;
+  ownMachineId: Promise<string>;
   ownMachineIdRead: string | undefined;
   ownsPermission: (parked: Envelope) => boolean;
   parkForPerson: (envelope: Envelope<unknown>, outlivesHub?: boolean) => void;
@@ -999,6 +1003,7 @@ export interface HubContext {
     title?: string | null;
   }) => string;
   sessionStartOf: (where: SessionLocation) => Promise<string>;
+  sessionWorkspace: (row: InstanceRow) => WorkspaceRef | undefined;
   settleMode: (
     machineId: string,
     payload: NamedSpawn,
