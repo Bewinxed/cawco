@@ -615,6 +615,7 @@ import {
   type PauseCaller,
 } from "./machine-pause";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import { createMachineRuntime } from "./machine-runtime";
 import { MeaningJudge } from "./meaning";
 import { externalizeImages, mediaBase64 } from "./media";
 import {
@@ -778,6 +779,7 @@ import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { sessionReads } from "./session-list";
 import { createSessionNotes } from "./session-notes";
+import { createSessionRuntime } from "./session-runtime";
 import { sessionWord } from "./session-word";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
@@ -2660,6 +2662,21 @@ export const createServer = (
     tellLeak,
     unnoteAtLimit,
   } = createSessionNotes(ctx);
+  const {
+    awaitingFirstTurn,
+    credentialTurns,
+    heldSessions,
+    lastRequestContext,
+    pulses,
+    touched,
+    forget: forgetSessionRuntime,
+  } = createSessionRuntime();
+  const {
+    agentProtocols,
+    binaryUpdateStates,
+    machineCustody,
+    forget: forgetMachineRuntime,
+  } = createMachineRuntime();
   const { askedProjectName, createOrJoinProject, leadHome, workPlaceOf } =
     createProjectJoining(ctx);
   const { learnCheckout, runOnMachine, stopCommands } =
@@ -3521,21 +3538,6 @@ export const createServer = (
   }
   repairSplitContinuations(db);
   keepSendsAtStart(db);
-
-  /**
-   * What each session is doing right now, as its own daemon last said: memory
-   * only, and never a column.
-   *
-   * A pulse is the daemon's first-hand reading of a live process — working,
-   * blocked, idle — and it is worth exactly as long as the process it describes.
-   * Persisting it would recreate the defect this whole build exists to close in
-   * a second column, so it lives here, keyed by instance, and is dropped the
-   * moment the row it belongs to settles or is discarded. A dashboard opening
-   * cold gets the map in its first `instances` frame, which is the difference
-   * between a rail that knows what is working on connect and one that has to
-   * wait for the next pulse to arrive.
-   */
-  const pulses = new Map<string, SessionPulse>();
   /**
    * What the hub knows for `archiveRefusal` (core archive.ts): a session's
    * live pulse (a turn, or an ask on the owner), and what hangs under it the
@@ -3564,10 +3566,6 @@ export const createServer = (
           : (pulses.get(id)?.activity ?? "idle"),
     };
   };
-  const heldSessions = new Map<
-    string,
-    { machineId: string; since: number; reason: string }
-  >();
   /**
    * A session no longer held in custody: its notice is taken back out of its
    * transcript, on every screen ({@link custodyLine}).
@@ -3577,7 +3575,6 @@ export const createServer = (
       transcripts.removeLine(id, `custody-held-${id}`);
     }
   };
-  const machineCustody = new Map<string, SessionCustody>();
   /**
    * A machine's custody as it read it now. A reading that decides what was
    * undecided (the first since it came back, or since it could not read it)
@@ -3648,14 +3645,6 @@ export const createServer = (
   };
 
   /**
-   * When each session's activity was last written down, so the column that says
-   * it is not rewritten on every pulse. The pulse itself is throttled to one a
-   * second per session on the daemon side; a row does not need a write that
-   * often, and a rail cannot see the difference.
-   */
-  const touched = new Map<string, number>();
-
-  /**
    * The session said something. `updatedAt` is the only per-session timestamp
    * anywhere in the fleet, and until this existed nothing wrote it for the one
    * reason a reader cares about: every value in it was a status change, so a
@@ -3672,19 +3661,10 @@ export const createServer = (
     db.touchInstanceActivity(instanceId);
   };
 
-  /** Each connected machine's binary update state, as its daemon last said. */
-  const binaryUpdateStates = new Map<string, BinaryUpdateState>();
-
   /** Each machine's damaged records, laid over the rows they belong to. */
   const damagedRecords = damagedRecordsOf((workspaceId) =>
     db.workItemsIn(workspaceId)
   );
-
-  /**
-   * Each connected machine's agent's hub ↔ agent contract, as its last
-   * register said ({@link BuildInfo.protocol}); none for one that said none.
-   */
-  const agentProtocols = new Map<string, BuildInfo["protocol"]>();
 
   /**
    * Machines the owner paused until a time (machine-pause.ts). As a pause
@@ -4450,12 +4430,6 @@ export const createServer = (
   /** What each session's turn in flight has said and done ({@link turnState}). */
   const turnInFlight = turnState();
   /**
-   * The tokens each Claude session's latest top-level request sent (its
-   * uncached input plus cache reads and writes), by session: its context as
-   * it stood, taken at its turn's result (keep-alive.ts `keepAliveResult`).
-   */
-  const lastRequestContext = new Map<string, number>();
-  /**
    * Sessions whose turn in flight their account's limit refused: Claude Code
    * said `rejected` with no extra usage to fall back on, or ended the turn on
    * its `rate_limit` error. Its end is the at-limit controller's to answer,
@@ -4488,13 +4462,6 @@ export const createServer = (
       at: Date.now(),
     });
   };
-  /**
-   * Sessions whose turn in flight died on their account's credential and
-   * whose end is the at-limit controller's to answer, not a failed turn to
-   * hand back ({@link takeCredentialTurn}): a refusal it moves the session
-   * off.
-   */
-  const credentialTurns = new Set<string>();
   /**
    * A work item's turn its account's refused credential ended and the hub
    * does not carry on: the account, and why not, for the item's failure.
@@ -7174,9 +7141,7 @@ export const createServer = (
     // What the hub held for the old id in memory goes with it: its agent is
     // gone, and this register says the rest again.
     machineCredentials.forget(former);
-    binaryUpdateStates.delete(former);
-    agentProtocols.delete(former);
-    machineCustody.delete(former);
+    forgetMachineRuntime(former);
     homeStamps.delete(former);
     ruleEngine.reload();
     ruleEngine.forgetFacts();
@@ -7484,16 +7449,6 @@ export const createServer = (
    * live cawco connection lists: bound once the MCP server exists below.
    */
   let toolsMayHaveChanged = (): void => undefined;
-
-  /**
-   * Sessions this hub started fresh, with no title, and has not yet heard a
-   * word from. A title derived from a live turn is only the session's *first*
-   * message while this holds the id — a resumed session's next turn is somewhere in the middle of
-   * a conversation, and naming the row after it would be a wrong name that then
-   * outranks the transcript's own. Those get named from the transcript instead,
-   * where the first message is unambiguous.
-   */
-  const awaitingFirstTurn = new Set<string>();
 
   /**
    * Names an unnamed row after what its session was first asked to do, using
@@ -11188,8 +11143,7 @@ export const createServer = (
       anchors.delete(id);
       settleBackoff.delete(id);
       unanswered.delete(id);
-      pulses.delete(id);
-      touched.delete(id);
+      forgetSessionRuntime(id);
       releaseHeld(id);
     }
   };
