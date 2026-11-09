@@ -339,6 +339,7 @@ suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/das
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/deck.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/gesture.svelte.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/fleet-converger.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/claude-transcript.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/claude.ts	2
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/opencode-session.ts	1
@@ -347,7 +348,7 @@ suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/pi-runtime.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/preview.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/session-containers.ts	1
-suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/session.ts	6
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/session.ts	5
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/stage-host/host.ts	3
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/cli/src/cli.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/core/src/hooks.ts	1
@@ -405,8 +406,8 @@ suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/ask-routing
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/history.ts	1
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/rules.ts	2
 suppression	biome-ignore lint/style/noNestedTernary	packages/hub/src/stream.ts	1
+suppression	biome-ignore lint/style/noNonNullAssertion	packages/agent/src/fleet-converger.ts	2
 suppression	biome-ignore lint/style/noNonNullAssertion	packages/agent/src/harnesses/opencode.ts	1
-suppression	biome-ignore lint/style/noNonNullAssertion	packages/agent/src/session.ts	2
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/canvas/stage.svelte.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/frame-observer.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/HoverPanel.svelte	1
