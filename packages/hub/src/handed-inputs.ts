@@ -15,12 +15,14 @@
  * One that names nothing, or nothing the caller may read, is refused in
  * words that name it.
  */
+
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
 import { INPUTS_LIMIT_BYTES } from "@cawco/core/workspace/controls";
+import { ElysiaStatus } from "elysia";
 import { ArtifactRefusal } from "./artifacts/refusals";
 import type { Artifacts } from "./artifacts/service";
 import type { HandedReceiver } from "./artifacts/shapes";
@@ -28,7 +30,8 @@ import type { WorkItemRow } from "./db/project-work";
 import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
 import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
-import { FolderRefusal, readFolderBytes } from "./project-folder";
+import { readFolderBytes } from "./project-folder";
+import { ProjectRefusal } from "./project-refusal";
 
 /**
  * One file the hub writes into `inputs/`: its name there, what it was handed
@@ -455,20 +458,16 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
       );
     }
     const { projectId } = item;
-    const folderRead = async <T>(read: () => Promise<T>): Promise<T> => {
-      try {
-        return await read();
-      } catch (error) {
-        if (error instanceof FolderRefusal) {
-          throw new HandedInputRefusal(
-            `{ assets: "${id}" }: ${error.message}`,
-            { cause: error }
-          );
+    const refused = (words: string, cause: unknown) =>
+      new HandedInputRefusal(`{ assets: "${id}" }: ${words}`, { cause });
+    const paths = await deps
+      .folderFiles(projectId, folder)
+      .catch((error: unknown) => {
+        if (error instanceof ProjectRefusal) {
+          throw refused(error.message, error);
         }
         throw error;
-      }
-    };
-    const paths = await folderRead(() => deps.folderFiles(projectId, folder));
+      });
     if (paths.length === 0) {
       throw new HandedInputRefusal(
         `{ assets: "${id}" }: ${folder}/ in its project's folder holds no file at any depth; its outputs land there once it has finished`
@@ -477,12 +476,13 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     // Each lands at its path in the project's folder, its folders kept:
     // `inputs/assets/<item>/design-briefs/brief.md`.
     for (const path of paths) {
-      const { bytes } = await folderRead(() =>
-        readFolderBytes(projectId, path, ASSET_LIMIT)
-      );
+      const read = await readFolderBytes(projectId, path, ASSET_LIMIT);
+      if (read instanceof ElysiaStatus) {
+        throw refused(read.response.detail, read);
+      }
       yield {
         name: path,
-        bytes: Buffer.from(bytes),
+        bytes: Buffer.from(read.bytes),
         from: `${path} in the project's folder`,
       };
     }
