@@ -11,9 +11,6 @@
 import { markerTag, readMarkerTag } from "@cawco/core/injected";
 import type { NeutralUserMessage } from "@cawco/core/session-messages";
 
-/** The migration's name, as `data_migrations` keeps it. */
-export const TAG_MARKERS = "tag-markers";
-
 /** Each marker as the hubs before the tag wrote it, and the tag its words name. */
 const BEFORE: readonly {
   line: RegExp;
