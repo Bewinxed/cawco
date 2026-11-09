@@ -25,12 +25,12 @@
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { getMeta, setMeta } from "../../../../packages/core/src/doc-meta";
 import {
   faultsAt,
   faultsWith,
   type PageFault,
   type PageFaultReport,
-  type PageFaultsKept,
 } from "../../../../packages/core/src/page-faults";
 import {
   OVERLAY_PATH,
@@ -109,9 +109,7 @@ const run = async (kit: Kit) => {
       cancel: () => undefined,
     } as unknown as HubLifetimeShape,
   });
-  docs.transact(ID, "hub", (doc) =>
-    doc.getMap("meta").set("revision", REVISION)
-  );
+  docs.transact(ID, "hub", (doc) => setMeta(doc, "revision", REVISION));
   const served = injectOverlay(built.html, { artifact: ID, ...docs.seed(ID) });
   /** Every report the route handed on, and the paths they came by. */
   const reports: PageFaultReport[] = [];
@@ -137,15 +135,12 @@ const run = async (kit: Kit) => {
             return;
           }
           const kept = faultsWith(
-            docs.doc(ID).getMap("meta").get("faults") as
-              PageFaultsKept | undefined,
+            getMeta(docs.doc(ID), "faults"),
             report.revision,
             report.fault
           );
           if (kept) {
-            docs.transact(ID, "hub", (doc) =>
-              doc.getMap("meta").set("faults", kept)
-            );
+            docs.transact(ID, "hub", (doc) => setMeta(doc, "faults", kept));
           }
         });
       }
@@ -168,11 +163,7 @@ const run = async (kit: Kit) => {
     const page = await kit.page("desk", { theme: "light" });
     await page.goto(`http://127.0.0.1:${server.port}/`, { waitUntil: "load" });
     const deadline = Date.now() + HEARD_MS;
-    const faults = () =>
-      faultsAt(
-        docs.doc(ID).getMap("meta").get("faults") as PageFaultsKept | undefined,
-        REVISION
-      );
+    const faults = () => faultsAt(getMeta(docs.doc(ID), "faults"), REVISION);
     while (
       Date.now() < deadline &&
       !(
