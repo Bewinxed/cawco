@@ -136,7 +136,7 @@ import {
   permissionModeNamed,
   WORK_ITEM_ORIGIN,
 } from "@cawco/core/harness/kinds";
-import { HARNESS_TRAITS, traitsOf } from "@cawco/core/harness/traits";
+import { traitsOf } from "@cawco/core/harness/traits";
 import {
   type FleetHarnessConfig,
   type HarnessConfigKind,
@@ -3965,7 +3965,7 @@ export const createServer = (
   ): string | null | undefined => {
     const bare = harnessNamed(harness);
     if (
-      !(bare && HARNESS_TRAITS[bare].bareModelIds && model) ||
+      !(bare && traitsOf(bare).resolvesModelNames && model) ||
       model.includes("/")
     ) {
       return model;
@@ -4073,7 +4073,7 @@ export const createServer = (
       : undefined;
   /** A new pi session that names no model, so pi's pick in its directory is asked first. */
   const asksPiDefault = (payload: SpawnPayload): boolean =>
-    traitsOf(payload.harness).defaultModelFromDirectory &&
+    traitsOf(payload.harness).resolvesModelNames &&
     (!payload.model || payload.model === "default") &&
     !payload.resume &&
     Boolean(payload.cwd);
