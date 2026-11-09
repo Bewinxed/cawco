@@ -1,0 +1,11 @@
+language js
+
+// An artifact doc's meta map is reached through core doc-meta.ts (docMeta,
+// getMeta, setMeta), where every key has its type and its writer: a key
+// named by hand at a cast hides a typo and a wrong shape. A probe's code
+// that runs in the page (comments.ts) loads no module, and names it there.
+`$doc.getMap("meta")` as $hit where {
+  $filename <: not includes "packages/core/src/doc-meta.ts",
+  $filename <: not includes "scripts/probe-kit/specs/comments.ts",
+  register_diagnostic(span=$hit, message="Reach an artifact doc's meta through docMeta, getMeta or setMeta from @cawco/core/doc-meta, where each key has its type and its writer.")
+}
