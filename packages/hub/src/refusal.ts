@@ -17,6 +17,18 @@ export const refusal = <const Status extends number, const Code extends string>(
 ) => problem(answering, { code, detail });
 
 /**
+ * Any refusal, as code that passes one on without answering it as a route
+ * reads it (an approved write's run, a tool's dependency): Elysia's status
+ * mark and the problem it carries. A route answers the {@link refusal}
+ * itself, whose status and code its type keeps.
+ */
+export interface Refused {
+  readonly "~status": true;
+  readonly response: { readonly code: string; readonly detail: string };
+  readonly status: number;
+}
+
+/**
  * A schema's own refusal, as its `error` (`t.String({ …, error:
  * schemaRefusal(words) })`): Elysia's validation problem, the sentence the
  * person reads as its `detail`, where Elysia's own names only the field that
