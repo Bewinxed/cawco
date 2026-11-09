@@ -5,6 +5,7 @@ import "@cawco/core/src/time";
 import "../../../apps/dashboard/other.js";
 import "../../../agent/src/proc-id";
 import "../../core/scripts/openui-views";
+import "../../preview/src/proxy";
 // The manifest's own door, and the CLI's named exception, stand.
 import "@cawco/core/time";
 import "../../../apps/dashboard/serve.js";
