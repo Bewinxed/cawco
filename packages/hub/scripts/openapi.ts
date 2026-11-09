@@ -240,6 +240,46 @@ const { definitions = {} } = generator.getSchemaForSymbols([
 ]) as { definitions?: Record<string, Schema> };
 console.warn = warn;
 
+/**
+ * A schema made by a mapped type (`Omit`, `Pick`) lists its properties in the
+ * order TypeScript gave their names ids, which moves with how the hub's
+ * program is read rather than with anything the type says. Each one that has
+ * moved is held to the order the published document has, listed whole so a
+ * new property fails here instead of being dropped.
+ */
+const WRITTEN_ORDER: Record<string, readonly string[]> = {
+  PinnedElement: [
+    "id",
+    "text",
+    "page",
+    "source",
+    "url",
+    "selector",
+    "rect",
+    "tag",
+    "classes",
+    "styles",
+  ],
+};
+for (const [name, order] of Object.entries(WRITTEN_ORDER)) {
+  const properties = definitions[name]?.properties as
+    Record<string, unknown> | undefined;
+  const asked = new Set(order);
+  const made = Object.keys(properties ?? {});
+  if (
+    !properties ||
+    made.length !== asked.size ||
+    made.some((key) => !asked.has(key))
+  ) {
+    throw new Error(
+      `WRITTEN_ORDER's ${name} no longer matches its schema (${made.join(", ")}): write out its properties again, in the order the document should keep`
+    );
+  }
+  definitions[name].properties = Object.fromEntries(
+    order.map((key) => [key, properties[key]])
+  );
+}
+
 // Frame kinds are mutually exclusive already: required literal `kind` values.
 // Emit the existing discriminant with named references, so Swift names cases
 // from components instead of positions. This changes schemas, never JSON bytes.
