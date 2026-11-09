@@ -33236,6 +33236,10 @@
                   "string"
                 ]
               },
+              "doneAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "effort": {
                 "$ref": "#/components/schemas/InstanceRowEffort"
               },
@@ -33358,11 +33362,18 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "wakesItself": {
+                "type": "boolean"
+              },
               "workItemId": {
                 "type": [
                   "null",
                   "string"
                 ]
+              },
+              "wroteAt": {
+                "type": "string",
+                "format": "date-time"
               }
             },
             "required": [
@@ -33392,6 +33403,7 @@
               "status",
               "title",
               "updatedAt",
+              "wakesItself",
               "workItemId"
             ]
           },
@@ -33484,6 +33496,10 @@
                 "null",
                 "string"
               ]
+            },
+            "doneAt": {
+              "type": "string",
+              "format": "date-time"
             },
             "effort": {
               "$ref": "#/components/schemas/InstanceRowEffort"
@@ -33631,6 +33647,9 @@
               "type": "string",
               "format": "date-time"
             },
+            "wakesItself": {
+              "type": "boolean"
+            },
             "workItemId": {
               "type": [
                 "null",
@@ -33642,6 +33661,10 @@
                 "null",
                 "string"
               ]
+            },
+            "wroteAt": {
+              "type": "string",
+              "format": "date-time"
             }
           },
           "required": [
@@ -33673,6 +33696,7 @@
             "status",
             "title",
             "updatedAt",
+            "wakesItself",
             "workItemId",
             "workspaceId"
           ]
@@ -64723,6 +64747,24 @@
               }
             ]
           },
+          "doneAt": {
+            "description": "When the person pressed Done on it (an archive), on the hub's clock: off\nthe sidebar's Recent list until they write to it again. Null otherwise.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
           "cwd": {
             "description": "The directory the session was launched in; see `launchDir`.",
             "type": "string"
@@ -64964,6 +65006,28 @@
           },
           "updatedAt": {
             "description": "When the row last moved.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "wakesItself": {
+            "description": "Its latest turn ended with work of its own that will start it again\n(harness.ts `waitsOnItself`: a background command, a monitor, a wake-up\nit set itself). The sidebar counts it as still working.",
+            "type": "boolean"
+          },
+          "wroteAt": {
+            "description": "When the person last wrote to it (a send of theirs the hub accepted,\nharness.ts `byPerson`), on the hub's clock. Null when they never did.",
             "anyOf": [
               {
                 "type": "string",

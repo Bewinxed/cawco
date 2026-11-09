@@ -1093,6 +1093,11 @@ export interface InstanceRow {
   continuedInto?: string | null;
   /** When the hub first opened its row: when it was started. */
   createdAt?: string | number | Date | null;
+  /**
+   * When the person pressed Done on it (an archive), on the hub's clock: off
+   * the sidebar's Recent list until they write to it again. Null otherwise.
+   */
+  doneAt?: string | number | Date | null;
   /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
   /**
@@ -1225,6 +1230,17 @@ export interface InstanceRow {
   turnEndedAt?: string | number | Date | null;
   /** When the row last moved. */
   updatedAt?: string | number | Date | null;
+  /**
+   * Its latest turn ended with work of its own that will start it again
+   * (harness.ts `waitsOnItself`: a background command, a monitor, a wake-up
+   * it set itself). The sidebar counts it as still working.
+   */
+  wakesItself?: boolean;
+  /**
+   * When the person last wrote to it (a send of theirs the hub accepted,
+   * harness.ts `byPerson`), on the hub's clock. Null when they never did.
+   */
+  wroteAt?: string | number | Date | null;
   /**
    * The work item this session runs: every delegate is one, and a session
    * never runs more than one. Null on a session nobody delegated, and on a

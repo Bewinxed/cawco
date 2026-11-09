@@ -1410,6 +1410,16 @@ export interface DbShape {
     instanceIds: string[],
     at: Date | null
   ) => (typeof instances.$inferSelect)[];
+  /**
+   * The person pressed Done on these sessions (an archive) at `at`; a null
+   * `at` takes it back (unarchive). `updatedAt` stays, as {@link markSeen}'s.
+   */
+  readonly markDone: (instanceIds: string[], at: Date | null) => void;
+  /**
+   * The person wrote to the session at `at` (a send of theirs the hub
+   * accepted): its `wroteAt`. False when the hub keeps no row for it.
+   */
+  readonly noteWrote: (id: string, at: Date) => boolean;
   /** A project's fact uses and declined rewrites (memory.ts). */
   readonly memoryFacts: MemoryFactsDb;
   /**
@@ -1542,9 +1552,16 @@ export interface DbShape {
    * `silent` turn (it ended on no_reply_needed, saying nothing) leaves
    * nothing unseen: when the owner had seen it through its last end, they
    * have seen it through this one (`seenAt`), so no screen lists it as news.
-   * One whose last end is still unseen stays news, as it was.
+   * One whose last end is still unseen stays news, as it was. `wakesItself`:
+   * the turn ended with work of its own that will start it again (core
+   * `waitsOnItself`).
    */
-  readonly noteTurnEnded: (id: string, at: Date, silent: boolean) => void;
+  readonly noteTurnEnded: (
+    id: string,
+    at: Date,
+    silent: boolean,
+    wakesItself: boolean
+  ) => void;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
   readonly noteWatchLine: (id: string, line: WatchLine) => void;
   /** What a device was shown and what has been cleared, by collapse id (notifications.ts). */
@@ -6436,6 +6453,21 @@ const make = async (path: string): Promise<DbShape> => {
             .returning()
             .all()
         : [],
+    markDone: (instanceIds, at) => {
+      if (instanceIds.length > 0) {
+        db.update(instances)
+          .set({ doneAt: at })
+          .where(inArray(instances.id, instanceIds))
+          .run();
+      }
+    },
+    noteWrote: (id, at) =>
+      db
+        .update(instances)
+        .set({ wroteAt: at })
+        .where(eq(instances.id, id))
+        .returning({ id: instances.id })
+        .all().length > 0,
     // `updatedAt` deliberately untouched: a reading is not the session moving.
     noteInstanceEffort: (id, effort) =>
       db
@@ -9620,7 +9652,7 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
     },
     // `updatedAt` deliberately untouched: a turn's end is not the session moving.
-    noteTurnEnded: (id, at, silent) => {
+    noteTurnEnded: (id, at, silent, wakesItself) => {
       const [was] = silent
         ? db
             .select({
@@ -9638,7 +9670,11 @@ const make = async (path: string): Promise<DbShape> => {
             was.seenAt.getTime() >= was.turnEndedAt.getTime())) &&
         !(was.seenAt && was.seenAt.getTime() >= at.getTime());
       db.update(instances)
-        .set({ turnEndedAt: at, ...(seenThrough ? { seenAt: at } : {}) })
+        .set({
+          turnEndedAt: at,
+          wakesItself,
+          ...(seenThrough ? { seenAt: at } : {}),
+        })
         .where(eq(instances.id, id))
         .run();
     },

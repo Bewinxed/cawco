@@ -439,6 +439,7 @@ import {
   type WorkInFlight,
   waitArtifact,
   waitingOnYou,
+  waitsOnItself,
   windowWords,
   withMovedLine,
   withReminder,
@@ -10476,6 +10477,11 @@ export const createServer = (
     });
     if (owed) {
       record = keepHold(record);
+    }
+    // The person wrote to it: the sidebar's Recent list orders it by this
+    // and lists it again after a Done.
+    if (accepted && byPerson(message.origin) && db.noteWrote(instanceId, record.acceptedAt)) {
+      publishInstances(machineId);
     }
     // The send it retries goes first, so a screen folds that row away as
     // this one arrives.
@@ -34336,6 +34342,11 @@ export const createServer = (
           }
           const at = body.kind === "unarchive" ? null : new Date();
           const seen = db.markSeen(instanceIds, at);
+          // Done (an archive) takes it off the sidebar's Recent list until
+          // the person writes to it again; an unarchive puts it back.
+          if (body.kind !== "look") {
+            db.markDone(instanceIds, at);
+          }
           if (body.kind === "look") {
             // Looked at: a session's finished turn or failure, its message
             // and its asks are read, so their notifications come down.
@@ -40482,7 +40493,13 @@ export const createServer = (
                     const before = row.turnEndedAt
                       ? new Date(row.turnEndedAt)
                       : null;
-                    db.noteTurnEnded(turnId, endedAt, silent);
+                    db.noteTurnEnded(
+                      turnId,
+                      endedAt,
+                      silent,
+                      // A cut turn is handed back: nothing of its own waits.
+                      !cut && waitsOnItself(neutral.wakes)
+                    );
                     // Its closing words answer what it read, and the person's
                     // stop settles it; a server's stop is handed back to go on.
                     if (

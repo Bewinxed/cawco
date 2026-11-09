@@ -1149,6 +1149,27 @@ export const instances = sqliteTable("instances", {
    */
   turnEndedAt: timestamp("turn_ended_at"),
   /**
+   * Whether its latest turn ended with work of its own that will start it
+   * again (core `waitsOnItself` over the turn's `wakes`: a background
+   * command, a monitor, a wake-up it set itself), written at each turn's
+   * end (db `noteTurnEnded`). The sidebar reads it as still working.
+   */
+  wakesItself: integer("wakes_itself", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /**
+   * When the person last wrote to the session: the newest send of theirs
+   * the hub accepted (core `byPerson`). Null when they never wrote to it.
+   * The sidebar orders its Recent list by it, or by when the row opened.
+   */
+  wroteAt: timestamp("wrote_at"),
+  /**
+   * When the person pressed Done on it (an archive, `/api/seen`): it leaves
+   * the sidebar's Recent list until they write to it again. Null on one
+   * never archived, and after an unarchive.
+   */
+  doneAt: timestamp("done_at"),
+  /**
    * `scratch`: a spin-off (NEW.md §1), shown apart from mainline work.
    * `summariser`: a continuation's internal worker, never on the board.
    */
