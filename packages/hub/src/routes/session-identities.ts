@@ -43,7 +43,7 @@ export const sessionIdentityRoutes = ({
             instanceId: row.id,
             harness: row.harness,
             status: row.status,
-            installedAt: identity?.installedAt ?? null,
+            installedAt: identity?.installedAt?.toISOString() ?? null,
             pending: !!identity?.pendingHash,
             error: identity?.error ?? null,
           };
