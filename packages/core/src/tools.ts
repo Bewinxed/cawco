@@ -733,3 +733,18 @@ export const pinnedTools = (): Record<string, string> =>
       spec.exactVersion ? [[spec.id, spec.exactVersion]] : []
     )
   );
+
+/** The states a daemon may claim for a tool; anything else is not a status. */
+const TOOL_STATES: readonly ToolState[] = [
+  "installed",
+  "missing",
+  "installing",
+  "failed",
+  "unsupported",
+];
+
+export const isToolStatus = (value: unknown): value is ToolStatus =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as ToolStatus).id === "string" &&
+  TOOL_STATES.includes((value as ToolStatus).state);
