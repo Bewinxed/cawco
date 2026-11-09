@@ -14,6 +14,7 @@ import { newId } from "#lib/platform/id.js";
 import { continuationStageWords } from "../continue.svelte";
 import type { DraftContent } from "../draft-store";
 import { answeredOr } from "../hub/control";
+import type { SendExtras } from "../send-store";
 import {
   askedFor,
   beginStart,
@@ -22,7 +23,6 @@ import {
   parked,
   planAsks,
 } from "../spawn/parked.svelte";
-import type { SendExtras } from "../stores/commands.svelte";
 import { conversationStart, nameConversation } from "../stores/projects.svelte";
 import {
   drawFirstPrompt,
