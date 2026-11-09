@@ -29,7 +29,7 @@ import {
   type FoldBox,
   foldPath,
   restPose,
-} from "#lib/components/ui/fluid-tabs/fold-path.js";
+} from "#lib/platform/motion/fold-path.js";
 
 /** Half the outline's 1px stroke: the outline is drawn this far in from the silhouette's edge. */
 export const HALF = 0.5;

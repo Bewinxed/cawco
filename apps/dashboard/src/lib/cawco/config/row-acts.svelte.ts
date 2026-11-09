@@ -7,7 +7,7 @@
  * (deletes.ts).
  */
 import { IconTrash } from "#lib/icons.js";
-import { failureWords as message } from "../hub-read";
+import { failureWords as message } from "#lib/platform/hub-read.js";
 import { refusals } from "../refusals.svelte";
 import { notDeleted } from "./deletes";
 

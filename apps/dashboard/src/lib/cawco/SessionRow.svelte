@@ -2,7 +2,7 @@
   import {
     type FrameObserver,
     frameObserver,
-  } from "#lib/cawco/frame-observer.js";
+  } from "#lib/platform/frame-observer.js";
 
   /** Peek and Archive: the row's end actions, one recipe. */
   const ROW_ACTION =
@@ -100,12 +100,14 @@
    */
   import type { NeutralSessionInfo } from "@cawco/core/session-messages";
   import type { Attachment } from "svelte/attachments";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconArchive, IconMaximize } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { cn } from "#lib/utils.js";
   import { page } from "$app/state";
+  import { unfold } from "../platform/motion/fold.svelte";
+  import { landRegroup } from "../platform/motion/share.svelte";
   import AskHere from "./AskHere.svelte";
   import { stopWords } from "./accounts/switch.svelte";
   import { STOPPING_LABEL } from "./activity";
@@ -115,8 +117,6 @@
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import { isSessionRow } from "./links";
-  import { unfold } from "./motion/fold.svelte";
-  import { landRegroup } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import SessionMark from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";

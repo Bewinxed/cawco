@@ -115,7 +115,7 @@
      no taller than it: on the keyboard while one is up, on the screen's edge
      otherwise. The sheet carries where the visible area starts and how tall
      it is as --visible-top and --visible-height, measured together once a
-     frame (cawco/visible-viewport, ui/drawer/drawer-content); a sheet names
+     frame (platform/visible-viewport, ui/drawer/drawer-content); a sheet names
      its own cap in --drawer-max-height. Its bottom edge is placed from the
      top of the box fixed elements stand in, then the sheet is lifted by its
      own height (translate, which vaul's transform composes with): Brave and

@@ -16,11 +16,8 @@
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { hubSeam } from "#lib/cawco/hub-live.js";
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
-  import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import { startConversation } from "#lib/cawco/project/conversation.js";
@@ -136,6 +133,9 @@
     IconShield,
     IconTrash,
   } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { failureWords as message } from "#lib/platform/hub-read.js";
+  import { reveal, revealOut } from "#lib/platform/motion/curves.svelte.js";
   import { goto, replaceState } from "$app/navigation";
   import { page as here } from "$app/state";
 

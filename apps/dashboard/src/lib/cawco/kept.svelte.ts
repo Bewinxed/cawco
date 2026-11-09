@@ -8,9 +8,9 @@
  * rows the same way; then its own.
  */
 import { page } from "$app/state";
-import { firstRender } from "./first-render.svelte";
-import { asPref, KEPT, keepPrefs, type Pref } from "./prefs";
-import { stored } from "./storage";
+import { firstRender } from "../platform/first-render.svelte";
+import { asPref, KEPT, keepPrefs, type Pref } from "../platform/prefs";
+import { stored } from "../platform/storage";
 
 /** The server's copy of localStorage's `key`, as this page was rendered with it; null for none. */
 function servedRaw(key: string): string | null {

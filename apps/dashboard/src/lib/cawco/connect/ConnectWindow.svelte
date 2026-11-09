@@ -24,7 +24,6 @@
   import { tick, untrack } from "svelte";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { page } from "$app/state";
   import {
     CURVE,
     dur,
@@ -33,9 +32,10 @@
     motionOk,
     numberOf,
     pinned,
-  } from "../motion/curves.svelte";
-  import { closeInto, land } from "../motion/share.svelte";
-  import { visible } from "../visible-viewport.svelte";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { closeInto, land } from "#lib/platform/motion/share.svelte.js";
+  import { visible } from "#lib/platform/visible-viewport.svelte.js";
+  import { page } from "$app/state";
   import { connect, INSTALL_PARAM, parkedAt, phone } from "./installs.svelte";
   import OutcomeStep from "./OutcomeStep.svelte";
   import OutputSheet from "./OutputSheet.svelte";
