@@ -797,6 +797,7 @@ export interface HubContext {
     note?: string | undefined,
     asksOnly?: boolean
   ) => Promise<PreparedContinuation>;
+  presenced: (envelope: Envelope<SendPayload>) => Envelope<SendPayload>;
   presenceSaid: (request: Request) => string | null;
   previewListeners: ReturnType<typeof createPreviewListeners>;
   previewService: ReturnType<typeof createPreviewService>;
