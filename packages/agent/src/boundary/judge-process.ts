@@ -13,7 +13,6 @@ import { BUN_SCRIPT_ENV } from "../bun-runtime";
 import { isJudgeOf, JUDGE_FORM_LENGTH, judgeProcId } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { socketPlace } from "../tool-door";
-import { armStep, rearming } from "./arming";
 import { ready } from "./exec";
 import {
   bunRuntime,
@@ -38,6 +37,7 @@ import {
   stateDir,
   writeWhole,
 } from "./state";
+import { judgeExited } from "./unasked";
 
 /** The judges starting now, by their sessiond id: one start each, however many ask. */
 const judging = new Map<string, Promise<void>>();
@@ -210,8 +210,7 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
             `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
           );
         }
-        armStep({ kind: "judge-exit", id, held: held !== undefined });
-        await rearming.get(id);
+        await judgeExited(id, held !== undefined);
       }).catch((error: unknown) => {
         console.warn(
           `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
