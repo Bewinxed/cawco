@@ -619,7 +619,7 @@ async function chain(
 }> {
   const { startPreview, stopPreview } =
     await import("../../../packages/agent/src/preview");
-  const { embedKey } = await import("../../../packages/hub/src/preview");
+  const { embedKey } = await import("../../../packages/hub/src/preview-origin");
   const { sourceKeyOf } =
     await import("../../../packages/core/src/preview/upstream");
   // The canvas's own origin's key, which the machine keys its listener by.
