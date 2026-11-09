@@ -7,10 +7,13 @@
   import type { OnCap } from "@cawco/core/areas";
   import { SPEND_ON_CAP, spendWords } from "@cawco/core/words/spend";
   import { onMount } from "svelte";
-  import { setSpendSettings, spendSettings } from "#lib/cawco/client.svelte.js";
   import Field from "#lib/cawco/config/Field.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import {
+    setSpendSettings,
+    spendSettings,
+  } from "#lib/cawco/stores/projects.svelte.js";
   import {
     NativeSelect,
     NativeSelectOption,

@@ -25,7 +25,10 @@
    * rendered the bug invisible.
    */
   import { COMPACT_SUMMARY_KIND } from "@cawco/core/transcript-rules";
-  import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
+  import {
+    blankSession,
+    type SessionState,
+  } from "#lib/cawco/stores/sessions.svelte.js";
   import { disclosureAt } from "#lib/cawco/transcript/disclosure.svelte.js";
   import { askOpenAt } from "#lib/cawco/transcript/open-at.svelte.js";
   import { buildRowsFrom } from "#lib/cawco/transcript/rows.js";
