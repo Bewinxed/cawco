@@ -38,6 +38,8 @@ import {
 } from "@cawco/core/browser";
 import { detach } from "@cawco/core/detach";
 import { PAIRING_REQUIRED } from "@cawco/core/hub-auth";
+import { stunServer } from "@cawco/core/stream-relay";
+import { HOUR_MS } from "@cawco/core/time";
 import {
   causeOf,
   decodedHeaders,
@@ -45,9 +47,7 @@ import {
   previewWebSocket,
   proxyHeaders,
   RELAY_HEADER,
-} from "@cawco/core/preview/proxy";
-import { stunServer } from "@cawco/core/stream-relay";
-import { HOUR_MS } from "@cawco/core/time";
+} from "@cawco/preview/proxy";
 import type { ServerWebSocket } from "bun";
 import { Elysia } from "elysia";
 import { z } from "zod";
