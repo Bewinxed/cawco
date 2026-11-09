@@ -96,7 +96,7 @@ const askHub = async (
   return JSON.parse(text) as unknown;
 };
 
-/** The project workspace `id` belongs to, as the hub named it at its cut (boundary.ts `setProject`); none for none. */
+/** The project workspace `id` belongs to, as the hub named it at its cut (boundary/looks.ts `setProject`); none for none. */
 export const workspaceProjectOf = async (
   id: string
 ): Promise<string | undefined> => {
