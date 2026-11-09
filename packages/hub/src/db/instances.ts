@@ -244,6 +244,10 @@ const keptInstances = () =>
     or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
   );
 
+/** What find's index reads: a kept row, but a summariser's. */
+export const findable = () =>
+  and(keptInstances(), ne(instances.kind, "summariser"));
+
 const listedInstances = () =>
   and(
     keptInstances(),
