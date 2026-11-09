@@ -141,6 +141,7 @@ import type { FleetMcp } from "./fleet-mcp";
 import type { FleetMcpChanges } from "./fleet-mcp-changes";
 import type { FleetSync } from "./fleet-sync";
 import type { FleetWatch } from "./fleet-watch";
+import type { createForgePosts } from "./forge-posts";
 import type { HarnessConfigBody } from "./harness-config-body";
 import type { Caller, createHubAuth } from "./hub-auth";
 import type {
@@ -530,6 +531,7 @@ export interface HubContext {
     lastTurnAt: string | null;
     activityBound: boolean;
   };
+  forgePosts: ReturnType<typeof createForgePosts>;
   forgetInstances: (ids: readonly string[]) => void;
   forgetOn: (
     account: Pick<Account, "id" | "provider">,
