@@ -1,3 +1,4 @@
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 /** Projects: their rows, places, links, offers, spend and notes, and folding one into another. */
 
 import {
@@ -172,6 +173,37 @@ const withPlaces = (
         a.id.localeCompare(b.id)
     ),
   }));
+};
+
+/** The project whose place holds the folder `cwd` on `machineId` (the deepest; the earliest made among equals). */
+export const projectHoldingOf = (
+  db: BunSQLiteDatabase,
+  machineId: string,
+  cwd: string
+): string | undefined => {
+  const at = cwd.replace(TRAILING_SLASHES, "") || "/";
+  const base = sql`rtrim(${projectPlaces.path}, '/')`;
+  return db
+    .select({ projectId: projectPlaces.projectId })
+    .from(projectPlaces)
+    .innerJoin(projects, eq(projects.id, projectPlaces.projectId))
+    .where(
+      and(
+        eq(projectPlaces.machineId, machineId),
+        ne(projectPlaces.kind, "hub"),
+        or(
+          sql`${base} = ${at}`,
+          sql`substr(${at}, 1, length(${base}) + 1) = ${base} || '/'`
+        )
+      )
+    )
+    .orderBy(
+      desc(sql`length(${base})`),
+      asc(projects.createdAt),
+      asc(projects.id)
+    )
+    .limit(1)
+    .get()?.projectId;
 };
 
 export interface ProjectsDb {
@@ -533,31 +565,7 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
   };
 
   return {
-    projectHolding: (machineId, cwd) => {
-      const at = cwd.replace(TRAILING_SLASHES, "") || "/";
-      const base = sql`rtrim(${projectPlaces.path}, '/')`;
-      return db
-        .select({ projectId: projectPlaces.projectId })
-        .from(projectPlaces)
-        .innerJoin(projects, eq(projects.id, projectPlaces.projectId))
-        .where(
-          and(
-            eq(projectPlaces.machineId, machineId),
-            ne(projectPlaces.kind, "hub"),
-            or(
-              sql`${base} = ${at}`,
-              sql`substr(${at}, 1, length(${base}) + 1) = ${base} || '/'`
-            )
-          )
-        )
-        .orderBy(
-          desc(sql`length(${base})`),
-          asc(projects.createdAt),
-          asc(projects.id)
-        )
-        .limit(1)
-        .get()?.projectId;
-    },
+    projectHolding: (machineId, cwd) => projectHoldingOf(db, machineId, cwd),
     listProjects: () =>
       withPlaces(
         db.select().from(projects).all(),
