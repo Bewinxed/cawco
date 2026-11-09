@@ -115,7 +115,7 @@ export type MoveOffWhy = "refused" | "removed" | "signed-out";
  * transcript read has looked: `fail` — it did not go, for the reason given:
  * the session will never run again; `owe` — the process it was handed to
  * is gone and the session runs again, so it is owed to the next process
- * ({@link oweUnread}), a machine that cannot be asked counting as having
+ * (`oweUnread`), a machine that cannot be asked counting as having
  * taken none; `wait` — a live process may still hand it over and say so;
  * `unheld` — what the process holds is known, so a send it neither stored
  * nor said it held ({@link SentMessageRow.held}), or one a later send
