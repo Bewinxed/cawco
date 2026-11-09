@@ -83,7 +83,18 @@ import {
   writeGuardedGhConfig,
   writeShims,
 } from "./shims";
-import { retiring, STALE_LOOK_MS, stale, stubbed } from "./staleness";
+import {
+  closeWhenIdle,
+  forgetRetiring,
+  forgetStale,
+  forgetStubbed,
+  keptRunning,
+  replaceSoon,
+  restartWhenIdle,
+  retiring,
+  stale,
+  stubbed,
+} from "./staleness";
 import {
   type Boundary,
   closing,
@@ -110,7 +121,6 @@ import {
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
 import { watchCloneOf, watchHost } from "./watch";
-import { keptRunning } from "./work";
 
 /**
  * Starts the workspace's judge in this build's form and writes its hook for
@@ -987,17 +997,15 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
   return left;
 };
 
-let staleTimer: ReturnType<typeof setInterval> | undefined;
-
 /**
- * Each {@link STALE_LOOK_MS}: hands over every running boundary of an older
+ * Each staleness.ts `STALE_LOOK_MS`: hands over every running boundary of an older
  * form ({@link ensureBoundary}), then closes every older boundary nothing
  * runs in any more ({@link closeIdle}), reading the processes once for all
  * of them, after the handovers. A workspace leaves the first set once its
  * boundary is handed over, current, or no longer running, and the second
  * once no older boundary of it is left.
  */
-const lookAtStale = async (): Promise<void> => {
+export const lookAtStale = async (): Promise<void> => {
   await handOverStale();
   if (retiring.size > 0) {
     await closeRetiring();
@@ -1005,19 +1013,6 @@ const lookAtStale = async (): Promise<void> => {
   if (stubbed.size > 0) {
     await restartStubbed();
   }
-};
-
-/** Replaces workspace `ref`'s boundary once nothing runs in it ({@link stubbed}). */
-const restartWhenIdle = (ref: WorkspaceRef): void => {
-  if (!stubbed.has(ref.id)) {
-    stubbed.set(ref.id, { ref, commands: [] });
-  }
-  lookSoon();
-};
-
-export const forgetStubbed = (id: string): void => {
-  stubbed.delete(id);
-  stopLooking();
 };
 
 /**
@@ -1205,71 +1200,6 @@ const closeRetiring = async (): Promise<void> => {
       );
     }
   }
-};
-
-/** The look at the older boundaries under way ({@link lookAtStale}): one at a time. */
-export let staleLook: Promise<void> | undefined;
-
-/** A look at the older boundaries: the one under way, or one begun now. Never throws: what fails is said. */
-export const lookOnce = (): Promise<void> => {
-  staleLook ??= lookAtStale()
-    .catch((error: unknown) => {
-      console.warn(
-        `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
-      );
-    })
-    .finally(() => {
-      staleLook = undefined;
-    });
-  return staleLook;
-};
-
-/** Looks at the older boundaries each {@link STALE_LOOK_MS} while there are any ({@link lookAtStale}). */
-const lookSoon = (): void => {
-  if (staleTimer) {
-    return;
-  }
-  staleTimer = setInterval(() => {
-    if (!staleLook) {
-      lookOnce();
-    }
-  }, STALE_LOOK_MS);
-  staleTimer.unref();
-};
-
-/** Hands workspace `ref`'s boundary, of an older form, over at the next look. */
-export const replaceSoon = (ref: WorkspaceRef): void => {
-  stale.set(ref.id, ref);
-  lookSoon();
-};
-
-/** Closes workspace `id`'s older boundaries as nothing runs in each any more. */
-export const closeWhenIdle = (id: string): void => {
-  retiring.add(id);
-  lookSoon();
-};
-
-const stopLooking = (): void => {
-  if (
-    stale.size === 0 &&
-    retiring.size === 0 &&
-    stubbed.size === 0 &&
-    staleTimer
-  ) {
-    clearInterval(staleTimer);
-    staleTimer = undefined;
-  }
-};
-
-export const forgetStale = (id: string): void => {
-  stale.delete(id);
-  keptRunning.delete(id);
-  stopLooking();
-};
-
-export const forgetRetiring = (id: string): void => {
-  retiring.delete(id);
-  stopLooking();
 };
 
 /**

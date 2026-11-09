@@ -48,9 +48,6 @@ import {
   armState,
   ensureBoundary,
   ensureNow,
-  forgetRetiring,
-  forgetStale,
-  forgetStubbed,
   rearming,
   replaceNarrowed,
 } from "./lifecycle";
@@ -63,7 +60,7 @@ import { type Seen, snapshot } from "./place-guard";
 import { formNow, movedParts, SYNCED_PART } from "./plan";
 import { busyOld, executors, lookAtPreTag, QUIET_SWEEP_MS } from "./processes";
 import { endMembers } from "./sandboxes";
-import { stale } from "./staleness";
+import { forgetRetiring, forgetStale, forgetStubbed, stale } from "./staleness";
 import {
   closing,
   holding,
