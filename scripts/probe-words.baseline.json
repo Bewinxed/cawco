@@ -48,8 +48,7 @@
     "didn't open": 1
   },
   "scripts/probe-kit/specs/connect-machine.ts": {
-    "couldn't be read": 1,
-    "Fetching the signed build": 2
+    "couldn't be read": 1
   },
   "scripts/probe-kit/specs/delegate-inputs.ts": {
     "a credential store no workspace reads": 1,
@@ -127,9 +126,7 @@
     "<meta name=\"": 1
   },
   "scripts/probe-kit/specs/preview-reach.ts": {
-    "listener didn't answer the hub": 1,
-    "Previews need": 1,
-    "The hub reaches": 1
+    "listener didn't answer the hub": 1
   },
   "scripts/probe-kit/specs/preview-socket.ts": {
     "CawCo refused": 1,
@@ -174,14 +171,10 @@
   },
   "scripts/probe-kit/specs/state-records.ts": {
     "damaged record(s) on this machine": 1,
-    "is damaged (": 1,
-    "This workspace's record is damaged:": 1
+    "is damaged (": 1
   },
   "scripts/probe-kit/specs/tab-return.ts": {
     "Nothing has been said here yet": 1
-  },
-  "scripts/probe-kit/specs/tailnet-https.ts": {
-    "Run it once in a terminal on": 1
   },
   "scripts/probe-kit/specs/two-pane-perf.ts": {
     "the frame": 4
