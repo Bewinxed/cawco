@@ -69,6 +69,18 @@ export function depart(
 }
 
 /**
+ * The source under `key` departs, as a click on it would: `source` when the
+ * caller holds it (a card being dragged), else the one drawn on the page.
+ */
+export function departShared(key: string, source?: HTMLElement): void {
+  const drawn =
+    source ?? document.querySelector<HTMLElement>(`[data-share="${key}"]`);
+  if (drawn) {
+    depart(drawn);
+  }
+}
+
+/**
  * A source that departs under a key it does not carry, the one its
  * destination names. By default it stays where it is while what it held
  * travels: the composer's field, emptied into a send, stays drawn and ready
