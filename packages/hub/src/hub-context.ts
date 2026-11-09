@@ -17,7 +17,6 @@ import type {
   AccountProvider,
   CompactStage,
   EndedBy,
-  HomeStore,
   PendingAccountSignin,
   ProviderInfo,
   RebalanceNotice,
@@ -146,6 +145,7 @@ import type {
   FetchedCopy,
   FolderSkillBody,
   Located,
+  LoginMoveResults,
   MachineAway,
   ReportTold,
   SessionLocation,
@@ -716,19 +716,7 @@ export interface HubContext {
     store,
     storeProvider,
   }: Pick<LoginMove, "machineId" | "store" | "storeProvider">) => string;
-  moveResults: Map<
-    string,
-    {
-      accountId: string;
-      at: number;
-      error?: string | undefined;
-      machineId: string;
-      provider: string;
-      kept?: string | undefined;
-      store: HomeStore;
-      storeProvider: string;
-    }
-  >;
+  moveResults: LoginMoveResults;
   moveRowsToAccount: (
     machineId: string,
     rows: readonly {
