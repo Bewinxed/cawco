@@ -138,7 +138,7 @@ import {
 import { type HeldInput, handedInputs } from "./handed-input";
 import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
 import { byId } from "./handles";
-import { type ItemHold, itemHold } from "./item-holds";
+import { holdsBut, type ItemHold, itemHold } from "./item-holds";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { statusCommand } from "./landing";
 import {
@@ -1448,22 +1448,7 @@ const FOLLOW_HOLDS = [
 ] as const satisfies readonly ItemHold[];
 
 /** What leaves a live item's session asleep with nothing done: every hold but a verifier's. */
-const ASLEEP_HOLDS = [
-  "held",
-  "stopping",
-  "blocked",
-  "paused",
-  "custody",
-  "waiting",
-  "waitResuming",
-  "landing",
-  "completing",
-  "finishing",
-  "movedOn",
-  "offline",
-  "sendComing",
-  "onPerson",
-] as const satisfies readonly ItemHold[];
+const ASLEEP_HOLDS = holdsBut("verifying");
 
 export const createWorkItems = ({
   projectReached,
