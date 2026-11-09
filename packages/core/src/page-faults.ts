@@ -3,7 +3,7 @@
  * panel doesn't draw, an uncaught error or rejection, an asset that failed
  * to load. The preview overlay hears each one in every page it runs in (a
  * decision page, HTML or program, and a folder's or a port's preview:
- * agent preview-overlay faults.ts) and sends it, with the artifact and the
+ * preview overlay/faults.ts) and sends it, with the artifact and the
  * revision it was served at, to the preview origin's error path (core
  * `PREVIEW_ERRORS_PATH`, hub dashboard-errors.ts), which journals it as it
  * journals every page error and keeps it in the artifact's doc for
