@@ -25,7 +25,7 @@
  * A path git tracks is the project's own and is never touched.
  *
  * Stand-ins are made only inside a clone that is there, a repository (the
- * host's `goneReason`, boundary/lifecycle.ts `placeReady`). A folder at a clone's path
+ * host's `goneReason`, boundary/ensure.ts `placeReady`). A folder at a clone's path
  * whose `.git` is no repository and that holds nothing but what CawCo wrote
  * there (stand-ins as made, mount points a sandbox left, git-lfs's format
  * marker, a project's skills as placed) is a husk: a clone deleted under a

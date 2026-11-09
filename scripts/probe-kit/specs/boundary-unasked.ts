@@ -1,7 +1,7 @@
 /**
  * A workspace's boundary that ends unasked while a delegate still runs in it
  * is started again for the delegate's next command, on Linux and on macOS
- * alike (agent boundary/lifecycle.ts `restartUnasked`, `watchHost`), and not in a
+ * alike (agent boundary/watch.ts `restartUnasked`, `watchHost`), and not in a
  * loop. On a scratch fleet (real hub, agent and sessiond; Claude Code
  * against the mock model). This spec delegates, so its fleet cuts
  * workspaces: it runs on the host, outside every boundary, on Linux (the srt
