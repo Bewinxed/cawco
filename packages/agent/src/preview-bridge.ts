@@ -1,6 +1,6 @@
 /**
  * A preview's way to a port inside a workspace (Linux). Every command of a
- * workspace runs in its boundary's own network (`boundary.ts`), so a dev
+ * workspace runs in its boundary's own network (`boundary/`), so a dev
  * server a session there starts listens on the boundary's loopback, which the
  * host's does not reach. The agent bridges it: a relay (bridge-relay.ts
  * `bridgeRelay`, one bun process on CawCo's own runtime) joined to the
@@ -21,7 +21,7 @@
  * `setpriv --pdeathsig KILL`, and the hub starts each preview again at the
  * agent's next register. A workspace with no sandbox running answers
  * {@link WorkspaceDown}, judged off its generations' own files and `/proc`,
- * never a keeper's answer (`sandboxes` in boundary.ts); a port named for a
+ * never a keeper's answer (`sandboxes` in boundary/); a port named for a
  * workspace is reached there, never on the host.
  */
 import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
@@ -36,7 +36,7 @@ import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
-import { listeners, workspaceNetworks } from "./boundary";
+import { listeners, workspaceNetworks } from "./boundary/sandboxes";
 import { bridgeRelay } from "./bridge-relay";
 
 /** The workspace a preview names has no boundary running on this machine. */

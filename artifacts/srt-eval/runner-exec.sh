@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prototype: the executor for the runner model — boundary.ts darwinExec, made
+# Prototype: the executor for the runner model — boundary/ darwinExec, made
 # platform-neutral. runner-exec.sh STATE SCRATCH [--cwd-out FILE] COMMAND
 # STATE holds ro/runner.fifo, srt.pid, runner.hostpid and clone (runner-start.sh).
 # Hands COMMAND, the caller's directory and environment to the workspace's
