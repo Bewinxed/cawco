@@ -8,33 +8,6 @@
 import type { DamagedRecordReport, DamagedRow } from "@cawco/core/protocol";
 import { damagedWords } from "@cawco/core/words/damaged";
 
-/** A machine's damaged records off its 15s beat; undefined on a beat that carries none. */
-export const peekDamagedRecords = (
-  payload: unknown
-): DamagedRecordReport[] | undefined => {
-  const { damagedRecords } = (payload ?? {}) as { damagedRecords?: unknown };
-  if (!Array.isArray(damagedRecords)) {
-    return;
-  }
-  return damagedRecords.flatMap((entry): DamagedRecordReport[] => {
-    const { file, reason, workspaceId, instanceId } = (entry ?? {}) as Record<
-      string,
-      unknown
-    >;
-    if (typeof file !== "string" || typeof reason !== "string") {
-      return [];
-    }
-    return [
-      {
-        file,
-        reason,
-        ...(typeof workspaceId === "string" ? { workspaceId } : {}),
-        ...(typeof instanceId === "string" ? { instanceId } : {}),
-      },
-    ];
-  });
-};
-
 export interface DamagedRecords {
   /** Takes a beat's list for `machineId`; answers whether it differs from the last one. */
   heard: (machineId: string, reports: DamagedRecordReport[]) => boolean;
