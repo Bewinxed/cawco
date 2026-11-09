@@ -6,8 +6,7 @@
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { snapshot } from "./place-guard";
 import { commandsIn, workProcesses } from "./processes";
-import { isStarting, readRetiring } from "./state";
-import { lookAtOlder } from "./unasked";
+import { isStarting, readRetiring, type UnaskedCalls } from "./state";
 
 /** How often the boundaries of an older form are looked at. */
 const STALE_LOOK_MS = 5000;
@@ -119,11 +118,14 @@ export const markKeptRunning = (id: string, kept: KeptRunning): void => {
 let staleTimer: ReturnType<typeof setInterval> | undefined;
 
 /** Replaces workspace `ref`'s boundary once nothing runs in it ({@link stubbed}). */
-export const restartWhenIdle = (ref: WorkspaceRef): void => {
+export const restartWhenIdle = (
+  ref: WorkspaceRef,
+  unasked: UnaskedCalls
+): void => {
   if (!stubbed.has(ref.id)) {
     stubbed.set(ref.id, { ref, commands: [] });
   }
-  lookSoon();
+  lookSoon(unasked);
 };
 
 export const forgetStubbed = (id: string): void => {
@@ -138,42 +140,47 @@ let staleLook: Promise<void> | undefined;
 export const lookUnderWay = (): Promise<void> | undefined => staleLook;
 
 /** A look at the older boundaries: the one under way, or one begun now. Never throws: what fails is said. */
-export const lookOnce = (): Promise<void> => {
-  staleLook ??= lookAtOlder()
-    .catch((error: unknown) => {
-      console.warn(
-        `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
-      );
-    })
-    .finally(() => {
-      staleLook = undefined;
-    });
+export const lookOnce = (unasked: UnaskedCalls): Promise<void> => {
+  staleLook ??= sayingWhatFails(unasked).finally(() => {
+    staleLook = undefined;
+  });
   return staleLook;
 };
 
-/** Looks at the older boundaries each {@link STALE_LOOK_MS} while there are any ({@link lookAtStale}). */
-const lookSoon = (): void => {
+/** One look at the older boundaries, what fails said: an `async` function, so nothing it runs can throw past the timer that called it. */
+const sayingWhatFails = async (unasked: UnaskedCalls): Promise<void> => {
+  try {
+    await unasked.lookAtOlder();
+  } catch (error) {
+    console.warn(
+      `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+};
+
+/** Looks at the older boundaries each {@link STALE_LOOK_MS} while there are any (`unasked.lookAtOlder`). */
+const lookSoon = (unasked: UnaskedCalls): void => {
   if (staleTimer) {
     return;
   }
   staleTimer = setInterval(() => {
     if (!staleLook) {
-      lookOnce();
+      lookOnce(unasked);
     }
   }, STALE_LOOK_MS);
   staleTimer.unref();
 };
 
 /** Hands workspace `ref`'s boundary, of an older form, over at the next look. */
-export const replaceSoon = (ref: WorkspaceRef): void => {
+export const replaceSoon = (ref: WorkspaceRef, unasked: UnaskedCalls): void => {
   stale.set(ref.id, ref);
-  lookSoon();
+  lookSoon(unasked);
 };
 
 /** Closes workspace `id`'s older boundaries as nothing runs in each any more. */
-export const closeWhenIdle = (id: string): void => {
+export const closeWhenIdle = (id: string, unasked: UnaskedCalls): void => {
   retiring.add(id);
-  lookSoon();
+  lookSoon(unasked);
 };
 
 const stopLooking = (): void => {
