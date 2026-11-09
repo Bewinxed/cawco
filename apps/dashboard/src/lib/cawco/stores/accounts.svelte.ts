@@ -27,7 +27,12 @@ import type {
 import type { AccountHue } from "@cawco/core/accounts/kinds";
 import { hubRequest } from "@cawco/core/hub-request";
 import { hub } from "#lib/platform/hub.js";
-import { hubData, hubJson, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  hubAsk,
+  hubData,
+  hubJson,
+  hubRefusal,
+} from "#lib/platform/hub-read.js";
 import { load } from "../hub/load";
 import { equal } from "./same";
 
@@ -294,14 +299,15 @@ export async function placementFor(query: {
   model?: string;
   projectId?: string;
 }): Promise<PlacementPreview | undefined> {
-  const answer = await hub.api.accounts.placement.get({ query });
-  if (answer.error) {
-    if (answer.error.status === 400 || answer.error.status === 503) {
-      throw hubRefusal(answer);
+  const answer = await hubAsk(hub.api.accounts.placement.get({ query }));
+  if (!answer.ok) {
+    const { status } = answer.refused.error;
+    if (status === 400 || status === 503) {
+      throw hubRefusal(answer.refused);
     }
     return undefined;
   }
-  return await hubData(answer);
+  return answer.value;
 }
 
 /** The hub's accounts and the providers the fleet can sign in to; null until read. */

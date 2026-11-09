@@ -22,6 +22,7 @@
     IconPlain,
   } from "#lib/icons.js";
   import { hub } from "#lib/platform/hub.js";
+  import { hubData } from "#lib/platform/hub-read.js";
   import {
     crossIn,
     crossOut,
@@ -31,7 +32,6 @@
   import { folds, unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
-
   import RuleActivity from "../../RuleActivity.svelte";
   import RuleTester from "../../RuleTester.svelte";
   import { blankRule, createRule, draftOf, saveRule } from "../../rules";
@@ -79,10 +79,9 @@
   let jevOn = $state(true);
 
   onMount(() => {
-    hub.api.jev
-      .get()
-      .then((answer) => {
-        jevOn = answer.error ? false : answer.data.route !== null;
+    hubData(hub.api.jev.get())
+      .then((jev) => {
+        jevOn = jev.route !== null;
       })
       .catch(() => {
         jevOn = false;
