@@ -10,7 +10,7 @@ import type { DamagedHubRecord } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { SvelteSet } from "svelte/reactivity";
 import { hub } from "#lib/platform/hub.js";
-import { hubDone, hubRefusal } from "#lib/platform/hub-read.js";
+import { hubAsk, hubDone, hubRefusal } from "#lib/platform/hub-read.js";
 
 class Notices {
   /** Notice ids acknowledged anywhere, plus this tab's own on their way to the hub. */
@@ -66,10 +66,10 @@ class Notices {
     for (const id of fresh) {
       this.seen.add(id);
     }
-    const answer = await hub.api.notices.seen
-      .post({ ids: fresh }, { fetch: { keepalive: true } })
-      .catch(() => null);
-    if (!answer || answer.error) {
+    const answer = await hubAsk(
+      hub.api.notices.seen.post({ ids: fresh }, { fetch: { keepalive: true } })
+    ).catch(() => null);
+    if (!answer?.ok) {
       for (const id of fresh) {
         this.seen.delete(id);
       }

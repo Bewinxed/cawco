@@ -1,7 +1,7 @@
 import { hostModeDomain, previewEnterUrl } from "@cawco/core/preview/routes";
 import { previewWords } from "@cawco/core/words/preview";
 import { hub } from "#lib/platform/hub.js";
-import { hubData, hubRefusal, unanswered } from "#lib/platform/hub-read.js";
+import { hubAsk, hubRefusal } from "#lib/platform/hub-read.js";
 
 /**
  * Whether `origin` is an origin's own port: the dashboard's own host (core
@@ -41,13 +41,15 @@ const entries = new Map<string, Entry>();
 
 /** A ticket from the hub, spent on `origin`: null once spent, else why not. */
 async function enter(origin: string): Promise<string | null> {
-  const answer = await hub.api["preview-ticket"].post().catch(() => null);
-  if (!answer || answer.error) {
-    return !answer || unanswered(answer)
-      ? "The hub didn't give this browser a pass to its previews."
-      : hubRefusal(answer).message;
+  const answer = await hubAsk(hub.api["preview-ticket"].post()).catch(
+    () => null
+  );
+  if (!answer?.ok) {
+    return answer
+      ? hubRefusal(answer.refused).message
+      : "The hub didn't give this browser a pass to its previews.";
   }
-  const { ticket } = await hubData(answer);
+  const { ticket } = answer.value;
   // The entry's answer is the preview's origin's, opaque to this page: its
   // pass is the browser's to keep, and the frame's next load says whether
   // it stood.

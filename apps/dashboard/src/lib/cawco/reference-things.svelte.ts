@@ -17,7 +17,7 @@ import { type ReferenceKind, referenceParts } from "@cawco/core/references";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
 import { hub } from "#lib/platform/hub.js";
-import { type HubAnswer, hubData } from "#lib/platform/hub-read.js";
+import { hubData, type Refused } from "#lib/platform/hub-read.js";
 import { planProgress } from "./plan";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
 import { boardStore } from "./stores/board.svelte";
@@ -82,7 +82,7 @@ const taskOf = (project: string, task: string): TaskView | null | undefined => {
 const planOf = (session: string): SessionPlan | null | undefined =>
   plansStore.planOf(session) ??
   askOnce(`plan:${session}`, () =>
-    readJson(hub.api.instances({ id: session }).plan.get())
+    hubData(hub.api.instances({ id: session }).plan.get(), statusOf)
   );
 
 const STEP_WORDS: Record<string, string> = {
@@ -106,14 +106,11 @@ const planName = (plan: SessionPlan): string => {
 /** A markdown heading's marks. */
 const HEADING = /^#+\s*/u;
 
-/** A hub read as JSON; its status on a refusal, so a 4xx keeps "none". */
-function readJson<T>(call: Promise<HubAnswer<T>>): Promise<T> {
-  return hubData(call, ({ response }) =>
-    Object.assign(new Error(`${response.url} answered ${response.status}`), {
-      status: response.status,
-    })
-  );
-}
+/** A refusal as its status, so a 4xx keeps "none". */
+const statusOf = ({ response }: Refused) =>
+  Object.assign(new Error(`${response.url} answered ${response.status}`), {
+    status: response.status,
+  });
 
 const projectHref = (project: string) =>
   `/project/${encodeURIComponent(project)}`;
@@ -224,7 +221,7 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
   },
   routine: (id) => {
     const routine = askOnce(`routine:${id}`, () =>
-      readJson(hub.api.routines({ id }).get())
+      hubData(hub.api.routines({ id }).get(), statusOf)
     );
     if (!routine) {
       return routine;

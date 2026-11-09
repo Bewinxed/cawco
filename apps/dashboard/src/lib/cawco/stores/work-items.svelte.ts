@@ -8,7 +8,7 @@ import { detach } from "@cawco/core/detach";
 import type { WorkItemSummary } from "@cawco/core/protocol";
 import { workWords } from "@cawco/core/words/work";
 import { hub } from "#lib/platform/hub.js";
-import { type HubAnswer, hubData, hubRefusal } from "#lib/platform/hub-read.js";
+import { hubData, hubRefusal } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
 import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
@@ -72,8 +72,9 @@ export function dismissWorkItem(
   why: { reason: string } | { replacedBy: string }
 ): Promise<void> {
   return workItemAct(
-    hub.api["work-items"]({ id }).dismiss.post(why),
-    workWords.notDismissedThen
+    hubData(hub.api["work-items"]({ id }).dismiss.post(why), (refused) =>
+      hubRefusal(refused, workWords.notDismissedThen)
+    )
   );
 }
 
@@ -83,20 +84,15 @@ export function dismissWorkItem(
  */
 export function retryWorkItem(id: string): Promise<void> {
   return workItemAct(
-    hub.api["work-items"]({ id }).retry.post(),
-    workWords.notRetriedThen
+    hubData(hub.api["work-items"]({ id }).retry.post(), (refused) =>
+      hubRefusal(refused, workWords.notRetriedThen)
+    )
   );
 }
 
-async function workItemAct(
-  call: Promise<HubAnswer<WorkItemSummary>>,
-  outcome: string
-): Promise<void> {
+async function workItemAct(answered: Promise<WorkItemSummary>): Promise<void> {
   const mark = readLeaves();
-  keepWorkItem(
-    await hubData(call, (refused) => hubRefusal(refused, outcome)),
-    mark
-  );
+  keepWorkItem(await answered, mark);
 }
 
 export function takeWorkItem(frame: FrameOf<"work_item">): void {

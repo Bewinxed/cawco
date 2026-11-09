@@ -16,6 +16,7 @@
 
 import { PREVIEW_ERRORS_PATH } from "@cawco/core/preview/routes";
 import { hub } from "#lib/platform/hub.js";
+import { hubReached } from "#lib/platform/hub-read.js";
 
 const WINDOW_MS = 60_000;
 const FIRST_FRAME = /^\s*at\s|@/u;
@@ -167,7 +168,9 @@ export function reportError(
           body: JSON.stringify(body),
           keepalive: true,
         })
-      : hub.api["dashboard-errors"].post(body, { fetch: { keepalive: true } })
+      : hubReached(
+          hub.api["dashboard-errors"].post(body, { fetch: { keepalive: true } })
+        )
     ).catch(() => undefined);
   } catch {
     // A malformed thrown value or unavailable transport must not alter the app.

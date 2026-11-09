@@ -24,7 +24,12 @@ import type {
 } from "@cawco/core/hub-auth";
 import { KeptPairingSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";
-import { failureWords, hubData, hubDone } from "#lib/platform/hub-read.js";
+import {
+  failureWords,
+  hubAsk,
+  hubData,
+  hubDone,
+} from "#lib/platform/hub-read.js";
 import { readJson, unstore, writeJson } from "#lib/platform/storage.js";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { leaveThePage } from "./leaving";
@@ -94,9 +99,9 @@ export function readAuth(): Promise<void> {
   reading ??= (async () => {
     try {
       const mark = readLeaves();
-      const answer = await hub.api.auth.get();
-      if (!answer.error) {
-        takeAuth(await hubData(answer), mark);
+      const answer = await hubAsk(hub.api.auth.get());
+      if (answer.ok) {
+        takeAuth(answer.value, mark);
       }
     } catch {
       // The hub out of reach: the connection band says so, and the next close reads again.

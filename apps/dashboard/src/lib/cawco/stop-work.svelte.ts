@@ -37,7 +37,12 @@ import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { StopJobSchema } from "#lib/cawco/stored-shapes.js";
 import { hub } from "#lib/platform/hub.js";
-import { failureWords, hubData, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  failureWords,
+  hubAsk,
+  hubData,
+  hubRefusal,
+} from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { route } from "#lib/platform/motion/route.svelte.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
@@ -997,14 +1002,16 @@ async function stillRunning(
   job: StopJob
 ): Promise<RunningSession[] | "gone" | { refused: string }> {
   try {
-    const answer = await hub.api.projects({ id: job.projectId }).running.get();
-    if (answer.error?.status === 404) {
+    const answer = await hubAsk(
+      hub.api.projects({ id: job.projectId }).running.get()
+    );
+    if (answer.ok) {
+      return answer.value.sessions;
+    }
+    if (answer.refused.error.status === 404) {
       return "gone";
     }
-    const { sessions } = await hubData(answer, (refused) =>
-      hubRefusal(refused, cawOffWords.stillRunningUnreadThen)
-    );
-    return sessions;
+    throw hubRefusal(answer.refused, cawOffWords.stillRunningUnreadThen);
   } catch (error) {
     return { refused: failureWords(error) };
   }

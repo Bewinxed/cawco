@@ -35,6 +35,7 @@
   import {
     failureClause,
     failureWords,
+    hubAsk,
     hubData,
     hubRefusal,
     hubSaid,
@@ -117,14 +118,16 @@
     }
     savingKey = true;
     jevError = null;
-    const answer = await hub.api.jev["typesafe-key"].put({
-      key: typesafeKey.trim(),
-    });
-    if (answer.error) {
-      jevError = `The key was not saved. ${hubSaid(answer)}. Jev's route is unchanged.`;
-    } else {
+    const answer = await hubAsk(
+      hub.api.jev["typesafe-key"].put({
+        key: typesafeKey.trim(),
+      })
+    );
+    if (answer.ok) {
       typesafeKey = "";
-      takeJev(answer.data);
+      takeJev(answer.value);
+    } else {
+      jevError = `The key was not saved. ${hubSaid(answer.refused)}. Jev's route is unchanged.`;
     }
     savingKey = false;
   }
@@ -132,11 +135,11 @@
   async function removeKey() {
     removingKey = true;
     jevError = null;
-    const answer = await hub.api.jev["typesafe-key"].delete();
-    if (answer.error) {
-      jevError = `The key was not removed. ${hubSaid(answer)}. It is still held.`;
+    const answer = await hubAsk(hub.api.jev["typesafe-key"].delete());
+    if (answer.ok) {
+      takeJev(answer.value);
     } else {
-      takeJev(answer.data);
+      jevError = `The key was not removed. ${hubSaid(answer.refused)}. It is still held.`;
     }
     removingKey = false;
   }
@@ -181,15 +184,17 @@
       return;
     }
     connecting = true;
-    const answer = await hub.api.openrouter.connect.post({
-      callbackUrl: `${location.origin}/config/models`,
-    });
-    if (answer.error) {
-      openrouterError = hubRefusal(answer).message;
+    const answer = await hubAsk(
+      hub.api.openrouter.connect.post({
+        callbackUrl: `${location.origin}/config/models`,
+      })
+    );
+    if (!answer.ok) {
+      openrouterError = hubRefusal(answer.refused).message;
       connecting = false;
       return;
     }
-    const { authUrl } = answer.data;
+    const { authUrl } = answer.value;
     leaveThePage(() => {
       location.href = authUrl;
     });
@@ -198,12 +203,12 @@
   async function exchange(code: string) {
     exchanging = true;
     openrouterError = null;
-    const answer = await hub.api.openrouter.exchange.post({ code });
-    if (answer.error) {
-      openrouterError = hubRefusal(answer).message;
-    } else {
+    const answer = await hubAsk(hub.api.openrouter.exchange.post({ code }));
+    if (answer.ok) {
       // The status line above says so: "Connected just now".
       await readOpenRouter();
+    } else {
+      openrouterError = hubRefusal(answer.refused).message;
     }
     exchanging = false;
   }
@@ -211,11 +216,11 @@
   async function disconnect() {
     disconnecting = true;
     openrouterError = null;
-    const answer = await hub.api.openrouter.delete();
-    if (answer.error) {
-      openrouterError = hubRefusal(answer).message;
-    } else {
+    const answer = await hubAsk(hub.api.openrouter.delete());
+    if (answer.ok) {
       await readOpenRouter();
+    } else {
+      openrouterError = hubRefusal(answer.refused).message;
     }
     disconnecting = false;
   }
@@ -251,11 +256,11 @@
   async function setWatch(on: boolean) {
     savingWatch = true;
     watchError = null;
-    const answer = await hub.api["fleet-watch"].put({ on });
-    if (answer.error) {
-      watchError = hubRefusal(answer).message;
+    const answer = await hubAsk(hub.api["fleet-watch"].put({ on }));
+    if (answer.ok) {
+      watch = answer.value;
     } else {
-      watch = answer.data;
+      watchError = hubRefusal(answer.refused).message;
     }
     savingWatch = false;
   }
@@ -319,11 +324,14 @@
     imageFault = null;
     let fault: string | null = null;
     try {
-      const answer = await hub.api["image-settings"].put(next);
-      if (answer.error) {
-        fault = imageSettingsWords.refused(hubSaid(answer), held.provider);
+      const answer = await hubAsk(hub.api["image-settings"].put(next));
+      if (answer.ok) {
+        image = answer.value;
       } else {
-        image = answer.data;
+        fault = imageSettingsWords.refused(
+          hubSaid(answer.refused),
+          held.provider
+        );
       }
     } catch (error) {
       fault = imageSettingsWords.unsent(failureWords(error), held.provider);
