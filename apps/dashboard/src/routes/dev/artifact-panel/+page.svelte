@@ -113,7 +113,10 @@
   const listed = hubRequest("GET /api/instances/:id/artifacts", {
     path: { id: INSTANCE },
   }).path;
-  window.fetch = (input, init) => {
+  const answered = (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1]
+  ): Promise<Response> => {
     const path = String(input);
     if (!path.startsWith(listed)) {
       return hubFetch(input, init);
@@ -125,6 +128,10 @@
     }
     return Promise.resolve(Response.json(ARTIFACTS));
   };
+  window.fetch = new Proxy(window.fetch, {
+    apply: (_fetch, _this, [input, init]: Parameters<typeof fetch>) =>
+      answered(input, init),
+  });
   /** Send all pressed: what was held stands sent. */
   let heldSent = $state(false);
   const holding = asked === "held" || asked === "note" || asked === "fold";
