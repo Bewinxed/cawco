@@ -95,7 +95,6 @@ import type {
   InputsLanded,
   InputsPlace,
   InputsRead,
-  WorkspaceArchive,
   WorkspaceChanges,
   WorkspaceRef,
 } from "@cawco/core/workspace/controls";
@@ -105,7 +104,6 @@ import {
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
-  CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CHANGES,
   INPUTS_DIR,
@@ -148,6 +146,7 @@ import {
   fenced,
   findingsBlock,
   LANDING_ENDED,
+  type LandingsHub,
   MIB,
   reportLine,
 } from "./landing-run";
@@ -181,10 +180,10 @@ import {
   outputsFolder,
   ownCopy,
   refOf,
-  type Settled,
   SPACES,
   type Unlanded,
   type WorkspacesDeps,
+  type WorkspacesHub,
   workspaceOf,
 } from "./workspaces";
 
@@ -692,17 +691,7 @@ export interface WorkItemStart {
 
 export interface WorkItemDeps extends Pick<
   WorkspacesDeps,
-  | "call"
-  | "command"
-  | "db"
-  | "end"
-  | "launchesOn"
-  | "makingFrom"
-  | "sendWakes"
-  | "servedOwed"
-  | "stageRuns"
-  | "waitingOnPerson"
-  | "workspaceChanged"
+  "call" | "command" | "db" | "end"
 > {
   /**
    * Whether a send to the session is still pending, owed or handed, other
@@ -752,8 +741,10 @@ export interface WorkItemDeps extends Pick<
    * kept at the hub goes now, in order (sends.ts `releaseOwed`).
    */
   readonly finishOver: (instanceId: string) => void;
-  /** The machine the hub runs on, once read (server.ts `ownMachineIdRead`): where a project ships from (ship.ts). */
-  readonly hubMachineId: () => string | undefined;
+  /** What a landing run and its gate read of the hub, passed on whole (landing-run.ts). */
+  readonly forLandings: LandingsHub;
+  /** What workspaces read of the hub, passed on whole (workspaces.ts). */
+  readonly forWorkspaces: WorkspacesHub;
   /**
    * THE gate on input to a session (server.ts `inputRefusal`): why a message
    * from `origin` may not reach it now, or nothing when it may.
@@ -771,8 +762,6 @@ export interface WorkItemDeps extends Pick<
   readonly itemEnded?: (item: WorkItemRow) => void;
   /** Runs the budget sweep and every wait's timer until the hub closes. */
   readonly lifetime: HubLifetimeShape;
-  /** Resolves once `machineId`'s pause is over; at once when it is not paused. */
-  readonly machineFree: (machineId: string) => Promise<void>;
   /**
    * "Omars-MacBook-Pro is paused until 00:57" while the owner has paused
    * `machineId` (machine-pause.ts); undefined when it is not paused.
@@ -879,11 +868,6 @@ export interface WorkItemDeps extends Pick<
     state: string;
   };
   /**
-   * Where a reader opens a session in the dashboard: the link a pull request
-   * carries back, and each landed commit's `Agent-Logs-Url` trailer.
-   */
-  readonly sessionUrl: (instanceId: string) => string;
-  /**
    * Sends a spawn and records its row under the work item. `fallbackMode` is
    * the mode it runs in when its harness has modes; the hub's one rule
    * settles it (none at all for a harness without modes). `placed`: the
@@ -913,11 +897,6 @@ export interface WorkItemDeps extends Pick<
    * undefined once it went. A held start goes by itself when the hold ends.
    */
   readonly startHeld: (instanceId: string) => string | undefined;
-  /** A task's title as its project's index has it: a pull request's title. */
-  readonly taskTitle?: (
-    projectId: string,
-    taskId: string
-  ) => string | undefined;
   /**
    * A notice about the session in Needs you (fleet-watch.ts `tellYou`), and
    * its end once the hold it told of is over (`untellYou`).
@@ -1452,11 +1431,11 @@ export const createWorkItems = ({
   designHold,
   end,
   finishOver,
-  hubMachineId,
   itemEnded,
   lifetime,
   pauses,
-  launchesOn,
+  forLandings,
+  forWorkspaces,
   placeAhead,
   planSteps,
   publish,
@@ -1471,27 +1450,18 @@ export const createWorkItems = ({
   between,
   missingFor,
   unblocked,
-  machineFree,
   machinePaused,
   modelRefusal,
   online,
   stalled,
   send,
-  sendWakes,
-  sessionUrl,
   spawn,
   spawnedUnder,
-  stageRuns,
   startHeld,
-  taskTitle,
   tellYou,
   todos,
   types,
   untellYou,
-  waitingOnPerson,
-  servedOwed,
-  makingFrom,
-  workspaceChanged,
   workPlace,
 }: WorkItemDeps) => {
   /**
@@ -1556,8 +1526,6 @@ export const createWorkItems = ({
       );
     }
   };
-  /** Items whose landing this hub process is running now: a resume leaves them to that run. */
-  const finishing = new Set<string>();
   /**
    * Whether `item`'s landing holds its reopeners' sends: one that runs, not
    * one completing, which waits on its own delegates and may be written to
@@ -1633,22 +1601,6 @@ export const createWorkItems = ({
   const lastTurn = async (item: WorkItemRow): Promise<void> => {
     update(item.id, { lastTurnAt: new Date() });
     await reclaimUnread(item.instanceId);
-  };
-  /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
-  const opening = new Set<string>();
-  const discarding = new Map<string, Promise<void>>();
-  /** The filed and unfiled cases use the same machine archive, acknowledged before forgetting it. */
-  const discardCreate = (id: string, machineId: string): Promise<void> => {
-    const pending = discarding.get(id);
-    if (pending !== undefined) {
-      return pending;
-    }
-    const unmade: WorkspaceArchive = { id, unlanded: "unmade" };
-    const discarded = call(machineId, CONTROL_WORKSPACE_ARCHIVE, [unmade])
-      .then(() => db.finishWorkspaceCreate(id))
-      .finally(() => discarding.delete(id));
-    discarding.set(id, discarded);
-    return discarded;
   };
   /** Every write to an item goes out to the dashboards as it lands. */
   const published = (
@@ -1798,7 +1750,7 @@ export const createWorkItems = ({
     replacedBy: item.replacedBy,
     waitUntil: item.waitUntil?.getTime() ?? null,
     waitReason: item.waitReason,
-    checkQueue: landingRun.landingWaits.get(item.id) ?? null,
+    checkQueue: landingRun.landingWaitOf(item.id),
     firstLines: {
       brief: firstLine(item.brief),
       result: item.headline ?? firstLine(item.result),
@@ -2146,7 +2098,7 @@ export const createWorkItems = ({
       .filter(
         (item) =>
           (!only || only.has(item.instanceId)) &&
-          !finishing.has(item.id) &&
+          !landingRun.landingRuns(item.id) &&
           !item.stoppingAt
       );
     if (live.length === 0) {
@@ -2195,7 +2147,7 @@ export const createWorkItems = ({
     itemHolds(item, {
       custody: custodyPending(row.machineId, row.id),
       paused: pausedWorkspace(item.workspaceId) !== undefined,
-      finishing: finishing.has(item.id),
+      finishing: landingRun.landingRuns(item.id),
       movedOn: row.workItemId !== item.id,
       offline: !online(row.machineId),
       sendComing: awaitsSend(row.id),
@@ -4189,7 +4141,7 @@ export const createWorkItems = ({
       return current;
     }
     // Its landing, if one runs, ends with it: every command of it stops.
-    landingRun.landingStops.get(item.id)?.abort();
+    landingRun.stopLanding(item.id);
     workedThisTurn.delete(item.id);
     toldWhileWaiting.delete(item.id);
     const { landed } = db.workItem(item.id) ?? item;
@@ -4453,50 +4405,35 @@ export const createWorkItems = ({
     return true;
   };
 
-  /** A machine as a gate step's line names it: its hostname as the fleet shows it. */
+  /** A machine as a line names it: its hostname as the fleet shows it. */
   const machineName = (machineId: string): string =>
     machineCalled(machineId, db.listAgents());
   const workspaces = createWorkspaces({
+    ...forWorkspaces,
     call,
     command,
     db,
     end,
-    launchesOn,
-    makingFrom,
-    sendWakes,
-    servedOwed,
-    stageRuns,
-    waitingOnPerson,
-    workspaceChanged,
     report,
-    finishing,
-    opening,
-    discardCreate,
+    landingRuns: (itemId) => landingRun.landingRuns(itemId),
     leadFor,
     mayReopen,
     notPaused,
-    itemOf,
-    machineName,
   });
   const landingRun = createLandingRun({
+    ...forLandings,
     call,
     command,
     db,
-    hubMachineId,
-    machineFree,
     machinePaused,
     online,
-    sessionUrl,
-    taskTitle,
     report,
-    finishing,
     closeTurn,
     published,
     update,
     declareWait,
     finish,
     heldForGroup,
-    machineName,
     workspaces,
   });
 
@@ -4607,11 +4544,11 @@ export const createWorkItems = ({
         `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`
       );
     }
-    const hold = itemHold(item, { finishing: finishing.has(item.id) }, [
-      "stopping",
-      "landing",
-      "finishing",
-    ]);
+    const hold = itemHold(
+      item,
+      { finishing: landingRun.landingRuns(item.id) },
+      ["stopping", "landing", "finishing"]
+    );
     if (hold === "stopping") {
       throw new WorkItemRefusal(409, workWords.stoppingRefused);
     }
@@ -4715,7 +4652,7 @@ export const createWorkItems = ({
 
     /** While the item's landing waits (a shared machine slot, a pause, its turn to land): what its status says, and since when. */
     landingWaitOf: (itemId: string): { words: string; since: number } | null =>
-      landingRun.landingWaits.get(itemId) ?? null,
+      landingRun.landingWaitOf(itemId),
 
     /**
      * The hub's own work: a routine's run (routines.ts, {@link routineParent})
@@ -5117,48 +5054,36 @@ export const createWorkItems = ({
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
       const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-      if (
-        !(
-          item &&
-          workspace &&
-          (workspaces.recuttable(workspace) ||
-            workspaces.turnMayRetire(workspace.id))
-        ) ||
-        workspaces.recutWaits.has(instanceId)
-      ) {
+      if (!(
+        item &&
+        workspace &&
+        (workspaces.recuttable(workspace) ||
+          workspaces.turnMayRetire(workspace.id))
+      )) {
         return;
       }
-      workspaces.recutWaits.add(instanceId);
-      workspaces
-        .inWorkspaceTurn(workspace.id, async () => {
-          const [now] = db.workspacesNamed(workspace.id);
-          if (now && workspaces.recuttable(now)) {
-            await workspaces.recut(now);
-          }
-        })
-        .finally(() => workspaces.recutWaits.delete(instanceId))
-        .then(
-          () => recutDone?.(instanceId),
-          (error: unknown) => {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            const wait = recutWaitsForAgent(message);
-            if (wait !== undefined) {
-              console.info(
-                `[workspaces] ${instanceId}: its workspace ${handle(workspace.id)} is not cut again yet, its machine's agent answering "${message}"; what was sent to it is kept at the hub, and the cut is asked again ${wait === "fenced" ? `once the agent is back (at the latest in ${RESTART_RECUT_MS / 1000} s)` : "now"}`
-              );
-              if (wait === "fenced") {
-                lifetime.after(RESTART_RECUT_MS, () => recutKept?.(instanceId));
-              } else {
-                recutKept?.(instanceId);
-              }
-              return;
+      workspaces.recutInTurn(instanceId, workspace.id)?.then(
+        () => recutDone?.(instanceId),
+        (error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          const wait = recutWaitsForAgent(message);
+          if (wait !== undefined) {
+            console.info(
+              `[workspaces] ${instanceId}: its workspace ${handle(workspace.id)} is not cut again yet, its machine's agent answering "${message}"; what was sent to it is kept at the hub, and the cut is asked again ${wait === "fenced" ? `once the agent is back (at the latest in ${RESTART_RECUT_MS / 1000} s)` : "now"}`
+            );
+            if (wait === "fenced") {
+              lifetime.after(RESTART_RECUT_MS, () => recutKept?.(instanceId));
+            } else {
+              recutKept?.(instanceId);
             }
-            const reason = `Its workspace ${handle(workspace.id)} retired and could not be cut again: ${message}`;
-            console.warn(`[workspaces] ${instanceId}: ${reason}`);
-            recutFailed?.(instanceId, reason);
+            return;
           }
-        );
+          const reason = `Its workspace ${handle(workspace.id)} retired and could not be cut again: ${message}`;
+          console.warn(`[workspaces] ${instanceId}: ${reason}`);
+          recutFailed?.(instanceId, reason);
+        }
+      );
     },
 
     /**
@@ -5199,18 +5124,7 @@ export const createWorkItems = ({
     },
 
     /** Replays durable discards, including creates whose reply a previous hub never received. */
-    discardUnfiled(machineId: string): void {
-      for (const { id } of db.workspaceCreatesOn(machineId)) {
-        if (opening.has(id)) {
-          continue;
-        }
-        discardCreate(id, machineId).catch((error: unknown) => {
-          console.warn(
-            `[workspaces] discard ${id} on ${machineId} is still pending: ${error instanceof Error ? error.message : String(error)}`
-          );
-        });
-      }
-    },
+    discardUnfiled: workspaces.discardUnfiled,
 
     /**
      * THE gate on input to a session: why a message from `origin` may not
@@ -5311,7 +5225,7 @@ export const createWorkItems = ({
         throw new Error(`work item ${itemId} has no workspace`);
       }
       const { workspaceId } = item;
-      await workspaces.inWorkspaceTurn(workspaceId, async () => {
+      return await workspaces.inWorkspaceTurn(workspaceId, async () => {
         const [workspace] = db.workspacesNamed(workspaceId);
         if (!workspace) {
           throw new Error(`work item ${itemId} has no workspace`);
@@ -5327,26 +5241,8 @@ export const createWorkItems = ({
             `the clone of workspace ${handle(workspace.id)} is gone from ${machineName(workspace.machineId)}`
           );
         }
-        workspaces.continuing.set(
-          itemId,
-          (workspaces.continuing.get(itemId) ?? 0) + 1
-        );
+        return workspaces.holdForContinuation(itemId, workspaceId);
       });
-      let released = false;
-      return () => {
-        if (released) {
-          return;
-        }
-        released = true;
-        const left = (workspaces.continuing.get(itemId) ?? 1) - 1;
-        if (left > 0) {
-          workspaces.continuing.set(itemId, left);
-        } else {
-          workspaces.continuing.delete(itemId);
-        }
-        // Held no longer by this, it settles as it stands.
-        workspaces.settleSoon(workspaceId);
-      };
     },
 
     /**
@@ -5611,7 +5507,10 @@ export const createWorkItems = ({
     resumeLandings(machineId: string): void {
       for (const item of liveItemsOn(machineId)) {
         const { submission } = item;
-        if (!(item.landingSince && submission) || finishing.has(item.id)) {
+        if (
+          !(item.landingSince && submission) ||
+          landingRun.landingRuns(item.id)
+        ) {
           continue;
         }
         // Completing: it lands once its own delegates have ended, which
@@ -5730,7 +5629,7 @@ export const createWorkItems = ({
       }
       quiet.delete(item.id);
       clearWait(item);
-      landingRun.landingStops.get(item.id)?.abort();
+      landingRun.stopLanding(item.id);
       update(item.id, {
         stoppingAt: new Date(),
         stoppedBy: by,
@@ -5933,38 +5832,8 @@ export const createWorkItems = ({
     heldWorkspaces: (): HeldWork[] =>
       db.heldWorkspaces().filter(workspaces.isHeld).map(workspaces.heldWork),
 
-    /**
-     * {@link settle} for each active workspace on `machineId`, one after
-     * another, then each archived one whose clone is still there closed
-     * again (workspaces.ts `closeLeftClones`): the sweep's look (workspace-retire.ts).
-     * A timed look passes over a workspace whose last settle failed until its
-     * wait is over ({@link settleFailed}); a look someone `asked` for tries
-     * it now. Answers each one's outcome by id.
-     */
-    async settleOn(
-      machineId: string,
-      asked: boolean
-    ): Promise<{ outcome: Settled; workspace: WorkspaceRow }[]> {
-      const done: { outcome: Settled; workspace: WorkspaceRow }[] = [];
-      for (const workspace of db.activeWorkspacesOn(machineId)) {
-        // Something runs in its turn now, or its last settle failed and its
-        // wait is not over: a later look settles it.
-        if (
-          workspaces.workspaceTurns.has(workspace.id) ||
-          (!asked &&
-            (workspaces.settleFailures.get(workspace.id)?.retryAt ?? 0) >
-              Date.now())
-        ) {
-          continue;
-        }
-        done.push({
-          workspace,
-          outcome: await workspaces.settleNow(workspace.id),
-        });
-      }
-      done.push(...(await workspaces.closeLeftClones(machineId)));
-      return done;
-    },
+    /** The sweep's look at the workspaces on a machine ({@link Workspaces.settleOn}). */
+    settleOn: workspaces.settleOn,
 
     /**
      * The workspace of session `instanceId`'s item settled soon
@@ -6163,7 +6032,7 @@ export const createWorkItems = ({
           ? { dismissReason: why.reason, replacedBy: null }
           : { dismissReason: null, replacedBy: replacementOf(item, why) };
       const dismissedAt = new Date();
-      if (!LIVE.has(item.state) || finishing.has(item.id)) {
+      if (!LIVE.has(item.state) || landingRun.landingRuns(item.id)) {
         const kept = update(id, { dismissedAt, ...said });
         return kept ? summaryOf(kept) : undefined;
       }
