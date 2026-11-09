@@ -2661,7 +2661,7 @@ export class SessionSupervisor {
         running = this.#live.sessions.get(instanceId);
       }
       if (running) {
-        // Ended by this daemon: its end is no failure ({@link LiveSessions.ending}).
+        // Ended by this daemon: its end is no failure ({@link LiveSessions.stopsHere}).
         this.#live.drop(instanceId, { why: "relaunched", ended: running });
         await running.stop();
       }
@@ -4236,7 +4236,7 @@ export class SessionSupervisor {
   }
 
   /**
-   * A process this daemon ended itself ({@link LiveSessions.ending}) has gone: whoever
+   * A process this daemon ended itself ({@link LiveSessions.stopsHere}) has gone: whoever
    * ended it says so (the hub for a stop or a move, a sleep for itself), so
    * its harness's word on the way out is only logged, never a failure.
    */
