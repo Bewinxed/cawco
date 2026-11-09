@@ -28,6 +28,7 @@ import {
   ownKeeperOwed,
   recordDecision,
 } from "./decisions";
+import { ensureNow, replaceNarrowed } from "./ensure";
 import {
   type BoundaryHolders,
   commandsNow,
@@ -45,7 +46,6 @@ import {
   judgeScripts,
 } from "./hook-judge";
 import { settling } from "./judge-process";
-import { ensureNow, replaceNarrowed } from "./lifecycle";
 import {
   NARROW_CAUSE_WORDS,
   NARROW_LOOK_MS,
