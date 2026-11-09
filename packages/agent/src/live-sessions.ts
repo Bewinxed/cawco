@@ -1,8 +1,8 @@
 import type { SessionPulse } from "@cawco/core/protocol";
 import type { NeutralMessage } from "@cawco/core/session-messages";
 import { getToolGlance } from "@cawco/core/transcript-rules";
+import type { FrameSink } from "./frame-sink";
 import type { Harness, HarnessSession } from "./harness";
-import type { FrameSink } from "./session";
 
 /** What the live sessions read of the supervisor around them, and where their pulses go. */
 export interface LiveHost {

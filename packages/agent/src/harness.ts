@@ -28,7 +28,11 @@ import type {
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { KeeperHarnessKind } from "@cawco/core/harness/traits";
 import type { Envelope, SendPayload, SpawnPayload } from "@cawco/core/protocol";
-import type { MoveEnded } from "@cawco/core/session/controls";
+import type {
+  CarrySessionOutcome,
+  CarrySessionRequest,
+  MoveEnded,
+} from "@cawco/core/session/controls";
 import type {
   AuthState,
   NeutralMessage,
@@ -432,6 +436,43 @@ export interface SubagentChange {
   taskId: string;
 }
 
+/**
+ * What a carry of sessions between accounts asks of the supervisor that
+ * carries them ({@link Harness.carrier}): the process it carries for a
+ * session now, whether anything of the session runs here or is on its way,
+ * and the drop of one whose process it ended or found gone.
+ */
+export interface CarryHost {
+  /** Whether a reattach has claimed the session's child and is deciding it. */
+  adopting: (instanceId: string) => boolean;
+  /** Why the session's process cannot be ended now, in words; nothing when it is at rest. */
+  awake: (
+    instanceId: string,
+    session: HarnessSession,
+    serverBusy: undefined,
+    keepAliveAside: boolean,
+    forMove: boolean
+  ) => Promise<{ why: string; unsure?: true; later?: true } | undefined>;
+  /** The session is no longer carried: its process ended for the carry, or found gone. */
+  drop: (
+    instanceId: string,
+    how: { why: "carried" | "exited"; ended: HarnessSession }
+  ) => void;
+  /** What the session's background tasks ran in its workspace, ended with it. */
+  endWork: (instanceId: string, why: "moved") => Promise<void>;
+  /** Whether something sent to the session is still on its way. */
+  queued: (instanceId: string) => boolean;
+  /** The process carried for the session now. */
+  running: (instanceId: string) => HarnessSession | undefined;
+}
+
+/** A harness's carry of its sessions' conversations into the account directory each row is to say ({@link CONTROL_CARRY_SESSIONS}). */
+export interface SessionCarry {
+  carrySessions: (
+    requests: CarrySessionRequest[]
+  ) => Promise<Record<string, CarrySessionOutcome>>;
+}
+
 /** The facet a harness of kind `K` carries, per the traits table: a type error when the two disagree. */
 type CustodyOf<K extends HarnessKind> = K extends KeeperHarnessKind
   ? KeeperCustody
@@ -454,6 +495,13 @@ export interface Harness<K extends HarnessKind = HarnessKind> {
    */
   readonly authReason?: string;
   readonly capabilities: HarnessCapabilities;
+  /**
+   * The carry of this harness's sessions between account directories, for
+   * the supervisor `host` (the account-model trait's `dir`, whose session
+   * data lives in an account's directory). Absent from a harness whose
+   * sessions move with no data of theirs.
+   */
+  carrier?: (host: CarryHost) => SessionCarry;
   /**
    * `true` when {@link listSessions} reads the harness's servers' databases
    * on the stores thread (OpenCode's, multi-gigabyte on obelisk). The
