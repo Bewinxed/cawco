@@ -36,6 +36,7 @@ import {
   upgradePreview,
 } from "@cawco/preview/proxy";
 import type { Server } from "bun";
+import { problemResponse } from "elysia/error";
 import { HUB_PORT } from "./config";
 import { processSecret } from "./hub-self";
 import type { HubLifetimeShape } from "./lifetime";
@@ -72,10 +73,14 @@ const targetHost = (target: string): string =>
 
 /** What the hub answers a request it could not carry on. */
 const unreachable = (cause: string): Response =>
-  new Response(`The hub did not answer on its own port (${cause}).\n`, {
-    status: 502,
-    headers: { "content-type": "text/plain; charset=utf-8" },
-  });
+  problemResponse(
+    {
+      status: 502,
+      code: "hub-did-not-answer",
+      detail: `The hub did not answer on its own port (${cause}).\n`,
+    },
+    {}
+  );
 
 /** A request's headers as the hub reads them from the door: marked, and named by `address`, nothing the machine said in either's place. */
 const marked = (from: Headers, address: string, record: string): Headers => {
@@ -126,7 +131,11 @@ export const createSshDoor = (lifetime: HubLifetimeShape): SshDoor => {
             instanceId: null,
           })
             ? undefined
-            : new Response("WebSocket upgrade failed", { status: 400 });
+            : problemResponse({
+                status: 400,
+                code: "websocket-upgrade-failed",
+                detail: "WebSocket upgrade failed",
+              });
         }
         try {
           const answer = await forwardRequest(

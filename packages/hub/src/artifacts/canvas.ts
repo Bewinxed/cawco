@@ -29,6 +29,7 @@ import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
 import { injectOverlay } from "@cawco/preview/proxy";
+import { problemResponse } from "elysia/error";
 import { Map as YMap } from "yjs";
 import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
 import { type ArtifactDocs, elementsOf } from "./docs";
@@ -66,7 +67,10 @@ export async function serveCanvas(
   const file = pathname.startsWith(CANVAS_ASSETS)
     ? await canvasHostFile(pathname.slice(CANVAS_ASSETS.length))
     : null;
-  return file ?? new Response("Not found", { status: 404 });
+  return (
+    file ??
+    problemResponse({ status: 404, code: "not-found", detail: "Not found" })
+  );
 }
 
 /** The canvas's elements as their entries hold them, in scene order. */
