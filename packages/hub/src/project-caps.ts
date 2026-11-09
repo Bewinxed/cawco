@@ -51,7 +51,7 @@ const WHEN = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
-const ON_CAP: readonly OnCap[] = ["pause", "quiet", "both"];
+const ON_CAP = ["pause", "quiet", "both"] as const satisfies readonly OnCap[];
 
 export interface CapsDeps {
   db: Pick<
@@ -156,7 +156,7 @@ export const createCaps = ({ db, publish }: CapsDeps) => {
           "/api/spend-settings",
           {
             body: t.Object({
-              onCap: t.Union(ON_CAP.map((each) => t.Literal(each))),
+              onCap: t.UnionEnum(ON_CAP),
             }),
           },
           ({ body }) => {
@@ -177,7 +177,7 @@ export const createCaps = ({ db, publish }: CapsDeps) => {
               period: t.Nullable(
                 t.Union([t.Literal("day"), t.Literal("month")])
               ),
-              onCap: t.Nullable(t.Union(ON_CAP.map((each) => t.Literal(each)))),
+              onCap: t.Nullable(t.UnionEnum(ON_CAP)),
             }),
           },
           ({ params, body }) => {

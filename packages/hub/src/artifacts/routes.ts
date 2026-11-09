@@ -111,7 +111,7 @@ const handQuery = t.Object({ by: t.Optional(t.Literal("agent")) });
 const skeletons = t.Array(
   t.Object(
     {
-      type: t.Union(SKELETON_TYPES.map((type) => t.Literal(type))),
+      type: t.UnionEnum(SKELETON_TYPES),
       id: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
     },
     { additionalProperties: true }
@@ -155,7 +155,7 @@ const statesFile = t.String({
 const storyRef = t.String({ minLength: 1, maxLength: 1100 });
 
 /** What the person does on an artifact, and its one line in the panel's head. */
-const doesField = t.Union(ARTIFACT_DOES.map((one) => t.Literal(one)));
+const doesField = t.UnionEnum(ARTIFACT_DOES);
 const askField = t.String({ minLength: 1, maxLength: ASK_LIMIT });
 const titleField = t.String({ minLength: 1, maxLength: ARTIFACT_TITLE_LIMIT });
 
@@ -887,9 +887,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           client: t.String({ minLength: 1, maxLength: 100 }),
           revision: t.String({ minLength: 1, maxLength: 100 }),
           ok: t.Boolean(),
-          error: t.Optional(
-            t.Union(SHOWN_FAILURES.map((failure) => t.Literal(failure)))
-          ),
+          error: t.Optional(t.UnionEnum(SHOWN_FAILURES)),
         }),
       },
       ({ params, body }) => {

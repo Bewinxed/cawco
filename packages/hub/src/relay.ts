@@ -1322,7 +1322,7 @@ const attempt = refusalAttempt(RelayRefusal);
 
 /** What a relay is made of, as the owner sends it to preview or make one. */
 const RELAY_FIELDS = t.Object({
-  provider: t.Union(RELAY_PROVIDERS.map((one) => t.Literal(one))),
+  provider: t.UnionEnum(RELAY_PROVIDERS),
   repo: t.Optional(t.Nullable(t.String())),
   connection: t.Optional(t.Nullable(t.String())),
   signatureHeader: t.Optional(t.Nullable(t.String())),
