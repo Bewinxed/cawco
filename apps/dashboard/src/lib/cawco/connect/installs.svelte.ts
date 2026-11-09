@@ -47,6 +47,7 @@ import {
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { currentClientId } from "../client-id";
+import { socketOpen } from "../hub/socket.svelte";
 
 /** The URL's word for the window: an install's id, or the draft's. */
 export const INSTALL_PARAM = "install";
@@ -233,7 +234,7 @@ class Connect {
     try {
       this.take(await hubJson<InstallsRead>(hubRequest("GET /api/installs")));
     } catch {
-      if (globalThis.__cawcoHub?.socket?.readyState !== WebSocket.OPEN) {
+      if (!socketOpen()) {
         return;
       }
       this.#readRetry = setTimeout(() => {

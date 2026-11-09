@@ -17,6 +17,7 @@
     ConfigStore,
     provideConfig,
   } from "#lib/cawco/config/store.svelte.js";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { pageIn, pageOut } from "#lib/platform/motion/route.svelte.js";
   import { store as storeLocally } from "#lib/platform/storage.js";
@@ -51,7 +52,7 @@
   // are read again once it is back.
   let dropped = false;
   $effect(() => {
-    if (cawco.status === "connected" && dropped) {
+    if (connectionStore.status === "connected" && dropped) {
       dropped = false;
       detach(store.fleet.load(), "load");
     }

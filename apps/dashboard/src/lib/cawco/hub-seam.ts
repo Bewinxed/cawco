@@ -11,7 +11,7 @@
 
 import type { HubRequest } from "@cawco/core/hub-request";
 import { getContext, setContext } from "svelte";
-import type { HubState } from "./client.svelte";
+import type { HubState } from "./hub/socket.svelte";
 
 export interface HubSeam {
   /**
