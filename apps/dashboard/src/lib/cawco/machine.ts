@@ -45,14 +45,10 @@ export function signInWarning(
   harness: HarnessKind = "claude"
 ): string | undefined {
   const report = machine.harnesses?.find((one) => one.harness === harness);
-  if (
-    traitsOf(harness).accountModel === "dir" &&
-    report?.installed &&
-    report.authReason
-  ) {
+  if (traitsOf(harness).accountDir && report?.installed && report.authReason) {
     return report.authReason;
   }
-  if (traitsOf(harness).accountModel !== "dir") {
+  if (!traitsOf(harness).accountDir) {
     const said = [
       report?.authReason,
       ...(report?.signInFaults ?? []).map((fault) => fault.words),

@@ -65,9 +65,7 @@ const CATALOG_PROVES_GONE_HARNESSES = harnessesWith(
 );
 
 /** The harnesses whose conversations live in an account's directory. */
-const ACCOUNT_DIR_HARNESSES = harnessesWith(
-  (traits) => traits.accountModel === "dir"
-);
+const ACCOUNT_DIR_HARNESSES = harnessesWith((traits) => traits.accountDir);
 
 /**
  * Statuses a live process can be wrongly filed under: a demotion while its
