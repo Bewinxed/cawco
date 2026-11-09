@@ -71,14 +71,11 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import type { BrowserKey } from "../../../packages/core/src/browser";
-import type {
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../../packages/core/src/hub-request";
+import type { Sending } from "../../../packages/core/src/sending";
 import { askWords } from "../../../packages/core/src/words/asks";
 import { browserAskWords } from "../../../packages/core/src/words/browser";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
+import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { caw } from "../caw-head";
