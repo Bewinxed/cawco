@@ -1,7 +1,7 @@
 /**
  * What a component reads of the hub, through its own tree: the connection's
- * state, as `connectionStore.hub` says it, and a read of the hub's REST, as `hubJson`
- * answers one. A states file provides a stand-in for the hub state it names
+ * state, as `connectionStore.hub` says it, and Eden's client of the hub's
+ * REST. A states file provides a stand-in for the hub state it names
  * (HubStandIn, by a story's decorator): context, not a store, because the
  * canvas draws every frame in one page, and two frames naming two hub
  * states each read their own. The live client's seam is hub-live.ts, which
@@ -9,19 +9,19 @@
  * module imports no store, so a stand-in loads none.
  */
 
-import type { HubRequest } from "@cawco/core/hub-request";
 import { getContext, setContext } from "svelte";
+import type { HubClient } from "#lib/platform/hub.js";
 import type { HubState } from "./hub/socket.svelte";
 
 export interface HubSeam {
+  /** The hub's REST, as Eden's client asks it. */
+  readonly client: HubClient;
   /**
    * Whether a session's machine is offline, said by a states file's
    * stand-in; the live client leaves it out, and a reader takes the
    * session's own row (`isStale`).
    */
   readonly machineOffline?: boolean;
-  /** A read of the hub's REST (core `hubRequest`), its JSON answer or its refusal. */
-  read: <T>(request: HubRequest) => Promise<T>;
   /** The connection to the hub. */
   readonly state: HubState;
 }
