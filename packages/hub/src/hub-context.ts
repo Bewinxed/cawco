@@ -867,6 +867,11 @@ export interface HubContext {
   >;
   readMachineMemory: (machineId: string, set: RouteSet) => Promise<MemoryRead>;
   readMarketplaceSource: (source: string) => Promise<MarketplaceRead>;
+  readSessionProcess: (
+    row: { id: string; machineId: string },
+    method: string,
+    args: unknown[]
+  ) => Promise<Bounded<ControlResult>>;
   readSkillFolder: SkillFolderReader;
   readStoppable: (
     machineId: string,
