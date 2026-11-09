@@ -48,6 +48,9 @@
     "./scripts/lint/no-hand-shell-quote.grit",
     // core's frames.ts holds frame types alone (packages/core/src/frames.ts).
     "./scripts/lint/frames-types-only.grit",
+    // A harness is a table and a facet, never a name
+    // (packages/core/src/harness/traits.ts).
+    "./scripts/lint/no-harness-compare.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.
