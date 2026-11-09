@@ -53,7 +53,6 @@ import { epochOf } from "../board.svelte";
 import {
   type BlockedRequest,
   cawco,
-  type HubState,
   isFailed,
   type ProjectRow,
 } from "../client.svelte";
@@ -61,6 +60,7 @@ import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence, machineSync, syncNotice } from "../convergence";
 import { machineFaults } from "../fleet-faults";
 import { harnessWords, machineBlocksOf } from "../harness-block.svelte";
+import { connectionStore, type HubState } from "../hub/socket.svelte";
 import { hubAuth } from "../hub-auth.svelte";
 import {
   type BoardRow,
@@ -1093,7 +1093,7 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
 
 class Home {
   /** The hub is live: only then can an empty group be believed. */
-  readonly live = $derived(cawco.hub === "connected");
+  readonly live = $derived(connectionStore.hub === "connected");
 
   /**
    * Where the fleet's machines stand, once the hub is live and has listed
@@ -1194,8 +1194,8 @@ class Home {
    * quiet one: live and read, there is no line at all.
    */
   get status(): HubState | "reading" {
-    if (cawco.hub !== "connected") {
-      return cawco.hub;
+    if (connectionStore.hub !== "connected") {
+      return connectionStore.hub;
     }
     return this.#ready ? "connected" : "reading";
   }
@@ -1213,7 +1213,7 @@ class Home {
   constructor() {
     $effect.root(() => {
       $effect(() => {
-        if (cawco.hub !== "connected") {
+        if (connectionStore.hub !== "connected") {
           this.#waitingRead.clear();
           return;
         }
@@ -1241,7 +1241,7 @@ class Home {
       });
       $effect(() => {
         if (
-          cawco.hub === "unreachable" ||
+          connectionStore.hub === "unreachable" ||
           (cawco.fleetRead && cawco.liveRead && cawco.catalogsRead)
         ) {
           this.#ready = true;
@@ -1254,7 +1254,7 @@ class Home {
       // The looks the hub did not take go again as it is connected again:
       // once a connection, never on a mark's own change.
       $effect(() => {
-        if (cawco.hub === "connected") {
+        if (connectionStore.hub === "connected") {
           untrack(sendUnsent);
         }
       });

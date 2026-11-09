@@ -119,6 +119,7 @@
   import type { DraftContent } from "../draft-store";
   import { EFFORT_OPTIONS } from "../effort-levels";
   import { inspectMachine } from "../fleet";
+  import { connectionStore } from "../hub/socket.svelte";
   import { conversationHref } from "../links";
   import MachineAway from "../MachineAway.svelte";
   import { awayWords, MachineWait } from "../machine-wait.svelte";
@@ -838,7 +839,10 @@
     const id = project?.id;
     const target = moveTo;
     const from = moveFrom?.id;
-    if (!(open && key && id && target && from) || cawco.hub !== "connected") {
+    if (
+      !(open && key && id && target && from) ||
+      connectionStore.hub !== "connected"
+    ) {
       return;
     }
     if (untrack(() => moveRead?.for === key)) {
@@ -1039,7 +1043,7 @@
     return spawnWords.form.moveReading(what, there, work, size);
   });
   const reading = $derived.by(() => {
-    if (cawco.hub !== "connected") {
+    if (connectionStore.hub !== "connected") {
       return spawnWords.form.hubUnreachable;
     }
     if (moveTo) {
@@ -1059,7 +1063,7 @@
             offlineMachine
           ) &&
           missingMachines.length &&
-          cawco.hub === "connected"
+          connectionStore.hub === "connected"
         )
   );
   const summarizerEntries = $derived(
@@ -1125,7 +1129,9 @@
   /** The last start failed: the footer shows no check. */
   const startFailed = $derived(failure !== "");
   /** The line under the chips says why Start can't go: it stays on step 2 too. */
-  const readingSaysWhy = $derived(cawco.hub !== "connected" || failure !== "");
+  const readingSaysWhy = $derived(
+    connectionStore.hub !== "connected" || failure !== ""
+  );
   /** A clean start its harness can't make (core `cleanStartRefusal`); null when it can, or none is asked. */
   const cleanRefused = $derived(
     clean && !(forking || continueFrom)
@@ -1139,7 +1145,7 @@
       placementRefusal !== null ||
       modeRefused !== null ||
       modeUnchosen ||
-      cawco.hub !== "connected" ||
+      connectionStore.hub !== "connected" ||
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
       unreadable ||
@@ -2001,7 +2007,7 @@
    * `force`: the form is closing on a press the folder check held.
    */
   async function start(force = false) {
-    if (busy || cawco.hub !== "connected" || heldBack(force)) {
+    if (busy || connectionStore.hub !== "connected" || heldBack(force)) {
       return;
     }
     submission += 1;

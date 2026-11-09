@@ -83,6 +83,7 @@
   import { findIn } from "./find/conversation-find.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
+  import { connectionStore } from "./hub/socket.svelte";
   import { rowHref } from "./links";
   import { minimizedAsks } from "./minimized-asks.svelte";
   import MoveWait from "./move/MoveWait.svelte";
@@ -444,7 +445,7 @@
     // Tracking the connection and the live session's machineId (neither
     // written by the read below) re-runs this the moment it becomes
     // answerable, so the transcript reads back instead of staying empty.
-    track(cawco.status);
+    track(connectionStore.status);
     track(cawco.session(id)?.machineId);
     untrack(() => {
       // What the last read said stands while this pass reads again: a

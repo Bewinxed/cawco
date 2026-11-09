@@ -72,6 +72,7 @@
   import Home from "./home/Home.svelte";
   import HomeRecent from "./home/HomeRecent.svelte";
   import { home, lastAt } from "./home/home-state.svelte";
+  import { connectionStore } from "./hub/socket.svelte";
   import { type BoardRow, rowHref } from "./links";
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
@@ -215,7 +216,7 @@
    * mounts it and its scroll can be put back over them (`scroller`).
    */
   const readSoFar = (): number => {
-    if (cawco.hub === "unreachable") {
+    if (connectionStore.hub === "unreachable") {
       return 3;
     }
     if (!cawco.fleetRead) {
