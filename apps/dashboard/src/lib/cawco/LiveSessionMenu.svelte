@@ -41,7 +41,7 @@
   import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import ContextMenuCopyItem from "./ContextMenuCopyItem.svelte";
-  import { cawco, discardSession, keepSession } from "./client.svelte";
+  import { discardSession, keepSession } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import {
     archive,
@@ -56,6 +56,7 @@
   import { stopOnRow } from "./session-acts.svelte";
   import { sessionName } from "./session-name";
   import { startFork } from "./spawn/new-session.svelte";
+  import { asksStore } from "./stores/asks.svelte";
   import { boardStore } from "./stores/board.svelte";
   import {
     archiveWorkspace,
@@ -93,7 +94,7 @@
   );
   /** Stopping now cuts a turn short: the item says so. */
   const midTurn = $derived(
-    running && cawco.activityOf(instance.id) === "working"
+    running && asksStore.activityOf(instance.id) === "working"
   );
 
   const session = $derived(sessionsStore.session(instance.id) ?? null);

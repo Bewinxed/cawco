@@ -50,7 +50,6 @@ import {
 import { heldOrder } from "#lib/platform/motion/held-order.svelte.js";
 import { unlessSame } from "#lib/platform/unless-same.js";
 import { epochOf } from "../board.svelte";
-import { cawco } from "../client.svelte";
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
 import { buildConvergence, machineSync, syncNotice } from "../convergence";
 import { machineFaults } from "../fleet-faults";
@@ -79,6 +78,7 @@ import { sameRow } from "../same-row";
 import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
+import { asksStore } from "../stores/asks.svelte";
 import { boardStore, isFailed } from "../stores/board.svelte";
 import { catalogStore } from "../stores/catalog.svelte";
 import { mcpServersStore } from "../stores/mcp-servers.svelte";
@@ -975,7 +975,9 @@ function endedAt(row: BoardRow): number | undefined {
   if (end === undefined) {
     return;
   }
-  return isFailed(row) || cawco.activityOf(row.id) === "idle" ? end : undefined;
+  return isFailed(row) || asksStore.activityOf(row.id) === "idle"
+    ? end
+    : undefined;
 }
 
 /**
@@ -1167,7 +1169,7 @@ class Home {
         doing: (id) =>
           boardStore.instanceIndex.byId.get(id)?.status === "starting"
             ? "working"
-            : cawco.activityOf(id),
+            : asksStore.activityOf(id),
         childrenOf: (id) => this.#children.get(id) ?? [],
       }) === null
     );
@@ -1303,7 +1305,7 @@ class Home {
   );
 
   readonly needs = $derived.by<NeedsItem[]>(() => {
-    const asks: NeedsItem[] = cawco.blocked.map((item) => {
+    const asks: NeedsItem[] = asksStore.blocked.map((item) => {
       const row = boardStore.instanceIndex.byId.get(item.instanceId);
       const questions = questionsOf(item.request.toolName, item.request.input);
       // An ask no session row stands behind (a memory proposal) is titled
@@ -1812,7 +1814,7 @@ class Home {
     const shown = new Set([
       ...this.workingListed.map((row) => row.id),
       ...this.finishedListed.map((row) => row.id),
-      ...cawco.blocked.map((item) => item.instanceId),
+      ...asksStore.blocked.map((item) => item.instanceId),
     ]);
     const rows = this.#standing.filter((row) => !shown.has(row.id));
     // What the Delegates switch means in every home list (WorkTabs
@@ -1960,7 +1962,7 @@ function listedIn(all: BoardRow[]): BoardRow[] {
  */
 function workingNow(): BoardRow[] {
   const rows = boardStore.runningInstances.filter(
-    (row) => cawco.activityOf(row.id) === "working"
+    (row) => asksStore.activityOf(row.id) === "working"
   );
   // Ordered by when each joined Working this stint, newest first: a key
   // that never moves while it works, so two agents trading turns never

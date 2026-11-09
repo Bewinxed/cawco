@@ -15,9 +15,9 @@ import { machineLabel } from "@cawco/core/machine-names";
 import { unhandled } from "@cawco/core/unhandled";
 import type { UsageSummaryRow } from "@cawco/core/usage/types";
 import { accountsWords } from "@cawco/core/words/accounts";
-import { cawco } from "./client.svelte";
 import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
+import { asksStore } from "./stores/asks.svelte";
 import { boardStore, isFailed } from "./stores/board.svelte";
 import { catalogStore } from "./stores/catalog.svelte";
 import {
@@ -37,7 +37,7 @@ function stateOf(id: string, failed: boolean): string {
   if (failed) {
     return "Failed";
   }
-  switch (cawco.activityOf(id)) {
+  switch (asksStore.activityOf(id)) {
     case "blocked":
       return "Needs you";
     case "working":
