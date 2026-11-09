@@ -3,6 +3,7 @@ import type { NeutralMessage } from "@cawco/core/session-messages";
 import { getToolGlance } from "@cawco/core/transcript-rules";
 import type { FrameSink } from "./frame-sink";
 import type { Harness, HarnessSession } from "./harness";
+import { gaugeTables } from "./memory";
 
 /** What the live sessions read of the supervisor around them, and where their pulses go. */
 export interface LiveHost {
@@ -26,7 +27,7 @@ export interface LiveHost {
  *   a carry, a move's stop, a relaunch, a credential not proved after an
  *   attach, a refusal for good), so it is marked ending as it is dropped,
  *   and its closing, on whatever signal, is that end's to say
- *   ({@link LiveSessions.ending}). A sleep and a stop mark it themselves
+ *   ({@link LiveSessions.stopsHere}). A sleep and a stop mark it themselves
  *   before they stop it; a process gone on its own (`died`, `closed`), one
  *   whose input its keeper refused, and a detach mark nothing.
  * - `stopping`: a stop of a process that waits for the turn it interrupts.
@@ -53,6 +54,11 @@ export class LiveSessions {
 
   constructor(host: LiveHost) {
     this.#host = host;
+    gaugeTables("supervisor", {
+      sessions: this.#table,
+      activeAt: this.#activeAt,
+      pulseAt: this.#pulseAt,
+    });
   }
 
   readonly #table = new Map<string, HarnessSession>();
@@ -72,36 +78,103 @@ export class LiveSessions {
    * turn starting or ending, every ask parked or settled and every send, and
    * by each sweep that finds the session not at rest.
    */
-  readonly activeAt = new Map<string, number>();
+  readonly #activeAt = new Map<string, number>();
+
+  /** When `instanceId` was last seen doing, or holding, anything; nothing once it is dropped. */
+  lastActive(instanceId: string): number | undefined {
+    return this.#activeAt.get(instanceId);
+  }
+
+  /** `instanceId` was last seen doing something `at`, epoch ms: its rest is counted from then. */
+  activeAt(instanceId: string, at: number): void {
+    this.#activeAt.set(instanceId, at);
+  }
   /**
    * Sessions this daemon is stopping itself (a sleep, a stop, a relaunch, a
    * move's carry): their process closing, on whatever signal or exit, is
    * that stop's to say, never a failure and never a process going away on
    * its own.
    */
-  readonly ending = new WeakSet<HarnessSession>();
+  readonly #ending = new WeakSet<HarnessSession>();
+
+  /** This daemon ends `session`'s process itself: its closing is that stop's to say. */
+  stopsHere(session: HarnessSession): void {
+    this.#ending.add(session);
+  }
+
+  /** Whether this daemon is ending `session`'s process itself ({@link stopsHere}). */
+  stoppedHere(session: HarnessSession): boolean {
+    return this.#ending.has(session);
+  }
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
-  readonly busy = new Set<string>();
+  readonly #busy = new Set<string>();
+
+  /** Whether `instanceId` has a turn in flight. */
+  turnRunning(instanceId: string): boolean {
+    return this.#busy.has(instanceId);
+  }
+
+  /** The instances with a turn in flight now. */
+  turnsRunning(): string[] {
+    return [...this.#busy];
+  }
+
+  /** `instanceId`'s turn is in flight: a `send` started one, or a reattach found one running. */
+  turnStarted(instanceId: string): void {
+    this.#busy.add(instanceId);
+  }
+
+  /** `instanceId`'s turn ended. Whether it had one in flight. */
+  turnEnded(instanceId: string): boolean {
+    return this.#busy.delete(instanceId);
+  }
   /**
    * Per-instance pulse, folded from the frames already passing through (Part 2
    * of per-instance subscription). Only the parts a rail needs without frames:
    * the tool in flight, the parked-permission count, and the running-subagent
-   * task ids. `busy` reuses {@link busy}; the pulse is rebuilt on emit.
+   * task ids. `busy` reuses {@link #busy}; the pulse is rebuilt on emit.
    */
-  readonly pulseTool = new Map<
+  readonly #pulseTool = new Map<
     string,
     { name: string; glance: string; toolId: string }
   >();
-  readonly pulseBlocked = new Map<string, number>();
-  readonly pulseSubagents = new Map<string, Set<string>>();
+  readonly #pulseBlocked = new Map<string, number>();
+  readonly #pulseSubagents = new Map<string, Set<string>>();
   /** Last emit per instance — the 1/sec throttle — and its trailing-edge timer. */
-  readonly pulseAt = new Map<string, number>();
-  readonly pulseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  readonly #pulseAt = new Map<string, number>();
+  readonly #pulseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /** How many subagents `instanceId` has running now. */
+  subagentsRunning(instanceId: string): number {
+    return this.#pulseSubagents.get(instanceId)?.size ?? 0;
+  }
+
+  /** `instanceId` parked a permission: it did something, and its pulse is blocked until it is settled. */
+  permissionParked(instanceId: string): void {
+    this.touch(instanceId);
+    this.#pulseBlocked.set(
+      instanceId,
+      (this.#pulseBlocked.get(instanceId) ?? 0) + 1
+    );
+    this.emitPulse(instanceId, true);
+  }
+
+  /** One of `instanceId`'s asks or permissions is settled: it did something, and is blocked by one fewer. */
+  askSettled(instanceId: string): void {
+    this.touch(instanceId);
+    const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
+    if (left === 0) {
+      this.#pulseBlocked.delete(instanceId);
+    } else {
+      this.#pulseBlocked.set(instanceId, left);
+    }
+    this.emitPulse(instanceId, true);
+  }
   /** The pulse as it stands, computed from the parts rather than stored. */
   #buildPulse(instanceId: string): SessionPulse {
-    const blocked = (this.pulseBlocked.get(instanceId) ?? 0) > 0;
-    const busy = this.busy.has(instanceId);
-    const running = this.pulseSubagents.get(instanceId)?.size ?? 0;
+    const blocked = (this.#pulseBlocked.get(instanceId) ?? 0) > 0;
+    const busy = this.#busy.has(instanceId);
+    const running = this.#pulseSubagents.get(instanceId)?.size ?? 0;
     const activity = ((): SessionPulse["activity"] => {
       if (blocked) {
         return "blocked";
@@ -112,7 +185,7 @@ export class LiveSessions {
       instanceId,
       busy,
       activity,
-      currentTool: this.pulseTool.get(instanceId) ?? null,
+      currentTool: this.#pulseTool.get(instanceId) ?? null,
       runningSubagents: running,
       at: Date.now(),
     };
@@ -135,14 +208,14 @@ export class LiveSessions {
       return;
     }
     const now = Date.now();
-    const last = this.pulseAt.get(instanceId) ?? 0;
+    const last = this.#pulseAt.get(instanceId) ?? 0;
     const sendNow = () => {
-      const timer = this.pulseTimers.get(instanceId);
+      const timer = this.#pulseTimers.get(instanceId);
       if (timer) {
         clearTimeout(timer);
       }
-      this.pulseTimers.delete(instanceId);
-      this.pulseAt.set(instanceId, Date.now());
+      this.#pulseTimers.delete(instanceId);
+      this.#pulseAt.set(instanceId, Date.now());
       this.#host.sink({
         kind: "pulse",
         instanceId,
@@ -151,16 +224,16 @@ export class LiveSessions {
     };
     if (important || now - last >= PULSE_THROTTLE_MS) {
       sendNow();
-    } else if (!this.pulseTimers.has(instanceId)) {
-      this.pulseTimers.set(
+    } else if (!this.#pulseTimers.has(instanceId)) {
+      this.#pulseTimers.set(
         instanceId,
         setTimeout(
           () => {
-            this.pulseTimers.delete(instanceId);
+            this.#pulseTimers.delete(instanceId);
             if (!this.#speaksFor(instanceId)) {
               return;
             }
-            this.pulseAt.set(instanceId, Date.now());
+            this.#pulseAt.set(instanceId, Date.now());
             this.#host.sink({
               kind: "pulse",
               instanceId,
@@ -175,7 +248,7 @@ export class LiveSessions {
   /** A carried session did something: its rest is counted from now. */
   touch(instanceId: string): void {
     if (this.sessions.has(instanceId)) {
-      this.activeAt.set(instanceId, Date.now());
+      this.#activeAt.set(instanceId, Date.now());
     }
   }
   /**
@@ -197,7 +270,7 @@ export class LiveSessions {
         if (block.type !== "tool_use") {
           continue;
         }
-        this.pulseTool.set(instanceId, {
+        this.#pulseTool.set(instanceId, {
           name: block.name,
           glance: getToolGlance(block.input as Record<string, unknown>),
           toolId: block.id,
@@ -216,14 +289,14 @@ export class LiveSessions {
         if (block.type !== "tool_result") {
           continue;
         }
-        this.pulseTool.delete(instanceId);
+        this.#pulseTool.delete(instanceId);
         this.emitPulse(instanceId, false);
         return;
       }
       return;
     }
     if (message.type === "result") {
-      this.pulseTool.delete(instanceId);
+      this.#pulseTool.delete(instanceId);
       this.emitPulse(instanceId, false);
       return;
     }
@@ -231,12 +304,12 @@ export class LiveSessions {
     if (!change) {
       return;
     }
-    const running = this.pulseSubagents.get(instanceId);
+    const running = this.#pulseSubagents.get(instanceId);
     if (change.kind === "started") {
       if (running) {
         running.add(change.taskId);
       } else {
-        this.pulseSubagents.set(instanceId, new Set([change.taskId]));
+        this.#pulseSubagents.set(instanceId, new Set([change.taskId]));
       }
       this.emitPulse(instanceId, false);
     } else if (running?.has(change.taskId)) {
@@ -265,24 +338,24 @@ export class LiveSessions {
     this.#table.delete(instanceId);
     this.#forget(instanceId);
     if ("ended" in how) {
-      this.ending.add(how.ended);
+      this.stopsHere(how.ended);
     }
     return undefined;
   }
 
   /** Every trace of a session's pulse, and what the supervisor held of its process. */
   #forget(instanceId: string): void {
-    this.busy.delete(instanceId);
-    this.activeAt.delete(instanceId);
-    this.pulseTool.delete(instanceId);
-    this.pulseBlocked.delete(instanceId);
-    this.pulseSubagents.delete(instanceId);
-    this.pulseAt.delete(instanceId);
-    const timer = this.pulseTimers.get(instanceId);
+    this.#busy.delete(instanceId);
+    this.#activeAt.delete(instanceId);
+    this.#pulseTool.delete(instanceId);
+    this.#pulseBlocked.delete(instanceId);
+    this.#pulseSubagents.delete(instanceId);
+    this.#pulseAt.delete(instanceId);
+    const timer = this.#pulseTimers.get(instanceId);
     if (timer) {
       clearTimeout(timer);
     }
-    this.pulseTimers.delete(instanceId);
+    this.#pulseTimers.delete(instanceId);
     this.#host.forget(instanceId);
   }
 }
