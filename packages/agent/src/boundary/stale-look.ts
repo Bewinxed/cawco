@@ -42,14 +42,13 @@ import {
   type Held,
   isStarting,
   keepers,
-  markStarting,
   readHeld,
   readRetiring,
   retiringFileOf,
   running,
   sessiond,
-  startEnded,
   type UnaskedCalls,
+  withStart,
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
 
@@ -190,8 +189,7 @@ const restartStubbed = async (unasked: UnaskedCalls): Promise<void> => {
         );
         // Its failure is said below; an ensure awaiting it gets it too.
         runs.catch(() => undefined);
-        markStarting(ref.id, runs);
-        const tried = await restart.finally(() => startEnded(ref.id));
+        const tried = await withStart(ref.id, runs, restart);
         if ("kept" in tried) {
           noteStubbedCommands(entry, tried.kept.commands);
         }
