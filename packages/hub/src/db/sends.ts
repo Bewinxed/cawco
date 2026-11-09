@@ -61,6 +61,12 @@ export interface SendsDb {
   };
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
+  /**
+   * Runs the one-time migration `name` over every stored send, in one
+   * transaction, unless it has run (`data_migrations`): `rewrite` answers a
+   * send's message as it is to be kept, or null to leave it as it is. How
+   * many sends it changed; null when it had run already.
+   */
   readonly migrateSendsOnce: (
     name: string,
     rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null

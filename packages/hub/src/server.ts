@@ -813,6 +813,7 @@ import type {
 } from "./db/instances";
 import { listedAt } from "./db/instances";
 import type { AgentAuth } from "./db/machines";
+import { SPLIT_CONTINUATIONS, TAG_MARKERS } from "./db/migration-names";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
@@ -831,7 +832,7 @@ import type {
   SendHold,
   StoredSendRefusal,
 } from "./db/stored-types";
-import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
+import { tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
 import { decidesRoutes, type HarnessOffer } from "./decides";
@@ -1488,9 +1489,6 @@ const foldFormerSessions = (db: DbShape): string[] => {
   }
   return folded.flatMap((one) => one.owedAgain);
 };
-
-/** The once-run repair below, by its name in `data_migrations`. */
-const SPLIT_CONTINUATIONS = "split_continuations:2026-11-05";
 
 /**
  * Once, at start, before any machine is heard: each continuation a hub
