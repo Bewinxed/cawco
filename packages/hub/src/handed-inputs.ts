@@ -48,8 +48,11 @@ export interface HandedInputDeps {
   artifacts: Pick<Artifacts, "commentRead" | "handed">;
   /** A session's attachments, newest first (server.ts `sessionAttachments`); throws in words when its transcript can't be read. */
   attachments: (instanceId: string) => Promise<SessionAttachment[]>;
-  /** The turns around a `find` hit, as `find` answers them detailed (find-tool.ts): the hub's whole record. */
-  find: (actor: InstanceRow, input: { around: string }) => Promise<unknown>;
+  /** The turns around a `find` hit, as `find` answers them detailed (find-tool.ts): the hub's whole record; or why it gave none, in its words. */
+  find: (
+    actor: InstanceRow,
+    input: { around: string }
+  ) => Promise<{ turns: unknown } | { why: string }>;
   /** Every file at any depth under a folder of a project's folder, by path from its root; none when it is not there. */
   folderFiles: (projectId: string, dir: string) => Promise<string[]>;
   instance: (id: string) => InstanceRow | undefined;
@@ -253,19 +256,21 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     caller: InstanceRow,
     ref: string
   ): Promise<HandedFile[]> => {
-    let turns: unknown;
-    try {
-      turns = await deps.find(caller, { around: ref });
-    } catch (error) {
-      throw new HandedInputRefusal(
-        `{ find: "${ref}" }: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error }
-      );
+    const found = await deps
+      .find(caller, { around: ref })
+      .catch((error: unknown): never => {
+        throw new HandedInputRefusal(
+          `{ find: "${ref}" }: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error }
+        );
+      });
+    if ("why" in found) {
+      throw new HandedInputRefusal(`{ find: "${ref}" }: ${found.why}`);
     }
     return [
       {
         name: `find-${inputFileName(ref)}.json`,
-        bytes: Buffer.from(`${JSON.stringify(turns, null, 2)}\n`),
+        bytes: Buffer.from(`${JSON.stringify(found.turns, null, 2)}\n`),
         from: `the turns around find ref ${ref}`,
       },
     ];

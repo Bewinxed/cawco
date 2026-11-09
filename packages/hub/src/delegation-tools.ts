@@ -24,6 +24,7 @@ import { NO_REPLY_OWED, NO_REPLY_TOOL } from "@cawco/core/no-reply";
 import { REFERENCE_GUIDANCE } from "@cawco/core/references";
 import type { DesignMap } from "@cawco/core/stage";
 import { kindsLine } from "@cawco/core/words/decides-lines";
+import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import type {
   ArtifactList,
@@ -586,15 +587,20 @@ export function handoffTools(view: ToolView): McpToolOn<HandoffOn>[] {
           .describe(`Default ${SESSION_LIST_LIMIT}, max ${SESSION_LIST_MAX}.`),
         cursor: z.string().optional().describe("next_cursor."),
       },
-      ({ role, stopped, sort, since, limit, cursor }, _format, bound) =>
-        bound.actions.listSessions({
+      async ({ role, stopped, sort, since, limit, cursor }, _format, bound) => {
+        const offset = decodeCursor(cursor);
+        if (offset instanceof ElysiaStatus) {
+          return offset;
+        }
+        return await bound.actions.listSessions({
           role: role ?? "all",
           sort: sort ?? "active",
           limit: limit ?? SESSION_LIST_LIMIT,
-          offset: decodeCursor(cursor),
+          offset,
           ...(stopped ? { stopped } : {}),
           ...(since ? { since: dayStart(since) } : {}),
-        }),
+        });
+      },
       sessionListWords,
       { annotations: READ_ONLY }
     ),
