@@ -10,9 +10,9 @@ import { projectOrigin } from "../db/previews";
 import type { HubContext } from "../hub-context";
 import { PlaceRefusal } from "../place-refusal";
 import { DeleteRefusal } from "../project-delete";
-import { FolderRefusal } from "../project-folder";
 import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
+import { ProjectRefusal } from "../project-refusal";
 import { RestoreRefusal } from "../project-trash";
 import { refusal, schemaRefusal } from "../refusal";
 import { LANDS } from "../tasks";
@@ -119,12 +119,12 @@ export const projectRoutes = ({
               }
             : {}),
         }).catch((error: unknown) => {
-          if (error instanceof FolderRefusal && error.status === 400) {
+          if (error instanceof ProjectRefusal && error.status === 400) {
             return error;
           }
           throw error;
         });
-        if (made instanceof FolderRefusal) {
+        if (made instanceof ProjectRefusal) {
           return refusal(400, "project-not-made", made.message);
         }
         return {
@@ -375,7 +375,7 @@ export const projectRoutes = ({
         } catch (error) {
           if (
             error instanceof RestoreRefusal ||
-            error instanceof FolderRefusal
+            error instanceof ProjectRefusal
           ) {
             console.log(
               `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=refused status=${error.status}: ${error.message}`

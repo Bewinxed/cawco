@@ -49,6 +49,7 @@
  * person's own edits are theirs, never proposals; Caw's folder_write refuses
  * design/ (memory.ts `personsTier`).
  */
+
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
@@ -66,6 +67,7 @@ import {
   buildTokens,
 } from "@cawco/design-tokens/design-tokens";
 import { tokensIn } from "@cawco/design-tokens/dtcg-resolver";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
@@ -74,13 +76,12 @@ import { boardTitle } from "./labels";
 import { machineName } from "./machine-name";
 import {
   FOLDER_FILE_LIMIT,
-  FolderRefusal,
   folderContent,
-  projectRoot,
   readFolderBytes,
   writeFolderFiles,
   YOU,
 } from "./project-folder";
+import { projectRefusalOf, projectRootOf } from "./project-refusal";
 import { appliesNow } from "./proposal-base";
 import { isLive } from "./work-item-state";
 import { isHostFolder } from "./workspaces";
@@ -350,17 +351,15 @@ const incomingFiles = (files: DesignFile[]): Map<string, Uint8Array> => {
       problems.push(named.problem);
       continue;
     }
-    try {
-      const body = folderContent(file.content, file.encoding);
-      incoming.set(
-        named.path,
-        typeof body === "string" ? encoder.encode(body) : body
-      );
-    } catch (error) {
-      problems.push(
-        `${named.path}: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const body = folderContent(file.content, file.encoding);
+    if (body instanceof ElysiaStatus) {
+      problems.push(`${named.path}: ${body.response.detail}`);
+      continue;
     }
+    incoming.set(
+      named.path,
+      typeof body === "string" ? encoder.encode(body) : body
+    );
   }
   if (problems.length > 0) {
     throw new Error(`Nothing was written. ${problems.join(" ")}`);
@@ -641,7 +640,7 @@ const appliesAt = async (
   const encodings = new Map(
     files.map((file) => [inDesign(file.path), file.encoding] as const)
   );
-  const applies = await appliesNow(
+  const applies = await appliesNow<never>(
     files.map((file) => ({
       path: inDesign(file.path),
       before: file.before ?? "",
@@ -910,7 +909,7 @@ const folderStore = (
   session: string,
   message = "design: write the design system"
 ): DesignStore => ({
-  where: `${projectRoot(projectId)}/${DESIGN_DIR}`,
+  where: `${projectRootOf(projectId)}/${DESIGN_DIR}`,
   theirs: () => {
     const read = Bun.spawnSync(
       [
@@ -922,7 +921,7 @@ const folderStore = (
         "--",
         `${DESIGN_DIR}/${MANIFEST}`,
       ],
-      { cwd: projectRoot(projectId), env: { ...process.env, ...GIT_LOCALE } }
+      { cwd: projectRootOf(projectId), env: { ...process.env, ...GIT_LOCALE } }
     );
     if (read.exitCode !== 0) {
       // A folder git has no history for yet holds no system.
@@ -940,7 +939,7 @@ const folderStore = (
   commit: () =>
     Promise.resolve(
       Bun.spawnSync(
-        ["git", "-C", projectRoot(projectId), "rev-parse", "HEAD"],
+        ["git", "-C", projectRootOf(projectId), "rev-parse", "HEAD"],
         {
           env: { ...process.env, ...GIT_LOCALE },
         }
@@ -952,33 +951,36 @@ const folderStore = (
     new Map(
       await Promise.all(
         paths.map(async (path): Promise<[string, Uint8Array | null]> => {
-          try {
-            const file = await readFolderBytes(
-              projectId,
-              `${DESIGN_DIR}/${path}`,
-              FOLDER_FILE_LIMIT
-            );
-            return [path, file.bytes];
-          } catch (error) {
-            if (error instanceof FolderRefusal && error.status === 404) {
+          const file = await readFolderBytes(
+            projectId,
+            `${DESIGN_DIR}/${path}`,
+            FOLDER_FILE_LIMIT
+          );
+          if (file instanceof ElysiaStatus) {
+            if (file.status === 404) {
               return [path, null];
             }
-            throw error;
+            throw projectRefusalOf(file);
           }
+          return [path, file.bytes];
         })
       )
     ),
   source: async (raw) => {
-    const path = insideRoot(projectRoot(projectId), raw);
+    const path = insideRoot(projectRootOf(projectId), raw);
     if (!path) {
       throw new Error(
         `from ${raw} is not inside the project's folder: name a file in it.`
       );
     }
-    return (await readFolderBytes(projectId, path, FOLDER_FILE_LIMIT)).bytes;
+    const file = await readFolderBytes(projectId, path, FOLDER_FILE_LIMIT);
+    if (file instanceof ElysiaStatus) {
+      throw projectRefusalOf(file);
+    }
+    return file.bytes;
   },
   write: async (files) => {
-    await writeFolderFiles(
+    const written = await writeFolderFiles(
       projectId,
       files.map((file) => ({
         path: `${DESIGN_DIR}/${file.path}`,
@@ -989,6 +991,9 @@ const folderStore = (
         message: `${message}\n\n${SESSION_TRAILER}: ${session}`,
       }
     );
+    if (written instanceof ElysiaStatus) {
+      throw projectRefusalOf(written);
+    }
     changed(projectId);
   },
 });
@@ -1191,7 +1196,7 @@ export const createDesignSystem = (deps: {
     if (!(await deps.designTask(projectId, taskId))) {
       return;
     }
-    const folder = projectRoot(projectId);
+    const folder = projectRootOf(projectId);
     if (existsSync(join(folder, DESIGN_DIR))) {
       const read = Bun.spawnSync(
         [
@@ -1249,7 +1254,7 @@ export const createDesignSystem = (deps: {
         "A design system belongs to a project; this session is in none."
       );
     }
-    const folder = projectRoot(actor.projectId);
+    const folder = projectRootOf(actor.projectId);
     if (
       actor.machineId === (await deps.ownMachineId) &&
       (actor.cwd === folder || actor.cwd.startsWith(`${folder}/`))
