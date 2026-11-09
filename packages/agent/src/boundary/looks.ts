@@ -20,7 +20,7 @@ import { closeGitDoor } from "../hub-git";
 import type { HeldProc } from "../keepers";
 import { isBoundaryOf, isJudgeOf, judgeProcId } from "../proc-id";
 import { closeToolDoor } from "../tool-door";
-import { armState, ensureBoundary, rearming } from "./arming";
+import { allArming, armingOf, armPhase, ensureBoundary } from "./arming";
 import {
   behindGate,
   decided,
@@ -509,10 +509,10 @@ const sweepQuiet = async (): Promise<void> => {
  * one per `from` cut of held workspace bb4af2c9).
  */
 const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
-  if (armState.arming.kind !== "listed") {
+  if (armPhase().kind !== "listed") {
     return;
   }
-  await Promise.all(rearming.values());
+  await Promise.all(allArming());
   const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
   if (ids.length === 0) {
     return;
@@ -582,7 +582,7 @@ const repairJudge = async (
   let started = "its judge was started again";
   try {
     await ensureNow(ref);
-    await rearming.get(ref.id);
+    await armingOf(ref.id);
   } catch (error) {
     started = `its boundary could not be started again (${error instanceof Error ? error.message : String(error)})`;
   }
