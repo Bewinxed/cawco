@@ -12,6 +12,7 @@
  */
 
 import { HOUR_MS } from "../time";
+import { harnessWords } from "../words/harness";
 import { HARNESSES, type HarnessKind, harnessNamed } from "./kinds";
 
 export interface HarnessTraits {
@@ -31,8 +32,12 @@ export interface HarnessTraits {
    * sessions (hub db `settleInstances`).
    */
   readonly catalogProvesGone: boolean;
-  /** Whether a session can start clean: none of the machine's fleet content. A harness that can't is refused, never started half clean. */
-  readonly cleanStart: boolean;
+  /**
+   * Why a session of it can't start clean (none of the machine's fleet
+   * content), in the words it is refused with; null when one can. A harness
+   * that can't is refused, never started half clean.
+   */
+  readonly cleanStartRefused: string | null;
   /** Whether the hub runs the compaction after an at-limit move (`compactBy`), rather than the harness's own CLI. */
   readonly compactedByHub: boolean;
   /**
@@ -121,7 +126,7 @@ const CLAUDE_TRAITS = {
   accountDir: true,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: true,
-  cleanStart: true,
+  cleanStartRefused: null,
   compactedByHub: false,
   contextWindow: "hub",
   costMeaning: "estimated",
@@ -147,7 +152,7 @@ const OPENCODE_TRAITS = {
   accountDir: false,
   boundaryBeforeCompactionFailure: true,
   catalogProvesGone: false,
-  cleanStart: false,
+  cleanStartRefused: harnessWords.openCodeNotClean,
   compactedByHub: true,
   contextWindow: "catalog",
   costMeaning: "real",
@@ -173,7 +178,7 @@ const PI_TRAITS = {
   accountDir: false,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: false,
-  cleanStart: true,
+  cleanStartRefused: null,
   compactedByHub: true,
   contextWindow: "catalog",
   costMeaning: "real",
@@ -212,7 +217,7 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   accountDir: false,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: false,
-  cleanStart: true,
+  cleanStartRefused: null,
   compactedByHub: false,
   contextWindow: "catalog",
   costMeaning: "real",
