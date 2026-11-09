@@ -1,7 +1,9 @@
 <script lang="ts">
-  import type { HookDraft, HookEvent, HookHandler } from "@cawco/core/hooks";
   import {
     HOOK_EVENTS,
+    type HookDraft,
+    type HookEvent,
+    type HookHandler,
     hookEventInfo,
     hookProblem,
     hookTakesMatcher,
@@ -30,7 +32,7 @@
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
-  import { cawco, type Machine } from "../../client.svelte";
+  import { cawco } from "../../client.svelte";
   import { adoptHook, peekHook, pushHook } from "../../fleet";
   import { causeOf } from "../../fleet-faults";
   import HookTester from "../../HookTester.svelte";
@@ -46,6 +48,7 @@
   } from "../../hooks";
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
+  import { boardStore, type Machine } from "../../stores/board.svelte";
   import Choice from "../Choice.svelte";
   import { deleteHook } from "../deletes";
   import { keepDraft, sameFields } from "../drafts.svelte";
@@ -261,13 +264,13 @@
    */
   const reach = $derived.by(() => {
     if (!scoped) {
-      return cawco.machines;
+      return boardStore.machines;
     }
     const project = cawco.projects.find(
       (candidate) => candidate.id === draft.projectId
     );
     const on = new Set(project?.places.map((place) => place.machineId) ?? []);
-    return cawco.machines.filter((machine) => on.has(machine.machineId));
+    return boardStore.machines.filter((machine) => on.has(machine.machineId));
   });
   const reachCount = $derived(
     `${reach.length} machine${reach.length === 1 ? "" : "s"}`
@@ -310,7 +313,7 @@
   // ── per machine ──────────────────────────────────────────────────────
   // A machine only ever gives back the script CawCo wrote it, so one edited
   // on the machine itself waits here until it is adopted or overwritten.
-  const machines = $derived(orderMachines(cawco.machines));
+  const machines = $derived(orderMachines(boardStore.machines));
   const copies = new MachineCopies();
 
   const stateOn = (machine: Machine) =>
@@ -394,7 +397,7 @@
     {#if id}
       <RolloutChip
         kind="hooks"
-        machines={cawco.machines}
+        machines={boardStore.machines}
         name={id}
         what={draft.name || "This hook"}
       />
