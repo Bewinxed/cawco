@@ -5,7 +5,7 @@ import type {
   HookVersion as KeptHookVersion,
 } from "@cawco/core/hooks";
 import { hubRequest } from "@cawco/core/hub-request";
-import { hubCall } from "#lib/platform/hub-read.js";
+import { couldNotOrAway, hubJson } from "#lib/platform/hub-read.js";
 import type { Machine } from "./client.svelte";
 
 /**
@@ -42,7 +42,7 @@ export const hooksOf = (machine: Machine): HookFleetReport | undefined =>
  *  draft leaves empty goes as `null`, which clears it; an absent one would keep
  *  the stored value. */
 export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
-  hubCall<FleetHook>(
+  hubJson<FleetHook>(
     hubRequest("PUT /api/fleet/hooks/:id", {
       path: { id },
       body: {
@@ -56,30 +56,30 @@ export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
         projectId: draft.projectId ?? null,
       },
     }),
-    `save ${draft.name || "the hook"}`
+    { failure: couldNotOrAway(`save ${draft.name || "the hook"}`) }
   );
 
 /** Deletes a hook everywhere, into the hub's trash for its Undo (config/undo.ts). */
 export const removeHook = (id: string, name: string): Promise<Deleted> =>
-  hubCall<Deleted>(
+  hubJson<Deleted>(
     hubRequest("DELETE /api/fleet/hooks/:id", { path: { id } }),
-    `delete ${name}`
+    { failure: couldNotOrAway(`delete ${name}`) }
   );
 
 /** What this hook used to be, newest first — the hub keeps a version on every
  *  save or delete over one that already existed. */
 export const loadHookVersions = (hookId: string): Promise<HookVersion[]> =>
-  hubCall<HookVersion[]>(
+  hubJson<HookVersion[]>(
     hubRequest("GET /api/fleet/hooks/history", { query: { hookId } }),
-    "load this hook’s history"
+    { failure: couldNotOrAway("load this hook’s history") }
   );
 
 /** Writes a past version back as the current one — through the same save door,
  *  so restoring keeps what it replaces, same as any other edit. */
 export const restoreHookVersion = (versionId: number): Promise<FleetHook> =>
-  hubCall<FleetHook>(
+  hubJson<FleetHook>(
     hubRequest("POST /api/fleet/hooks/restore", { body: { id: versionId } }),
-    "restore that version"
+    { failure: couldNotOrAway("restore that version") }
   );
 
 /** A blank hook, on the defaults that make the common case one field of typing. */
