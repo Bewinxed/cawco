@@ -233,6 +233,7 @@ empty-catch		packages/agent/src/first-session.ts	1
 empty-catch		packages/agent/src/fleet-mcp-listing.ts	1
 empty-catch		packages/agent/src/forges/cli-config.ts	1
 empty-catch		packages/agent/src/forges/gitea.ts	3
+empty-catch		packages/agent/src/git/lfs.ts	1
 empty-catch		packages/agent/src/harnesses/claude-stored-run.ts	1
 empty-catch		packages/agent/src/harnesses/claude.ts	2
 empty-catch		packages/agent/src/harnesses/opencode.ts	2
@@ -241,7 +242,6 @@ empty-catch		packages/agent/src/image-providers/antigravity.ts	1
 empty-catch		packages/agent/src/image-providers/chatgpt.ts	1
 empty-catch		packages/agent/src/layer.ts	3
 empty-catch		packages/agent/src/mcp-host.ts	3
-empty-catch		packages/agent/src/move.ts	1
 empty-catch		packages/agent/src/preview-bridge.ts	1
 empty-catch		packages/agent/src/preview.ts	2
 empty-catch		packages/agent/src/session-containers.ts	1
