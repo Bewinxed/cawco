@@ -9,6 +9,10 @@ import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeCapabilities } from "@cawco/agent/capabilities";
 import {
+  requireLinger,
+  systemdActive,
+} from "@cawco/agent/service-manager/install";
+import {
   type BinaryInstallation,
   binaryRoot,
   currentDirectory,
@@ -39,13 +43,7 @@ import { systemProgram } from "@cawco/core/workspace-needs";
 import { askYes, closeAsking } from "./ask";
 import { awaitJoined } from "./await-joined";
 import { keepJoinedHub } from "./joined-hub";
-import {
-  awaitFirstMachineReady,
-  dashboardUrl,
-  requireLinger,
-  service,
-  systemdActive,
-} from "./service";
+import { awaitFirstMachineReady, dashboardUrl, service } from "./service";
 
 /** Tools offered at install: what CawCo uses, none of it required to start. */
 const OFFERED = ["git", ...HARNESSES] as const;
