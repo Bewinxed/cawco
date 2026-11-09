@@ -438,7 +438,7 @@ export const createAdmission = (db: DbShape) => {
   /**
    * A move of `session` onto `targetId` priced as `projected`: the ledger
    * there, and the figures of the window with the least room after it
-   * ({@link figuresOf}). Read by the wake path (server.ts `replaceAtWake`);
+   * ({@link figuresOf}). Read by the wake path (limit-moves.ts `replaceAtWake`);
    * a limit's and a rebalance's moves read the same figures through their
    * decision (at-limit.ts `decideStop`).
    */
