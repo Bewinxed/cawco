@@ -22,7 +22,6 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import { hubRequest } from "@cawco/core/hub-request";
 import type {
   DraftStamp,
   Install,
@@ -38,12 +37,8 @@ import type {
 import type { JoinInfo } from "@cawco/core/join";
 import { MediaQuery } from "svelte/reactivity";
 import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-import {
-  failureWords,
-  hubFetch,
-  hubJson,
-  hubRefusal,
-} from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { failureWords, hubRefusal } from "#lib/platform/hub-read.js";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { currentClientId } from "../client-id";
@@ -232,7 +227,11 @@ class Connect {
   async load(delay = 1000): Promise<void> {
     clearTimeout(this.#readRetry);
     try {
-      this.take(await hubJson<InstallsRead>(hubRequest("GET /api/installs")));
+      const answer = await hub.api.installs.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      this.take(answer.data);
     } catch {
       if (!socketOpen()) {
         return;
@@ -245,7 +244,11 @@ class Connect {
 
   async loadJoin(): Promise<void> {
     try {
-      this.join = await hubJson<JoinInfo>(hubRequest("GET /api/join"));
+      const answer = await hub.api.join.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      this.join = answer.data;
       this.joinFailed = null;
     } catch (error) {
       this.joinFailed = failureWords(error);
@@ -399,11 +402,11 @@ class Connect {
     this.#unsaved = {};
     this.#sending = sending;
     this.#send(sending)
-      .then(async (response) => {
-        if (!response.ok) {
-          throw await hubRefusal(response);
+      .then((answer) => {
+        if (answer.error) {
+          throw hubRefusal(answer);
         }
-        const read = (await response.json()) as InstallsRead;
+        const read = answer.data;
         this.#sending = null;
         this.#saveRetryMs = RETRY_FIRST_MS;
         // An answer older than a frame already taken still ends the save.
@@ -448,11 +451,9 @@ class Connect {
    * page goes is otherwise cancelled with it (Fetch, "terminate a fetch
    * group"), and what it carried never reaches the hub.
    */
-  #send(draft: Partial<DraftFields>): Promise<Response> {
+  #send(draft: Partial<DraftFields>) {
     const edit: InstallDraftEdit = { stamp: this.#stamp(), draft };
-    return hubFetch(hubRequest("PATCH /api/installs/draft", { body: edit }), {
-      keepalive: true,
-    });
+    return hub.api.installs.draft.patch(edit, { fetch: { keepalive: true } });
   }
 
   /** A tab chosen: the draft's way in, what was typed in each tab kept. */
@@ -485,11 +486,14 @@ class Connect {
   async start(body: InstallStart, hold = 0): Promise<InstallStarted> {
     this.#startingValue = true;
     try {
-      const started = await hubJson<InstallStarted>(
-        hubRequest("POST /api/installs", {
-          body: { ...body, stamp: this.#stamp() },
-        })
-      );
+      const answer = await hub.api.installs.post({
+        ...body,
+        stamp: this.#stamp(),
+      });
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      const started = answer.data;
       if (!started.existing) {
         clearTimeout(this.#saveTimer);
         this.#saveTimer = undefined;
@@ -522,21 +526,24 @@ class Connect {
   }
 
   async stop(id: string): Promise<void> {
-    this.take(
-      await hubJson<InstallsRead>(
-        hubRequest("POST /api/installs/:id/stop", { path: { id } })
-      )
-    );
+    const answer = await hub.api.installs({ id }).stop.post();
+    if (answer.error) {
+      throw hubRefusal(answer);
+    }
+    this.take(answer.data);
   }
 
   async retry(id: string): Promise<void> {
     const install = this.installs.find((one) => one.id === id);
-    const started = await hubJson<InstallStarted>(
-      hubRequest("POST /api/installs/:id/retry", {
-        path: { id },
-        body: install?.signIn === "password" ? { password: this.password } : {},
-      })
-    );
+    const answer = await hub.api
+      .installs({ id })
+      .retry.post(
+        install?.signIn === "password" ? { password: this.password } : {}
+      );
+    if (answer.error) {
+      throw hubRefusal(answer);
+    }
+    const started = answer.data;
     this.#adopt(started.install);
     // A command install retried is a new one, with a new code.
     this.id = started.install.id;
@@ -547,20 +554,20 @@ class Connect {
 
   /** Remove install, or a joined one's notice dismissed: it leaves the band. */
   async remove(id: string): Promise<void> {
-    this.take(
-      await hubJson<InstallsRead>(
-        hubRequest("DELETE /api/installs/:id", { path: { id } })
-      )
-    );
+    const answer = await hub.api.installs({ id }).delete();
+    if (answer.error) {
+      throw hubRefusal(answer);
+    }
+    this.take(answer.data);
   }
 
   /** The install's whole output, for the output sheet. */
   async outputOf(id: string): Promise<string[]> {
-    return (
-      await hubJson<{ lines: string[] }>(
-        hubRequest("GET /api/installs/:id/output", { path: { id } })
-      )
-    ).lines;
+    const answer = await hub.api.installs({ id }).output.get();
+    if (answer.error) {
+      throw hubRefusal(answer);
+    }
+    return answer.data.lines;
   }
 }
 
