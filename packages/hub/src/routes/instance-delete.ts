@@ -3,6 +3,7 @@ import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import { Elysia } from "elysia";
 import type { HubContext } from "../hub-context";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
+import { refusal } from "../refusal";
 import { unreachable } from "../unreachable";
 
 export const instanceDeleteRoutes = ({
@@ -36,14 +37,19 @@ export const instanceDeleteRoutes = ({
     // transcript is there is its machine's to say: the row's key only says
     // one was named once.
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one refusal-checked removal covers live custody, transcript presence, and the persisted end decision
-    .delete("/api/instances/:id", async ({ params, status }) => {
+    .delete("/api/instances/:id", async ({ params }) => {
       const [row] = db.getInstancesByIds([params.id]);
       if (!row) {
-        return status(404, "No session with that id on this hub.");
+        return refusal(
+          404,
+          "no-session",
+          "No session with that id on this hub."
+        );
       }
       if (moves.holds(row.id)) {
-        return status(
+        return refusal(
           409,
+          "sessions-project-still-moving",
           "This session's project is still moving. Cancel the move in its pane instead."
         );
       }
@@ -59,7 +65,11 @@ export const instanceDeleteRoutes = ({
         heldSessions.has(row.id) ||
         inCustody.has(row.id)
       ) {
-        return status(409, "This session is still running. Stop it first");
+        return refusal(
+          409,
+          "session-still-running-stop",
+          "This session is still running. Stop it first"
+        );
       }
       if (row.sessionId) {
         const stored = await readAgent(
@@ -71,14 +81,16 @@ export const instanceDeleteRoutes = ({
         );
         switch (stored.kind) {
           case "unanswered":
-            return status(
+            return refusal(
               409,
+              "sessions-machine-not-answering",
               "This session's machine is not answering, so whether its transcript is still there can't be checked. Try again once it is back."
             );
           case "answered":
             if (!stored.value.ok) {
-              return status(
+              return refusal(
                 502,
+                "machine-could-not-check",
                 `The machine could not check this session's transcript: ${stored.value.error ?? "no reason given"}`
               );
             }
@@ -87,8 +99,9 @@ export const instanceDeleteRoutes = ({
             throw unreachable(stored);
         }
         if (stored.value.result) {
-          return status(
+          return refusal(
             409,
+            "session-has-transcript-delete",
             "This session has a transcript. Delete the transcript instead."
           );
         }
@@ -96,8 +109,9 @@ export const instanceDeleteRoutes = ({
       try {
         endSession(row.id, "delete", { kind: "person" });
       } catch (error) {
-        return status(
+        return refusal(
           409,
+          "session-not-deleted",
           error instanceof Error ? error.message : String(error)
         );
       }
