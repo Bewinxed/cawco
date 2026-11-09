@@ -24,10 +24,10 @@ import type {
 } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
 import { KeptPairingSchema } from "#lib/cawco/stored-shapes.js";
+import { failureWords, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { readJson, unstore, writeJson } from "#lib/platform/storage.js";
 import { heardFrame, heardSince, readLeaves } from "./heard";
-import { failureWords, hubFetch, hubRefusal } from "./hub-read";
 import { leaveThePage } from "./leaving";
-import { readJson, unstore, writeJson } from "./storage";
 
 /** Where pairing stands for this browser. */
 export type PairingStage =

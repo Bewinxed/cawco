@@ -19,6 +19,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { popoverRoom } from "#lib/components/ui/glide-popover/index.js";
   import { Popover, PopoverContent } from "#lib/components/ui/popover/index.js";
+
   import type { ContinueSource } from "../continue.svelte";
   import NewSessionDialog from "./NewSessionDialog.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";

@@ -1,5 +1,5 @@
 import { CARDS_COOKIE, parseCards } from "#lib/cawco/config/cards.js";
-import { prefCookie } from "#lib/cawco/prefs.js";
+import { prefCookie } from "#lib/platform/prefs.js";
 import type { LayoutServerLoad } from "./$types";
 
 /**

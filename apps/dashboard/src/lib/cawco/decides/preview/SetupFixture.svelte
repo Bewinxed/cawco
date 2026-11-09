@@ -10,8 +10,8 @@
   import { decidesWords } from "@cawco/core/words/decides";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   import { untrack } from "svelte";
-  import { HUB_UNREACHABLE } from "#lib/cawco/hub-read.js";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import { HUB_UNREACHABLE } from "#lib/platform/hub-read.js";
   import { type RecordRead, WhoDecides } from "../decides.svelte";
   import type { FleetOffer } from "../decides-client";
   import { drawPopoversInPlace, holdsPanels } from "../in-place";

@@ -8,7 +8,7 @@
    * from its list) shows at once.
    */
   import type { Snippet } from "svelte";
-  import { reveal, revealOutWith } from "#lib/cawco/motion/curves.svelte.js";
+  import { reveal, revealOutWith } from "#lib/platform/motion/curves.svelte.js";
   import EditorSkeleton from "./EditorSkeleton.svelte";
   import Missing from "./Missing.svelte";
   import type { ConfigSection } from "./sections";

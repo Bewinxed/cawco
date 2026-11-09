@@ -34,7 +34,7 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import MorphText from "../morph-text/morph-text.svelte";
   import type { Glide, GlideWords as Words } from "./glide";
   import Root from "./tooltip.svelte";

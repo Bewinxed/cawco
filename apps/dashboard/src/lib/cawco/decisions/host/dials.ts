@@ -31,9 +31,9 @@
 import { DIALS_REM, DIALS_ROOT } from "@cawco/core/dials-root";
 import { PAGE_FAULT_EVENT, type PageFault } from "@cawco/core/page-faults";
 import { mount } from "svelte";
+import { tokensOn } from "#lib/platform/motion/curves.svelte.js";
+import { watchEdgeFades } from "#lib/platform/motion/fade-runs.svelte.js";
 import { type DialValues, dialsOfConfig } from "../../graph/dials";
-import { tokensOn } from "../../motion/curves.svelte";
-import { watchEdgeFades } from "../../motion/fade-runs.svelte";
 import DialsRoot, { type Panel, shown } from "./DialsRoot.svelte";
 import { bridge, picks } from "./page.svelte.js";
 

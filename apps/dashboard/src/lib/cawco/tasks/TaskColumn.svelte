@@ -18,18 +18,18 @@
   import { type Snippet, tick } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
-  import {
-    reflow,
-    reflowsFrom,
-    reread,
-  } from "#lib/cawco/motion/rows.svelte.js";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconNeedsYou } from "#lib/icons.js";
+  import {
+    reflow,
+    reflowsFrom,
+    reread,
+  } from "#lib/platform/motion/rows.svelte.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
   import { markOf } from "./stage-look";
   import TaskCard from "./TaskCard.svelte";
 

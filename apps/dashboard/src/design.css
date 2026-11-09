@@ -287,7 +287,7 @@
     scrollbar-gutter: auto;
   }
   /* The screen's bottom inset (the home indicator's room), which a keyboard
-     over the screen's bottom takes away (cawco/visible-viewport sets
+     over the screen's bottom takes away (platform/visible-viewport sets
      data-keyboard): Brave's resized web view drops env() to 0 on its own,
      Safari keeps it, and a foreseen keyboard stands before both. A box that
      stands on the screen's bottom carries data-safe-bottom and pads by
