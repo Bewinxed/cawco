@@ -1,11 +1,11 @@
 #!/bin/bash
 # Prototype: one workspace's runner, started once per workspace as
 #   srt --settings <ws>.srt.json -c 'runner.sh <fifo>'
-# and held by sessiond, as boundary.ts holds its anchor (Linux) and runner (macOS)
+# and held by sessiond, as boundary/ holds its anchor (Linux) and runner (macOS)
 # today. Every command of the workspace runs inside this one srt sandbox: one
 # network namespace (a dev server one command starts is reachable from the
 # next), one pid namespace on Linux, one proxy, and background processes outlive
-# the command that started them. This is boundary.ts RUNNER, unchanged in shape.
+# the command that started them. This is boundary/ RUNNER, unchanged in shape.
 fifo=$1
 # srt's own plumbing for this sandbox (proxy, TMPDIR, git safe.directory):
 # re-applied over each request's environment so a caller's env cannot drop it.

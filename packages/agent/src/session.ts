@@ -215,15 +215,12 @@ import { Effect } from "effect";
 import { recordAgentState } from "./agent-state";
 import { drawArtifact } from "./artifact-picture";
 import { withFiles } from "./attachments";
-import {
-  type Boundary,
-  boundaryFor,
-  endSessionWork,
-  hookArmed,
-  rearmMoved,
-  recheckNarrowed,
-  sandboxOf,
-} from "./boundary";
+import { boundaryFor } from "./boundary/control";
+import { hookArmed } from "./boundary/lifecycle";
+import { rearmMoved, recheckNarrowed } from "./boundary/looks";
+import { sandboxOf } from "./boundary/sandboxes";
+import type { Boundary } from "./boundary/state";
+import { endSessionWork } from "./boundary/work";
 import {
   type BrowserDoor,
   browserDoor,
@@ -476,7 +473,7 @@ const warn = (message: string): void => {
  * reading what the keepers hold, ending a process between turns (Claude
  * Code's stdin EOF and the SDK's ~2 s grace, sessiond-client.ts
  * `sessiondBridge`) and what its background tasks run in its workspace
- * (boundary.ts `endSessionWork`, at most its 5 s grace and 2 s kill wait),
+ * (boundary/work.ts `endSessionWork`, at most its 5 s grace and 2 s kill wait),
  * and moving its entries within one disk. Together under the hub's 120 s
  * for the whole carry (hub `CARRY_TIMEOUT_MS`), so the hub always hears the
  * machine's own reason, never "not answering". Ours.
@@ -1036,8 +1033,8 @@ export class SessionSupervisor {
   /**
    * The workspaces whose boundary a carried session's commands run in, of
    * every harness: each holds its boundary up while it is carried, asleep it
-   * holds nothing (boundary.ts `watchQuietBoundaries`). A CLI adopted from
-   * the agent before is held there by its process (boundary.ts `attachedIn`).
+   * holds nothing (boundary/looks.ts `watchQuietBoundaries`). A CLI adopted from
+   * the agent before is held there by its process (boundary/holding.ts `attachedIn`).
    */
   boundedWorkspaces(): string[] {
     return [...this.#sessions.keys()].flatMap((instanceId) => {
@@ -5105,7 +5102,7 @@ export class SessionSupervisor {
 
   /**
    * Ends everything session `instanceId` left running in a workspace
-   * (boundary.ts {@link endSessionWork}): an interrupt or a stop of it, a
+   * (boundary/work.ts {@link endSessionWork}): an interrupt or a stop of it, a
    * move that ends its background tasks with its process
    * ({@link #stopForCarry}), or the settle of a workspace whose items have
    * all ended ({@link endFinishedWork}), leaves nothing of its running, on
@@ -7313,7 +7310,7 @@ const BOUND_KINDS: ReadonlySet<FleetItemKind> = new Set<FleetItemKind>([
 /**
  * What a converge (or the policy's write) moved, `what`, is in what a
  * boundary binds: each boundary in use whose form's synced part moved is
- * handed over to one that has it (boundary.ts `rearmMoved`). Nothing waits
+ * handed over to one that has it (boundary/looks.ts `rearmMoved`). Nothing waits
  * on it.
  */
 function rearmBoundaries(what: string): void {
