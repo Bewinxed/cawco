@@ -35,7 +35,7 @@ import { lookAtStale } from "./stale-look";
 import { closeWhenIdle, replaceSoon, restartWhenIdle } from "./staleness";
 import {
   type Boundary,
-  keepers,
+  procsHeld,
   readHeld,
   readRetiring,
   running,
@@ -339,7 +339,7 @@ const readWorkspaces = async (): Promise<{
       throw error;
     }
   );
-  const live = (await keepers.held()).filter((proc) => proc.alive);
+  const live = (await procsHeld()).filter((proc) => proc.alive);
   const commands = await commandsNow();
   const listed: ListedWorkspace[] = [];
   const refs = new Map<string, WorkspaceRef>();
