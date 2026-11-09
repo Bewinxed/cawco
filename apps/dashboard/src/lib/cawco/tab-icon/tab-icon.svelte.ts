@@ -34,8 +34,8 @@ import needsYouStill from "#lib/assets/brand/tab-icon-needs-you.png";
 import needsYouWave from "#lib/assets/brand/tab-icon-needs-you-wave.png";
 import sleepingStill from "#lib/assets/brand/tab-icon-sleeping.png";
 import workingStill from "#lib/assets/brand/tab-icon-working.png";
+import { motionOk } from "#lib/platform/motion/curves.svelte.js";
 import { home } from "../home/home-state.svelte";
-import { motionOk } from "../motion/curves.svelte";
 
 /** Drawings a second: Caw's loops are held on twos of 24. */
 const PACE = 12;

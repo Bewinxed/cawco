@@ -6,7 +6,7 @@
 
 import { hubRequest } from "@cawco/core/hub-request";
 import type { SuggestCandidate } from "@cawco/core/suggest";
-import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
 import type { HubSeam } from "./hub-seam";
 import { send } from "./project-tasks";
 

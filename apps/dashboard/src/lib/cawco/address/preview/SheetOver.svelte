@@ -6,7 +6,7 @@
    * lowers it by the two boxes (motion.ts `sheetIn`, `sheetOut`).
    */
   import type { Snippet } from "svelte";
-  import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
+  import { dragToDismiss } from "#lib/platform/motion/drag.svelte.js";
 
   let {
     room,

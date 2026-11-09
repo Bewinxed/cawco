@@ -62,7 +62,11 @@
     IconShield,
     IconTuning as Tuning,
   } from "#lib/icons.js";
-  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+  } from "#lib/platform/motion/curves.svelte.js";
   import EffortPips from "./EffortPips.svelte";
   import NsPopover from "./NsPopover.svelte";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";

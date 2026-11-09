@@ -9,7 +9,7 @@
  * page.
  */
 import { getContext, setContext } from "svelte";
-import { frameObserver } from "#lib/cawco/frame-observer.js";
+import { frameObserver } from "#lib/platform/frame-observer.js";
 
 const STILL = Symbol("decides:in-place");
 
