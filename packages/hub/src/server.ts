@@ -9896,7 +9896,12 @@ export const createServer = (
       }
       return attachmentsOfPages(read.pages);
     },
-    find: (actor, input) => findTool.call(actor, input, "detailed"),
+    find: async (actor, input) => {
+      const turns = await findTool.call(actor, input, "detailed");
+      return turns instanceof ElysiaStatus
+        ? { why: turns.response.detail }
+        : { turns };
+    },
     // The folder's own listing, every depth: each entry says whether it is a
     // file or a folder. (Names read of a file are none, not a refusal: a walk
     // that took a refusal for a file took every file for an empty folder.)

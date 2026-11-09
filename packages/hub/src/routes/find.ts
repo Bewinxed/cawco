@@ -10,7 +10,7 @@ import type {
   TranscriptPlacesQuery,
 } from "@cawco/core/find";
 import { CONTROL_TRANSCRIPT_PLACES } from "@cawco/core/session/controls";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { answerFind, FIND_PLACES_QUERY, FIND_QUERY } from "../find";
 import { PLACES_LIMIT, placesForScreens, placesHeard } from "../find-places";
 import { forScreens } from "../find-secrets";
@@ -53,13 +53,11 @@ export const findRoutes = ({
     // secrets stand (find-secrets.ts), for every screen to draw as dots.
     .get("/api/find", { query: FIND_QUERY }, async ({ query, request }) => {
       const hide = db.findSettings.hideSecrets();
-      return forScreens(
-        await answerFind(find, query, hide, {
-          caller: findCaller(request),
-          signal: request.signal,
-        }),
-        hide
-      );
+      const answer = await answerFind(find, query, hide, {
+        caller: findCaller(request),
+        signal: request.signal,
+      });
+      return answer instanceof ElysiaStatus ? answer : forScreens(answer, hide);
     })
     .get("/api/find/waiting", () => find.waiting())
     // The person's find in one conversation (find-places.ts): every place
