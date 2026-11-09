@@ -504,8 +504,8 @@ const gated: Gated[] = [
     // Its input is the list of paths alone.
     key: () => keyOf(["scripts/case-clash-check.ts"], files.join("\n")),
   },
-  // Imports run one way: no cycle, core and the kit reach nothing above
-  // them, a member reaches another only through its manifest.
+  // Imports run one way: no cycle, and the kit reaches no module that
+  // itself reaches the kit (what a specifier alone says is Biome's).
   bun("scripts/import-rules-check.ts", [
     "apps/dashboard/",
     "apps/cawrier/",
