@@ -15,15 +15,14 @@ import {
   launchdEnded,
   launchdJob,
   launchdJobs,
-  launchdProgram,
 } from "@cawco/core/launchd";
 import { runInC } from "@cawco/core/run-captured";
 import { writeStateFile } from "@cawco/core/state-file";
+import { guiDomain, HELPER_LABEL_PREFIX, helperUnit } from "./names";
+import { transientPlist } from "./units";
 
 /** How long a launched helper has to take its lock; one that holds none after it has gone. */
 export const HELPER_START_MS = 10_000;
-
-const PLIST_PREFIX = "dev.cawco.binary-apply.";
 
 /** One helper's job, as the agent launched it. */
 export interface HelperJob {
@@ -70,7 +69,7 @@ export async function launchHelper(
 ): Promise<HelperJob> {
   const forwarded = helperEnvironment();
   if (process.platform === "linux") {
-    const unit = `cawco-binary-apply-${Date.now()}`;
+    const unit = helperUnit(Date.now());
     await startHelper([
       "systemd-run",
       "--user",
@@ -82,29 +81,11 @@ export async function launchHelper(
     ]);
     return { unit, name: `systemd (--user ${unit}.service)` };
   }
-  const label = `${PLIST_PREFIX}${Date.now()}`;
+  const label = `${HELPER_LABEL_PREFIX}${Date.now()}`;
   const plist = join(binaryRoot(), `${label}.plist`);
-  const text = (value: string) =>
-    `<string>${value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</string>`;
-  await writeStateFile(
-    plist,
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>Label</key>${text(label)}
-<key>ProgramArguments</key><array>${launchdProgram(label, argv).map(text).join("")}</array>
-<key>EnvironmentVariables</key><dict>${forwarded.map(([key, value]) => `<key>${key}</key>${text(value)}`).join("")}</dict>
-<key>RunAtLoad</key><true/>
-</dict></plist>
-`
-  );
-  await startHelper([
-    "launchctl",
-    "bootstrap",
-    `gui/${process.getuid?.()}`,
-    plist,
-  ]);
-  return { label, name: `launchd (gui/${process.getuid?.()}/${label})` };
+  await writeStateFile(plist, transientPlist(label, argv, forwarded));
+  await startHelper(["launchctl", "bootstrap", guiDomain(), plist]);
+  return { label, name: `launchd (${guiDomain()}/${label})` };
 }
 
 /**
@@ -157,7 +138,7 @@ export async function removeFinishedHelpers(): Promise<void> {
   }
   const jobs = await launchdJobs();
   const files = (await readdir(binaryRoot())).filter(
-    (name) => name.startsWith(PLIST_PREFIX) && name.endsWith(".plist")
+    (name) => name.startsWith(HELPER_LABEL_PREFIX) && name.endsWith(".plist")
   );
   await Promise.all(
     files.map(async (name) => {
@@ -177,11 +158,7 @@ export async function removeFinishedHelpers(): Promise<void> {
       // Its answer is not read: a job already gone is gone all the same. One
       // that did not answer within its bound keeps its file for the next pass.
       try {
-        await runInC([
-          "launchctl",
-          "bootout",
-          `gui/${process.getuid?.()}/${label}`,
-        ]);
+        await runInC(["launchctl", "bootout", `${guiDomain()}/${label}`]);
       } catch (error) {
         console.warn(
           `[update] ${label}: ${error instanceof Error ? error.message : String(error)}; it is removed on a later pass`
