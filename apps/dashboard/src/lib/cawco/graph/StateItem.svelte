@@ -20,9 +20,9 @@
    * description.
    */
   import { graphWords as words } from "@cawco/core/words/graph";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import type { GraphState } from "./model";
 
   let {

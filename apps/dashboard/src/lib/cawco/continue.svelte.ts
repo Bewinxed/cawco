@@ -17,11 +17,11 @@ import type {
 } from "@cawco/core/harness/kinds";
 import { type HubSent, hubRequest } from "@cawco/core/hub-request";
 import type { ContinuationJob } from "@cawco/core/protocol";
-import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
+import { hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { cawco, type SendExtras } from "./client.svelte";
 import { spawning } from "./spawn/new-session.svelte";
-import { readJson, writeJson } from "./storage";
 import { contextOf } from "./workspace/workspace.svelte";
 
 /** The session a continuation starts from, as the form shows and sends it. */

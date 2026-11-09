@@ -36,6 +36,9 @@
  */
 import { unhandled } from "@cawco/core/unhandled";
 import { tick } from "svelte";
+import { failureClause as errorOf } from "#lib/platform/hub-read.js";
+import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
+import { integrate, type Sample, spring } from "#lib/platform/motion/spring.js";
 import {
   type CanvasExport,
   canvasSent,
@@ -58,9 +61,6 @@ import {
   watch,
 } from "../canvas/stage.svelte";
 import { closePreview, type SendExtras } from "../client.svelte";
-import { failureClause as errorOf } from "../hub-read";
-import { CURVE, dur, motionOk } from "../motion/curves.svelte";
-import { integrate, type Sample, spring } from "../motion/spring";
 import type { ComposerDraft, DraftCanvas } from "./composer-draft.svelte";
 import { boxCut, type ClipBox, GrownShape, measureShape } from "./grown";
 

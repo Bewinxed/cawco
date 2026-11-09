@@ -40,12 +40,12 @@
   import { shellWords } from "@cawco/core/words/shell";
   import type { Component, Snippet } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
   import { IconRefresh } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { cn } from "#lib/utils.js";
-  import { unfold } from "./motion/fold.svelte";
 
   let {
     reason,

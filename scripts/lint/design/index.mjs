@@ -39,9 +39,9 @@ const BADGE = "src/lib/components/ui/badge/";
 const BAR_GLASS = "src/lib/components/ui/bar-glass/";
 /** The motion helpers that write the curves out (house/no-raw-motion). */
 const MOTION_HELPERS = new Set([
-  "src/lib/cawco/motion/curves.svelte.ts",
-  "src/lib/cawco/motion/rows.svelte.ts",
-  "src/lib/cawco/motion/hang.ts",
+  "src/lib/platform/motion/curves.svelte.ts",
+  "src/lib/platform/motion/rows.svelte.ts",
+  "src/lib/platform/motion/hang.ts",
 ]);
 
 /**
@@ -122,7 +122,7 @@ const INLINE_STYLES = {
   "src/lib/cawco/home/SessionTree.svelte": ["animation"],
   "src/lib/cawco/home/WorkTabs.svelte": ["animation", "opacity"],
   "src/lib/cawco/lightbox/Lightbox.svelte": ["pointer-events"],
-  "src/lib/cawco/motion/Rail.svelte": [
+  "src/lib/platform/motion/Rail.svelte": [
     "height",
     "opacity",
     "transform",
@@ -276,7 +276,7 @@ function optionsFor(rule, file) {
       // (https://svelteflow.dev/learn/customization/utility-classes).
       return { allow: ["nodrag", "nopan"] };
     case "house/no-raw-duration-read":
-      return file === "src/lib/cawco/motion/curves.svelte.ts" ? null : {};
+      return file === "src/lib/platform/motion/curves.svelte.ts" ? null : {};
     case "house/bar-item-in-kit":
       return file.startsWith(BAR_GLASS) ? null : {};
     case "house/count-in-badge":

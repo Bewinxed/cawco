@@ -7,8 +7,8 @@
   Nothing while no ask waits.
 -->
 <script lang="ts">
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import type { MachineAwayError } from "./hub-read";
+  import type { MachineAwayError } from "#lib/platform/hub-read.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { awayWords } from "./machine-wait.svelte";
 
   let { away }: { away: MachineAwayError | null } = $props();

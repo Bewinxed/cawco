@@ -17,7 +17,7 @@
    * few drag frames went with it.
    */
   import type { TransitionConfig } from "svelte/transition";
-  import { dur, easeOut } from "../motion/curves.svelte";
+  import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
   import { createDeck } from "./deck.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";
   import { workspace } from "./workspace.svelte";

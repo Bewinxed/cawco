@@ -15,7 +15,11 @@
   import darkNightly from "#lib/assets/caw/channel-nightly-dark.png";
   import lightStable from "#lib/assets/caw/channel-stable.png";
   import darkStable from "#lib/assets/caw/channel-stable-dark.png";
-  import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+  } from "#lib/platform/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { displayVersion } from "./model";
 

@@ -20,7 +20,6 @@ import {
   type LibraryJSONSchema,
 } from "@openuidev/lang-core";
 import { sendDecision } from "#lib/cawco/decisions/decisions-api.js";
-import { failureWords } from "#lib/cawco/hub-read.js";
 import {
   type ArtifactDoc,
   joinArtifact,
@@ -34,6 +33,7 @@ import {
   storedStages,
 } from "#lib/cawco/project/setup-stage.js";
 import { folderRawHref } from "#lib/cawco/project-tasks.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 
 /** The setup page, as the project's decisions list names it. */
 export interface SetupPageRow {

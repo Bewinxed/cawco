@@ -36,10 +36,10 @@
     IconNeedsYou as NeedsYou,
     IconServerAlt as Server,
   } from "#lib/icons.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { cn } from "#lib/utils.js";
   import Choice from "../config/Choice.svelte";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
-  import { reflow } from "../motion/rows.svelte";
   import FindField from "./FindField.svelte";
   import FindPeek from "./FindPeek.svelte";
   import FindRow from "./FindRow.svelte";

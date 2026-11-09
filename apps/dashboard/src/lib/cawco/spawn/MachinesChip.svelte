@@ -1,6 +1,5 @@
 <script lang="ts">
   import { spawnWords } from "@cawco/core/words/spawn";
-  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
   import { MachineRow } from "#lib/components/ui/machine-row/index.js";
@@ -16,6 +15,7 @@
     IconChevronDown as Down,
     IconServerSquare as Server,
   } from "#lib/icons.js";
+  import { staggered } from "#lib/platform/motion/curves.svelte.js";
   import { connect } from "../connect/installs.svelte";
   import { machineRowRadius } from "./machine-rows";
   import NsPopover from "./NsPopover.svelte";

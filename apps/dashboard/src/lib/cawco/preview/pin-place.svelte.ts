@@ -7,9 +7,9 @@
  * header says why each is so.
  */
 import { tick, untrack } from "svelte";
-import { frameObserver } from "../frame-observer";
-import { dur, ease, numberOf } from "../motion/curves.svelte";
-import type { PopSide } from "../motion/pop.svelte";
+import { frameObserver } from "#lib/platform/frame-observer.js";
+import { dur, ease, numberOf } from "#lib/platform/motion/curves.svelte.js";
+import type { PopSide } from "#lib/platform/motion/pop.svelte.js";
 
 export interface Box {
   h: number;
