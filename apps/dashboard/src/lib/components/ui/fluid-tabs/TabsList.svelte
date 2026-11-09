@@ -25,16 +25,6 @@
    * - `scrollable`: hugs its items and gives way, never grows, when its row
    *   is narrower than they are; the edges fade the tabs past them
    *   (`kit-edge-fade`), and a chosen tab is brought clear of each fade.
-   * - `strip`: the host's tuning. `session` and `hosted` (PaneTabs, on its
-   *   own shelf or in a host's row; only its own shelf is the phone's bar): a step taller than
-   *   the default in a bar with room, the strip's own pad, the chosen sheet
-   *   in `tab-sheet` (the transcript's head dissolves into it), the hover
-   *   lifting an unchosen tab toward it, and the status rim's stroke (one
-   *   unit under more contrast or less transparency). Scrolling on a coarse
-   *   pointer its transparent padding grows into an equal negative margin,
-   *   so the controls' touch areas sit inside its clip; on a phone's own bar
-   *   the tabs are a row's height, on the bar's floor, the ends fading over
-   *   a short run so a tab slides under the toggle and Caw.
    */
   const tabsListVariants = tv({
     base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--spacing-space-row)] [--icon:var(--spacing-icon-md)] [--px:calc(var(--spacing)_*_3)] [--text:var(--text-label)] coarse:[--item:var(--spacing-space-8)]",
@@ -59,12 +49,6 @@
       scrollable: {
         true: "kit-edge-fade no-scrollbar min-w-0 max-w-full flex-[0_1_auto] overflow-x-auto overflow-y-hidden [--edge-room-end:var(--fade-len)] [--edge-room-start:var(--fade-len)] [&>[data-slot=ff-tab]]:shrink-0",
       },
-      strip: {
-        session:
-          "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--color-tab-sheet)] [--tab-hover:light-dark(var(--color-surface-recess),var(--color-surface-hover))] coarse:[--item:var(--strip-item)]",
-        hosted:
-          "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--color-tab-sheet)] [--tab-hover:light-dark(var(--color-surface-recess),var(--color-surface-hover))] coarse:[--item:var(--strip-item)]",
-      },
     },
     compoundVariants: [
       // Compact, the segmented groove holds 24px segments a row's pad in: 28px in all.
@@ -73,18 +57,6 @@
         size: "compact",
         class:
           "[--item:var(--spacing-c-btn-h-xs)] [--pad:var(--spacing-space-row)]",
-      },
-      {
-        strip: "session",
-        scrollable: true,
-        class:
-          "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--spacing-c-top-bar-h)_-_var(--spacing-c-tab-row-h))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:not-glass-item:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
-      },
-      {
-        strip: "hosted",
-        scrollable: true,
-        class:
-          "coarse:-my-(--strip-reach) coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach)",
       },
     ],
   });
@@ -1222,8 +1194,9 @@
       variant: tabs.variant,
       scrollable,
       fill,
-      strip: tabs.strip,
     }),
+    tabs.strip?.list,
+    scrollable && tabs.strip?.scrolled,
     className
   )}
   data-overflows={overflows ? "" : undefined}
