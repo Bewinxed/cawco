@@ -126,7 +126,9 @@ export const CONTROL_GH_ACCOUNTS = "ghAccounts";
  */
 export const CONTROL_GH_TOKEN = "ghToken";
 
-/** `signed-in`: its tools answer. `needs-sign-in`: a key or a sign-in is owed. `error`: `reason` says what failed. */
+/** `signed-in`: its tools answer. `needs-sign-in`: a key or a sign-in is owed. `error`: `reason` says what failed.
+ * @public Named by packages/hub/src/db/schema.ts as an `import()` type, which knip does not read.
+ */
 export type ConnectionState = "signed-in" | "needs-sign-in" | "error";
 
 /** A connection as every route and tool answers it: never its key. */
