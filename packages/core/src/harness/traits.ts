@@ -128,79 +128,84 @@ type HomeLoginTraits =
 
 export type HarnessTraits = HarnessTraitsBase & HomeLoginTraits;
 
+/*
+ * Every row lists its traits in one order, by topic: accounts and what a
+ * session's cost means; its models; starting a session; where its
+ * conversations live and what a listing of them proves; its turns.
+ */
 const CLAUDE_TRAITS = {
   accountDir: true,
-  boundaryBeforeCompactionFailure: false,
-  catalogProvesGone: true,
-  cleanStartRefused: null,
-  contextWindow: "hub",
-  costMeaning: "estimated",
-  custody: "keeper",
   homeLogin: "dir",
-  listsAllConversations: true,
-  liveSkillReload: true,
-  modelCatalog: "account",
-  ownProviderIds: false,
-  permissionModes: true,
-  promptCacheMaxMs: HOUR_MS,
-  providerLimit: "account",
-  queuesSends: true,
-  readsStoredContext: true,
-  requiredOnEveryMachine: true,
-  resolvesModelNames: false,
-  rewindAnchor: "assistant-before",
   soleProvider: "anthropic",
+  ownProviderIds: false,
+  providerLimit: "account",
+  costMeaning: "estimated",
+  modelCatalog: "account",
+  resolvesModelNames: false,
+  contextWindow: "hub",
+  cleanStartRefused: null,
+  permissionModes: true,
+  requiredOnEveryMachine: true,
   startsWithoutConversation: false,
+  custody: "keeper",
+  listsAllConversations: true,
+  catalogProvesGone: true,
+  readsStoredContext: true,
+  rewindAnchor: "assistant-before",
+  queuesSends: true,
+  promptCacheMaxMs: HOUR_MS,
+  boundaryBeforeCompactionFailure: false,
+  liveSkillReload: true,
 } as const satisfies HarnessTraits;
 
 const OPENCODE_TRAITS = {
   accountDir: false,
-  boundaryBeforeCompactionFailure: true,
-  catalogProvesGone: false,
-  cleanStartRefused: harnessWords.openCodeNotClean,
-  contextWindow: "catalog",
-  costMeaning: "real",
-  custody: "server",
   homeLogin: "credentials",
-  listsAllConversations: false,
-  liveSkillReload: false,
-  modelCatalog: "machine",
-  ownProviderIds: true,
-  permissionModes: true,
-  promptCacheMaxMs: null,
-  providerLimit: "go",
-  queuesSends: false,
-  readsStoredContext: false,
-  requiredOnEveryMachine: false,
-  resolvesModelNames: false,
-  rewindAnchor: "user-turn",
   soleProvider: null,
+  ownProviderIds: true,
+  providerLimit: "go",
+  costMeaning: "real",
+  modelCatalog: "machine",
+  resolvesModelNames: false,
+  contextWindow: "catalog",
+  cleanStartRefused: harnessWords.openCodeNotClean,
+  permissionModes: true,
+  requiredOnEveryMachine: false,
   startsWithoutConversation: true,
+  custody: "server",
+  listsAllConversations: false,
+  catalogProvesGone: false,
+  readsStoredContext: false,
+  rewindAnchor: "user-turn",
+  queuesSends: false,
+  promptCacheMaxMs: null,
+  boundaryBeforeCompactionFailure: true,
+  liveSkillReload: false,
 } as const satisfies HarnessTraits;
 
 const PI_TRAITS = {
   accountDir: false,
-  boundaryBeforeCompactionFailure: false,
-  catalogProvesGone: false,
-  cleanStartRefused: null,
-  contextWindow: "catalog",
-  costMeaning: "real",
-  custody: "keeper",
   homeLogin: "credentials",
-  listsAllConversations: true,
-  liveSkillReload: false,
-  modelCatalog: "machine",
-  ownProviderIds: false,
-  permissionModes: false,
-  promptCacheMaxMs: null,
-  providerLimit: "none",
-  queuesSends: false,
-  readsStoredContext: false,
-  requiredOnEveryMachine: false,
-  resolvesModelNames: true,
-  rewindAnchor: "assistant-before",
   soleProvider: null,
+  ownProviderIds: false,
+  providerLimit: "none",
+  costMeaning: "real",
+  modelCatalog: "machine",
+  resolvesModelNames: true,
+  contextWindow: "catalog",
+  cleanStartRefused: null,
+  permissionModes: false,
+  requiredOnEveryMachine: false,
   startsWithoutConversation: false,
+  custody: "keeper",
+  listsAllConversations: true,
+  catalogProvesGone: false,
+  readsStoredContext: false,
+  rewindAnchor: "assistant-before",
+  queuesSends: false,
+  promptCacheMaxMs: null,
+  boundaryBeforeCompactionFailure: false,
+  liveSkillReload: false,
 } as const satisfies HarnessTraits;
 
 /** Each harness's traits: the one table. */
@@ -214,33 +219,32 @@ const HARNESS_TRAITS = {
  * The traits of a name this build does not know, or of none: every question
  * answered as a compare with the name answers it, "not this harness". An
  * account dir, a server's custody or a capability is never claimed for it,
- * and a `!==` reads as true of it, as it always did.
+ * and a `!==` reads as true of it, as it always did. Each line says which of
+ * the two its value is.
  */
 const UNKNOWN_TRAITS: HarnessTraits = {
-  // Nothing claimed of it.
-  accountDir: false,
-  boundaryBeforeCompactionFailure: false,
-  catalogProvesGone: false,
-  cleanStartRefused: null,
-  liveSkillReload: false,
-  ownProviderIds: false,
-  promptCacheMaxMs: null,
-  queuesSends: false,
-  readsStoredContext: false,
-  requiredOnEveryMachine: false,
-  resolvesModelNames: false,
-  soleProvider: null,
-  startsWithoutConversation: false,
-  // What a compare with a name it isn't answered.
-  contextWindow: "catalog",
-  costMeaning: "real",
-  custody: "keeper",
-  homeLogin: "credentials",
-  listsAllConversations: true,
-  modelCatalog: "machine",
-  permissionModes: true,
-  providerLimit: "none",
-  rewindAnchor: "assistant-before",
+  accountDir: false, // nothing claimed
+  homeLogin: "credentials", // as a compare with a name it isn't
+  soleProvider: null, // nothing claimed
+  ownProviderIds: false, // nothing claimed
+  providerLimit: "none", // as a compare with a name it isn't
+  costMeaning: "real", // as a compare with a name it isn't
+  modelCatalog: "machine", // as a compare with a name it isn't
+  resolvesModelNames: false, // nothing claimed
+  contextWindow: "catalog", // as a compare with a name it isn't
+  cleanStartRefused: null, // nothing claimed
+  permissionModes: true, // as a compare with a name it isn't
+  requiredOnEveryMachine: false, // nothing claimed
+  startsWithoutConversation: false, // nothing claimed
+  custody: "keeper", // as a compare with a name it isn't
+  listsAllConversations: true, // as a compare with a name it isn't
+  catalogProvesGone: false, // nothing claimed
+  readsStoredContext: false, // nothing claimed
+  rewindAnchor: "assistant-before", // as a compare with a name it isn't
+  queuesSends: false, // nothing claimed
+  promptCacheMaxMs: null, // nothing claimed
+  boundaryBeforeCompactionFailure: false, // nothing claimed
+  liveSkillReload: false, // nothing claimed
 };
 
 /** The traits of `harness`, a kind or whatever a row or a frame says one is. */
