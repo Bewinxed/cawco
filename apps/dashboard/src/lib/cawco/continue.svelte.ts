@@ -18,7 +18,7 @@ import type {
 import { type HubSent, hubRequest } from "@cawco/core/hub-request";
 import type { ContinuationJob } from "@cawco/core/protocol";
 import { ContinueSourceSchema } from "#lib/cawco/stored-shapes.js";
-import { hubFetch, hubJson, hubRefusal } from "#lib/platform/hub-read.js";
+import { hubJson, hubSend } from "#lib/platform/hub-read.js";
 import { readJson, writeJson } from "#lib/platform/storage.js";
 import { cawco, type SendExtras } from "./client.svelte";
 import { spawning } from "./spawn/new-session.svelte";
@@ -125,12 +125,7 @@ export const continuationRunning = (
 
 /** Cancel, in any stage before the new session has started: nothing starts. Throws the hub's refusal. */
 export async function cancelContinuation(id: string): Promise<void> {
-  const response = await hubFetch(
-    hubRequest("DELETE /api/continuations/:id", { path: { id } })
-  );
-  if (!response.ok) {
-    throw await hubRefusal(response);
-  }
+  await hubSend(hubRequest("DELETE /api/continuations/:id", { path: { id } }));
 }
 
 /**
