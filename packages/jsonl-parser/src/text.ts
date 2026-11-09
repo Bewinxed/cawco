@@ -114,13 +114,13 @@ const TAGGED: Readonly<Record<string, DocAuthor>> = {
  * Claude Code's slash-command echoes, local command output, task
  * notifications, hook output, its caveat line, an interruption, a
  * compaction's summary and a skill's loaded text; and the hub's own prompts
- * for a continuation (hub continuation.ts): the summariser's prompt, which
+ * for a continuation (hub continuation-words.ts): the summariser's prompt, which
  * quotes the source session's transcript whole, and the new session's
  * opening, which quotes its summary and its last turns or the person's asks.
  * Both carry the person's words, copied: indexed as the person's, every
  * summarised session's words came back twice under `by: person`, the copy
  * ranked above the turn. The summariser's prompt is {@link COPIED}, never
- * indexed. Keep these in step with continuation.ts's `summariserPrompt`,
+ * indexed. Keep these in step with continuation-words.ts's `summariserPrompt`,
  * `openingMessage` and `asksOpening`.
  */
 const INJECTED = [
@@ -133,7 +133,7 @@ const INJECTED = [
 ];
 
 /**
- * The hub's summariser prompt (continuation.ts `summariserPrompt`): another
+ * The hub's summariser prompt (continuation-words.ts `summariserPrompt`): another
  * session's transcript quoted whole as one user turn, each of its words
  * already indexed where it was said, in a session no find ever answers with
  * (hub find.ts `hubMade`). Indexed, it held every word of any long query
