@@ -90,7 +90,11 @@ export interface HarnessTraits {
    * the harness reports none.
    */
   readonly providerLimit: "account" | "go" | "none";
-  /** Whether a send it holds waits in the harness's own queue, and shows as queued. */
+  /**
+   * Whether a send handed to a busy session waits in the harness's own queue
+   * until the session reads it: it shows as queued, and can be taken back
+   * while it waits. Without one, a session stores a send as it is handed it.
+   */
   readonly queuesSends: boolean;
   /** Whether a machine's context for a stored conversation can be read back (hub server.ts `CONTROL_READ_SESSION_CONTEXT`). */
   readonly readsStoredContext: boolean;
@@ -108,8 +112,6 @@ export interface HarnessTraits {
   readonly soleProvider: string | null;
   /** A row can start with no conversation of its own and take one at its first send; until then it is never started, not ended. */
   readonly startsWithoutConversation: boolean;
-  /** Whether a send still pending can be taken back from the harness's own queue (CLI's `withdrawSend`). */
-  readonly withdrawSend: boolean;
 }
 
 const CLAUDE_TRAITS = {
@@ -137,7 +139,6 @@ const CLAUDE_TRAITS = {
   rewindAnchor: "assistant-before",
   soleProvider: "anthropic",
   startsWithoutConversation: false,
-  withdrawSend: true,
 } as const satisfies HarnessTraits;
 
 const OPENCODE_TRAITS = {
@@ -165,7 +166,6 @@ const OPENCODE_TRAITS = {
   rewindAnchor: "user-turn",
   soleProvider: null,
   startsWithoutConversation: true,
-  withdrawSend: false,
 } as const satisfies HarnessTraits;
 
 const PI_TRAITS = {
@@ -193,7 +193,6 @@ const PI_TRAITS = {
   rewindAnchor: "assistant-before",
   soleProvider: null,
   startsWithoutConversation: false,
-  withdrawSend: false,
 } as const satisfies HarnessTraits;
 
 /** Each harness's traits: the one table. */
@@ -234,7 +233,6 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   rewindAnchor: "assistant-before",
   soleProvider: null,
   startsWithoutConversation: false,
-  withdrawSend: false,
 };
 
 /** The traits of `harness`, a kind or whatever a row or a frame says one is. */
