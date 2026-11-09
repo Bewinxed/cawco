@@ -127,7 +127,7 @@
 
   let {
     children,
-    /** Read from the `cawco-rail-width` cookie server-side (see
+    /** Read from the `RAIL_PREF` cookie server-side (see
      *  +layout.server.ts) so the first paint is already the resolved width —
      *  the rail no longer renders the default and jumps on hydration. Null
      *  when the reader has no width of their own: the token's stands. */
@@ -173,7 +173,7 @@
   /**
    * The rail's width is settled before the first paint, in two places at once.
    *
-   * SSR draws it from the `cawco-rail-width` cookie, and the inline script in
+   * SSR draws it from the `RAIL_PREF` cookie (platform/prefs.ts), and the inline script in
    * `app.html` overwrites `--rail-w` from localStorage — which is where the
    * width is actually authored, and which the server cannot read. A browser with
    * a stored width and no cookie (a fresh profile, or the pre-cookie migration)
