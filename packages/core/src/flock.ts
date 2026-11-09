@@ -10,6 +10,7 @@
  */
 import { dlopen, FFIType } from "bun:ffi";
 import { closeSync, constants, openSync } from "node:fs";
+import { until } from "./until";
 
 /** `LOCK_EX | LOCK_NB` (2 | 4, the same on Linux and macOS): take it now or not at all. */
 const LOCK_EX_NOW = 6;
@@ -67,18 +68,8 @@ const LOCK_POLL_MS = 100;
  * kernel offers no wait that leaves the event loop running, so it looks every
  * {@link LOCK_POLL_MS}.
  */
-export const lockBy = async (
-  fd: number,
-  deadline: number
-): Promise<boolean> => {
-  while (!tryLock(fd)) {
-    if (Date.now() >= deadline) {
-      return false;
-    }
-    await Bun.sleep(LOCK_POLL_MS);
-  }
-  return true;
-};
+export const lockBy = async (fd: number, deadline: number): Promise<boolean> =>
+  until(() => tryLock(fd), { deadline, every: LOCK_POLL_MS });
 
 /** Lets `fd`'s lock go and closes it. */
 export const unlock = (fd: number): void => {
