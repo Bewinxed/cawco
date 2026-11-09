@@ -82,7 +82,7 @@ import { sentence, tool } from "./mcp-tool";
 import { MEANING_THRESHOLD } from "./meaning";
 import { sessionWord } from "./session-word";
 import { CAWCO_TOOL } from "./web-reads";
-import { isLive } from "./work-items";
+import { isLive } from "./work-item-state";
 
 /** Triage runs at once, fleet-wide; the rest wait their turn. */
 const TRIAGE_MAX_RUNNING = 2;
