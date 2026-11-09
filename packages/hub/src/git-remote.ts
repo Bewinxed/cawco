@@ -32,6 +32,7 @@ import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { placeStreamedFile } from "@cawco/core/state-file";
 import { startedPath } from "@cawco/core/workspace-needs";
 import { Elysia } from "elysia";
+import { problemResponse } from "elysia/error";
 import { HUB_DEBUG } from "./config";
 import { hidden } from "./hidden";
 
@@ -211,14 +212,15 @@ const lfsError = (status: number, message: string): Response =>
   });
 
 const unauthorized = (): Response =>
-  new Response(
-    "This remote takes a CawCo machine or session credential (HTTP Basic).\n",
+  problemResponse(
     {
       status: 401,
-      headers: {
-        "WWW-Authenticate": REALM,
-        "Content-Type": "text/plain",
-      },
+      code: "remote-takes-cawco-machine",
+      detail:
+        "This remote takes a CawCo machine or session credential (HTTP Basic).\n",
+    },
+    {
+      "WWW-Authenticate": REALM,
     }
   );
 
@@ -313,8 +315,10 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
   ): Promise<Response> => {
     const made = repository(key);
     if (!made) {
-      return new Response(`There is no project ${key.projectId}.\n`, {
+      return problemResponse({
         status: 404,
+        code: "project",
+        detail: `There is no project ${key.projectId}.\n`,
       });
     }
     const repo = await made;
@@ -348,10 +352,11 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
     const head = await cgiHead(reader);
     if (!head) {
       await child.exited;
-      return new Response(
-        `git http-backend answered nothing: ${stderr.trim()}\n`,
-        { status: 502 }
-      );
+      return problemResponse({
+        status: 502,
+        code: "git-http-backend-answered",
+        detail: `git http-backend answered nothing: ${stderr.trim()}\n`,
+      });
     }
     const { status, headers, rest } = head;
     const body = new ReadableStream<Uint8Array>({
@@ -546,7 +551,11 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
       const key = parseHubRepoSegment(params.repo);
       return key
         ? backend(request, key, service, user)
-        : new Response("Not a repository.\n", { status: 404 });
+        : problemResponse({
+            status: 404,
+            code: "not-repository",
+            detail: "Not a repository.\n",
+          });
     };
 
   return (
