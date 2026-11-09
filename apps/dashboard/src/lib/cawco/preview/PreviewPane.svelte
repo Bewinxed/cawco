@@ -111,6 +111,7 @@
     IconUndock,
     IconUndockLinear,
   } from "#lib/icons.js";
+  import { graceWhile } from "#lib/platform/grace-while.svelte.js";
   import {
     failureClause,
     failureWords,
@@ -1285,17 +1286,7 @@
   /** Whether the pane holds the doc yet: until it does, no count or list reads as none. */
   let docSync = $state<DocSync>({ state: "reading" });
   /** The first sync has outlasted `--duration-wait-grace`: the list's skeleton stands in (The Real Wait Rule). */
-  let readingLong = $state(false);
-  $effect(() => {
-    if (docSync.state !== "reading") {
-      readingLong = false;
-      return;
-    }
-    const grace = setTimeout(() => {
-      readingLong = true;
-    }, dur("--duration-wait-grace"));
-    return () => clearTimeout(grace);
-  });
+  const readingLong = graceWhile(() => docSync.state === "reading");
   /** What the Comments list stands on: quiet inside the grace, then reading, the pins once held, or why they weren't. */
   const listHold = $derived.by<ListHold>(() => {
     switch (docSync.state) {
@@ -1307,7 +1298,7 @@
       case "reading":
         break;
     }
-    return readingLong ? "reading" : "quiet";
+    return readingLong.current ? "reading" : "quiet";
   });
   /** The page's doc's link to the hub, as the page says it (`cawco:sync`): what closed it, while it stands lost. */
   let pageLost = $state<string | null>(null);
