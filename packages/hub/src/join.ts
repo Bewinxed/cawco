@@ -810,7 +810,7 @@ export const joinRoutes = ({
           }),
         ]),
       },
-      ({ body, status }) => {
+      ({ body }) => {
         const started =
           body.route === "ssh"
             ? installs.startSsh({
@@ -822,7 +822,7 @@ export const joinRoutes = ({
               })
             : installs.startCommand(body.address, body.stamp);
         return "status" in started
-          ? status(started.status, started.message)
+          ? refusal(started.status, "ssh-add-refused", started.message)
           : started;
       }
     )
@@ -832,7 +832,7 @@ export const joinRoutes = ({
         installs.output(params.id) ??
         refusal(404, "no-install", "No install with that id on this hub.")
     )
-    .post("/api/installs/:id/stop", async ({ params, status }) => {
+    .post("/api/installs/:id/stop", async ({ params }) => {
       const stopped = await installs.stop(params.id);
       if (!stopped) {
         return refusal(
@@ -842,7 +842,11 @@ export const joinRoutes = ({
         );
       }
       return "status" in stopped && typeof stopped.status === "number"
-        ? status(stopped.status, (stopped as { message: string }).message)
+        ? refusal(
+            stopped.status,
+            "ssh-stop-refused",
+            (stopped as { message: string }).message
+          )
         : installs.read();
     })
     .post(
@@ -852,7 +856,7 @@ export const joinRoutes = ({
           password: t.Optional(t.String({ maxLength: 4096 })),
         }),
       },
-      ({ params, body, status }) => {
+      ({ params, body }) => {
         const again = installs.retry(params.id, body.password);
         if (!again) {
           return refusal(
@@ -861,10 +865,12 @@ export const joinRoutes = ({
             "No install with that id on this hub."
           );
         }
-        return "status" in again ? status(again.status, again.message) : again;
+        return "status" in again
+          ? refusal(again.status, "ssh-add-refused", again.message)
+          : again;
       }
     )
-    .delete("/api/installs/:id", ({ params, status }) => {
+    .delete("/api/installs/:id", ({ params }) => {
       const gone = installs.remove(params.id);
       if (gone === false) {
         return refusal(
@@ -875,7 +881,7 @@ export const joinRoutes = ({
       }
       return gone === true
         ? installs.read()
-        : status(gone.status, gone.message);
+        : refusal(gone.status, "ssh-remove-refused", gone.message);
     })
     .post(
       "/api/installs/code/:code/ended",
@@ -912,7 +918,7 @@ export const joinRoutes = ({
           password: t.Optional(t.String()),
         }),
       },
-      ({ body, status }) => {
+      ({ body }) => {
         const password = body.password ?? "";
         const started = installs.startSsh({
           target: body.target,
@@ -921,7 +927,7 @@ export const joinRoutes = ({
           password,
         });
         if ("status" in started) {
-          return status(started.status, started.message);
+          return refusal(started.status, "ssh-add-refused", started.message);
         }
         if (started.existing) {
           // A plain answer, not a declared status: the route's typed answers
