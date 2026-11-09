@@ -12946,806 +12946,825 @@ export const createServer = (
     fleetSyncRoutes(ctx),
     projectRoutes(ctx),
     workspaceRoutes(ctx),
-    new Elysia()
-      // ── Accounts ─────────────────────────────────────────────────────────────
-      // Several sign-ins per provider, where each is signed in for which
-      // harness, how new sessions choose among them, and what they read of
-      // their limits. `provider` narrows it to one provider's accounts.
-      .get(
-        "/api/accounts",
-        { query: t.Object({ provider: t.Optional(accountProvider) }) },
-        ({ query }) => {
-          const accounts = db.accounts
-            .list()
-            .filter(
-              (account) =>
-                !query.provider || account.provider === query.provider
-            );
-          const ids = new Set(accounts.map((account) => account.id));
-          const mine = <T extends { accountId: string }>(rows: T[]): T[] =>
-            rows.filter((row) => ids.has(row.accountId));
-          return {
-            accounts,
-            signins: mine(db.accounts.signins()),
-            // Sign-ins started and not finished: the link or code each
-            // showed, for a screen that reloads or reopens to show again.
-            pending: livePendingSignins().filter((one) =>
-              ids.has(one.accountId)
-            ),
-            routing: (query.provider
-              ? [query.provider]
-              : [
-                  ...new Set([
-                    CLAUDE_PROVIDER,
-                    ...accounts.map((account) => account.provider),
-                  ]),
-                ]
-            ).map((provider) => db.accounts.routing(provider)),
-            readings: mine(db.accounts.readings()),
-            bench: mine(db.accounts.bench()),
-            catalogs: mine(db.accounts.catalogs()),
-            catalogFaults: mine(
-              [...catalogFaults].map(
-                ([accountId, reason]): AccountCatalogFault => ({
-                  accountId,
-                  reason,
-                })
-              )
-            ),
-            rebalances: rebalanceNotices.filter((notice) =>
-              notice.came.some((one) => ids.has(one.account.id))
-            ),
-          };
-        }
-      )
-      // The account picker's rows: Claude's subscription and Console, then
-      // every provider the fleet's machines know (pi-ai's joined with
-      // OpenCode's), each with how it signs in, the harnesses that use it,
-      // and whether CawCo reads its limits.
-      .get("/api/accounts/providers", (): ProviderChoice[] =>
-        providerChoices(knownProviders())
-      )
-      .post(
-        "/api/accounts",
-        {
-          body: t.Object({
-            provider: accountProvider,
-            // Claude: `subscription` or `console`. Any other provider: `oauth`
-            // (its own sign-in through pi-ai) or `api_key`.
-            kind: t.Union([
-              t.Literal("subscription"),
-              t.Literal("console"),
-              t.Literal("oauth"),
-              t.Literal("api_key"),
-            ]),
-            // A nickname; without one the account goes by its email once signed in.
-            label: t.Optional(t.String({ minLength: 1 })),
-            hue: t.Optional(accountHue),
-            // Made by the dashboard's setup: the step it stands at, kept
-            // until the setup is done so a reload opens it there again.
-            setupStep: t.Optional(accountSetupStep),
-          }),
-        },
-        ({ body, status }) => {
-          const refusal = accountKindRefusal(body.provider, body.kind);
-          return refusal ? status(400, refusal) : db.accounts.create(body);
-        }
-      )
-      .patch(
-        "/api/accounts/:id",
-        {
-          body: t.Object({
-            // Null clears the nickname: the account goes by its email.
-            label: t.Optional(t.Union([t.String({ minLength: 1 }), t.Null()])),
-            hue: t.Optional(accountHue),
-            order: t.Optional(t.Integer()),
-            neverBackup: t.Optional(t.Boolean()),
-            reservePct: t.Optional(
-              t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
-            ),
-            // At a plan limit with extra usage on: move its sessions to an
-            // account with plan room, or keep going on its extra usage.
-            atPlanLimit: t.Optional(
-              t.Union([t.Literal("move"), t.Literal("extra-usage")])
-            ),
-            // Where its setup stands; null: the setup is done.
-            setupStep: t.Optional(t.Union([accountSetupStep, t.Null()])),
-          }),
-        },
-        ({ params, body, status }) => {
-          const account = accountOf(params.id);
-          return (
-            (account && db.accounts.patch(account.id, body)) ??
-            status(404, `There is no account ${params.id}.`)
-          );
-        }
-      )
-      // What removing the account does with the sessions on it, for its
-      // confirm to say: how many move to another account, how many have
-      // none to go to.
-      .get("/api/accounts/:id/removal", ({ params, status }) => {
-        const account = accountOf(params.id);
-        if (!account) {
-          return status(404, `There is no account ${params.id}.`);
-        }
-        return removalOf(account);
-      })
-      .delete("/api/accounts/:id", async ({ params, status }) => {
-        const account = accountOf(params.id);
-        if (!account) {
-          return status(404, `There is no account ${params.id}.`);
-        }
-        const named = accountNameAmong(account, db.accounts.list());
-        // An id a join removed names the account it became, which is not the
-        // one the screen asking made: removing that is never done by its old
-        // id.
-        if (account.id !== params.id) {
-          return status(
-            409,
-            `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in ${configurePage("accounts")}.`
-          );
-        }
-        const signins = db.accounts
-          .signins()
-          .filter((one) => one.accountId === account.id);
-        // A machine where a process still runs in the account's store keeps
-        // it until none does ({@link leaveAccounts}): signed out under a
-        // turn, the turn would lose its credential and its transcript.
-        const leavesOn = [
-          ...new Set(
-            db
-              .instancesOnAccount(account.id)
-              .filter(processMayRun)
-              .map((row) => row.machineId)
-          ),
-        ];
-        // Each other machine signed in to it signs it out now (Claude Code
-        // itself for a Claude dir, the agent for any other) and drops the
-        // account's store there. One that is offline does so when it next
-        // connects: it names its stores, and this hub answers the ones it
-        // removed, by the record `remove` keeps (`unknownAccountsOf`). One
-        // that is online and fails says why.
-        const { failed, silent, later } = await signOutEverywhere(
-          account,
-          signins
-            .map((signin) => signin.machineId)
-            .filter((machineId) => !leavesOn.includes(machineId))
-        );
-        if (failed.length > 0 || silent.length > 0) {
-          return status(
-            409,
-            [
-              failed.length > 0
-                ? `${failed.join(", ")} did not sign ${named} out.`
-                : "",
-              silent.length > 0
-                ? `${silent.join("; ")}, so whether ${named} was signed out there is not known.`
-                : "",
-              "Try again.",
-            ]
-              .filter(Boolean)
-              .join(" ")
-          );
-        }
-        const { moving, staying } = removeWithSessions(
-          account,
-          named,
-          leavesOn
-        );
-        // Machines offline now, which sign it out when they next connect.
-        return { ok: true, later, moving, staying };
-      })
-      // Signs an account out on one machine and drops that sign-in: the same
-      // sign-out the account's removal runs on each of its machines, here on
-      // one, the account and its other machines left as they are. Every
-      // session on it there moves off it as a removal's do ({@link
-      // signOutMachine}).
-      .delete(
-        "/api/accounts/:id/machines/:machineId",
-        async ({ params, status }) => {
-          const account = accountOf(params.id);
-          if (!account) {
-            return status(404, `There is no account ${params.id}.`);
-          }
-          const machine = machineName(params.machineId);
-          const named = accountNameAmong(account, db.accounts.list());
-          const signin = db.accounts
-            .signins()
-            .find(
-              (one) =>
-                one.accountId === account.id &&
-                one.machineId === params.machineId
-            );
-          if (!signin) {
-            return status(404, `${named} is not signed in on ${machine}.`);
-          }
-          // A process there still running in its store keeps the store
-          // until none does ({@link leaveAccounts}), as an account's
-          // removal does: signed out under a turn, the turn would lose its
-          // credential and its transcript.
-          const leaves = db
-            .instancesOnAccount(account.id)
-            .some(
-              (row) => row.machineId === params.machineId && processMayRun(row)
-            );
-          if (leaves) {
+    new Elysia().use([
+      new Elysia()
+        // ── Accounts ─────────────────────────────────────────────────────────────
+        // Several sign-ins per provider, where each is signed in for which
+        // harness, how new sessions choose among them, and what they read of
+        // their limits. `provider` narrows it to one provider's accounts.
+        .get(
+          "/api/accounts",
+          { query: t.Object({ provider: t.Optional(accountProvider) }) },
+          ({ query }) => {
+            const accounts = db.accounts
+              .list()
+              .filter(
+                (account) =>
+                  !query.provider || account.provider === query.provider
+              );
+            const ids = new Set(accounts.map((account) => account.id));
+            const mine = <T extends { accountId: string }>(rows: T[]): T[] =>
+              rows.filter((row) => ids.has(row.accountId));
             return {
-              ok: true,
-              ...signOutMachine(account, named, params.machineId, true),
+              accounts,
+              signins: mine(db.accounts.signins()),
+              // Sign-ins started and not finished: the link or code each
+              // showed, for a screen that reloads or reopens to show again.
+              pending: livePendingSignins().filter((one) =>
+                ids.has(one.accountId)
+              ),
+              routing: (query.provider
+                ? [query.provider]
+                : [
+                    ...new Set([
+                      CLAUDE_PROVIDER,
+                      ...accounts.map((account) => account.provider),
+                    ]),
+                  ]
+              ).map((provider) => db.accounts.routing(provider)),
+              readings: mine(db.accounts.readings()),
+              bench: mine(db.accounts.bench()),
+              catalogs: mine(db.accounts.catalogs()),
+              catalogFaults: mine(
+                [...catalogFaults].map(
+                  ([accountId, reason]): AccountCatalogFault => ({
+                    accountId,
+                    reason,
+                  })
+                )
+              ),
+              rebalances: rebalanceNotices.filter((notice) =>
+                notice.came.some((one) => ids.has(one.account.id))
+              ),
             };
           }
-          const answer = await forgetOn(account, params.machineId);
-          switch (answer.kind) {
-            case "unanswered":
-              return answer.reason === "dead"
-                ? status(
-                    409,
-                    `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
-                  )
-                : status(
-                    409,
-                    `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`
-                  );
-            case "answered":
-              if (!answer.value.ok) {
-                return status(
-                  409,
-                  `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
-                );
-              }
-              break;
-            default:
-              throw unreachable(answer);
-          }
-          return {
-            ok: true,
-            ...signOutMachine(account, named, params.machineId, false),
-          };
-        }
-      )
-      .put(
-        "/api/accounts/routing/:provider",
-        {
-          params: t.Object({ provider: accountProvider }),
-          body: t.Object({
-            yours: strategyChoice,
-            delegates: strategyChoice,
-            atLimit: t.Object({
-              move: t.Boolean(),
-              waitMinutes: t.Integer({ minimum: 0 }),
-              moveWholeUnderK: t.Integer({ minimum: 0 }),
-              // Shipped apps send no cutoff: they keep the one saved.
-              staleAfterHours: t.Optional(t.Integer({ minimum: 1 })),
-              // Shipped apps send none: they keep the one saved.
-              compaction: t.Optional(
-                t.Object({
-                  beforeMove: compactMethod,
-                  atLimit: compactMethod,
-                  // A tab from before it sends none: it keeps the one saved.
-                  fileRoom: t.Optional(t.Integer({ minimum: 0 })),
-                  summarizer: t.Object({
-                    harness: harnessSchema,
-                    model: t.String({ minLength: 1 }),
-                  }),
-                })
-              ),
+        )
+        // The account picker's rows: Claude's subscription and Console, then
+        // every provider the fleet's machines know (pi-ai's joined with
+        // OpenCode's), each with how it signs in, the harnesses that use it,
+        // and whether CawCo reads its limits.
+        .get("/api/accounts/providers", (): ProviderChoice[] =>
+          providerChoices(knownProviders())
+        )
+        .post(
+          "/api/accounts",
+          {
+            body: t.Object({
+              provider: accountProvider,
+              // Claude: `subscription` or `console`. Any other provider: `oauth`
+              // (its own sign-in through pi-ai) or `api_key`.
+              kind: t.Union([
+                t.Literal("subscription"),
+                t.Literal("console"),
+                t.Literal("oauth"),
+                t.Literal("api_key"),
+              ]),
+              // A nickname; without one the account goes by its email once signed in.
+              label: t.Optional(t.String({ minLength: 1 })),
+              hue: t.Optional(accountHue),
+              // Made by the dashboard's setup: the step it stands at, kept
+              // until the setup is done so a reload opens it there again.
+              setupStep: t.Optional(accountSetupStep),
             }),
-          }),
-        },
-        ({ params, body, status }) => {
-          // Spread and Soonest reset weigh the limits CawCo reads; a provider
-          // it reads none for can only be routed Pinned or Fill first.
-          const offered = strategiesFor(params.provider);
-          for (const choice of [body.yours, body.delegates]) {
-            if (!offered.includes(choice.strategy)) {
-              const name =
-                params.provider === CLAUDE_PROVIDER
-                  ? "Claude"
-                  : (knownProviders().find((one) => one.id === params.provider)
-                      ?.name ?? params.provider);
-              const asked =
-                choice.strategy === "spread" ? "Spread" : "Soonest reset";
-              return status(
-                400,
-                `${asked} can't route ${name}: CawCo reads no limits for ${name}'s accounts, so there is no use or reset to weigh. Choose Pinned or Fill first.`
-              );
-            }
-            if (
-              choice.strategy === "pinned" &&
-              choice.pinnedAccountId &&
-              !db.accounts.get(choice.pinnedAccountId)
-            ) {
-              return status(
-                400,
-                `There is no account ${choice.pinnedAccountId} to pin.`
-              );
-            }
+          },
+          ({ body, status }) => {
+            const refusal = accountKindRefusal(body.provider, body.kind);
+            return refusal ? status(400, refusal) : db.accounts.create(body);
           }
-          const saved = db.accounts.routing(params.provider).atLimit;
-          const routing = {
-            provider: params.provider,
-            ...body,
-            atLimit: {
-              ...body.atLimit,
-              staleAfterHours:
-                body.atLimit.staleAfterHours ?? saved.staleAfterHours,
-              compaction: compactionAsked(
-                body.atLimit.compaction,
-                saved.compaction
+        )
+        .patch(
+          "/api/accounts/:id",
+          {
+            body: t.Object({
+              // Null clears the nickname: the account goes by its email.
+              label: t.Optional(
+                t.Union([t.String({ minLength: 1 }), t.Null()])
               ),
-            },
-          };
-          db.accounts.setRouting(routing);
-          return routing;
-        }
-      )
-      // Each account's windows with their pace and run-out, and which account
-      // carries a person's and a session's new sessions to the relay's horizon.
-      .get(
-        "/api/accounts/forecast",
-        { query: t.Object({ provider: accountProvider }) },
-        ({ query }): ProviderForecast => {
-          const now = Date.now();
-          const accounts = db.accounts
-            .list()
-            .filter((account) => account.provider === query.provider);
-          const readings = db.accounts.readings();
-          const history = accounts.flatMap((account) =>
-            historyPoints(db, account.id, now - 7 * DAY_MS)
-          );
-          const running = new Set(
-            db
-              .listInstances()
-              .filter((row) => row.status === "running" && row.accountId)
-              .map((row) => row.accountId as string)
-          );
-          const forecasts = accountForecasts(
-            accounts,
-            readings,
-            history,
-            running,
-            now
-          );
-          const signedIn = new Set(
-            db.accounts
-              .signins()
-              .filter((one) => one.state === "signed-in")
-              .map((one) => one.accountId)
-          );
-          const carry = (kind: "yours" | "delegates") =>
-            carrySequence({
-              accounts,
-              bench: db.accounts.bench(now),
-              forecasts,
-              kind,
-              now,
-              readings,
-              routing: db.accounts.routing(query.provider),
-              signedIn,
-            });
-          return {
-            provider: query.provider,
-            accounts: forecasts,
-            yours: carry("yours"),
-            delegates: carry("delegates"),
-          };
-        }
-      )
-      // Which account a session would start on, and why: what the New
-      // session modal says beside "Auto".
-      .get(
-        "/api/accounts/placement",
-        {
-          query: t.Object({
-            harness: t.String(),
-            machineId: t.String(),
-            model: t.Optional(t.String()),
-            projectId: t.Optional(t.String()),
-            taskId: t.Optional(t.String()),
-            type: t.Optional(t.String()),
-            kind: t.Optional(
-              t.Union([t.Literal("yours"), t.Literal("delegates")])
-            ),
-            account: t.Optional(t.String()),
-            forkOf: t.Optional(t.String()),
-            // The session's directory: what pi's `default` is there.
-            cwd: t.Optional(t.String()),
-          }),
-        },
-        async ({ query, status }) => {
-          const asked = await askedStart(query);
-          if ("refusal" in asked) {
-            return status(asked.status, asked.refusal);
+              hue: t.Optional(accountHue),
+              order: t.Optional(t.Integer()),
+              neverBackup: t.Optional(t.Boolean()),
+              reservePct: t.Optional(
+                t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
+              ),
+              // At a plan limit with extra usage on: move its sessions to an
+              // account with plan room, or keep going on its extra usage.
+              atPlanLimit: t.Optional(
+                t.Union([t.Literal("move"), t.Literal("extra-usage")])
+              ),
+              // Where its setup stands; null: the setup is done.
+              setupStep: t.Optional(t.Union([accountSetupStep, t.Null()])),
+            }),
+          },
+          ({ params, body, status }) => {
+            const account = accountOf(params.id);
+            return (
+              (account && db.accounts.patch(account.id, body)) ??
+              status(404, `There is no account ${params.id}.`)
+            );
           }
-          // Where a start would go says what its start would: a machine
-          // that refuses the harness refuses it ({@link placeSpawn}).
-          const refused = refusedHarness(query.machineId, asked.harness);
-          if (refused) {
-            return status(400, refused);
-          }
-          const input = placementInput(
-            query.machineId,
-            asked,
-            { projectId: query.projectId, taskId: query.taskId },
-            query.forkOf
-              ? {
-                  accountId:
-                    db.getInstancesByIds([query.forkOf])[0]?.accountId ?? null,
-                }
-              : undefined
-          );
-          // pi's `default` (asked in the directory above) or a bare id, as
-          // the session would start on it: the screen names the session's
-          // provider by it.
-          const resolved =
-            resolvedModel(query.machineId, query.harness, asked.model) ?? null;
-          if (!input) {
-            const named =
-              resolved && resolved !== query.model
-                ? `${query.model ?? "default"} (${resolved})`
-                : query.model;
-            return {
-              accountId: null,
-              strategy: "none",
-              why: named
-                ? `${named} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`
-                : `A ${query.harness} session with no model named runs from the machine's own ${query.harness} store.`,
-              model: resolved,
-            } satisfies PlacementPreview;
-          }
-          const placed = placeAccount(input);
-          if (!placed.ok) {
-            return status(400, placed.refusal);
-          }
-          const { ok: _ok, ...explain } = placed;
-          return { ...explain, model: resolved } satisfies PlacementPreview;
-        }
-      )
-      // Checks now whether Claude Code still refuses an account it refused
-      // account-wide, as the hourly look does (`checkRefused`): one turn as
-      // the account on a machine its refusal signed out. Answers the
-      // verdict: `back` on those machines, `refused` with Claude Code's
-      // words, `none` with why there was none, or `not-refused` for an
-      // account no account-wide refusal holds out.
-      .post("/api/accounts/:id/refusal-check", async ({ params, status }) => {
-        if (!accountOf(params.id)) {
-          return status(404, `There is no account ${params.id}.`);
-        }
-        return await checkRefused(params.id);
-      })
-      // Signs an account in on a machine, into the account's own store there.
-      // Claude: `claude auth login` in the account's config dir, answering
-      // the link to authorise in the reader's browser. Any other provider:
-      // pi-ai's own OAuth sign-in, run by the agent, answering a device code
-      // to enter on any device (or a link, for a provider without one). Only
-      // ever started by this call.
-      .post(
-        "/api/accounts/:id/machines/:machineId/signin",
-        async ({ params, status }) => {
+        )
+        // What removing the account does with the sessions on it, for its
+        // confirm to say: how many move to another account, how many have
+        // none to go to.
+        .get("/api/accounts/:id/removal", ({ params, status }) => {
           const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
-          const claude = account.provider === CLAUDE_PROVIDER;
-          if (!claude && account.kind !== "oauth") {
+          return removalOf(account);
+        })
+        .delete("/api/accounts/:id", async ({ params, status }) => {
+          const account = accountOf(params.id);
+          if (!account) {
+            return status(404, `There is no account ${params.id}.`);
+          }
+          const named = accountNameAmong(account, db.accounts.list());
+          // An id a join removed names the account it became, which is not the
+          // one the screen asking made: removing that is never done by its old
+          // id.
+          if (account.id !== params.id) {
             return status(
-              400,
-              `${accountNameAmong(account, db.accounts.list())} is a key account: send its key to the machines that use it.`
+              409,
+              `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in ${configurePage("accounts")}.`
             );
           }
-          // Signed in there again while a sign-out waited on a process there
-          // ({@link leaveAccounts}): the store stays.
-          db.accounts.dropLeave(account.id, params.machineId);
-          // The machine's sign-in runs under the id it was asked for, the id
-          // `…/signin/complete` finishes it under: one a join removed
-          // finishes into the account it joined ({@link finishJoined}).
-          const answer = claude
-            ? await callAgent(
-                params.machineId,
-                CONTROL_BEGIN_ACCOUNT_LOGIN,
-                [params.id, account.kind],
-                SIGNIN_TIMEOUT_MS,
-                "claude"
-              )
-            : await callAgent(
-                params.machineId,
-                CONTROL_BEGIN_PROVIDER_LOGIN,
-                [params.id, account.provider],
-                SIGNIN_TIMEOUT_MS
-              );
-          // Sent, whether or not it answered: only a machine not connected was
-          // never asked.
-          const sent = !(
-            answer.kind === "unanswered" && answer.reason === "dead"
+          const signins = db.accounts
+            .signins()
+            .filter((one) => one.accountId === account.id);
+          // A machine where a process still runs in the account's store keeps
+          // it until none does ({@link leaveAccounts}): signed out under a
+          // turn, the turn would lose its credential and its transcript.
+          const leavesOn = [
+            ...new Set(
+              db
+                .instancesOnAccount(account.id)
+                .filter(processMayRun)
+                .map((row) => row.machineId)
+            ),
+          ];
+          // Each other machine signed in to it signs it out now (Claude Code
+          // itself for a Claude dir, the agent for any other) and drops the
+          // account's store there. One that is offline does so when it next
+          // connects: it names its stores, and this hub answers the ones it
+          // removed, by the record `remove` keeps (`unknownAccountsOf`). One
+          // that is online and fails says why.
+          const { failed, silent, later } = await signOutEverywhere(
+            account,
+            signins
+              .map((signin) => signin.machineId)
+              .filter((machineId) => !leavesOn.includes(machineId))
           );
-          if (sent && !accountOf(params.id)) {
+          if (failed.length > 0 || silent.length > 0) {
             return status(
-              404,
-              await undoRemovedSignin(account, params.machineId)
+              409,
+              [
+                failed.length > 0
+                  ? `${failed.join(", ")} did not sign ${named} out.`
+                  : "",
+                silent.length > 0
+                  ? `${silent.join("; ")}, so whether ${named} was signed out there is not known.`
+                  : "",
+                "Try again.",
+              ]
+                .filter(Boolean)
+                .join(" ")
             );
           }
-          // A machine that was asked makes the account's store (and may be
-          // waiting on its sign-in) whether or not a code came back; it holds
-          // that store signed out, as its next register would report, so
-          // removing the account forgets it there. A store under an id a
-          // join removed is no account's: the machine forgets it when it
-          // next names its stores ({@link unknownAccountsOf}).
-          if (
-            sent &&
-            params.id === account.id &&
-            !db.accounts
+          const { moving, staying } = removeWithSessions(
+            account,
+            named,
+            leavesOn
+          );
+          // Machines offline now, which sign it out when they next connect.
+          return { ok: true, later, moving, staying };
+        })
+        // Signs an account out on one machine and drops that sign-in: the same
+        // sign-out the account's removal runs on each of its machines, here on
+        // one, the account and its other machines left as they are. Every
+        // session on it there moves off it as a removal's do ({@link
+        // signOutMachine}).
+        .delete(
+          "/api/accounts/:id/machines/:machineId",
+          async ({ params, status }) => {
+            const account = accountOf(params.id);
+            if (!account) {
+              return status(404, `There is no account ${params.id}.`);
+            }
+            const machine = machineName(params.machineId);
+            const named = accountNameAmong(account, db.accounts.list());
+            const signin = db.accounts
               .signins()
-              .some(
+              .find(
                 (one) =>
                   one.accountId === account.id &&
                   one.machineId === params.machineId
-              )
-          ) {
-            db.accounts.putSignin({
-              accountId: account.id,
-              machineId: params.machineId,
-              state: "signed-out",
-            });
-            publishUsage(params.machineId);
-          }
-          switch (answer.kind) {
-            case "unanswered":
-              return status(503, awayWords(params.machineId, answer));
-            case "answered": {
-              if (!answer.value.ok) {
-                pendingSignins.delete(pendingKey(params.id, params.machineId));
-                return status(
-                  422,
-                  answer.value.error ?? "The sign-in did not start."
-                );
-              }
-              const challenge = answer.value.result as ProviderSigninChallenge;
-              keepPending(params.id, params.machineId, challenge);
-              return challenge;
-            }
-            default:
-              throw unreachable(answer);
-          }
-        }
-      )
-      // Claude: types the pasted code into the waiting `claude auth login`.
-      // Any other provider: a pasted code for a sign-in that asked for one;
-      // else it waits up to a minute for the person to enter the device code,
-      // and says `pending` when they have not yet, `expired` once it lapsed.
-      .post(
-        "/api/accounts/:id/machines/:machineId/signin/complete",
-        { body: t.Object({ code: t.Optional(t.String()) }) },
-        async ({ params, body, status }) => {
-          // The account the sign-in finishes into: its own, or the one a
-          // sign-in on another machine has since joined it into.
-          const account = accountOf(params.id);
-          if (!account) {
-            return status(404, `There is no account ${params.id}.`);
-          }
-          const claude = account.provider === CLAUDE_PROVIDER;
-          if (claude && !body.code) {
-            return status(400, "Paste the code from the authorisation page.");
-          }
-          const asked = await completeOn(
-            account,
-            params.id,
-            params.machineId,
-            body.code
-          );
-          switch (asked.kind) {
-            case "unanswered":
-              return status(503, awayWords(params.machineId, asked));
-            case "answered":
-              break;
-            default:
-              throw unreachable(asked);
-          }
-          const answer = asked.value;
-          const now = accountOf(params.id);
-          if (!now) {
-            return status(
-              404,
-              await undoRemovedSignin(account, params.machineId)
-            );
-          }
-          if (!answer.ok) {
-            // The machine's login stopped: its link or code is spent.
-            pendingSignins.delete(pendingKey(params.id, params.machineId));
-            return status(422, answer.error ?? "The sign-in did not finish.");
-          }
-          const result = answer.result as
-            AccountSigninResult | ProviderSigninResult;
-          // Ended, one way or another; a code still waited on, or one that
-          // did not take, leaves the same link or code standing.
-          if (["signed-in", "mismatch", "expired"].includes(result.state)) {
-            pendingSignins.delete(pendingKey(params.id, params.machineId));
-          }
-          const settled =
-            now.id === params.id
-              ? await settleSignin(now, params.machineId, result)
-              : await finishJoined(params.id, now, params.machineId, result);
-          return "error" in settled ? status(409, settled.error) : settled;
-        }
-      )
-      // A key account's key, typed once in the dashboard: relayed to each
-      // machine named, which writes it into the account's store there. The
-      // hub never stores it, never logs it and answers nothing of it.
-      .post(
-        "/api/accounts/:id/key",
-        {
-          body: t.Object({
-            key: t.String({ minLength: 1 }),
-            machineIds: t.Array(t.String(), { minItems: 1 }),
-          }),
-        },
-        async ({ params, body, status }) => {
-          const account = accountOf(params.id);
-          if (!account) {
-            return status(404, `There is no account ${params.id}.`);
-          }
-          if (account.kind !== "api_key") {
-            return status(
-              400,
-              `${accountNameAmong(account, db.accounts.list())} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
-            );
-          }
-          const machines = await Promise.all(
-            body.machineIds.map(async (machineId) => {
-              // Its key sent there again while a sign-out waited on a process
-              // there ({@link leaveAccounts}): the store stays.
-              db.accounts.dropLeave(account.id, machineId);
-              const answer = await callAgent(
-                machineId,
-                CONTROL_SET_PROVIDER_KEY,
-                [account.id, account.provider, body.key, account.identity],
-                SIGNIN_TIMEOUT_MS
               );
-              switch (answer.kind) {
-                case "unanswered":
-                  return { machineId, error: awayWords(machineId, answer) };
-                case "answered":
-                  if (!answer.value.ok) {
-                    return {
-                      machineId,
-                      error: answer.value.error ?? "The key was not written.",
-                    };
-                  }
-                  break;
-                default:
-                  throw unreachable(answer);
-              }
-              const result = answer.value.result as ProviderSigninResult;
-              // Another machine's write already joined the key into the
-              // account it already was: this one joins it there too.
-              const now = accountOf(account.id);
-              const joinedTo = now?.id === account.id ? undefined : now;
-              const settled =
-                joinedTo && result.state === "signed-in" && result.identity
-                  ? await joinOn(
-                      account.id,
-                      joinedTo,
-                      machineId,
-                      result.identity
-                    ).then((joined) =>
-                      "error" in joined ? joined : { ...result, joined }
+            if (!signin) {
+              return status(404, `${named} is not signed in on ${machine}.`);
+            }
+            // A process there still running in its store keeps the store
+            // until none does ({@link leaveAccounts}), as an account's
+            // removal does: signed out under a turn, the turn would lose its
+            // credential and its transcript.
+            const leaves = db
+              .instancesOnAccount(account.id)
+              .some(
+                (row) =>
+                  row.machineId === params.machineId && processMayRun(row)
+              );
+            if (leaves) {
+              return {
+                ok: true,
+                ...signOutMachine(account, named, params.machineId, true),
+              };
+            }
+            const answer = await forgetOn(account, params.machineId);
+            switch (answer.kind) {
+              case "unanswered":
+                return answer.reason === "dead"
+                  ? status(
+                      409,
+                      `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
                     )
-                  : await settleProviderSignin(
-                      db.accounts.get(account.id) ?? account,
-                      machineId,
-                      result
+                  : status(
+                      409,
+                      `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`
                     );
-              return "error" in settled
-                ? { machineId, error: settled.error }
-                : { machineId, result: settled };
-            })
-          );
-          return { machines };
-        }
-      )
-      // What a machine's own stores hold that CawCo can move into accounts:
-      // `~/.claude`'s login, and each credential in pi's and OpenCode's own
-      // `auth.json` (a Claude subscription's OAuth there is never listed).
-      .get(
-        "/api/accounts/home-credentials",
-        { query: t.Object({ machineId: t.String() }) },
-        async ({ query, set, status }) => {
-          const [claude, others] = await Promise.all([
-            readAgent(
-              query.machineId,
-              CONTROL_READ_HOME_LOGIN,
-              [],
-              SIGNIN_TIMEOUT_MS,
-              "claude"
-            ),
-            readAgent(
-              query.machineId,
-              CONTROL_READ_HOME_CREDENTIALS,
-              [],
-              SIGNIN_TIMEOUT_MS
-            ),
-          ]);
-          switch (others.kind) {
-            case "unanswered":
-              if (others.reason === "dead") {
-                const away = awayStatus(set, query.machineId);
-                return status(away.code, away.said);
-              }
-              return status(503, awayWords(query.machineId, others));
-            case "answered":
-              if (!others.value.ok) {
+              case "answered":
+                if (!answer.value.ok) {
+                  return status(
+                    409,
+                    `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
+                  );
+                }
+                break;
+              default:
+                throw unreachable(answer);
+            }
+            return {
+              ok: true,
+              ...signOutMachine(account, named, params.machineId, false),
+            };
+          }
+        ),
+
+      new Elysia()
+        .put(
+          "/api/accounts/routing/:provider",
+          {
+            params: t.Object({ provider: accountProvider }),
+            body: t.Object({
+              yours: strategyChoice,
+              delegates: strategyChoice,
+              atLimit: t.Object({
+                move: t.Boolean(),
+                waitMinutes: t.Integer({ minimum: 0 }),
+                moveWholeUnderK: t.Integer({ minimum: 0 }),
+                // Shipped apps send no cutoff: they keep the one saved.
+                staleAfterHours: t.Optional(t.Integer({ minimum: 1 })),
+                // Shipped apps send none: they keep the one saved.
+                compaction: t.Optional(
+                  t.Object({
+                    beforeMove: compactMethod,
+                    atLimit: compactMethod,
+                    // A tab from before it sends none: it keeps the one saved.
+                    fileRoom: t.Optional(t.Integer({ minimum: 0 })),
+                    summarizer: t.Object({
+                      harness: harnessSchema,
+                      model: t.String({ minLength: 1 }),
+                    }),
+                  })
+                ),
+              }),
+            }),
+          },
+          ({ params, body, status }) => {
+            // Spread and Soonest reset weigh the limits CawCo reads; a provider
+            // it reads none for can only be routed Pinned or Fill first.
+            const offered = strategiesFor(params.provider);
+            for (const choice of [body.yours, body.delegates]) {
+              if (!offered.includes(choice.strategy)) {
+                const name =
+                  params.provider === CLAUDE_PROVIDER
+                    ? "Claude"
+                    : (knownProviders().find(
+                        (one) => one.id === params.provider
+                      )?.name ?? params.provider);
+                const asked =
+                  choice.strategy === "spread" ? "Spread" : "Soonest reset";
                 return status(
-                  422,
-                  others.value.error ?? "The machine gave no reason."
+                  400,
+                  `${asked} can't route ${name}: CawCo reads no limits for ${name}'s accounts, so there is no use or reset to weigh. Choose Pinned or Fill first.`
                 );
               }
-              break;
-            default:
-              throw unreachable(others);
-          }
-          // `null` is Claude Code's answer that it holds no login to read; a
-          // read it did not answer is said, never shown as no login.
-          let home: HomeLogin | null;
-          switch (claude.kind) {
-            case "unanswered":
-              if (claude.reason === "dead") {
-                const away = awayStatus(set, query.machineId);
-                return status(away.code, away.said);
+              if (
+                choice.strategy === "pinned" &&
+                choice.pinnedAccountId &&
+                !db.accounts.get(choice.pinnedAccountId)
+              ) {
+                return status(
+                  400,
+                  `There is no account ${choice.pinnedAccountId} to pin.`
+                );
               }
-              return status(503, awayWords(query.machineId, claude));
-            case "answered":
-              home = claude.value.ok
-                ? (claude.value.result as HomeLogin)
-                : null;
-              break;
-            default:
-              throw unreachable(claude);
+            }
+            const saved = db.accounts.routing(params.provider).atLimit;
+            const routing = {
+              provider: params.provider,
+              ...body,
+              atLimit: {
+                ...body.atLimit,
+                staleAfterHours:
+                  body.atLimit.staleAfterHours ?? saved.staleAfterHours,
+                compaction: compactionAsked(
+                  body.atLimit.compaction,
+                  saved.compaction
+                ),
+              },
+            };
+            db.accounts.setRouting(routing);
+            return routing;
           }
-          return {
-            claude: home,
-            credentials: others.value.result as HomeCredential[],
-          };
-        }
-      )
-      // Moves one credential out of a machine's own store into CawCo, once:
-      // into the account of the identity it is (made now when there is none),
-      // in that account's store on the machine, so it works in CawCo without
-      // a second sign-in. `store` `claude` is `~/.claude`'s login; `pi` and
-      // `opencode` name their own `auth.json`, and `provider` the entry there.
-      // The sessions that run from it go on running from it, and the machine
-      // moves it at the first moment all of them are at rest; the answer says
-      // how many run from it now, and GET says how it came out.
-      .post(
-        "/api/accounts/move-login",
-        {
-          body: t.Object({
-            machineId: t.String(),
-            store: homeStore,
-            provider: t.Optional(t.String()),
-          }),
-        },
-        async ({ body, status }) => {
-          const { machineId, store } = body;
-          const found = await homeCredentialOf(machineId, store, body.provider);
-          if ("error" in found) {
-            return status(found.status, found.error);
+        )
+        // Each account's windows with their pace and run-out, and which account
+        // carries a person's and a session's new sessions to the relay's horizon.
+        .get(
+          "/api/accounts/forecast",
+          { query: t.Object({ provider: accountProvider }) },
+          ({ query }): ProviderForecast => {
+            const now = Date.now();
+            const accounts = db.accounts
+              .list()
+              .filter((account) => account.provider === query.provider);
+            const readings = db.accounts.readings();
+            const history = accounts.flatMap((account) =>
+              historyPoints(db, account.id, now - 7 * DAY_MS)
+            );
+            const running = new Set(
+              db
+                .listInstances()
+                .filter((row) => row.status === "running" && row.accountId)
+                .map((row) => row.accountId as string)
+            );
+            const forecasts = accountForecasts(
+              accounts,
+              readings,
+              history,
+              running,
+              now
+            );
+            const signedIn = new Set(
+              db.accounts
+                .signins()
+                .filter((one) => one.state === "signed-in")
+                .map((one) => one.accountId)
+            );
+            const carry = (kind: "yours" | "delegates") =>
+              carrySequence({
+                accounts,
+                bench: db.accounts.bench(now),
+                forecasts,
+                kind,
+                now,
+                readings,
+                routing: db.accounts.routing(query.provider),
+                signedIn,
+              });
+            return {
+              provider: query.provider,
+              accounts: forecasts,
+              yours: carry("yours"),
+              delegates: carry("delegates"),
+            };
           }
-          const started = await startMove(machineId, store, found);
-          return "error" in started
-            ? status(started.status, started.error)
-            : status(202, started);
-        }
-      )
-      .get("/api/accounts/move-login", () => ({
-        moving: movingLogins().map((move) => ({
-          machineId: move.machineId,
-          store: move.store,
-          storeProvider: move.storeProvider,
-          provider: move.provider,
-          accountId: move.accountId,
-          since: move.since,
+        )
+        // Which account a session would start on, and why: what the New
+        // session modal says beside "Auto".
+        .get(
+          "/api/accounts/placement",
+          {
+            query: t.Object({
+              harness: t.String(),
+              machineId: t.String(),
+              model: t.Optional(t.String()),
+              projectId: t.Optional(t.String()),
+              taskId: t.Optional(t.String()),
+              type: t.Optional(t.String()),
+              kind: t.Optional(
+                t.Union([t.Literal("yours"), t.Literal("delegates")])
+              ),
+              account: t.Optional(t.String()),
+              forkOf: t.Optional(t.String()),
+              // The session's directory: what pi's `default` is there.
+              cwd: t.Optional(t.String()),
+            }),
+          },
+          async ({ query, status }) => {
+            const asked = await askedStart(query);
+            if ("refusal" in asked) {
+              return status(asked.status, asked.refusal);
+            }
+            // Where a start would go says what its start would: a machine
+            // that refuses the harness refuses it ({@link placeSpawn}).
+            const refused = refusedHarness(query.machineId, asked.harness);
+            if (refused) {
+              return status(400, refused);
+            }
+            const input = placementInput(
+              query.machineId,
+              asked,
+              { projectId: query.projectId, taskId: query.taskId },
+              query.forkOf
+                ? {
+                    accountId:
+                      db.getInstancesByIds([query.forkOf])[0]?.accountId ??
+                      null,
+                  }
+                : undefined
+            );
+            // pi's `default` (asked in the directory above) or a bare id, as
+            // the session would start on it: the screen names the session's
+            // provider by it.
+            const resolved =
+              resolvedModel(query.machineId, query.harness, asked.model) ??
+              null;
+            if (!input) {
+              const named =
+                resolved && resolved !== query.model
+                  ? `${query.model ?? "default"} (${resolved})`
+                  : query.model;
+              return {
+                accountId: null,
+                strategy: "none",
+                why: named
+                  ? `${named} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`
+                  : `A ${query.harness} session with no model named runs from the machine's own ${query.harness} store.`,
+                model: resolved,
+              } satisfies PlacementPreview;
+            }
+            const placed = placeAccount(input);
+            if (!placed.ok) {
+              return status(400, placed.refusal);
+            }
+            const { ok: _ok, ...explain } = placed;
+            return { ...explain, model: resolved } satisfies PlacementPreview;
+          }
+        ),
+
+      new Elysia()
+        // Checks now whether Claude Code still refuses an account it refused
+        // account-wide, as the hourly look does (`checkRefused`): one turn as
+        // the account on a machine its refusal signed out. Answers the
+        // verdict: `back` on those machines, `refused` with Claude Code's
+        // words, `none` with why there was none, or `not-refused` for an
+        // account no account-wide refusal holds out.
+        .post("/api/accounts/:id/refusal-check", async ({ params, status }) => {
+          if (!accountOf(params.id)) {
+            return status(404, `There is no account ${params.id}.`);
+          }
+          return await checkRefused(params.id);
+        })
+        // Signs an account in on a machine, into the account's own store there.
+        // Claude: `claude auth login` in the account's config dir, answering
+        // the link to authorise in the reader's browser. Any other provider:
+        // pi-ai's own OAuth sign-in, run by the agent, answering a device code
+        // to enter on any device (or a link, for a provider without one). Only
+        // ever started by this call.
+        .post(
+          "/api/accounts/:id/machines/:machineId/signin",
+          async ({ params, status }) => {
+            const account = accountOf(params.id);
+            if (!account) {
+              return status(404, `There is no account ${params.id}.`);
+            }
+            const claude = account.provider === CLAUDE_PROVIDER;
+            if (!claude && account.kind !== "oauth") {
+              return status(
+                400,
+                `${accountNameAmong(account, db.accounts.list())} is a key account: send its key to the machines that use it.`
+              );
+            }
+            // Signed in there again while a sign-out waited on a process there
+            // ({@link leaveAccounts}): the store stays.
+            db.accounts.dropLeave(account.id, params.machineId);
+            // The machine's sign-in runs under the id it was asked for, the id
+            // `…/signin/complete` finishes it under: one a join removed
+            // finishes into the account it joined ({@link finishJoined}).
+            const answer = claude
+              ? await callAgent(
+                  params.machineId,
+                  CONTROL_BEGIN_ACCOUNT_LOGIN,
+                  [params.id, account.kind],
+                  SIGNIN_TIMEOUT_MS,
+                  "claude"
+                )
+              : await callAgent(
+                  params.machineId,
+                  CONTROL_BEGIN_PROVIDER_LOGIN,
+                  [params.id, account.provider],
+                  SIGNIN_TIMEOUT_MS
+                );
+            // Sent, whether or not it answered: only a machine not connected was
+            // never asked.
+            const sent = !(
+              answer.kind === "unanswered" && answer.reason === "dead"
+            );
+            if (sent && !accountOf(params.id)) {
+              return status(
+                404,
+                await undoRemovedSignin(account, params.machineId)
+              );
+            }
+            // A machine that was asked makes the account's store (and may be
+            // waiting on its sign-in) whether or not a code came back; it holds
+            // that store signed out, as its next register would report, so
+            // removing the account forgets it there. A store under an id a
+            // join removed is no account's: the machine forgets it when it
+            // next names its stores ({@link unknownAccountsOf}).
+            if (
+              sent &&
+              params.id === account.id &&
+              !db.accounts
+                .signins()
+                .some(
+                  (one) =>
+                    one.accountId === account.id &&
+                    one.machineId === params.machineId
+                )
+            ) {
+              db.accounts.putSignin({
+                accountId: account.id,
+                machineId: params.machineId,
+                state: "signed-out",
+              });
+              publishUsage(params.machineId);
+            }
+            switch (answer.kind) {
+              case "unanswered":
+                return status(503, awayWords(params.machineId, answer));
+              case "answered": {
+                if (!answer.value.ok) {
+                  pendingSignins.delete(
+                    pendingKey(params.id, params.machineId)
+                  );
+                  return status(
+                    422,
+                    answer.value.error ?? "The sign-in did not start."
+                  );
+                }
+                const challenge = answer.value
+                  .result as ProviderSigninChallenge;
+                keepPending(params.id, params.machineId, challenge);
+                return challenge;
+              }
+              default:
+                throw unreachable(answer);
+            }
+          }
+        )
+        // Claude: types the pasted code into the waiting `claude auth login`.
+        // Any other provider: a pasted code for a sign-in that asked for one;
+        // else it waits up to a minute for the person to enter the device code,
+        // and says `pending` when they have not yet, `expired` once it lapsed.
+        .post(
+          "/api/accounts/:id/machines/:machineId/signin/complete",
+          { body: t.Object({ code: t.Optional(t.String()) }) },
+          async ({ params, body, status }) => {
+            // The account the sign-in finishes into: its own, or the one a
+            // sign-in on another machine has since joined it into.
+            const account = accountOf(params.id);
+            if (!account) {
+              return status(404, `There is no account ${params.id}.`);
+            }
+            const claude = account.provider === CLAUDE_PROVIDER;
+            if (claude && !body.code) {
+              return status(400, "Paste the code from the authorisation page.");
+            }
+            const asked = await completeOn(
+              account,
+              params.id,
+              params.machineId,
+              body.code
+            );
+            switch (asked.kind) {
+              case "unanswered":
+                return status(503, awayWords(params.machineId, asked));
+              case "answered":
+                break;
+              default:
+                throw unreachable(asked);
+            }
+            const answer = asked.value;
+            const now = accountOf(params.id);
+            if (!now) {
+              return status(
+                404,
+                await undoRemovedSignin(account, params.machineId)
+              );
+            }
+            if (!answer.ok) {
+              // The machine's login stopped: its link or code is spent.
+              pendingSignins.delete(pendingKey(params.id, params.machineId));
+              return status(422, answer.error ?? "The sign-in did not finish.");
+            }
+            const result = answer.result as
+              AccountSigninResult | ProviderSigninResult;
+            // Ended, one way or another; a code still waited on, or one that
+            // did not take, leaves the same link or code standing.
+            if (["signed-in", "mismatch", "expired"].includes(result.state)) {
+              pendingSignins.delete(pendingKey(params.id, params.machineId));
+            }
+            const settled =
+              now.id === params.id
+                ? await settleSignin(now, params.machineId, result)
+                : await finishJoined(params.id, now, params.machineId, result);
+            return "error" in settled ? status(409, settled.error) : settled;
+          }
+        )
+        // A key account's key, typed once in the dashboard: relayed to each
+        // machine named, which writes it into the account's store there. The
+        // hub never stores it, never logs it and answers nothing of it.
+        .post(
+          "/api/accounts/:id/key",
+          {
+            body: t.Object({
+              key: t.String({ minLength: 1 }),
+              machineIds: t.Array(t.String(), { minItems: 1 }),
+            }),
+          },
+          async ({ params, body, status }) => {
+            const account = accountOf(params.id);
+            if (!account) {
+              return status(404, `There is no account ${params.id}.`);
+            }
+            if (account.kind !== "api_key") {
+              return status(
+                400,
+                `${accountNameAmong(account, db.accounts.list())} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
+              );
+            }
+            const machines = await Promise.all(
+              body.machineIds.map(async (machineId) => {
+                // Its key sent there again while a sign-out waited on a process
+                // there ({@link leaveAccounts}): the store stays.
+                db.accounts.dropLeave(account.id, machineId);
+                const answer = await callAgent(
+                  machineId,
+                  CONTROL_SET_PROVIDER_KEY,
+                  [account.id, account.provider, body.key, account.identity],
+                  SIGNIN_TIMEOUT_MS
+                );
+                switch (answer.kind) {
+                  case "unanswered":
+                    return { machineId, error: awayWords(machineId, answer) };
+                  case "answered":
+                    if (!answer.value.ok) {
+                      return {
+                        machineId,
+                        error: answer.value.error ?? "The key was not written.",
+                      };
+                    }
+                    break;
+                  default:
+                    throw unreachable(answer);
+                }
+                const result = answer.value.result as ProviderSigninResult;
+                // Another machine's write already joined the key into the
+                // account it already was: this one joins it there too.
+                const now = accountOf(account.id);
+                const joinedTo = now?.id === account.id ? undefined : now;
+                const settled =
+                  joinedTo && result.state === "signed-in" && result.identity
+                    ? await joinOn(
+                        account.id,
+                        joinedTo,
+                        machineId,
+                        result.identity
+                      ).then((joined) =>
+                        "error" in joined ? joined : { ...result, joined }
+                      )
+                    : await settleProviderSignin(
+                        db.accounts.get(account.id) ?? account,
+                        machineId,
+                        result
+                      );
+                return "error" in settled
+                  ? { machineId, error: settled.error }
+                  : { machineId, result: settled };
+              })
+            );
+            return { machines };
+          }
+        )
+        // What a machine's own stores hold that CawCo can move into accounts:
+        // `~/.claude`'s login, and each credential in pi's and OpenCode's own
+        // `auth.json` (a Claude subscription's OAuth there is never listed).
+        .get(
+          "/api/accounts/home-credentials",
+          { query: t.Object({ machineId: t.String() }) },
+          async ({ query, set, status }) => {
+            const [claude, others] = await Promise.all([
+              readAgent(
+                query.machineId,
+                CONTROL_READ_HOME_LOGIN,
+                [],
+                SIGNIN_TIMEOUT_MS,
+                "claude"
+              ),
+              readAgent(
+                query.machineId,
+                CONTROL_READ_HOME_CREDENTIALS,
+                [],
+                SIGNIN_TIMEOUT_MS
+              ),
+            ]);
+            switch (others.kind) {
+              case "unanswered":
+                if (others.reason === "dead") {
+                  const away = awayStatus(set, query.machineId);
+                  return status(away.code, away.said);
+                }
+                return status(503, awayWords(query.machineId, others));
+              case "answered":
+                if (!others.value.ok) {
+                  return status(
+                    422,
+                    others.value.error ?? "The machine gave no reason."
+                  );
+                }
+                break;
+              default:
+                throw unreachable(others);
+            }
+            // `null` is Claude Code's answer that it holds no login to read; a
+            // read it did not answer is said, never shown as no login.
+            let home: HomeLogin | null;
+            switch (claude.kind) {
+              case "unanswered":
+                if (claude.reason === "dead") {
+                  const away = awayStatus(set, query.machineId);
+                  return status(away.code, away.said);
+                }
+                return status(503, awayWords(query.machineId, claude));
+              case "answered":
+                home = claude.value.ok
+                  ? (claude.value.result as HomeLogin)
+                  : null;
+                break;
+              default:
+                throw unreachable(claude);
+            }
+            return {
+              claude: home,
+              credentials: others.value.result as HomeCredential[],
+            };
+          }
+        )
+        // Moves one credential out of a machine's own store into CawCo, once:
+        // into the account of the identity it is (made now when there is none),
+        // in that account's store on the machine, so it works in CawCo without
+        // a second sign-in. `store` `claude` is `~/.claude`'s login; `pi` and
+        // `opencode` name their own `auth.json`, and `provider` the entry there.
+        // The sessions that run from it go on running from it, and the machine
+        // moves it at the first moment all of them are at rest; the answer says
+        // how many run from it now, and GET says how it came out.
+        .post(
+          "/api/accounts/move-login",
+          {
+            body: t.Object({
+              machineId: t.String(),
+              store: homeStore,
+              provider: t.Optional(t.String()),
+            }),
+          },
+          async ({ body, status }) => {
+            const { machineId, store } = body;
+            const found = await homeCredentialOf(
+              machineId,
+              store,
+              body.provider
+            );
+            if ("error" in found) {
+              return status(found.status, found.error);
+            }
+            const started = await startMove(machineId, store, found);
+            return "error" in started
+              ? status(started.status, started.error)
+              : status(202, started);
+          }
+        )
+        .get("/api/accounts/move-login", () => ({
+          moving: movingLogins().map((move) => ({
+            machineId: move.machineId,
+            store: move.store,
+            storeProvider: move.storeProvider,
+            provider: move.provider,
+            accountId: move.accountId,
+            since: move.since,
+          })),
+          done: [...moveResults.values()],
         })),
-        done: [...moveResults.values()],
-      })),
+    ]),
     usageRoutes(ctx),
   ]);
 
