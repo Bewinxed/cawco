@@ -38,7 +38,7 @@ import type { JoinInfo } from "@cawco/core/join";
 import { MediaQuery } from "svelte/reactivity";
 import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 import { hub } from "#lib/platform/hub.js";
-import { failureWords, hubRefusal } from "#lib/platform/hub-read.js";
+import { failureWords, hubData, hubRefusal } from "#lib/platform/hub-read.js";
 import { replaceState } from "$app/navigation";
 import { page } from "$app/state";
 import { currentClientId } from "../client-id";
@@ -227,11 +227,8 @@ class Connect {
   async load(delay = 1000): Promise<void> {
     clearTimeout(this.#readRetry);
     try {
-      const answer = await hub.api.installs.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      this.take(answer.data);
+      const answer = await hubData(hub.api.installs.get());
+      this.take(answer);
     } catch {
       if (!socketOpen()) {
         return;
@@ -244,11 +241,7 @@ class Connect {
 
   async loadJoin(): Promise<void> {
     try {
-      const answer = await hub.api.join.get();
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      this.join = answer.data;
+      this.join = await hubData(hub.api.join.get());
       this.joinFailed = null;
     } catch (error) {
       this.joinFailed = failureWords(error);
@@ -486,14 +479,12 @@ class Connect {
   async start(body: InstallStart, hold = 0): Promise<InstallStarted> {
     this.#startingValue = true;
     try {
-      const answer = await hub.api.installs.post({
-        ...body,
-        stamp: this.#stamp(),
-      });
-      if (answer.error) {
-        throw hubRefusal(answer);
-      }
-      const started = answer.data;
+      const started = await hubData(
+        hub.api.installs.post({
+          ...body,
+          stamp: this.#stamp(),
+        })
+      );
       if (!started.existing) {
         clearTimeout(this.#saveTimer);
         this.#saveTimer = undefined;
@@ -526,24 +517,19 @@ class Connect {
   }
 
   async stop(id: string): Promise<void> {
-    const answer = await hub.api.installs({ id }).stop.post();
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    this.take(answer.data);
+    const answer = await hubData(hub.api.installs({ id }).stop.post());
+    this.take(answer);
   }
 
   async retry(id: string): Promise<void> {
     const install = this.installs.find((one) => one.id === id);
-    const answer = await hub.api
-      .installs({ id })
-      .retry.post(
-        install?.signIn === "password" ? { password: this.password } : {}
-      );
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    const started = answer.data;
+    const started = await hubData(
+      hub.api
+        .installs({ id })
+        .retry.post(
+          install?.signIn === "password" ? { password: this.password } : {}
+        )
+    );
     this.#adopt(started.install);
     // A command install retried is a new one, with a new code.
     this.id = started.install.id;
@@ -554,20 +540,14 @@ class Connect {
 
   /** Remove install, or a joined one's notice dismissed: it leaves the band. */
   async remove(id: string): Promise<void> {
-    const answer = await hub.api.installs({ id }).delete();
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    this.take(answer.data);
+    const answer = await hubData(hub.api.installs({ id }).delete());
+    this.take(answer);
   }
 
   /** The install's whole output, for the output sheet. */
   async outputOf(id: string): Promise<string[]> {
-    const answer = await hub.api.installs({ id }).output.get();
-    if (answer.error) {
-      throw hubRefusal(answer);
-    }
-    return answer.data.lines;
+    const answer = await hubData(hub.api.installs({ id }).output.get());
+    return answer.lines;
   }
 }
 

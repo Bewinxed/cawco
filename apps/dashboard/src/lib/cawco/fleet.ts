@@ -33,7 +33,7 @@ import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
 import type { Treaty } from "@elysia/eden";
 import { hub } from "#lib/platform/hub.js";
-import { couldNot, couldNotOrAway } from "#lib/platform/hub-read.js";
+import { couldNot, couldNotOrAway, hubData } from "#lib/platform/hub-read.js";
 import { machineFs, onFleetFetch } from "./stores/machines";
 
 /**
@@ -269,28 +269,24 @@ const TRAILING_STOPS = /\.+$/u;
  * Saves an MCP server. `projectId` binds it to one project, placed at each of
  * its checkouts and workspaces; null makes it every machine's.
  */
-export const saveMcpServer = async (
+export const saveMcpServer = (
   name: string,
   config: FleetMcpConfig,
   enabled: boolean,
   projectId: string | null
-) => {
-  const answer = await hub.api.fleet
-    .mcp({ name })
-    .put({ config: { ...config }, enabled, projectId });
-  if (answer.error) {
-    throw couldNotOrAway(`save ${name}`)(answer);
-  }
-  return answer.data;
-};
+) =>
+  hubData(
+    hub.api.fleet
+      .mcp({ name })
+      .put({ config: { ...config }, enabled, projectId }),
+    couldNotOrAway(`save ${name}`)
+  );
 
-export const removeMcpServer = async (name: string) => {
-  const answer = await hub.api.fleet.mcp({ name }).delete();
-  if (answer.error) {
-    throw couldNotOrAway(`remove ${name}`)(answer);
-  }
-  return answer.data;
-};
+export const removeMcpServer = (name: string) =>
+  hubData(
+    hub.api.fleet.mcp({ name }).delete(),
+    couldNotOrAway(`remove ${name}`)
+  );
 
 /**
  * Signs this browser in to a fleet MCP server, in a tab of its own: the
@@ -320,18 +316,15 @@ export const signInToMcp = async (
     );
   }
   const { origin } = window.location;
-  const answer = await hub.api.fleet
-    .mcp({ name })
-    ["sign-in"].post(access ? { access } : undefined)
-    .catch((error: unknown) => {
-      tab.close();
-      throw error;
-    });
-  if (answer.error) {
+  const { authorizationUrl, expiresAt } = await hubData(
+    hub.api.fleet
+      .mcp({ name })
+      ["sign-in"].post(access ? { access } : undefined),
+    couldNotOrAway(`start sign-in to ${name}`)
+  ).catch((error: unknown) => {
     tab.close();
-    throw couldNotOrAway(`start sign-in to ${name}`)(answer);
-  }
-  const { authorizationUrl, expiresAt } = answer.data;
+    throw error;
+  });
   // The address rides in the fragment, which the browser never sends to a server.
   const hop = btoa(JSON.stringify({ origin, auth: authorizationUrl }))
     .replaceAll("+", "-")
@@ -345,21 +338,19 @@ export const signInToMcp = async (
  * Hands the provider's answer to the hub, which finishes the sign-in by
  * exchanging the code. It answers with the server that is now signed in.
  */
-export const completeMcpSignIn = async (
+export const completeMcpSignIn = (
   code: string,
   state: string,
   iss: string | null
-) => {
-  const answer = await hub.api.fleet.mcp.oauth.complete.post({
-    code,
-    state,
-    ...(iss ? { iss } : {}),
-  });
-  if (answer.error) {
-    throw couldNotOrAway("finish the sign-in")(answer);
-  }
-  return answer.data;
-};
+) =>
+  hubData(
+    hub.api.fleet.mcp.oauth.complete.post({
+      code,
+      state,
+      ...(iss ? { iss } : {}),
+    }),
+    couldNotOrAway("finish the sign-in")
+  );
 
 /**
  * What `/mcp auth [server]` means in a composer. Claude Code's own `/mcp` has
@@ -433,15 +424,13 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
     `read ${source}`,
     (frame) =>
       frame.marketplace?.source === source ? frame.marketplace : undefined,
-    async () => {
-      const answer = await hub.api.fleet["marketplace-read"].get({
-        query: { source },
-      });
-      if (answer.error) {
-        throw couldNotOrAway(`read ${source}`)(answer);
-      }
-      return answer.data;
-    }
+    () =>
+      hubData(
+        hub.api.fleet["marketplace-read"].get({
+          query: { source },
+        }),
+        couldNotOrAway(`read ${source}`)
+      )
   );
   if (!read.name) {
     throw new Error(
@@ -462,31 +451,26 @@ export const readMarketplaceName = async (wanted: string): Promise<string> => {
  */
 export const linkMarketplace = async (wanted: string) => {
   const source = wanted.trim();
-  const answer = await hub.api.fleet["marketplace-links"].post({ source });
-  if (answer.error) {
-    throw couldNotOrAway(`link ${source}`)(answer);
-  }
-  return answer.data;
+  return await hubData(
+    hub.api.fleet["marketplace-links"].post({ source }),
+    couldNotOrAway(`link ${source}`)
+  );
 };
 
 /** Lets a refused link go: it leaves the marketplace list. */
-export const dropMarketplaceLink = async (source: string) => {
-  const answer = await hub.api.fleet["marketplace-links"].delete(undefined, {
-    query: { source },
-  });
-  if (answer.error) {
-    throw couldNotOrAway(`let go of ${source}`)(answer);
-  }
-  return answer.data;
-};
+export const dropMarketplaceLink = (source: string) =>
+  hubData(
+    hub.api.fleet["marketplace-links"].delete(undefined, {
+      query: { source },
+    }),
+    couldNotOrAway(`let go of ${source}`)
+  );
 
-export const removeMarketplace = async (name: string) => {
-  const answer = await hub.api.fleet.marketplaces({ name }).delete();
-  if (answer.error) {
-    throw couldNotOrAway(`unlink ${name}`)(answer);
-  }
-  return answer.data;
-};
+export const removeMarketplace = (name: string) =>
+  hubData(
+    hub.api.fleet.marketplaces({ name }).delete(),
+    couldNotOrAway(`unlink ${name}`)
+  );
 
 /**
  * A fetch asked of the hub, resolved with the row once it has landed. The
@@ -546,13 +530,11 @@ const untilFetched = <T extends { fetching?: boolean }>(
  * comes back marked `fetching`, and its `fleet.fetch` frame says how that
  * went.
  */
-export const installPlugin = async (id: string) => {
-  const answer = await hub.api.fleet.plugins({ id }).put({ enabled: true });
-  if (answer.error) {
-    throw couldNotOrAway(`install ${id}`)(answer);
-  }
-  return answer.data;
-};
+export const installPlugin = (id: string) =>
+  hubData(
+    hub.api.fleet.plugins({ id }).put({ enabled: true }),
+    couldNotOrAway(`install ${id}`)
+  );
 
 /** A switch's refusal: "Couldn't turn on `what`." and the hub's words. */
 const switchRefusal = (enabled: boolean, what: string) =>
@@ -562,33 +544,27 @@ const switchRefusal = (enabled: boolean, what: string) =>
  * Switches an installed plugin on or off: the stored row's flag, nothing
  * fetched. A disabled plugin is uninstalled from the machines.
  */
-export const switchPlugin = async (id: string, enabled: boolean) => {
-  const answer = await hub.api.fleet.plugins({ id }).patch({ enabled });
-  if (answer.error) {
-    throw switchRefusal(enabled, id)(answer);
-  }
-  return answer.data;
-};
+export const switchPlugin = (id: string, enabled: boolean) =>
+  hubData(
+    hub.api.fleet.plugins({ id }).patch({ enabled }),
+    switchRefusal(enabled, id)
+  );
 
 /**
  * Switches a fleet skill on or off: the stored row's flag, its files as
  * they are, nothing fetched.
  */
-export const switchSkill = async (name: string, enabled: boolean) => {
-  const answer = await hub.api.fleet.skills({ name }).patch({ enabled });
-  if (answer.error) {
-    throw switchRefusal(enabled, name)(answer);
-  }
-  return answer.data;
-};
+export const switchSkill = (name: string, enabled: boolean) =>
+  hubData(
+    hub.api.fleet.skills({ name }).patch({ enabled }),
+    switchRefusal(enabled, name)
+  );
 
-export const removePlugin = async (id: string) => {
-  const answer = await hub.api.fleet.plugins({ id }).delete();
-  if (answer.error) {
-    throw couldNotOrAway(`remove ${id}`)(answer);
-  }
-  return answer.data;
-};
+export const removePlugin = (id: string) =>
+  hubData(
+    hub.api.fleet.plugins({ id }).delete(),
+    couldNotOrAway(`remove ${id}`)
+  );
 
 /**
  * Resolves a plugin's bytes at the hub again — the answer to a plugin the hub
@@ -600,13 +576,11 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
   untilFetched(
     `refresh ${id}`,
     (frame) => (frame.plugin?.id === id ? frame.plugin : undefined),
-    async () => {
-      const answer = await hub.api.fleet.plugins({ id }).refresh.post();
-      if (answer.error) {
-        throw couldNotOrAway(`refresh ${id}`)(answer);
-      }
-      return answer.data;
-    }
+    () =>
+      hubData(
+        hub.api.fleet.plugins({ id }).refresh.post(),
+        couldNotOrAway(`refresh ${id}`)
+      )
   );
 
 /**
@@ -615,83 +589,65 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
  * the row's, as the `fleet.fetch` frames bring it: its files, the hub's
  * reason it could not resolve, or the `choices` an ambiguous source holds.
  */
-export const saveSkill = async (
+export const saveSkill = (
   name: string,
   body: { source: string; enabled?: boolean; projectId?: string | null }
-) => {
-  const answer = await hub.api.fleet.skills({ name }).put(body);
-  if (answer.error) {
-    throw couldNotOrAway(`save ${name}`)(answer);
-  }
-  return answer.data;
-};
+) =>
+  hubData(
+    hub.api.fleet.skills({ name }).put(body),
+    couldNotOrAway(`save ${name}`)
+  );
 
 /**
  * What a machine really has, fleet or not (NEW.md §11), and what a session in
  * `cwd` would see. Asked on demand and never stored: it is the machine's own
  * word at the moment of asking.
  */
-export const inspectMachine = async (machineId: string, cwd?: string) => {
-  const answer = await hub.api
-    .agents({ machineId })
-    .inspect.post(cwd ? { cwd } : {});
-  if (answer.error) {
-    throw couldNotOrAway("read what this machine has")(answer);
-  }
-  return answer.data;
-};
+export const inspectMachine = (machineId: string, cwd?: string) =>
+  hubData(
+    hub.api.agents({ machineId }).inspect.post(cwd ? { cwd } : {}),
+    couldNotOrAway("read what this machine has")
+  );
 
 /**
  * A skill somebody wrote on one machine, taken into the fleet: the hub reads
  * its files off that machine and stores them like any it fetched itself.
  */
-export const adoptSkill = async (
-  name: string,
-  machineId: string,
-  cwd?: string
-) => {
-  const answer = await hub.api.fleet
-    .skills({ name })
-    .put({ fromMachine: machineId, ...(cwd ? { cwd } : {}) });
-  if (answer.error) {
-    throw couldNotOrAway(`adopt ${name}`)(answer);
-  }
-  return answer.data;
-};
+export const adoptSkill = (name: string, machineId: string, cwd?: string) =>
+  hubData(
+    hub.api.fleet
+      .skills({ name })
+      .put({ fromMachine: machineId, ...(cwd ? { cwd } : {}) }),
+    couldNotOrAway(`adopt ${name}`)
+  );
 
 /**
  * The fleet's copy of a skill over the one a machine edited. The machine sets
  * its edited copy aside before it writes the fleet's.
  */
-export const pushSkill = async (name: string, machineId: string) => {
-  const answer = await hub.api.fleet.skills({ name }).push.post({ machineId });
-  if (answer.error) {
-    throw couldNotOrAway("overwrite this machine")(answer);
-  }
-  return answer.data;
-};
+export const pushSkill = (name: string, machineId: string) =>
+  hubData(
+    hub.api.fleet.skills({ name }).push.post({ machineId }),
+    couldNotOrAway("overwrite this machine")
+  );
 
 /**
  * What a skill used to be, newest first, without its files — the hub keeps a
  * version on every change to the fleet's copy, on a delete, and of a
  * machine's edited copy an overwrite replaced.
  */
-export const skillHistory = async (name: string) => {
-  const answer = await hub.api.fleet.skills.history.get({ query: { name } });
-  if (answer.error) {
-    throw couldNotOrAway("load this skill’s history")(answer);
-  }
-  return answer.data;
-};
+export const skillHistory = (name: string) =>
+  hubData(
+    hub.api.fleet.skills.history.get({ query: { name } }),
+    couldNotOrAway("load this skill’s history")
+  );
 
 /** Writes a past version back as the fleet's copy, keeping what it replaces. */
-export const restoreSkillVersion = async (id: number) => {
-  const answer = await hub.api.fleet.skills.restore.post({ id });
-  if (answer.error) {
-    throw couldNotOrAway("restore that version")(answer);
-  }
-  return answer.data;
-};
+export const restoreSkillVersion = (id: number) =>
+  hubData(
+    hub.api.fleet.skills.restore.post({ id }),
+    couldNotOrAway("restore that version")
+  );
 
 /**
  * Resolves the same source again — for a skill whose repo has moved on. Comes
@@ -702,13 +658,11 @@ export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
   untilFetched(
     `refresh ${name}`,
     (frame) => (frame.skill?.name === name ? frame.skill : undefined),
-    async () => {
-      const answer = await hub.api.fleet.skills({ name }).refresh.post();
-      if (answer.error) {
-        throw couldNotOrAway(`refresh ${name}`)(answer);
-      }
-      return answer.data;
-    }
+    () =>
+      hubData(
+        hub.api.fleet.skills({ name }).refresh.post(),
+        couldNotOrAway(`refresh ${name}`)
+      )
   );
 
 /**
@@ -720,13 +674,11 @@ export const checkForUpdates = (): Promise<{ fetching: boolean }> =>
   untilFetched(
     "check for updates",
     (frame) => frame.check,
-    async () => {
-      const answer = await hub.api.fleet.updates.check.post();
-      if (answer.error) {
-        throw couldNotOrAway("check for updates")(answer);
-      }
-      return answer.data;
-    }
+    () =>
+      hubData(
+        hub.api.fleet.updates.check.post(),
+        couldNotOrAway("check for updates")
+      )
   );
 
 /**
@@ -751,13 +703,11 @@ export const versionPair = (
     ? [from.version, to.version]
     : [versionLabel(undefined, from.hash), versionLabel(undefined, to.hash)];
 
-export const removeSkill = async (name: string) => {
-  const answer = await hub.api.fleet.skills({ name }).delete();
-  if (answer.error) {
-    throw couldNotOrAway(`remove ${name}`)(answer);
-  }
-  return answer.data;
-};
+export const removeSkill = (name: string) =>
+  hubData(
+    hub.api.fleet.skills({ name }).delete(),
+    couldNotOrAway(`remove ${name}`)
+  );
 
 /** What a subagent write came to: what the hub did, or the file it has instead. */
 export type AgentWrite<T> =
@@ -807,13 +757,11 @@ export const removeAgent = async (
 };
 
 /** Writes the subagents again, at every machine that is online. */
-export const pushAgents = async () => {
-  const answer = await hub.api.fleet.agents.push.post();
-  if (answer.error) {
-    throw couldNotOrAway("push the subagents to the machines")(answer);
-  }
-  return answer.data;
-};
+export const pushAgents = () =>
+  hubData(
+    hub.api.fleet.agents.push.post(),
+    couldNotOrAway("push the subagents to the machines")
+  );
 
 /** One subagent found on a machine, whoever wrote it. */
 export interface DiscoveredAgent {
@@ -967,64 +915,56 @@ export async function saveMemory(
   return { ok: true, memory: answer.data };
 }
 
-/** What one machine really has, without adopting it: the read behind Compare. */
-/** A machine with no user CLAUDE.md is answered 204 — a fact, not a failure. */
+/**
+ * What one machine really has, without adopting it: the read behind Compare.
+ * A machine with no user CLAUDE.md is answered 204 (an empty body), a fact,
+ * not a failure: null.
+ */
 export async function peekMemory(machineId: string) {
-  const answer = await hub.api.fleet.memory.peek.post({ machineId });
-  if (answer.error) {
-    throw couldNotOrAway("read this machine's memory")(answer);
-  }
-  return answer.data || null;
+  const memory = await hubData(
+    hub.api.fleet.memory.peek.post({ machineId }),
+    couldNotOrAway("read this machine's memory")
+  );
+  return memory || null;
 }
 
 /**
  * What the memory used to say, newest first and without the content. One
  * document at a time: a `path` for a linked one, the main file without.
  */
-export const memoryHistory = async (path?: string) => {
-  const answer = await hub.api.fleet.memory.history.get({
-    query: path === undefined ? {} : { path },
-  });
-  if (answer.error) {
-    throw couldNotOrAway("read the memory history")(answer);
-  }
-  return answer.data;
-};
+export const memoryHistory = (path?: string) =>
+  hubData(
+    hub.api.fleet.memory.history.get({
+      query: path === undefined ? {} : { path },
+    }),
+    couldNotOrAway("read the memory history")
+  );
 
-export const memoryVersion = async (id: number) => {
-  const answer = await hub.api.fleet.memory.history({ id }).get();
-  if (answer.error) {
-    throw couldNotOrAway("read that version")(answer);
-  }
-  return answer.data;
-};
+export const memoryVersion = (id: number) =>
+  hubData(
+    hub.api.fleet.memory.history({ id }).get(),
+    couldNotOrAway("read that version")
+  );
 
 /** The memory's documents as they stand now, files and all (`GET /api/fleet`'s `memoryDocs`). */
 export const memoryDocsNow = async () => {
-  const answer = await hub.api.fleet.get();
-  if (answer.error) {
-    throw couldNotOrAway("read the memory documents")(answer);
-  }
-  return answer.data.memoryDocs;
+  const answer = await hubData(
+    hub.api.fleet.get(),
+    couldNotOrAway("read the memory documents")
+  );
+  return answer.memoryDocs;
 };
 
 /** Undo: the version becomes the fleet's, and what it replaced joins the history. */
-export const restoreMemory = async (id: number) => {
-  const answer = await hub.api.fleet.memory.restore.post({ id });
-  if (answer.error) {
-    throw couldNotOrAway("restore that version")(answer);
-  }
-  return answer.data;
-};
+export const restoreMemory = (id: number) =>
+  hubData(
+    hub.api.fleet.memory.restore.post({ id }),
+    couldNotOrAway("restore that version")
+  );
 
 /** Drops it, and with it the copy on every machine that still has cawco's. */
-export const removeMemory = async () => {
-  const answer = await hub.api.fleet.memory.delete();
-  if (answer.error) {
-    throw couldNotOrAway("remove the memory")(answer);
-  }
-  return answer.data;
-};
+export const removeMemory = () =>
+  hubData(hub.api.fleet.memory.delete(), couldNotOrAway("remove the memory"));
 
 /**
  * Stores one document, keyed by its path: a linked one lands on every
@@ -1057,106 +997,87 @@ export async function saveMemoryDoc(
 }
 
 /** Drops one document, and with it the copy on every machine that has cawco's. */
-export const removeMemoryDoc = async (path: string) => {
-  const answer = await hub.api.fleet.memory.docs.delete({ path });
-  if (answer.error) {
-    throw couldNotOrAway(`remove ${path}`)(answer);
-  }
-  return answer.data;
-};
+export const removeMemoryDoc = (path: string) =>
+  hubData(
+    hub.api.fleet.memory.docs.delete({ path }),
+    couldNotOrAway(`remove ${path}`)
+  );
 
 /**
  * Takes one machine's whole memory as the fleet's — the main file and every
  * document beside it. Where the first document comes from, and how a machine
  * that drifted has its version win.
  */
-export const adoptMemory = async (machineId: string) => {
-  const answer = await hub.api.fleet.memory.adopt.post({ machineId });
-  if (answer.error) {
-    throw couldNotOrAway("adopt this machine's memory")(answer);
-  }
-  return answer.data;
-};
+export const adoptMemory = (machineId: string) =>
+  hubData(
+    hub.api.fleet.memory.adopt.post({ machineId }),
+    couldNotOrAway("adopt this machine's memory")
+  );
 
 /** The same for one document of the set, for the drifted row being settled. */
-export const adoptMemoryDoc = async (machineId: string, path: string) => {
-  const answer = await hub.api.fleet.memory.adopt.post({ machineId, path });
-  if (answer.error) {
-    throw couldNotOrAway(`adopt this machine's ${path}`)(answer);
-  }
-  return answer.data;
-};
+export const adoptMemoryDoc = (machineId: string, path: string) =>
+  hubData(
+    hub.api.fleet.memory.adopt.post({ machineId, path }),
+    couldNotOrAway(`adopt this machine's ${path}`)
+  );
 
 /**
  * The other direction: the fleet's document over a machine copy that drifted.
  * A `path` forces the one document, so settling a drifted `models/…` does not
  * also overwrite a main file nobody looked at.
  */
-export const pushMemory = async (machineId: string, path?: string) => {
-  const answer = await hub.api.fleet.memory.push.post({ machineId, path });
-  if (answer.error) {
-    throw couldNotOrAway("overwrite this machine")(answer);
-  }
-  return answer.data;
-};
+export const pushMemory = (machineId: string, path?: string) =>
+  hubData(
+    hub.api.fleet.memory.push.post({ machineId, path }),
+    couldNotOrAway("overwrite this machine")
+  );
 
 /**
  * One machine's copy of a hook's script, for the compare beside a drift; 204
  * when the machine has none.
  */
 export async function peekHook(machineId: string, id: string) {
-  const answer = await hub.api.fleet.hooks.peek.post({ machineId, id });
-  if (answer.error) {
-    throw couldNotOrAway("read this machine's script")(answer);
-  }
-  return answer.data || null;
+  const answer = await hubData(
+    hub.api.fleet.hooks.peek.post({ machineId, id }),
+    couldNotOrAway("read this machine's script")
+  );
+  return answer || null;
 }
 
 /** Takes one machine's edited script for a hook as the fleet's. */
-export const adoptHook = async (machineId: string, id: string) => {
-  const answer = await hub.api.fleet.hooks.adopt.post({ machineId, id });
-  if (answer.error) {
-    throw couldNotOrAway("adopt this machine's script")(answer);
-  }
-  return answer.data;
-};
+export const adoptHook = (machineId: string, id: string) =>
+  hubData(
+    hub.api.fleet.hooks.adopt.post({ machineId, id }),
+    couldNotOrAway("adopt this machine's script")
+  );
 
 /** The other direction: the fleet's script over a machine's edited one. */
-export const pushHook = async (machineId: string, id: string) => {
-  const answer = await hub.api.fleet.hooks.push.post({ machineId, id });
-  if (answer.error) {
-    throw couldNotOrAway("overwrite this machine")(answer);
-  }
-  return answer.data;
-};
+export const pushHook = (machineId: string, id: string) =>
+  hubData(
+    hub.api.fleet.hooks.push.post({ machineId, id }),
+    couldNotOrAway("overwrite this machine")
+  );
 
 /** The items that did not set up on a machine, converged again: the hub sends them forced in one delta (hub fleet-sync.ts `retry`). */
-export const retryFleetItems = async (
-  machineId: string,
-  ids: readonly string[]
-) => {
-  const answer = await hub.api.fleet.items.retry.post({
-    machineId,
-    ids: [...ids],
-  });
-  if (answer.error) {
-    throw couldNotOrAway("set these up again")(answer);
-  }
-  return answer.data;
-};
+export const retryFleetItems = (machineId: string, ids: readonly string[]) =>
+  hubData(
+    hub.api.fleet.items.retry.post({
+      machineId,
+      ids: [...ids],
+    }),
+    couldNotOrAway("set these up again")
+  );
 
 /**
  * Asks the hub to push the desired state again — at one machine, or at every
  * machine that is online. A change already syncs itself; this is for the
  * machine that was asleep when one happened.
  */
-export const syncFleet = async (machineId?: string) => {
-  const answer = await hub.api.fleet.sync.post(machineId ? { machineId } : {});
-  if (answer.error) {
-    throw couldNotOrAway("sync the fleet")(answer);
-  }
-  return answer.data;
-};
+export const syncFleet = (machineId?: string) =>
+  hubData(
+    hub.api.fleet.sync.post(machineId ? { machineId } : {}),
+    couldNotOrAway("sync the fleet")
+  );
 
 /**
  * What a linked marketplace offers, read by the hub from its source: the
@@ -1171,15 +1092,13 @@ export const marketplaceCatalog = async (
     `read ${row.name}`,
     (frame) =>
       frame.marketplace?.source === row.source ? frame.marketplace : undefined,
-    async () => {
-      const answer = await hub.api.fleet["marketplace-read"].get({
-        query: { source: row.source },
-      });
-      if (answer.error) {
-        throw couldNotOrAway(`read ${row.name}`)(answer);
-      }
-      return answer.data;
-    }
+    () =>
+      hubData(
+        hub.api.fleet["marketplace-read"].get({
+          query: { source: row.source },
+        }),
+        couldNotOrAway(`read ${row.name}`)
+      )
   );
   if (read.error) {
     throw new Error(

@@ -8,40 +8,29 @@
 import { hubRequestAsGiven } from "@cawco/core/hub-request";
 import type { ViewToolName } from "@cawco/core/views";
 import { hub } from "#lib/platform/hub.js";
-import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import {
+  hubData,
+  hubJson,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 
 /** A project's views: kept ones, then Caw's drafts. */
-export const viewsOf = async (projectId: string) => {
-  const answer = await hub.api.projects({ id: projectId }).views.get();
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const viewsOf = (projectId: string) =>
+  hubData(hub.api.projects({ id: projectId }).views.get(), refusedOrUnreached);
 
 /** Keeps a draft view: it becomes `views/<name>.oui`, one commit. */
-export const keepView = async (projectId: string, name: string) => {
-  const answer = await hub.api
-    .projects({ id: projectId })
-    .views({ name })
-    .keep.post();
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const keepView = (projectId: string, name: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).views({ name }).keep.post(),
+    refusedOrUnreached
+  );
 
 /** Discards a draft view. */
-export const discardView = async (projectId: string, name: string) => {
-  const answer = await hub.api
-    .projects({ id: projectId })
-    .views.drafts({ name })
-    .delete();
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const discardView = (projectId: string, name: string) =>
+  hubData(
+    hub.api.projects({ id: projectId }).views.drafts({ name }).delete(),
+    refusedOrUnreached
+  );
 
 /**
  * One view tool's answer: what a view's `Query("<tool>", args)` reads, the
