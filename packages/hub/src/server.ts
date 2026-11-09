@@ -185,7 +185,6 @@ import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
 import type {
   FleetConvergeFrame,
   FleetHeld,
-  FleetMcpConfig,
   FleetPlugin,
   FleetSkillMeta,
   FleetSyncReport,
@@ -200,7 +199,6 @@ import {
   type FleetAgent,
   INSPECT_CONFIG,
   isLoopbackSource,
-  MCP_PLATFORMS,
   MEMORY_ROLES,
   machinePlatform,
   mcpRunsOn,
@@ -1057,6 +1055,7 @@ import { delegationRoutes } from "./routes/delegation";
 import { fileRoutes } from "./routes/files";
 import { findRoutes } from "./routes/find";
 import { fleetRoutes } from "./routes/fleet";
+import { fleetMcpRoutes } from "./routes/fleet-mcp";
 import { followupStateRoutes } from "./routes/followup-state";
 import { harnessSchema } from "./routes/harness-schema";
 import { hubInfoRoutes } from "./routes/hub-info";
@@ -2737,43 +2736,6 @@ const isFleetReport = (value: unknown): value is FleetSyncReport =>
   isRecord((value as FleetSyncReport).mcp) &&
   isRecord((value as FleetSyncReport).marketplaces) &&
   isRecord((value as FleetSyncReport).plugins);
-
-/** What the CLI will take as an MCP server name — it keys `~/.claude.json` by it. */
-const MCP_NAME = /^[A-Za-z0-9_-]+$/u;
-
-/** And the names Claude Code keeps for its own servers, which are not the user's to take. */
-const RESERVED_MCP_NAMES = [
-  "workspace",
-  "claude-in-chrome",
-  "computer-use",
-  "Claude Preview",
-  "Claude Browser",
-];
-
-/**
- * Why the hub will not store this server, or nothing. The config itself is
- * stored verbatim — what a server means is the CLI's affair — but an entry
- * missing the one field that makes it startable is a row no machine can apply.
- */
-const mcpProblem = (
-  name: string,
-  config: Record<string, unknown>
-): string | undefined => {
-  if (!MCP_NAME.test(name)) {
-    return `${name} is not a usable MCP server name`;
-  }
-  if (RESERVED_MCP_NAMES.includes(name)) {
-    return `${name} is Claude Code's own`;
-  }
-  if ("url" in config || config.type === "http" || config.type === "sse") {
-    return typeof config.type === "string" && typeof config.url === "string"
-      ? undefined
-      : "a remote MCP server needs both a type and a url";
-  }
-  return typeof config.command === "string"
-    ? undefined
-    : "a stdio MCP server needs a command";
-};
 
 /** What a skill may be called: it names a directory under `~/.claude/skills`. */
 const SKILL_NAME = /^[A-Za-z0-9._-]+$/u;
@@ -33435,142 +33397,8 @@ export const createServer = (
       }),
     toolRoutes(ctx),
     fleetRoutes(ctx),
+    fleetMcpRoutes(ctx),
     new Elysia()
-      .put(
-        "/api/fleet/mcp/:name",
-        {
-          body: t.Object({
-            // Stored and written verbatim, so the schema only asks that it be an
-            // object; `mcpProblem` checks the one field that makes it startable.
-            config: t.Record(t.String(), t.Unknown()),
-            enabled: t.Optional(t.Boolean()),
-            /**
-             * One project's only: placed at each of its checkouts and
-             * delegate workspaces. Null: every machine. Left out: as it was.
-             */
-            projectId: t.Optional(t.Union([t.String(), t.Null()])),
-            /** Every project in one area instead, as read now. Null: none. Left out: as it was. */
-            areaId: t.Optional(t.Union([t.String(), t.Null()])),
-            /**
-             * The machine platforms it runs on (`machine_capabilities.platform`):
-             * any other machine is never sent it. Null or empty: every
-             * machine. Left out: as it was.
-             */
-            platforms: t.Optional(
-              t.Union([
-                t.Array(t.Union(MCP_PLATFORMS.map((one) => t.Literal(one)))),
-                t.Null(),
-              ])
-            ),
-            /**
-             * One instance on each machine for all its sessions, started at
-             * its first call (core `FleetMcpServer.shared`). Left out: as it
-             * was.
-             */
-            shared: t.Optional(t.Boolean()),
-          }),
-        },
-        async ({ params, body, status }) => {
-          const problem =
-            mcpProblem(params.name, body.config) ??
-            boundProblem(body) ??
-            sharedProblem(
-              params.name,
-              body.config,
-              body.projectId === undefined && body.areaId === undefined
-                ? (db.getMcpServer(params.name)?.projectId ??
-                    db.getMcpServer(params.name)?.areaId)
-                : (body.projectId ?? body.areaId),
-              body.shared ?? db.getMcpServer(params.name)?.shared ?? false
-            );
-          if (problem) {
-            return status(400, problem);
-          }
-
-          db.putMcpServer({
-            name: params.name,
-            config: body.config as unknown as FleetMcpConfig,
-            enabled: body.enabled,
-            projectId: body.projectId,
-            areaId: body.areaId,
-            platforms: body.platforms,
-            shared: body.shared,
-          });
-          await fleetMcp.probe(params.name);
-          announceMcp();
-          const saved = db
-            .fleetConfig()
-            .mcp.find((row) => row.name === params.name);
-          if (!saved) {
-            return status(404, "MCP server was removed while probing.");
-          }
-          return saved;
-        }
-      )
-      // Into the trash with its sign-in, off every machine at once.
-      .delete("/api/fleet/mcp/:name", ({ params, status }) => {
-        const trashed = db.trash.put(
-          { kind: "mcp", key: params.name },
-          Date.now()
-        );
-        if (trashed === undefined) {
-          return status(404, `the fleet keeps no MCP server ${params.name}`);
-        }
-        fleetMcp.forget(params.name);
-        announceMcp();
-        return undoable(trashed);
-      })
-      .post(
-        "/api/fleet/mcp/:name/sign-in",
-        {
-          body: t.Optional(
-            t.Object({
-              /**
-               * The access to ask the provider for (core `ConnectAccess`),
-               * a connect ask's pick. Left out: the access the last
-               * sign-in asked for, else every scope the server names.
-               */
-              access: t.Optional(
-                t.Union([t.Literal("read"), t.Literal("write")])
-              ),
-            })
-          ),
-        },
-        async ({ params, body, status }) => {
-          try {
-            return await fleetMcp.start(params.name, body?.access);
-          } catch (error) {
-            return status(
-              400,
-              error instanceof Error
-                ? error.message
-                : "Sign-in could not start. Save this server and retry sign-in."
-            );
-          }
-        }
-      )
-      .post(
-        "/api/fleet/mcp/oauth/complete",
-        {
-          body: t.Object({
-            code: t.String({ minLength: 1 }),
-            state: t.String({ minLength: 1 }),
-            iss: t.Optional(t.String()),
-          }),
-        },
-        async ({ body, status }) => {
-          try {
-            return await fleetMcp.complete(body.code, body.state, body.iss);
-          } catch (error) {
-            return status(
-              400,
-              error instanceof Error
-                ? error.message
-                : "Sign-in could not finish. Start sign-in again."
-            );
-          }
-        }
-      )
       /**
        * Rules: standing instructions the hub enforces on the frame stream. The
        * shape is validated loosely here and strictly by `ruleProblem`, which is
