@@ -12,18 +12,8 @@ export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 export type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
 
-/** A read off a machine refused, as the status its route answers with. */
-export interface ReadRefused {
-  code: 500 | 503 | 504;
-  ok: false;
-  said: string;
-}
-
 /** What a machine answered `readMemoryFile` with: its own memory set, or nothing. */
 export type MachineMemory = MachineMemorySet | null;
-
-/** A read of a machine's memory, or the status the route should answer with. */
-export type MemoryRead = { ok: true; copy: MachineMemory } | ReadRefused;
 
 /** A route's `set`, on which a read whose machine is away names it (`awayStatus`). */
 export interface RouteSet {

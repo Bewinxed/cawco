@@ -31,6 +31,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { DB_PATH } from "./config";
+import { refusal } from "./refusal";
 
 const DIR = join(dirname(DB_PATH), "favicons");
 
@@ -397,10 +398,14 @@ export const faviconRoutes = () =>
   new Elysia().get(
     "/api/favicon",
     { query: t.Object({ host: t.String({ minLength: 1, maxLength: 253 }) }) },
-    async ({ query, status }) => {
+    async ({ query }) => {
       const host = query.host.trim().toLowerCase().replace(TRAILING_DOT, "");
       if (!publicName(host)) {
-        return status(400, "That host is not a public site name.");
+        return refusal(
+          400,
+          "host-not-public-site",
+          "That host is not a public site name."
+        );
       }
       const read = await iconFor(host);
       let icon: Icon | null | undefined;
@@ -412,8 +417,9 @@ export const faviconRoutes = () =>
           // The last icon kept for it stands, however old.
           icon = await cached(host, true);
           if (icon === undefined) {
-            return status(
+            return refusal(
               504,
+              "site-did-not-answer",
               `That site did not answer within ${secondsOf(read.after)} s.`
             );
           }
@@ -422,7 +428,11 @@ export const faviconRoutes = () =>
           unhandled("read", read);
       }
       if (!icon) {
-        return status(404, "That site has no icon this hub could read.");
+        return refusal(
+          404,
+          "site-has-no-icon",
+          "That site has no icon this hub could read."
+        );
       }
       return new Response(new Uint8Array(icon.bytes), {
         headers: {

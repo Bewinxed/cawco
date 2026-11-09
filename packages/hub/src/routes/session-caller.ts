@@ -1,3 +1,4 @@
+import { refusal } from "../refusal";
 import type { createSessionIdentities } from "../session-identity";
 
 /** A request's session credential (`Authorization: Bearer …`), or null: never the person's `Owner` token. */
@@ -12,20 +13,22 @@ const bearerOf = (request: Request): string | null => {
  * request whose credential is invalid, or names a session other than
  * `instanceId` (`stranger` says which); undefined when it may go on.
  */
-export const sessionCallerRefusal = <Refused>(
+export const sessionCallerRefusal = (
   identities: Pick<ReturnType<typeof createSessionIdentities>, "resolve">,
   request: Request,
   instanceId: string,
-  stranger: string,
-  status: (code: 401 | 403, said: string) => Refused
-): Refused | undefined => {
+  stranger: string
+) => {
   const authorization = bearerOf(request);
   const identity = identities.resolve(authorization);
   if (authorization !== null && !identity) {
-    return status(401, "Invalid session credential");
+    return refusal(
+      401,
+      "invalid-session-credential",
+      "Invalid session credential"
+    );
   }
   if (identity && identity.instanceId !== instanceId) {
-    return status(403, stranger);
+    return refusal(403, "not-this-session", stranger);
   }
-  return undefined;
 };
