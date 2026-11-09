@@ -49,9 +49,9 @@
   import type { ClipKind } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
   import interact from "interactjs";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { IconRepeat } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { browser } from "$app/env";
   import { figureOf } from "./figures";
   import {

@@ -11,8 +11,8 @@
   import { lfsWords } from "@cawco/core/words/lfs";
   import { untrack } from "svelte";
   import { answerLfsOffer, readLfsOffer } from "#lib/cawco/client.svelte.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import type { MessageMetadata } from "../types";
   import OfferActs from "./OfferActs.svelte";
 

@@ -26,8 +26,8 @@
   import { MediaQuery } from "svelte/reactivity";
   import { popoverRoom } from "#lib/components/ui/glide-popover/index.js";
   import { Popover, PopoverContent } from "#lib/components/ui/popover/index.js";
+  import { closeInto } from "#lib/platform/motion/share.svelte.js";
   import type { ContinueSource } from "../continue.svelte";
-  import { closeInto } from "../motion/share.svelte";
   import NewSessionDialog from "./NewSessionDialog.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
   import { FORM_SIZES, type SpawnPrefill } from "./new-session.svelte";

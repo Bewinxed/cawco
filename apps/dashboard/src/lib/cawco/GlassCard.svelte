@@ -63,6 +63,9 @@
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
+  import { FOLDED, GROWN, standsOpen } from "#lib/platform/motion/hang.js";
+  import { keyed } from "#lib/platform/motion/keyed.svelte.js";
   import { page } from "$app/state";
   import {
     barGlass,
@@ -77,9 +80,6 @@
   import { liveFeed } from "./home/caw-feed.svelte";
   import { lightbox } from "./lightbox/lightbox-state.svelte";
   import MachinesList from "./MachinesList.svelte";
-  import { dur, ease } from "./motion/curves.svelte";
-  import { FOLDED, GROWN, standsOpen } from "./motion/hang";
-  import { keyed } from "./motion/keyed.svelte";
   import { cawQuiet } from "./NeedsCaw.svelte";
 
   /** The first paint, on both sides, has the width cookie's guess (first-render.svelte.ts). */

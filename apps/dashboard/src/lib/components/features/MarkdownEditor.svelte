@@ -19,11 +19,11 @@
   import "#lib/vendor-css/crepe.css";
   import { detach } from "@cawco/core/detach";
   import { onMount } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { crossIn } from "#lib/platform/motion/curves.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
 
   let {
     value = $bindable(),

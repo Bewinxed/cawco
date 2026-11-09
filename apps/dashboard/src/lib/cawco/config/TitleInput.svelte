@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { land } from "#lib/cawco/motion/share.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
   /**
    * The name of the thing being edited, typed where its title reads. It is
    * the same object as the row's name in the section list: drilling in, the

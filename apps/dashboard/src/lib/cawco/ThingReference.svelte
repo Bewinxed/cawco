@@ -14,8 +14,8 @@
    */
   import { Portal } from "bits-ui";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { chipPeek } from "./chip-peek.svelte";
-  import { numberOf } from "./motion/curves.svelte";
   import { REFERENCE_LOOKS } from "./reference-looks";
   import { openThing } from "./reference-open.svelte";
   import { type ThingKind, thingNamed } from "./reference-things.svelte";

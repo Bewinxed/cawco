@@ -38,7 +38,7 @@
   import { tick, untrack } from "svelte";
   import { Drawer as Vaul } from "vaul-svelte";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
-  import { frameSize } from "../frame-observer";
+  import { frameSize } from "#lib/platform/frame-observer.js";
 
   let {
     open,
