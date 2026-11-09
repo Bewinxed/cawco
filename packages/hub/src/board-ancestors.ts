@@ -8,7 +8,7 @@
  * but a person's own session stands at a project's top.
  *
  * A routine's run and a design check's verifier name the hub's own parent
- * (work-items.ts `isHubParent`), which no row is: their chain ends there,
+ * (work-item-state.ts `isHubParent`), which no row is: their chain ends there,
  * and they stay on the board for the views that read them.
  */
 
