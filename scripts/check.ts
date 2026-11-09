@@ -502,6 +502,15 @@ const gated: Gated[] = [
     "site/",
     "package.json",
   ]),
+  // Each file's swallowed failures and casts around the type checker may
+  // fall, never rise.
+  bun("scripts/swallow-cast-ratchet.ts", [
+    "apps/dashboard/",
+    "apps/cawrier/",
+    "packages/",
+    "scripts/",
+    "site/",
+  ]),
   bun("scripts/css-scope-check.ts", DASH),
   bun("scripts/browser-core-check.ts", [
     "apps/dashboard/src/",
