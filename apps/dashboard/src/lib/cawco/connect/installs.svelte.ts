@@ -233,7 +233,7 @@ class Connect {
     try {
       this.take(await hubJson<InstallsRead>(hubRequest("GET /api/installs")));
     } catch {
-      if (globalThis.__cawcoSocket?.readyState !== WebSocket.OPEN) {
+      if (globalThis.__cawcoHub?.socket?.readyState !== WebSocket.OPEN) {
         return;
       }
       this.#readRetry = setTimeout(() => {
