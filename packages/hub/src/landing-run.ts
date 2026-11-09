@@ -187,7 +187,7 @@ interface CheckoutHead {
 }
 /**
  * How long an item waits for a machine its gate needs before the hub wakes
- * it to try again (the {@link WAIT_ITEM_LIMIT} ceiling); one coming online
+ * it to try again (the work-items.ts `WAIT_ITEM_LIMIT` ceiling); one coming online
  * wakes it sooner, at the sweep.
  */
 const CAPABLE_WAIT_MINUTES = 120;
@@ -643,7 +643,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
   /**
    * Items whose landing waits for something now: what its status says, and
    * since when. In memory: a hub that starts says it again as the landing
-   * it resumes waits ({@link resumeLandings}).
+   * it resumes waits (work-items.ts `resumeLandings`).
    */
   const landingWaits = new Map<string, { words: string; since: number }>();
   /** Where `item`'s landing stands now ({@link LandingPhase}), stored as it moves there. */
@@ -682,7 +682,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
   const endLanding = (id: string): WorkItemRow | undefined =>
     update(id, LANDING_ENDED);
   /**
-   * Whether the landing `item` is in was stopped ({@link LandingDeps.stopped}):
+   * Whether the landing `item` is in was stopped (landing.ts `LandingDeps.stopped`):
    * the item ended (a stop cancels it and clears its `landingSince`), or its
    * row marks a landing other than the one `item` was read in.
    */
@@ -788,7 +788,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
    * The landing rebased workspace `id`'s commits onto origin's `base`, HEAD
    * going `from` → `to` (landing.ts `onBase`, landed or not): its row's
    * `movedUntold` says so to the next message its session reads
-   * ({@link WorkItems.movedTold}), when the move changed a file. A stamp
+   * (work-items.ts `movedTold`), when the move changed a file. A stamp
    * alone (landing.ts `stampCommand`, every commit's first landing) rewrites
    * each commit's message and leaves the tree as it was: HEAD moved, no file
    * did, and there is nothing to install again, so it is told nothing. One
@@ -983,7 +983,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
   /**
    * The report of an item that just ended through `finish_item`, to its parent;
    * or, for a done item of a group, held for the group's one report
-   * ({@link settleGroup}) — a failure reports at once. Answers what the
+   * (work-items.ts `settleGroup`) — a failure reports at once. Answers what the
    * delegate is told of a hold.
    */
   const reportOrHold = (
@@ -1477,10 +1477,10 @@ export const createLandingRun = (deps: LandingRunDeps) => {
   };
   /**
    * After `workspace`'s item landed on its base: the commit each workspace
-   * up its `from` chain was cut at ({@link cutFrom}) is vouched landed when
+   * up its `from` chain was cut at (workspaces.ts `cutFrom`) is vouched landed when
    * `git cherry` in this clone, against the branch it just pushed, finds
    * every patch of it there (no `+` line), and that workspace is read again
-   * ({@link resettleSoon}). A landing rebases a workspace's own commits, so
+   * (workspaces.ts `resettleSoon`). A landing rebases a workspace's own commits, so
    * main carries new commits for them: the workspace it was cut from still
    * had the originals, on no remote, and stayed held for good (2026-10-18,
    * three of the 38 retired by hand). A patch the landing changed (a
@@ -1664,7 +1664,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
   /**
    * THE run of a `finish_item`, against the submission stored on its row, to
    * an outcome. The live call and a hub start-up resume both come here. The
-   * landing gate ({@link gateSteps}) runs on the tree that lands: for an
+   * landing gate (gate.ts `gateSteps`) runs on the tree that lands: for an
    * item that lands on its base, on top of that base, inside the landing
    * ({@link landOnBase}); for a branch or a pull request, here, on the tree
    * it pushes. A gate that fails hands the item back to its
@@ -1691,7 +1691,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
       landingStops.delete(item.id);
       // A wait an error cut short leaves no words behind it.
       landingWait(item.id, null);
-      // An item stopped while it landed was not settled for it ({@link holdsOf}).
+      // An item stopped while it landed was not settled for it (workspaces.ts `holdsOf`).
       if (!LIVE.has((db.workItem(item.id) ?? item).state)) {
         workspaces.settleSoon(item.workspaceId);
       }
@@ -1757,7 +1757,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
     if ("refusal" in gate) {
       const refused = endLanding(item.id) ?? item;
       // No machine a due step needs is online: the item waits for one, never
-      // idle, and the sweep wakes it when one comes ({@link wakeCapable}).
+      // idle, and the sweep wakes it when one comes (work-items.ts `wakeCapable`).
       if (gate.needs && LIVE.has(refused.state)) {
         declareWait(
           refused,

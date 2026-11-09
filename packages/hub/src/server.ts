@@ -8092,7 +8092,7 @@ export const createServer = (
       lead?.notice(projectId, note);
     },
   });
-  /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (work-items.ts `stageRuns`). */
+  /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (workspaces.ts `stageRuns`). */
   const placeStages = new Map<
     string,
     Map<number, { at: number; status: StageStatus }>

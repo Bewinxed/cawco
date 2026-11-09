@@ -499,7 +499,7 @@ export const createWorkspaces = ({
     workspace.state === "held" && workspace.holding !== null;
   /**
    * The commits of workspace `id` whose work is on its base branch through a
-   * workspace cut `from` it that landed them ({@link vouchLanded}): what its
+   * workspace cut `from` it that landed them (landing-run.ts `vouchLanded`): what its
    * archive does not count as its own (core `WorkspaceArchive.landed`).
    */
   const landedFrom = (id: string): string[] =>
@@ -768,7 +768,7 @@ export const createWorkspaces = ({
   };
   /**
    * Refuses session `from` the discard of workspace `needle` when it is
-   * not one of that session's ({@link discardFor}); the workspace when it
+   * not one of that session's (work-items.ts `discardFor`); the workspace when it
    * is. What a discard asked of the person checks before it is recorded.
    */
   const discardable = (from: string, needle: string): WorkspaceRow => {
@@ -794,7 +794,7 @@ export const createWorkspaces = ({
     "unknown",
     "stopping",
   ]);
-  /** Sessions whose kept sends wait for their workspace's turn and cut ({@link recutFor}): one wait each. */
+  /** Sessions whose kept sends wait for their workspace's turn and cut (work-items.ts `recutFor`): one wait each. */
   const recutWaits = new Set<string>();
   /** Items whose session's continuation is being prepared, by count: their workspace is held ({@link holdsOf}). */
   const continuing = new Map<string, number>();
@@ -928,7 +928,7 @@ export const createWorkspaces = ({
    * the workspace is ({@link Workspace}):
    * - a stage clone: its place's stage while it runs, and nothing else;
    * - any other: the landing of one of its items still running (its run
-   *   settles the workspace again as it ends, {@link settleLanding}), a
+   *   settles the workspace again as it ends, landing-run.ts `settleLanding`), a
    *   session of its items whose process may still run there (one asleep,
    *   stopped or failed has none), a message on its way that wakes one of
    *   those sessions there, a continuation of one of them being prepared or
@@ -1545,7 +1545,7 @@ export const createWorkspaces = ({
   /**
    * Workspace `id` read again, off the caller's step and in its turn, now
    * that commits it held are on its base branch through a workspace cut from
-   * it ({@link vouchLanded}): held, it is closed again with those left out
+   * it (landing-run.ts `vouchLanded`): held, it is closed again with those left out
    * ({@link landedFrom}), and retires when they were all it held; active, its
    * settle reads it the same way. A held one that something still holds
    * ({@link holdsOf}: an artifact showing what it serves among them) is not
@@ -1597,7 +1597,7 @@ export const createWorkspaces = ({
    * it holds, or archived, holding nothing anywhere but its remote. Only one
    * something still holds (a live item, an attached session, a preview) is
    * read now, by git inside its boundary, which that hold keeps up; never
-   * waiting (a paused machine or a busy folder throws {@link WouldWait}).
+   * waiting (a paused machine or a busy folder throws machine-pause.ts `WouldWait`).
    * Undefined for one archived, gone, or a landing gate's. Throws the
    * machine's words when git cannot say.
    */
@@ -1839,7 +1839,7 @@ export const createWorkspaces = ({
    * installed dependencies, build outputs, its scratch dir. CawCo installs
    * nothing (the owner, 2026-10-18); the next message handed to its session
    * opens with the hub's line saying the folder is new (its row's
-   * `movedUntold`, {@link WorkItems.movedTold}), whichever path goes on there (a handoff, a
+   * `movedUntold`, work-items.ts `movedTold`), whichever path goes on there (a handoff, a
    * follow-up, a retry or a continuation), so it sets up what it needs. One
    * cut at a time per workspace; every caller shares it.
    * `onCut` runs in the step that files it active, before anything else
@@ -1944,8 +1944,8 @@ export const createWorkspaces = ({
   };
   /**
    * THE ONE WAY WORK GOES ON IN A FINISHED ITEM'S WORKSPACE from outside
-   * it (a handoff's inputs and its message, {@link WorkItems.handOff}; a
-   * follow-up's inputs and its item, {@link startFollowUp}): in the
+   * it (a handoff's inputs and its message, work-items.ts `handOff`; a
+   * follow-up's inputs and its item, work-items.ts `startFollowUp`): in the
    * workspace's turn ({@link inWorkspaceTurn}), after any settle queued
    * before it; cut again first when it retired ({@link recut}); then `work`
    * on it as it stands then (undefined when there is no such row), in the
@@ -1980,7 +1980,7 @@ export const createWorkspaces = ({
    * may be retiring it (its settle, run as its session fell asleep): from
    * one who may reopen it ({@link mayReopen}), to its workspace's latest
    * item. Such a send waits at the hub for that turn, and while the
-   * workspace is cut again ({@link recutFor}).
+   * workspace is cut again (work-items.ts `recutFor`).
    */
   const retiredFor = (instanceId: string, origin: NeutralOrigin): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
@@ -2012,7 +2012,7 @@ export const createWorkspaces = ({
   /**
    * The workspace a follow-up names, and the item before it there. Refused
    * while that workspace has a live item: one writer per checkout. Nothing
-   * here awaits, so the check and the item {@link start} files after it are
+   * here awaits, so the check and the item work-items.ts `start` files after it are
    * one step — two follow-ups can never both pass it.
    */
   const claim = (
@@ -2028,7 +2028,7 @@ export const createWorkspaces = ({
       );
     }
     const [workspace] = named;
-    // A retired one was cut again before this ({@link startFollowUp}).
+    // A retired one was cut again before this (work-items.ts `startFollowUp`).
     if (workspace.state === "archived") {
       throw new WorkItemRefusal(
         409,
@@ -2155,7 +2155,7 @@ export const createWorkspaces = ({
    * (agent layer.ts), and starts its boundary, and the hub files it.
    * `checksFor` makes it the gate workspace of that one;
    * `account` is the Claude account its first session launches on
-   * ({@link ItemPlacement}), whose user layer the boundary reads from its
+   * (work-items.ts `ItemPlacement`), whose user layer the boundary reads from its
    * first start; `first` is that session ({@link WorkspaceFirstSession}),
    * whose spill folder it reads from then too, so its spawn hands the
    * boundary over to no second one.

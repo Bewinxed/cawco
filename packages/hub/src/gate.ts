@@ -298,7 +298,7 @@ export const createGate = ({
    * The project's repository on a machine, which a gate workspace there is
    * cut from: its checkout place there (the primary first), or the folder
    * the last workspace of the project cut there was cut from
-   * ({@link recordRepository}), which outlives that workspace. Nothing when
+   * (workspaces.ts `recordRepository`), which outlives that workspace. Nothing when
    * the hub knows neither.
    */
   const repositoryOn = (

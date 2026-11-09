@@ -226,7 +226,7 @@ export interface ProposedFile {
  * so the send goes as its next turn and reopens the item if it landed; or an
  * interrupt holds its work item and only its parent, its conversation or the person
  * wakes it (`held`); or its workspace retired once its work was over and the
- * hub is cutting its clone again at the same path (`recut`, work-items.ts
+ * hub is cutting its clone again at the same path (`recut`, workspaces.ts
  * `recut`); or its start waits its turn among the hub's own launches on its
  * machine, which go one at a time (`starting`, start-holds.ts `paceSpawn`); or
  * its work item is blocked, its delegate type, machine or
@@ -271,7 +271,7 @@ export interface WorkspaceFrom {
   commit: string;
   /**
    * Whether this workspace's landing put every patch of that commit's work
-   * on the base branch (work-items.ts `vouchLanded`): then the source holds
+   * on the base branch (landing-run.ts `vouchLanded`): then the source holds
    * none of it as its own, and an archive is told so (core
    * `WorkspaceArchive.landed`).
    */
@@ -298,7 +298,7 @@ export interface ItemBlock {
  * A landing gate command that passed on a tree, with the stage it ran in
  * (`at finish_item`, `while gating on top of main`, `in its turn to land on
  * main`), for the line of a step its pass lets skip ({@link workItems}
- * `gatePasses`, keyed by what it passed on: work-items.ts `passKey`).
+ * `gatePasses`, keyed by what it passed on: gate.ts `passKey`).
  */
 export interface GatePass {
   command: string;
@@ -309,7 +309,7 @@ export interface GatePass {
 export interface WorkLanding {
   /**
    * When it was pushed (ms), for a push to a branch of its own: the newest
-   * is the commit the hub's next push there leases on (work-items.ts
+   * is the commit the hub's next push there leases on (landing-run.ts
    * `lastBranchPush`). Unset on landings on the base, and on branch pushes
    * before 2026-10-19.
    */

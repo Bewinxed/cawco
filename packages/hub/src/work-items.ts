@@ -13,7 +13,7 @@
  * The hub is the one authority: `delegate` is a request to {@link start}, and
  * the frames that move a session move its item. It is `done` only when its
  * session calls `finish_item` and its work passes the hub's landing gate
- * ({@link gateSteps}: the steps its project declares in gate.md, on the tree
+ * (gate.ts `gateSteps`: the steps its project declares in gate.md, on the tree
  * about to land; gate-file.ts) and lands. No session declares what the hub
  * runs: the session's report, quoting the output of every command
  * that proves its work, is the proof, and the parent's report is that
@@ -544,7 +544,7 @@ export interface WorkItemRequest {
   cwd?: string;
   /**
    * The commit a new workspace's worktree is moved to, detached, before its
-   * session starts ({@link detachNew}): a design check's verifier's judged
+   * session starts (workspaces.ts `detachNew`): a design check's verifier's judged
    * commit (design-verify.ts). Set by the hub alone.
    */
   detachAt?: string;
@@ -3069,7 +3069,7 @@ export const createWorkItems = ({
 
   /**
    * The workspace a retry goes on in, with its clone there: a retired one
-   * cut again ({@link recut}); one that never retired as it stands, while
+   * cut again (workspaces.ts `recut`); one that never retired as it stands, while
    * its clone is on its machine. Undefined when that clone is gone.
    */
   const withClone = async (
@@ -3094,7 +3094,7 @@ export const createWorkItems = ({
   /**
    * The workspace of an earlier attempt a retry runs in again: its earlier
    * sessions stopped ({@link endEarlierSessions}), its clone cut again by id
-   * at its own path when it retired ({@link recut}), its boundary started
+   * at its own path when it retired (workspaces.ts `recut`), its boundary started
    * again, and the workspace filed active (a held one's hold ends).
    * Undefined when its work was discarded, its clone is gone from a
    * workspace that never retired, its machine cannot say, or it is on none
@@ -3613,7 +3613,7 @@ export const createWorkItems = ({
    * An item in a new workspace: cut from the request's repository (the
    * parent's directory by default) at its default branch's tip, or, with
    * `from`, on that workspace's machine from its repository and moved to
-   * its head ({@link cutFrom}); then its session spawned there.
+   * its head (workspaces.ts `cutFrom`); then its session spawned there.
    */
   const startFresh = async (
     asked: WorkItemRequest,
@@ -3697,8 +3697,8 @@ export const createWorkItems = ({
 
   /**
    * The follow-up in the workspace `needle` names, going on there in one
-   * step of its turn ({@link goOnIn}): a retired one cut again at its own
-   * path first ({@link recut}), so no settle retires it before its item is
+   * step of its turn (workspaces.ts `goOnIn`): a retired one cut again at its own
+   * path first (workspaces.ts `recut`), so no settle retires it before its item is
    * filed. Its boundary is up and, when it continues a session, its inputs
    * are written for that session before the claim, which files the item in
    * the same step as its one-writer check; the inputs land only in a
@@ -4126,7 +4126,7 @@ export const createWorkItems = ({
 
   /**
    * Moves a live item to a finished state; finished work stays as it ended.
-   * Its workspace is settled next ({@link settleSoon}): retired or held once
+   * Its workspace is settled next (workspaces.ts `settleSoon`): retired or held once
    * nothing holds it, which its session, still in the turn that ended it,
    * does until it sleeps.
    *
@@ -4667,8 +4667,8 @@ export const createWorkItems = ({
       landingRun.landingWaitOf(itemId),
 
     /**
-     * The hub's own work: a routine's run (routines.ts, {@link routineParent})
-     * or a design check's verifier (design-verify.ts, {@link verifierParent}).
+     * The hub's own work: a routine's run (routines.ts, work-item-state.ts `routineParent`)
+     * or a design check's verifier (design-verify.ts, work-item-state.ts `verifierParent`).
      * A fresh session in a new workspace cut from `parent.cwd` on
      * `parent.machineId`. It reports to no session, the project's conversation
      * included: its owner reads how it ended from {@link WorkItemDeps.itemEnded}.
@@ -5043,8 +5043,8 @@ export const createWorkItems = ({
     /**
      * Whether a send from `origin` waits at the hub because the session's
      * finished item's workspace retired and is cut again first
-     * ({@link recut}): the handoff that reopens it, from its parent, its
-     * project's conversation or the reader ({@link retiredFor}). Its hold's words say so.
+     * (workspaces.ts `recut`): the handoff that reopens it, from its parent, its
+     * project's conversation or the reader (workspaces.ts `retiredFor`). Its hold's words say so.
      */
     recutHold: (instanceId: string, origin: NeutralOrigin): boolean =>
       workspaces.retiredFor(instanceId, origin),
@@ -5052,9 +5052,9 @@ export const createWorkItems = ({
     /**
      * A send kept for {@link recutHold}: after whatever runs in the
      * workspace's turn (a settle that may be retiring it as the send came),
-     * the workspace retired is cut again at its own path ({@link recut}),
+     * the workspace retired is cut again at its own path (workspaces.ts `recut`),
      * then what was kept for it goes ({@link WorkItemDeps.recutDone}); its
-     * settle meanwhile is deferred by the send on its way ({@link holdsOf}).
+     * settle meanwhile is deferred by the send on its way (workspaces.ts `holdsOf`).
      * Fails it with why the cut could not be made
      * ({@link WorkItemDeps.recutFailed}), unless only its machine's agent's
      * restart stopped the cut ({@link recutWaitsForAgent}): then it stays
@@ -5101,7 +5101,8 @@ export const createWorkItems = ({
     /**
      * How CawCo moved session `instanceId`'s workspace's checkout since a
      * message was last handed to a session of it (its row's `movedUntold`:
-     * cut again by {@link recut}, rebased as it landed by `landOnBase`);
+     * cut again by workspaces.ts `recut`, rebased as it landed by landing-run.ts
+     * `landOnBase`);
      * taken, so only the first message handed there says so. Called as a
      * message is handed to the machine.
      */
@@ -5227,7 +5228,7 @@ export const createWorkItems = ({
      * Item `itemId`'s workspace with its clone there, held for a
      * continuation of its session: in the workspace's turn, after any settle
      * already under way, a retired one cut again ({@link withClone}), and
-     * from then on held ({@link holdsOf}) until the answered release, called
+     * from then on held (workspaces.ts `holdsOf`) until the answered release, called
      * once the continuation's job is filed (its record holds it from there)
      * or has failed to be. Throws why there is no clone.
      */
@@ -5378,7 +5379,7 @@ export const createWorkItems = ({
      * fails with that command and error. Otherwise the submission is stored
      * and the item marked landing before the gate's first step starts, so a
      * hub that dies mid-run resumes it ({@link resumeLandings}); then
-     * {@link settleLanding} runs it to its outcome. An item done already
+     * landing-run.ts `settleLanding` runs it to its outcome. An item done already
      * answers its done result, unless its workspace holds work since, which
      * this lands ({@link finishable}); one landing already is refused.
      * Answers what the tool returns.
@@ -5509,7 +5510,7 @@ export const createWorkItems = ({
      * An agent has registered: every item on its machine left landing by a
      * hub that stopped mid-run has its landing run again on the stored
      * submission ({@link landStored}), its gate from the step it was on (each
-     * pass is kept, {@link gateOnce}); a completing one lands if its own
+     * pass is kept, gate.ts `gateOnce`); a completing one lands if its own
      * delegates ended meanwhile ({@link completeIfDrained}). An item this
      * hub is running now is left to that run. Then each `finish_item` turn
      * the stopped hub never heard end is released once the machine says the
@@ -5531,7 +5532,7 @@ export const createWorkItems = ({
           continue;
         }
         // Its gate goes on from the step it was on: what passed is kept
-        // on its row ({@link gateOnce}).
+        // on its row (gate.ts `gateOnce`).
         const kept = [...landingRun.passesOf(item.id).values()].flat().length;
         console.log(
           `resumed the landing of item ${item.id}${item.landingPhase ? ` at its phase ${item.landingPhase}` : ""}, ${kept} merge check pass(es) kept`
@@ -5547,10 +5548,10 @@ export const createWorkItems = ({
      * `sendLanded` called with what landed, which hands the message that names them to
      * the send path and answers what became of it. For a receiver whose
      * work item runs in a workspace, both go in one step of its turn
-     * ({@link goOnIn}): a retired one cut again first ({@link recut}), the
+     * (workspaces.ts `goOnIn`): a retired one cut again first (workspaces.ts `recut`), the
      * inputs written into its `$TMPDIR/inputs/` (a host-scope one's scratch
      * dir, agent host-scratch.ts), and the message sent there, so it holds
-     * the workspace ({@link holdsOf}) before any settle can retire it
+     * the workspace (workspaces.ts `holdsOf`) before any settle can retire it
      * and its scratch dir with the inputs. For a session with no work item,
      * its own inputs folder on its machine (core `InputsPlace`). Refused,
      * with nothing sent, for an input that may not go or cannot be read
@@ -5781,7 +5782,7 @@ export const createWorkItems = ({
 
     /**
      * What the workspace of session `instanceId`'s item holds that is on no
-     * remote ({@link Unlanded}, read by {@link unlandedOf}); undefined for a
+     * remote ({@link Unlanded}, read by workspaces.ts `unlandedOf`); undefined for a
      * session with no item. Throws the machine's words when git cannot say.
      */
     async unlanded(instanceId: string): Promise<Unlanded | undefined> {
@@ -5796,7 +5797,7 @@ export const createWorkItems = ({
 
     /**
      * The artifacts workspace `id` serves that still hold its retirement
-     * ({@link owedFrom}), each once by its artifact's own id and title (a
+     * (workspaces.ts `owedFrom`), each once by its artifact's own id and title (a
      * held next version by the artifact it is held for): what
      * `stop_delegate` names. Empty for a workspace the hub does not hold.
      */
@@ -5816,12 +5817,12 @@ export const createWorkItems = ({
     heldWorkspaces: (): HeldWork[] =>
       db.heldWorkspaces().filter(workspaces.isHeld).map(workspaces.heldWork),
 
-    /** The sweep's look at the workspaces on a machine ({@link Workspaces.settleOn}). */
+    /** The sweep's look at the workspaces on a machine (workspaces.ts `settleOn`). */
     settleOn: workspaces.settleOn,
 
     /**
      * The workspace of session `instanceId`'s item settled soon
-     * ({@link settleSoon}): its session went to sleep, stopped or failed, so
+     * (workspaces.ts `settleSoon`): its session went to sleep, stopped or failed, so
      * it may hold that workspace no longer.
      */
     settleFor(instanceId: string): void {
@@ -5851,7 +5852,7 @@ export const createWorkItems = ({
     },
 
     /**
-     * Place `placeId`'s stage clones settled soon ({@link settleSoon}): its
+     * Place `placeId`'s stage clones settled soon (workspaces.ts `settleSoon`): its
      * sheet stage slept, failed or stopped, and with it its hold.
      */
     settleStagesOf(placeId: string): void {
@@ -5868,7 +5869,7 @@ export const createWorkItems = ({
 
     /**
      * Each active workspace on `machineId` that an artifact showed settled
-     * soon ({@link settleSoon}): the artifact went, and with it a hold.
+     * soon (workspaces.ts `settleSoon`): the artifact went, and with it a hold.
      */
     settleShown(machineId: string): void {
       for (const workspace of db.activeWorkspacesOn(machineId)) {
@@ -5885,7 +5886,7 @@ export const createWorkItems = ({
      * holds that is nowhere else, and deletes the clone. Refused while an
      * item there is live — stop it first — and for a workspace already
      * archived. A clone that holds work that is nowhere else is kept and the
-     * workspace held ({@link WorkspaceHoldsWork}), unless `discard`: a
+     * workspace held (workspaces.ts `WorkspaceHoldsWork`), unless `discard`: a
      * person chose to let it go, and its machine saves it to a carry before
      * deleting anything.
      */
@@ -5914,7 +5915,7 @@ export const createWorkItems = ({
 
     /**
      * What workspace `needle` serves that waits on the person
-     * ({@link waitingFrom}), each by its id and title: what an archive or
+     * (workspaces.ts `waitingFrom`), each by its id and title: what an archive or
      * discard of it waits on, which the person's confirm names and an
      * approval ask shows.
      */
