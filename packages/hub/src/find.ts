@@ -61,7 +61,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import type { StageKind } from "@cawco/core/views";
 import { noticePartWords, reasonLine } from "@cawco/core/words/artifact-needs";
 import { artifactWords } from "@cawco/core/words/artifacts";
-import { status, t } from "elysia";
+import { t } from "elysia";
 import type { DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
 import {
@@ -82,7 +82,7 @@ import {
   taskEntry,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
-import { StatusRefusal } from "./refusal";
+import { refusal, StatusRefusal } from "./refusal";
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
@@ -1532,8 +1532,8 @@ const reportsWaiting = (
 
 /** A find refused for what was asked: its status, and the sentence that says why. */
 export class FindRefusal extends StatusRefusal<400 | 404> {
-  constructor(message: string, refusal: 400 | 404 = 400) {
-    super(refusal, message);
+  constructor(message: string, answering: 400 | 404 = 400) {
+    super(answering, message);
   }
 }
 
@@ -1547,7 +1547,7 @@ const AUTHOR_OF: Record<FindBy, MomentAuthor> = {
 /** A refusal thrown as its status; anything else as it was. */
 const refused = (error: unknown): never => {
   if (error instanceof FindRefusal) {
-    throw status(error.status, error.message);
+    throw refusal(error.status, "find-refused", error.message);
   }
   throw error;
 };
