@@ -53,6 +53,7 @@ import type {
   WorkBudget,
   WorkItemSubmission,
 } from "./db/stored-types";
+import type { DelegateResult } from "./delegate-result";
 import type {
   DelegateList,
   DelegateListQuery,
@@ -75,6 +76,7 @@ import {
   sessionRole,
   stopOf,
 } from "./session-list";
+import type { WorkItemCalls } from "./work-item-calls";
 import { type HandoffInputs, resolveSpawnType } from "./work-items";
 import type { Unlanded } from "./workspaces";
 
@@ -867,6 +869,12 @@ export interface HandoffDeps {
    * so the hub stops it if the call's harness cuts the call (call-cuts.ts).
    */
   readonly started?: (thing: Started) => void;
+  /**
+   * The work-item calls its tools make, the same functions their routes
+   * call (work-item-calls.ts): called directly, as the session the MCP
+   * gateway authenticated, never over the hub's own HTTP.
+   */
+  readonly work: WorkItemCalls;
   /** Delegate role: the session runs a work item, so finish_item and wait_item are offered. */
   readonly workItem?: boolean;
 }
@@ -1086,39 +1094,6 @@ export interface HandoffResult {
   title: string;
 }
 
-/**
- * A delegation's result (`POST /api/work-items`): started, its session and
- * the work item and workspace it runs in; or queued, waiting for files a
- * live item owns, with no session yet.
- */
-export type DelegateResult =
-  | {
-      /** Its session. */
-      instanceId: string;
-      state: "started";
-      text: string;
-      title: string;
-      workItemId: string;
-      workspaceId: string;
-      /** The workspace's scratch dir on its machine, the delegate's `TMPDIR`: where inputs for it are copied; absent when the machine named none. */
-      workspaceTmp?: string;
-    }
-  | {
-      /** The queued request's id. */
-      queued: string;
-      state: "queued";
-      text: string;
-      title: string;
-    }
-  | {
-      /** A `delegate` naming its task, whose attempt waits for owned files (hub dispatch.ts): the task's start is queued. */
-      projectId: string;
-      state: "queued-task";
-      task: string;
-      text: string;
-      title: string;
-    };
-
 /** What a `delegate` call started, as a cut of the call stops it (call-cuts.ts). */
 const startedOf = (started: DelegateResult): Started => {
   switch (started.state) {
@@ -1134,14 +1109,6 @@ const startedOf = (started: DelegateResult): Started => {
       };
   }
 };
-
-/** A work item as the hub answers for it (`GET /api/work-items/:id`). */
-interface WorkItemView {
-  id: string;
-  state: string;
-  title: string;
-  workspaceId: string;
-}
 
 /** A session a fork branched from, as its refusals name it. */
 export interface ForkOrigin {
@@ -1223,6 +1190,16 @@ const postToHub = (
     body: JSON.stringify(body),
     ...init,
   });
+
+/**
+ * A request as `POST /api/work-items` reads it, which the start reads as
+ * that route has always handed it: a key left undefined is absent, as it
+ * was once the request went as JSON.
+ */
+const asRouteReadsIt = <T extends object>(request: T): T =>
+  Object.fromEntries(
+    Object.entries(request).filter(([, value]) => value !== undefined)
+  ) as T;
 
 /** The words a hub route answered; its refusal is thrown in its words. */
 const hubText = async (response: Response): Promise<string> => {
@@ -1603,6 +1580,7 @@ export const handoffActions = ({
   shownRefusal,
   fleet,
   instancesByShortId,
+  work,
 }: HandoffDeps): HandoffActions => {
   /** A running delegate of the caller's that `target` names, through any continuation it was followed by. */
   const runningDelegate = (target: string) => {
@@ -2028,24 +2006,16 @@ export const handoffActions = ({
       if (opts.workspace) {
         await checkCold(undefined, opts.workspace, instanceId, prompt);
       }
-      const response = await postToHub(
-        "/api/work-items",
-        {
+      // A fresh remote fetch and, on failure, its acknowledged discard take
+      // minutes: nothing here times it out.
+      const started = await work.delegate(
+        asRouteReadsIt({
           ...request,
           machineId: target?.machineId,
           parentInstanceId: instanceId,
           prompt,
-        },
-        authorization,
-        {
-          // A fresh remote fetch and, on failure, its acknowledged discard take minutes.
-          timeout: false,
-        }
+        })
       );
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const started = (await response.json()) as DelegateResult;
       startedBy?.(startedOf(started));
       return target
         ? {
@@ -2055,55 +2025,25 @@ export const handoffActions = ({
         : started;
     },
 
-    async finishItem(request) {
-      const response = await postToHub(
-        "/api/work-items/finish",
-        { ...request, instanceId },
-        authorization,
-        {
-          // The landing gate may run for an hour (an iOS build behind others); Bun's fetch would drop a
-          // response silent for five minutes.
-          timeout: false,
-        }
-      );
-      return await hubText(response);
-    },
+    // The landing gate may run for an hour (an iOS build behind others):
+    // nothing here times it out.
+    finishItem: (request) => work.finishItem(instanceId, request),
 
-    async waitItem(minutes, reason) {
-      return hubText(
-        await postToHub(
-          "/api/work-items/wait",
-          { instanceId, minutes, reason },
-          authorization
-        )
-      );
-    },
+    waitItem: (minutes, reason) =>
+      Promise.resolve(work.waitItem(instanceId, minutes, reason)),
 
     async discardWorkspace(
       workspace: string,
       asked: { ask?: boolean; reason?: string } = {}
     ): Promise<string> {
-      return hubText(
-        await postToHub(
-          `/api/workspaces/${encodeURIComponent(workspace.trim())}/discard`,
-          { from: instanceId, ...asked },
-          authorization
-        )
-      );
+      return await work.discard(instanceId, workspace.trim(), asked);
     },
 
     async stopDelegate(asked: string): Promise<string> {
       // A queued delegate has no session yet: it is withdrawn from the queue.
-      const withdrawn = await postToHub(
-        "/api/work-items/queued/withdraw",
-        { from: instanceId, target: asked },
-        authorization
-      );
-      if (withdrawn.ok) {
-        return ((await withdrawn.json()) as { text: string }).text;
-      }
-      if (withdrawn.status !== 404) {
-        throw new Error(await withdrawn.text());
+      const withdrawn = work.withdrawQueued(instanceId, asked);
+      if (withdrawn !== undefined) {
+        return withdrawn;
       }
       const { peers } = roster(fleet, instanceId);
       const followed = formerOf(formerIds(), asked);
@@ -2127,15 +2067,7 @@ export const handoffActions = ({
         forkOrigins()
       );
       // The hub walks its tree (tree-stops.ts): what is under it ends first.
-      const response = await postToHub(
-        "/api/work-items/stop",
-        { from: instanceId, instanceId: peer.row.id },
-        authorization
-      );
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const { under } = (await response.json()) as { under: number };
+      const { under } = work.stop(instanceId, peer.row.id);
       const stopping = workWords.stopAsked(
         `${peer.label}${continuesWords(followed)}`,
         under
@@ -2143,24 +2075,17 @@ export const handoffActions = ({
       if (!peer.row.workItemId) {
         return stopping;
       }
-      const read = await fetch(
-        `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}/unlanded`
-      );
-      const said = read.ok
-        ? ((await read.json()) as {
-            serving?: { id: string; title: string }[];
-            unlanded: Unlanded | { error: string } | null;
-          })
-        : { unlanded: { error: await read.text() } };
-      const { unlanded } = said;
-      const serving = ("serving" in said ? said.serving : undefined) ?? [];
-      const item = await fetch(
-        `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}`
-      );
-      if (!item.ok) {
-        throw new Error(await item.text());
+      const itemId = peer.row.workItemId;
+      const said = (await work.unlandedOf(itemId)) ?? {
+        unlanded: { error: `no work item ${itemId}` },
+        serving: [],
+      };
+      const { unlanded, serving } = said;
+      const item = work.item(itemId);
+      if (!item) {
+        throw new Error(`no work item ${itemId}`);
       }
-      const { workspaceId } = (await item.json()) as WorkItemView;
+      const { workspaceId } = item;
       return `${stopping} ${stoppedHoldWords(workspaceId, unlanded, serving)}`;
     },
 
