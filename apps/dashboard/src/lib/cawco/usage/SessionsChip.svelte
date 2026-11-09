@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { InstanceRow } from "@cawco/core/protocol";
   /**
    * The sessions an account carries, on its dial's corner: a 16px count in
    * the kit badge's paint (its delegates' sessions among them: each is a
@@ -29,7 +30,7 @@
    */
   import { MediaQuery } from "svelte/reactivity";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { cawco, type InstanceRow } from "../client.svelte";
+  import { cawco } from "../client.svelte";
   import { instanceTitle, projectOfRow } from "../home/home-state.svelte";
   import { conversationHref } from "../links";
   import SessionStatus from "../workspace/SessionStatus.svelte";
