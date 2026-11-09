@@ -135,7 +135,7 @@ export const USER_LAYER_DIRS = [
  */
 export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
 
-/** The fleet's skills for Claude Code, which OpenCode reads too (agent session.ts `fleetHoldings`). */
+/** The fleet's skills for Claude Code, which OpenCode reads too (agent fleet-converger.ts `fleetHoldings`). */
 export const claudeSkillsDir = (): string => userLayerPath("skills");
 
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */
