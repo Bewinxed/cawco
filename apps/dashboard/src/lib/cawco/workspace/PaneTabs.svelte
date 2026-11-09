@@ -44,6 +44,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import ContextMenuCopyItem from "#lib/cawco/ContextMenuCopyItem.svelte";
+  import { HOSTED_STRIP, SESSION_STRIP } from "#lib/cawco/tab-strips.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
@@ -1380,7 +1381,7 @@
   boxes={servedBoxes}
   data-strip={leaf.id}
   onValueChange={(id) => workspace.activate(id, leaf.id)}
-  strip={hosted ? "hosted" : "session"}
+  strip={hosted ? HOSTED_STRIP : SESSION_STRIP}
   {travel}
   value={leaf.active ?? ""}
   values={leaf.tabs}
