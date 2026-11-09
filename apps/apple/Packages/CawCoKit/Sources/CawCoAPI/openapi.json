@@ -46044,7 +46044,7 @@
         ]
       },
       "KeptProcess": {
-        "description": "A process in a session keeper's unit that neither the keeper nor one of\nits sessions runs: while one is there, the keeper is not stopped (agent\nkeeper-jobs.ts), and the next look after it ends stops it.",
+        "description": "A process in a session keeper's unit that neither the keeper nor one of\nits sessions runs: while one is there, the keeper is not stopped (agent\nservice-manager/keeper-job.ts), and the next look after it ends stops it.",
         "type": "object",
         "properties": {
           "command": {
