@@ -46,6 +46,7 @@
     markOpened,
   } from "#lib/cawco/home/home-state.svelte.js";
   import PeekSheet from "#lib/cawco/home/PeekSheet.svelte";
+  import { connectionStore } from "#lib/cawco/hub/socket.svelte.js";
   import { instanceForSession } from "#lib/cawco/links.js";
   import MachinesEmpty from "#lib/cawco/MachinesEmpty.svelte";
   import { presenceWorkspace } from "#lib/cawco/presence.js";
@@ -128,7 +129,7 @@
 
   /** What a wide screen's detail area says while nothing is open. */
   const detailState = $derived.by(() => {
-    if (cawco.hub === "unreachable") {
+    if (connectionStore.hub === "unreachable") {
       return "reconnecting";
     }
     if (!fleetHome.ready) {
