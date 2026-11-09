@@ -41,6 +41,7 @@
     reveal,
     revealOut,
   } from "#lib/platform/motion/curves.svelte.js";
+  import { newestRead } from "#lib/platform/newest-read.js";
   import {
     makeDecisionTasks,
     readDecision,
@@ -90,18 +91,17 @@
   );
 
   /** Reads of the page so far: only the newest one's answer is kept. */
-  let reads = 0;
+  const reads = newestRead();
   async function load(page: string) {
-    reads += 1;
-    const ticket = reads;
+    const newest = reads.next();
     try {
       const next = await readDecision(projectId, page);
-      if (ticket === reads) {
+      if (newest()) {
         read = next;
         unread = null;
       }
     } catch (error) {
-      if (ticket === reads) {
+      if (newest()) {
         unread = failureWords(error);
       }
     }
