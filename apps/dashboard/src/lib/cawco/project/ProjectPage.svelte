@@ -9,7 +9,6 @@
   } from "@cawco/core/blocks";
   import { detach } from "@cawco/core/detach";
   import { PROJECT_SETTINGS_TOOL } from "@cawco/core/permission-presentation";
-  import { todoProgress } from "@cawco/core/plan";
   /**
    * The project's views (design §2, PRD §5.2): the head with Caw's face,
    * then the view; the view strip stands in the shell's bar on
@@ -38,7 +37,7 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
-  import type { ProjectView, StageKind } from "@cawco/core/views";
+  import type { StageKind } from "@cawco/core/views";
   import { blocksWords } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
   import { madeWords } from "@cawco/core/words/made";
@@ -71,6 +70,7 @@
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import { PANE_INSET } from "#lib/cawco/project/pane-inset.js";
+  import { ProjectBoard } from "#lib/cawco/project/project-board.svelte.js";
   import SetUpBar from "#lib/cawco/project/SetUpBar.svelte";
   import SetupBoard from "#lib/cawco/project/SetupBoard.svelte";
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
@@ -84,27 +84,16 @@
   import ViewBar from "#lib/cawco/project/ViewBar.svelte";
   import ViewTabs from "#lib/cawco/project/ViewTabs.svelte";
   import {
-    archiveTask,
-    createTask,
     firstTodoStage,
-    listArchived,
-    listTasks,
     movesFrom,
-    moveTask,
-    readStages,
-    type StagesView,
     stageLabel,
-    type TaskList,
-    type TaskSummary,
-    type TaskView,
-    updateTask,
   } from "#lib/cawco/project-tasks.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import { QUESTION_KEYS } from "#lib/cawco/question.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
-  import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
+  import BulkBar from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
@@ -124,16 +113,13 @@
     wordsOf,
   } from "#lib/cawco/tasks/task-find.svelte.js";
   import {
-    clearPicks,
     isPicked,
     pickAll,
     pickTask,
-    selection,
   } from "#lib/cawco/tasks/task-select.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
-  import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
   import { taskEdges } from "#lib/cawco/views/task-graph.js";
   import ViewCalendar, {
     calendarField,
@@ -142,12 +128,7 @@
   import ViewMade from "#lib/cawco/views/ViewMade.svelte";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import ViewRoutines from "#lib/cawco/views/ViewRoutines.svelte";
-  import {
-    discardView,
-    keepView,
-    viewsOf,
-    viewTool,
-  } from "#lib/cawco/views-api.js";
+  import { discardView, keepView } from "#lib/cawco/views-api.js";
   import {
     projectHref,
     projectTab,
@@ -179,8 +160,6 @@
   import { graceWhile } from "#lib/platform/grace-while.svelte.js";
   import {
     failureClause,
-    failureSentence,
-    type HubRead,
     failureWords as message,
     unreachable,
   } from "#lib/platform/hub-read.js";
@@ -191,7 +170,6 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { ListSwap } from "#lib/platform/motion/list-swap.svelte.js";
   import { depart } from "#lib/platform/motion/share.svelte.js";
-  import { newestRead } from "#lib/platform/newest-read.js";
   import { store, stored } from "#lib/platform/storage.js";
   import { track } from "#lib/platform/track.js";
   import { browser } from "$app/env";
@@ -268,28 +246,31 @@
     problem: null,
   });
 
-  /** A refused read, as a sentence with its status for support. */
-  const refusal = (read: HubRead<unknown>): string | null =>
-    read.ok ? null : failureSentence(read);
   /** A reason that already ends as a sentence does. */
   const SENTENCE_END = /[.!?]$/u;
 
   // --- the tasks: what the hub answered, from the load and each re-read ------
 
-  let list = $state<TaskList | null>(
-    untrack(() => (seed?.tasks.ok ? seed.tasks.value : null))
+  /** What the hub found for the filter's words, first from the load (task-find). */
+  const find = new TaskFind(
+    () => projectId,
+    untrack(() => seed?.find ?? wordless(here))
   );
-  let listProblem = $state(untrack(() => (seed ? refusal(seed.tasks) : null)));
-  let stages = $state<StagesView | null>(
-    untrack(() => (seed?.stages.ok ? seed.stages.value : null))
-  );
-  let stagesProblem = $state(
-    untrack(() => (seed ? refusal(seed.stages) : null))
-  );
+  /** The board's data and its writes (project-board.svelte.ts). */
+  const board = new ProjectBoard({
+    project: () => projectId,
+    seed: untrack(() => seed),
+    find,
+    lift,
+  });
+  const list = $derived(board.list);
+  const listProblem = $derived(board.listProblem);
+  const stages = $derived(board.stages);
+  const stagesProblem = $derived(board.stagesProblem);
   // A tab opened in the browser had no server read: it reads itself now.
   onMount(() => {
     if (!seed) {
-      detach(refresh(), "refresh");
+      detach(board.refresh(), "refresh");
     }
   });
   /**
@@ -319,29 +300,9 @@
   let adding = $state(false);
   /** Caw stands as the empty Routines page's mark (ViewRoutines `standing`). */
   let routinesStand = $state(false);
-  /** Moves the hub has not answered yet: the card already stands in its new column. */
-  let moving = $state<Record<string, string>>({});
 
   const stageList = $derived(stages?.stages ?? []);
-  const kindByStage = $derived(
-    new Map(stageList.map((stage) => [stage.name, stage.kind]))
-  );
-  /** The list with each pending move shown where it is going. */
-  const tasks = $derived<TaskSummary[]>(
-    (list?.tasks ?? []).map((task) => {
-      const stage = moving[task.id];
-      if (stage === undefined) {
-        return task;
-      }
-      const kind = kindByStage.get(stage) ?? null;
-      return {
-        ...task,
-        stage,
-        kind,
-        needsYou: kind === "you" || task.lastAttemptFailed,
-      };
-    })
-  );
+  const tasks = $derived(board.tasks);
   const kindById = $derived(new Map(tasks.map((task) => [task.id, task.kind])));
   /** What waits on you: the hub's reasons, a session's ask, an action (needs.svelte.ts). */
   const needsYou = $derived(
@@ -352,11 +313,6 @@
   /** What narrows every view of the tasks, kept in the URL (task-filter). */
   let filter = $state<TaskFilter>(untrack(() => filterOf(here.searchParams)));
   const narrowed = $derived(activeCount(filter));
-  /** What the hub found for the filter's words, first from the load (task-find). */
-  const find = new TaskFind(
-    () => projectId,
-    untrack(() => seed?.find ?? wordless(here))
-  );
   const shownTasks = $derived(
     applyFilter(filtering ? needsYou : tasks, filter, find.ids)
   );
@@ -371,22 +327,7 @@
   const newIn = $derived(firstTodoStage(stageList)?.name);
   const empty = $derived(list !== null && list.tasks.length === 0);
 
-  /** The archived tasks, for the board's Archived rail. */
-  let archived = $state<TaskSummary[]>([]);
-  /** Reads of the archived tasks so far: only the newest one's answer is kept. */
-  const archivedReads = newestRead();
-  async function readArchived() {
-    const id = projectId;
-    const newest = archivedReads.next();
-    try {
-      const read = await listArchived(id);
-      if (id === projectId && newest()) {
-        archived = read.tasks;
-      }
-    } catch {
-      // The board stands without them.
-    }
-  }
+  const archived = $derived(board.archived);
 
   const allowedFrom = (stage: string): Set<string> =>
     stages ? movesFrom(stages, stage) : new Set();
@@ -449,12 +390,10 @@
   /** His panel stands docked beside the page, which yields it its room (CawFloat). */
   const docked = $derived(front && lead.open && lead.anchor !== null);
 
-  /** The project's views, kept then drafted, once read. */
-  let views = $state<ProjectView[]>([]);
-  let viewsRead = $state(false);
-  let viewsProblem = $state<string | null>(null);
-  /** The tasks with their dates, as the `tasks` view tool answers them: what the Calendar places. */
-  let dated = $state<ViewTaskRow[] | null>(null);
+  const views = $derived(board.views);
+  const viewsRead = $derived(board.viewsRead);
+  const viewsProblem = $derived(board.viewsProblem);
+  const dated = $derived(board.dated);
 
   /**
    * Pages are blocks (blocks/): each page's arrangement, as the hub keeps
@@ -467,42 +406,6 @@
         ? views.filter((view) => !view.draft).map((view) => view.name)
         : null
   );
-
-  /** Reads of the views, and of the dated tasks, so far: only each newest one's answer is kept. */
-  const viewsReads = newestRead();
-  const datedReads = newestRead();
-  async function readViews() {
-    const id = projectId;
-    const newest = viewsReads.next();
-    try {
-      const read = await viewsOf(id);
-      if (id === projectId && newest()) {
-        views = read;
-        viewsProblem = null;
-      }
-    } catch (error) {
-      if (newest()) {
-        viewsProblem = message(error);
-      }
-    } finally {
-      viewsRead = true;
-    }
-  }
-
-  async function readDated() {
-    const id = projectId;
-    const newest = datedReads.next();
-    try {
-      const read = (await viewTool(id, "tasks", {})) as {
-        rows: ViewTaskRow[];
-      };
-      if (id === projectId && newest()) {
-        dated = read.rows;
-      }
-    } catch {
-      // The Calendar waits for the next read; the board stands.
-    }
-  }
 
   /** The date field the calendar places tasks by; null: no Calendar tab. */
   const dateField = $derived(
@@ -871,113 +774,6 @@
 
   // --- the hub's writes ---------------------------------------------------------
 
-  /** Reads of the tasks so far: only the newest one's answer is kept. */
-  const reads = newestRead();
-  async function refresh() {
-    const id = projectId;
-    const newest = reads.next();
-    const [read, readStagesNow] = await Promise.allSettled([
-      listTasks(id),
-      readStages(id),
-    ]);
-    if (id !== projectId || !newest()) {
-      return;
-    }
-    if (read.status === "fulfilled") {
-      list = read.value;
-      listProblem = null;
-    } else {
-      listProblem = message(read.reason);
-    }
-    if (readStagesNow.status === "fulfilled") {
-      stages = readStagesNow.value;
-      stagesProblem = null;
-    } else {
-      stagesProblem = message(readStagesNow.reason);
-    }
-    detach(readDated(), "readDated");
-    detach(readArchived(), "readArchived");
-    // What the words find moves with the tasks (a description changed).
-    detach(find.again(), "again");
-  }
-
-  /** A task the hub just wrote, put into the list until the list is read again. */
-  function patch(task: TaskView) {
-    if (!list) {
-      return;
-    }
-    const row: TaskSummary = {
-      ...(list.tasks.find((each) => each.id === task.id) ?? {
-        problem: null,
-        rank: task.rank,
-        type: task.type,
-      }),
-      id: task.id,
-      number: task.number,
-      path: task.path,
-      title: task.title,
-      stage: task.stage,
-      kind: task.kind,
-      needsYou: task.needsYou,
-      waitsOn: task.waitsOn,
-      partOf: task.partOf,
-      foundIn: task.foundIn,
-      duplicateOf: task.duplicateOf,
-      // The row's fields are the ones that hold one scalar (the hub's TaskSummary).
-      fields: Object.fromEntries(
-        Object.entries(task.extra).filter(
-          (entry): entry is [string, string] => typeof entry[1] === "string"
-        )
-      ),
-      labels: task.labels,
-      links: task.links.map(({ source, kind, ref, state, url, mode }) => ({
-        source,
-        kind,
-        ref,
-        state,
-        url,
-        mode,
-      })),
-      outputs: task.outputs,
-      rank: task.rank,
-      type: task.type,
-      todos: todoProgress(task.todos),
-      createdAt: task.createdAt,
-      createdBy: task.createdBy,
-      updatedAt: task.updatedAt,
-      updatedBy: task.updatedBy,
-      startedAt: task.startedAt,
-      completedAt: task.completedAt,
-      droppedAt: task.droppedAt,
-      archivedAt: task.archivedAt,
-      closeReason: task.closeReason,
-      attempts: task.attempts,
-      waits: task.waits,
-      unblocks: task.unblocks,
-      parts: task.parts,
-      heldBy: task.heldBy,
-      ready: task.ready,
-      builtOn: task.builtOn,
-      lastAttemptFailed: task.lastAttemptFailed,
-      lastAttemptStopped: task.lastAttemptStopped,
-      liveAttempt: task.liveAttempt,
-      queuedStart: task.queuedStart,
-      startProblem: task.startProblem,
-    };
-    const known = list.tasks.some((each) => each.id === task.id);
-    list = {
-      ...list,
-      tasks: known
-        ? list.tasks.map((each) => (each.id === task.id ? row : each))
-        : [...list.tasks, row],
-    };
-  }
-
-  function changed(task: TaskView) {
-    patch(task);
-    detach(refresh(), "refresh");
-  }
-
   /** The card for `id` takes off from where it is drawn, to land in its new column. */
   function lift(id: string, source?: HTMLElement) {
     const card =
@@ -986,66 +782,6 @@
     if (card) {
       depart(card);
     }
-  }
-
-  /**
-   * A move, the card standing where it was put, saying it moves, until the
-   * hub answers. A refusal puts the card back where it was, and the hub's
-   * sentence (which names the moves that are open) is thrown to whoever
-   * asked: the board says it under the card, the sheet beside its picker.
-   */
-  async function move(
-    id: string,
-    stage: string,
-    source?: HTMLElement,
-    reason?: string
-  ): Promise<TaskView> {
-    lift(id, source);
-    moving = { ...moving, [id]: stage };
-    try {
-      const task = await moveTask(projectId, id, stage, reason);
-      patch(task);
-      return task;
-    } catch (error) {
-      lift(id);
-      throw error;
-    } finally {
-      const { [id]: _, ...rest } = moving;
-      moving = rest;
-      detach(refresh(), "refresh");
-    }
-  }
-
-  /**
-   * Moves the hub refused from the board, by task: the card is back in its
-   * column with the hub's sentence (which names the moves that are open)
-   * under it, and Try again makes the same move.
-   */
-  let refusedMoves = $state<Record<string, { reason: string; stage: string }>>(
-    {}
-  );
-
-  function drop(id: string, stage: string, source?: HTMLElement) {
-    const { [id]: _, ...rest } = refusedMoves;
-    refusedMoves = rest;
-    move(id, stage, source).catch((error: unknown) => {
-      refusedMoves = {
-        ...refusedMoves,
-        [id]: { reason: message(error), stage },
-      };
-    });
-  }
-  const refusedMove = (id: string) => {
-    const refused = refusedMoves[id];
-    return refused
-      ? { reason: refused.reason, again: () => drop(id, refused.stage) }
-      : null;
-  };
-
-  async function create(title: string, stage: string): Promise<string> {
-    const task = await createTask(projectId, { title, stage });
-    changed(task);
-    return task.id;
   }
 
   // --- the filter and a bulk change ------------------------------------------
@@ -1069,78 +805,16 @@
   const dropTo = $derived(
     stageList.find((stage) => stage.kind === "dropped")?.name ?? null
   );
-  /** The bulk change in flight, or where the hub stopped it. */
-  let bulkRun = $state<BulkRun | null>(null);
-  /** Goes on from where a refused bulk change stopped. */
-  let bulkAgain: (() => void) | null = null;
-
-  /**
-   * A bulk change, one task at a time through each task's own route, in the
-   * order picked. Each task the hub confirms leaves the selection; a
-   * refusal stops the run there, says the task and the hub's words, and
-   * the tasks not yet changed stay picked for Try again.
-   */
-  async function bulk(
-    verb: string,
-    ids: string[],
-    act: (id: string) => Promise<unknown>,
-    total = ids.length,
-    before = 0
-  ) {
-    bulkRun = { verb, done: before, total, failed: null };
-    for (const [at, id] of ids.entries()) {
-      try {
-        await act(id);
-      } catch (error) {
-        bulkRun = {
-          verb,
-          done: before + at,
-          total,
-          failed: { id, text: message(error) },
-        };
-        bulkAgain = () => bulk(verb, ids.slice(at), act, total, before + at);
-        detach(refresh(), "refresh");
-        return;
-      }
-      selection.ids = selection.ids.filter((each) => each !== id);
-      bulkRun = { verb, done: before + at + 1, total, failed: null };
-    }
-    bulkRun = null;
-    bulkAgain = null;
-    clearPicks();
-    detach(refresh(), "refresh");
-  }
+  const bulkRun = $derived(board.bulkRun);
   const pickedIds = () => picked.map((task) => task.id);
-  const bulkMove = (stage: string) =>
-    bulk("Moving", pickedIds(), (id) => move(id, stage));
+  const bulkMove = (stage: string) => board.bulkMove(pickedIds(), stage);
   const bulkDrop = (reason: string) => {
     if (dropTo) {
-      bulk("Dropping", pickedIds(), (id) =>
-        move(id, dropTo, undefined, reason)
-      );
+      board.bulkDrop(pickedIds(), dropTo, reason);
     }
   };
-  const bulkLabel = (label: string) =>
-    bulk("Labelling", pickedIds(), async (id) => {
-      const row = tasks.find((task) => task.id === id);
-      patch(
-        await updateTask(projectId, id, {
-          labels: [...new Set([...(row?.labels ?? []), label])],
-        })
-      );
-    });
-  const bulkArchive = () =>
-    bulk("Archiving", pickedIds(), async (id) => {
-      await archiveTask(projectId, id);
-      if (list) {
-        list = { ...list, tasks: list.tasks.filter((task) => task.id !== id) };
-      }
-    });
-  function endBulk() {
-    clearPicks();
-    bulkRun = null;
-    bulkAgain = null;
-  }
+  const bulkLabel = (label: string) => board.bulkLabel(pickedIds(), label);
+  const bulkArchive = () => board.bulkArchive(pickedIds());
 
   // Another project, or another view: the picks go (a card picked on the
   // board is not a row picked in the table); the filter is the next
@@ -1149,7 +823,7 @@
   $effect(() => {
     const at = `${projectId}:${current}`;
     if (pickedFor && pickedFor !== at && !bulkRun) {
-      untrack(endBulk);
+      untrack(() => board.endBulk());
     }
     pickedFor = at;
   });
@@ -1230,7 +904,7 @@
     refusals.delete(viewKey(name));
     try {
       const kept = await keepView(projectId, name);
-      views = views.map((view) => (view.name === name ? kept : view));
+      board.views = views.map((view) => (view.name === name ? kept : view));
     } catch (error) {
       refusals.set(viewKey(name), {
         reason: `The ${viewLabel(name)} view was not kept: ${failureClause(error)}. It stays a draft.`,
@@ -1248,7 +922,7 @@
     try {
       await discardView(projectId, name);
       choose("board");
-      views = views.filter((view) => view.name !== name);
+      board.views = views.filter((view) => view.name !== name);
     } catch (error) {
       refusals.set(viewKey(name), {
         reason: `The ${viewLabel(name)} view was not discarded: ${failureClause(error)}. It stays a draft.`,
@@ -1405,13 +1079,13 @@
     readFor = id;
     untrack(() => {
       lead.read();
-      readViews();
+      board.readViews();
       blocks.read();
-      readDated();
-      readArchived();
+      board.readDated();
+      board.readArchived();
       decisions.read();
       if (list) {
-        refresh();
+        board.refresh();
       }
     });
   });
@@ -1452,7 +1126,7 @@
   $effect(() => {
     const changes = cawco.tasksChangedOf(projectId);
     if (changesSeen !== -1 && changes !== changesSeen && list) {
-      untrack(() => refresh());
+      untrack(() => board.refresh());
     }
     changesSeen = changes;
   });
@@ -1477,7 +1151,7 @@
     if (blocksSeen !== -1 && changes !== blocksSeen) {
       untrack(() => {
         blocks.read();
-        readViews();
+        board.readViews();
       });
     }
     blocksSeen = changes;
@@ -1487,7 +1161,7 @@
   $effect(() => {
     const back = () => {
       if (document.visibilityState === "visible") {
-        detach(refresh(), "refresh");
+        detach(board.refresh(), "refresh");
         detach(decisions.read(), "read");
         detach(blocks.read(), "read");
       }
@@ -1502,7 +1176,7 @@
   $effect(() => {
     const working = lead.status === "working";
     if (turnWas && !working) {
-      untrack(() => readViews());
+      untrack(() => board.readViews());
     }
     turnWas = working;
   });
@@ -1557,7 +1231,7 @@
   async function readAgain() {
     rereading = true;
     try {
-      await Promise.all([refresh(), readViews(), lead.read()]);
+      await Promise.all([board.refresh(), board.readViews(), lead.read()]);
     } finally {
       rereading = false;
     }
@@ -1962,11 +1636,11 @@
       {dropTo}
       labels={[...new Set(tasks.flatMap((task) => task.labels))].sort()}
       onarchive={bulkArchive}
-      onclear={endBulk}
+      onclear={() => board.endBulk()}
       ondrop={bulkDrop}
       onlabel={bulkLabel}
       onmove={bulkMove}
-      onretry={() => bulkAgain?.()}
+      onretry={() => board.bulkAgain?.()}
       {picked}
       run={bulkRun}
       stages={stageList}
@@ -1981,14 +1655,14 @@
     archived={applyFilter(archived, filter, find.ids)}
     {dateOf}
     hrefOf={(id) => hrefOf(id)}
-    moving={(id) => id in moving}
+    moving={(id) => id in board.moving}
     {newIn}
-    oncreate={create}
-    onmove={drop}
+    oncreate={(title, stage) => board.create(title, stage)}
+    onmove={(id, stage, source) => board.drop(id, stage, source)}
     onopen={openOne}
     onpick={pick}
     picked={isPicked}
-    refused={refusedMove}
+    refused={(id) => board.refusedMove(id)}
     stages={shownStages}
     tasks={shownTasks}
     bind:adding
@@ -1999,7 +1673,7 @@
     {#if adding}
       <div class="max-w-144 rounded-lg bg-surface-raised p-space-3 shadow-tile">
         <NewTaskForm
-          oncreate={create}
+          oncreate={(title, stage) => board.create(title, stage)}
           stage={newIn ?? ""}
           stages={stageList}
           bind:open={adding}
@@ -2310,7 +1984,7 @@
           {#snippet action()}
             <div class="flex flex-wrap items-start gap-space-2">
               <NewTaskForm
-                oncreate={create}
+                oncreate={(title, stage) => board.create(title, stage)}
                 primary
                 stage={newIn ?? ""}
                 stages={stageList}
@@ -2391,9 +2065,9 @@
         >
           <TaskPane
             {allowedFrom}
-            onchanged={changed}
+            onchanged={(task) => board.changed(task)}
             onclose={closeTask}
-            onmove={(id, stage) => move(id, stage)}
+            onmove={(id, stage) => board.move(id, stage)}
             onopen={openOne}
             page={{ backTo: project.name }}
             {pageOf}
@@ -2586,9 +2260,9 @@
   {:else if sideHeld && stages}
     <TaskPane
       {allowedFrom}
-      onchanged={changed}
+      onchanged={(task) => board.changed(task)}
       onclose={closeTask}
-      onmove={(id, stage) => move(id, stage)}
+      onmove={(id, stage) => board.move(id, stage)}
       onopen={openOne}
       {pageOf}
       {projectId}
