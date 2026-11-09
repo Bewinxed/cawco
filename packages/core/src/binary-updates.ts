@@ -357,7 +357,7 @@ export function mergeHolds(
 /**
  * A process in a session keeper's unit that neither the keeper nor one of
  * its sessions runs: while one is there, the keeper is not stopped (agent
- * keeper-jobs.ts), and the next look after it ends stops it.
+ * service-manager/keeper-job.ts), and the next look after it ends stops it.
  */
 export interface KeptProcess {
   /** Its command line, from `/proc/<pid>/cmdline`. */

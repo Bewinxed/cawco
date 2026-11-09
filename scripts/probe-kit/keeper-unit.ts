@@ -7,7 +7,7 @@
  * The unit runs this checkout's sessiond, delegated as the real keeper's unit
  * is (`Delegate=pids memory cpu`, `DelegateSubgroup=keeper`), under a name
  * the agent's own keeper jobs take (`cawco-sessiond-probe-<tag>.service`,
- * agent keeper-jobs.ts `keeperJob` of a build `probe-<tag>`), so a spec can
+ * agent service-manager/keeper-job.ts `keeperJob` of a build `probe-<tag>`), so a spec can
  * stop it the way an agent's update retires a keeper. It has a HOME and a
  * socket dir of its own and nothing else of the machine's: its `keeper` link
  * is written in its own socket dir.
@@ -99,7 +99,7 @@ export const hostRefusal = async (
 export interface KeeperUnit {
   /** Its own HOME. */
   home: string;
-  /** The keeper as the agent's keeper jobs name it (agent keeper-jobs.ts `keeperJob`). */
+  /** The keeper as the agent's keeper jobs name it (agent service-manager/keeper-job.ts `keeperJob`). */
   keeper: KeeperName;
   socket: string;
   /** Its own socket dir, under XDG_RUNTIME_DIR. */
