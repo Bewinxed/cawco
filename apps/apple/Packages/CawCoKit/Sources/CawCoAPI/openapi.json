@@ -34846,7 +34846,7 @@
           },
           "compactFailure": {
             "$ref": "#/components/schemas/CompactionFailure",
-            "description": "{@link compactError} typed, as its harness typed the error ({@link import (\"./harness\").CompactionFailure})."
+            "description": "{@link compactError} typed, as its harness typed the error ({@link import (\"./session-messages\").CompactionFailure})."
           },
           "compactResult": {
             "$ref": "#/components/schemas/BlockMetadataCompactResult",
