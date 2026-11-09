@@ -12,6 +12,7 @@ import { PlaceRefusal } from "../place-refusal";
 import { DeleteRefusal } from "../project-delete";
 import { ProjectEditRefusal } from "../project-edit";
 import { FolderRefusal } from "../project-folder";
+import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
 import { RestoreRefusal } from "../project-trash";
 import { refusal } from "../refusal";
@@ -129,7 +130,7 @@ export const projectRoutes = ({
         }
         return {
           ...projectOut(made.project),
-          place: made.place,
+          place: placeOut(made.place),
           placeAdded: made.placeAdded,
           // Read by nothing and never sent: the conversation a create with
           // `prompt` started, before his start carried on past the answer.
