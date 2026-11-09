@@ -30,10 +30,15 @@ import type {
   ProjectNote,
 } from "@cawco/core/project-conversation";
 import type { StagesTemplate } from "@cawco/core/views";
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import { projectDesign } from "./landed";
-import { FolderRefusal, folderAttempt, projectRoot } from "./project-folder";
+import { projectRoot } from "./project-folder";
+import {
+  ProjectRefusal,
+  projectAttempt,
+  projectRefusalOf,
+} from "./project-refusal";
 import type { TaskActor, TaskEvent, Tasks, TaskView } from "./tasks";
 
 /** The templates whose work calls for a design system. */
@@ -137,6 +142,9 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
   const sourcesOf = (projectId: string): string[] => {
     const project = db.project(projectId);
     const folder = projectRoot(projectId);
+    if (folder instanceof ElysiaStatus) {
+      throw projectRefusalOf(folder);
+    }
     const has = (path: string) => existsSync(join(folder, path));
     return [
       ...(project?.places.some((place) => place.kind === "checkout")
@@ -171,13 +179,13 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
   ): Promise<TaskView> => {
     const open = await building(projectId);
     if (open) {
-      throw new FolderRefusal(
+      throw new ProjectRefusal(
         409,
         `${open.id} already builds this project's design system.`
       );
     }
     if ((await projectDesign(deps, projectId)).hasDesign === true) {
-      throw new FolderRefusal(
+      throw new ProjectRefusal(
         409,
         "This project has a design system already (design/ on its default branch, or in its folder): a change to it is a design_write proposal, not a build."
       );
@@ -236,7 +244,7 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
   const answerable = (projectId: string) => {
     const row = db.designOffers.of(projectId);
     if (!row) {
-      throw new FolderRefusal(
+      throw new ProjectRefusal(
         404,
         "This project was never offered a design system."
       );
@@ -294,11 +302,11 @@ export type DesignOffers = ReturnType<typeof createDesignOffers>;
 export const designOfferRoutes = (offers: DesignOffers, you: TaskActor) =>
   new Elysia()
     .get("/api/projects/:id/design-offer", ({ params }) =>
-      folderAttempt(() => offers.state(params.id))
+      projectAttempt(() => offers.state(params.id))
     )
     .post("/api/projects/:id/design-offer/dismiss", ({ params }) =>
-      folderAttempt(() => offers.dismiss(params.id))
+      projectAttempt(() => offers.dismiss(params.id))
     )
     .post("/api/projects/:id/design-offer/build", ({ params }) =>
-      folderAttempt(() => offers.build(params.id, you))
+      projectAttempt(() => offers.build(params.id, you))
     );

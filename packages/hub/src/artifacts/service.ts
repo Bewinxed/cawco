@@ -143,10 +143,10 @@ import { HANDLE_MIN } from "../handles";
 import { sessionLabel } from "../labels";
 import {
   changeFolderFiles,
-  FolderRefusal,
   folderFileNames,
   folderPath,
 } from "../project-folder";
+import type { Refused } from "../refusal";
 import { artifactByHandle, boardOf, createAccess, named } from "./access";
 import { canvasEntries } from "./canvas";
 import {
@@ -476,11 +476,11 @@ const promotedFolder = (name: string): string => {
 const TRAILING_DOT = /\.$/u;
 
 /** A promote git refused, in DESIGN.md's error formula: what failed, and git's reason. */
-const notCommitted = (name: string, error: FolderRefusal): ArtifactRefusal =>
+const notCommitted = (name: string, refused: Refused): ArtifactRefusal =>
   new ArtifactRefusal(
-    error.status === 413 || error.status === 409 ? error.status : 503,
-    `${name} could not be committed: ${error.message.replace(TRAILING_DOT, "")}.`,
-    { cause: error }
+    refused.status === 413 || refused.status === 409 ? refused.status : 503,
+    `${name} could not be committed: ${refused.response.detail.replace(TRAILING_DOT, "")}.`,
+    { cause: refused }
   );
 
 /** A promoted file's text: JSON, two-space indented, ending on a newline, as a repository keeps it. */
@@ -4282,31 +4282,31 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const folder = promotedFolder(row.name);
       const at = new Date().toISOString();
       const files = promotedFiles(instance, row, at);
-      let commit: string;
-      try {
-        const there = new Set(await folderFileNames(projectId, folder));
-        ({ sha: commit } = await changeFolderFiles(
-          projectId,
-          {
-            writes: Object.entries(files).map(([name, content]) => ({
-              path: `${folder}/${name}`,
-              content,
-            })),
-            deletes: PROMOTED_FILES.filter(
-              (name) => !(name in files) && there.has(name)
-            ).map((name) => `${folder}/${name}`),
-          },
-          {
-            author: { name: sessionLabel(instance).name },
-            message: `Promote ${row.kind} ${row.name} from session ${instance.id.slice(0, 8)}`,
-          }
-        ));
-      } catch (error) {
-        if (!(error instanceof FolderRefusal)) {
-          throw error;
-        }
-        throw notCommitted(row.name, error);
+      const names = await folderFileNames(projectId, folder);
+      if (names instanceof ElysiaStatus) {
+        throw notCommitted(row.name, names);
       }
+      const there = new Set(names);
+      const changed = await changeFolderFiles(
+        projectId,
+        {
+          writes: Object.entries(files).map(([name, content]) => ({
+            path: `${folder}/${name}`,
+            content,
+          })),
+          deletes: PROMOTED_FILES.filter(
+            (name) => !(name in files) && there.has(name)
+          ).map((name) => `${folder}/${name}`),
+        },
+        {
+          author: { name: sessionLabel(instance).name },
+          message: `Promote ${row.kind} ${row.name} from session ${instance.id.slice(0, 8)}`,
+        }
+      );
+      if (changed instanceof ElysiaStatus) {
+        throw notCommitted(row.name, changed);
+      }
+      const commit = changed.sha;
       const promoted: ArtifactPromotion = { commit, at };
       docs.transact(row.id, "hub", (doc) => setMeta(doc, "promoted", promoted));
       return { commit, path: `${folder}/` };
