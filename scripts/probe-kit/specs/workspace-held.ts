@@ -40,12 +40,9 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type {
-  Sending,
-  ToolArgs,
-  ToolName,
-} from "../../../packages/core/src/hub-request";
+import type { Sending } from "../../../packages/core/src/sending";
 import { workWords } from "../../../packages/core/src/words/work";
+import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import {
   type ToolCall,
   type ToolRecord,
