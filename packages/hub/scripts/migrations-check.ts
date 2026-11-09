@@ -45,6 +45,7 @@ import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { applyUpdate, Doc } from "yjs";
 import { type TitleSource, titleFor, titlesSaid } from "../src/artifact-titles";
 import { MIGRATION_STEP_TAGS } from "../src/db/migration-names";
+import { KNOWN_UNOWNED, OWNED_ROWS } from "../src/db/owned-rows";
 import { PROGRAM_FILE } from "../src/decision-program";
 import { hubInProcess } from "./hub-in-process";
 import { storedRows, storedRowsReport } from "./stored-rows";
@@ -385,6 +386,66 @@ const qualifiedChecks = async (tag: string): Promise<string[]> => {
   );
 };
 
+const OWNER_COLUMN = /(^|_)(instance|machine|project)_id$/u;
+
+/**
+ * Every column that names a session, machine or project is an owner's to
+ * answer for: a foreign key, a row in the owned-rows registry, or a named
+ * exception ({@link KNOWN_UNOWNED}). A new column with none of these is a
+ * decision the check surfaces.
+ */
+const unownedColumns = async (): Promise<string[]> => {
+  const schema = await import("../src/db/schema");
+  const declared = Object.values(schema).flatMap((value) =>
+    is(value, SQLiteTable) ? [getTableConfig(value)] : []
+  );
+  const columnsOf = new Map(
+    declared.map((table) => [
+      table.name,
+      new Set(table.columns.map((column) => column.name)),
+    ])
+  );
+  const registered = new Set(
+    OWNED_ROWS.map((row) => `${row.table}.${row.column}`)
+  );
+  const known = new Set(KNOWN_UNOWNED);
+  const problems = OWNED_ROWS.flatMap((row) =>
+    columnsOf.get(row.table)?.has(row.column)
+      ? []
+      : [
+          `owned-rows.ts names ${row.table}.${row.column}, which the schema does not have`,
+        ]
+  );
+  const owners = declared.flatMap((table) =>
+    table.columns
+      .filter((column) => OWNER_COLUMN.test(column.name))
+      .map((column) => ({
+        key: `${table.name}.${column.name}`,
+        withKey: table.foreignKeys.some((fk) =>
+          fk.reference().columns.some((from) => from.name === column.name)
+        ),
+      }))
+  );
+  for (const { key, withKey } of owners) {
+    const answered = withKey || registered.has(key);
+    if (known.delete(key) && answered) {
+      problems.push(
+        `${key} is in KNOWN_UNOWNED but now has ${withKey ? "a foreign key" : "an owned-rows entry"}: take it off the list`
+      );
+    } else if (!(answered || KNOWN_UNOWNED.includes(key))) {
+      problems.push(
+        `${key} names a session, machine or project with no foreign key and no owned-rows entry: register it in db/owned-rows.ts (or add it to KNOWN_UNOWNED with a reason)`
+      );
+    }
+  }
+  return [
+    ...problems,
+    ...[...known].map(
+      (key) => `KNOWN_UNOWNED names ${key}, which the schema does not have`
+    ),
+  ];
+};
+
 try {
   const { entries } = (await Bun.file(
     join(HUB, "drizzle/meta/_journal.json")
@@ -609,6 +670,10 @@ try {
     throw new Error(
       `Artifacts the start's title pass left wrong: ${[...mistitled, ...empty.map(([id]) => `${id}: no title`)].slice(0, 10).join("; ")}`
     );
+  }
+  const unowned = await unownedColumns();
+  if (unowned.length) {
+    throw new Error(unowned.join("\n"));
   }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(
