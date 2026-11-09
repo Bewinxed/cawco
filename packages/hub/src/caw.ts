@@ -1941,8 +1941,8 @@ const answer = refusalAnswer(CawRefusal, (error) =>
   status(502, error instanceof Error ? error.message : String(error))
 );
 
-const HARNESS = t.Union(HARNESSES.map((harness) => t.Literal(harness)));
-const BLOCK_PAGE = t.Union(BLOCK_PAGES.map((page) => t.Literal(page)));
+const HARNESS = t.UnionEnum(HARNESSES);
+const BLOCK_PAGE = t.UnionEnum(BLOCK_PAGES);
 
 /** The routes for a project's conversation and your asks for views. */
 export const cawRoutes = (caw: Caw) =>

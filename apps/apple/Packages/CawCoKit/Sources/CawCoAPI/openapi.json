@@ -230,7 +230,6 @@
                     }
                   },
                   "control": {
-                    "type": "string",
                     "enum": [
                       "page-send",
                       "page-key",
@@ -239,7 +238,8 @@
                       "needs-you",
                       "decisions-done",
                       "answered"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "pins": {
                     "type": "array",
@@ -964,25 +964,25 @@
                     "type": "string"
                   },
                   "harness": {
-                    "type": "string",
                     "enum": [
                       "claude",
                       "opencode",
                       "pi"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "model": {
                     "type": "string"
                   },
                   "effort": {
-                    "type": "string",
                     "enum": [
                       "low",
                       "medium",
                       "high",
                       "xhigh",
                       "max"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "skills": {
                     "type": "array",
@@ -1452,6 +1452,30 @@
                     "type": "object",
                     "properties": {
                       "act": {
+                        "enum": [
+                          "set-up",
+                          "later",
+                          "skip-name",
+                          "add-name",
+                          "retry",
+                          "start-again",
+                          "check-again",
+                          "done-for-now",
+                          "start",
+                          "stop",
+                          "remove"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "act"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "act": {
                         "type": "string",
                         "const": "add-record"
                       },
@@ -1516,30 +1540,6 @@
                     "required": [
                       "act",
                       "token"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "act": {
-                        "type": "string",
-                        "enum": [
-                          "set-up",
-                          "later",
-                          "skip-name",
-                          "add-name",
-                          "retry",
-                          "start-again",
-                          "check-again",
-                          "done-for-now",
-                          "start",
-                          "stop",
-                          "remove"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "act"
                     ]
                   }
                 ]
@@ -1967,11 +1967,11 @@
                     "type": "string"
                   },
                   "encoding": {
-                    "type": "string",
                     "enum": [
                       "utf8",
                       "base64"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "message": {
                     "maxLength": 2000,
@@ -2854,36 +2854,36 @@
                     "type": "integer"
                   },
                   "hear": {
-                    "type": "string",
                     "enum": [
                       "each",
                       "later"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "agent": {
                     "type": "object",
                     "properties": {
                       "harness": {
-                        "type": "string",
                         "enum": [
                           "claude",
                           "opencode",
                           "pi"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "model": {
                         "minLength": 1,
                         "type": "string"
                       },
                       "effort": {
-                        "type": "string",
                         "enum": [
                           "low",
                           "medium",
                           "high",
                           "xhigh",
                           "max"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "skills": {
                         "type": "array",
@@ -3066,36 +3066,36 @@
                     "type": "integer"
                   },
                   "hear": {
-                    "type": "string",
                     "enum": [
                       "each",
                       "later"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "agent": {
                     "type": "object",
                     "properties": {
                       "harness": {
-                        "type": "string",
                         "enum": [
                           "claude",
                           "opencode",
                           "pi"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "model": {
                         "minLength": 1,
                         "type": "string"
                       },
                       "effort": {
-                        "type": "string",
                         "enum": [
                           "low",
                           "medium",
                           "high",
                           "xhigh",
                           "max"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "skills": {
                         "type": "array",
@@ -3407,7 +3407,6 @@
                     "type": "object",
                     "properties": {
                       "pose": {
-                        "type": "string",
                         "enum": [
                           "ready",
                           "idle",
@@ -3423,7 +3422,8 @@
                           "working",
                           "done",
                           "trying"
-                        ]
+                        ],
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -4874,13 +4874,13 @@
                     }
                   },
                   "lands": {
-                    "type": "string",
                     "enum": [
                       "main",
                       "branch",
                       "pr",
                       "none"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "runsOn": {
                     "type": "string"
@@ -5263,15 +5263,15 @@
                     ]
                   },
                   "lands": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "main",
                       "branch",
                       "pr",
                       "none"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "runsOn": {
@@ -7169,7 +7169,6 @@
                 "type": "object",
                 "properties": {
                   "template": {
-                    "type": "string",
                     "enum": [
                       "code",
                       "launch",
@@ -7178,7 +7177,8 @@
                       "design",
                       "social",
                       "outreach"
-                    ]
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -7380,13 +7380,13 @@
                     ]
                   },
                   "does": {
-                    "type": "string",
                     "enum": [
                       "pick",
                       "judge",
                       "try",
                       "draw"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "ask": {
                     "minLength": 1,
@@ -7536,7 +7536,6 @@
                       "type": "object",
                       "properties": {
                         "type": {
-                          "type": "string",
                           "enum": [
                             "rectangle",
                             "ellipse",
@@ -7545,7 +7544,8 @@
                             "line",
                             "text",
                             "frame"
-                          ]
+                          ],
+                          "type": "string"
                         },
                         "id": {
                           "minLength": 1,
@@ -8104,7 +8104,6 @@
                       "type": "object",
                       "properties": {
                         "type": {
-                          "type": "string",
                           "enum": [
                             "rectangle",
                             "ellipse",
@@ -8113,7 +8112,8 @@
                             "line",
                             "text",
                             "frame"
-                          ]
+                          ],
+                          "type": "string"
                         },
                         "id": {
                           "minLength": 1,
@@ -9165,7 +9165,6 @@
                     "type": "boolean"
                   },
                   "error": {
-                    "type": "string",
                     "enum": [
                       "server",
                       "machine",
@@ -9176,7 +9175,8 @@
                       "error",
                       "crashed",
                       "page"
-                    ]
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -11534,12 +11534,12 @@
                 "type": "object",
                 "properties": {
                   "place": {
-                    "type": "string",
                     "enum": [
                       "board",
                       "routines",
                       "decisions"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "text": {
                     "minLength": 1,
@@ -12974,12 +12974,12 @@
                     ]
                   },
                   "harness": {
-                    "type": "string",
                     "enum": [
                       "claude",
                       "opencode",
                       "pi"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "model": {
                     "type": [
@@ -12988,16 +12988,16 @@
                     ]
                   },
                   "mode": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "default",
                       "acceptEdits",
                       "plan",
                       "bypassPermissions",
                       "fullSend"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "hearsTasks": {
@@ -13294,16 +13294,16 @@
                 "type": "object",
                 "properties": {
                   "mode": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "default",
                       "acceptEdits",
                       "plan",
                       "bypassPermissions",
                       "fullSend"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -13439,13 +13439,13 @@
                     "type": "string"
                   },
                   "page": {
-                    "type": "string",
                     "enum": [
                       "board",
                       "table",
                       "pipeline",
                       "routines"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "position": {
                     "minimum": 0,
@@ -13972,13 +13972,13 @@
                     ]
                   },
                   "lands": {
-                    "type": "string",
                     "enum": [
                       "main",
                       "branch",
                       "pr",
                       "none"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "budget": {
                     "type": [
@@ -14004,16 +14004,16 @@
                     ]
                   },
                   "mode": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "default",
                       "acceptEdits",
                       "plan",
                       "bypassPermissions",
                       "fullSend"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "keep": {
@@ -14208,13 +14208,13 @@
                     ]
                   },
                   "lands": {
-                    "type": "string",
                     "enum": [
                       "main",
                       "branch",
                       "pr",
                       "none"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "budget": {
                     "type": [
@@ -14240,16 +14240,16 @@
                     ]
                   },
                   "mode": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "default",
                       "acceptEdits",
                       "plan",
                       "bypassPermissions",
                       "fullSend"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "enabled": {
@@ -15533,16 +15533,16 @@
                     "type": "boolean"
                   },
                   "mode": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "default",
                       "acceptEdits",
                       "plan",
                       "bypassPermissions",
                       "fullSend"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -15679,16 +15679,16 @@
                     "type": "boolean"
                   },
                   "mode": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "default",
                       "acceptEdits",
                       "plan",
                       "bypassPermissions",
                       "fullSend"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 }
@@ -16272,12 +16272,12 @@
                 "type": "object",
                 "properties": {
                   "provider": {
-                    "type": "string",
                     "enum": [
                       "github",
                       "stripe",
                       "generic"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "repo": {
                     "type": [
@@ -16402,12 +16402,12 @@
                 "type": "object",
                 "properties": {
                   "provider": {
-                    "type": "string",
                     "enum": [
                       "github",
                       "stripe",
                       "generic"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "repo": {
                     "type": [
@@ -17136,12 +17136,12 @@
                 "type": "object",
                 "properties": {
                   "onCap": {
-                    "type": "string",
                     "enum": [
                       "pause",
                       "quiet",
                       "both"
-                    ]
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -17212,14 +17212,14 @@
                     ]
                   },
                   "onCap": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "pause",
                       "quiet",
                       "both"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 },
@@ -17739,16 +17739,16 @@
                     ]
                   },
                   "cawMode": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "default",
                       "acceptEdits",
                       "plan",
                       "bypassPermissions",
                       "fullSend"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   },
                   "cap": {
@@ -18492,11 +18492,11 @@
                     "type": "string"
                   },
                   "encoding": {
-                    "type": "string",
                     "enum": [
                       "utf8",
                       "base64"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "message": {
                     "maxLength": 2000,
@@ -20453,13 +20453,13 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
               "enum": [
                 "board",
                 "table",
                 "pipeline",
                 "routines"
-              ]
+              ],
+              "type": "string"
             }
           }
         ],
@@ -20481,11 +20481,11 @@
                           "type": "string"
                         },
                         "width": {
-                          "type": "string",
                           "enum": [
                             "narrow",
                             "wide"
-                          ]
+                          ],
+                          "type": "string"
                         },
                         "hidden": {
                           "type": "boolean"
@@ -21899,12 +21899,12 @@
                     ]
                   },
                   "provider": {
-                    "type": "string",
                     "enum": [
                       "chatgpt",
                       "antigravity",
                       "gemini-api"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "model": {
                     "type": "string"
@@ -22084,12 +22084,12 @@
                     "type": "object",
                     "properties": {
                       "harness": {
-                        "type": "string",
                         "enum": [
                           "claude",
                           "opencode",
                           "pi"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "model": {
                         "minLength": 1,
@@ -22108,12 +22108,12 @@
                     "type": "object",
                     "properties": {
                       "harness": {
-                        "type": "string",
                         "enum": [
                           "claude",
                           "opencode",
                           "pi"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "model": {
                         "minLength": 1,
@@ -22128,17 +22128,16 @@
                         "type": "string"
                       },
                       "effort": {
-                        "type": "string",
                         "enum": [
                           "low",
                           "medium",
                           "high",
                           "xhigh",
                           "max"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "permissionMode": {
-                        "type": "string",
                         "enum": [
                           "default",
                           "acceptEdits",
@@ -22147,7 +22146,8 @@
                           "dontAsk",
                           "auto",
                           "fullSend"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "scratch": {
                         "type": "object",
@@ -22535,29 +22535,28 @@
                     "type": "object",
                     "properties": {
                       "harness": {
-                        "type": "string",
                         "enum": [
                           "claude",
                           "opencode",
                           "pi"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "model": {
                         "minLength": 1,
                         "type": "string"
                       },
                       "effort": {
-                        "type": "string",
                         "enum": [
                           "low",
                           "medium",
                           "high",
                           "xhigh",
                           "max"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "permissionMode": {
-                        "type": "string",
                         "enum": [
                           "default",
                           "acceptEdits",
@@ -22566,7 +22565,8 @@
                           "dontAsk",
                           "auto",
                           "fullSend"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "account": {
                         "minLength": 1,
@@ -23569,12 +23569,12 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
               "enum": [
                 "claude",
                 "opencode",
                 "pi"
-              ]
+              ],
+              "type": "string"
             }
           },
           {
@@ -25141,12 +25141,12 @@
                       "null"
                     ],
                     "items": {
-                      "type": "string",
                       "enum": [
                         "darwin",
                         "linux",
                         "win32"
-                      ]
+                      ],
+                      "type": "string"
                     }
                   },
                   "shared": {
@@ -25458,11 +25458,11 @@
                         "type": "string"
                       },
                       "role": {
-                        "type": "string",
                         "enum": [
                           "orchestrator",
                           "leaf"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "delegateType": {
                         "type": "string"
@@ -25605,11 +25605,11 @@
                         "type": "string"
                       },
                       "role": {
-                        "type": "string",
                         "enum": [
                           "orchestrator",
                           "leaf"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "delegateType": {
                         "type": "string"
@@ -26011,12 +26011,12 @@
                           "type": "string"
                         },
                         "kind": {
-                          "type": "string",
                           "enum": [
                             "skill",
                             "tool",
                             "mcp"
-                          ]
+                          ],
+                          "type": "string"
                         },
                         "name": {
                           "type": "string"
@@ -27502,11 +27502,11 @@
                     "type": "object",
                     "properties": {
                       "role": {
-                        "type": "string",
                         "enum": [
                           "orchestrator",
                           "leaf"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "projectIds": {
                         "minItems": 1,
@@ -28755,7 +28755,6 @@
                     "type": "boolean"
                   },
                   "template": {
-                    "type": "string",
                     "enum": [
                       "code",
                       "launch",
@@ -28764,7 +28763,8 @@
                       "design",
                       "social",
                       "outreach"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "prompt": {
                     "maxLength": 20000,
@@ -28959,13 +28959,13 @@
                     "type": "boolean"
                   },
                   "lands": {
-                    "type": "string",
                     "enum": [
                       "main",
                       "branch",
                       "pr",
                       "none"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "account": {
                     "maxLength": 320,
@@ -29876,7 +29876,6 @@
                     "type": "string"
                   },
                   "hue": {
-                    "type": "string",
                     "enum": [
                       "amber",
                       "blue",
@@ -29885,10 +29884,10 @@
                       "orange",
                       "rose",
                       "violet"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "setupStep": {
-                    "type": "string",
                     "enum": [
                       "signIn",
                       "nameIt",
@@ -29896,7 +29895,8 @@
                       "delegates",
                       "atLimit",
                       "done"
-                    ]
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -29986,7 +29986,6 @@
                     ]
                   },
                   "hue": {
-                    "type": "string",
                     "enum": [
                       "amber",
                       "blue",
@@ -29995,7 +29994,8 @@
                       "orange",
                       "rose",
                       "violet"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "order": {
                     "type": "integer"
@@ -30019,10 +30019,6 @@
                     ]
                   },
                   "setupStep": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
                     "enum": [
                       "signIn",
                       "nameIt",
@@ -30030,6 +30026,10 @@
                       "delegates",
                       "atLimit",
                       "done"
+                    ],
+                    "type": [
+                      "string",
+                      "null"
                     ]
                   }
                 }
@@ -30234,13 +30234,13 @@
                     "type": "object",
                     "properties": {
                       "strategy": {
-                        "type": "string",
                         "enum": [
                           "pinned",
                           "fill-first",
                           "spread",
                           "soonest-reset"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "pinnedAccountId": {
                         "type": "string"
@@ -30254,13 +30254,13 @@
                     "type": "object",
                     "properties": {
                       "strategy": {
-                        "type": "string",
                         "enum": [
                           "pinned",
                           "fill-first",
                           "spread",
                           "soonest-reset"
-                        ]
+                        ],
+                        "type": "string"
                       },
                       "pinnedAccountId": {
                         "type": "string"
@@ -30292,20 +30292,20 @@
                         "type": "object",
                         "properties": {
                           "beforeMove": {
-                            "type": "string",
                             "enum": [
                               "native",
                               "summary",
                               "whole"
-                            ]
+                            ],
+                            "type": "string"
                           },
                           "atLimit": {
-                            "type": "string",
                             "enum": [
                               "native",
                               "summary",
                               "whole"
-                            ]
+                            ],
+                            "type": "string"
                           },
                           "fileRoom": {
                             "minimum": 0,
@@ -30315,12 +30315,12 @@
                             "type": "object",
                             "properties": {
                               "harness": {
-                                "type": "string",
                                 "enum": [
                                   "claude",
                                   "opencode",
                                   "pi"
-                                ]
+                                ],
+                                "type": "string"
                               },
                               "model": {
                                 "minLength": 1,
@@ -30929,12 +30929,12 @@
                     "type": "string"
                   },
                   "store": {
-                    "type": "string",
                     "enum": [
                       "claude",
                       "pi",
                       "opencode"
-                    ]
+                    ],
+                    "type": "string"
                   },
                   "provider": {
                     "type": "string"
@@ -67133,8 +67133,14 @@
             "properties": {
               "pinnedAccountId": {
                 "type": "string"
+              },
+              "strategy": {
+                "$ref": "#/components/schemas/PlacementStrategy"
               }
-            }
+            },
+            "required": [
+              "strategy"
+            ]
           },
           "provider": {
             "type": "string"
@@ -67144,8 +67150,14 @@
             "properties": {
               "pinnedAccountId": {
                 "type": "string"
+              },
+              "strategy": {
+                "$ref": "#/components/schemas/PlacementStrategy"
               }
-            }
+            },
+            "required": [
+              "strategy"
+            ]
           }
         },
         "required": [
