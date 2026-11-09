@@ -1,5 +1,5 @@
 import { frameObserver } from "#lib/platform/frame-observer.js";
-import { keepPrefs, type Pref } from "#lib/platform/prefs.js";
+import { CONFIG_CARDS_PREF, keepPrefs } from "#lib/platform/prefs.js";
 import { store, stored } from "#lib/platform/storage.js";
 
 /**
@@ -11,7 +11,6 @@ import { store, stored } from "#lib/platform/storage.js";
  * so the server draws the first paint at that size too
  * (routes/config/+layout.server.ts).
  */
-export const CARDS_COOKIE = "cawco-config-cards" satisfies Pref;
 /** The paths remembered: the sections and the editors opened last. */
 const CARDS_LIMIT = 24;
 
@@ -42,7 +41,7 @@ export function parseCards(raw: string | undefined): Cards {
 
 /** No storage: the server's copy is where it starts. */
 const storedValue = (): string | undefined =>
-  stored("local", CARDS_COOKIE) ?? undefined;
+  stored("local", CONFIG_CARDS_PREF) ?? undefined;
 
 /**
  * Attachment: keeps the height `node` settles at as `path`'s card, a moment
@@ -63,8 +62,8 @@ export function rememberCard(path: string) {
         delete cards[old];
       }
       const value = JSON.stringify(cards);
-      store("local", CARDS_COOKIE, value);
-      keepPrefs({ [CARDS_COOKIE]: value });
+      store("local", CONFIG_CARDS_PREF, value);
+      keepPrefs({ [CONFIG_CARDS_PREF]: value });
     };
     const sizes = frameObserver(() => {
       clearTimeout(timer);
