@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { networkInterfaces, hostname as osHostname } from "node:os";
-import { join, posix } from "node:path";
+import { join } from "node:path";
 import {
   ACCOUNT_SETUP_STEPS,
   type AccountBorrowFrame,
@@ -365,7 +365,6 @@ import {
 } from "@cawco/core/words/machine-names";
 import { pauseClock } from "@cawco/core/words/machine-pause";
 import { noticeWords } from "@cawco/core/words/notices";
-import { projectWords } from "@cawco/core/words/project";
 import {
   continuedInWords,
   type RelaunchFor,
@@ -506,7 +505,7 @@ import { SPLIT_CONTINUATIONS, TAG_MARKERS } from "./db/migration-names";
 import type { OwedMove } from "./db/owed-moves";
 import { originOfKey, projectOfOrigin, projectOrigin } from "./db/previews";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
-import type { PlaceRow, ProjectRow } from "./db/projects";
+import type { ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { MachineLineKind, TrashKind } from "./db/schema";
 import type { SentMessageRow } from "./db/sends";
@@ -658,7 +657,7 @@ import {
 } from "./pending";
 import { PlaceRefusal } from "./place-refusal";
 import { createPlaceRepos } from "./place-repo";
-import { onAccountMachines, place as placeAccount } from "./placement";
+import { place as placeAccount } from "./placement";
 import {
   createPlanChanges,
   type PlanChanges,
@@ -698,10 +697,9 @@ import {
   listFolder,
   onFolderCommits,
   projectFolderRoutes,
-  projectRoot,
   readFolderFile,
 } from "./project-folder";
-import type { ProjectAsk, ProjectMade } from "./project-making";
+import { createProjectJoining } from "./project-joining";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import { createProjectOut, placeAddedOf } from "./project-out";
@@ -723,7 +721,6 @@ import {
 } from "./project-starting-set";
 import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
-import { NOTHING_READ, readCheckout } from "./projects";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
@@ -882,7 +879,6 @@ import {
   WorkItemRefusal,
   type WorkItemRequest,
 } from "./work-items";
-import { type WorkAsk, type WorkPlace, workPlace } from "./work-place";
 import { createWorkspaceRetire } from "./workspace-retire";
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
@@ -2244,6 +2240,11 @@ export const createServer = (
     presenced: () => presenced,
     commandQueues: () => commandQueues,
     merging: () => merging,
+    askedMachinePath: () => askedMachinePath,
+    onlineMachines: () => onlineMachines,
+    projectStarters: () => projectStarters,
+    projectsChanged: () => projectsChanged,
+    runOnMachine: () => runOnMachine,
   });
   const {
     anchors,
@@ -2687,6 +2688,8 @@ export const createServer = (
     waiting,
     waitingMachines,
   } = createMachineCalls(ctx);
+  const { askedProjectName, createOrJoinProject, leadHome, workPlaceOf } =
+    createProjectJoining(ctx);
   const { learnCheckout, runOnMachine, stopCommands } =
     createMachineCommands(ctx);
   const { autoInstall, installArgs, installAsk, readyHarnesses } =
@@ -8311,217 +8314,6 @@ export const createServer = (
       .listAgents()
       .map((agent) => agent.machineId)
       .filter((machineId) => registry.agent(machineId));
-
-  /** Caw's own folder for a project, under a machine's home ({@link leadHome}). */
-  const cawHome = (projectId: string): string =>
-    posix.join(".cawco", "caw", projectId);
-
-  /**
-   * Where a project's Caw starts before any checkout of it is online (D2):
-   * its folder on the hub, on the hub's machine, when that machine runs an
-   * agent; else `~/.cawco/caw/<projectId>`, made on the first machine that is
-   * online. Undefined while no machine is. Among the machines where the
-   * project's account is signed in, when any is (placement.ts
-   * `onAccountMachines`).
-   */
-  const leadHome = async (
-    projectId: string
-  ): Promise<{ machineId: string; cwd: string } | undefined> => {
-    const machines = onAccountMachines(
-      onlineMachines().map((id) => ({ machineId: id })),
-      db.project(projectId)?.inEffect.account.value,
-      db.accounts.signins()
-    ).map((one) => one.machineId);
-    const own = await ownMachineId;
-    const hubMachine = machines.find((id) => id === own);
-    if (hubMachine) {
-      // Made and committed on first use, as every read of it does.
-      await listFolder(projectId);
-      return { machineId: hubMachine, cwd: projectRoot(projectId) };
-    }
-    const [machineId] = machines;
-    if (!machineId) {
-      return undefined;
-    }
-    // The machine's home, so the session's row names a real path; the spawn
-    // makes the folder (the agent's `#workdir`).
-    const home = await runOnMachine(
-      machineId,
-      "/",
-      'printf %s "$HOME"',
-      15_000
-    );
-    const path = home.stdout.trim();
-    if (home.exitCode !== 0 || !path.startsWith("/")) {
-      throw new Error(
-        `${machineName(machineId)} did not say where its home folder is, so Caw has no folder there: ${home.stderr.trim() || `exit ${home.exitCode}`}`
-      );
-    }
-    return { machineId, cwd: posix.join(path, cawHome(projectId)) };
-  };
-
-  /**
-   * Where a project's work runs now (work-place.ts): one rule for a task's
-   * attempt, a routine's run, a delegate moved to its project's account and
-   * the project's conversation's checkout.
-   */
-  const workPlaceOf = (project: ProjectRow, ask?: WorkAsk): WorkPlace =>
-    workPlace(
-      project,
-      {
-        hubFolder: projectRoot,
-        hubMachine: ownMachineIdRead,
-        machines: db.listAgents(),
-        online: (machineId) => Boolean(registry.agent(machineId)),
-        signins: db.accounts.signins(),
-      },
-      ask
-    );
-
-  /**
-   * One repository is one project: a folder whose remote a project already
-   * has joins it as a checkout place (`placeAdded`), and the answer is that
-   * project, not a second one. Else a new project, its places its folder on
-   * the hub and the checkout it was made from, its primary. With no checkout
-   * (New project: its place is picked once it is set up) its one place is
-   * its folder on the hub. Nothing is written into a new project here: the
-   * template tapped on New project is kept as `tapped`, and its setup page's
-   * Send applies the shape picked (setup.ts `applySetupPicks`). Given `setup`
-   * (your prompt), its conversation starts with it and sets it up, on or off
-   * (caw.ts `setup`). The dashboard's "New project" and an accepted project
-   * offer come here.
-   */
-  /** A paused machine's folder is read nothing: the person is told now, not kept waiting for the pause's end. */
-  const folderReadable = (machineId: string | undefined): void => {
-    const paused = machineId && machinePause.words(machineId);
-    if (paused) {
-      throw new FolderRefusal(
-        409,
-        `${paused}, so its folder is not read until then. Add it after the pause, or resume the machine first.`
-      );
-    }
-  };
-
-  /**
-   * The name `POST /api/projects` makes a project under: the one asked, else
-   * for New project's words the placeholder Caw names it from (caw.ts
-   * `project_name`); none when neither was sent.
-   */
-  const askedProjectName = (body: {
-    name?: string;
-    prompt?: string;
-  }): string | undefined =>
-    body.name ??
-    (body.prompt?.trim() ? projectWords.placeholderName : undefined);
-
-  /** Each project being made now, by the id its prompt went as ({@link createOrJoinProject}). */
-  const projectsMaking = new Map<string, Promise<ProjectMade>>();
-
-  /** The place a project was made from: its checkout, else its folder on the hub. */
-  const madeFrom = (project: ProjectRow): PlaceRow =>
-    checkoutOf(project) ??
-    project.places.find((each) => each.kind === "hub") ??
-    (project.places[0] as PlaceRow);
-
-  /**
-   * A project made, or a folder joined to the one it belongs to. The same
-   * prompt again under the id it went as while the first is being made (a
-   * device sending again after its answer was lost) answers both: nothing
-   * is made twice.
-   */
-  const createOrJoinProject = (asked: ProjectAsk): Promise<ProjectMade> => {
-    const promptId = asked.setup?.promptId;
-    if (!promptId) {
-      return makeOrJoinProject(asked);
-    }
-    const first = projectsMaking.get(promptId);
-    if (first !== undefined) {
-      return first;
-    }
-    const making = makeOrJoinProject(asked);
-    projectsMaking.set(promptId, making);
-    const done = () => projectsMaking.delete(promptId);
-    making.then(done, done);
-    return making;
-  };
-
-  /** A folder of a repository `known` links joins it as a checkout, its root commit kept. */
-  const joinProject = (
-    known: ProjectRow,
-    checkout: { machineId: string; path: MachinePath; root: string | null }
-  ): ProjectMade => {
-    const { place, added } = db.addPlace({
-      projectId: known.id,
-      machineId: checkout.machineId,
-      path: checkout.path,
-      kind: "checkout",
-    });
-    if (checkout.root) {
-      db.setPlaceRoot(place.id, checkout.root);
-    }
-    if (added) {
-      placesChanged(checkout.machineId, known.id);
-    }
-    return {
-      project: db.project(known.id) ?? known,
-      place,
-      placeAdded: added,
-      joined: true,
-    };
-  };
-
-  const makeOrJoinProject = async (asked: ProjectAsk): Promise<ProjectMade> => {
-    const checkout = asked.checkout && {
-      machineId: asked.checkout.machineId,
-      path: askedMachinePath(
-        asked.checkout.machineId,
-        asked.checkout.cwd,
-        (message, cause) => new FolderRefusal(400, message, { cause })
-      ),
-    };
-    folderReadable(checkout?.machineId);
-    const { remote, root } = checkout
-      ? await readCheckout(runOnMachine, checkout.machineId, checkout.path)
-      : NOTHING_READ;
-    const known = remote ? db.projectByRemote(remote) : undefined;
-    if (known && checkout) {
-      return joinProject(known, { ...checkout, root });
-    }
-    const created = db.createProject({
-      id: crypto.randomUUID(),
-      name: asked.name,
-      ...(checkout ? { checkout: { ...checkout, root } } : {}),
-      remote,
-      caw: asked.caw ?? false,
-      tapped: asked.tapped ?? null,
-    });
-    projectsChanged();
-    projectStarters.touched(created.id, "project created");
-    startProject(created, asked);
-    return {
-      project: created,
-      place: madeFrom(created),
-      placeAdded: false,
-      joined: false,
-    };
-  };
-
-  /**
-   * A new project's conversation set to set it up when it is made with
-   * your prompt, started as the project is answered and carrying on after:
-   * the person's press answers once the project is made, and its page shows
-   * Caw starting (his view's `starting`, his session's row) and why he
-   * could not (his view's `problem`, caw.ts `startRefusals`). Your prompt
-   * sets the project up whether its Caw is on or off.
-   */
-  const startProject = (created: ProjectRow, asked: ProjectAsk): void => {
-    if (asked.setup) {
-      detach(
-        caw.setup(created.id, asked.setup),
-        `set up ${created.id} with Caw`
-      );
-    }
-  };
 
   const projectOut = createProjectOut(db);
 
