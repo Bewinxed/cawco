@@ -765,6 +765,8 @@ import { recordHubEvent } from "./hub-record";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
 import {
+  type FetchedCopy,
+  type FolderSkillBody,
   type Located,
   MachineAway,
   type ReportTold,
@@ -1078,6 +1080,7 @@ import { unreachable } from "./unreachable";
 import { createTrim } from "./unused-trim";
 import { TOOL_RELEASES } from "./upstreams";
 import { UsageCounter } from "./usage-count";
+import { firstValidationIssue } from "./validation-issue";
 import { renameViewTaskTables } from "./view-task-tables";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
@@ -2331,9 +2334,12 @@ const peekTools = (payload: unknown): ToolStatus[] => {
     : [];
 };
 
-/** A `control` asking a machine to install a tool, and the tool it names. */
-const peekInstall = (payload: unknown): string | undefined => {
-  if (peek(payload, "method") !== "installTool") {
+/** The first argument of a `control` of `method`, when it is a string. */
+const peekControlArg = (
+  payload: unknown,
+  method: string
+): string | undefined => {
+  if (peek(payload, "method") !== method) {
     return undefined;
   }
   const { args } = payload as { args?: unknown };
@@ -2341,15 +2347,13 @@ const peekInstall = (payload: unknown): string | undefined => {
   return typeof id === "string" ? id : undefined;
 };
 
+/** A `control` asking a machine to install a tool, and the tool it names. */
+const peekInstall = (payload: unknown): string | undefined =>
+  peekControlArg(payload, "installTool");
+
 /** A `control` asking a machine to delete a transcript, and the session it names. */
-const peekTranscriptDelete = (payload: unknown): string | undefined => {
-  if (peek(payload, "method") !== "deleteSession") {
-    return undefined;
-  }
-  const { args } = payload as { args?: unknown };
-  const id = Array.isArray(args) ? args[0] : undefined;
-  return typeof id === "string" ? id : undefined;
-};
+const peekTranscriptDelete = (payload: unknown): string | undefined =>
+  peekControlArg(payload, "deleteSession");
 
 /** A `control` answering a permission, and the ask it answers with what it says. */
 const peekAnswer = (
@@ -2602,6 +2606,10 @@ export interface ServerOptions {
    */
   serves?: boolean;
 }
+
+/** A thrown value in its own words. */
+const thrownWords = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
@@ -5929,42 +5937,31 @@ export const createServer = (
       "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
       "answers are keyed by the exact question text and the value is the chosen option label " +
       "(pass deny=true to refuse it).";
-    deliverSend({
-      verb: "send",
-      machineId: parent.machineId,
-      instanceId: parent.id,
-      payload: {
-        instanceId: parent.id,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: {
-            role: "user",
-            content: withContext(
-              delegateAskText({
-                label,
-                body,
-                instance: delegate.id,
-                request: String(ask.requestId),
-                instruction,
-              }),
-              conversationContext(
-                parent,
-                `${sessionLink(delegate.id, boardTitle(delegate))} asked a question`
-              )
-            ),
-          },
-          parent_tool_use_id: null,
-          origin: {
-            kind: "peer",
-            from: delegate.id,
-            name,
-            fromSession: delegate.id,
-          },
-          shouldQuery: false,
+    deliverSend(
+      sessionWord(
+        parent,
+        withContext(
+          delegateAskText({
+            label,
+            body,
+            instance: delegate.id,
+            request: String(ask.requestId),
+            instruction,
+          }),
+          conversationContext(
+            parent,
+            `${sessionLink(delegate.id, boardTitle(delegate))} asked a question`
+          )
+        ),
+        {
+          kind: "peer",
+          from: delegate.id,
+          name,
+          fromSession: delegate.id,
         },
-      },
-    });
+        { shouldQuery: false }
+      )
+    );
     const toolName = peek(ask.payload, "toolName");
     publishDelegateEvent(
       delegate.machineId,
@@ -6059,33 +6056,19 @@ export const createServer = (
     { completion, notice = false, headline, outputs }: ReportTold
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
-    deliverSend({
-      verb: "send",
-      machineId: parent.machineId,
-      instanceId: parent.id,
-      payload: {
-        instanceId: parent.id,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: {
-            role: "user",
-            // The delegate as a link (core references.ts) heads the body:
-            // the form the parent copies when it names the delegate. To a
-            // project's conversation it is the event's context line.
-            content: `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}`,
-          },
-          parent_tool_use_id: null,
-          origin: {
-            kind: "peer",
-            from: delegate.id,
-            name,
-            fromSession: delegate.id,
-          },
-          shouldQuery: false,
+    deliverSend(
+      sessionWord(
+        parent,
+        `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}`,
+        {
+          kind: "peer",
+          from: delegate.id,
+          name,
+          fromSession: delegate.id,
         },
-      },
-    });
+        { shouldQuery: false }
+      )
+    );
     publishDelegateEvent(
       delegate.machineId,
       db.recordDelegateEvent({
@@ -7686,13 +7669,7 @@ export const createServer = (
    */
   const installFromFolder = async <Refused>(
     name: string,
-    body: {
-      contentHash?: string;
-      enabled?: boolean;
-      projectId?: string | null;
-      areaId?: string | null;
-      source: string;
-    },
+    body: FolderSkillBody,
     refuse: (code: 400 | 409, said: string) => Refused
   ): Promise<FleetSkillMeta | Refused | undefined> => {
     if (parseSkillSource(body.source)?.kind !== "file") {
@@ -9408,6 +9385,14 @@ export const createServer = (
       : { bytes: read.bytes };
   };
 
+  /** A folder's refusal of a page's commit, as the page's refusal; anything else throws. */
+  const folderPageRefusal = (error: unknown): PageRefusal => {
+    if (!(error instanceof FolderRefusal)) {
+      throw error;
+    }
+    return { code: error.status === 413 ? 413 : 400, refused: error.message };
+  };
+
   /**
    * Page `name`'s source kept in its project's folder (kept-blocks.ts
    * `pageSourceKept`): a decision page's program or built page under
@@ -9444,10 +9429,7 @@ export const createServer = (
         }
       );
     } catch (error) {
-      if (!(error instanceof FolderRefusal)) {
-        throw error;
-      }
-      return { code: error.status === 413 ? 413 : 400, refused: error.message };
+      return folderPageRefusal(error);
     }
     decisionsChanged(projectId);
   };
@@ -9482,10 +9464,7 @@ export const createServer = (
         }
       );
     } catch (error) {
-      if (!(error instanceof FolderRefusal)) {
-        throw error;
-      }
-      return { code: error.status === 413 ? 413 : 400, refused: error.message };
+      return folderPageRefusal(error);
     }
     decisionsChanged(projectId);
   };
@@ -16668,8 +16647,8 @@ export const createServer = (
    */
   const noteFetch = (
     row: { skill: string } | { plugin: string },
-    before: FleetVersioned & { hash?: string; source?: string },
-    after: FleetVersioned & { hash?: string; source?: string },
+    before: FetchedCopy,
+    after: FetchedCopy,
     error: string | undefined
   ): boolean => {
     const at = Date.now();
@@ -20084,6 +20063,15 @@ export const createServer = (
     tellSession(now, text, { name: ASK_ORIGIN, line });
     return true;
   };
+  /** A parked ask of a memory proposal or a system change settled, `closed` when it was withdrawn. */
+  const settleParked = (requestId: string, closed?: string): void => {
+    if (closed === undefined) {
+      pending.resolve(requestId);
+    } else {
+      pending.resolve(requestId, "cancelled", { closed });
+    }
+  };
+
   const projectMemory = createMemory({
     db,
     watch: memoryWatch,
@@ -20098,13 +20086,7 @@ export const createServer = (
       lead?.notice(projectId, note);
     },
     park: (envelope) => parkForPerson(envelope),
-    settle: (requestId, closed) => {
-      if (closed === undefined) {
-        pending.resolve(requestId);
-      } else {
-        pending.resolve(requestId, "cancelled", { closed });
-      }
-    },
+    settle: settleParked,
     tell: (instanceId, text, line) => tellProposer(instanceId, text, line),
   });
   // Open proposals are the person's asks again as the hub starts.
@@ -21819,13 +21801,7 @@ export const createServer = (
     // An agent's change to a system its project had is the person's ask,
     // as a memory proposal is, answered below with the rest.
     park: (envelope) => parkForPerson(envelope),
-    settle: (requestId, closed) => {
-      if (closed === undefined) {
-        pending.resolve(requestId);
-      } else {
-        pending.resolve(requestId, "cancelled", { closed });
-      }
-    },
+    settle: settleParked,
     tell: (instanceId, content) => workItems.tellSession(instanceId, content),
     tellClosed: (instanceId, text, line) =>
       tellProposer(instanceId, text, line),
@@ -22741,6 +22717,37 @@ export const createServer = (
   // again; the asks of sessions that ended meanwhile are withdrawn.
   hubAsks.boot();
 
+  /**
+   * A leak said by the session the machine runs, not told before: its row and
+   * what was said. What was already told is not told again; the list holds
+   * only the latest it must.
+   */
+  const firstTellingOfLeak = (
+    machineId: string,
+    instanceId: string,
+    said: { uuid?: unknown; content?: unknown }
+  ) => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (
+      !row ||
+      row.machineId !== machineId ||
+      typeof said.uuid !== "string" ||
+      typeof said.content !== "string"
+    ) {
+      return;
+    }
+    const key = `${row.id} ${said.uuid}`;
+    if (leaksTold.has(key)) {
+      return;
+    }
+    leaksTold.add(key);
+    const [oldest] = leaksTold;
+    if (leaksTold.size > LEAKS_KEPT && oldest !== undefined) {
+      leaksTold.delete(oldest);
+    }
+    return { row, uuid: said.uuid, content: said.content };
+  };
+
   /** The leaks and container endings each session was told of, by `<session> <id>` ({@link LEAKS_KEPT}). */
   const leaksTold = new Set<string>();
   /**
@@ -22770,24 +22777,11 @@ export const createServer = (
     instanceId: string,
     said: { uuid?: unknown; content?: unknown; leak?: LeakFound }
   ): void => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (
-      !row ||
-      row.machineId !== machineId ||
-      typeof said.uuid !== "string" ||
-      typeof said.content !== "string"
-    ) {
+    const told = firstTellingOfLeak(machineId, instanceId, said);
+    if (!told) {
       return;
     }
-    const key = `${row.id} ${said.uuid}`;
-    if (leaksTold.has(key)) {
-      return;
-    }
-    leaksTold.add(key);
-    const [oldest] = leaksTold;
-    if (leaksTold.size > LEAKS_KEPT && oldest !== undefined) {
-      leaksTold.delete(oldest);
-    }
+    const { row } = told;
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
     const parent = item?.parentInstanceId;
     if (
@@ -22795,14 +22789,14 @@ export const createServer = (
       parent &&
       inputRefusal(row.id, { kind: "system", name: LEAK_ORIGIN })
     ) {
-      if (!said.content.includes(leakWords.leaking)) {
+      if (!told.content.includes(leakWords.leaking)) {
         console.warn(
-          `[leak] ${row.id} (its item ${item.id} is ${item.state}), told to no one: its workspace's settle ends what it left: ${said.content}`
+          `[leak] ${row.id} (its item ${item.id} is ${item.state}), told to no one: its workspace's settle ends what it left: ${told.content}`
         );
         return;
       }
       console.warn(
-        `[leak] ${row.id} (its item ${item.id} is ${item.state}), told to ${parent}: ${said.content}`
+        `[leak] ${row.id} (its item ${item.id} is ${item.state}), told to ${parent}: ${told.content}`
       );
       tellSession(
         parent,
@@ -22811,23 +22805,23 @@ export const createServer = (
           item.id.slice(0, 8),
           item.state,
           item.workspaceId.slice(0, 8),
-          said.content
+          told.content
         ),
         {
           name: LEAK_ORIGIN,
           line: leakLine(said.leak, item.title),
           live: "running",
-          uuid: leakSend(row.id, said.uuid),
+          uuid: leakSend(row.id, told.uuid),
         }
       );
       return;
     }
-    console.warn(`[leak] ${row.id}: ${said.content}`);
-    tellSession(row.id, said.content, {
+    console.warn(`[leak] ${row.id}: ${told.content}`);
+    tellSession(row.id, told.content, {
       name: LEAK_ORIGIN,
       line: leakLine(said.leak, null),
       live: "running",
-      uuid: leakSend(row.id, said.uuid),
+      uuid: leakSend(row.id, told.uuid),
     });
   };
 
@@ -22877,31 +22871,18 @@ export const createServer = (
     said: { uuid?: unknown; content?: unknown },
     notice: "ended" | "untracked"
   ): void => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (
-      !row ||
-      row.machineId !== machineId ||
-      typeof said.uuid !== "string" ||
-      typeof said.content !== "string"
-    ) {
+    const told = firstTellingOfLeak(machineId, instanceId, said);
+    if (!told) {
       return;
     }
-    const key = `${row.id} ${said.uuid}`;
-    if (leaksTold.has(key)) {
-      return;
-    }
-    leaksTold.add(key);
-    const [oldest] = leaksTold;
-    if (leaksTold.size > LEAKS_KEPT && oldest !== undefined) {
-      leaksTold.delete(oldest);
-    }
+    const { row } = told;
     const item =
       notice === "ended" && row.workItemId
         ? db.workItem(row.workItemId)
         : undefined;
     const parent = item?.parentInstanceId;
     console.info(
-      `[containers] ${row.id}${parent ? `, told to ${parent}` : ""}: ${said.content}`
+      `[containers] ${row.id}${parent ? `, told to ${parent}` : ""}: ${told.content}`
     );
     if (item && parent) {
       tellSession(
@@ -22909,7 +22890,7 @@ export const createServer = (
         containerWords.delegateEnded(
           item.title,
           item.id.slice(0, 8),
-          said.content
+          told.content
         ),
         {
           name: CONTAINERS_ORIGIN,
@@ -22918,7 +22899,7 @@ export const createServer = (
       );
       return;
     }
-    tellSession(row.id, said.content, {
+    tellSession(row.id, told.content, {
       name: CONTAINERS_ORIGIN,
       line:
         notice === "ended"
@@ -23606,6 +23587,7 @@ export const createServer = (
   // instantiation-depth allowance, and more `.use` calls on the root app or
   // one list of them all run the checker past it (TS2589; see the list below),
   // as `.ws` does after them, so the sockets are registered first.
+
   const hubRoutesPart1 = new Elysia().use([
     mcpRoutes(ctx),
     delegationRoutes(ctx),
@@ -23749,10 +23731,7 @@ export const createServer = (
               const away = awayStatus(set, error.machineId, error.message);
               return status(away.code, away.said);
             }
-            return status(
-              422,
-              error instanceof Error ? error.message : String(error)
-            );
+            return status(422, thrownWords(error));
           }
         }
       )
@@ -23768,11 +23747,7 @@ export const createServer = (
           // A 400 that names the missing or malformed field, in words.
           error({ error, status }) {
             if (error instanceof ValidationError) {
-              const [first] = error.all as {
-                path: string;
-                message: string;
-                params?: { requiredProperties?: string[] };
-              }[];
+              const first = firstValidationIssue(error);
               // The issue's own path stops at the object missing the field;
               // the error's `property` names that object from the root.
               const { property } = error.payload as { property?: string };
@@ -23812,10 +23787,7 @@ export const createServer = (
               const away = awayStatus(set, error.machineId, error.message);
               return status(away.code, away.said);
             }
-            return status(
-              422,
-              error instanceof Error ? error.message : String(error)
-            );
+            return status(422, thrownWords(error));
           }
           if (refusal) {
             release();
