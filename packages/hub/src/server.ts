@@ -166,7 +166,6 @@ import {
   originsFor,
 } from "@cawco/core/preview/hub-previews";
 import { PREVIEW_WEIGHT } from "@cawco/core/preview/protocol";
-import type { FolderWeight } from "@cawco/core/preview/proxy";
 import { previewEnterUrl } from "@cawco/core/preview/routes";
 import type { ServingPreview } from "@cawco/core/preview/upstream";
 import type {
@@ -341,6 +340,7 @@ import {
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
+import type { FolderWeight } from "@cawco/preview/proxy";
 import { Elysia } from "elysia";
 import { websocket } from "elysia/websocket";
 import { createAccountCarry } from "./account-carry";

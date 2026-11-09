@@ -283,7 +283,7 @@ const RUN_ENGINE: Engine = (() => {
  * scripts, and a frame sandboxed without `allow-scripts` blocks them and
  * says so as a console error; Chromium sets them in where no sandbox
  * reaches and mostly says nothing. The product's one such frame holds no
- * script of its own (preview-overlay schemes.ts `blankFrame`: `sandbox=
+ * script of its own (preview overlay/schemes.ts `blankFrame`: `sandbox=
  * "allow-same-origin"`, `srcdoc` "<!doctype html>"), so this message is
  * the kit's scripts turned away, never the page's: named `about:srcdoc`,
  * or, from the frame's first document before its srcdoc lands, by the URL
@@ -1983,7 +1983,7 @@ async function coverOver(
  * took reached nothing in the page, so it is made again. The element is
  * watched, not the frame's window: the preview overlay's own window
  * listener stops a Comment or Draw press before any listener added later
- * (`preview-overlay/page.ts`, `stopImmediatePropagation`).
+ * (`overlay/page.ts`, `stopImmediatePropagation`).
  */
 export async function pressIn(
   frame: Frame | FrameLocator,
