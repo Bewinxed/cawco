@@ -12,12 +12,15 @@
 
 import type {
   Account,
+  AccountKind,
   AccountMove,
   AccountProvider,
   CompactStage,
   EndedBy,
   HomeStore,
+  PendingAccountSignin,
   ProviderInfo,
+  RebalanceNotice,
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { ArchiveView } from "@cawco/core/archive";
@@ -211,6 +214,10 @@ import type { createWorkItems, Unlanded, WorkItemRequest } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
 
 export interface HubContext {
+  accountKindRefusal: (
+    provider: string,
+    kind: AccountKind
+  ) => string | undefined;
   accountLaunch: (
     machineId: string,
     row: {
@@ -358,6 +365,7 @@ export interface HubContext {
     compact: { line: string; move: AccountMove } | undefined,
     laterSince: number | undefined
   ) => Promise<{ kept: Kept } | { ended?: MoveEnded | undefined }>;
+  catalogFaults: Map<string, string>;
   caw: ReturnType<typeof createCaw>;
   changeSend: <Row extends SentMessageRow>(
     row: Row,
@@ -665,6 +673,7 @@ export interface HubContext {
   limitRefused: Set<string>;
   linkMarketplace: (source: string) => MarketplaceLink;
   liveFrom: (move: LoginMove) => string[];
+  livePendingSignins: () => PendingAccountSignin[];
   locateSession: (id: string) => Promise<Located>;
   locations: Map<string, SessionLocation | null>;
   losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
@@ -925,6 +934,7 @@ export interface HubContext {
     timeoutMs: number,
     ask: { caller: string; signal?: AbortSignal | undefined }
   ) => Promise<Bounded<ControlResult> | null>;
+  rebalanceNotices: RebalanceNotice[];
   reconnectingFor: (machineId: string) => number;
   recordDelegateAnswer: (
     machineId: string,
@@ -946,6 +956,12 @@ export interface HubContext {
   ) => void;
   releaseOne: (send: SentMessageRow) => void;
   releaseOwed: (of: { instanceId: string } | { machineId: string }) => void;
+  removalOf: (account: Account) => { moving: number; staying: number };
+  removeWithSessions: (
+    account: Account,
+    named: string,
+    leavesOn: readonly string[]
+  ) => { moving: number; staying: number };
   replaceAtWake: (
     row: ReturnType<HubContext["db"]["getInstancesByIds"]>[number]
   ) => void;
@@ -1081,6 +1097,16 @@ export interface HubContext {
     target: PreviewTarget,
     open: boolean
   ) => PreviewFrame;
+  signOutEverywhere: (
+    account: Account,
+    machineIds: string[]
+  ) => Promise<{ failed: string[]; later: string[]; silent: string[] }>;
+  signOutMachine: (
+    account: Account,
+    named: string,
+    machineId: string,
+    leaves: boolean
+  ) => { moving: number; staying: number };
   silentWords: (
     machineId: string,
     answer: { kind: "unanswered"; after: number; reason: "timeout" | "dead" }
