@@ -20,7 +20,8 @@
   import { reveal } from "#lib/platform/motion/curves.svelte.js";
   import { morph } from "#lib/platform/motion/morph.svelte.js";
   import { page } from "$app/state";
-  import { cawco } from "../client.svelte";
+  import { connectionStore } from "../hub/socket.svelte";
+
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
   import { type Cards, rememberCard } from "./cards";
@@ -117,7 +118,9 @@
       });
   });
   /** Rows read, nothing wrong, the hub up: the size worth keeping. */
-  const settled = $derived(ready && !problem && cawco.hub === "connected");
+  const settled = $derived(
+    ready && !problem && connectionStore.hub === "connected"
+  );
 </script>
 
 <svelte:head
