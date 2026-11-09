@@ -15,8 +15,10 @@ import type { CarrySpan, ProviderForecast } from "@cawco/core/accounts";
 import { traitsOf } from "@cawco/core/harness/traits";
 import { hubRequest } from "@cawco/core/hub-request";
 import { hubFetch } from "#lib/platform/hub-read.js";
-import { cawco, followAccounts } from "../client.svelte";
+import { cawco } from "../client.svelte";
 import { devDebug } from "../dev-debug";
+import { accountsStore, followAccounts } from "../stores/accounts.svelte";
+import { usageStore } from "../stores/usage.svelte";
 import { speakingReading } from "../usage";
 import {
   type ClaudeRings,
@@ -91,7 +93,7 @@ const claude = $derived.by((): ClaudeRings | null => {
   if (staged) {
     return staged.claude;
   }
-  const view = cawco.accounts;
+  const view = accountsStore.accounts;
   const { forecast } = state;
   if (!(view && forecast)) {
     return null;
@@ -117,7 +119,7 @@ const openCode = $derived.by((): RingAccount | null => {
   if (staged) {
     return staged.openCode;
   }
-  const reading = speakingReading(cawco.openCodeGoLimits)?.reading;
+  const reading = speakingReading(usageStore.openCodeGoLimits)?.reading;
   if (!reading || reading.windows.length === 0) {
     return null;
   }
