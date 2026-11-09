@@ -24,7 +24,10 @@ import type { ArchiveView } from "@cawco/core/archive";
 import type { AskAnswer } from "@cawco/core/asks";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import type { Bounded } from "@cawco/core/bounded";
-import type { CommandQueue } from "@cawco/core/commands/controls";
+import type {
+  CommandQueue,
+  CommandResult,
+} from "@cawco/core/commands/controls";
 import type {
   FleetAgent,
   FleetPlugin,
@@ -160,7 +163,7 @@ import type {
 } from "./machine-answers";
 import type { createMachineContact } from "./machine-contact";
 import type { createMachineCredentials } from "./machine-credentials";
-import type { MachinePause } from "./machine-pause";
+import type { CommandOptions, MachinePause } from "./machine-pause";
 import type { createMemory, createTurnWatch } from "./memory";
 import type { createMoves } from "./moves";
 import type { createNoticesSeen } from "./notices";
@@ -179,6 +182,7 @@ import type { createProjectEdits } from "./project-edit";
 import type { ProjectAsk, ProjectMade } from "./project-making";
 import type { MergeDeps } from "./project-merge";
 import type { createProjectOut, placeAddedOf } from "./project-out";
+import type { createProjectStarters } from "./project-starters";
 import type { createProjectStops } from "./project-stops";
 import type { ProjectTrash } from "./project-trash";
 import type { createPush } from "./push";
@@ -270,6 +274,11 @@ export interface HubContext {
   artifactLane: ReturnType<typeof createArtifactLane>;
   artifactSessions: ReturnType<typeof createArtifactSessions>;
   artifacts: Artifacts;
+  askedMachinePath: (
+    machineId: string,
+    raw: string,
+    refuse: (message: string, cause: Error) => Error
+  ) => MachinePath;
   askedProjectName: (body: {
     name?: string;
     prompt?: string;
@@ -765,6 +774,7 @@ export interface HubContext {
   notifications: ReturnType<typeof createNotifications>;
   /** Whether a machine's agent is connected. */
   online: (machineId: string) => boolean;
+  onlineMachines: () => string[];
   openInstance: (row: Parameters<DbShape["openInstance"]>[0]) => void;
   openItems: ReturnType<typeof createOpenItems>;
   originKeyOf: (id: string) => string | undefined;
@@ -840,7 +850,9 @@ export interface HubContext {
     folderMoved: boolean
   ) => void;
   projectOut: ReturnType<typeof createProjectOut>;
+  projectStarters: ReturnType<typeof createProjectStarters>;
   projectStops: ReturnType<typeof createProjectStops>;
+  projectsChanged: () => void;
   projectTypes: ProjectDelegateTypes;
   publishDelegateEvent: (machineId: string, event: DelegateEvent) => void;
   publishedAgents: Map<string, string>;
@@ -961,6 +973,14 @@ export interface HubContext {
   ) => void;
   ruleEngine: RuleEngine;
   ruleRowsOf: ReturnType<typeof createRuleRows>;
+  runOnMachine: (
+    machineId: string,
+    cwd: string,
+    cmd: string,
+    timeoutMs?: number,
+    workspace?: WorkspaceRef,
+    how?: CommandOptions
+  ) => Promise<CommandResult>;
   SETTLED: Set<
     | "failed"
     | "cancelled"
