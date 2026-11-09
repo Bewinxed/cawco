@@ -7,10 +7,13 @@
 import type { FsEntry } from "@cawco/core/protocol";
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
-import { cawco, closePreview, didntAnswer, machineFs } from "../client.svelte";
+import { cawco, machineFs } from "../client.svelte";
+import { didntAnswer } from "../hub/control";
 import { conversationHref } from "../links";
 import { boardStore } from "../stores/board.svelte";
 import { browsersStore } from "../stores/browsers.svelte";
+import { catalogStore } from "../stores/catalog.svelte";
+import { closePreview, previewsStore } from "../stores/previews.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
 import { TRY_AGAIN } from "../unanswered";
@@ -25,7 +28,7 @@ const fleetFolders: FolderReader = {
       again: TRY_AGAIN,
     }),
   recent: (machineId) =>
-    cawco
+    catalogStore
       .catalogOf(machineId)
       .reduce<NeutralSessionInfo | null>(
         (best, info) =>
@@ -49,7 +52,7 @@ export const fleetPane: PaneFleet = {
   // A browser artifact's key is its page (core `ArtifactKind`), on the
   // session's machine: the hub's artifact-session frame reads it the same way.
   browser: (instanceId) => {
-    const shown = cawco.previews[instanceId];
+    const shown = previewsStore.previews[instanceId];
     const key =
       shown?.artifact.kind === "browser" &&
       shown.source &&
@@ -65,7 +68,7 @@ export const fleetPane: PaneFleet = {
       null
     );
   },
-  preview: (instanceId) => cawco.previews[instanceId],
+  preview: (instanceId) => previewsStore.previews[instanceId],
   session: (instanceId) => boardStore.instanceIndex.byId.get(instanceId),
   get machines() {
     return machines;

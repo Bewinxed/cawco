@@ -16,15 +16,11 @@
 import type { NeutralSessionInfo } from "@cawco/core/session-messages";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords as messageOf } from "#lib/platform/hub-read.js";
-import {
-  answeredOr,
-  loadCatalog,
-  machineControl,
-  renameInstance,
-  stopSession,
-} from "./client.svelte";
+import { machineControl, renameInstance, stopSession } from "./client.svelte";
+import { answeredOr } from "./hub/control";
 import { instanceForSession } from "./links";
 import { boardStore } from "./stores/board.svelte";
+import { loadCatalog } from "./stores/catalog.svelte";
 
 export interface RowFaultState {
   again?: () => unknown;
