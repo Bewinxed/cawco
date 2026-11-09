@@ -39,6 +39,7 @@ import type {
   PreparedContinuation,
 } from "./db/stored-types";
 import type { HubContext } from "./hub-context";
+import type { ContinueOutcome } from "./hub-shapes";
 import { MachineAway, type SessionLocation } from "./hub-shapes";
 import { leafOf, sessionLabel } from "./labels";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
@@ -86,22 +87,6 @@ export class StartsHeld extends Error {
     this.name = "StartsHeld";
     this.machineId = machineId;
   }
-}
-export interface ContinueOutcome {
-  /** Whether the source had been compacted: its live context starts at a summary. */
-  compacted: boolean;
-  /** Messages read: the live chain, the whole transcript, and the live scope. */
-  entries: { live: number; whole: number; scope: number };
-  liveContextTokens: number;
-  /** The new session's first message, as sent. */
-  opening: string;
-  openingTokens: number;
-  sizes: { artifacts: number; middle: number; tail: number };
-  summariseInputTokens: number;
-  /** Null when there was nothing before the tail, so no summariser ran. */
-  summariserInstanceId: string | null;
-  summary: string | null;
-  targetInstanceId: string;
 }
 
 export type ContinuationsContext = Pick<

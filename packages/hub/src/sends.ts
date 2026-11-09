@@ -53,6 +53,7 @@ import type { SentMessageRow } from "./db/sends";
 import type { SendHold, StoredSendRefusal } from "./db/stored-types";
 import type { SendDelivery } from "./delegation-actions";
 import type { HubContext } from "./hub-context";
+import type { Unstored } from "./hub-shapes";
 import { isKeepAlive } from "./keep-alive";
 import { sessionLabel } from "./labels";
 import type { Unanswered } from "./machine-answers";
@@ -295,20 +296,6 @@ const normalizeRelayMessage = (body: unknown): string | undefined => {
   sent.uuid ??= crypto.randomUUID();
   sent.origin ??= { kind: "human" };
 };
-
-/**
- * What becomes of a pending send its harness has not taken up, once a
- * transcript read has looked: `fail` — it did not go, for the reason given:
- * the session will never run again; `owe` — the process it was handed to
- * is gone and the session runs again, so it is owed to the next process
- * ({@link oweUnread}), a machine that cannot be asked counting as having
- * taken none; `wait` — a live process may still hand it over and say so;
- * `unheld` — what the process holds is known, so a send it neither stored
- * nor said it held ({@link SentMessageRow.held}), or one a later send
- * overtook, never reached it, and is owed to it again. That is decided only
- * on a read the machine answered.
- */
-export type Unstored = "fail" | "owe" | "wait" | "unheld";
 
 /** What a session's machine and item hold a send for ({@link workHoldOf}). */
 interface WorkHolds {
