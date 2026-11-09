@@ -24,15 +24,15 @@
 </script>
 
 <script lang="ts">
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   /**
    * What a fleet row used to be, newest first, each one a click from being
    * the current one again. One list for every row that keeps a history and
    * has no compare of its own — a hook in its editor, a skill under its row —
    * so the two read and restore the same way.
    */
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import RowFault from "#lib/cawco/RowFault.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import ShowAllVersions from "./ShowAllVersions.svelte";
 
   const LATEST = 5;

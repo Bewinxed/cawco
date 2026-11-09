@@ -14,9 +14,9 @@
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { Switch } from "#lib/components/ui/switch/index.js";
+  import { dur } from "#lib/platform/motion/curves.svelte.js";
   import { cn } from "#lib/utils.js";
   import CawFace from "../home/CawFace.svelte";
-  import { dur } from "../motion/curves.svelte";
   import StopTrayPick, {
     type PickRow,
     type PickStep,
