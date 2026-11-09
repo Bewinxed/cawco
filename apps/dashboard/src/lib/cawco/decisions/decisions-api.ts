@@ -8,15 +8,17 @@ import type {
   DecisionSent,
   DecisionsList,
 } from "@cawco/core/decisions";
-import { hubRequest } from "@cawco/core/hub-request";
 import { openPageWrites } from "#lib/cawco/preview/open-pages.js";
-import { hubJson } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubRefusal } from "#lib/platform/hub-read.js";
 
 /** The project's pages, newest first, each with the pages it links to. */
 export async function listDecisions(projectId: string): Promise<DecisionsList> {
-  return await hubJson(
-    hubRequest("GET /api/projects/:id/decisions", { path: { id: projectId } })
-  );
+  const answer = await hub.api.projects({ id: projectId }).decisions.get();
+  if (answer.error) {
+    throw hubRefusal(answer);
+  }
+  return answer.data;
 }
 
 /** One page: its progress, its state, its writer and, once decided, its record. */
@@ -24,11 +26,14 @@ export async function readDecision(
   projectId: string,
   name: string
 ): Promise<DecisionPageRead> {
-  return await hubJson(
-    hubRequest("GET /api/projects/:id/decisions/:name", {
-      path: { id: projectId, name },
-    })
-  );
+  const answer = await hub.api
+    .projects({ id: projectId })
+    .decisions({ name })
+    .get();
+  if (answer.error) {
+    throw hubRefusal(answer);
+  }
+  return answer.data;
 }
 
 /**
@@ -46,15 +51,17 @@ export async function sendDecision(
 ): Promise<DecisionSent> {
   const writes =
     text || !artifactId ? undefined : await openPageWrites(artifactId);
-  return hubJson(
-    hubRequest("POST /api/projects/:id/decisions/:name/send", {
-      path: { id: projectId, name },
-      body: {
-        ...(text ? { text } : {}),
-        ...(writes ? { writes } : {}),
-      },
-    })
-  );
+  const answer = await hub.api
+    .projects({ id: projectId })
+    .decisions({ name })
+    .send.post({
+      ...(text ? { text } : {}),
+      ...(writes ? { writes } : {}),
+    });
+  if (answer.error) {
+    throw hubRefusal(answer);
+  }
+  return answer.data;
 }
 
 /** Make tasks: the record written, and its session (or Caw) asked to file them. */
@@ -62,9 +69,12 @@ export async function makeDecisionTasks(
   projectId: string,
   name: string
 ): Promise<DecisionPageRead> {
-  return await hubJson(
-    hubRequest("POST /api/projects/:id/decisions/:name/tasks", {
-      path: { id: projectId, name },
-    })
-  );
+  const answer = await hub.api
+    .projects({ id: projectId })
+    .decisions({ name })
+    .tasks.post();
+  if (answer.error) {
+    throw hubRefusal(answer);
+  }
+  return answer.data;
 }
