@@ -12,7 +12,9 @@
  * may be dropped, its rows with it. Every foreign key
  * the schema declares stands in the migrated database with the same
  * ON DELETE and ON UPDATE ({@link foreignKeyDrift}). The journal's `when`
- * increases strictly with idx ({@link outOfOrder}). No check constraint
+ * increases strictly with idx ({@link outOfOrder}), and the code migration
+ * steps are listed in the order they run, by their tags' journal order
+ * ({@link misplacedSteps}). No check constraint
  * names a column through its table ({@link qualifiedChecks}). Once the hub has
  * started, no row names a row that is not there (`PRAGMA
  * foreign_key_check`): a hub that kept a port for a project no longer there
@@ -44,7 +46,6 @@ import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { applyUpdate, Doc } from "yjs";
 import { type TitleSource, titleFor, titlesSaid } from "../src/artifact-titles";
-import { MIGRATION_STEP_TAGS } from "../src/db/migration-names";
 import { KNOWN_UNOWNED, OWNED_ROWS, type OwnedOp } from "../src/db/owned-rows";
 import { type OwnerKind, ownerOf } from "../src/db/owner-columns";
 import { PROGRAM_FILE } from "../src/decision-program";
@@ -512,18 +513,57 @@ const unownedColumns = async (): Promise<string[]> => {
   ];
 };
 
+/** The phases a hub's start runs the code migration steps in, in order. */
+const STEP_PHASES = ["migrator", "open", "opened"] as const;
+
+/**
+ * The code migration steps (db/migrate.ts `MIGRATION_STEPS`) as the runner
+ * reads them: each `migrator` step names a tag the journal holds, the steps
+ * are listed in the order they run (every `migrator` step, then `open`, then
+ * `opened`), and the `migrator` steps in their tags' journal order. A step
+ * listed ahead of one with an earlier tag would apply the SQL up to its own
+ * tag first, and the earlier step would then run against a later schema.
+ */
+const misplacedSteps = async (
+  entries: readonly { idx: number; tag: string }[]
+): Promise<string[]> => {
+  // Read once the hub in this process has its database (hub-in-process.ts).
+  const { MIGRATION_STEPS } = await import("../src/db/migrate");
+  const problems: string[] = [];
+  let phase = 0;
+  let last: { idx: number; name: string; tag: string } | undefined;
+  for (const step of MIGRATION_STEPS) {
+    const runs = STEP_PHASES.indexOf(step.at);
+    if (runs < phase) {
+      problems.push(
+        `db/migrate.ts lists ${step.name} (${step.at}) after a step that runs later (${STEP_PHASES[phase]}): list the steps in the order they run`
+      );
+    }
+    phase = Math.max(phase, runs);
+    if (step.at !== "migrator") {
+      continue;
+    }
+    const entry = entries.find(({ tag }) => tag === step.before);
+    if (!entry) {
+      problems.push(
+        `db/migrate.ts's ${step.name} names a journal tag no migration has: ${step.before}`
+      );
+      continue;
+    }
+    if (last && entry.idx <= last.idx) {
+      problems.push(
+        `db/migrate.ts lists ${step.name} (before ${step.before}) after ${last.name} (before ${last.tag}), out of the journal's order: list the migrator steps by their tags' order`
+      );
+    }
+    last = { idx: entry.idx, name: step.name, tag: step.before };
+  }
+  return problems;
+};
+
 try {
   const { entries } = (await Bun.file(
     join(HUB, "drizzle/meta/_journal.json")
   ).json()) as { entries: { idx: number; tag: string; when: number }[] };
-  const untagged = MIGRATION_STEP_TAGS.filter(
-    (tag) => !entries.some((entry) => entry.tag === tag)
-  );
-  if (untagged.length) {
-    throw new Error(
-      `A code migration step (db/migrate.ts) names a journal tag no migration has: ${untagged.join(", ")}`
-    );
-  }
   const sorted = entries.toSorted((a, b) => a.idx - b.idx);
   const disordered = outOfOrder(sorted);
   if (disordered.length) {
@@ -736,6 +776,10 @@ try {
     throw new Error(
       `Artifacts the start's title pass left wrong: ${[...mistitled, ...empty.map(([id]) => `${id}: no title`)].slice(0, 10).join("; ")}`
     );
+  }
+  const stepProblems = await misplacedSteps(entries);
+  if (stepProblems.length) {
+    throw new Error(stepProblems.join("\n"));
   }
   const unowned = await unownedColumns();
   if (unowned.length) {
