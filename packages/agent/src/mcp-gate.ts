@@ -5,7 +5,7 @@
  * server runs on the host, one process per gate and name, started at its
  * first call; a session of the workspace starts none of its own. A Claude
  * Code session in a workspace runs every process it spawns inside the
- * boundary (its shell prefix, boundary.ts `claudePrefixScript`), where no
+ * boundary (its shell prefix, boundary/hook-judge.ts `claudePrefixScript`), where no
  * fleet server reaches its install, its browser door or the owner's
  * machines; OpenCode's and pi's take the same gate, so each server works
  * the same in every harness.

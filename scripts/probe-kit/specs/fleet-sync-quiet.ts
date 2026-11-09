@@ -1,7 +1,7 @@
 /**
  * A fleet sync that changes nothing a workspace's boundary reads hands
  * nothing over, and a form that moved never ends a command that runs (agent
- * boundary.ts `rearmMoved`, fleet-converged.ts `syncedHeld`, `stopBoundary`). On a scratch
+ * boundary/looks.ts `rearmMoved`, fleet-converged.ts `syncedHeld`, `stopBoundary`). On a scratch
  * fleet (real hub, agent and sessiond; Claude Code against the mock model),
  * boundaries included: run it where a workspace boundary can start.
  *
@@ -38,7 +38,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { BoundaryDecision } from "../../../packages/agent/src/boundary";
+import type { BoundaryDecision } from "../../../packages/agent/src/boundary/decisions";
 import { readWithin } from "../../../packages/core/src/bounded";
 import {
   fetchHub,
@@ -61,11 +61,11 @@ const FOREGROUND = [
 ].join("; ");
 const FG_STATUS = /FG-STATUS-(\d+)/u;
 const TAG = "PROBE-QUIET-D:";
-/** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
+/** The executor's line for a command cut off by its boundary's end (agent boundary/exec.ts `execScript`). */
 const CUT_OFF = "boundary stopped while this command ran";
 /** How long a converge and the look after it (agent session.ts `rearmBoundaries`) take to land, after the agent says the sync. */
 const SETTLE_MS = 15_000;
-/** How long after D's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
+/** How long after D's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary/staleness.ts `STALE_LOOK_MS`), a start, and slack. */
 const HANDOVER_BOUND_MS = 30_000;
 /** The agent's line for each delta it takes (agent session.ts `FLEET_DELTA`). */
 const SYNC_LINE = /\[fleet\] sync from the hub: gen (\d+)/gu;
@@ -139,7 +139,7 @@ const hubCall = async (fleet: Fleet, request: HubRequest): Promise<unknown> => {
 const stateOf = (home: string, id: string): string =>
   join(home, ".cawco", "workspaces", id);
 
-/** Workspace `id`'s current boundary as the agent records it (agent boundary.ts `readHeld`). */
+/** Workspace `id`'s current boundary as the agent records it (agent boundary/state.ts `readHeld`). */
 const heldOf = async (
   home: string,
   id: string
@@ -168,16 +168,16 @@ const decisionSaid = (
     ? JSON.stringify(decision)
     : "no decision recorded";
 
-/** The agent's line for a form move a sync made (agent boundary.ts `rearmMoved`): the workspace, and what moved. */
+/** The agent's line for a form move a sync made (agent boundary/looks.ts `rearmMoved`): the workspace, and what moved. */
 const MOVED_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary's form moved \(([^)]*)\)/u;
-/** The agent's line for a hand-over (agent boundary.ts `handOver`): the workspace, the older boundary and the new one. */
+/** The agent's line for a hand-over (agent boundary/lifecycle.ts `handOver`): the workspace, the older boundary and the new one. */
 const HANDOVER_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(form \w+\) is handed over to (\d+)/u;
 /** The host's line for a sandbox that ended unasked (agent boundary-host.ts), as the agent says it: the workspace, its boundary, the sandbox, its status. */
 const UNASKED_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary (\d+) says: cawco: the sandbox (\d+) ended with status (\d+)/u;
-/** The agent's line for a boundary's exit (agent boundary.ts `watchHost`): the workspace, its boundary, how it exited. */
+/** The agent's line for a boundary's exit (agent boundary/lifecycle.ts `watchHost`): the workspace, its boundary, how it exited. */
 const EXIT_LINE =
   /\[workspace\] ([0-9a-f-]+): its boundary (\d+) \(\S+\) exited, (status \S+|killed by \S+)/u;
 
