@@ -4,7 +4,6 @@ import { getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { Context, Effect, Layer } from "effect";
 import { DB_PATH } from "../config";
-import { type DelegateTypesShape, makeDelegateTypes } from "../delegate-types";
 import { hubId } from "../hub-id";
 import { HubLifetime } from "../lifetime";
 import { nameStoredRowsFrom } from "../stored-json";
@@ -28,6 +27,7 @@ import { type ContinuationsDb, continuationsDb } from "./continuations";
 import { type DbCore, dbCore } from "./core";
 import { type DecidesDb, decidesDb } from "./decides";
 import { type DelegateEventsDb, delegateEventsDb } from "./delegate-events";
+import { type DelegateTypesShape, makeDelegateTypes } from "./delegate-types";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import {
@@ -119,7 +119,7 @@ interface HubStore {
   readonly connections: ConnectionsDb;
   /** Who decides: the fleet's table, its members and kinds, and where every card went (decides.ts). */
   readonly decides: DecidesDb;
-  /** The fleet's delegate types (delegate-types.ts), on this connection. */
+  /** The fleet's delegate types (db/delegate-types.ts), on this connection. */
   readonly delegateTypes: DelegateTypesShape;
   /** Design checks and design proposals (design-verify.ts, design-system.ts). */
   readonly designChecks: DesignChecksDb;
