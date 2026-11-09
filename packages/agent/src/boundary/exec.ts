@@ -81,7 +81,7 @@ const stderrReason = (stderr: string | undefined): string | undefined =>
     .findLast((line) => ERROR_LINE.test(line));
 
 /**
- * Waits for a process's `line` (the boundary's {@link READY}); answers that
+ * Waits for a process's `line` (the boundary's state.ts `READY`); answers that
  * line's seq, or rejects with the process's own words if it dies first: what
  * it said on stdout, and the error line of the stderr tail its keeper kept
  * ({@link stderrReason}), so an exception thrown past the host's own lines
@@ -153,7 +153,7 @@ export const ready = (
  * with it, and a workspace reaches the network through that proxy alone),
  * its scratch dir as `TMPDIR` (by its short name on macOS, `workspaceTmpDir`)
  * and no `CLAUDE_CODE_TMPDIR`, the empty git template, git's own system config
- * ({@link gitSystemConfigOf}), impeccable's browser ({@link writeChromiumShim}),
+ * ({@link gitSystemConfigOf}), impeccable's browser (shims.ts `writeChromiumShim`),
  * the tool and git doors (hub-git.ts
  * `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a script tells that it runs
  * inside one; never a key agent's socket ({@link AGENT_SOCKET_ENV}).
@@ -168,7 +168,7 @@ export const ready = (
  */
 const commandEnv = (id: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
-  // The session's CLI temp root, read only in here ({@link Boundary.claudeTmp}):
+  // The session's CLI temp root, read only in here (state.ts `Boundary.claudeTmp`):
   // a Claude Code a command starts takes `TMPDIR`, the scratch dir, instead.
   "unset CLAUDE_CODE_TMPDIR",
   `for name in $(compgen -e); do case $name in ${FORGE_TOKEN_ENV.join(" | ")}) unset "$name" ;; esac; done`,
@@ -216,7 +216,7 @@ const FORGE_TOKEN_ENV = [
 
 /**
  * An executor whose boundary ended unasked waits for the one the agent
- * starts again (lifecycle.ts `restartUnasked`), which writes this executor anew (a
+ * starts again (watch.ts `restartUnasked`), which writes this executor anew (a
  * new file, so a new inode at `$0`: `ls -di`, the same on Linux and macOS),
  * then runs through it.
  */
@@ -290,7 +290,7 @@ take() {
  * the command runs with its caller's PATH, behind the hub's git helper and,
  * on macOS, the toolchain shims.
  */
-/** A place's guard, looking before its command ({@link placeGuard}): a place it cannot look at runs no command. Nothing for a clone. */
+/** A place's guard, looking before its command (place-guard.ts `placeGuard`): a place it cannot look at runs no command. Nothing for a clone. */
 const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
   isPlace(id)
     ? `if ! ${shellQuote(perl())} ${shellQuote(guardOf(id, held.gen))} before "$req" ${shellQuote(held.path)} 2> "$req/guard-err"; then
@@ -301,7 +301,7 @@ fi
 `
     : "";
 
-/** A place's guard, judging what its command did ({@link placeGuard}): what it moved fails the command, and so does a guard that could not look. Nothing for a clone. */
+/** A place's guard, judging what its command did (place-guard.ts `placeGuard`): what it moved fails the command, and so does a guard that could not look. Nothing for a clone. */
 const guardAfter = (
   id: string,
   held: Pick<Held, "gen" | "path" | "scratch">
@@ -319,14 +319,14 @@ const ereLiteral = (text: string): string =>
 
 /**
  * The end Claude Code puts on every Bash and Monitor command it hands its
- * shell prefix ({@link claudePrefixScript}), as an extended regular
+ * shell prefix (hook-judge.ts `claudePrefixScript`), as an extended regular
  * expression over the whole command, its group 1 the file: ` && pwd -P >|
  * <CLAUDE_CODE_TMPDIR>/claude-<id>-cwd`, the file the CLI reads the
  * session's next working directory from once the command succeeded. The CLI
  * quotes the file only when it needs it (2.1.302: `&& pwd -P >|
  * /…/claude-6a33-cwd`), so both forms are taken; its id is four hex digits,
  * a Bash call's with a tag after it (`${Yt}-${Dn}`). The temp root is the
- * workspace's own ({@link Boundary.claudeTmp}), read only inside, so the
+ * workspace's own (state.ts `Boundary.claudeTmp`), read only inside, so the
  * executor writes the file on the host.
  */
 const claudeCwdTail = (id: string): string => {
@@ -340,12 +340,11 @@ const claudeCwdTail = (id: string): string => {
  * own text (plan.ts `planFor`), which is hashed and never run, and names no
  * process.
  *
- * `--claude` is a claude session's shell prefix's ({@link
- * claudePrefixScript}): COMMAND is whatever its CLI runs through it, a Bash
+ * `--claude` is a claude session's shell prefix's (hook-judge.ts `claudePrefixScript`): COMMAND is whatever its CLI runs through it, a Bash
  * or Monitor call, a shell-form hook, a stdio MCP server's start, and all of
  * it runs inside. The executor's stdin reaches the command (`$req/in`, a
  * FIFO the command reads through a pipe, as its output leaves through one:
- * {@link runnerText}), since a hook reads its call there and a server its
+ * runner.ts `runnerText`), since a hook reads its call there and a server its
  * requests. A command that ends in the CLI's working-directory tail
  * ({@link claudeCwdTail}) runs without it, shows the workspace's notice
  * first, as `--session` does, and on status 0 the directory it ended in is
