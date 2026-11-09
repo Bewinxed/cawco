@@ -24,11 +24,17 @@ import type { ToolGlance } from "@cawco/core/transcript-types";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { activityOf } from "../activity";
 import type { PulseReading } from "../board.svelte";
-import type { FrameKind, FrameOf } from "../hub/frames";
+import type { BoardFrame, FrameKind, FrameOf } from "../hub/frames";
 import type { BoardRow } from "../links";
 import { availableCommands, type CommandState } from "../slash-commands";
 import type { Message } from "../types";
-import { instanceIndex, pulseOf } from "./board.svelte";
+import {
+  boardState,
+  instanceIndex,
+  pulseOf,
+  pulses,
+  takePulse,
+} from "./board.svelte";
 import { latestCommandFor } from "./ledger.svelte";
 import { equal } from "./same";
 
@@ -580,3 +586,47 @@ export const sessionsStore = {
     return target ? availableCommands(target.commands) : [];
   },
 };
+
+/**
+ * Every connection seeds now-state; subsequent changes arrive as pulses.
+ * A merge, not a replace: a per-instance `pulse` frame is not ordered
+ * against a snapshot the hub took moments before the `instances` frame
+ * carrying it left, so whichever pulse actually happened later, by its
+ * own `at`, is the one kept.
+ */
+export function takeBoardPulses(frame: BoardFrame): void {
+  if (frame.kind !== "instances") {
+    return;
+  }
+  for (const [id, pulse] of Object.entries(frame.pulses)) {
+    const held = pulses.get(id);
+    if (!held || pulse.at >= held.at) {
+      takePulse(id, pulse);
+    }
+  }
+  for (const [id, pulse] of pulses) {
+    const held = sessionsState.sessions[id];
+    if (held) {
+      applyPulse(held, pulse);
+    }
+  }
+  if (!equal(boardState.hubBuild, frame.hubBuild)) {
+    boardState.hubBuild = frame.hubBuild;
+  }
+}
+
+export function takePulseFrame(frame: FrameOf<"pulse">): void {
+  const previous = pulses.get(frame.instanceId);
+  if (previous && previous.at > frame.pulse.at) {
+    return;
+  }
+  // The daemon's coarse now-state, broadcast — this is the whole of what the
+  // rail knows about a session this browser has not subscribed to. Field
+  // by field: a pulse inside a turn moves its row's time and tool, and
+  // wakes no list that files the session by its activity.
+  takePulse(frame.instanceId, frame.pulse);
+  const held = sessionsState.sessions[frame.instanceId];
+  if (held) {
+    applyPulse(held, frame.pulse);
+  }
+}
