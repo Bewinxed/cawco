@@ -2,6 +2,7 @@
   import { type SessionPlan, todoProgress } from "@cawco/core/plan";
   import { planWords } from "@cawco/core/words/plan";
   import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+  import { boardStore } from "../stores/board.svelte";
   import { stepsTree, todosTree } from "./PlanTree.svelte";
   /** How far a plan has got: its steps, else its task's agreed to-dos. */
   export function planProgress(plan: SessionPlan): {
@@ -69,7 +70,7 @@
   import { dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
-  import { cawco } from "../client.svelte";
+
   import MessageBody from "../MessageBody.svelte";
   import { planAsked, takePlan } from "../reference-things.svelte";
   import { plansStore } from "../stores/plans.svelte";
@@ -95,7 +96,7 @@
   const todosOnly = $derived(onlyTodos(plan));
   const cardTitle = $derived(planTitle(plan));
   const projectId = $derived(
-    cawco.instanceIndex.byId.get(instanceId)?.projectId ?? null
+    boardStore.instanceIndex.byId.get(instanceId)?.projectId ?? null
   );
   const showsTodos = $derived(todos.length > 0 && !!plan?.taskId);
   /** The steps are named once another part stands beside them. */

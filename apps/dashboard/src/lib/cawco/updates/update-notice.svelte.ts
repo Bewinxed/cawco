@@ -13,9 +13,9 @@
 
 import { detach } from "@cawco/core/detach";
 import { machineLabel } from "@cawco/core/machine-names";
-import { cawco } from "../client.svelte";
 import { notices } from "../notices.svelte";
 import { newerBuild } from "../served-build.svelte";
+import { boardStore } from "../stores/board.svelte";
 import { type Notice, noticeFor } from "./model";
 import { watchUpdateToast } from "./update-toast.svelte";
 import { updates } from "./updates.svelte";
@@ -33,7 +33,7 @@ class UpdateNotice {
     return noticeFor(
       {
         commanded: new Set(updates.commanded),
-        machines: cawco.machines,
+        machines: boardStore.machines,
         newerBuild: newerBuild(),
         policy,
         refused: new Map(updates.refused),
@@ -68,20 +68,20 @@ export function actOnUpdate(
 ): void {
   const { policy } = updates;
   if (action === "install-all" && policy) {
-    detach(updates.installAll(cawco.machines, policy), "installAll");
+    detach(updates.installAll(boardStore.machines, policy), "installAll");
     return;
   }
   if (notice.kind === 9) {
     // Each refused ask again, as it was asked: an install, or its cancel.
     for (const id of notice.machineIds) {
-      const machine = cawco.machines.find((row) => row.machineId === id);
+      const machine = boardStore.machines.find((row) => row.machineId === id);
       if (machine) {
         detach(updates.again(machine), "again");
       }
     }
     return;
   }
-  const machine = cawco.machines.find(
+  const machine = boardStore.machines.find(
     (row) => row.machineId === notice.machineIds[0]
   );
   if (machine) {
