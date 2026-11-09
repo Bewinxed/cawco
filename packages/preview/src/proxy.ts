@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { bundled } from "@cawco/core/bundled";
 import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
+import type { ControlRefusal } from "@cawco/core/frames";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import {
   PREVIEW_DOWN_META,
@@ -195,6 +196,27 @@ const FOLDER_GONE = "The preview's folder isn't on its machine any more";
 
 /** {@link FOLDER_GONE} with the system's own words for it ("ENOENT: no such file or directory, …"). */
 export const folderGone = (why: string): string => `${FOLDER_GONE}: ${why}`;
+
+/**
+ * Which hop a machine's refusal of a preview's start says is down, and its
+ * words: the kind it sent beside them (agent session.ts, core
+ * `PreviewStartDown`); from a daemon from before it sent one, read off its
+ * words: a workspace no boundary runs in is refused in
+ * `DOWN_WORDS.workspace` (agent preview-bridge.ts `WorkspaceDown`), and
+ * anything else kept the way to the server from opening.
+ */
+export const startRefused = (answer: {
+  error?: string;
+  refusal?: ControlRefusal;
+}): { down: PreviewDown; why: string } => {
+  const why = answer.error ?? "Preview failed";
+  const said =
+    answer.refusal?.kind === "unknown" ? answer.refusal.down : undefined;
+  return {
+    down: said ?? (why === DOWN_WORDS.workspace ? "workspace" : "reach"),
+    why,
+  };
+};
 
 /** Whether a daemon's refusal of a preview's start says its folder is gone. */
 export const isFolderGone = (error: string): boolean =>
