@@ -142,10 +142,7 @@ export class FleetConverger {
   /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
   #fleetQueue: Promise<unknown> = Promise.resolve();
   /** A fleet report the hub is owed and not yet read ({@link reportFleet}). */
-  #fleetReportOwedValue = false;
-  get #fleetReportOwed(): boolean {
-    return this.#fleetReportOwedValue;
-  }
+  #fleetReportOwed = false as boolean;
   /** What this agent holds of the fleet, as the hub's deltas carried it (fleet-desired.ts). */
   readonly #desired = new FleetDesired();
   /** The machine's last fleet report sent, which a clone's placement adds its place to ({@link placeClone}). */
@@ -155,28 +152,16 @@ export class FleetConverger {
   /** The items deltas moved or took away since the last converge began. */
   readonly #convergeIds = new Set<string>();
   /** A person's Sync: the next converge takes every item, changed or not. */
-  #reconvergeValue = false;
-  get #reconverge(): boolean {
-    return this.#reconvergeValue;
-  }
+  #reconverge = false as boolean;
   /** A converge is queued and not yet begun: a delta meanwhile joins it ({@link convergeSoon}). */
-  #convergeOwedValue = false;
-  get #convergeOwed(): boolean {
-    return this.#convergeOwedValue;
-  }
+  #convergeOwed = false as boolean;
   /** A converge pass runs now: a delta that moved nothing is converged once it ends. */
-  #passingValue = false;
-  get #passing(): boolean {
-    return this.#passingValue;
-  }
+  #passing = false as boolean;
   /** Each harness whose converge threw in the last pass, in its words: every item of that pass failed with it. */
   #harnessFailures = new Map<HarnessKind, string>();
   /** Each delta's write of the policy, begun as it arrived and awaited before its answer, by its request. */
   readonly #fleetDenials = new Map<string, Promise<void>>();
-  readonly #mcpLauncherStates = new Map<
-    string,
-    import("@cawco/core/fleet").FleetItemState
-  >();
+  readonly #mcpLauncherStates = new Map<string, FleetItemState>();
   /**
    * Asks each named live Claude session, one after another, to take again
    * what of the fleet it reads that moved: with `mcp`, every fleet server
@@ -298,7 +283,7 @@ export class FleetConverger {
         this.#convergeIds.add(id);
       }
     }
-    this.#reconvergeValue ||= delta.reconverge === true;
+    this.#reconverge ||= delta.reconverge === true;
     // A build that has not converged every part yet (an update, a first
     // start) does, as the hub welcomes it: what an earlier build's rules
     // left behind is this one's to take away, though nothing moved at the
@@ -311,7 +296,7 @@ export class FleetConverger {
       );
       if (moved) {
         console.info(`[fleet] ${moved}`);
-        this.#reconvergeValue = true;
+        this.#reconverge = true;
       }
     }
     const denied = this.#desired.deniedTools;
@@ -511,16 +496,16 @@ export class FleetConverger {
     if (this.#convergeOwed || !owed) {
       return;
     }
-    this.#convergeOwedValue = true;
+    this.#convergeOwed = true;
     this.#fleetTurn(async () => {
-      this.#convergeOwedValue = false;
-      this.#passingValue = true;
+      this.#convergeOwed = false;
+      this.#passing = true;
       const all = this.#reconverge;
       const ids = (all ? this.#desired.ids() : [...this.#convergeIds]).filter(
         (id) => id !== "policy"
       );
       this.#convergeIds.clear();
-      this.#reconvergeValue = false;
+      this.#reconverge = false;
       const moves = movesOf(ids, all);
       // Said item by item: the ones held; one taken away is said gone.
       const held = ids.filter((id) => this.#desired.has(id));
@@ -547,7 +532,7 @@ export class FleetConverger {
       );
       // Every generation since converged too, when no delta since moved
       // anything: one that did is owed the next pass.
-      this.#passingValue = false;
+      this.#passing = false;
       const owedSince =
         this.#convergeOwed || this.#convergeIds.size > 0 || this.#reconverge;
       this.#desired.converged(
@@ -576,7 +561,7 @@ export class FleetConverger {
         warn(`the fleet converge failed: ${errorText(error)}`)
       )
       .finally(() => {
-        this.#passingValue = false;
+        this.#passing = false;
       });
   }
   /**
@@ -674,9 +659,9 @@ export class FleetConverger {
     if (this.#fleetReportOwed) {
       return;
     }
-    this.#fleetReportOwedValue = true;
+    this.#fleetReportOwed = true;
     this.#fleetTurn(async () => {
-      this.#fleetReportOwedValue = false;
+      this.#fleetReportOwed = false;
       if (!(await isMachineAgent())) {
         return;
       }
@@ -1163,7 +1148,7 @@ export class FleetConverger {
 
   /** A harness CLI was installed here: the next converge takes every item, as each harness already here did. */
   reconverge(): void {
-    this.#reconvergeValue = true;
+    this.#reconverge = true;
     this.convergeSoon();
   }
 
