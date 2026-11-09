@@ -21,7 +21,6 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { PolicySchema } from "@cawco/core/stored-shapes";
-import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import type { Policy } from "@cawco/core/workspace-judge";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { z } from "zod";
@@ -237,28 +236,6 @@ export const heldProc = (procId: string): Promise<HeldProc | undefined> =>
 export const keeperOf = (
   keeper: KeeperName
 ): Promise<SessiondClient | undefined> => keepers.of(keeper);
-
-/**
- * The three calls that go up boundary/'s files, each made when nobody just
- * asked for it: a host that ended and a stale boundary's next look ensure the
- * boundary again, the timer starts that look, and a judge that exited has its
- * workspace armed again. The loops are the system's own: ensuring a boundary
- * follows its host, whose exit ensures it again. So that boundary/'s imports
- * still run one way, `ensure.ts` holds these and hands them, as an argument,
- * to whatever starts or follows a boundary: each file that makes one of these
- * calls has it in hand where it does.
- */
-export interface UnaskedCalls {
-  /** Workspace `ref`'s boundary, running: what `ensure.ts` `ensureBoundary` answers. */
-  readonly ensureAgain: (ref: WorkspaceRef) => Promise<Boundary>;
-  /** Moves workspace `id`'s arming on from its judge's exit, `held` saying whether its boundary is on record, and answers its arming under way, if any. */
-  readonly judgeExited: (
-    id: string,
-    held: boolean
-  ) => Promise<void> | undefined;
-  /** One look at the older boundaries: `ensure.ts` `lookAtStale`. */
-  readonly lookAtOlder: () => Promise<void>;
-}
 
 /** The keeper every new boundary and judge starts on: the current one. */
 export const sessiond = (): Promise<SessiondClient> => keepers.current();
