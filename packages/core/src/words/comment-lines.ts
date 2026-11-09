@@ -1,7 +1,7 @@
 /** What a delivery says of a person's marks: where a mark stands and what was written. */
 
 import type { PageAnchor } from "../comments/anchor";
-import type { ChangedItem } from "../comments/model";
+import type { ChangedItem } from "../doc-meta";
 
 /** A chain as a delivery says it: `IconAgent (Who.svelte:82:11) › story Agent (Who.stories.ts:5:14)`. */
 export const chainWords = (anchor: PageAnchor): string | null => {
