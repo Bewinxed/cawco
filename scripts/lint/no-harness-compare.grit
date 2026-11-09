@@ -1,0 +1,66 @@
+language js
+
+// A harness is a table and a facet, never a name: `=== "claude"`, `case "pi"`,
+// `kinds.includes("opencode")` and `harness("claude")` are refused outside the
+// places a harness's name is its subject. What a harness is, the hub, core
+// and the dashboard read from core's traits table
+// (packages/core/src/harness/traits.ts); what it does, the agent asks its
+// adapter (packages/agent/src/harness.ts). A new harness is one row in the
+// table and one adapter. `harness/traits.ts` is the table, `harnesses/` a
+// harness naming itself, and `proc-id.ts` the keeper's process-id grammar:
+// each compares a harness by name on purpose.
+
+pattern harness_name() {
+  or { `"claude"`, `"opencode"`, `"pi"`, `'claude'`, `'opencode'`, `'pi'` }
+}
+
+pattern a_named_file() {
+  or {
+    includes "packages/agent/src/harnesses/",
+    includes "packages/core/src/harness/traits.ts",
+    includes "packages/agent/src/proc-id.ts"
+  }
+}
+
+or {
+  or { `$l === $r`, `$l !== $r`, `$l == $r`, `$l != $r` } as $hit where {
+    $filename <: not a_named_file(),
+    or { $l <: harness_name(), $r <: harness_name() },
+    // Each compare that must stay, by file, with why: a test double or mock
+    // data, a chart's series index of a two-harness view, a display name
+    // that should be a words lookup.
+    not or {
+      and { $filename <: includes "lib/cawco/decides/preview/setup-records.ts", or { $l <: `offer.id`, $r <: `offer.id` } },
+      and { $filename <: includes "lib/cawco/usage/History.svelte", or { $l <: `chart.harness`, $r <: `chart.harness` } },
+      and { $filename <: includes "lib/cawco/usage/WhereItGoes.svelte", or { $l <: `harness`, $r <: `harness` } },
+      and { $filename <: includes "packages/core/src/delegate-types.ts", or { $l <: `harness`, $r <: `harness` } },
+      and { $filename <: includes "packages/core/src/hooks.ts", or { $l <: `harness`, $r <: `harness` } },
+      and { $filename <: includes "scripts/binary/test-harnesses.ts", or { $l <: `kind`, $r <: `kind` } }
+    },
+    register_diagnostic(span=$hit, message="A harness name compared: read HARNESS_TRAITS through traitsOf (packages/core/src/harness/traits.ts) or ask the adapter's facet (packages/agent/src/harness.ts). A compare that must stay is named in scripts/lint/no-harness-compare.grit, with why.")
+  },
+  JsCaseClause(test=$lit) as $hit where {
+    $filename <: not a_named_file(),
+    $lit <: harness_name(),
+    register_diagnostic(span=$hit, message="A case on a harness name: read HARNESS_TRAITS through traitsOf or ask the adapter's facet, so a new harness is one row and one adapter.")
+  },
+  `$x.includes($lit)` as $hit where {
+    $filename <: not a_named_file(),
+    $lit <: harness_name(),
+    register_diagnostic(span=$hit, message="A harness name looked for: read HARNESS_TRAITS through traitsOf or ask the adapter's facet.")
+  },
+  `[$items].includes($v)` as $hit where {
+    $filename <: not a_named_file(),
+    $items <: contains harness_name(),
+    register_diagnostic(span=$hit, message="A harness name in a list compared: read HARNESS_TRAITS through traitsOf or ask the adapter's facet.")
+  },
+  // A lookup by name reads the name too. The daemon's one left per harness
+  // is its own beat (OpenCode's providers, pi's providers, Claude's report
+  // and keychain), each of which still needs a facet.
+  or { `harness($lit)`, `traitsOf($lit)` } as $hit where {
+    $filename <: not a_named_file(),
+    $lit <: harness_name(),
+    $filename <: not includes "packages/agent/src/daemon.ts",
+    register_diagnostic(span=$hit, message="A harness looked up by name: walk harnesses() and read a facet, so a new harness is one row and one adapter.")
+  }
+}
