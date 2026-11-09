@@ -10,7 +10,11 @@ import { BUDGET, LANDS } from "../tasks";
 import { firstValidationIssue } from "../validation-issue";
 import { workItemCalls } from "../work-item-calls";
 import { WorkItemRefusal } from "../work-item-state";
-import { SESSION_TITLE_DESCRIPTION, WAIT_ITEM_LIMIT } from "../work-items";
+import {
+  SESSION_TITLE_DESCRIPTION,
+  WAIT_ITEM_LIMIT,
+  WAIT_ITEM_MAX_MINUTES,
+} from "../work-items";
 import { harnessSchema } from "./harness-schema";
 import { sessionCallerRefusal } from "./session-caller";
 
@@ -187,7 +191,10 @@ export const workItemRoutes = (
           body: t.Object(
             {
               instanceId: t.String({ minLength: 1 }),
-              minutes: t.Integer({ minimum: 1, maximum: 120 }),
+              minutes: t.Integer({
+                minimum: 1,
+                maximum: WAIT_ITEM_MAX_MINUTES,
+              }),
               reason: t.String({ minLength: 1 }),
             },
             { additionalProperties: false }
@@ -211,7 +218,11 @@ export const workItemRoutes = (
           }
           try {
             return {
-              text: calls.waitItem(body.instanceId, body.minutes, body.reason),
+              text: workItems.waitItem(
+                body.instanceId,
+                body.minutes,
+                body.reason
+              ),
             };
           } catch (error) {
             return status(
@@ -255,7 +266,7 @@ export const workItemRoutes = (
           server?.timeout(request, 0);
           const { instanceId, ...finished } = body;
           try {
-            return { text: await calls.finishItem(instanceId, finished) };
+            return { text: await workItems.finishItem(instanceId, finished) };
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
@@ -323,7 +334,7 @@ export const workItemRoutes = (
             return stranger;
           }
           try {
-            const text = calls.withdrawQueued(body.from, body.target);
+            const text = workItems.withdrawQueued(body.from, body.target);
             return text === undefined
               ? status(404, `no queued delegate ${body.target}`)
               : { text };
@@ -338,7 +349,7 @@ export const workItemRoutes = (
         }
       )
       .get("/api/work-items/:id", hidden, ({ params, status }) => {
-        const item = calls.item(params.id);
+        const item = workItems.item(params.id);
         return item ?? status(404, `no work item ${params.id}`);
       })
       // What the item's workspace holds on no remote now (workspaces.ts
