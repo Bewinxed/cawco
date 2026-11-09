@@ -117,7 +117,6 @@
   import CopyBox from "../CopyBox.svelte";
   import {
     answerFor,
-    cawco,
     type PermissionAnswer,
     permissionAnswer,
     submitCommand,
@@ -135,6 +134,7 @@
   import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
+  import { boardStore } from "../stores/board.svelte";
   import { takeOverBrowser } from "../stores/browsers.svelte";
   import { decideAction } from "../stores/needs.svelte";
   import { relayStore } from "../stores/relay.svelte";
@@ -186,7 +186,7 @@
       return item.kind === "artifact" ? needLinkOf(item.href) : item.href;
     }
     // An ask opens where it was made (`askView`).
-    return conversationHref(askView(item), cawco.instanceIndex);
+    return conversationHref(askView(item), boardStore.instanceIndex);
   });
   /** What it asks for, in the words it is asked: its second line. */
   const want = $derived.by(() => {

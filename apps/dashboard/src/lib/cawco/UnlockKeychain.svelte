@@ -27,8 +27,9 @@
   import { failureWords } from "#lib/platform/hub-read.js";
   import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import { didntAnswer, type Machine, machineControl } from "./client.svelte";
+  import { didntAnswer, machineControl } from "./client.svelte";
   import MachineAuthStatus from "./MachineAuthStatus.svelte";
+  import type { Machine } from "./stores/board.svelte";
   import { TRY_AGAIN } from "./unanswered";
 
   let {

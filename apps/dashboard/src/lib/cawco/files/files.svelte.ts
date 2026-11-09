@@ -33,6 +33,7 @@ import { listAttachments, listFiles } from "../artifact-api";
 import { cawco, storedReadWaits } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { extensionOf } from "../lightbox/extension";
+import { boardStore } from "../stores/board.svelte";
 import { needsStore } from "../stores/needs.svelte";
 import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
@@ -107,7 +108,7 @@ const attachmentReads = new SessionReads<SessionAttachment>(
     if (waits?.on === "machine") {
       throw new Error(
         machineFaultWords(
-          machineCalled(waits.machine.machineId, cawco.machines),
+          machineCalled(waits.machine.machineId, boardStore.machines),
           "offline"
         )
       );
