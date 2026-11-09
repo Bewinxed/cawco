@@ -1,7 +1,7 @@
 /**
  * The canvas's own Yjs doc: a replica of the artifact's doc, which the
  * overlay keeps in its worker and never brings into the page's realm
- * (preview-overlay artifact.ts). This page's bundle carries its one copy of
+ * (preview overlay/artifact.ts). This page's bundle carries its one copy of
  * Yjs; the doc's whole state and every change come from the overlay as
  * updates (`window.cawcoArtifact.replicate`), and each change Excalidraw's
  * binding makes here goes back the same way (`send`), so the doc it binds
@@ -12,8 +12,12 @@
  * (host.tsx `firstLook`), as the overlay's own doc did; the overlay's
  * whole state, merged in after, adds what came since.
  */
+
+import type {
+  ArtifactGlobal,
+  ArtifactHold,
+} from "@cawco/preview/overlay/artifact";
 import { applyUpdate, Doc } from "yjs";
-import type { ArtifactGlobal, ArtifactHold } from "../preview-overlay/artifact";
 
 /** The doc as the canvas binds it: the overlay's hold, with this page's replica of the doc. */
 export interface CanvasHold extends ArtifactHold {

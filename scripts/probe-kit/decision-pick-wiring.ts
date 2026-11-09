@@ -1,11 +1,11 @@
 /**
- * The overlay's own pick (agent preview-overlay pick.ts `listenForPicks`),
+ * The overlay's own pick (preview overlay/pick.ts `listenForPicks`),
  * wired to the probe's stand-in bridge (decision-embeds.ts `CAWCO_BRIDGE`)
  * instead of the page's doc: a press on an option picks it as it does where
  * CawCo shows the page. Bundled for the page by `startDecisionStage` and
  * served beside it.
  */
-import { listenForPicks } from "../../packages/agent/src/preview-overlay/pick";
+import { listenForPicks } from "../../packages/preview/src/overlay/pick";
 
 interface StandIn {
   choose: (choice: string, option: string | string[] | null) => Promise<void>;
