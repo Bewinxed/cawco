@@ -6,13 +6,14 @@
  * proposed (actions.ts). A row's actions are the hub's routine routes; a
  * refusal is thrown in the hub's own sentence.
  */
+
 import type { ApprovedActionView } from "@cawco/core/actions";
 import type { ConnectionView } from "@cawco/core/connections";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { RelayView } from "@cawco/core/relays";
 import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
-import { send } from "#lib/cawco/project-tasks.js";
+import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 /** One run, as the hub answers it (times in ms). */
 export type RoutineRun = RoutineRunView;
@@ -114,7 +115,8 @@ interface IngressRead {
  */
 export async function readRoutinesPage(
   projectId: string,
-  read: <T>(request: HubRequest) => Promise<T> = send
+  read: <T>(request: HubRequest) => Promise<T> = (request) =>
+    hubJson(request, { failure: refusedOrUnreached })
 ): Promise<RoutinesPage> {
   const id = encodeURIComponent(projectId);
   const [routines, ingress, relays, actions, connections, trim] =
@@ -227,7 +229,7 @@ export interface RoutineFormHub {
  */
 export const routineFormHub: RoutineFormHub = {
   create: (projectId, draft) =>
-    send(
+    hubJson(
       hubRequest("POST /api/routines", {
         body: {
           projectId,
@@ -238,19 +240,22 @@ export const routineFormHub: RoutineFormHub = {
           timeZone: draft.timeZone,
           delegateType: draft.delegateType,
         },
-      })
+      }),
+      { failure: refusedOrUnreached }
     ),
   preview: (cron, timeZone) =>
-    send(
+    hubJson(
       hubRequest("GET /api/routines/schedule", {
         query: { cron: cron.trim(), timeZone },
-      })
+      }),
+      { failure: refusedOrUnreached }
     ),
   types: async (projectId) => {
-    const catalog = await send<{ types: TypeChoice[] }>(
+    const catalog = await hubJson<{ types: TypeChoice[] }>(
       hubRequest("GET /api/projects/:id/delegate-types", {
         path: { id: projectId },
-      })
+      }),
+      { failure: refusedOrUnreached }
     );
     return catalog.types.map(({ name, description }) => ({
       name,
@@ -264,22 +269,28 @@ export const updateRoutine = (
   routineId: string,
   change: { enabled?: boolean; keep?: boolean }
 ): Promise<Routine> =>
-  send(
+  hubJson(
     hubRequest("PATCH /api/routines/:id", {
       path: { id: routineId },
       body: change,
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /** Runs a routine now, beside its schedule: the run the hub started. */
 export const runRoutineNow = (routineId: string): Promise<RoutineRun> =>
-  send(hubRequest("POST /api/routines/:id/run", { path: { id: routineId } }));
+  hubJson(
+    hubRequest("POST /api/routines/:id/run", { path: { id: routineId } }),
+    { failure: refusedOrUnreached }
+  );
 
 /** Deletes a routine; its past runs stay in the project's history. */
 export const deleteRoutine = (
   routineId: string
 ): Promise<{ deleted: boolean }> =>
-  send(hubRequest("DELETE /api/routines/:id", { path: { id: routineId } }));
+  hubJson(hubRequest("DELETE /api/routines/:id", { path: { id: routineId } }), {
+    failure: refusedOrUnreached,
+  });
 
 /**
  * The person's answer to Caw's suggestion of the unused skills and servers
@@ -289,17 +300,22 @@ export const answerTrimOffer = (
   projectId: string,
   answer: "on" | "dismissed"
 ): Promise<{ routine: Routine | null }> =>
-  send(
+  hubJson(
     hubRequest("POST /api/projects/:id/trim-routine", {
       path: { id: projectId },
       body: { answer },
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /** The fleet switch for the routine (Configure › Skills): whether it is on. */
 export const readFleetTrim = (): Promise<{ on: boolean }> =>
-  send(hubRequest("GET /api/trim-routine/fleet"));
+  hubJson(hubRequest("GET /api/trim-routine/fleet"), {
+    failure: refusedOrUnreached,
+  });
 
 /** Flips the fleet switch: on turns the routine on in every project. */
 export const setFleetTrim = (on: boolean): Promise<{ on: boolean }> =>
-  send(hubRequest("PUT /api/trim-routine/fleet", { body: { on } }));
+  hubJson(hubRequest("PUT /api/trim-routine/fleet", { body: { on } }), {
+    failure: refusedOrUnreached,
+  });
