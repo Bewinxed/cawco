@@ -45,12 +45,12 @@ const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 /** Every schema of an exported type, proved against that type. */
 prove<
   [
-    Same<MediaMeasurementOutput, MediaMeasurementType>,
     Same<BrowserRecordOutput, BrowserRecordType>,
     Same<SetHarnessConfigOutput, SetHarnessConfigType>,
     Same<SetHookOutput, SetHookType>,
     Same<FleetHarnessSetOutput, FleetHarnessSetType>,
     Same<FleetMcpSetOutput, FleetMcpSetType>,
     Same<FleetPlaceSetOutput, FleetPlaceSetType>,
+    Same<MediaMeasurementOutput, MediaMeasurementType>,
   ]
 >();
