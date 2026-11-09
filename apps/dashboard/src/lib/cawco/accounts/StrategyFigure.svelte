@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   /**
    * One strategy figure in its stage (figure.ts). It is built for the
    * stage's width and rebuilt when that, its lanes, its numbers or the theme
@@ -8,7 +8,7 @@
    * card chosen or under the pointer) and while on screen; otherwise, and
    * always under reduced motion, it holds its last frame and caption.
    */
-  import { motionOk } from "../motion/curves.svelte";
+  import { motionOk } from "#lib/platform/motion/curves.svelte.js";
   import {
     type Board,
     buildFigure,

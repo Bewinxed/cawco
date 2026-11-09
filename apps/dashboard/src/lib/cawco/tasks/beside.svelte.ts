@@ -9,9 +9,9 @@
 
 import { z } from "zod";
 import { BesideSchema } from "#lib/cawco/stored-shapes.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { goto } from "$app/navigation";
 import { rowHref } from "../links";
-import { readJson, writeJson } from "../storage";
 
 export interface Beside {
   projectId: string;

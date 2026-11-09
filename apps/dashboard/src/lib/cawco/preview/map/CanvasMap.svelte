@@ -26,9 +26,6 @@
   } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { fetchCanvasMap } from "#lib/cawco/artifact-api.js";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { track } from "#lib/cawco/track.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
@@ -36,6 +33,9 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconAlert, IconRefresh } from "#lib/icons.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { track } from "#lib/platform/track.js";
   import { theme } from "#lib/theme.svelte.js";
   import MapCard, { type MapRole } from "./MapCard.svelte";
   import MapFit from "./MapFit.svelte";

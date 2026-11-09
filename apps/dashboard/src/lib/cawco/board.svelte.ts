@@ -158,24 +158,6 @@ const sameTool = (
     a.glance === b.glance &&
     a.toolId === b.toolId);
 
-/**
- * `next`, or `was` when it holds the same values in the same order: a
- * derived that returns the very array it returned before wakes nothing
- * downstream ("If the new value of a derived is referentially identical to
- * its previous value, downstream updates will be skipped",
- * svelte.dev/docs/svelte/$derived).
- */
-export function unlessSame<T>(was: readonly T[] | undefined, next: T[]): T[] {
-  if (
-    was !== undefined &&
-    was.length === next.length &&
-    was.every((value, i) => value === next[i])
-  ) {
-    return was as T[];
-  }
-  return next;
-}
-
 /** A date the hub sent, as ms epoch: 0 for none or one that is no date. */
 const epochOfValue = (
   at: string | number | Date | null | undefined

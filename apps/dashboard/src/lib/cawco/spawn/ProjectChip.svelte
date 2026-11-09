@@ -1,7 +1,5 @@
 <script lang="ts">
   import { spawnWords } from "@cawco/core/words/spawn";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
@@ -14,6 +12,8 @@
     IconToolFiles as Files,
     IconFolder as Folder,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import { staggered } from "#lib/platform/motion/curves.svelte.js";
   import NsPopover from "./NsPopover.svelte";
   import type { ProjectItem } from "./ns-types";
 

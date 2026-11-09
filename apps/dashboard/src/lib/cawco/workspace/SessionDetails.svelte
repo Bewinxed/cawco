@@ -29,6 +29,16 @@
     IconRefresh,
     IconConnection as Link,
   } from "#lib/icons.js";
+  import { copyRefused, copyToClipboard } from "#lib/platform/copy.js";
+  import {
+    CURVE,
+    crossIn,
+    crossOut,
+    dur,
+    easeOut,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { standsOpen } from "#lib/platform/motion/hang.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
   import AccountSwitch from "../accounts/AccountSwitch.svelte";
   import { nameOf } from "../accounts/model.svelte";
   import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
@@ -45,18 +55,8 @@
     submitCommand,
   } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
-  import { copyRefused, copyToClipboard } from "../copy";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { describingRow, modelLabel } from "../models.svelte";
-  import {
-    CURVE,
-    crossIn,
-    crossOut,
-    dur,
-    easeOut,
-  } from "../motion/curves.svelte";
-  import { standsOpen } from "../motion/hang";
-  import { morph } from "../motion/morph.svelte";
   import { bypasses, permissionModesFor } from "../permission-modes";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";

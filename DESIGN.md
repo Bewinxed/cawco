@@ -310,7 +310,7 @@ Two recipes the owner picked from transitions.dev run on `--ease-crossfade`, the
 
 **The Reduced Motion Rule.** Motion is opt-in: every travelling transition sits under `prefers-reduced-motion: no-preference`, and script asks `motionOk`. With reduced motion, fades still run and everything that travels lands; loops stop. Reduced motion means stillness, never an instant swap: what changed still fades.
 
-**The House Helper Rule.** Each kind of motion has one helper, which already keeps the curves, clocks, interruption and reduced motion: `morph()` for a size change, `NsPopoverGroup` for sibling popovers, `reflow()` with `data-flip` for a list, `unfold` for a disclosure, `fluid-tabs` and the harness `Rail` for a switch, `keyed` for The Frequency Rule's keyboard half (`cawco/motion/`, `cawco/spawn/NsPopoverGroup.svelte`, `components/ui/fluid-tabs`, under `apps/dashboard/src/lib`). A component takes a one-clock composite (`transition-control`, …) rather than listing properties and clocks; a new pairing is a new token.
+**The House Helper Rule.** Each kind of motion has one helper, which already keeps the curves, clocks, interruption and reduced motion: `morph()` for a size change, `NsPopoverGroup` for sibling popovers, `reflow()` with `data-flip` for a list, `unfold` for a disclosure, `fluid-tabs` and the harness `Rail` for a switch, `keyed` for The Frequency Rule's keyboard half (`platform/motion/`, `cawco/spawn/NsPopoverGroup.svelte`, `components/ui/fluid-tabs`, under `apps/dashboard/src/lib`). A component takes a one-clock composite (`transition-control`, …) rather than listing properties and clocks; a new pairing is a new token.
 
 ### Sound and touch
 

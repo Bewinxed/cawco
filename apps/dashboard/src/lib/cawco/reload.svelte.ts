@@ -17,9 +17,9 @@
  * comes back after it, save words no draft keeps ({@link unsavedWords}).
  */
 import { PERSONS_INPUT, personsInput } from "@cawco/core/preview/routes";
+import { store, stored } from "#lib/platform/storage.js";
 import { version } from "$app/env";
 import { leaveThePage } from "./leaving";
-import { store, stored } from "./storage";
 
 /** Writes each composer's unsent words down; each resolves once they are stored. */
 const flushes = new Set<() => Promise<void>>();
