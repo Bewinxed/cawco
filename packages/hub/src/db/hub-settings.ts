@@ -1,3 +1,4 @@
+import { singleton, singletonColumn } from "./singleton";
 /** The hub's own settings rows: the supervisor's mode, images, the fleet watch, connections, what Jev may spend. */
 
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
@@ -7,24 +8,20 @@ import {
   type ImageSettings,
 } from "@cawco/core/image-generation";
 import { eq } from "drizzle-orm";
-import { type DbCore, SUPERVISOR_CONFIG_ID } from "./core";
+import type { DbCore } from "./core";
 import {
+  FLEET_WATCH_ID,
   fleetWatchNotices,
   fleetWatchSettings,
+  IMAGE_SETTINGS_ID,
   imageSettings,
+  JEV_SETTINGS_ID,
   jevSettings,
+  OPENROUTER_CONNECTION_ID,
   openrouterConnection,
+  SUPERVISOR_CONFIG_ID,
   supervisorConfig,
 } from "./schema";
-
-const OPENROUTER_CONNECTION_ID = "openrouter";
-
-const JEV_SETTINGS_ID = "jev";
-
-const FLEET_WATCH_ID = "fleet-watch";
-
-/** The one row of {@link imageSettings}. */
-const IMAGE_SETTINGS_ID = "images";
 
 export interface HubSettingsDb {
   /** The fleet's choices row (`supervisor_config`) and its tool denials. */
@@ -91,11 +88,7 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
       };
     },
     imageSettings: () => {
-      const row = db
-        .select()
-        .from(imageSettings)
-        .where(eq(imageSettings.id, IMAGE_SETTINGS_ID))
-        .get();
+      const row = singleton(db, imageSettings, IMAGE_SETTINGS_ID);
       return row
         ? { provider: row.provider, model: row.model }
         : DEFAULT_IMAGE_SETTINGS;
@@ -107,11 +100,12 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
         .run();
     },
     fleetWatchOn: () =>
-      db
-        .select({ on: fleetWatchSettings.on })
-        .from(fleetWatchSettings)
-        .where(eq(fleetWatchSettings.id, FLEET_WATCH_ID))
-        .get()?.on ?? true,
+      singletonColumn(
+        db,
+        fleetWatchSettings,
+        FLEET_WATCH_ID,
+        fleetWatchSettings.on
+      ) ?? true,
     setFleetWatchOn: (on) => {
       db.insert(fleetWatchSettings)
         .values({ id: FLEET_WATCH_ID, on })
@@ -139,22 +133,14 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
         .returning({ id: fleetWatchNotices.id })
         .all().length > 0,
     getOpenRouterConnection: () => {
-      const row = db
-        .select()
-        .from(openrouterConnection)
-        .where(eq(openrouterConnection.id, OPENROUTER_CONNECTION_ID))
-        .get();
+      const row = singleton(db, openrouterConnection, OPENROUTER_CONNECTION_ID);
       // A key the hub's key does not open reads as not connected: connect again.
       return row?.apiKey
         ? { apiKey: row.apiKey, connectedAt: row.connectedAt }
         : undefined;
     },
     getJevSettings: () => {
-      const row = db
-        .select()
-        .from(jevSettings)
-        .where(eq(jevSettings.id, JEV_SETTINGS_ID))
-        .get();
+      const row = singleton(db, jevSettings, JEV_SETTINGS_ID);
       return {
         typesafeKey: row?.typesafeKey || null,
         typesafeKeySetAt: row?.typesafeKey ? row.typesafeKeySetAt : null,
