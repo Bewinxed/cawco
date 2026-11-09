@@ -311,7 +311,7 @@ export const fleetSkillRoutes = ({
       "/api/fleet/skills/:name/push",
       { body: t.Object({ machineId: t.String() }) },
       async ({ params, body, set, status }) => {
-        const target = pushTarget(body.machineId, status);
+        const target = pushTarget(body, status);
         if ("refused" in target) {
           return target.refused;
         }
