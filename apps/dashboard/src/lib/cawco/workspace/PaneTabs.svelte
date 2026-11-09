@@ -43,6 +43,7 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import ContextMenuCopyItem from "#lib/cawco/ContextMenuCopyItem.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
@@ -1594,12 +1595,12 @@
             <span>{transcriptWords.closeOthers}</span>
           </ContextMenu.Item>
           <ContextMenu.Separator />
-          <ContextMenu.CopyItem
+          <ContextMenuCopyItem
             text={new URL(tab.href, location.origin).href}
             what="Link"
           >
             {commonWords.copyLink}
-          </ContextMenu.CopyItem>
+          </ContextMenuCopyItem>
         {/snippet}
         <ContextMenu.Root
           bind:open={() => menuFor === tab.id, (open) => setMenu(tab.id, open)}
