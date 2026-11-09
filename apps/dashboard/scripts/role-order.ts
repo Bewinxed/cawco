@@ -11,8 +11,8 @@
  * placed after a longhand. `bun scripts/build-tokens.ts --check` runs it.
  */
 import { dirname, resolve } from "node:path";
+import type { TailwindTheme } from "@cawco/design-tokens/design-tokens";
 import { compile } from "@tailwindcss/node";
-import type { TailwindTheme } from "../../../packages/design-tokens/src/design-tokens";
 
 const APP_CSS = "src/app.css";
 /** The house's own `@utility` definitions, which app.css imports. */

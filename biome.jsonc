@@ -150,9 +150,9 @@
   "linter": {
     "rules": {
       "style": {
-        // Every import names the module that owns it (core has no index). The
-        // sheet override below restates this path beside its own, as an
-        // override's options replace these.
+        // Every import names the module that owns it (core has no index). An
+        // override's options replace these, so each noRestrictedImports
+        // override below restates this path.
         "noRestrictedImports": {
           "level": "error",
           "options": {
@@ -263,6 +263,138 @@
     },
   },
   "overrides": [
+    {
+      // scripts/, assets/, design/ and the root's own files are no member's:
+      // the checks and probes read the members' sources by design, and a
+      // member reading a shared asset has no manifest to go through.
+      "includes": ["apps/**", "packages/**", "site/**", "!**/*.jsonc"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
+                  },
+                ],
+                "paths": {
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // Core stands under every other package, so it imports none of them.
+      // jsonl-parser is a published leaf that imports no workspace package,
+      // and the transcript index's author words are its own: core's wire
+      // type is an Extract of them (find.ts), so the two cannot drift.
+      "includes": ["packages/core/**", "!**/*.jsonc"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
+                  },
+                  {
+                    "group": [
+                      "@cawco/**",
+                      "!@cawco/core",
+                      "!@cawco/core/**",
+                      "!@cawco/jsonl-parser",
+                      "**/agent/src/**",
+                      "**/auth/src/**",
+                      "**/cli/src/**",
+                      "**/design-tokens/src/**",
+                      "**/hub/src/**",
+                      "**/icons/src/**",
+                      "**/sessiond/src/**",
+                    ],
+                    "message": "@cawco/core imports no other package; what it needs moves into core.",
+                  },
+                ],
+                "paths": {
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      // The kit imports no feature component and no route; what it needs of
+      // them comes in as a prop or a snippet. A module that itself reaches
+      // the kit is scripts/import-rules-check.ts's. The tool cards' output
+      // block is a named exception until markdown takes it as a slot: the
+      // kit's markdown draws a tool's output through it.
+      "includes": ["apps/dashboard/src/lib/components/ui/**", "!**/*.jsonc"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
+                  },
+                  {
+                    "group": [
+                      "**/features/**",
+                      "**/routes/**",
+                      "!#lib/components/features/tool-cards/OutputBlock.svelte",
+                    ],
+                    "message": "lib/components/ui imports no feature component and no route; pass it in as a prop or a snippet.",
+                  },
+                ],
+                "paths": {
+                  "@cawco/core": "Core has no index: import the module that owns the name, like @cawco/core/stage.",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     {
       // The shadcn-svelte kit's component groups are imported as a namespace
       // (`* as DropdownMenu`, read as `DropdownMenu.Root`, `.Item`) through
@@ -458,6 +590,19 @@
                       "../client.svelte.js",
                     ],
                     "message": "The fleet store is the live app; a sheet takes its state as fixtures in args.",
+                  },
+                  {
+                    // A member imports another member's file through its
+                    // manifest (@cawco/<name>/…), never by a path into its
+                    // folder. The CLI's `dashboard` starts the dashboard's
+                    // own entry, which no manifest exports (its binary builds it).
+                    "group": [
+                      "**/packages/*/src/**",
+                      "@cawco/*/src/**",
+                      "**/apps/*/**",
+                      "!**/apps/dashboard/serve.js",
+                    ],
+                    "message": "A member imports another's file through that member's manifest (@cawco/<name>/…), never by a path into its folder.",
                   },
                 ],
                 "paths": {
