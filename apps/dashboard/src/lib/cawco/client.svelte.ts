@@ -5006,11 +5006,11 @@ function restoreComposer(
   restoreSlots[instanceId] = { text, extras };
 }
 
-/** Only Claude's CLI supports individually recalling a pending send. */
+/** A pending send can be taken back only from a harness that queues sends. */
 export function canWithdraw(message: Message): boolean {
   return (
     message.state === "pending" &&
-    traitsOf(state.sessions[message.instanceId]?.harness).withdrawSend
+    traitsOf(state.sessions[message.instanceId]?.harness).queuesSends
   );
 }
 
