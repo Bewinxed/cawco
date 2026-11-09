@@ -578,6 +578,7 @@ export interface HubContext {
     | { refusal: string; cause?: SendRefusal };
   launchClaims: Map<string, { accountId: string; at: number }>;
   launchInFlight: (instanceId: string) => boolean;
+  launchRefusal: (instanceId: string) => string | undefined;
   launchStarted: (instanceId: string, why: string) => void;
   laws: ReturnType<typeof createLaws>;
   lead: Caw | undefined;
@@ -626,6 +627,11 @@ export interface HubContext {
   mcpChanges: FleetMcpChanges;
   mcpReady: Promise<unknown>;
   memoryWatch: ReturnType<typeof createTurnWatch>;
+  modelRefusal: (
+    machineId: string,
+    harness: HarnessKind,
+    model: string | undefined
+  ) => string | undefined;
   movedFrom: () => Map<string, string>;
   moveJobOf: (instanceId: string) => ContinuationSlip | undefined;
   moveKey: ({
@@ -698,6 +704,7 @@ export interface HubContext {
     after: FetchedCopy,
     error: string | undefined
   ) => boolean;
+  noteFreshStart: (row: InstanceRow) => void;
   noteInterrupt: (instanceId: string, hold?: boolean) => void;
   notifications: ReturnType<typeof createNotifications>;
   /** Whether a machine's agent is connected. */
@@ -741,6 +748,10 @@ export interface HubContext {
   previewListeners: ReturnType<typeof createPreviewListeners>;
   previewService: ReturnType<typeof createPreviewService>;
   processAt: Map<string, number>;
+  processEvent: (instanceId: string) => boolean;
+  processGeneration: (
+    row: ReturnType<DbShape["getInstancesByIds"]>[number]
+  ) => string;
   processMayRun: (row: { id: string; status: string }) => boolean;
   projectEdits: ReturnType<typeof createProjectEdits>;
   projectMemory: ReturnType<typeof createMemory>;
@@ -816,6 +827,9 @@ export interface HubContext {
   ) => void;
   releaseOne: (send: SentMessageRow) => void;
   releaseOwed: (of: { instanceId: string } | { machineId: string }) => void;
+  replaceAtWake: (
+    row: ReturnType<HubContext["db"]["getInstancesByIds"]>[number]
+  ) => void;
   reportedMachinePath: (
     machineId: string,
     raw: string
@@ -1036,6 +1050,7 @@ export interface HubContext {
     row: { parentInstanceId?: string | null | undefined } | undefined,
     origin: NeutralOrigin
   ) => TakenUpBy | undefined;
+  takeOwedMove: (row: StoredRow) => StoredRow;
   takeUpOwedMove: (
     instanceId: string,
     carry?: "limit" | "signin"
@@ -1045,6 +1060,7 @@ export interface HubContext {
     taskId: string | null | undefined
   ) => string[] | null;
   tasks: ReturnType<typeof createTasks>;
+  tellEndedByMove: (row: { id: string; machineId: string }) => void;
   tickLeaves: () => void;
   tickMoves: () => void;
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
@@ -1074,6 +1090,7 @@ export interface HubContext {
   unlocatedWords: (id: string, machines: string[]) => string;
   unnoteAtLimit: (row: { id: string }, id: string) => void;
   unpushable: Map<string, string>;
+  unstrand: (instanceId: string) => void;
   waitingForProcess: Set<string>;
   wakeForSend: (
     agent: HubSocket,
