@@ -194,8 +194,10 @@ export function hubSaid(refused: Refused): string {
 }
 
 /**
- * THE ONE READER of a hub request's JSON answer, everywhere the dashboard
- * asks the hub for one. Refused, `failure`'s error is thrown: the hub's
+ * A request through core's door (`hubRequest`) and its JSON answer, for the
+ * callers whose route the hub's types still misstate (a `Response` in its
+ * answer, a `Date` sent as a string), until they ask through Eden
+ * ({@link hubData}). Refused, `failure`'s error is thrown: the hub's
  * refusal in its own words ({@link hubRefusal}) unless the caller words it
  * ({@link couldNotOrAway}, {@link refusedOrUnreached}, its own `then`).
  * Answered, its body is read by {@link answerOf}, as {@link readHub} reads a
@@ -416,8 +418,8 @@ export function couldNot(attempt: string, refused: Refused): Error {
  * A hub request sent from this page: `request` as core's door built it
  * (`hubRequest`, held to what its route takes), with `init`'s own signal,
  * keepalive or other headers beside it, through `through`: the page's
- * `fetch`, or a load's own. The one way the dashboard's code sends the hub a
- * request.
+ * `fetch`, or a load's own: the door {@link hubJson} and {@link readHub}
+ * send through, for the callers still waiting on the hub's types.
  */
 export const hubFetch = (
   request: HubRequest,
