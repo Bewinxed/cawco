@@ -1,4 +1,4 @@
-export { restRank, type TabsTravel } from "./context.svelte";
+export { restRank, type TabsStrip, type TabsTravel } from "./context.svelte";
 export { default as TabItem } from "./TabItem.svelte";
 export { default as Tabs } from "./Tabs.svelte";
 export { default as TabsList } from "./TabsList.svelte";
