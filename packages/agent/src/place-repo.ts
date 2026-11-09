@@ -44,8 +44,8 @@ import {
 } from "@cawco/core/workspace/controls";
 import { refuseShortOfWorkspace } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
+import { LFS_FILTERS } from "./git/lfs";
 import { configEnv } from "./git-credential";
-import { LFS_FILTERS } from "./move";
 import { credentialIn } from "./secret-text";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
