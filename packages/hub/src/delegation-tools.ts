@@ -36,7 +36,7 @@ import type {
   Revised,
   Settled,
   Shown,
-} from "./artifacts/service";
+} from "./artifacts/shapes";
 import {
   artifactBrowse,
   artifactCreate,

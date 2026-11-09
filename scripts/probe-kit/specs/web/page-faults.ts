@@ -38,7 +38,7 @@ import {
 } from "../../../../packages/core/src/preview/routes";
 import { artifactToolWords } from "../../../../packages/core/src/words/artifact-tools";
 import { createArtifactDocs } from "../../../../packages/hub/src/artifacts/docs";
-import type { ArtifactRead } from "../../../../packages/hub/src/artifacts/service";
+import type { ArtifactRead } from "../../../../packages/hub/src/artifacts/shapes";
 import { takeErrorReport } from "../../../../packages/hub/src/dashboard-errors";
 import type { ArtifactsDb } from "../../../../packages/hub/src/db/artifacts";
 import { decisionHostFile } from "../../../../packages/hub/src/decision-host";
