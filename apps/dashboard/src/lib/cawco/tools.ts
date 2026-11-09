@@ -5,17 +5,11 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core/tools";
+import type { ToolPolicy, ToolStatus } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { hub } from "#lib/platform/hub.js";
 import { couldNot, hubRefusal, type Refused } from "#lib/platform/hub-read.js";
 import { machineControl } from "./stores/machines";
-
-/** What `GET /api/tools` answers with. */
-export interface ToolsSnapshot {
-  catalog: ToolSpec[];
-  policies: ToolPolicy[];
-}
 
 /**
  * A tool's policy, including one nobody has ever toggled: the hub keeps no row

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   import type { FleetWatchSettings } from "@cawco/core/fleet-watch";
-  import { hubRequest } from "@cawco/core/hub-request";
   import {
     DEFAULT_IMAGE_SETTINGS,
     type ImageSettings,
@@ -32,11 +31,10 @@
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { IconGlobe, IconJev, IconRules } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
+  import { hub } from "#lib/platform/hub.js";
   import {
     failureClause,
     failureWords,
-    hubFetch,
-    hubJson,
     hubRefusal,
     hubSaid,
   } from "#lib/platform/hub-read.js";
@@ -80,9 +78,11 @@
 
   async function readOpenRouter() {
     try {
-      openrouter = await hubJson<OpenRouterState>(
-        hubRequest("GET /api/openrouter")
-      );
+      const answer = await hub.api.openrouter.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      openrouter = answer.data;
     } catch (error) {
       openrouterError = `Could not read the OpenRouter connection — ${failureClause(error)}.`;
     }
@@ -104,7 +104,11 @@
 
   async function readJev() {
     try {
-      takeJev(await hubJson<JevState>(hubRequest("GET /api/jev")));
+      const answer = await hub.api.jev.get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      takeJev(answer.data);
     } catch (error) {
       jevError = `Could not read Jev's settings — ${failureClause(error)}.`;
     }
@@ -119,16 +123,14 @@
     }
     savingKey = true;
     jevError = null;
-    const response = await hubFetch(
-      hubRequest("PUT /api/jev/typesafe-key", {
-        body: { key: typesafeKey.trim() },
-      })
-    );
-    if (response.ok) {
-      typesafeKey = "";
-      takeJev((await response.json()) as JevState);
+    const answer = await hub.api.jev["typesafe-key"].put({
+      key: typesafeKey.trim(),
+    });
+    if (answer.error) {
+      jevError = `The key was not saved. ${hubSaid(answer)}. Jev's route is unchanged.`;
     } else {
-      jevError = `The key was not saved. ${await hubSaid(response)}. Jev's route is unchanged.`;
+      typesafeKey = "";
+      takeJev(answer.data);
     }
     savingKey = false;
   }
@@ -136,11 +138,11 @@
   async function removeKey() {
     removingKey = true;
     jevError = null;
-    const response = await hubFetch(hubRequest("DELETE /api/jev/typesafe-key"));
-    if (response.ok) {
-      takeJev((await response.json()) as JevState);
+    const answer = await hub.api.jev["typesafe-key"].delete();
+    if (answer.error) {
+      jevError = `The key was not removed. ${hubSaid(answer)}. It is still held.`;
     } else {
-      jevError = `The key was not removed. ${await hubSaid(response)}. It is still held.`;
+      takeJev(answer.data);
     }
     removingKey = false;
   }
@@ -185,17 +187,15 @@
       return;
     }
     connecting = true;
-    const response = await hubFetch(
-      hubRequest("POST /api/openrouter/connect", {
-        body: { callbackUrl: `${location.origin}/config/models` },
-      })
-    );
-    if (!response.ok) {
-      openrouterError = (await hubRefusal(response)).message;
+    const answer = await hub.api.openrouter.connect.post({
+      callbackUrl: `${location.origin}/config/models`,
+    });
+    if (answer.error) {
+      openrouterError = hubRefusal(answer).message;
       connecting = false;
       return;
     }
-    const { authUrl } = (await response.json()) as { authUrl: string };
+    const { authUrl } = answer.data;
     leaveThePage(() => {
       location.href = authUrl;
     });
@@ -204,14 +204,12 @@
   async function exchange(code: string) {
     exchanging = true;
     openrouterError = null;
-    const response = await hubFetch(
-      hubRequest("POST /api/openrouter/exchange", { body: { code } })
-    );
-    if (response.ok) {
+    const answer = await hub.api.openrouter.exchange.post({ code });
+    if (answer.error) {
+      openrouterError = hubRefusal(answer).message;
+    } else {
       // The status line above says so: "Connected just now".
       await readOpenRouter();
-    } else {
-      openrouterError = (await hubRefusal(response)).message;
     }
     exchanging = false;
   }
@@ -219,11 +217,11 @@
   async function disconnect() {
     disconnecting = true;
     openrouterError = null;
-    const response = await hubFetch(hubRequest("DELETE /api/openrouter"));
-    if (response.ok) {
-      await readOpenRouter();
+    const answer = await hub.api.openrouter.delete();
+    if (answer.error) {
+      openrouterError = hubRefusal(answer).message;
     } else {
-      openrouterError = (await hubRefusal(response)).message;
+      await readOpenRouter();
     }
     disconnecting = false;
   }
@@ -250,9 +248,11 @@
 
   async function readWatch() {
     try {
-      watch = await hubJson<FleetWatchSettings>(
-        hubRequest("GET /api/fleet-watch")
-      );
+      const answer = await hub.api["fleet-watch"].get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      watch = answer.data;
     } catch (error) {
       watchError = `Could not read fleet watch — ${failureClause(error)}.`;
     }
@@ -261,13 +261,11 @@
   async function setWatch(on: boolean) {
     savingWatch = true;
     watchError = null;
-    const response = await hubFetch(
-      hubRequest("PUT /api/fleet-watch", { body: { on } })
-    );
-    if (response.ok) {
-      watch = (await response.json()) as FleetWatchSettings;
+    const answer = await hub.api["fleet-watch"].put({ on });
+    if (answer.error) {
+      watchError = hubRefusal(answer).message;
     } else {
-      watchError = (await hubRefusal(response)).message;
+      watch = answer.data;
     }
     savingWatch = false;
   }
@@ -291,9 +289,11 @@
 
   async function readImage() {
     try {
-      image = await hubJson<ImageSettings>(
-        hubRequest("GET /api/image-settings")
-      );
+      const answer = await hub.api["image-settings"].get();
+      if (answer.error) {
+        throw hubRefusal(answer);
+      }
+      image = answer.data;
       imageShown = image;
     } catch (error) {
       imageUnread = imageSettingsWords.unread(failureClause(error));
@@ -333,16 +333,11 @@
     imageFault = null;
     let fault: string | null = null;
     try {
-      const response = await hubFetch(
-        hubRequest("PUT /api/image-settings", { body: next })
-      );
-      if (response.ok) {
-        image = (await response.json()) as ImageSettings;
+      const answer = await hub.api["image-settings"].put(next);
+      if (answer.error) {
+        fault = imageSettingsWords.refused(hubSaid(answer), held.provider);
       } else {
-        fault = imageSettingsWords.refused(
-          await hubSaid(response),
-          held.provider
-        );
+        image = answer.data;
       }
     } catch (error) {
       fault = imageSettingsWords.unsent(failureWords(error), held.provider);
