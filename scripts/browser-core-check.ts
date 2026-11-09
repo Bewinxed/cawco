@@ -8,81 +8,24 @@
  * through core's own value imports, and one that reaches a builtin is refused
  * with the path that got there. A type-only import loads nothing.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import ts from "typescript";
+import { importGraph } from "./lib/import-graph";
+import { repoFiles } from "./lib/repo-files";
 
-const ROOT = resolve(import.meta.dir, "..");
-const CORE = join(ROOT, "packages/core/src");
+const DASHBOARD = "apps/dashboard/src/";
+const CORE = "packages/core/src/";
 const CORE_PREFIX = "@cawco/core/";
+const CODE = /\.(?:ts|svelte)$/u;
 const BUILTIN = /^(?:node:|bun:|bun$)/u;
 const SERVER_FILE = /(?:\.server\.ts$|\/\+server\.ts$|\/lib\/server\/)/u;
-const SVELTE_SCRIPT = /<script[^>]*>([\s\S]*?)<\/script>/gu;
 
-const moduleFile = (specifier: string, from: string): string | undefined => {
-  let path: string;
-  if (specifier.startsWith(CORE_PREFIX)) {
-    path = join(CORE, specifier.slice(CORE_PREFIX.length));
-  } else if (specifier.startsWith(".")) {
-    path = resolve(dirname(from), specifier);
-  } else {
-    return;
-  }
-  return [path, `${path}.ts`].find(
-    (candidate) => candidate.endsWith(".ts") && existsSync(candidate)
-  );
-};
-
-/** The specifiers a source loads when it runs. */
-const loadedBy = (text: string): string[] => {
-  const source = ts.createSourceFile(
-    "m.ts",
-    text,
-    ts.ScriptTarget.Latest,
-    true
-  );
-  const found: string[] = [];
-  const typeOnly = (statement: ts.ImportDeclaration): boolean => {
-    const clause = statement.importClause;
-    const named = clause?.namedBindings;
-    return (
-      clause?.isTypeOnly === true ||
-      (clause?.name === undefined &&
-        named !== undefined &&
-        ts.isNamedImports(named) &&
-        named.elements.length > 0 &&
-        named.elements.every((element) => element.isTypeOnly))
-    );
-  };
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isImportDeclaration(node) &&
-      ts.isStringLiteral(node.moduleSpecifier) &&
-      !typeOnly(node)
-    ) {
-      found.push(node.moduleSpecifier.text);
-    } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier) &&
-      !node.isTypeOnly
-    ) {
-      found.push(node.moduleSpecifier.text);
-    } else if (ts.isCallExpression(node)) {
-      const [argument] = node.arguments;
-      if (
-        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-        argument &&
-        ts.isStringLiteral(argument)
-      ) {
-        found.push(argument.text);
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return found;
-};
+const present = repoFiles();
+const graph = importGraph(
+  present.filter(
+    (file) =>
+      CODE.test(file) && (file.startsWith(DASHBOARD) || file.startsWith(CORE))
+  ),
+  new Set(present)
+);
 
 const walked = new Map<string, string[] | null>();
 /** The chain from `file` to a builtin, or null when it reaches none. */
@@ -92,17 +35,19 @@ const toBuiltin = (file: string): string[] | null => {
     return known;
   }
   walked.set(file, null);
-  const label = relative(ROOT, file);
-  for (const specifier of loadedBy(readFileSync(file, "utf8"))) {
+  for (const { specifier, file: next, typeOnly } of graph.get(file) ?? []) {
+    if (typeOnly) {
+      continue;
+    }
     if (BUILTIN.test(specifier)) {
-      const chain = [label, specifier];
+      const chain = [file, specifier];
       walked.set(file, chain);
       return chain;
     }
-    const next = moduleFile(specifier, file);
-    const rest = next ? toBuiltin(next) : null;
+    const rest =
+      next && graph.has(next) && next.startsWith(CORE) ? toBuiltin(next) : null;
     if (rest) {
-      const chain = [label, ...rest];
+      const chain = [file, ...rest];
       walked.set(file, chain);
       return chain;
     }
@@ -111,23 +56,21 @@ const toBuiltin = (file: string): string[] | null => {
 };
 
 const refused: string[] = [];
-const dashboardFiles = new Bun.Glob("apps/dashboard/src/**/*.{ts,svelte}");
-for await (const file of dashboardFiles.scan({ cwd: ROOT })) {
-  if (SERVER_FILE.test(file)) {
+for (const [file, edges] of graph) {
+  if (!file.startsWith(DASHBOARD) || SERVER_FILE.test(file)) {
     continue;
   }
-  const text = readFileSync(join(ROOT, file), "utf8");
-  const code = file.endsWith(".svelte")
-    ? [...text.matchAll(SVELTE_SCRIPT)].map((match) => match[1]).join("\n")
-    : text;
-  for (const specifier of loadedBy(code)) {
-    if (!specifier.startsWith(CORE_PREFIX)) {
-      continue;
-    }
-    const target = moduleFile(specifier, join(ROOT, file));
-    const chain = target ? toBuiltin(target) : null;
-    if (chain) {
-      refused.push(`${file} loads ${chain.join(" -> ")}`);
+  for (const { specifier, file: target, typeOnly } of edges) {
+    if (
+      !typeOnly &&
+      specifier.startsWith(CORE_PREFIX) &&
+      target &&
+      graph.has(target)
+    ) {
+      const chain = toBuiltin(target);
+      if (chain) {
+        refused.push(`${file} loads ${chain.join(" -> ")}`);
+      }
     }
   }
 }
