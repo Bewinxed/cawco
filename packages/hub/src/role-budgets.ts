@@ -305,6 +305,7 @@ const standIn = (
     putToolListing: () => undefined,
     // Only the definitions are read: nothing is called.
     tasks: {} as Tasks,
+    workItemCalls: {} as never,
     projectFromSession: () => Promise.reject(new Error("measuring")),
     askPerson:
       calls.askPerson ?? (() => Promise.reject(new Error("measuring"))),
