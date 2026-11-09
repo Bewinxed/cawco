@@ -164,7 +164,7 @@ const OWN_SERVER_DOWN: ReadonlySet<PreviewDown | null> = new Set([
  * answer ({@link probePreview}): null once the origin is reached. The hub's
  * word that the preview's own server is down ({@link OWN_SERVER_DOWN}) is
  * the origin reached all the same: its load gets the proxy's page naming the
- * hop (core preview-proxy `downResponse`, `cawco:down`), and every embed of
+ * hop (preview proxy `downResponse`, `cawco:down`), and every embed of
  * the preview draws that hop's own down state, with its fix. Anything on the
  * way to it (its machine, the listener's bridge, a hop unnamed, the browser's
  * own failures) leaves it unreached, said by {@link previewUnreachedWords}
