@@ -11,7 +11,6 @@ import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { getContext, setContext } from "svelte";
 import { failureWords, hubJson } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
-import type { ProjectRow } from "../client.svelte";
 import type {
   DelegateTypesPayload,
   ProjectCatalogPayload,
@@ -25,6 +24,7 @@ import type {
 } from "../fleet";
 import type { HooksPayload } from "../hooks";
 import type { RulesPayload } from "../rules";
+import type { ProjectRow } from "../stores/projects.svelte";
 import type { ToolsSnapshot } from "../tools";
 
 /**
