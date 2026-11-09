@@ -107,13 +107,13 @@ no = Option("no", "Not yet", null, false, [], "Another round of tuning.")
 `;
 const build = async (config: string): Promise<string | null> => {
   try {
-    await buildProgram(
+    const built = await buildProgram(
       page(config),
       async () => ({ bytes: new Uint8Array() }),
       (id) => id,
       KIND_SEED
     );
-    return null;
+    return "html" in built ? null : built.response.detail;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }

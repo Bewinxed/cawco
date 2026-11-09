@@ -60,7 +60,8 @@ import {
   split,
   tokenize,
 } from "@openuidev/lang-core";
-import { StatusRefusal } from "./refusal";
+import { ElysiaStatus } from "elysia";
+import { refusal } from "./refusal";
 
 process.env.OPENUI_TELEMETRY_DISABLED = "1";
 process.env.DO_NOT_TRACK = "1";
@@ -93,16 +94,15 @@ interface CheckedProgram {
   read: ProgramRead;
 }
 
-/** A program that could not be kept, every reason in a sentence. */
-export class ProgramRefusal extends StatusRefusal<422> {
-  constructor(message: string) {
-    super(422, message);
-  }
-}
-
-const refuse = (problems: string[]): never => {
+/** A program that could not be kept, under the code of its cause, every reason in a sentence. */
+const programRefusal = <const Code extends string>(
+  code: Code,
+  problems: string[]
+) => {
   const unique = [...new Set(problems)];
-  throw new ProgramRefusal(
+  return refusal(
+    422,
+    code,
     unique.length === 1
       ? (unique[0] ?? "")
       : `The program has ${unique.length} problems:\n- ${unique.slice(0, MAX_PROBLEMS).join("\n- ")}`
@@ -574,7 +574,7 @@ const unclosedProblem = (text: string): string | null => {
 };
 
 /**
- * `raw` as a decision page's program, or a {@link ProgramRefusal} with every
+ * `raw` as a decision page's program, or its refusal with every
  * reason: its size and code first, then the parser's mistakes, then its ids,
  * each Canvas's and Preview's resolved whole by `artifact` when given.
  */
@@ -582,15 +582,15 @@ const checkProgram = (
   raw: string,
   kinds: readonly Kind[],
   artifact?: ArtifactNamed
-): CheckedProgram => {
+) => {
   const program = `${raw.trim()}\n`;
   if (program.length > PROGRAM_MAX) {
-    refuse([
+    return programRefusal("program-too-large", [
       `The program is ${Math.round(program.length / 1024)} KiB; a decision page's is ${PROGRAM_MAX / 1024} KiB at most. Split the page.`,
     ]);
   }
   if (program.includes(CLOUD_MARKER)) {
-    refuse([
+    return programRefusal("program-cloud-markers", [
       "The program carries OpenUI Cloud markers: a decision page is a program alone, and runs no scripts.",
     ]);
   }
@@ -602,11 +602,11 @@ const checkProgram = (
     )
     .map((token) => `@${token.v} is an action: a decision page runs none.`);
   if (actions.length > 0) {
-    refuse(actions);
+    return programRefusal("program-runs-actions", actions);
   }
   const unclosed = unclosedProblem(program);
   if (unclosed) {
-    refuse([unclosed]);
+    return programRefusal("program-left-open", [unclosed]);
   }
   const result = parser.parse(program);
   const problems: string[] = [];
@@ -640,11 +640,11 @@ const checkProgram = (
     );
   }
   if (problems.length > 0) {
-    refuse(problems);
+    return programRefusal("program-unparsed", problems);
   }
   const unsafe = [...unsafeWords(result.root), ...undrawnWords(result.root)];
   if (unsafe.length > 0) {
-    refuse(unsafe);
+    return programRefusal("program-unsafe-words", unsafe);
   }
   const read = readProgram(result.root);
   const whole = wholeArtifacts(program, read, artifact);
@@ -655,9 +655,9 @@ const checkProgram = (
     ...whole.problems,
   ];
   if (ids.length > 0) {
-    refuse(ids);
+    return programRefusal("program-ids-unfit", ids);
   }
-  return {
+  const checked: CheckedProgram = {
     program: whole.program,
     read:
       whole.program === program
@@ -672,6 +672,7 @@ const checkProgram = (
       ),
     ],
   };
+  return checked;
 };
 
 /** A program read without checks: what the hub draws from a page it already keeps. */
@@ -817,27 +818,22 @@ export interface StatementChange {
  * open are refused as written ({@link unclosedProblem}), before the merge
  * can carry the open tail into a statement of the page's.
  */
-export const mergeProgram = (
-  existing: string,
-  statements: string
-): { change: StatementChange; merged: string } => {
+export const mergeProgram = (existing: string, statements: string) => {
   const unclosed = unclosedProblem(statements);
   if (unclosed) {
-    refuse([unclosed]);
+    return programRefusal("program-left-open", [unclosed]);
   }
   const merged = `${mergeStatements(existing, statements, "root").trim()}\n`;
   const before = statementsOf(existing);
   const after = statementsOf(merged);
-  return {
-    merged,
-    change: {
-      added: [...after.keys()].filter((name) => !before.has(name)),
-      replaced: [...after.keys()].filter(
-        (name) => before.has(name) && before.get(name) !== after.get(name)
-      ),
-      removed: [...before.keys()].filter((name) => !after.has(name)),
-    },
+  const change: StatementChange = {
+    added: [...after.keys()].filter((name) => !before.has(name)),
+    replaced: [...after.keys()].filter(
+      (name) => before.has(name) && before.get(name) !== after.get(name)
+    ),
+    removed: [...before.keys()].filter((name) => !after.has(name)),
   };
+  return { merged, change };
 };
 
 const ESCAPES: Record<string, string> = {
@@ -897,15 +893,18 @@ export const buildProgram = async (
   image: (file: string) => Promise<ImageRead>,
   artifact: ArtifactNamed,
   kinds: readonly Kind[]
-): Promise<BuiltProgram> => {
+) => {
   const checked = checkProgram(raw, kinds, artifact);
+  if (checked instanceof ElysiaStatus) {
+    return checked;
+  }
   const names = imageNames(checked.read);
   const reads = await Promise.all(names.map(image));
   const problems = reads.flatMap((read, index) =>
     "problem" in read ? [`Image("${names[index]}"): ${read.problem}`] : []
   );
   if (problems.length > 0) {
-    refuse(problems);
+    return programRefusal("program-image-unread", problems);
   }
   const files = names.map((name, index) => ({
     path: imagePath(name, index),
@@ -914,11 +913,12 @@ export const buildProgram = async (
   const addresses = Object.fromEntries(
     names.map((name, index) => [name, files[index]?.path ?? ""])
   );
-  return {
+  const built: BuiltProgram = {
     ...checked,
     files,
     html: programHost(checked.program, checked.read.title, addresses),
   };
+  return built;
 };
 
 /** A JSON value in a script tag, nothing in it able to close the tag. */
