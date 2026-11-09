@@ -405,14 +405,13 @@ class ForeignResizeObserver {
 }
 
 /**
- * Makes the window's own ResizeObserver the shared observer's
- * (`ForeignResizeObserver`), before anything on the page makes one: the
- * client's hooks call it first thing.
+ * Reading this module makes the window's own ResizeObserver the shared
+ * observer's (`ForeignResizeObserver`), wherever it is read. Each page's
+ * client entry imports it first, so it is in place before any other module
+ * can make one (house/resize-delivery-first holds that order).
  */
-export function installResizeDelivery(): void {
-  if (Native && typeof window !== "undefined") {
-    window.ResizeObserver = ForeignResizeObserver as unknown as NativeClass;
-  }
+if (Native && typeof window !== "undefined") {
+  window.ResizeObserver = ForeignResizeObserver as unknown as NativeClass;
 }
 
 /**
