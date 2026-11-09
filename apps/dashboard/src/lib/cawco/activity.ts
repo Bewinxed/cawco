@@ -73,7 +73,7 @@ export function sessionActivity(sources: {
 }
 
 /** How many of a session's subagents are still going — 0 for a session with none. */
-export function runningSubagents(
+function runningSubagents(
   subagents: Record<string, { status: string }> | undefined
 ): number {
   if (!subagents) {
