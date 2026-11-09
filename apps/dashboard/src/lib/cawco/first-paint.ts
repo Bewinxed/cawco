@@ -12,102 +12,20 @@
  * is added to its list.
  */
 import type {
+  AgentRow,
   InstanceRow,
   SessionPulse,
   StoredRecent,
 } from "@cawco/core/protocol";
-import type { Machine, ProjectRow } from "./client.svelte";
-import { type FleetFault, fleetFaults } from "./convergence";
-import type { Area } from "./home/areas.svelte";
-import { type MachineVerdict, machineVerdict } from "./machine-verdict";
-
-/**
- * A session row's fields the first paint reads: where it is, its kind and
- * status, its titles, its place in its tree, and the stamps Recent orders,
- * groups, ages and marks it by. Every required field of `InstanceRow` is
- * here (the store's `instances` is typed so, and checks it).
- */
-const ROW_KEYS = [
-  "id",
-  "machineId",
-  "projectId",
-  "sessionId",
-  "harness",
-  "cwd",
-  "launchDir",
-  "kind",
-  "origin",
-  "status",
-  "title",
-  "titleSource",
-  "derivedTitle",
-  "parentInstanceId",
-  "continuedInto",
-  "createdAt",
-  "updatedAt",
-  "turnEndedAt",
-  "wroteAt",
-  "seenAt",
-  "doneAt",
-  "wakesItself",
-  "queuedSends",
-  "runningDelegates",
-  "stalled",
-] as const satisfies readonly (keyof InstanceRow)[];
-
-type FirstPaintRow = Pick<InstanceRow, (typeof ROW_KEYS)[number]>;
-
-/**
- * A machine's fields the first paint reads: who and where it is, its status
- * and build, its pause, and the faults its row says (its update, its last
- * fleet change, what a workspace there lacks). Not its harnesses, its fleet
- * report or each fleet item's converge, the most of a machine's row: what
- * the first paint reads of those goes as it reads it, made by the page's
- * own functions here: the items that didn't set up as their fault lines
- * read them (`fleetFaults`), and what its row says is wrong with it
- * (`verdict`, the bar's Machines).
- */
-const MACHINE_KEYS = [
-  "machineId",
-  "hostname",
-  "os",
-  "status",
-  "auth",
-  "build",
-  "home",
-  "hostsHub",
-  "lastSeenAt",
-  "lostAt",
-  "reconnectingUntil",
-  "pausedUntil",
-  "pauseStopped",
-  "binaryUpdate",
-  "fleetSync",
-  "machineCapabilities",
-] as const satisfies readonly (keyof Machine)[];
-
-type FirstPaintMachine = Pick<Machine, (typeof MACHINE_KEYS)[number]> & {
-  /** Its fleet items that didn't set up (convergence.ts `fleetFaults`). */
-  fleetFaults: FleetFault[];
-  /** What its row says is wrong with it (machine-verdict.ts). */
-  verdict: MachineVerdict;
-};
-
-/** Recent's stored transcripts, the older sessions among them cut as every row is. */
-interface FirstPaintStored extends Omit<StoredRecent, "rows"> {
-  rows: FirstPaintRow[];
-}
-
-/** The board the first paint draws (the module's head). */
-export interface ServedBoard {
-  areas: Area[];
-  instances: FirstPaintRow[];
-  machines: FirstPaintMachine[];
-  projects: ProjectRow[];
-  pulses: Record<string, SessionPulse>;
-  /** Recent's stored transcripts as the hub keeps them, drawn until its first `stored` frame. */
-  stored: FirstPaintStored;
-}
+import { fleetFaults } from "./convergence";
+import { machineVerdict } from "./machine-verdict";
+import {
+  type Area,
+  type FirstPaintRow,
+  MACHINE_KEYS,
+  ROW_KEYS,
+  type ServedBoard,
+} from "./served-board";
 
 /** `row` with only `keys`, each one it has. */
 function cut<T extends object, K extends keyof T>(
@@ -126,14 +44,14 @@ function cut<T extends object, K extends keyof T>(
 const firstPaintRow = (row: InstanceRow): FirstPaintRow => cut(row, ROW_KEYS);
 
 /** The board the first paint draws, from the hub's whole reads of it. */
-export function servedBoardOf(read: {
+export function servedBoardOf<Project>(read: {
   areas: Area[];
   instances: InstanceRow[];
-  machines: Machine[];
-  projects: ProjectRow[];
+  machines: AgentRow[];
+  projects: Project[];
   pulses: Record<string, SessionPulse>;
   stored: StoredRecent;
-}): ServedBoard {
+}): ServedBoard<Project> {
   const now = Date.now();
   return {
     areas: read.areas,

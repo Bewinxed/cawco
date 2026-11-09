@@ -133,6 +133,8 @@ export default {
         // scripts/check.ts:538
         "scripts/runtime-bundles-check.ts",
         // scripts/check.ts, beside css-scope-check.ts
+        "scripts/import-rules-check.ts",
+        // scripts/check.ts, beside css-scope-check.ts
         "scripts/browser-core-check.ts",
         // scripts/check.ts:555
         "scripts/style-residual-check.ts",

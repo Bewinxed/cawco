@@ -61,7 +61,7 @@ import "../packages/core/src/git-repository-env";
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { availableParallelism } from "node:os";
-import { basename, dirname, join, normalize } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   coresPerRun,
   heldAbove,
@@ -72,6 +72,7 @@ import {
 import { type Check, runChecks } from "./lib/checks";
 import { diskRoomOrExit } from "./lib/disk-room";
 import { repoFiles } from "./lib/repo-files";
+import { depth, holds, targetOf } from "./lib/workspace-imports";
 
 diskRoomOrExit("bun run check");
 
@@ -159,6 +160,7 @@ const EVERYTHING = [
   /^scripts\/check\.ts$/u,
   /^scripts\/lib\/checks\.ts$/u,
   /^scripts\/lib\/repo-files\.ts$/u,
+  /^scripts\/lib\/workspace-imports\.ts$/u,
   /^scripts\/(?:lib\/)?real-modules\.ts$/u,
   /^scripts\/lint\//u,
 ];
@@ -168,9 +170,6 @@ const MANIFEST = /(^|\/)package\.json$/u;
 const DASHBOARD_CSS = /^apps\/dashboard\/src\/.*\.css$/u;
 const TYPESCRIPT_FILE = /\.[cm]?tsx?$/u;
 const STEM = /(?:\.d)?\.[cm]?[jt]sx?$/u;
-/** An import of a file TypeScript reads: code, JSON, or a path with no extension. */
-const TYPED_TARGET = /\.(?:[cm]?[jt]sx?|svelte|json)$/u;
-const WORKSPACE_IMPORT = /^(@cawco\/[^/]+)(?:\/(.+))?$/u;
 const SPECIFIER =
   /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|<reference\s+path=)["']([^"'\n]+)["']/gu;
 
@@ -194,10 +193,6 @@ const projects: Project[] = files
   }));
 const svelteProject = projects.find((p) => p.config === SVELTE_PROJECT);
 
-const depth = (dir: string): number =>
-  dir === "." ? 0 : dir.split("/").length;
-const holds = (dir: string, path: string): boolean =>
-  dir === "." || path === dir || path.startsWith(`${dir}/`);
 /** The project whose folder holds `path` most closely. */
 const ownersOf = (path: string): Project[] => {
   let closest = -1;
@@ -217,114 +212,6 @@ const ownersOf = (path: string): Project[] => {
     }
   }
   return owners;
-};
-
-/** Each workspace package by name: its folder, `exports` and `imports`. */
-const rootManifest = (await Bun.file(join(ROOT, "package.json")).json()) as {
-  workspaces: string[];
-};
-type Entry = string | { types?: string; default?: string };
-interface Manifest {
-  dir: string;
-  exports?: Record<string, Entry>;
-  imports?: Record<string, string>;
-  main?: string;
-}
-const packages = new Map<string, Manifest>(
-  await Promise.all(
-    rootManifest.workspaces
-      .flatMap((pattern) => [
-        ...new Bun.Glob(`${pattern}/package.json`).scanSync({ cwd: ROOT }),
-      ])
-      .map(async (path) => {
-        const pkg = (await Bun.file(join(ROOT, path)).json()) as Omit<
-          Manifest,
-          "dir"
-        > & { name: string };
-        return [pkg.name, { ...pkg, dir: dirname(path) }] as const;
-      })
-  )
-);
-
-/** The path a `#name` import in `file` names, through its package's `imports`. */
-const subpathImport = (file: string, specifier: string): string | undefined => {
-  const [holder] = [...packages.values()]
-    .filter((pkg) => holds(pkg.dir, file))
-    .sort((a, b) => depth(b.dir) - depth(a.dir));
-  for (const [key, path] of Object.entries(holder?.imports ?? {})) {
-    if (key === specifier) {
-      return normalize(join(holder.dir, path));
-    }
-    const star = key.indexOf("*");
-    if (
-      star >= 0 &&
-      specifier.startsWith(key.slice(0, star)) &&
-      specifier.endsWith(key.slice(star + 1))
-    ) {
-      const matched = specifier.slice(
-        star,
-        specifier.length - (key.length - star - 1)
-      );
-      return normalize(join(holder.dir, path.replace("*", matched)));
-    }
-  }
-};
-
-/** The entry `exports` answers `sub` with, by its exact key or its longest-prefixed `*` pattern, as a resolver reads it. */
-const exportedAt = (
-  exports: Manifest["exports"],
-  sub: string
-): Entry | undefined => {
-  if (!exports) {
-    return;
-  }
-  const exact = exports[sub];
-  if (exact !== undefined) {
-    return exact;
-  }
-  const [pattern] = Object.keys(exports)
-    .filter((key) => {
-      const star = key.indexOf("*");
-      return (
-        star >= 0 &&
-        sub.startsWith(key.slice(0, star)) &&
-        sub.endsWith(key.slice(star + 1))
-      );
-    })
-    .sort((a, b) => b.indexOf("*") - a.indexOf("*"));
-  if (pattern === undefined) {
-    return;
-  }
-  const star = pattern.indexOf("*");
-  const matched = sub.slice(star, sub.length - (pattern.length - star - 1));
-  const entry = exports[pattern] as string;
-  return entry.replace("*", matched);
-};
-
-/** The repository path `specifier` in `file` names, when TypeScript reads it. */
-const targetOf = (file: string, specifier: string): string | undefined => {
-  if (specifier.startsWith("#")) {
-    return subpathImport(file, specifier);
-  }
-  if (specifier.startsWith(".")) {
-    const path = normalize(join(dirname(file), specifier));
-    const hasExtension = basename(path).includes(".");
-    return !hasExtension || TYPED_TARGET.test(path) ? path : undefined;
-  }
-  const named = WORKSPACE_IMPORT.exec(specifier);
-  const pkg = named ? packages.get(named[1] as string) : undefined;
-  if (!(named && pkg)) {
-    return;
-  }
-  const sub = named[2] ? `./${named[2]}` : ".";
-  const entry = exportedAt(pkg.exports, sub);
-  const path =
-    typeof entry === "string"
-      ? entry
-      : (entry?.types ??
-        entry?.default ??
-        (sub === "." ? pkg.main : undefined));
-  return path ? normalize(join(pkg.dir, path)) : pkg.dir;
 };
 
 /** A path as its importers name it: without the extension an import may leave off. */
@@ -617,6 +504,16 @@ const gated: Gated[] = [
     // Its input is the list of paths alone.
     key: () => keyOf(["scripts/case-clash-check.ts"], files.join("\n")),
   },
+  // Imports run one way: no cycle, core and the kit reach nothing above
+  // them, a member reaches another only through its manifest.
+  bun("scripts/import-rules-check.ts", [
+    "apps/dashboard/",
+    "apps/cawrier/",
+    "packages/",
+    "scripts/",
+    "site/",
+    "package.json",
+  ]),
   bun("scripts/css-scope-check.ts", DASH),
   bun("scripts/browser-core-check.ts", [
     "apps/dashboard/src/",
