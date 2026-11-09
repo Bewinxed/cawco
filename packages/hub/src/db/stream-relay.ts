@@ -7,11 +7,15 @@ import type {
 import { eq } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
+  STREAM_JOURNEY_ID,
+  STREAM_RELAY_ID,
+  SUPERVISOR_CONFIG_ID,
   streamRelay,
   streamRelayJourney,
   streamRelayProofs,
   supervisorConfig,
 } from "./schema";
+import { singleton, singletonColumn } from "./singleton";
 
 /** The fleet's stream relay as stored; its secret opened (null when the hub's key does not open it). */
 export interface StoredRelay {
@@ -103,21 +107,13 @@ export interface StreamRelayDb {
   readonly update: (change: RelayChange) => void;
 }
 
-const ID = "relay";
-const JOURNEY_ID = "journey";
-const CONFIG_ID = "supervisor";
-
 const time = (at: Date | null): number | null => at?.getTime() ?? null;
 const toDate = (ms: number | null): Date | null =>
   ms === null ? null : new Date(ms);
 
 export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
   read: () => {
-    const row = db
-      .select()
-      .from(streamRelay)
-      .where(eq(streamRelay.id, ID))
-      .get();
+    const row = singleton(db, streamRelay, STREAM_RELAY_ID);
     return row
       ? {
           machineId: row.machineId,
@@ -152,7 +148,7 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
       createdAt: new Date(),
     };
     db.insert(streamRelay)
-      .values({ id: ID, ...fresh })
+      .values({ id: STREAM_RELAY_ID, ...fresh })
       .onConflictDoUpdate({ target: streamRelay.id, set: fresh })
       .run();
   },
@@ -165,17 +161,16 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
     if (Object.keys(set).length === 0) {
       return;
     }
-    db.update(streamRelay).set(set).where(eq(streamRelay.id, ID)).run();
+    db.update(streamRelay)
+      .set(set)
+      .where(eq(streamRelay.id, STREAM_RELAY_ID))
+      .run();
   },
   forget: () => {
-    db.delete(streamRelay).where(eq(streamRelay.id, ID)).run();
+    db.delete(streamRelay).where(eq(streamRelay.id, STREAM_RELAY_ID)).run();
   },
   journey: () => {
-    const row = db
-      .select()
-      .from(streamRelayJourney)
-      .where(eq(streamRelayJourney.id, JOURNEY_ID))
-      .get();
+    const row = singleton(db, streamRelayJourney, STREAM_JOURNEY_ID);
     return row
       ? {
           machineId: row.machineId,
@@ -196,7 +191,7 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
   },
   journeyOpen: (domain) => {
     db.insert(streamRelayJourney)
-      .values({ id: JOURNEY_ID, domain, createdAt: new Date() })
+      .values({ id: STREAM_JOURNEY_ID, domain, createdAt: new Date() })
       .onConflictDoUpdate({
         target: streamRelayJourney.id,
         set: { closed: null },
@@ -217,12 +212,12 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
     }
     db.update(streamRelayJourney)
       .set(set)
-      .where(eq(streamRelayJourney.id, JOURNEY_ID))
+      .where(eq(streamRelayJourney.id, STREAM_JOURNEY_ID))
       .run();
   },
   journeyForget: () => {
     db.delete(streamRelayJourney)
-      .where(eq(streamRelayJourney.id, JOURNEY_ID))
+      .where(eq(streamRelayJourney.id, STREAM_JOURNEY_ID))
       .run();
     db.delete(streamRelayProofs).run();
   },
@@ -244,16 +239,17 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
   },
   askedAt: () =>
     time(
-      db
-        .select({ at: supervisorConfig.relayAskedAt })
-        .from(supervisorConfig)
-        .where(eq(supervisorConfig.id, CONFIG_ID))
-        .get()?.at ?? null
+      singletonColumn(
+        db,
+        supervisorConfig,
+        SUPERVISOR_CONFIG_ID,
+        supervisorConfig.relayAskedAt
+      ) ?? null
     ),
   asked: () => {
     const at = new Date();
     db.insert(supervisorConfig)
-      .values({ id: CONFIG_ID, relayAskedAt: at })
+      .values({ id: SUPERVISOR_CONFIG_ID, relayAskedAt: at })
       .onConflictDoUpdate({
         target: supervisorConfig.id,
         set: { relayAskedAt: at },
