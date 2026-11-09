@@ -28,10 +28,10 @@
   import { land } from "#lib/platform/motion/share.svelte.js";
   import { browser } from "$app/env";
   import { page } from "$app/state";
-  import type { ServerTail } from "../client.svelte";
   import ProjectPage from "../project/ProjectPage.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
+  import type { ServerTail } from "../stores/transcript-reads.svelte";
   import Composer, { type TrayRow } from "../transcript/Composer.svelte";
   import { composerFleet } from "../transcript/composer-fleet";
   import {
