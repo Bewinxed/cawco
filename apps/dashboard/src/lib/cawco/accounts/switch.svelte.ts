@@ -11,11 +11,11 @@
 import type { Account, AccountProvider } from "@cawco/core/accounts";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/platform/hub-read.js";
-import { moveInstanceAccount } from "../client.svelte";
 import type { BoardRow } from "../links";
 import { faultOn, pendingOn } from "../session-acts.svelte";
 import { accountsStore } from "../stores/accounts.svelte";
 import { boardStore, machineConnected } from "../stores/board.svelte";
+import { moveInstanceAccount } from "../stores/row-acts.svelte";
 import { accountsOf, nameOf, signinState } from "./model.svelte";
 
 /** Session id → the account it is moving to. */
