@@ -16,6 +16,7 @@ import { keepStandInsListed } from "../stand-ins";
 import { decided, readDecisions, recordDecision } from "./decisions";
 import { attachedIn, commandsNow } from "./holding";
 import { executors } from "./processes";
+import { HOST_FILES } from "./protocol";
 import { generationDir, type Held, keepers } from "./state";
 
 /** Each boundary's srt host or Seatbelt runner followed (lifecycle.ts `watchHost`), by its proc id, with the connection it is followed on. */
@@ -172,12 +173,9 @@ export const lookAgainEverywhere = (): void => {
   everywhere.unref();
 };
 
-/** The file in a generation's dir where its srt host records each restart of its sandbox (boundary-host.ts `RESTARTS_FILE`). */
-const HOST_RESTARTS_FILE = "restarts.json";
-
 /**
  * Records each restart of generation `held`'s sandbox its srt host recorded
- * ({@link HOST_RESTARTS_FILE}) that workspace `id`'s decisions do not hold
+ * (protocol.ts `HOST_FILES.restarts`) that workspace `id`'s decisions do not hold
  * yet, as a `host-restarted` decision ({@link BoundaryDecision}).
  */
 export const recordHostRestarts = async (
@@ -185,7 +183,7 @@ export const recordHostRestarts = async (
   held: Pick<Held, "form" | "gen" | "pid">
 ): Promise<void> => {
   const text = await readFile(
-    join(generationDir(id, held.gen), HOST_RESTARTS_FILE),
+    join(generationDir(id, held.gen), HOST_FILES.restarts),
     "utf8"
   ).catch(() => "[]");
   let restarts: unknown;
@@ -222,9 +220,6 @@ export const recordHostRestarts = async (
     });
   }
 };
-
-/** What a boundary host exits with when the folder it holds is gone (boundary-host.ts `GONE_STATUS`). */
-export const HOST_GONE_STATUS = 66;
 
 /**
  * What still holds workspace `ref` on this machine, in words, or nothing:
