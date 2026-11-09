@@ -26,7 +26,14 @@
  * Run by hand; the live hub never generates any of this.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { z } from "zod";
@@ -265,13 +272,26 @@ const definitions = inOneOrder(
   "definitions"
 ) as Record<string, Schema>;
 console.warn = warn;
+/** Elysia's package folder, wherever the hub resolves it from. */
+const elysiaRoot = (() => {
+  const entry = Bun.resolveSync("elysia", HUB);
+  for (let at = dirname(entry); at !== dirname(at); at = dirname(at)) {
+    const manifest = join(at, "package.json");
+    if (
+      existsSync(manifest) &&
+      z
+        .object({ name: z.string().optional() })
+        .parse(JSON.parse(readFileSync(manifest, "utf8"))).name === "elysia"
+    ) {
+      return `${at}/`;
+    }
+  }
+  throw new Error(`No package.json names elysia above ${entry}`);
+})();
 const validationBody = generator
   .getSymbols(VALIDATION_BODY)
   .map(({ symbol }) => symbol.declarations?.[0]?.getSourceFile().fileName);
-if (
-  validationBody.length !== 1 ||
-  !validationBody[0]?.includes("/node_modules/elysia/")
-) {
+if (validationBody.length !== 1 || !validationBody[0]?.startsWith(elysiaRoot)) {
   throw new Error(
     `${VALIDATION_BODY} names ${validationBody.length} types (${validationBody.join(", ")}); openapi.ts reads Elysia's one`
   );
@@ -407,8 +427,9 @@ const isText = (schema: Schema): boolean => {
 
 /**
  * Elysia's 422 body, by the literal it carries. A route's type spells it out
- * (Elysia's own `ValidationProblem`, kept equal to the exported
- * {@link VALIDATION_BODY}); one that no longer reads as that type fails here.
+ * (Elysia's unexported `ValidationProblem` in its dist/types.d.ts, kept equal
+ * to the exported {@link VALIDATION_BODY}); one that no longer reads as that
+ * type fails here. Both are compared in one order, so neither's order counts.
  */
 const isValidationProblem = (schema: Schema): boolean => {
   const kind = (schema.properties as Record<string, Schema> | undefined)?.type;
@@ -421,7 +442,7 @@ const isValidationProblem = (schema: Schema): boolean => {
     definitions[VALIDATION_BODY]
   ) as Schema;
   const { description: __, ...spelled } = schema;
-  if (JSON.stringify(published) !== JSON.stringify(spelled)) {
+  if (!Bun.deepEquals(inOneOrder(published), inOneOrder(spelled), true)) {
     throw new Error(
       `A route's 422 body is no longer Elysia's ${VALIDATION_BODY}:\n${JSON.stringify(spelled)}\n${JSON.stringify(published)}`
     );
