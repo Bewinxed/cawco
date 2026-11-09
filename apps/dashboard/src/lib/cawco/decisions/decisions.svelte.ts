@@ -5,8 +5,10 @@
  * (`decisions.changed`, `tasks.changed`), on a reconnect and when the tab
  * comes back. Only the newest read's answer is kept.
  */
+
 import type { DecisionsList } from "@cawco/core/decisions";
 import { failureWords } from "#lib/platform/hub-read.js";
+import { newestRead } from "#lib/platform/newest-read.js";
 import { listDecisions } from "./decisions-api";
 
 export class ProjectDecisions {
@@ -15,7 +17,7 @@ export class ProjectDecisions {
   /** Why the last read failed, in the hub's words; null when it read. */
   problem = $state<string | null>(null);
   readonly #project: () => string;
-  #reads = 0;
+  readonly #reads = newestRead();
 
   constructor(project: () => string) {
     this.#project = project;
@@ -33,16 +35,15 @@ export class ProjectDecisions {
     if (!projectId) {
       return;
     }
-    this.#reads += 1;
-    const ticket = this.#reads;
+    const newest = this.#reads.next();
     try {
       const list = await listDecisions(projectId);
-      if (ticket === this.#reads && projectId === this.#project()) {
+      if (newest() && projectId === this.#project()) {
         this.list = list;
         this.problem = null;
       }
     } catch (error) {
-      if (ticket === this.#reads && projectId === this.#project()) {
+      if (newest() && projectId === this.#project()) {
         this.problem = failureWords(error);
       }
     }
