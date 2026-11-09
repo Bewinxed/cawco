@@ -1,9 +1,17 @@
-/** The process keeper's namespace. Infrastructure procs are never sessions. */
+/**
+ * The process keeper's namespace. A session's child is named for its
+ * harness, one of the traits table's keeper-held kinds; infrastructure procs
+ * are never sessions.
+ */
+import {
+  KEEPER_HARNESSES,
+  type KeeperHarnessKind,
+} from "@cawco/core/harness/traits";
+
 export const OPENCODE_SERVER_PROC_ID = "opencode-server";
-export const SESSION_PROC_KINDS = ["claude", "pi"] as const;
 
 export type ProcId =
-  | { kind: "claude" | "pi"; instanceId: string }
+  | { kind: KeeperHarnessKind; instanceId: string }
   | { kind: "boundary"; id: string }
   | { kind: "judge" }
   | { kind: "opencode-server" };
@@ -32,20 +40,19 @@ export const boundaryProcId = (workspace: string, generation: string) =>
 export const isBoundaryOf = (procId: string, workspace: string): boolean =>
   procId.startsWith(`${procIdFor("boundary", workspace)}-`);
 
+/**
+ * The keeper's name for a session's child of harness `kind`, `kind:id`, or
+ * for a workspace's boundary. Claude Code's children predate the prefix: a
+ * bare id is Claude Code's.
+ */
 export function procIdFor(
-  kind: "claude" | "pi" | "boundary",
+  kind: KeeperHarnessKind | "boundary",
   id: string
 ): string {
-  switch (kind) {
-    case "claude":
-      return id;
-    case "pi":
-      return `pi:${id}`;
-    case "boundary":
-      return `boundary-${id}`;
-    default:
-      return kind satisfies never;
+  if (kind === "boundary") {
+    return `boundary-${id}`;
   }
+  return kind === "claude" ? id : `${kind}:${id}`;
 }
 
 export function parseProcId(procId: string): ProcId {
@@ -61,8 +68,11 @@ export function parseProcId(procId: string): ProcId {
   if (procId.startsWith("boundary-")) {
     return { kind: "boundary", id: procId.slice("boundary-".length) };
   }
-  if (procId.startsWith("pi:")) {
-    return { kind: "pi", instanceId: procId.slice(3) };
+  for (const kind of KEEPER_HARNESSES) {
+    const prefix = procIdFor(kind, "");
+    if (prefix && procId.startsWith(prefix)) {
+      return { kind, instanceId: procId.slice(prefix.length) };
+    }
   }
   return { kind: "claude", instanceId: procId };
 }
