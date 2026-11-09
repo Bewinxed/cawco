@@ -18,7 +18,7 @@
  * the panel (artifact-session.svelte.ts), so nothing there is closed here.
  */
 import type { PreviewFrame } from "@cawco/core/frames";
-import { store, stored, unstore } from "../storage";
+import { store, stored, unstore } from "../../platform/storage";
 
 const closedKey = (instanceId: string) => `cawco-preview-closed:${instanceId}`;
 

@@ -13,6 +13,7 @@ import { hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import { updatesWords } from "@cawco/core/words/updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { KeptUpdatesSchema } from "#lib/cawco/stored-shapes.js";
 import {
   failureClause,
   failureSentence,
@@ -20,10 +21,9 @@ import {
   hubFetch,
   hubRefusal,
   hubSaid,
-} from "#lib/cawco/hub-read.js";
-import { KeptUpdatesSchema } from "#lib/cawco/stored-shapes.js";
-import { newId } from "../id";
-import { readJson, writeJson } from "../storage";
+} from "#lib/platform/hub-read.js";
+import { newId } from "#lib/platform/id.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import { installable, type Refusal, type UpdateMachine } from "./model";
 
 /** A setting on Configure › Updates whose save the hub can refuse. */

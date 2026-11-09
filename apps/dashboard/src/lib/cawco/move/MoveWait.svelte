@@ -25,8 +25,6 @@
   import { askWords } from "@cawco/core/words/asks";
   import { spawnWords } from "@cawco/core/words/spawn";
   import { type Component, untrack } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import { msOf } from "#lib/cawco/motion/time.js";
   import {
     Alert,
     AlertDescription,
@@ -49,13 +47,19 @@
     IconSuccess,
     IconTick,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { msOf } from "#lib/platform/motion/time.js";
   import { browser } from "$app/env";
   import { answerFor, submitCommand } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import Caw from "../home/Caw.svelte";
   import { machineName } from "../home/home-state.svelte";
-  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
   import { cancelMove, retryMove } from "../move.svelte";
   import RowFault from "../RowFault.svelte";
   import { workspace } from "../workspace/workspace.svelte";

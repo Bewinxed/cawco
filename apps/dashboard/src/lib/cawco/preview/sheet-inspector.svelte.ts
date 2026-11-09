@@ -19,7 +19,7 @@ import {
   type Story,
   type StoryOp,
 } from "@cawco/core/stage";
-import { failureWords } from "#lib/cawco/hub-read.js";
+import { failureWords } from "#lib/platform/hub-read.js";
 import type { SheetChange } from "../artifact-api";
 
 /** What the inspector says to the sheet's page. */

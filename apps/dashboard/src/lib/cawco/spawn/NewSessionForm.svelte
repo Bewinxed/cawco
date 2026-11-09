@@ -32,15 +32,7 @@
   import { spawnWords } from "@cawco/core/words/spawn";
   import { tick, untrack } from "svelte";
   import { z } from "zod";
-  import {
-    awayOf,
-    failureWords,
-    hubFetch,
-    hubRefusal,
-  } from "#lib/cawco/hub-read.js";
-  import { staggered } from "#lib/cawco/motion/curves.svelte.js";
   import { SessionDraftSchema } from "#lib/cawco/stored-shapes.js";
-  import { track } from "#lib/cawco/track.js";
   import {
     Alert,
     AlertDescription,
@@ -84,6 +76,25 @@
     IconTerminal as Terminal,
     IconClose as X,
   } from "#lib/icons.js";
+  import {
+    awayOf,
+    failureWords,
+    hubFetch,
+    hubRefusal,
+  } from "#lib/platform/hub-read.js";
+  import { newId } from "#lib/platform/id.js";
+  import { staggered } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import { handOver } from "#lib/platform/motion/share.svelte.js";
+  import {
+    readJson,
+    store,
+    stored,
+    unstore,
+    writeJson,
+  } from "#lib/platform/storage.js";
+  import { track } from "#lib/platform/track.js";
   import { goto } from "$app/navigation";
   import {
     answeredOr,
@@ -107,14 +118,10 @@
   import type { DraftContent } from "../draft-store";
   import { EFFORT_OPTIONS } from "../effort-levels";
   import { inspectMachine } from "../fleet";
-  import { newId } from "../id";
   import { conversationHref } from "../links";
   import MachineAway from "../MachineAway.svelte";
   import { awayWords, MachineWait } from "../machine-wait.svelte";
   import { loadModelWindows, models } from "../models.svelte";
-  import { unfold } from "../motion/fold.svelte";
-  import { morph } from "../motion/morph.svelte";
-  import { handOver } from "../motion/share.svelte";
   import MoveAskBody from "../move/MoveAsk.svelte";
   import { moveEstimate, startMove } from "../move.svelte";
   import {
@@ -130,7 +137,6 @@
     rememberSpawn,
     spawnPrefs,
   } from "../spawnPrefs.svelte";
-  import { readJson, store, stored, unstore, writeJson } from "../storage";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";

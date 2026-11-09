@@ -6,8 +6,8 @@
  */
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
+import { parseJson, stored, writeJson } from "../platform/storage";
 import { drawnFrom } from "./kept.svelte";
-import { parseJson, stored, writeJson } from "./storage";
 
 /** A list that shows trees: the rail's Recent, the phone home's, and the running sessions a project unfolds in the rail's Projects. */
 export type TreeList = "rail-recent" | "home-recent" | "rail-projects";

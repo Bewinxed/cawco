@@ -15,9 +15,9 @@
    */
   import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
   import { mcpWords as words } from "@cawco/core/words/mcp";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconKey } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { signInToMcp } from "../fleet.js";
   import RowFault from "../RowFault.svelte";
 

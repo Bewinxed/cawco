@@ -17,7 +17,7 @@
    * the clock moved, not because something happened).
    */
   import { TextMorph } from "torph/svelte";
-  import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { CURVE, dur } from "#lib/platform/motion/curves.svelte.js";
 
   let {
     text,

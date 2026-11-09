@@ -32,12 +32,12 @@
   import type { StageDifferences, StageLaid } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
   import type { Snippet } from "svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconChevronDown, IconCloudCross } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { numberOf } from "#lib/platform/motion/curves.svelte.js";
   import { browser } from "$app/env";
   import { figureOf } from "./figures";
 

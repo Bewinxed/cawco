@@ -53,7 +53,7 @@
  * started from the list's same fixed time, so it is in step at once.
  */
 import type { Attachment } from "svelte/attachments";
-import { watchRendered } from "#lib/utils/rendered.js";
+import { watchRendered } from "#lib/platform/rendered.js";
 import { firstRender } from "../first-render.svelte";
 import { CURVE, dur, motionOk, numberOf } from "./curves.svelte";
 

@@ -10,7 +10,7 @@
    * row says where it stands.
    */
   import { untrack } from "svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { closeTo, openFrom, type Source } from "../motion";
   import { rowLine } from "../words";
   import AddressRow from "./AddressRow.svelte";
