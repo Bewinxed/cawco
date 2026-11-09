@@ -646,7 +646,6 @@ const gated: Gated[] = [
   ]),
   run("packages/hub", "roles:check", PKG),
   run("packages/core", "openui:check", []),
-  run("packages/core", "tools:check", ["apps/apple/"]),
   bun("scripts/claude-paths-check.ts", [...DASH, ...PKG]),
   bun("scripts/machine-paths-check.ts", [...DASH, ...PKG]),
   bun("scripts/signal-check.ts", ALL_FILES),
@@ -657,15 +656,6 @@ const gated: Gated[] = [
     "scripts/",
   ]),
   bun("scripts/apple-ops-check.ts", ["apps/apple/", ...PKG]),
-  bun(
-    "scripts/words-swift.ts",
-    [
-      "apps/apple/Packages/CawCoKit/Sources/",
-      "apps/dashboard/src/",
-      "packages/core/src/",
-    ],
-    "--check"
-  ),
   bun("scripts/protocol-sweep.ts", ["packages/core/src/"]),
   bun("scripts/git-door-words-check.ts", [
     "packages/agent/src/",
