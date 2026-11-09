@@ -2,8 +2,8 @@
   import type { SessionPulse } from "@cawco/core/protocol";
   import { HOUR_MS } from "@cawco/core/time";
   import { onMount, untrack } from "svelte";
-  import { blankSession } from "#lib/cawco/client.svelte.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";

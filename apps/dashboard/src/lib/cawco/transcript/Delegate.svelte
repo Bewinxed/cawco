@@ -37,6 +37,7 @@
     sessionTitle,
   } from "../session-names.svelte";
   import { boardStore } from "../stores/board.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import type { Message } from "../types";
   import { disclosure } from "./disclosure.svelte";
   import InlineTranscript from "./InlineTranscript.svelte";
@@ -59,7 +60,7 @@
   const started = $derived(meta.handoffKind === "start");
 
   const row = $derived(id ? boardStore.instanceIndex.byId.get(id) : undefined);
-  const branch = $derived(id ? cawco.session(id) : null);
+  const branch = $derived(id ? sessionsStore.session(id) : null);
   /**
    * The delegate as the hub's names have it, when the board no longer holds
    * its row (it moved more than a day ago): its harness, its state at rest
@@ -102,7 +103,7 @@
     }
   });
   const record = $derived(id && !elsewhere ? cawco.delegateOf(id) : null);
-  const parent = $derived(cawco.session(message.instanceId));
+  const parent = $derived(sessionsStore.session(message.instanceId));
 
   const toolInput = $derived.by((): Record<string, unknown> => {
     const raw = meta.toolInput;
