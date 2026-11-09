@@ -5,7 +5,6 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import { hubRequest } from "@cawco/core/hub-request";
 import {
   DELEGATE_SUMMARIES_LIMIT,
   type DelegateEvent,
@@ -13,7 +12,8 @@ import {
   type InstanceRow,
   type WorkItemSummary,
 } from "@cawco/core/protocol";
-import { hubFetch } from "#lib/platform/hub-read.js";
+import { hub } from "#lib/platform/hub.js";
+import { hubData } from "#lib/platform/hub-read.js";
 import { type DelegateRecord, delegateRecord } from "../delegate-record";
 import { resolveSessionTitle } from "../links";
 import { activityFor } from "./asks.svelte";
@@ -227,15 +227,10 @@ async function loadDelegates(
 ): Promise<void> {
   let summaries: DelegateSummary[];
   try {
-    const response = await hubFetch(
-      hubRequest("POST /api/delegate-summaries", {
-        body: { parent, instances: delegates },
-      })
+    summaries = await hubData(
+      hub.api["delegate-summaries"].post({ parent, instances: delegates }),
+      ({ response }) => new Error(`${response.status} ${response.statusText}`)
     );
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
-    }
-    summaries = (await response.json()) as DelegateSummary[];
   } catch (error) {
     console.error("[cawco] /api/delegate-summaries failed:", error);
     const read = delegatesRead.get(parent);

@@ -4,13 +4,14 @@
  * it. Read on connect, then kept by every `usage` frame.
  */
 
-import { hubRequest } from "@cawco/core/hub-request";
 import type {
   ClaudeLimits,
   OpenCodeGoLimits,
   UsageLimitsResponse,
   UsageSpend,
 } from "@cawco/core/usage/types";
+import { hub } from "#lib/platform/hub.js";
+import { hubData } from "#lib/platform/hub-read.js";
 import { heardFrame, heardSince, readLeaves } from "../heard";
 import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
@@ -72,7 +73,7 @@ function adoptSpend(spend: UsageSpend): void {
  */
 export async function readSpend(): Promise<void> {
   const mark = readLeaves();
-  const spend = await load<UsageSpend>(hubRequest("GET /api/usage/spend"));
+  const spend = await load(hubData(hub.api.usage.spend.get()));
   // A `usage` frame since the read left carries a spend at least as new.
   if (heardSince("usage", mark)) {
     return;
