@@ -2,7 +2,7 @@
  * The canvas's host page (Projects spec §5.10, D24): one page the hub serves
  * at a canvas artifact's root, the same in the panel, a tab of its own and
  * the app's web view. Its code is the agent package's `canvas-host/`, its
- * JS bundled by Bun as the preview overlay is (preview-proxy.ts
+ * JS bundled by Bun as the preview overlay is (preview proxy.ts
  * `buildOverlay`) and its stylesheet (`SHEETS`) compiled by Lightning CSS
  * (page-css.ts): the standalone binary carries both prebuilt under
  * `canvas/` (`build-binary.ts`), and a source checkout builds them on first
@@ -74,7 +74,7 @@ const INLINED_FONTS = () =>
  * stylesheet (`host.css`). React and Excalidraw built for production;
  * Mermaid's converter is its own chunk, loaded when the agent first sends
  * Mermaid. Its Yjs is the page's one copy: the overlay keeps its own in a
- * worker (agent preview-overlay doc-worker.ts), and hands the doc to the
+ * worker (preview overlay/doc-worker.ts), and hands the doc to the
  * page's replica as updates (canvas-host replica.ts).
  */
 export async function buildCanvasHost(): Promise<Map<string, Blob>> {

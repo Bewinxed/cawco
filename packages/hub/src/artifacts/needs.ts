@@ -99,7 +99,7 @@ export interface ArtifactFacts {
   draft: boolean;
   /** The first decision, in page order, with no answer. */
   firstOpen: string | null;
-  /** Its folder isn't on its machine any more, in the daemon's words (core preview-proxy `folderGone`); null while it was there at its last start. */
+  /** Its folder isn't on its machine any more, in the daemon's words (preview proxy `folderGone`); null while it was there at its last start. */
   gone: string | null;
   /** Handed up to a parent session that hasn't opened it, or a maker's change held for it: not the person's yet. */
   handed: boolean;

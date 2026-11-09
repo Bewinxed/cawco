@@ -835,7 +835,7 @@ export function bootStage(page: Page): Mode {
   /** Whether `el` is the drawing's root: its body, or the story's own outermost element. */
   const rootOf = (el: Element) => el === drawing || el === ownRoot(drawing);
 
-  /** Tells the panel, through the overlay (preview-overlay page.ts relays each to the pane). */
+  /** Tells the panel, through the overlay (preview overlay/page.ts relays each to the pane). */
   const tell = <Message extends object>(type: string, message: Message) =>
     dispatchEvent(new CustomEvent(type, { detail: message }));
 
