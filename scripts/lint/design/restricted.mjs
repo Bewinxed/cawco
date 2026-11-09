@@ -1,5 +1,5 @@
 // Two shapes the dashboard never writes (its former ESLint
-// no-restricted-syntax entries, apps/dashboard/eslint.config.mjs):
+// no-restricted-syntax entries):
 //
 // - house/no-raw-duration-read: a duration token is read in its unit,
 //   through motion `dur()`, never as a bare number: the built stylesheet's
