@@ -97,7 +97,7 @@ import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { z } from "zod";
 import { type Caw, isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
@@ -114,7 +114,7 @@ import { jevType, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
-import { ROUTINE_ORIGIN } from "./memory";
+import { type Memory, ROUTINE_ORIGIN } from "./memory";
 import {
   routineListWords,
   routineRunWords,
@@ -323,11 +323,7 @@ export interface RoutineDeps {
    * A curator run's inbox, made ready (memory.ts): `none` when no note is
    * left to curate, else the brief it reads; Jev failing throws.
    */
-  readonly curatorBrief: (
-    projectId: string
-  ) => Promise<
-    { kind: "none"; reason: string } | { kind: "run"; text: string }
-  >;
+  readonly curatorBrief: Memory["curatorBrief"];
   readonly db: Pick<
     DbShape,
     "accounts" | "ingress" | "project" | "routines" | "workItem"
@@ -1232,6 +1228,9 @@ export const createRoutines = ({
   ): Promise<void> => {
     const projectId = routine.projectId ?? refuse(409, "no project");
     const brief = await curatorBrief(projectId);
+    if (brief instanceof ElysiaStatus) {
+      return refuse(brief.status, brief.response.detail);
+    }
     if (brief.kind === "none") {
       settle(run.id, {
         outcome: "silent",
