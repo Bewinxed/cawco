@@ -8,6 +8,7 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { NamedSpawn } from "@cawco/core/protocol";
 import type { DbShape } from "./db";
+import type { HubSocket } from "./wire-socket";
 
 /**
  * A step or a read that could not finish because its machine went away. Not
@@ -140,3 +141,11 @@ export interface ContinueOutcome {
   summary: string | null;
   targetInstanceId: string;
 }
+
+/** A socket the hub may close, and the address it came from. */
+export type AuthSocket = HubSocket & {
+  close: (code?: number, reason?: string) => void;
+  /** Its upgrade's headers: the SSH door's mark among them (ssh-door.ts). */
+  readonly headers?: Record<string, string | undefined>;
+  readonly remoteAddress?: string;
+};
