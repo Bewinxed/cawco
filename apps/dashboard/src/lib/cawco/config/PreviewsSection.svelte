@@ -19,7 +19,7 @@
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
   import { hub } from "#lib/platform/hub.js";
-  import { hubRefusal } from "#lib/platform/hub-read.js";
+  import { hubData, hubRefusal } from "#lib/platform/hub-read.js";
 
   const section = sectionOf("previews");
 
@@ -37,14 +37,8 @@
   };
 
   onMount(() => {
-    hub.api["preview-settings"]
-      .get()
-      .then((answer) => {
-        if (answer.error) {
-          throw hubRefusal(answer);
-        }
-        read(answer.data);
-      })
+    hubData(hub.api["preview-settings"].get())
+      .then(read)
       .catch((error: unknown) => {
         problem = `Could not read how previews are reached — ${error instanceof Error ? error.message : String(error)}.`;
       });
