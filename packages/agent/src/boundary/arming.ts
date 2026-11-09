@@ -40,8 +40,8 @@ import {
   readRetiring,
   running,
   stateDir,
+  type UnaskedCalls,
 } from "./state";
-import { answerUnasked } from "./unasked";
 import { watchCloneOf } from "./watch";
 
 /**
@@ -63,7 +63,7 @@ const rearmOne = async (id: string): Promise<boolean> => {
     );
   };
   if ((await readRetiring(id)).length > 0) {
-    closeWhenIdle(id);
+    closeWhenIdle(id, unasked);
   }
   const held = await readHeld(id).catch(
     said("its boundary hook could not be written again")
@@ -88,7 +88,7 @@ const rearmOne = async (id: string): Promise<boolean> => {
       return false;
     });
     if (dirsLeft) {
-      restartWhenIdle(ref);
+      restartWhenIdle(ref, unasked);
     }
   }
   // Only CawCo's stand-ins in the clone's `info/exclude`: the fixed names
@@ -111,15 +111,15 @@ const rearmOne = async (id: string): Promise<boolean> => {
     // Handed over now, behind the gate: a command waits at the gate and runs
     // through the new boundary rather than through one of another form.
     try {
-      await behindGate(id, () => ensureNow(ref));
+      await behindGate(id, () => ensureNow(ref, unasked));
       return true;
     } catch (error) {
       said("its older boundary could not be handed over yet")(error);
-      replaceSoon(ref);
+      replaceSoon(ref, unasked);
     }
   }
   try {
-    await armHook(id, held);
+    await armHook(id, held, unasked);
     return true;
   } catch (error) {
     said("its boundary hook could not be written again")(error);
@@ -268,12 +268,12 @@ const armOne = async (
     } else if (how === "judge") {
       const held = await readHeld(id);
       if (held) {
-        await armHook(id, held);
+        await armHook(id, held, unasked);
       }
     } else {
       const ref = readRefs.get(id);
       if (ref) {
-        await armLimit(() => ensureNow(ref));
+        await armLimit(() => ensureNow(ref, unasked));
       }
     }
   } catch (error) {
@@ -385,14 +385,15 @@ const readWorkspaces = async (): Promise<{
  */
 export const ensureBoundary = async (ref: WorkspaceRef): Promise<Boundary> => {
   await hookArmed(ref.id);
-  return ensureNow(ref);
+  return ensureNow(ref, unasked);
 };
 
-answerUnasked({
+/** What everything below this file needs to reach back up it ({@link UnaskedCalls}): a value, not a late hand-over, so nothing can ask before it is here. */
+export const unasked: UnaskedCalls = {
   ensureAgain: ensureBoundary,
   judgeExited: (id, held) => {
     armStep({ kind: "judge-exit", id, held });
     return rearming.get(id);
   },
-  lookAtOlder: lookAtStale,
-});
+  lookAtOlder: () => lookAtStale(unasked),
+};
