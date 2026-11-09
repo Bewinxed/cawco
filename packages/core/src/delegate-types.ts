@@ -728,9 +728,9 @@ export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
     name: "advisor",
     description:
-      "Advisor on Fable 5.1: a second, stronger opinion on one question, returned as guidance you apply yourself. Use it when an approach is hard to reverse and the evidence leaves it open, or when the same error keeps recurring. It sees only the brief, so the brief carries the goal, the constraints, what you tried, the exact error text and the file paths involved. The report gives a recommendation, the reasoning behind it, and what would change it, and names each check the answer still depends on for you to dispatch. Carrying out a spec goes to `medium`; fixing a bug with an unknown cause goes to `high`.",
+      "Advisor on Fable 5.2: a second, stronger opinion on one question, returned as guidance you apply yourself. Use it when an approach is hard to reverse and the evidence leaves it open, or when the same error keeps recurring. It sees only the brief, so the brief carries the goal, the constraints, what you tried, the exact error text and the file paths involved. The report gives a recommendation, the reasoning behind it, and what would change it, and names each check the answer still depends on for you to dispatch. Carrying out a spec goes to `medium`; fixing a bug with an unknown cause goes to `high`.",
     harness: "claude",
-    model: "claude-fable-5-1",
+    model: "claude-fable-5-2",
     effort: "high",
     denyTools: ["mcp__claude-in-chrome__*"],
   },

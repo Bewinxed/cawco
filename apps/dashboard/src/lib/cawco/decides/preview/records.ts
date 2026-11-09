@@ -26,7 +26,7 @@ export const facts: Record<string, Facts> = {
   },
   advisor: {
     attention: false,
-    text: decidesWords.runsOn("Claude Code", "Fable 5.1", "high"),
+    text: decidesWords.runsOn("Claude Code", "Fable 5.2", "high"),
   },
   practice: {
     attention: false,

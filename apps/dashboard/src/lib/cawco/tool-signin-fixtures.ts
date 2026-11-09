@@ -17,7 +17,7 @@ import type { Machine } from "./client.svelte";
 export const AGY = "antigravity";
 
 const VERSIONS: Record<string, string> = {
-  claude: "2.1.318",
+  claude: "2.1.321",
   opencode: "2.0.29",
   pi: "1.4.0",
   [AGY]: "1.5.0",

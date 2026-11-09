@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-17T07:16:54.881Z",
+  "generatedAt": "2026-11-09T19:28:39.857Z",
   "models": {
     "anthropic/claude-fable-5": {
       "input": 10,
@@ -12,6 +12,12 @@
       "output": 50,
       "cacheWrite": 12.5,
       "cacheRead": 0.25
+    },
+    "anthropic/claude-fable-5-2": {
+      "input": 8,
+      "output": 40,
+      "cacheWrite": 10,
+      "cacheRead": 0.2
     },
     "anthropic/claude-haiku-4-5": {
       "input": 1,
@@ -213,19 +219,9 @@
       "output": 14,
       "cacheRead": 0.175
     },
-    "openai/gpt-5.2-chat-latest": {
-      "input": 1.75,
-      "output": 14,
-      "cacheRead": 0.175
-    },
     "openai/gpt-5.2-pro": {
       "input": 21,
       "output": 168
-    },
-    "openai/gpt-5.3-chat-latest": {
-      "input": 1.75,
-      "output": 14,
-      "cacheRead": 0.175
     },
     "openai/gpt-5.3-codex": {
       "input": 1.75,
@@ -415,6 +411,21 @@
         }
       ]
     },
+    "openai/gpt-6.1-terra": {
+      "input": 1,
+      "output": 5,
+      "cacheWrite": 1.25,
+      "cacheRead": 0.05,
+      "tiers": [
+        {
+          "above": 272000,
+          "input": 2,
+          "output": 7.5,
+          "cacheWrite": 2.5,
+          "cacheRead": 0.1
+        }
+      ]
+    },
     "openai/gpt-daybreak-blue-latest": {
       "input": 4,
       "output": 20,
@@ -511,6 +522,11 @@
         }
       ]
     },
+    "opencode-go/crouton-alpha-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
+    },
     "opencode-go/deepseek-v4-pro": {
       "input": 0.66,
       "output": 1.98,
@@ -520,6 +536,11 @@
       "input": 0.15,
       "output": 0.6,
       "cacheRead": 0.003
+    },
+    "opencode-go/gemini-4-argon": {
+      "input": 2,
+      "output": 10,
+      "cacheRead": 0.1
     },
     "opencode-go/gemini-4-argon-contributor": {
       "input": 4,
@@ -589,10 +610,20 @@
       "output": 0.58,
       "cacheRead": 0.035
     },
+    "opencode-go/hy4": {
+      "input": 0.834,
+      "output": 2.501,
+      "cacheRead": 0.042
+    },
     "opencode-go/hy4-preview": {
       "input": 0.834,
       "output": 2.501,
       "cacheRead": 0.042
+    },
+    "opencode-go/iceman-contributor-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
     },
     "opencode-go/kimi-k2.7-code": {
       "input": 0.95,
@@ -602,12 +633,24 @@
     "opencode-go/kimi-k3": {
       "input": 3,
       "output": 15,
+      "cacheWrite": 3,
       "cacheRead": 0.3
+    },
+    "opencode-go/kimi-k3.1-pro": {
+      "input": 2,
+      "output": 10,
+      "cacheWrite": 2,
+      "cacheRead": 0.2
     },
     "opencode-go/longcat-2.0": {
       "input": 0.3,
       "output": 1.2,
       "cacheRead": 0.006
+    },
+    "opencode-go/longcat-2.5-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
     },
     "opencode-go/longcat-2.5-preview-free": {
       "input": 0,
@@ -652,6 +695,16 @@
           "cacheRead": 0.12
         }
       ]
+    },
+    "opencode-go/minimax-m3.1-flash": {
+      "input": 0.15,
+      "output": 0.6,
+      "cacheRead": 0.015
+    },
+    "opencode-go/minimax-m3.1-flash-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
     },
     "opencode-go/muse-spark-1.2-contributor": {
       "input": 0.1,
@@ -849,7 +902,12 @@
       "input": 2,
       "output": 10,
       "cacheWrite": 2.5,
-      "cacheRead": 0.2
+      "cacheRead": 0.1
+    },
+    "opencode/crouton-alpha-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
     },
     "opencode/deepseek-v4-flash": {
       "input": 0.14,
@@ -868,7 +926,7 @@
     },
     "opencode/deepseek-v4-pro": {
       "input": 1.74,
-      "output": 3.84,
+      "output": 3.48,
       "cacheRead": 0.145
     },
     "opencode/deepseek-v4.1-flash": {
@@ -888,6 +946,11 @@
     "opencode/fledge-alpha-free": {
       "input": 0,
       "output": 0
+    },
+    "opencode/flint-40b-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
     },
     "opencode/gemini-3-flash": {
       "input": 0.5,
@@ -1132,17 +1195,17 @@
       ]
     },
     "opencode/gpt-5.6-terra": {
-      "input": 2.5,
-      "output": 15,
-      "cacheWrite": 3.125,
-      "cacheRead": 0.25,
+      "input": 2,
+      "output": 12,
+      "cacheWrite": 2.5,
+      "cacheRead": 0.2,
       "tiers": [
         {
           "above": 272000,
-          "input": 5,
-          "output": 22.5,
-          "cacheWrite": 6.25,
-          "cacheRead": 0.5
+          "input": 4,
+          "output": 18,
+          "cacheWrite": 5,
+          "cacheRead": 0.4
         }
       ]
     },
@@ -1266,6 +1329,17 @@
       "output": 0,
       "cacheRead": 0
     },
+    "opencode/iceman-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
+    },
+    "opencode/inkling-2-small-free": {
+      "input": 0,
+      "output": 0,
+      "cacheWrite": 0,
+      "cacheRead": 0
+    },
     "opencode/kimi-k2": {
       "input": 0.4,
       "output": 2.5,
@@ -1279,7 +1353,7 @@
     "opencode/kimi-k2.5": {
       "input": 0.6,
       "output": 3,
-      "cacheRead": 0.08
+      "cacheRead": 0.1
     },
     "opencode/kimi-k2.5-free": {
       "input": 0,
@@ -1299,6 +1373,7 @@
     "opencode/kimi-k3": {
       "input": 3,
       "output": 15,
+      "cacheWrite": 3,
       "cacheRead": 0.3
     },
     "opencode/laguna-s-2.1-free": {
@@ -1335,6 +1410,11 @@
       "cacheRead": 0
     },
     "opencode/longcat-2.0-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
+    },
+    "opencode/longcat-2.5-free": {
       "input": 0,
       "output": 0,
       "cacheRead": 0
@@ -1404,10 +1484,21 @@
       "output": 0,
       "cacheRead": 0
     },
+    "opencode/minimax-m3.1-flash-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
+    },
     "opencode/mistral-large-4": {
       "input": 0.68,
       "output": 2.09,
       "cacheRead": 0.07
+    },
+    "opencode/muse-ember-1.0": {
+      "input": 0.1,
+      "output": 0.5,
+      "cacheWrite": 0,
+      "cacheRead": 0.004
     },
     "opencode/muse-spark-1.2": {
       "input": 1.25,
@@ -1428,6 +1519,11 @@
       "input": 0,
       "output": 0,
       "cacheRead": 0
+    },
+    "opencode/muse-wonder-1.0": {
+      "input": 4,
+      "output": 20,
+      "cacheRead": 0.2
     },
     "opencode/nemotron-3-super-free": {
       "input": 0,
@@ -1452,6 +1548,11 @@
     "opencode/north-mini-code-free": {
       "input": 0,
       "output": 0
+    },
+    "opencode/pulse-alpha-free": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0
     },
     "opencode/qwen3-coder": {
       "input": 0.45,

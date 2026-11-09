@@ -59,7 +59,7 @@ Every value is a root token or a line named in PRESERVE.md §4, "Opening choreog
 `deriveModelEntries` is pure over `models.forHarness(harness, machineIds, accountId)`:
 
 1. Canonical ID is `resolvedModel ?? value`. Dedupe by ID, merging supported effort levels and release dates. Aliases collapse into canonical entries. The entry resolved by `default` carries the default tag.
-2. Names derive from canonical IDs. Route prefixes become provider metadata; strip `claude-`, title-case the family, join numeric version tokens with dots, and render `[1m]` as ` · 1M`. Examples: `claude-opus-5[1m]` becomes "Opus 5 · 1M"; `claude-fable-5-1` becomes "Fable 5.1"; `deepseek-v4-pro` becomes "DeepSeek V4 Pro".
+2. Names derive from canonical IDs. Route prefixes become provider metadata; strip `claude-`, title-case the family, join numeric version tokens with dots, and render `[1m]` as ` · 1M`. Examples: `claude-opus-5[1m]` becomes "Opus 5 · 1M"; `claude-fable-5-1` becomes "Fable 5.1"; `claude-fable-5-2` becomes "Fable 5.2"; `deepseek-v4-pro` becomes "DeepSeek V4 Pro".
 3. Group order: New since the last spawn; Recent by last-used descending; All by released descending with undated last; Typed remembered custom IDs. Record model use only when a session starts.
 4. One search matches name, canonical ID, aliases, and provider. An unmatched ID-shaped query is a selectable custom row; Enter selects it and remembers the ID.
 5. Submit the canonical ID after selection. Untouched model is `""` internally and omitted from the wire payload.

@@ -23,12 +23,18 @@ export const harnesses: FleetOffer["harnesses"] = [
       { id: "default", name: "Opus 5.5 (default)", default: true },
       { id: "opus", name: "Opus 5.5", default: false },
       {
+        id: "claude-fable-5-2[1m]",
+        name: "Fable 5.2 (1M context)",
+        default: false,
+      },
+      {
         id: "claude-fable-5-1[1m]",
         name: "Fable 5.1 (1M context)",
         default: false,
       },
       { id: "sonnet", name: "Sonnet 5.5", default: false },
       { id: "haiku", name: "Sonnet 5", default: false },
+      { id: "claude-fable-5-2", name: "Fable 5.2", default: false },
       { id: "claude-fable-5-1", name: "Fable 5.1", default: false },
       { id: "claude-opus-4-8", name: "Opus 4.8", default: false },
     ],
@@ -129,9 +135,9 @@ export const types: DelegateType[] = [
   {
     name: "advisor",
     description:
-      "Advisor on Fable 5.1: a second, stronger opinion on one question, returned as guidance you apply yourself. Use it when an approach is hard to reverse and the evidence leaves it open, or when the same error keeps recurring.",
+      "Advisor on Fable 5.2: a second, stronger opinion on one question, returned as guidance you apply yourself. Use it when an approach is hard to reverse and the evidence leaves it open, or when the same error keeps recurring.",
     harness: "claude",
-    model: "claude-fable-5-1",
+    model: "claude-fable-5-2",
     effort: "high",
     mayStart: [],
   },
