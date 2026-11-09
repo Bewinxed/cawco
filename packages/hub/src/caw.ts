@@ -93,7 +93,12 @@ import type { ProjectRow } from "./db/projects";
 import type { Origin } from "./db/schema";
 import { boardTitle } from "./labels";
 import { type McpTool, sentence, tool } from "./mcp-tool";
-import { AGENTS_FILE, personsTier, ROUTINE_ORIGIN } from "./memory";
+import {
+  AGENTS_FILE,
+  type Memory,
+  personsTier,
+  ROUTINE_ORIGIN,
+} from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import {
   folderReadWords,
@@ -581,12 +586,7 @@ export interface CawDeps {
    * and drawn at the call `toolUseId` (memory.ts `proposeType`): nothing is
    * committed until they approve it.
    */
-  readonly proposeType: (
-    actor: InstanceRow,
-    path: string,
-    content: string,
-    toolUseId: string | undefined
-  ) => Promise<{ id: string; path: string; waiting: string }>;
+  readonly proposeType: Memory["proposeType"];
   /**
    * Renames the project as the dashboard's rename does (project-edit.ts),
    * every client reading it again; answers the name as kept, or its
