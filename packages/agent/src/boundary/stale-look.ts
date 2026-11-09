@@ -29,10 +29,12 @@ import {
   forgetRetiring,
   forgetStale,
   forgetStubbed,
-  keptRunning,
-  retiring,
-  stale,
-  stubbed,
+  keptRunningOf,
+  markKeptRunning,
+  noteStubbedCommands,
+  retiringNow,
+  staleNow,
+  stubbedNow,
 } from "./staleness";
 import { start } from "./start";
 import {
@@ -115,16 +117,16 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
  */
 export const lookAtStale = async (): Promise<void> => {
   await handOverStale();
-  if (retiring.size > 0) {
+  if (retiringNow().length > 0) {
     await closeRetiring();
   }
-  if (stubbed.size > 0) {
+  if (stubbedNow().length > 0) {
     await restartStubbed();
   }
 };
 
 /**
- * Replaces each {@link stubbed} workspace's boundary when nothing runs in it:
+ * Replaces each staleness.ts `stubbed` workspace's boundary when nothing runs in it:
  * no older boundary beside it, no command past its gate, nothing in its
  * sandbox but what was there when its runner was ready. As a look at a kept
  * boundary does ({@link handOverStale}): one idle, or running commands alone,
@@ -144,7 +146,7 @@ const restartStubbed = async (): Promise<void> => {
   if (await ownKeeperOwed()) {
     return;
   }
-  for (const entry of [...stubbed.values()]) {
+  for (const entry of stubbedNow()) {
     const { ref } = entry;
     try {
       const held = await readHeld(ref.id);
@@ -165,7 +167,7 @@ const restartStubbed = async (): Promise<void> => {
       }
       const work = await workLeft(ref.id, held);
       if (work && !drainable(work, entry.commands)) {
-        entry.commands = work.commands;
+        noteStubbedCommands(entry, work.commands);
         continue;
       }
       // The wait is outside `starting`: an ensure under way meanwhile, a
@@ -173,7 +175,7 @@ const restartStubbed = async (): Promise<void> => {
       await behindGate(ref.id, async () => {
         const past = await commandsEnded(ref.id, held.gen);
         if (past.length > 0) {
-          entry.commands = past;
+          noteStubbedCommands(entry, past);
           return;
         }
         // Read again: what waited may have replaced it meanwhile.
@@ -191,7 +193,7 @@ const restartStubbed = async (): Promise<void> => {
         markStarting(ref.id, runs);
         const tried = await restart.finally(() => startEnded(ref.id));
         if ("kept" in tried) {
-          entry.commands = tried.kept.commands;
+          noteStubbedCommands(entry, tried.kept.commands);
         }
       });
     } catch (error) {
@@ -242,10 +244,10 @@ const restartIfIdle = (
  * waits for it, so its one handover lands on the keeper that stays.
  */
 const handOverStale = async (): Promise<void> => {
-  if (stale.size === 0 || (await ownKeeperOwed())) {
+  if (staleNow().length === 0 || (await ownKeeperOwed())) {
     return;
   }
-  for (const ref of [...stale.values()]) {
+  for (const ref of staleNow()) {
     if (isStarting(ref.id)) {
       continue;
     }
@@ -258,14 +260,14 @@ const handOverStale = async (): Promise<void> => {
       // One kept while its work runs (lifecycle.ts `replaceOlder`) is only looked
       // at, not ensured: an ensure is a use, and its quiet time must run.
       // A narrowing meanwhile is the narrowing look's ({@link recheckNarrowed}).
-      const kept = keptRunning.get(ref.id);
+      const kept = keptRunningOf(ref.id);
       if (!kept) {
         await ensureAgain(ref);
         continue;
       }
       const work = await workLeft(ref.id, held);
       if (work && !drainable(work, kept.commands)) {
-        keptRunning.set(ref.id, { ...kept, commands: work.commands });
+        markKeptRunning(ref.id, { ...kept, commands: work.commands });
         continue;
       }
       // Idle, or its commands alone, each new since the look before: a
@@ -279,7 +281,7 @@ const handOverStale = async (): Promise<void> => {
       await behindGate(ref.id, async () => {
         const past = await commandsEnded(ref.id, held.gen);
         if (past.length > 0) {
-          keptRunning.set(ref.id, { ...kept, commands: past });
+          markKeptRunning(ref.id, { ...kept, commands: past });
           return;
         }
         await ensureAgain(ref);
@@ -294,7 +296,7 @@ const handOverStale = async (): Promise<void> => {
 
 const closeRetiring = async (): Promise<void> => {
   const seen = await snapshot();
-  for (const id of [...retiring]) {
+  for (const id of retiringNow()) {
     if (isStarting(id)) {
       continue;
     }
