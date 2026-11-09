@@ -44,11 +44,8 @@
   import { nameOf } from "../accounts/model.svelte";
   import { movingTo, movingWords, stopWords } from "../accounts/switch.svelte";
   import {
-    holdDetails,
-    refreshContext,
     relaunchSession,
     settingFault,
-    showContext,
     submitCommand,
   } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
@@ -69,6 +66,11 @@
   import { accountsStore } from "../stores/accounts.svelte";
   import { boardStore, machineConnected } from "../stores/board.svelte";
   import { latestCommandFor } from "../stores/ledger.svelte";
+  import {
+    holdDetails,
+    refreshContext,
+    showContext,
+  } from "../stores/session-detail.svelte";
   import { sessionsStore } from "../stores/sessions.svelte";
   import { usageStore } from "../stores/usage.svelte";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
