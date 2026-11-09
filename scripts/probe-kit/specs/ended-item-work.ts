@@ -2,7 +2,7 @@
  * A workspace whose items have all ended runs nothing but what a landing
  * runs or an artifact shows (hub work-items.ts `endLeftWork`, agent
  * boundary.ts `endSessionWork`, `agentServerStarted`, stage.ts `start`; hub
- * server.ts `tellLeak`). On a scratch fleet (real hub, agent and sessiond;
+ * session-notes.ts `tellLeak`). On a scratch fleet (real hub, agent and sessiond;
  * Claude Code against the mock model), boundaries included: it delegates,
  * so it runs on the host, outside every workspace, on Linux and on macOS.
  * The agent's leak threshold is {@link THRESHOLD_GIB} GiB.
@@ -276,7 +276,7 @@ const serving = async (
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {
-      // The session's preview, on its own origin (hub server.ts `frameAddress`).
+      // The session's preview, on its own origin (hub artifact-pages.ts `frameAddress`).
       const listed = await fetchHub(
         fetch,
         fleet.base,

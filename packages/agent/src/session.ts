@@ -440,7 +440,7 @@ const shellCallsOf = (
  * from the launch it names (its `processGeneration`): a read of the account
  * (its catalog, its limits, its session's dir), or Claude Code's error in
  * the model's place, which the hub reads for a refusal of the account (hub
- * server.ts `settleRefusal`, which settles nothing for a frame naming no
+ * ask-routing.ts `settleRefusal`, which settles nothing for a frame naming no
  * launch). Without the error here, no refusal was ever settled: on
  * 2026-11-04 an account Anthropic refused (`oauth_org_not_allowed`) stayed
  * signed in, sessions were carried onto it, and a delegate's item failed.
