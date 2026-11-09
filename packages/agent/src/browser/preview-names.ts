@@ -17,8 +17,8 @@
  */
 import { readWithin } from "@cawco/core/bounded";
 import type { PreviewNames } from "@cawco/core/browser";
-import { hubRequest } from "@cawco/core/hub-request";
 import { delegationHubUrl } from "../delegation";
+import { hubClient, unwrap } from "../hub-client";
 import { provenFetch } from "../hub-proof";
 import type { Runtime } from "./runtime";
 
@@ -82,16 +82,10 @@ const loopback = (address: string): boolean =>
 const readNames = async (
   signal: AbortSignal
 ): Promise<{ loopback: boolean; names: PreviewNames["names"] }> => {
-  const answer = await provenFetch(
-    `${delegationHubUrl()}${hubRequest("GET /api/preview-names").path}`,
-    {
-      signal,
-    }
-  );
-  if (!answer.ok) {
-    throw new Error(`HTTP ${answer.status}`);
-  }
-  const { names } = (await answer.json()) as PreviewNames;
+  const answer = await hubClient(delegationHubUrl(), (url, init) =>
+    provenFetch(url, { ...init, signal })
+  ).api["preview-names"].get();
+  const { names } = unwrap(answer, ({ status }) => new Error(`HTTP ${status}`));
   if (!names) {
     return { names, loopback: false };
   }
