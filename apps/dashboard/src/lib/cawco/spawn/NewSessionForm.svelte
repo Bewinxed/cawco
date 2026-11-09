@@ -525,7 +525,7 @@
     models.forHarness(
       harness,
       machineIds,
-      traitsOf(harness).accountModel === "dir" ? placedAccount : undefined
+      traitsOf(harness).modelCatalog === "account" ? placedAccount : undefined
     )
   );
   /**
@@ -1438,7 +1438,7 @@
       machineId,
       harness,
       cwd: cwd.trim(),
-      account: traitsOf(harness).accountModel === "dir" ? placedAccount : null,
+      account: traitsOf(harness).accountDir ? placedAccount : null,
       model,
     };
     commands = [];

@@ -110,7 +110,7 @@ export const firstSpill = async (
   if (!first) {
     return;
   }
-  if (traitsOf(first.harness).accountModel !== "dir") {
+  if (!traitsOf(first.harness).accountDir) {
     return workspaceSpillDir(id, first.instanceId);
   }
   if (first.resume) {
