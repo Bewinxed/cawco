@@ -111,9 +111,9 @@ const answered = async <T>(work: () => T | Promise<T>) => {
 };
 
 const AGENT = t.Object({
-  harness: t.Union(HARNESSES.map((harness) => t.Literal(harness))),
+  harness: t.UnionEnum(HARNESSES),
   model: t.String({ minLength: 1 }),
-  effort: t.Optional(t.Union(EFFORT_LEVELS.map((level) => t.Literal(level)))),
+  effort: t.Optional(t.UnionEnum(EFFORT_LEVELS)),
   skills: t.Array(t.String()),
   instructions: t.String(),
   delegates: t.Boolean(),
@@ -127,7 +127,7 @@ interface AgentBody {
   model: string;
   skills: string[];
 }
-const HEAR = t.Union(HEARS.map((hear) => t.Literal(hear)));
+const HEAR = t.UnionEnum(HEARS);
 const HUE = t.Integer({ minimum: 1, maximum: 8 });
 
 /** The first of `ids` the fleet knows no member by, refused. */
@@ -464,7 +464,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
         {
           body: t.Union([
             t.Object({
-              pose: t.Union(CAW_POSE_IDS.map((pose) => t.Literal(pose))),
+              pose: t.UnionEnum(CAW_POSE_IDS),
             }),
             t.Object({ hue: HUE }),
           ]),
