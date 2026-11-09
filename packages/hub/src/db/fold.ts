@@ -1,3 +1,4 @@
+import { FOLD_DROPPED, FOLD_MOVED, idList } from "./owned-rows";
 /** Folding sessions into one: every kind of row a session owns moved onto the survivor. */
 
 import { CONTINUATION_ORIGIN } from "@cawco/core/harness/kinds";
@@ -23,54 +24,6 @@ interface FoldedSession {
   /** Sends that failed only because a process went away, pending again for the session now. */
   owedAgain: string[];
 }
-
-/**
- * Every table whose rows a former session's id names, by the column that
- * names it: what answered to it, what it ran, what it was sent and wrote.
- * Moved onto the session it is now; `once`: a table holding one row per
- * session, whose row the session already has keeps that one.
- */
-const FOLD_MOVED: readonly (readonly [string, string, "once"?])[] = [
-  ["instances", "parent_instance_id"],
-  ["instances", "continued_into"],
-  ["work_items", "instance_id"],
-  ["work_items", "parent_instance_id"],
-  ["queued_work_items", "parent_instance_id"],
-  ["queued_task_starts", "parent_instance_id"],
-  ["delegate_events", "instance_id"],
-  ["delegate_events", "parent_instance_id"],
-  ["workspaces", "created_by_instance_id"],
-  ["projects", "conversation_instance_id"],
-  ["project_notes", "instance_id"],
-  ["limit_events", "instance_id"],
-  ["turn_usage", "instance_id"],
-  ["artifacts", "instance_id"],
-  ["artifacts", "made_by"],
-  ["routines", "made_by"],
-  ["design_proposals", "instance_id"],
-  ["asks", "instance_id"],
-  ["session_lines", "instance_id"],
-  ["line_anchors", "instance_id"],
-  ["completed_turns", "instance_id", "once"],
-  ["session_plans", "instance_id", "once"],
-  ["project_offers", "instance_id", "once"],
-  ["fleet_watch_notices", "instance_id", "once"],
-];
-
-/** A former session's state of the moment, which the session it is now keeps its own of. */
-const FOLD_DROPPED = [
-  "limit_holds",
-  "limit_compactions",
-  "parked_asks",
-  "rule_state",
-  "moved_from_sessions",
-];
-
-const idList = (ids: readonly string[]) =>
-  sql.join(
-    ids.map((id) => sql`${id}`),
-    sql`, `
-  );
 
 export interface FoldDb {
   /**
@@ -257,7 +210,7 @@ export const foldDb = (core: DbCore): FoldDb => {
         envelope = CASE WHEN envelope IS NULL THEN NULL ELSE json_set(envelope, '$.instanceId', ${survivorId}, '$.machineId', ${survivor.machineId}, '$.payload.instanceId', ${survivorId}) END
         WHERE instance_id IN (${idList(gone)})`
     );
-    for (const [table, column, once] of FOLD_MOVED) {
+    for (const { table, column, fold } of FOLD_MOVED) {
       const name = sql.identifier(table);
       const by = sql.identifier(column);
       // A session nested under one of the former rows is the session's;
@@ -267,15 +220,15 @@ export const foldDb = (core: DbCore): FoldDb => {
       tx.run(
         sql`UPDATE OR IGNORE ${name} SET ${by} = ${survivorId} WHERE ${by} IN (${idList(gone)})${besides}`
       );
-      if (once) {
+      if (fold === "once") {
         tx.run(sql`DELETE FROM ${name} WHERE ${by} IN (${idList(gone)})`);
       }
     }
     // Its identity too: the session it is now holds its own.
     revokeIdentities(tx, gone);
-    for (const table of FOLD_DROPPED) {
+    for (const { table, column } of FOLD_DROPPED) {
       tx.run(
-        sql`DELETE FROM ${sql.identifier(table)} WHERE instance_id IN (${idList(gone)})`
+        sql`DELETE FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} IN (${idList(gone)})`
       );
     }
     // The session as it began: its parent, its work and its place, its
