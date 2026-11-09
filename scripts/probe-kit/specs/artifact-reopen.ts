@@ -16,7 +16,6 @@
  *    A's row opens the panel on A again.
  */
 import type { Page } from "playwright-core";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
@@ -100,11 +99,7 @@ const leg = async (
     )) as string;
   };
   const shownOnHub = async (id: string) =>
-    (
-      await fleet.api<{ shown: boolean }>(
-        hubRequest("GET /api/artifacts/:artifact", { path: { artifact: id } })
-      )
-    ).shown;
+    (await fleet.api((hub) => hub.api.artifacts({ artifact: id }).get())).shown;
 
   const page = await kit.page(view);
   // The panel's menu comes with the first artifact: the session's pane is the page's readiness.

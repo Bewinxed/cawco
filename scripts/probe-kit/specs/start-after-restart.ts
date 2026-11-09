@@ -37,7 +37,6 @@ import {
 } from "node:fs/promises";
 import { delimiter, join, resolve } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
   type Fleet,
@@ -107,7 +106,7 @@ const layOut = async (fleet: Fleet): Promise<string> => {
 
 /** The machine's row at the hub. */
 const rowOf = async (fleet: Fleet): Promise<AgentRow | undefined> =>
-  (await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))).find(
+  (await fleet.api((hub) => hub.api.agents.get())).find(
     (row) => row.machineId === MACHINE
   );
 

@@ -15,7 +15,6 @@ import type {
   BrowserKey,
   ListedBrowser,
 } from "../../packages/core/src/browser";
-import { hubRequest } from "../../packages/core/src/hub-request";
 import { until } from "../scratch-fleet";
 import type { KitFleet } from "./kit";
 
@@ -50,17 +49,12 @@ export const liveBrowser = async (
   machineId: string
 ): Promise<ListedBrowser | undefined> => {
   await fleet
-    .api<unknown>(
-      hubRequest("POST /api/browsers/:key/start", {
-        path: { key },
-        body: { machineId },
-      })
-    )
+    .api((hub) => hub.api.browsers({ key }).start.post({ machineId }))
     .catch(() => undefined);
   return await until(
     `${key} live`,
     async () =>
-      (await fleet.api<ListedBrowser[]>(hubRequest("GET /api/browsers"))).find(
+      (await fleet.api((hub) => hub.api.browsers.get())).find(
         (one) => one.key === key && one.machineId === machineId
       ),
     (row) => row?.state === "live" || row?.state === "failed",

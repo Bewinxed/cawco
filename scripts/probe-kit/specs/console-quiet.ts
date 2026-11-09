@@ -54,11 +54,10 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page, Response, WebSocketRoute } from "playwright-core";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { RECONNECTING_MS } from "../../../packages/core/src/handover";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { machineCalled } from "../../../packages/core/src/machine-names";
-import type { AgentRow } from "../../../packages/core/src/protocol";
 import { filesWords } from "../../../packages/core/src/words/files";
 import { machineFaultWords } from "../../../packages/core/src/words/machine-names";
 import { MACHINE, until } from "../../scratch-fleet";
@@ -335,9 +334,7 @@ const run = async (kit: Kit): Promise<void> => {
   );
 
   // c. Reloads while the turn streams.
-  const newest = hubRequest("GET /api/instances/:id/transcript", {
-    path: { id: busy },
-  }).path;
+  const newest = hubPath.api.instances({ id: busy }).transcript["~path"];
   for (let at = 1; at <= RELOADS; at += 1) {
     const streaming = fleet.instance(busy)?.status === "running";
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -479,19 +476,17 @@ const run = async (kit: Kit): Promise<void> => {
   await until(
     "the machine away",
     async () =>
-      (await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))).find(
+      (await fleet.api((hub) => hub.api.agents.get())).find(
         (row) => row.machineId === MACHINE
       )?.status,
     (status) => status !== "online",
     30_000
   );
   take(heard);
-  const stored = hubRequest("GET /api/instances/:id/transcript", {
-    path: { id: STORED },
-  }).path;
-  const attachments = hubRequest("GET /api/instances/:id/attachments", {
-    path: { id: STORED },
-  }).path;
+  const stored = hubPath.api.instances({ id: STORED }).transcript["~path"];
+  const attachments = hubPath.api.instances({ id: STORED }).attachments[
+    "~path"
+  ];
   // The hub's own answer for it, asked beside the page (not in its log).
   const hubSays = await page.request.get(`${base}${stored}`);
   await page.goto(
@@ -547,10 +542,7 @@ const run = async (kit: Kit): Promise<void> => {
   await page.locator(`${ATTACHMENTS_FAULT} [data-details]`).click();
   await settle(page, 400);
   const machineWords = machineFaultWords(
-    machineCalled(
-      MACHINE,
-      await fleet.api<AgentRow[]>(hubRequest("GET /api/agents"))
-    ),
+    machineCalled(MACHINE, await fleet.api((hub) => hub.api.agents.get())),
     "offline"
   );
   const faultSaid = (

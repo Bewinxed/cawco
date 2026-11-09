@@ -61,20 +61,20 @@
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { hubPath } from "../../../packages/agent/src/hub-client";
 import { setupPageAt } from "../../../packages/core/src/artifact-needs";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
-import {
-  hubRequest,
-  hubRequestAsGiven,
-  type Sending,
-  type ToolArgs,
-  type ToolName,
+import type {
+  Sending,
+  ToolArgs,
+  ToolName,
 } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, toolReply } from "../../tool-calls";
+import { payloadOf } from "../hub";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const WRITE = "mcp__cawco__folder_write";
@@ -150,22 +150,14 @@ interface StagesRead {
   source: string;
   stages: { name: string }[];
 }
-
-interface Pending {
-  payload?: { instanceId?: string; toolName?: string };
-  requestId?: string;
-}
-
 /** A project of its own and its session, which writes the setup page. */
 const projectWithSession = async (fleet: KitFleet, name: string) => {
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name,
-        machineId: MACHINE,
-        cwd: fleet.repo,
-        caw: false,
-      },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name,
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
     })
   );
   const session = await fleet.spawn("claude", name, fleet.repo, {
@@ -184,17 +176,15 @@ const projectWithSession = async (fleet: KitFleet, name: string) => {
       input: Sending<A, ToolArgs<N>>
     ) => toolWords(as, tool, input),
     stages: () =>
-      fleet.api<StagesRead>(
-        hubRequest("GET /api/projects/:id/stages", { path: { id: project.id } })
-      ),
+      fleet.api((hub) => hub.api.projects({ id: project.id }).stages.get()),
     /** The board's Set up: the hub's answer, its status and words. */
     setUp: async () => {
       try {
-        await fleet.api(
-          hubRequest("POST /api/projects/:id/decisions/:name/send", {
-            path: { id: project.id, name: "setup" },
-            body: {},
-          })
+        await fleet.api((hub) =>
+          hub.api
+            .projects({ id: project.id })
+            .decisions({ name: "setup" })
+            .send.post({})
         );
         return "200";
       } catch (error) {
@@ -245,12 +235,12 @@ const run = async (kit: Kit) => {
   });
   const parked = await until(
     "the question parked for the person",
-    () => fleet.api<Pending[]>(hubRequest("GET /api/pending")),
-    (list) => list.some((one) => one.payload?.instanceId === own.session),
+    () => fleet.api((hub) => hub.api.pending.get()),
+    (list) => list.some((one) => payloadOf(one).instanceId === own.session),
     60_000
   );
   const question = parked.find(
-    (one) => one.payload?.instanceId === own.session
+    (one) => payloadOf(one).instanceId === own.session
   );
   await fleet.post({
     type: "command",
@@ -276,8 +266,8 @@ const run = async (kit: Kit) => {
   });
   const answered = await until(
     "the answer off the person's list",
-    () => fleet.api<Pending[]>(hubRequest("GET /api/pending")),
-    (list) => !list.some((one) => one.payload?.instanceId === own.session),
+    () => fleet.api((hub) => hub.api.pending.get()),
+    (list) => !list.some((one) => payloadOf(one).instanceId === own.session),
     60_000
   ).then(
     () => true,
@@ -321,10 +311,8 @@ const run = async (kit: Kit) => {
   );
 
   // 3. Caw draws the page again after that Send; Set up again.
-  const page = await fleet.api<{ artifactId: string | null }>(
-    hubRequest("GET /api/projects/:id/decisions/:name", {
-      path: { id: own.id, name: "setup" },
-    })
+  const page = await fleet.api((hub) =>
+    hub.api.projects({ id: own.id }).decisions({ name: "setup" }).get()
   );
   const redrawn = await own.call("artifact_update", {
     id: page.artifactId ?? "",
@@ -380,11 +368,11 @@ const run = async (kit: Kit) => {
     () => "not stopped"
   );
   const handed = await fleet
-    .api<{ instanceId?: string; to: string }>(
-      hubRequest("POST /api/projects/:id/decisions/:name/send", {
-        path: { id: ended.id, name: "setup" },
-        body: {},
-      })
+    .api((hub) =>
+      hub.api
+        .projects({ id: ended.id })
+        .decisions({ name: "setup" })
+        .send.post({})
     )
     .catch((error: unknown) => ({
       to: error instanceof Error ? error.message : String(error),
@@ -425,26 +413,20 @@ const run = async (kit: Kit) => {
 
   // 6. New project with Caw: the answer before his start ends.
   const createdAt = Date.now();
-  const made6 = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        prompt: "Keep track of my flat hunt for next spring.",
-        promptId: crypto.randomUUID(),
-        caw: true,
-      },
+  const made6 = await fleet.api((hub) =>
+    hub.api.projects.post({
+      prompt: "Keep track of my flat hunt for next spring.",
+      promptId: crypto.randomUUID(),
+      caw: true,
     })
   );
   const answeredIn = Date.now() - createdAt;
-  const atAnswer = await fleet.api<{
-    instanceId: string | null;
-    starting?: boolean;
-  }>(hubRequest("GET /api/projects/:id/caw", { path: { id: made6.id } }));
+  const atAnswer = await fleet.api((hub) =>
+    hub.api.projects({ id: made6.id }).caw.get()
+  );
   const started = await until(
     "Caw's conversation started",
-    () =>
-      fleet.api<{ instanceId: string | null; starting?: boolean }>(
-        hubRequest("GET /api/projects/:id/caw", { path: { id: made6.id } })
-      ),
+    () => fleet.api((hub) => hub.api.projects({ id: made6.id }).caw.get()),
     (view) => view.instanceId !== null && view.starting === false,
     120_000
   ).catch(() => null);
@@ -499,26 +481,22 @@ const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
     ask: "Set up Private office",
     program: OFFICE,
   });
-  const row = await fleet.api<{ artifactId: string | null }>(
-    hubRequest("GET /api/projects/:id/decisions/:name", {
-      path: { id: office.id, name: "setup" },
-    })
+  const row = await fleet.api((hub) =>
+    hub.api.projects({ id: office.id }).decisions({ name: "setup" }).get()
   );
   const id = row.artifactId ?? "";
   const shown = await fleet
-    .api<{ opened: boolean; href?: string }>(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-        path: { id: office.session, artifact: id },
-        body: {},
-      })
+    .api((hub) =>
+      hub.api
+        .instances({ id: office.session })
+        .artifacts({ artifact: id })
+        .show.post({})
     )
     .catch((error: unknown) => ({
       opened: false,
       href: error instanceof Error ? error.message : String(error),
     }));
-  const needs = await fleet.api<{
-    needs: { artifactId: string; href: string }[];
-  }>(hubRequest("GET /api/artifact-needs"));
+  const needs = await fleet.api((hub) => hub.api["artifact-needs"].get());
   const rows = needs.needs.filter((one) => one.artifactId === id);
   kit.check(
     "8: a project's setup page opens in no panel: Caw's create answers that the board draws it, the person's show lands on the project's board, its Needs-you row leads to its first open card on the project's page",
@@ -638,18 +616,16 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
     ask: "Set up Private office",
     program: OFFICE,
   });
-  const row = await fleet.api<{ artifactId: string | null }>(
-    hubRequest("GET /api/projects/:id/decisions/:name", {
-      path: { id: office.id, name: "setup" },
-    })
+  const row = await fleet.api((hub) =>
+    hub.api.projects({ id: office.id }).decisions({ name: "setup" }).get()
   );
   const id = row.artifactId ?? "";
   const shown = await fleet
-    .api<{ opened: boolean; href?: string }>(
-      hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
-        path: { id: office.session, artifact: id },
-        body: { at: { card: "routines" } },
-      })
+    .api((hub) =>
+      hub.api
+        .instances({ id: office.session })
+        .artifacts({ artifact: id })
+        .show.post({ at: { card: "routines" } })
     )
     .catch((error: unknown) => ({
       opened: false,
@@ -660,12 +636,10 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
   // field (hub unknown-fields.ts), never answered as a show of the page's
   // top, as r487 was.
   const oldShape = await fleet
-    .api(
-      // Sent as given: the route's refusal is what this proves.
-      hubRequestAsGiven("POST /api/instances/:id/artifacts/:artifact/show", {
-        path: { id: office.session, artifact: id },
-        body: { card: "routines" },
-      })
+    .postGiven(
+      hubPath.api.instances({ id: office.session }).artifacts({ artifact: id })
+        .show["~path"],
+      { card: "routines" }
     )
     .then(
       (answer) => `answered ${JSON.stringify(answer)}`,
@@ -676,12 +650,11 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
     "9: the show refuses the card in the old shape with a 422 naming `card`, and takes it as `at: { card }`",
     oldShape.includes(": 422 ") &&
       oldShape.endsWith(hubFailureWords.unknownFields("body", ["card"])) &&
+      "href" in shown &&
       shown.href === atCard,
     JSON.stringify({ oldShape, shown })
   );
-  const needs = await fleet.api<{
-    needs: { artifactId: string; href: string }[];
-  }>(hubRequest("GET /api/artifact-needs"));
+  const needs = await fleet.api((hub) => hub.api["artifact-needs"].get());
   const rows = needs.needs.filter((one) => one.artifactId === id);
   kit.check(
     "9: a set-up project's setup page lands on its Decisions tab: Caw's create says so, a card chip's show lands at that card, and so does its Needs-you row",
@@ -706,7 +679,7 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
     const page = await kit.page(view);
     await open(
       page,
-      `${base}${shown.href ?? atCard}`,
+      `${base}${"href" in shown ? shown.href : atCard}`,
       '[data-slot="decisions"] iframe'
     );
     const card = await until(
@@ -757,13 +730,11 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
       }
     }).observe(document, { childList: true, subtree: true });
   });
-  const made = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        prompt: WORDS7,
-        promptId: crypto.randomUUID(),
-        caw: true,
-      },
+  const made = await fleet.api((hub) =>
+    hub.api.projects.post({
+      prompt: WORDS7,
+      promptId: crypto.randomUUID(),
+      caw: true,
     })
   );
   await open(page, `${base}/project/${made.id}`, '[data-slot="caw-seat"]');

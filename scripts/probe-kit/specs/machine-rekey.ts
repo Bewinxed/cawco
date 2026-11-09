@@ -24,9 +24,9 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { MACHINE, until } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const PHRASE = "rekey probe phrase";
@@ -35,24 +35,7 @@ const ASK = "SAY-THE-PHRASE";
 const REPLY = "The rekey probe's rule fired.";
 const RENAMED = "scratch-fleet-renamed";
 /** A turn's wait: room for a session's start on a host many fleets share. */
-const TURN_MS = 300_000;
-
-interface RuleRead {
-  id: string;
-  orphaned?: {
-    machineId: string;
-    name: string | null;
-    removedAt: number | null;
-  };
-  scope: { machineId?: string };
-}
-interface AgentRead {
-  hostname: string;
-  machineId: string;
-  status: string;
-}
-
-/** A person's message to a session on `machineId`, through the dashboard, as `fleet.send` sends one. */
+const TURN_MS = 300_000; /** A person's message to a session on `machineId`, through the dashboard, as `fleet.send` sends one. */
 const sendOn = (
   fleet: KitFleet,
   machineId: string,
@@ -92,34 +75,29 @@ async function run(kit: Kit): Promise<void> {
     await fleet.agentUp();
     await fleet.accountSignedIn();
 
-    const rule = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/rules", {
-        body: {
-          name: "Rekey probe rule",
-          enabled: true,
-          pattern: PHRASE,
-          matchKind: "phrase",
-          caseSensitive: false,
-          wholeWord: false,
-          watch: "text",
-          reply: REPLY,
-          timing: "turn",
-          repeat: true,
-          scope: { machineId: MACHINE },
-        },
+    const rule = await fleet.api((hub) =>
+      hub.api.rules.post({
+        name: "Rekey probe rule",
+        enabled: true,
+        pattern: PHRASE,
+        matchKind: "phrase",
+        caseSensitive: false,
+        wholeWord: false,
+        watch: "text",
+        reply: REPLY,
+        timing: "turn",
+        repeat: true,
+        scope: { machineId: MACHINE },
       })
     );
     const session = await fleet.spawn("claude", "Rekey probe");
     const fires = async () =>
       (
-        await fleet.api<{
-          activity: { instanceId: string; totalFires: number }[];
-        }>(hubRequest("GET /api/rules/:id/activity", { path: { id: rule.id } }))
+        await fleet.api((hub) => hub.api.rules({ id: rule.id }).activity.get())
       ).activity.find((one) => one.instanceId === session)?.totalFires ?? 0;
     const rules = async () =>
-      (await fleet.api<{ rules: RuleRead[] }>(hubRequest("GET /api/rules")))
-        .rules;
-    const agents = () => fleet.api<AgentRead[]>(hubRequest("GET /api/agents"));
+      (await fleet.api((hub) => hub.api.rules.get())).rules;
+    const agents = () => fleet.api((hub) => hub.api.agents.get());
     /** How many requests the model has had whose words hold `words`. */
     const heard = (words: string) =>
       fleet.seen.filter((one) => one.last.includes(words)).length;
@@ -211,15 +189,10 @@ async function run(kit: Kit): Promise<void> {
       "the machine removed once its agent is away",
       async () => {
         const read = await readWithin(30_000, async (signal) => {
-          const response = await fetchHub(
-            fetch,
-            fleet.base,
-            hubRequest("DELETE /api/agents/:machineId", {
-              path: { machineId: RENAMED },
-            }),
-            { signal }
-          );
-          return response.ok ? await response.text() : undefined;
+          const response = await hubAt(fleet.base, { signal })
+            .api.agents({ machineId: RENAMED })
+            .delete();
+          return response.error === null ? answerText(response) : undefined;
         });
         switch (read.kind) {
           case "answered":

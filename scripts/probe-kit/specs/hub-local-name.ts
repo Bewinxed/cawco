@@ -74,13 +74,14 @@ import { networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
 import makeMdns from "multicast-dns";
 import { browseMdns } from "../../../packages/agent/src/discovery";
+import { dataOf, hubPath } from "../../../packages/agent/src/hub-client";
 import { currentExecutable } from "../../../packages/core/src/binary-installation";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { reachableLinks } from "../../../packages/core/src/reachable-links";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
 import { leasePortRange, until } from "../../scratch-fleet";
+import { hubAt } from "../hub";
 import type { Kit, Spec } from "../kit";
 import { type LaunchAgents, launchAgents, RESULT_MARK } from "../launch-agent";
 
@@ -223,7 +224,7 @@ const askFromLan = async (
   mdns.destroy();
   const at = [...heard].find((address) => !address.includes(":"));
   const said = at
-    ? await Bun.$`curl -s --noproxy ${"*"} --interface ${from} --resolve ${`${name}:${port}:${at}`} --retry 5 --retry-connrefused --retry-delay 1 ${`http://${name}:${port}${hubRequest("GET /health").path}`}`
+    ? await Bun.$`curl -s --noproxy ${"*"} --interface ${from} --resolve ${`${name}:${port}:${at}`} --retry 5 --retry-connrefused --retry-delay 1 ${`http://${name}:${port}${hubPath.health["~path"]}`}`
         .nothrow()
         .text()
     : "";
@@ -427,11 +428,9 @@ const localNameRead = async (
   dashboardPort: string
 ): Promise<string> => {
   const url = `http://${name}:${dashboardPort}`;
-  const read = (await fetchHub(
-    fetch,
-    base,
-    hubRequest("GET /api/local-name")
-  ).then((r) => r.json())) as Record<string, unknown>;
+  const read = (await hubAt(base)
+    .api["local-name"].get()
+    .then((r) => dataOf(r))) as Record<string, unknown>;
   kit.check(
     `6: /api/local-name on ${base} says ${name} is held, the dashboard at ${url}, and carries no command`,
     read.state === "held" &&
@@ -611,9 +610,9 @@ const heldBy = (base: string) =>
     `${base} holding its .local name`,
     async () =>
       (
-        (await fetchHub(fetch, base, hubRequest("GET /health")).then((r) =>
-          r.json()
-        )) as Health
+        (await hubAt(base)
+          .health.get()
+          .then((r) => dataOf(r))) as Health
       ).localName ?? undefined,
     (name) => HELD.test(name),
     60_000
@@ -660,9 +659,9 @@ const nameChecks = async (
     const port = Number(new URL(base).port);
     const answered = await asker.ask<string>({ name, type: "A" }, "A");
     const listed = (
-      (await fetchHub(fetch, base, hubRequest("GET /api/join")).then((r) =>
-        r.json()
-      )) as {
+      (await hubAt(base)
+        .api.join.get()
+        .then((r) => dataOf(r))) as {
         addresses: { label: string; url: string }[];
       }
     ).addresses;
@@ -768,7 +767,7 @@ const macLegs = async (
     if (!(await grantLeg(kit, agents, bundle))) {
       return;
     }
-    const hubAt = async (n: number): Promise<Held> => {
+    const startHub = async (n: number): Promise<Held> => {
       const leased = await ports();
       await agents.start(`hub-${n}`, [bundle, "hub"], {
         ...fleet.env,
@@ -780,9 +779,9 @@ const macLegs = async (
       return { base, name: await heldBy(base) };
     };
     // 1. The first hub holds a name; 2. a second takes the next.
-    const first = await hubAt(1);
+    const first = await startHub(1);
     kit.note(`the first hub (CawCo Agent) holds ${first.name}`);
-    const next = await hubAt(2);
+    const next = await startHub(2);
     await nameChecks(kit, asker, [first, next]);
     // 6. Each hub's name with the dashboard's port, and no command.
     for (const hub of [first, next]) {

@@ -15,7 +15,6 @@
  *
  *   bun scripts/probe-kit/run.ts proposal-closes-item-ended
  */
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { askWords } from "../../../packages/core/src/words/asks";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
 import { toolWords } from "../../lib/tool-call";
@@ -26,7 +25,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, open, type Spec } from "../kit";
+import { delegateStarted, type Kit, open, type Spec } from "../kit";
 import {
   commitDesign,
   leaves,
@@ -54,21 +53,19 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const base = await fleet.dashboard();
-  await fleet.api(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Scouting",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-        caw: false,
-      },
+  await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: "Scouting",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
     })
   );
   await commitDesign(fleet.repo);
   const steward = await fleet.spawn("claude", "Item steward", fleet.repo);
-  const delegate = await fleet.api<{ instanceId: string }>(
-    hubRequest("POST /api/work-items", {
-      body: {
+  const delegate = delegateStarted(
+    await fleet.api((hub) =>
+      hub.api["work-items"].post({
         parentInstanceId: steward,
         title: "Item designer",
         prompt: `${SLOW}: work on.`,
@@ -76,8 +73,8 @@ const run = async (kit: Kit): Promise<void> => {
         model: MODEL.claude,
         cwd: fleet.repo,
         lands: "none",
-      },
-    })
+      })
+    )
   );
   await until(
     "the item's designer running",

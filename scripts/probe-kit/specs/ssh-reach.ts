@@ -119,8 +119,8 @@ import {
 } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { dataOf, hubPath } from "../../../packages/agent/src/hub-client";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import type { SshJoinJob } from "../../../packages/core/src/join";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import {
@@ -130,7 +130,6 @@ import {
   signal,
   spawnedPid,
 } from "../../../packages/core/src/signal";
-import type { RelayAnswer } from "../../../packages/core/src/stream-relay";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import {
@@ -138,6 +137,7 @@ import {
   systemProgram,
 } from "../../../packages/core/src/workspace-needs";
 import { ACCOUNT, until } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { machineBin } from "../ssh-target";
 
@@ -663,9 +663,7 @@ async function standUp(
 /** What the legs read and check with: the hub's adds, the machine's row, the records, the hub's connections. */
 const readers = (kit: Kit, fleet: KitFleet, box: Box) => {
   const read = (id: string) =>
-    fleet.api<SshJoinJob>(
-      hubRequest("GET /api/machines/ssh/:id", { path: { id } })
-    );
+    fleet.api((hub) => hub.api.machines.ssh({ id }).get());
   return {
     /** A leg's check; a failed one keeps every log it is read by, there and then. */
     check: async (name: string, ok: boolean, detail: string) => {
@@ -675,13 +673,11 @@ const readers = (kit: Kit, fleet: KitFleet, box: Box) => {
       }
     },
     add: async (target: string, sshPort: number, password?: string) => {
-      const started = await fleet.api<SshJoinJob>(
-        hubRequest("POST /api/machines/ssh", {
-          body: {
-            target,
-            port: sshPort,
-            ...(password === undefined ? {} : { password }),
-          },
+      const started = await fleet.api((hub) =>
+        hub.api.machines.ssh.post({
+          target,
+          port: sshPort,
+          ...(password === undefined ? {} : { password }),
         })
       );
       return until(
@@ -692,19 +688,16 @@ const readers = (kit: Kit, fleet: KitFleet, box: Box) => {
       ).catch(() => read(started.id));
     },
     status: () =>
-      fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("GET /api/agents/:machineId", { path: { machineId: BOX } })
-      )
-        .then((r) => (r.ok ? r.json() : null))
+      hubAt(fleet.base)
+        .api.agents({ machineId: BOX })
+        .get()
+        .then((r) => (r.error === null ? dataOf(r) : null))
         .then((row: { status?: string } | null) => row?.status ?? "absent"),
     /** The machines held for the person, as the dashboard's Admit rows read them. */
     waiting: () =>
-      fetchHub(fetch, fleet.base, hubRequest("GET /api/machines/waiting")).then(
-        (r) =>
-          r.json() as Promise<{ address: string | null; machineId: string }[]>
-      ),
+      hubAt(fleet.base)
+        .api.machines.waiting.get()
+        .then((r) => dataOf(r)),
     rows: () =>
       fleet.query<{
         box_port: number | null;
@@ -742,11 +735,9 @@ async function joins(
     join(box.dir, "reach-github.txt"),
     "utf8"
   ).trim();
-  const here = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("GET /health")
-  ).then((r) => r.ok);
+  const here = await hubAt(fleet.base)
+    .health.get()
+    .then((r) => r.error === null);
   await check(
     `a: from the box nothing answers on the hub's address (127.0.0.1:${box.hubPort}) nor on GitHub; here the hub answers there`,
     here && !fromBox.endsWith(" exit 0") && !outward.endsWith(" exit 0"),
@@ -828,8 +819,9 @@ async function sessionStarts(
   { check }: Readers,
   port: number
 ): Promise<void> {
-  const hubId = await fetchHub(fetch, fleet.base, hubRequest("GET /health"))
-    .then((r) => r.json() as Promise<{ hubId?: string }>)
+  const hubId = await hubAt(fleet.base)
+    .health.get()
+    .then((r) => dataOf(r))
     .then((body) => body.hubId ?? "");
   const configFile = join(box.home, ".config", "cawco", "config.json");
   const config = existsSync(configFile)
@@ -1032,13 +1024,10 @@ async function refusalEnds(
     Boolean,
     30_000
   ).catch(() => false);
-  const refused = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/machines/waiting/:machineId/refuse", {
-      path: { machineId: BOX },
-    })
-  ).then((r) => r.status);
+  const refused = await hubAt(fleet.base)
+    .api.machines.waiting({ machineId: BOX })
+    .refuse.post()
+    .then((r) => r.status);
   const ended = await waitingRun;
   const kept = join(box.home, ".config", "cawco", "admission-refused.json");
   const stored = existsSync(kept) ? readFileSync(kept, "utf8") : "";
@@ -1138,8 +1127,9 @@ async function refusedReAdd(
 const relayChoice = (
   fleet: KitFleet
 ): Promise<{ candidates: number; machine: unknown } | undefined> =>
-  fetchHub(fetch, fleet.base, hubRequest("GET /api/stream-relay"))
-    .then((r) => r.json() as Promise<Partial<RelayAnswer>>)
+  hubAt(fleet.base)
+    .api["stream-relay"].get()
+    .then((r) => dataOf(r))
     .then((answer) =>
       answer.journey
         ? {
@@ -1209,13 +1199,10 @@ async function strangerHeld(
   ).catch(() => waiting());
   const row = held.find((one) => one.machineId === STRANGER);
   const refused = row
-    ? await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/machines/waiting/:machineId/refuse", {
-          path: { machineId: STRANGER },
-        })
-      ).then((r) => r.status)
+    ? await hubAt(fleet.base)
+        .api.machines.waiting({ machineId: STRANGER })
+        .refuse.post()
+        .then((r) => r.status)
     : 0;
   const heard = await knocking;
   const words = heard.out.split("\n");
@@ -1534,23 +1521,19 @@ async function credentials(
   const sha = createHash("sha256").update(bytes).digest("hex");
   // Its bytes as they are, which no JSON body holds: the route reads the
   // request whole.
-  const stored = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/files"),
-    {
-      headers: {
-        "content-type": "application/octet-stream",
-        "x-file-name": "ssh-reach.txt",
-      },
-      body: bytes,
-    }
-  ).then((r) => r.json() as Promise<{ ref?: string }>);
+  const stored = await fetch(`${fleet.base}${hubPath.api.files["~path"]}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-file-name": "ssh-reach.txt",
+    },
+    body: bytes,
+  }).then((response) => response.json() as Promise<{ ref: string }>);
   const via = `http://127.0.0.1:${port}`;
   const code = (path: string) =>
     box.enter(OPEN, `curl -s -o /dev/null -w "%{http_code}" ${via}${path}`);
-  const file = hubRequest("GET /api/files/:hash", { path: { hash: sha } }).path;
-  const owner = await code(hubRequest("GET /api/agents").path);
+  const file = hubPath.api.files({ hash: sha })["~path"];
+  const owner = await code(hubPath.api.agents["~path"]);
   const fileBare = await code(file);
   const fileKeyed = await box.enter(
     OPEN,
@@ -1566,12 +1549,12 @@ async function credentials(
   );
 
   // A project on the hub's remote, cloned and pushed to from the box.
-  const project = await fleet.api<{ id?: string; project?: { id?: string } }>(
-    hubRequest("POST /api/projects", {
-      body: { name: `ssh-reach ${crypto.randomUUID().slice(0, 8)}` },
+  const project = await fleet.api((hub) =>
+    hub.api.projects.post({
+      name: `ssh-reach ${crypto.randomUUID().slice(0, 8)}`,
     })
   );
-  const id = project.project?.id ?? project.id ?? "";
+  const { id } = project;
   const bare = join(dirname(fleet.env.CAWCO_DB_PATH ?? ""), "git", `${id}.git`);
   if (!existsSync(bare)) {
     mkdirSync(dirname(bare), { recursive: true });
@@ -1673,13 +1656,10 @@ async function removeUnlisted(
   { check }: Readers
 ): Promise<void> {
   const remove = () =>
-    fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("DELETE /api/agents/:machineId", {
-        path: { machineId: STRANGER },
-      })
-    ).then(async (r) => `${r.status} ${await r.text()}`);
+    hubAt(fleet.base)
+      .api.agents({ machineId: STRANGER })
+      .delete()
+      .then(async (r) => `${r.status} ${answerText(r)}`);
   const first = await remove();
   const second = await remove();
   await check(
@@ -1861,9 +1841,7 @@ async function run(kit: Kit): Promise<void> {
   // The probe's account, filed before the box's agent reports it signed in.
   fleet.fileAccount();
   const offer = await fleet
-    .api<{ manifest?: { version?: string } }>(
-      hubRequest("GET /api/binary-updates/latest")
-    )
+    .api((hub) => hub.api["binary-updates"].latest.get())
     .then(
       (answer) => ({ version: answer.manifest?.version ?? "", error: "" }),
       (error: Error) => ({ version: "", error: error.message })

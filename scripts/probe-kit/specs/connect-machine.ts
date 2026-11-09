@@ -96,11 +96,7 @@ import {
 import { join } from "node:path";
 import type { Page, Request } from "playwright-core";
 import type { AuthContext } from "ssh2";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
-import type {
-  InstallSignIn,
-  InstallsRead,
-} from "../../../packages/core/src/install";
+import type { InstallSignIn } from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { connectWords } from "../../../packages/core/src/words/connect";
@@ -108,6 +104,7 @@ import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
+import { hubAt } from "../hub";
 import {
   handOn,
   type Kit,
@@ -223,7 +220,7 @@ async function settled(
 }
 
 const installs = (fleet: KitFleet) =>
-  fleet.api<InstallsRead>(hubRequest("GET /api/installs"));
+  fleet.api((client) => client.api.installs.get());
 
 /** This spec's own place in the hub's order of draft edits (core DraftStamp): another device's. */
 let probeSeq = Date.now();
@@ -240,16 +237,10 @@ const editDraft = (
   }>
 ) => {
   probeSeq += 1;
-  return fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PATCH /api/installs/draft", {
-      body: {
-        stamp: { page: "probe-kit", seq: probeSeq },
-        draft,
-      },
-    })
-  );
+  return hubAt(fleet.base).api.installs.draft.patch({
+    stamp: { page: "probe-kit", seq: probeSeq },
+    draft,
+  });
 };
 
 /** The hub's draft, set whole as Reach would leave it. */
@@ -274,17 +265,9 @@ const setDraft = (
 async function clearInstalls(fleet: KitFleet): Promise<void> {
   for (const one of (await installs(fleet)).installs) {
     if (one.state === "running") {
-      await fetchHub(
-        fetch,
-        fleet.base,
-        hubRequest("POST /api/installs/:id/stop", { path: { id: one.id } })
-      );
+      await hubAt(fleet.base).api.installs({ id: one.id }).stop.post();
     }
-    await fetchHub(
-      fetch,
-      fleet.base,
-      hubRequest("DELETE /api/installs/:id", { path: { id: one.id } })
-    );
+    await hubAt(fleet.base).api.installs({ id: one.id }).delete();
   }
 }
 
@@ -486,10 +469,8 @@ async function run(kit: Kit): Promise<void> {
     /** Starts an SSH install held at its fetch, as Add machine does, and answers its id. */
     const startHeld = async (): Promise<string> => {
       holdOn();
-      const started = await fleet.api<{ install: { id: string } }>(
-        hubRequest("POST /api/installs", {
-          body: { route: "ssh", target, port, signIn: "key" },
-        })
+      const started = await fleet.api((client) =>
+        client.api.installs.post({ route: "ssh", target, port, signIn: "key" })
       );
       await until(
         "the install held at its fetch",
@@ -1389,16 +1370,8 @@ async function walk(
   // which no release ends: it is stopped and goes, and the same machine is
   // added again with no hold, from the window, so the installer runs to its
   // first failing check (no `tar` on the machine).
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/installs/:id/stop", { path: { id } })
-  );
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("DELETE /api/installs/:id", { path: { id } })
-  );
+  await hubAt(fleet.base).api.installs({ id }).stop.post();
+  await hubAt(fleet.base).api.installs({ id }).delete();
   options.holdOff();
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
@@ -1425,14 +1398,12 @@ async function walk(
   } else {
     // A phone's band is its navigation sheet: the failure lands, its row
     // says so there, and a press on the row opens the drawer on it.
-    const started = await fleet.api<{ install: { id: string } }>(
-      hubRequest("POST /api/installs", {
-        body: {
-          route: "ssh",
-          target: options.target,
-          port: options.port,
-          signIn: "key",
-        },
+    const started = await fleet.api((client) =>
+      client.api.installs.post({
+        route: "ssh",
+        target: options.target,
+        port: options.port,
+        signIn: "key",
       })
     );
     failedId = started.install.id;
@@ -1718,16 +1689,11 @@ async function walk(
     (r) => r.text()
   );
   const afterFetch = await stepsOf();
-  const machines = await fleet.api<{ machineId: string }[]>(
-    hubRequest("GET /api/agents")
-  );
+  const machines = await fleet.api((client) => client.api.agents.get());
   const machineId = machines[0]?.machineId ?? "";
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("GET /api/agents/:machineId", { path: { machineId } }),
-    { headers: { "x-cawco-install-code": code } }
-  );
+  await hubAt(fleet.base, { headers: { "x-cawco-install-code": code } })
+    .api.agents({ machineId })
+    .get();
   const joined = await settled(page, "outcome", "is in the fleet");
   note("joined", joined);
   const afterJoin = (await installs(fleet)).installs.find(
@@ -1761,18 +1727,11 @@ async function walk(
     r.text()
   );
   // What the installer's end says when its check for tar fails (core install-script.ts).
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("POST /api/installs/code/:code/ended", {
-      path: { code: checkCode },
-      body: {
-        status: 1,
-        said: "tar is needed to unpack the build. Install it with the machine's package manager, then run this again.",
-        host: "build-01",
-      },
-    })
-  );
+  await hubAt(fleet.base).api.installs.code({ code: checkCode }).ended.post({
+    status: 1,
+    said: "tar is needed to unpack the build. Install it with the machine's package manager, then run this again.",
+    host: "build-01",
+  });
   const checkFailed = await settled(
     page,
     "outcome",
@@ -1795,11 +1754,7 @@ async function walk(
       checkRow.startsWith("Failed at Installing on it · it lacks tar"),
     `step ${checkInstall?.problemStep}; row ${checkRow}; window ${checkFailed.text.slice(0, 120)}`
   );
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("DELETE /api/installs/:id", { path: { id: checkId } })
-  );
+  await hubAt(fleet.base).api.installs({ id: checkId }).delete();
   await page.waitForFunction((sel) => !document.querySelector(sel), WINDOW, {
     timeout: 10_000,
   });
@@ -1850,15 +1805,13 @@ async function refusedForward(
   options: { port: number; pushes: Phone; target: string }
 ): Promise<void> {
   await clearInstalls(fleet);
-  const started = await fleet.api<{ install: { id: string } }>(
-    hubRequest("POST /api/installs", {
-      body: {
-        route: "ssh",
-        target: options.target,
-        port: options.port,
-        signIn: "password",
-        password: PASSWORD,
-      },
+  const started = await fleet.api((client) =>
+    client.api.installs.post({
+      route: "ssh",
+      target: options.target,
+      port: options.port,
+      signIn: "password",
+      password: PASSWORD,
     })
   );
   const { id } = started.install;
@@ -1896,11 +1849,7 @@ async function refusedForward(
       "Failed at Opening its path to the hub · its SSH server won't forward",
     JSON.stringify(alerts)
   );
-  await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("DELETE /api/installs/:id", { path: { id } })
-  );
+  await hubAt(fleet.base).api.installs({ id }).delete();
   await page.close();
 }
 
