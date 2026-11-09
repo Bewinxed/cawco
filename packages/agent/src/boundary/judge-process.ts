@@ -26,14 +26,14 @@ import {
 } from "./hook-judge";
 import { JUDGE_PROTOCOL_FILE, JUDGE_READY, judgeArgv } from "./protocol";
 import {
-  closing,
   type Held,
   holding,
+  isClosing,
+  isStarting,
   readHeld,
   refusal,
   sessiond,
   sessiondPath,
-  starting,
   stateDir,
   writeWhole,
 } from "./state";
@@ -75,8 +75,8 @@ const watchedJudges = new Map<string, SessiondClient>();
  * its boundary starting or closing, its hook being armed, its judge starting.
  */
 export const settling = (id: string): boolean =>
-  starting.has(id) ||
-  closing.has(id) ||
+  isStarting(id) ||
+  isClosing(id) ||
   arming.has(id) ||
   [...judging.keys()].some((procId) => isJudgeOf(procId, id));
 
