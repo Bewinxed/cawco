@@ -726,7 +726,7 @@ suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/co
 suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/components/ui/input-group/input-group.svelte	1
 suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/platform/motion/Rail.svelte	1
 suppression	biome-ignore lint/a11y/useValidAnchor	apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-sub-button.svelte	1
-suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/client.svelte.ts	2
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/client.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/connect/words.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/deck.svelte.ts	1
