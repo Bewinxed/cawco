@@ -780,14 +780,14 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
   };
 
   return {
-    awaitsSend,
-    diedOnSignal,
-    goneWithProcess,
     keepTasks,
+    noteWithdrawn,
+    goneWithProcess,
+    awaitsSend,
+    resumeCutTurn,
+    processFailed,
+    diedOnSignal,
     noteFreshStart,
     noteMachineLine,
-    noteWithdrawn,
-    processFailed,
-    resumeCutTurn,
   };
 };
