@@ -38,7 +38,7 @@ import type {
   Revised,
   Settled,
   Shown,
-} from "../artifacts/service";
+} from "../artifacts/shapes";
 import type { Picture, Presented } from "../mcp-tool";
 import {
   ago,
