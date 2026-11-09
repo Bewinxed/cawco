@@ -1,7 +1,6 @@
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import type {
-  FleetAgent,
   FleetPlugin,
   FleetSkillMeta,
   FleetVersioned,
@@ -470,33 +469,6 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
   };
 
   /** A definition changed: every machine that is online takes it now. */
-  /**
-   * Why a write naming `expectedHash` may not land on subagent `name`: the
-   * stored file when it moved since that read or when "" asked for a new one
-   * under a taken name (409), a sentence when the read file is gone (404).
-   * Undefined when it may, or when no hash was named (the dashboard's save).
-   */
-  const agentMoved = (
-    name: string,
-    expectedHash: string | undefined
-  ):
-    | { answer: FleetAgent; status: 409 }
-    | { answer: string; status: 404 }
-    | undefined => {
-    if (expectedHash === undefined) {
-      return;
-    }
-    const current = ctx.db.listFleetAgents().find((row) => row.name === name);
-    if (!current) {
-      return expectedHash === ""
-        ? undefined
-        : { status: 404, answer: `the fleet keeps no subagent ${name}` };
-    }
-    return current.hash === expectedHash
-      ? undefined
-      : { status: 409, answer: current };
-  };
-
   const fanOutAgents = (): void => {
     for (const machineId of ctx.registry.machineIds()) {
       detach(pushAgents(machineId), "agent push");
@@ -1234,7 +1206,6 @@ export const createFleetSources = (ctx: FleetSourcesContext) => {
     callFs,
     readMachineMedia,
     pushAgents,
-    agentMoved,
     fanOutAgents,
     fleetChanged,
     skillChoices,
