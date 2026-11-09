@@ -35,7 +35,8 @@ import { folderSync } from "../layer";
 import { toolDoorOf } from "../tool-door";
 import { execScript } from "./exec";
 import { bunRuntime } from "./hook-judge";
-import { guardFiles, PLACE_ENV, placeGuard } from "./place-guard";
+import { guardFiles, placeGuard } from "./place-guard";
+import { HOST_ENV, hostArgv } from "./protocol";
 import {
   bwrapLauncherOf,
   containerSockets,
@@ -302,7 +303,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         cwd: policy.clone,
         env: {
           TMPDIR: workspaceTmpDir(id),
-          ...(isPlace(id) ? { [PLACE_ENV]: "1" } : {}),
+          ...(isPlace(id) ? { [HOST_ENV.place]: "1" } : {}),
         },
       },
     };
@@ -366,13 +367,15 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       command: runtime,
       args: [
         host,
-        files.settings,
-        files.runner,
-        fifoOf(id, gen),
-        policy.clone,
-        READY,
-        files.denies,
-        ...runtimePlaces(id, [...policy.allowRead, srtTmp]),
+        ...hostArgv({
+          settingsFile: files.settings,
+          runnerFile: files.runner,
+          fifo: fifoOf(id, gen),
+          clone: policy.clone,
+          readyLine: READY,
+          deniesFile: files.denies,
+          places: runtimePlaces(id, [...policy.allowRead, srtTmp]),
+        }),
       ],
       // The host starts here, never in the clone: Bun reads bunfig.toml and
       // .env from where it starts (boundary-host.ts). It names its sandbox
@@ -395,11 +398,11 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         // place's scratch dir, never in the place (boundary-host.ts); and
         // what each command leaves running goes with it (`runnerText`).
         ...(place
-          ? { CAWCO_SANDBOX_CWD: policy.scratch, [PLACE_ENV]: "1" }
+          ? { [HOST_ENV.sandboxCwd]: policy.scratch, [HOST_ENV.place]: "1" }
           : {}),
         // A delegate's copy of a folder that is no repository: the host
         // holds it as a folder, never asking it for a `.git` (layer.ts).
-        ...(folderSync(id) ? { CAWCO_FOLDER: "1" } : {}),
+        ...(folderSync(id) ? { [HOST_ENV.folder]: "1" } : {}),
       },
     },
   };
