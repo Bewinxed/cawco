@@ -445,7 +445,7 @@ const recordOf = (
 
 export const forgetDb = (
   db: BunSQLiteDatabase,
-  /** db index.ts `dropArtifacts`: the one way an artifact row goes, which tells its listeners. */
+  /** db artifacts.ts `artifactEvents`'s `dropArtifacts`: the one way an artifact row goes, which tells its listeners. */
   dropArtifacts: (tx: Deleter, where: SQL | undefined) => void
 ): ForgetDb => ({
   forget: (id, keep) =>
