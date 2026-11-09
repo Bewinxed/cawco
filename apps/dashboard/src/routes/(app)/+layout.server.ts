@@ -13,7 +13,6 @@ import type {
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import { servedBoardOf } from "#lib/cawco/first-paint.js";
 import { askOpens, landingOf, type Wait } from "#lib/cawco/landing.js";
-import { clampRail } from "#lib/cawco/rail.js";
 import type { Area, ServedBoard } from "#lib/cawco/served-board.js";
 import { routedToParent } from "#lib/cawco/transcript/present.js";
 import {
@@ -36,6 +35,7 @@ import {
 import { parseFoldBoxes } from "#lib/components/ui/fluid-tabs/fold-memory.js";
 import { type HubRead, readHub } from "#lib/platform/hub-read.js";
 import {
+  clampRail,
   FOLD_BOXES_PREF,
   KEPT,
   NARROW_PREF,
