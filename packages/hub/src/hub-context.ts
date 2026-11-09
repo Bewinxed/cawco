@@ -58,6 +58,7 @@ import type {
 } from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
 import type {
+  EndedTask,
   GitChanges,
   MoveEnded,
   WorkInFlight,
@@ -181,8 +182,16 @@ export interface HubContext {
   }) => string | undefined;
   askerOf: (request: Request) => string;
   askersOf: (row: InstanceRow | undefined) => string[];
+  asRead: (answer: Bounded<ControlResult>) => Bounded<ControlResult>;
   atLimit: ReturnType<typeof createAtLimit>;
   autoInstall: (machineId: string, agent: HubSocket) => void;
+  awaitReply: (
+    machineId: string,
+    requestId: string,
+    timeoutMs: number,
+    send: () => Envelope | undefined,
+    letGo?: AbortSignal
+  ) => Promise<Bounded<ControlResult>>;
   /** Sends a hub frame to every dashboard. */
   awayAnswer: <Answer>(
     set: RouteSet,
@@ -258,6 +267,7 @@ export interface HubContext {
   ) => Promise<string | undefined>;
   createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade>;
   credentialTurns: Set<string>;
+  cutTasksWords: (how: string, cut: readonly EndedTask[]) => string;
   db: DbShape;
   delegatedAttempt: ({
     task,
@@ -290,6 +300,10 @@ export interface HubContext {
     asked: Envelope<SendPayload>,
     ahead?: boolean
   ) => SentMessageRow | undefined;
+  deliverToSession: (
+    envelope: Envelope<SendPayload>,
+    ahead: boolean
+  ) => SentMessageRow;
   designSystem: ReturnType<typeof createDesignSystem>;
   discardAsked: (
     from: string,
@@ -312,6 +326,7 @@ export interface HubContext {
     by: EndedBy,
     requestId?: string
   ) => void;
+  escalateRoutedAsks: (recipientId: string) => void;
   fanOutAgents: () => void;
   fanOutFetched: (what: string) => void;
   fetchPlugins: (ids: readonly string[]) => Promise<boolean>;
@@ -450,6 +465,7 @@ export interface HubContext {
   limitRefused: Set<string>;
   linkMarketplace: (source: string) => MarketplaceLink;
   locateSession: (id: string) => Promise<Located>;
+  losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
   machineCredentials: ReturnType<typeof createMachineCredentials>;
   machineFault: (
     machineId: string,
@@ -638,6 +654,7 @@ export interface HubContext {
     plan: { instanceId: string; lineId: string; move: AccountMove | null },
     stage: CompactStage
   ) => void;
+  sendAnswerable: <T extends Envelope>(socket: HubSocket, frame: T) => T;
   sendFrame: (socket: HubSocket, frame: unknown) => void;
   sendFromHub: (
     machineId: string,
@@ -658,6 +675,7 @@ export interface HubContext {
         refusal?: StoredSendRefusal | undefined;
       }
     | undefined;
+  sessionAsleep: (machineId: string, instanceId: string) => void;
   sessionIdle: (row: { id: string; machineId: string }) => Promise<boolean>;
   sessionName: (row: {
     derivedTitle?: string | null;
@@ -775,6 +793,7 @@ export interface HubContext {
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;
   turnInFlight: ReturnType<typeof turnState>;
+  turnOver: (instanceId: string) => void;
   turnWaiters: Map<
     string,
     { machineId: string; resolve: () => void; reject: (error: Error) => void }
