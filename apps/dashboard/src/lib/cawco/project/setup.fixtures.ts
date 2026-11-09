@@ -8,7 +8,7 @@
  */
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { presentPermission } from "@cawco/core/permission-presentation";
-import type { BlockedRequest } from "../client.svelte";
+import type { BlockedRequest } from "../stores/sessions.svelte";
 import type { Message } from "../types";
 import type { Stage as DraftStage, SetupDelegate } from "./setup-stage";
 
