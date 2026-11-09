@@ -16,7 +16,7 @@
  */
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { departBox } from "#lib/platform/motion/share.svelte.js";
-import { cawco, type TrayChild } from "../client.svelte";
+import { delegatesStore, type TrayChild } from "../stores/delegates.svelte";
 
 /** How a chip entered the tray: its mark flew in, it faded in, or it was simply there. */
 export type Entry = "fly" | "fade" | "none";
@@ -43,7 +43,7 @@ export const inTray = (item: TrayChild): boolean =>
 
 /** Whether any chip stands in this session's tray. */
 export const trayHasChips = (parentId: string): boolean =>
-  cawco.trayOf(parentId).some(inTray);
+  delegatesStore.trayOf(parentId).some(inTray);
 
 /** Each registered card's visibility, by delegate instance id. */
 const cards = new SvelteMap<string, "visible" | "hidden">();
@@ -54,7 +54,7 @@ const cards = new SvelteMap<string, "visible" | "hidden">();
  * dismissed.
  */
 function admissible(instanceId: string): boolean {
-  const child = cawco.trayChildFor(instanceId);
+  const child = delegatesStore.trayChildFor(instanceId);
   return (
     !!child &&
     (child.state === "starting" ||
