@@ -24,7 +24,7 @@ export interface MachineCapability {
   media?: MediaPath;
   /**
    * `workspace` only: each tool a delegate's workspace needs that the
-   * machine lacks (agent workspace-needs.ts). While it is not empty the
+   * machine lacks (core workspace-needs.ts). While it is not empty the
    * machine refuses every delegate before anything starts, in `reason`'s
    * words, and `installCommand` installs them all.
    */

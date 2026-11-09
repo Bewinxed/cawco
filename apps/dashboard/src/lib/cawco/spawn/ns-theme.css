@@ -64,7 +64,7 @@
 
 /* The form's one-shot entrances (the new-session form; "Sections
    fade up 8px in a stagger"; a chip's panel rises with `ns-panel`): the
-   theme's `animate-ns-*` (scripts/build-tokens.ts), read inline because each
+   theme's `animate-ns-*` (lib/tokens/theme.css), read inline because each
    reads a duration the form sets on `.ns-theme`, not on the root. Interruptible
    transitions are used everywhere the user can retrigger quickly; these run
    once, as do the popover's open and close (ui/glide-popover,

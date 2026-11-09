@@ -1,7 +1,7 @@
 /**
  * What one neutral frame means for a transcript: the rows it adds, the tool
  * results it folds into calls already drawn, and how it moves a subagent's
- * branch. Moved here from the dashboard's `frames.ts` unchanged in substance —
+ * branch. Moved here from the dashboard unchanged in substance —
  * the same rules, the same block kinds — so the hub builds every session's
  * blocks once and every client renders them.
  *
