@@ -42,14 +42,7 @@ import type {
 } from "@cawco/core/trackers";
 import type { StageKind } from "@cawco/core/views";
 import type { WorkItemState } from "@cawco/core/work-items";
-import {
-  HUB_UNREACHABLE,
-  HubUnreachable,
-  hubJson,
-  hubSaid,
-  refusedOrUnreached,
-  unreachedAnswer,
-} from "#lib/platform/hub-read.js";
+import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
 
 export type {
   ProjectStarter,
@@ -677,11 +670,8 @@ export const outputUrl = (
  */
 export async function readOutputText(src: string): Promise<string> {
   const response = await fetch(src);
-  if (unreachedAnswer(response)) {
-    throw new HubUnreachable(HUB_UNREACHABLE);
-  }
   if (!response.ok) {
-    throw new Error(`${await hubSaid(response)}.`);
+    throw await refusedOrUnreached(response);
   }
   return response.text();
 }
