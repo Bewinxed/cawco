@@ -13,7 +13,12 @@ import type {
   ToolStatus,
 } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
-import { couldNot, hubFetch, hubRefusal } from "#lib/platform/hub-read.js";
+import {
+  couldNot,
+  hubFetch,
+  hubJson,
+  hubRefusal,
+} from "#lib/platform/hub-read.js";
 import { machineControl } from "./client.svelte";
 
 /** What `GET /api/tools` answers with. */
@@ -42,13 +47,10 @@ export async function setPolicy(
   id: string,
   patch: { required?: boolean; pinnedVersion?: string | null }
 ): Promise<ToolPolicy> {
-  const response = await hubFetch(
-    hubRequest("PUT /api/tools/:id", { path: { id }, body: patch })
+  return await hubJson<ToolPolicy>(
+    hubRequest("PUT /api/tools/:id", { path: { id }, body: patch }),
+    { failure: (refused) => couldNot("save that policy", refused) }
   );
-  if (!response.ok) {
-    throw await couldNot("save that policy", response);
-  }
-  return (await response.json()) as ToolPolicy;
 }
 
 /**
