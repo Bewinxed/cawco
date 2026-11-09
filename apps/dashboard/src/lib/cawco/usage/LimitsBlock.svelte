@@ -21,6 +21,7 @@
   import AccountName from "../accounts/AccountName.svelte";
   import { cawco } from "../client.svelte";
   import OpenCodeLogo from "../OpenCodeLogo.svelte";
+  import { usageStore } from "../stores/usage.svelte";
   import { claudeGap, extraUsageLine, money } from "../usage";
   import Figure from "./Figure.svelte";
   import { startForecast, usage } from "./forecast.svelte";
@@ -48,17 +49,19 @@
   const claude = $derived(usage.claude);
   const openCode = $derived(usage.openCode);
   const now = $derived(usage.now);
-  const read = $derived(usage.read && cawco.usageLimitsRead);
+  const read = $derived(usage.read && usageStore.usageLimitsRead);
 
   /** The fleet's real spend, the hub's one figure; null while read or failed. */
-  const spend = $derived(cawco.spend);
+  const spend = $derived(usageStore.spend);
 
   /** Why there is no Claude tile, and what to do about it (usage.ts `claudeGap`). */
-  const claudeUnknown = $derived(claude ? null : claudeGap(cawco.claudeLimits));
+  const claudeUnknown = $derived(
+    claude ? null : claudeGap(usageStore.claudeLimits)
+  );
 
   /** Claude's extra usage, as each account's Claude Code last said it. */
   const extraText = $derived(
-    claude ? extraUsageLine(cawco.claudeLimits, claude.accounts) : ""
+    claude ? extraUsageLine(usageStore.claudeLimits, claude.accounts) : ""
   );
 
   /**

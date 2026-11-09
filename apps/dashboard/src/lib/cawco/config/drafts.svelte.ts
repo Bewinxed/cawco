@@ -17,9 +17,9 @@
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
-import { cawco } from "../client.svelte";
 import { result } from "../idb";
 import { keepsDrafts } from "../reload.svelte";
+import { accountsStore } from "../stores/accounts.svelte";
 import { MAIN } from "./memory";
 import type { SectionSlug } from "./sections";
 import type { ConfigStore } from "./store.svelte";
@@ -284,7 +284,9 @@ function live(store: ConfigStore, slug: string, key: string): boolean {
       );
     case "accounts":
       return (
-        cawco.accounts?.accounts.some((account) => account.id === key) ?? false
+        accountsStore.accounts?.accounts.some(
+          (account) => account.id === key
+        ) ?? false
       );
 
     default:

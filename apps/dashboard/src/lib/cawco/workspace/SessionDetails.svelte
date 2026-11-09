@@ -69,6 +69,8 @@
     effortNotExposed,
     NO_EFFORT_MODEL,
   } from "../spawn/ToolChips.svelte";
+  import { accountsStore } from "../stores/accounts.svelte";
+  import { usageStore } from "../stores/usage.svelte";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
   import LimitBar from "../usage/LimitBar.svelte";
   import ProviderLimit from "../usage/ProviderLimit.svelte";
@@ -156,7 +158,7 @@
   const providerLimit = $derived.by(() => {
     if (traitsOf(harness).providerLimit === "account") {
       const accountId = row?.accountId;
-      const claude = accountId ? cawco.claudeLimits[accountId] : undefined;
+      const claude = accountId ? usageStore.claudeLimits[accountId] : undefined;
       const limit = firstToStop(limitRows("Claude", claude, limitNow));
       return limit && claude ? { ...limit, seenAt: claude.fetchedAt } : null;
     }
@@ -164,7 +166,7 @@
       traitsOf(harness).providerLimit === "go" &&
       model?.startsWith("opencode-go/")
     ) {
-      const go = speakingReading(cawco.openCodeGoLimits)?.reading;
+      const go = speakingReading(usageStore.openCodeGoLimits)?.reading;
       const limit = firstToStop(limitRows("opencode", go, limitNow));
       return limit && go ? { ...limit, seenAt: go.fetchedAt } : null;
     }
@@ -351,7 +353,9 @@
    * feedback line says while the move is in flight.
    */
   const accountName = (id: string | null | undefined) => {
-    const account = cawco.accounts?.accounts.find((one) => one.id === id);
+    const account = accountsStore.accounts?.accounts.find(
+      (one) => one.id === id
+    );
     return account ? nameOf(account) : "another account";
   };
   type Slot = "model" | "permission" | "effort" | "account";
