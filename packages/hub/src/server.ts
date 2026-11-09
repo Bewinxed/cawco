@@ -5,27 +5,14 @@ import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join } from "node:path";
 import {
   type AccountBorrowFrame,
-  type AccountSigninResult,
   accountNameAmong,
   CLAUDE_PROVIDER,
   type EndedBy,
-  type HomeCredential,
-  type HomeLogin,
-  type HomeStore,
   LIMITED_PROVIDERS,
   type ProviderAccountReading,
-  type ProviderSigninChallenge,
-  type ProviderSigninResult,
   sameIdentity,
 } from "@cawco/core/accounts";
-import {
-  CONTROL_BEGIN_ACCOUNT_LOGIN,
-  CONTROL_BEGIN_PROVIDER_LOGIN,
-  CONTROL_PI_DEFAULT_MODEL,
-  CONTROL_READ_HOME_CREDENTIALS,
-  CONTROL_READ_HOME_LOGIN,
-  CONTROL_SET_PROVIDER_KEY,
-} from "@cawco/core/accounts/controls";
+import { CONTROL_PI_DEFAULT_MODEL } from "@cawco/core/accounts/controls";
 import type { ArchiveView } from "@cawco/core/archive";
 import { type ArtifactNeed, unparked } from "@cawco/core/artifact-needs";
 import {
@@ -77,7 +64,6 @@ import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { sessionMayStart, startsAny } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
-import { everyOf } from "@cawco/core/every-of";
 import type { TranscriptAnswer, TranscriptTurns } from "@cawco/core/find";
 import type {
   FleetConvergeFrame,
@@ -582,7 +568,7 @@ import { createLaws } from "./laws";
 import { createLfsOffers, lfsOfferRoutes } from "./lfs-offers";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
 import { createLimitMoves } from "./limit-moves";
-import { createLoginMoves, SIGNIN_TIMEOUT_MS } from "./login-moves";
+import { createLoginMoves } from "./login-moves";
 import type { RouteSet } from "./machine-answers";
 import {
   type ControlResult,
@@ -706,7 +692,9 @@ import {
   relayJourneyRoutes,
 } from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
+import { accountHomeLoginRoutes } from "./routes/account-home-logins";
 import { accountPlacementRoutes } from "./routes/account-placement";
+import { accountSigninRoutes } from "./routes/account-signins";
 import { accountRoutes } from "./routes/accounts";
 import { agentControlRoutes } from "./routes/agent-control";
 import { agentListRoutes, agentMediaRoutes } from "./routes/agents";
@@ -1168,15 +1156,6 @@ const PARKS_ASKS: ReadonlySet<InstanceStatus> = new Set([
   "unknown",
   "moving",
 ]);
-/**
- * One of a machine's own stores a credential is moved out of, in the order
- * the apps' generated schema has it.
- */
-const homeStore = t.Union(
-  everyOf<HomeStore>()(["claude", "pi", "opencode"]).map((store) =>
-    t.Literal(store)
-  )
-);
 /** How long after a session heard a pin's thread a task it files counts as found in that pin (tasks.ts `found_in`). */
 const PIN_ASK_MS = 30 * 60_000;
 /** The origin of the hub's word to a live attempt that a wait of its task moved (tasks.ts `tell`). */
@@ -2173,6 +2152,19 @@ export const createServer = (
     signOutEverywhere: () => signOutEverywhere,
     signOutMachine: () => signOutMachine,
     askedStart: () => askedStart,
+    checkRefused: () => checkRefused,
+    completeOn: () => completeOn,
+    finishJoined: () => finishJoined,
+    joinOn: () => joinOn,
+    keepPending: () => keepPending,
+    pendingKey: () => pendingKey,
+    pendingSignins: () => pendingSignins,
+    settleProviderSignin: () => settleProviderSignin,
+    settleSignin: () => settleSignin,
+    undoRemovedSignin: () => undoRemovedSignin,
+    awayStatus: () => awayStatus,
+    homeCredentialOf: () => homeCredentialOf,
+    startMove: () => startMove,
   });
   const {
     anchors,
@@ -12911,378 +12903,7 @@ export const createServer = (
 
       accountPlacementRoutes(ctx),
 
-      new Elysia().use([
-        new Elysia()
-          // Checks now whether Claude Code still refuses an account it refused
-          // account-wide, as the hourly look does (`checkRefused`): one turn as
-          // the account on a machine its refusal signed out. Answers the
-          // verdict: `back` on those machines, `refused` with Claude Code's
-          // words, `none` with why there was none, or `not-refused` for an
-          // account no account-wide refusal holds out.
-          .post(
-            "/api/accounts/:id/refusal-check",
-            async ({ params, status }) => {
-              if (!accountOf(params.id)) {
-                return status(404, `There is no account ${params.id}.`);
-              }
-              return await checkRefused(params.id);
-            }
-          )
-          // Signs an account in on a machine, into the account's own store there.
-          // Claude: `claude auth login` in the account's config dir, answering
-          // the link to authorise in the reader's browser. Any other provider:
-          // pi-ai's own OAuth sign-in, run by the agent, answering a device code
-          // to enter on any device (or a link, for a provider without one). Only
-          // ever started by this call.
-          .post(
-            "/api/accounts/:id/machines/:machineId/signin",
-            async ({ params, status }) => {
-              const account = accountOf(params.id);
-              if (!account) {
-                return status(404, `There is no account ${params.id}.`);
-              }
-              const claude = account.provider === CLAUDE_PROVIDER;
-              if (!claude && account.kind !== "oauth") {
-                return status(
-                  400,
-                  `${accountNameAmong(account, db.accounts.list())} is a key account: send its key to the machines that use it.`
-                );
-              }
-              // Signed in there again while a sign-out waited on a process there
-              // ({@link leaveAccounts}): the store stays.
-              db.accounts.dropLeave(account.id, params.machineId);
-              // The machine's sign-in runs under the id it was asked for, the id
-              // `…/signin/complete` finishes it under: one a join removed
-              // finishes into the account it joined ({@link finishJoined}).
-              const answer = claude
-                ? await callAgent(
-                    params.machineId,
-                    CONTROL_BEGIN_ACCOUNT_LOGIN,
-                    [params.id, account.kind],
-                    SIGNIN_TIMEOUT_MS,
-                    "claude"
-                  )
-                : await callAgent(
-                    params.machineId,
-                    CONTROL_BEGIN_PROVIDER_LOGIN,
-                    [params.id, account.provider],
-                    SIGNIN_TIMEOUT_MS
-                  );
-              // Sent, whether or not it answered: only a machine not connected was
-              // never asked.
-              const sent = !(
-                answer.kind === "unanswered" && answer.reason === "dead"
-              );
-              if (sent && !accountOf(params.id)) {
-                return status(
-                  404,
-                  await undoRemovedSignin(account, params.machineId)
-                );
-              }
-              // A machine that was asked makes the account's store (and may be
-              // waiting on its sign-in) whether or not a code came back; it holds
-              // that store signed out, as its next register would report, so
-              // removing the account forgets it there. A store under an id a
-              // join removed is no account's: the machine forgets it when it
-              // next names its stores ({@link unknownAccountsOf}).
-              if (
-                sent &&
-                params.id === account.id &&
-                !db.accounts
-                  .signins()
-                  .some(
-                    (one) =>
-                      one.accountId === account.id &&
-                      one.machineId === params.machineId
-                  )
-              ) {
-                db.accounts.putSignin({
-                  accountId: account.id,
-                  machineId: params.machineId,
-                  state: "signed-out",
-                });
-                publishUsage(params.machineId);
-              }
-              switch (answer.kind) {
-                case "unanswered":
-                  return status(503, awayWords(params.machineId, answer));
-                case "answered": {
-                  if (!answer.value.ok) {
-                    pendingSignins.delete(
-                      pendingKey(params.id, params.machineId)
-                    );
-                    return status(
-                      422,
-                      answer.value.error ?? "The sign-in did not start."
-                    );
-                  }
-                  const challenge = answer.value
-                    .result as ProviderSigninChallenge;
-                  keepPending(params.id, params.machineId, challenge);
-                  return challenge;
-                }
-                default:
-                  throw unreachable(answer);
-              }
-            }
-          )
-          // Claude: types the pasted code into the waiting `claude auth login`.
-          // Any other provider: a pasted code for a sign-in that asked for one;
-          // else it waits up to a minute for the person to enter the device code,
-          // and says `pending` when they have not yet, `expired` once it lapsed.
-          .post(
-            "/api/accounts/:id/machines/:machineId/signin/complete",
-            { body: t.Object({ code: t.Optional(t.String()) }) },
-            async ({ params, body, status }) => {
-              // The account the sign-in finishes into: its own, or the one a
-              // sign-in on another machine has since joined it into.
-              const account = accountOf(params.id);
-              if (!account) {
-                return status(404, `There is no account ${params.id}.`);
-              }
-              const claude = account.provider === CLAUDE_PROVIDER;
-              if (claude && !body.code) {
-                return status(
-                  400,
-                  "Paste the code from the authorisation page."
-                );
-              }
-              const asked = await completeOn(
-                account,
-                params.id,
-                params.machineId,
-                body.code
-              );
-              switch (asked.kind) {
-                case "unanswered":
-                  return status(503, awayWords(params.machineId, asked));
-                case "answered":
-                  break;
-                default:
-                  throw unreachable(asked);
-              }
-              const answer = asked.value;
-              const now = accountOf(params.id);
-              if (!now) {
-                return status(
-                  404,
-                  await undoRemovedSignin(account, params.machineId)
-                );
-              }
-              if (!answer.ok) {
-                // The machine's login stopped: its link or code is spent.
-                pendingSignins.delete(pendingKey(params.id, params.machineId));
-                return status(
-                  422,
-                  answer.error ?? "The sign-in did not finish."
-                );
-              }
-              const result = answer.result as
-                AccountSigninResult | ProviderSigninResult;
-              // Ended, one way or another; a code still waited on, or one that
-              // did not take, leaves the same link or code standing.
-              if (["signed-in", "mismatch", "expired"].includes(result.state)) {
-                pendingSignins.delete(pendingKey(params.id, params.machineId));
-              }
-              const settled =
-                now.id === params.id
-                  ? await settleSignin(now, params.machineId, result)
-                  : await finishJoined(
-                      params.id,
-                      now,
-                      params.machineId,
-                      result
-                    );
-              return "error" in settled ? status(409, settled.error) : settled;
-            }
-          )
-          // A key account's key, typed once in the dashboard: relayed to each
-          // machine named, which writes it into the account's store there. The
-          // hub never stores it, never logs it and answers nothing of it.
-          .post(
-            "/api/accounts/:id/key",
-            {
-              body: t.Object({
-                key: t.String({ minLength: 1 }),
-                machineIds: t.Array(t.String(), { minItems: 1 }),
-              }),
-            },
-            async ({ params, body, status }) => {
-              const account = accountOf(params.id);
-              if (!account) {
-                return status(404, `There is no account ${params.id}.`);
-              }
-              if (account.kind !== "api_key") {
-                return status(
-                  400,
-                  `${accountNameAmong(account, db.accounts.list())} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
-                );
-              }
-              const machines = await Promise.all(
-                body.machineIds.map(async (machineId) => {
-                  // Its key sent there again while a sign-out waited on a process
-                  // there ({@link leaveAccounts}): the store stays.
-                  db.accounts.dropLeave(account.id, machineId);
-                  const answer = await callAgent(
-                    machineId,
-                    CONTROL_SET_PROVIDER_KEY,
-                    [account.id, account.provider, body.key, account.identity],
-                    SIGNIN_TIMEOUT_MS
-                  );
-                  switch (answer.kind) {
-                    case "unanswered":
-                      return { machineId, error: awayWords(machineId, answer) };
-                    case "answered":
-                      if (!answer.value.ok) {
-                        return {
-                          machineId,
-                          error:
-                            answer.value.error ?? "The key was not written.",
-                        };
-                      }
-                      break;
-                    default:
-                      throw unreachable(answer);
-                  }
-                  const result = answer.value.result as ProviderSigninResult;
-                  // Another machine's write already joined the key into the
-                  // account it already was: this one joins it there too.
-                  const now = accountOf(account.id);
-                  const joinedTo = now?.id === account.id ? undefined : now;
-                  const settled =
-                    joinedTo && result.state === "signed-in" && result.identity
-                      ? await joinOn(
-                          account.id,
-                          joinedTo,
-                          machineId,
-                          result.identity
-                        ).then((joined) =>
-                          "error" in joined ? joined : { ...result, joined }
-                        )
-                      : await settleProviderSignin(
-                          db.accounts.get(account.id) ?? account,
-                          machineId,
-                          result
-                        );
-                  return "error" in settled
-                    ? { machineId, error: settled.error }
-                    : { machineId, result: settled };
-                })
-              );
-              return { machines };
-            }
-          ),
-
-        new Elysia()
-          // What a machine's own stores hold that CawCo can move into accounts:
-          // `~/.claude`'s login, and each credential in pi's and OpenCode's own
-          // `auth.json` (a Claude subscription's OAuth there is never listed).
-          .get(
-            "/api/accounts/home-credentials",
-            { query: t.Object({ machineId: t.String() }) },
-            async ({ query, set, status }) => {
-              const [claude, others] = await Promise.all([
-                readAgent(
-                  query.machineId,
-                  CONTROL_READ_HOME_LOGIN,
-                  [],
-                  SIGNIN_TIMEOUT_MS,
-                  "claude"
-                ),
-                readAgent(
-                  query.machineId,
-                  CONTROL_READ_HOME_CREDENTIALS,
-                  [],
-                  SIGNIN_TIMEOUT_MS
-                ),
-              ]);
-              switch (others.kind) {
-                case "unanswered":
-                  if (others.reason === "dead") {
-                    const away = awayStatus(set, query.machineId);
-                    return status(away.code, away.said);
-                  }
-                  return status(503, awayWords(query.machineId, others));
-                case "answered":
-                  if (!others.value.ok) {
-                    return status(
-                      422,
-                      others.value.error ?? "The machine gave no reason."
-                    );
-                  }
-                  break;
-                default:
-                  throw unreachable(others);
-              }
-              // `null` is Claude Code's answer that it holds no login to read; a
-              // read it did not answer is said, never shown as no login.
-              let home: HomeLogin | null;
-              switch (claude.kind) {
-                case "unanswered":
-                  if (claude.reason === "dead") {
-                    const away = awayStatus(set, query.machineId);
-                    return status(away.code, away.said);
-                  }
-                  return status(503, awayWords(query.machineId, claude));
-                case "answered":
-                  home = claude.value.ok
-                    ? (claude.value.result as HomeLogin)
-                    : null;
-                  break;
-                default:
-                  throw unreachable(claude);
-              }
-              return {
-                claude: home,
-                credentials: others.value.result as HomeCredential[],
-              };
-            }
-          )
-          // Moves one credential out of a machine's own store into CawCo, once:
-          // into the account of the identity it is (made now when there is none),
-          // in that account's store on the machine, so it works in CawCo without
-          // a second sign-in. `store` `claude` is `~/.claude`'s login; `pi` and
-          // `opencode` name their own `auth.json`, and `provider` the entry there.
-          // The sessions that run from it go on running from it, and the machine
-          // moves it at the first moment all of them are at rest; the answer says
-          // how many run from it now, and GET says how it came out.
-          .post(
-            "/api/accounts/move-login",
-            {
-              body: t.Object({
-                machineId: t.String(),
-                store: homeStore,
-                provider: t.Optional(t.String()),
-              }),
-            },
-            async ({ body, status }) => {
-              const { machineId, store } = body;
-              const found = await homeCredentialOf(
-                machineId,
-                store,
-                body.provider
-              );
-              if ("error" in found) {
-                return status(found.status, found.error);
-              }
-              const started = await startMove(machineId, store, found);
-              return "error" in started
-                ? status(started.status, started.error)
-                : status(202, started);
-            }
-          )
-          .get("/api/accounts/move-login", () => ({
-            moving: movingLogins().map((move) => ({
-              machineId: move.machineId,
-              store: move.store,
-              storeProvider: move.storeProvider,
-              provider: move.provider,
-              accountId: move.accountId,
-              since: move.since,
-            })),
-            done: [...moveResults.values()],
-          })),
-      ]),
+      new Elysia().use([accountSigninRoutes(ctx), accountHomeLoginRoutes(ctx)]),
     ]),
     usageRoutes(ctx),
   ]);
