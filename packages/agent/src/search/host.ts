@@ -45,7 +45,7 @@ import {
   TranscriptIndex,
   type TurnsOptions,
 } from "@cawco/jsonl-parser/fts5";
-import { readOpenCodeDocs } from "@cawco/jsonl-parser/opencode";
+import { readOpenCodeDocs } from "../harnesses/opencode-docs";
 
 /** The `meta` key prefix of each OpenCode database's watermark, followed by its path. */
 const WATERMARK = "opencode_watermark:";
