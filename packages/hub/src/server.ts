@@ -539,7 +539,6 @@ import { unhandled } from "@cawco/core/unhandled";
 import type {
   OpenCodeGoLimits,
   UsageBucket,
-  UsageLimitsResponse,
   UsageSpend,
 } from "@cawco/core/usage/types";
 import { windowWords } from "@cawco/core/usage/windows";
@@ -1059,6 +1058,7 @@ import { continueBody } from "./routes/session-bodies";
 import { sessionIdentityRoutes } from "./routes/session-identities";
 import { toolRoutes } from "./routes/tools";
 import { trashRoutes } from "./routes/trash";
+import { usageRoutes } from "./routes/usage";
 import { workspaceRoutes } from "./routes/workspaces";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
@@ -32341,12 +32341,13 @@ export const createServer = (
     }
   }
   // The hub's HTTP routes after the plugins above, in the order the generated
-  // OpenAPI document lists its paths (`hub.routes`' order is the contract:
-  // a family moved out of this order moves a path in openapi.json). One
-  // composite, built from one `.use` of a list: more `.use` calls on the root
-  // app run the checker past its instantiation depth (TS2589; see the list
-  // above), where one more plugin does not.
-  const hubRoutes = new Elysia().use([
+  // OpenAPI document lists its paths (`hub.routes`' order is the contract: a
+  // family moved out of this order moves a path in openapi.json). Built across
+  // statements and joined as one plugin: each statement gets its own
+  // instantiation-depth allowance, and more `.use` calls on the root app or
+  // one list of them all run the checker past it (TS2589; see the list below),
+  // as `.ws` does after them, so the sockets are registered first.
+  const hubRoutesPart1 = new Elysia().use([
     mcpRoutes(ctx),
     delegationRoutes(ctx),
     sessionIdentityRoutes(ctx),
@@ -33490,6 +33491,8 @@ export const createServer = (
           }),
         };
       }),
+  ]);
+  const hubRoutes = hubRoutesPart1.use([
     modelAccessRoutes(ctx),
     imageSettingRoutes(ctx),
     fleetWatchRoutes(ctx),
@@ -35624,56 +35627,8 @@ export const createServer = (
           since: move.since,
         })),
         done: [...moveResults.values()],
-      }))
-      // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
-      // The heavy data lives behind these reads; the socket only carries the small
-      // limits frame, so the dashboard pulls aggregates when it needs them.
-      .get("/api/usage/limits", (): UsageLimitsResponse => usageLimits(db))
-      .get("/api/usage/spend", (): UsageSpend => spendNow())
-      .get(
-        "/api/usage/limits/history",
-        {
-          query: t.Object({
-            accountId: t.String(),
-            kind: t.Optional(t.String()),
-            since: t.Optional(t.Numeric()),
-            until: t.Optional(t.Numeric()),
-          }),
-        },
-        ({ query }) =>
-          db.accounts.history({
-            accountId: query.accountId,
-            kind: query.kind,
-            since: query.since,
-            until: query.until,
-          })
-      )
-      .get(
-        "/api/usage/summary",
-        {
-          query: t.Object({
-            since: t.Optional(t.Numeric()),
-            until: t.Optional(t.Numeric()),
-            harness: t.Optional(t.String()),
-            machineId: t.Optional(t.String()),
-            groupBy: t.Union([
-              t.Literal("machine"),
-              t.Literal("model"),
-              t.Literal("project"),
-              t.Literal("session"),
-              t.Literal("start"),
-            ]),
-          }),
-        },
-        ({ query }) =>
-          db.usageSummary({
-            since: query.since,
-            until: query.until,
-            harness: query.harness,
-            machineId: query.machineId,
-            groupBy: query.groupBy,
-          })
-      ),
+      })),
+    usageRoutes(ctx),
   ]);
 
   return Object.assign(
@@ -35908,7 +35863,6 @@ export const createServer = (
         joinRoutes({ installs, offered: () => binaryUpdates.offered() }),
         binaryUpdates.routes,
       ])
-      .use([hubRoutes])
       .ws("/ws", {
         // An agent on this build sends parts of at most 4 MiB
         // (`@cawco/core/wire`), joined in `guardedAgentMessage`; one on the
@@ -38936,7 +38890,8 @@ export const createServer = (
           // ack both die with the socket that asked for them.
           streams.dropSocket(ws.id);
         },
-      }),
+      })
+      .use([hubRoutes]),
     { previews: previewListeners, tailnet: tailnetHttps }
   );
 };
