@@ -218,10 +218,7 @@ export const hubRequestAsGiven = <R extends HubRoute>(
 ): HubRequest => requestOf(route, sent as Parts);
 
 /** `request` as `fetch`'s init, `init`'s own fields (a signal, credentials, other headers) beside it. */
-export const hubInit = (
-  request: HubRequest,
-  init: RequestInit = {}
-): RequestInit => {
+const hubInit = (request: HubRequest, init: RequestInit = {}): RequestInit => {
   const headers = new Headers(init.headers);
   for (const [name, value] of Object.entries(request.headers ?? {})) {
     headers.set(name, value);
