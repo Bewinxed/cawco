@@ -8,7 +8,6 @@ import { rm } from "node:fs/promises";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { boundaryProcId, isBoundaryOf } from "../proc-id";
 import { hasLeftDirs } from "../stand-ins";
-import { ensureBoundary } from "./arming";
 import {
   behindGate,
   decided,
@@ -48,6 +47,7 @@ import {
   starting,
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
+import { ensureAgain } from "./unasked";
 
 /**
  * Closes every older boundary of workspace `id` that nothing runs in any
@@ -258,7 +258,7 @@ const handOverStale = async (): Promise<void> => {
       // A narrowing meanwhile is the narrowing look's ({@link recheckNarrowed}).
       const kept = keptRunning.get(ref.id);
       if (!kept) {
-        await ensureBoundary(ref);
+        await ensureAgain(ref);
         continue;
       }
       const work = await workLeft(ref.id, held);
@@ -280,7 +280,7 @@ const handOverStale = async (): Promise<void> => {
           keptRunning.set(ref.id, { ...kept, commands: past });
           return;
         }
-        await ensureBoundary(ref);
+        await ensureAgain(ref);
       });
     } catch (error) {
       console.warn(
