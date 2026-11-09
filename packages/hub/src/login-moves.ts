@@ -1,9 +1,4 @@
-import type {
-  AccountBorrowFrame,
-  AccountProvider,
-  HomeLoginMoved,
-  HomeStore,
-} from "@cawco/core/accounts";
+import type { AccountBorrowFrame, HomeLoginMoved } from "@cawco/core/accounts";
 import {
   ACCOUNT_RULES,
   accountNameAmong,
@@ -22,6 +17,7 @@ import { CONTROL_RESTLESS, CONTROL_SLEEP } from "@cawco/core/session/controls";
 import { secondsOf } from "@cawco/core/time";
 import type { LoginMove } from "./db/accounts";
 import type { HubContext } from "./hub-context";
+import type { LoginMoveResults } from "./hub-shapes";
 import type { HubTimer } from "./lifetime";
 import type { Unanswered } from "./machine-answers";
 import { unreachable } from "./unreachable";
@@ -99,20 +95,7 @@ export const createLoginMoves = (ctx: LoginMovesContext) => {
   /** How often a pending move is tried, and what ran from a moved credential is asked to sleep. */
   const MOVE_TICK_MS = 5000;
   /** What the last move of each credential came to, for `GET /api/accounts/move-login`, by {@link moveKey}. */
-  const moveResults = new Map<
-    string,
-    {
-      accountId: string;
-      at: number;
-      error?: string;
-      machineId: string;
-      provider: AccountProvider;
-      /** Where the moved credential is kept now, as its owner names it. */
-      kept?: string;
-      store: HomeStore;
-      storeProvider: string;
-    }
-  >();
+  const moveResults: LoginMoveResults = new Map();
   let moveTicker: HubTimer | undefined;
 
   /**
