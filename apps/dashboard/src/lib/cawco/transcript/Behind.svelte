@@ -30,9 +30,9 @@
   import { commonWords } from "@cawco/core/words/common";
   import { Button } from "#lib/components/ui/button/index.js";
   import { rise } from "#lib/platform/motion/curves.svelte.js";
-  import { reconnectingNow } from "../client.svelte";
   import { boardStore } from "../stores/board.svelte";
   import type { ReadFault } from "../stores/sessions.svelte";
+  import { reconnectingNow } from "../stores/transcript-reads.svelte";
 
   let {
     fault,

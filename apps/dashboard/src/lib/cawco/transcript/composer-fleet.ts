@@ -9,11 +9,7 @@
  * its type alone, so a comment's reply (the artifact page's comment kit, a
  * comment card) loads none of it.
  */
-import {
-  readOlderPage,
-  replaceQueued,
-  userTurnActions,
-} from "../client.svelte";
+import { replaceQueued, userTurnActions } from "../client.svelte";
 import { mcpSignInIntent, signInToMcp } from "../fleet";
 import HarnessBlock from "../HarnessBlock.svelte";
 import {
@@ -29,6 +25,7 @@ import SkillChip from "../SkillChip.svelte";
 import { boardStore } from "../stores/board.svelte";
 import { mcpServersStore } from "../stores/mcp-servers.svelte";
 import { sessionsStore } from "../stores/sessions.svelte";
+import { readOlderPage } from "../stores/transcript-reads.svelte";
 import { CanvasRoom } from "./canvas-room.svelte";
 import DelegateTray from "./DelegateTray.svelte";
 import {

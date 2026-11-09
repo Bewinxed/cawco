@@ -20,13 +20,7 @@
   import { dur, easeOut } from "#lib/platform/motion/curves.svelte.js";
   import { reflow } from "#lib/platform/motion/rows.svelte.js";
   import { formatDuration } from "#lib/utils/time.js";
-  import {
-    cawco,
-    readDelegate,
-    readTranscript,
-    unwatchDelegate,
-    watchDelegate,
-  } from "../client.svelte";
+  import { cawco, readDelegate } from "../client.svelte";
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
@@ -38,6 +32,11 @@
   } from "../session-names.svelte";
   import { boardStore } from "../stores/board.svelte";
   import { sessionsStore } from "../stores/sessions.svelte";
+  import {
+    unwatchDelegate,
+    watchDelegate,
+  } from "../stores/subscriptions.svelte";
+  import { readTranscript } from "../stores/transcript-reads.svelte";
   import type { Message } from "../types";
   import { disclosure } from "./disclosure.svelte";
   import InlineTranscript from "./InlineTranscript.svelte";

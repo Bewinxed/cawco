@@ -16,14 +16,14 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import MessageBody from "../MessageBody.svelte";
+  import { sessionsStore } from "../stores/sessions.svelte";
   import {
     faultMessage,
     readOlderPage,
     readTranscript,
     reconnectingNow,
-  } from "../client.svelte";
-  import MessageBody from "../MessageBody.svelte";
-  import { sessionsStore } from "../stores/sessions.svelte";
+  } from "../stores/transcript-reads.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import Behind from "./Behind.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
