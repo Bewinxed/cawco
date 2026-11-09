@@ -1,6 +1,6 @@
 <script lang="ts">
+  import Markdown from "#lib/cawco/Markdown.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   /**
