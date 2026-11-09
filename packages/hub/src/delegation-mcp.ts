@@ -1013,13 +1013,8 @@ export function createDelegationMcp(options: {
       authorization,
       callId,
       cwd: actor.cwd,
-      harness: actor.harness,
-      mayStart: actor.mayStart ?? undefined,
-      hasParent: !!actor.parentInstanceId,
-      lands: landsOf(actor),
       ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
       forkOrigins: () => options.forkOrigins?.(actor.id) ?? [],
-      workItem: !!actor.workItemId,
       projectId: actor.projectId ?? undefined,
       projectAt: (machineId, cwd) =>
         options.projectAt(machineId || actor.machineId, cwd),
