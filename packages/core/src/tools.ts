@@ -140,7 +140,7 @@ export const switchOn = (value: unknown): boolean =>
   );
 
 /** The shape of {@link ToolSpec.requires}, which no tool sets. */
-export interface ToolRequirement {
+interface ToolRequirement {
   id: string;
   min?: string;
 }
