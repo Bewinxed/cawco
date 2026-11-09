@@ -36,16 +36,14 @@ import { runtimeVersion } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import {
+  requireLinger,
+  systemdActive,
+} from "../../agent/src/service-manager/install";
 import { askYes, closeAsking } from "./ask";
 import { awaitJoined } from "./await-joined";
 import { keepJoinedHub } from "./joined-hub";
-import {
-  awaitFirstMachineReady,
-  dashboardUrl,
-  requireLinger,
-  service,
-  systemdActive,
-} from "./service";
+import { awaitFirstMachineReady, dashboardUrl, service } from "./service";
 
 /** Tools offered at install: what CawCo uses, none of it required to start. */
 const OFFERED = ["git", ...HARNESSES] as const;

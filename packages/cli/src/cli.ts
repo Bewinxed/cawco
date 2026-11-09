@@ -22,15 +22,11 @@ import { secondsOf } from "@cawco/core/time";
 import { pinnedTools } from "@cawco/core/tools";
 import { configurePage } from "@cawco/core/words/configure";
 import { z } from "zod";
+import { isServiceId } from "../../agent/src/service-manager/units";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { OwnerApprovalError, ownerFetch } from "./owner";
 import { pairingOff } from "./pairing";
-import {
-  isServiceAction,
-  isServiceId,
-  SERVICE_ACTIONS,
-  service,
-} from "./service";
+import { isServiceAction, SERVICE_ACTIONS, service } from "./service";
 import { callTool, listTools, sessionOf, toolDoor } from "./tools";
 
 /** Reported by `--version`; keep in sync with package.json. */
