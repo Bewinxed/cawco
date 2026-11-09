@@ -534,7 +534,6 @@ catch-drops-reason	CallExpression	scripts/probe-kit/specs/workspace-retire.ts	5
 catch-drops-reason	CallExpression	scripts/scratch-fleet.ts	1
 catch-drops-reason	ElementAccessExpression	scripts/probe-kit/specs/workspace-retire.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/decides/WhoDecides.svelte	1
-catch-drops-reason	empty	apps/dashboard/src/lib/cawco/fleet-mcp.svelte.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/home/Caw.svelte	3
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/home/home-state.svelte.ts	1
 catch-drops-reason	empty	apps/dashboard/src/lib/cawco/NeedsCaw.svelte	2
