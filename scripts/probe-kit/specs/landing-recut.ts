@@ -25,7 +25,7 @@
  *   "Not landed" answer in the reopened turn. Why: on 2026-11-05 a handoff's
  *   input to a retired delegate was written into a clone that retired again
  *   before the message went, and the session read the message with no
- *   inputs folder (hub work-items.ts `goOnIn`).
+ *   inputs folder (hub workspaces.ts `goOnIn`).
  *
  * Then S, with a bun.lock: its delegate adds a dependency to package.json
  * and leaves bun.lock as it was. The declared frozen install refuses it:
@@ -38,7 +38,7 @@
  * The line is for a session that goes on in the clone the landing moved, so
  * each landing here fails its gate and the item stays open there: a landed
  * item's session is put to sleep and its workspace retires (server.ts
- * `sleepFinished`, work-items.ts `settle`), and the next message reaches a
+ * `sleepFinished`, workspaces.ts `settle`), and the next message reaches a
  * clone cut again, whose own line (the recut's) is the one it reads.
  *
  * - M: its delegate commits a file that typechecks against src/index.ts as
@@ -51,7 +51,7 @@
  * - K: main stays put and its delegate's commit fails typecheck on its own,
  *   so the landing only stamps its commit (hub landing.ts `stampCommand`):
  *   HEAD moves, its tree does not, no file changed under the session, and
- *   nothing it reads after carries such a line (hub work-items.ts
+ *   nothing it reads after carries such a line (hub landing-run.ts
  *   `movedByLanding`).
  *
  *   bun scripts/probe-kit/run.ts landing-recut
@@ -111,14 +111,14 @@ const STALE_MANIFEST = {
   scripts: SCRIPTS,
   devDependencies: { typescript: "5.9.3", "is-number": "7.0.0" },
 };
-/** How finish_item names the failed install, in its first sentence (work-items.ts `failedRun`). */
+/** How finish_item names the failed install, in its first sentence (landing-run.ts `failedRun`). */
 const STALE_WORDS =
   "bun install --frozen-lockfile failed, so bun run lint:changed and bun run typecheck did not run. Fix it, commit, and call finish_item again.";
 /** bun's own words as its frozen install refuses a lockfile package.json disagrees with. */
 const BUN_REFUSAL = "error: lockfile had changes, but lockfile is frozen";
 /** The parent's handoff to a retired delegate, and the mark of its reopened turn. */
 const again = (tag: Tag) => `PROBE-RECUT-AGAIN-${tag}`;
-/** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
+/** How finish_item answers a failed gate (landing-run.ts `gateFailedText`). */
 const NOT_LANDED = "Not landed: the merge checks ran on";
 /** How the hub says a handoff's clone was, or is being, cut again (delegation-actions.ts `HOLD_WORDS.recut`, `CUT_FOR_INPUTS`). */
 const RECUTTING = "its clone again at the same path";
