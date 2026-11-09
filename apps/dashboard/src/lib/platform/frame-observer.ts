@@ -404,8 +404,15 @@ class ForeignResizeObserver {
   }
 }
 
-if (Native && typeof window !== "undefined") {
-  window.ResizeObserver = ForeignResizeObserver as unknown as NativeClass;
+/**
+ * Makes the window's own ResizeObserver the shared observer's
+ * (`ForeignResizeObserver`), before anything on the page makes one: the
+ * client's hooks call it first thing.
+ */
+export function installResizeDelivery(): void {
+  if (Native && typeof window !== "undefined") {
+    window.ResizeObserver = ForeignResizeObserver as unknown as NativeClass;
+  }
 }
 
 /**
