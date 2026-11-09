@@ -85,7 +85,7 @@ export const effectiveImageChoice = (
 };
 
 /** The formats a provider's image is kept in, as it made it: never re-encoded. */
-export const IMAGE_FORMATS = ["png", "jpeg"] as const;
+const IMAGE_FORMATS = ["png", "jpeg"] as const;
 export type ImageFormat = (typeof IMAGE_FORMATS)[number];
 
 /** The extension a saved image of each format carries. */
