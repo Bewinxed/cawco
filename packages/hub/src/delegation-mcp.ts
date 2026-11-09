@@ -27,18 +27,22 @@ import { type CallKeys, CLAUDE_CALL_META, mcpCallKey } from "./call-keys";
 import type { Caw } from "./caw";
 import { CONNECT_TOOLS, type ConnectAsks } from "./connect-asks";
 import type { Connections } from "./connections";
-import type {
-  Fleet,
-  ForkOrigin,
-  HandoffDeps,
-  ItemEnd,
-  SendDelivery,
+import {
+  delegateTypesListed,
+  type Fleet,
+  type ForkOrigin,
+  type HandoffDeps,
+  handoffActions,
+  type ItemEnd,
+  type SendDelivery,
 } from "./delegation-actions";
 import {
   handoffInstructions,
   handoffTools,
   type Listable,
+  listDelegateTypesTool,
   loadsUpfront,
+  type ToolView,
 } from "./delegation-tools";
 import type {
   DelegateList,
@@ -49,6 +53,7 @@ import type { FleetWatch } from "./fleet-watch";
 import { type createHubTools, DESIGN_VERDICT, HUB_TOOLS } from "./hub-tools";
 import { INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { bindTool } from "./mcp-tool";
 import { MEMORY_TOOLS, type Memory } from "./memory";
 import {
   mayMakeProject,
@@ -413,19 +418,7 @@ export function createDelegationMcp(options: {
       // A failed reload is logged and the registry keeps what it had.
       detach(
         import(`${moduleUrl.href}?revision=${Date.now()}`).then((module) => {
-          const definitions = module.handoffTools({
-            instanceId: "",
-            instanceById: options.instanceById,
-            formerIds: options.formerIds,
-            fleet: options.fleet,
-            cwd: "",
-            harness: harnessOf(undefined),
-            emit: () => {
-              throw new Error("Discovery cannot execute tools");
-            },
-            spawn: () =>
-              Promise.reject(new Error("Discovery cannot execute tools")),
-          });
+          const definitions = module.handoffTools(viewOf(undefined));
           const all = [...definitions, ...admin];
           if (new Set(all.map((tool) => tool.name)).size !== all.length) {
             throw new Error("Duplicate delegation tool names");
@@ -464,6 +457,19 @@ export function createDelegationMcp(options: {
     actor?.harness ?? "opencode";
 
   /**
+   * What listing `actor`'s tools reads of it (delegation-tools.ts
+   * {@link ToolView}). With no session, OpenCode's shared discovery: every
+   * tool a session may be listed.
+   */
+  const viewOf = (actor: InstanceRow | undefined): ToolView => ({
+    harness: harnessOf(actor),
+    mayStart: actor?.mayStart ?? undefined,
+    hasParent: !actor || !!actor.parentInstanceId,
+    lands: landsOf(actor),
+    workItem: !actor || !!actor.workItemId,
+  });
+
+  /**
    * The tools a session is listed: its role's and its scope's (roles.ts),
    * narrowed by its own context (a leaf gets no spawning tools, only a work
    * item `finish_item`, only a session in a project the project's tools,
@@ -474,35 +480,7 @@ export function createDelegationMcp(options: {
    */
   const toolsFor = (actor: InstanceRow | undefined) => {
     const all = [
-      ...tools({
-        instanceId: "",
-        instanceById: options.instanceById,
-        formerIds: options.formerIds,
-        fleet: options.fleet,
-        cwd: "",
-        harness: harnessOf(actor),
-        mayStart: actor?.mayStart ?? undefined,
-        hasParent: !actor || !!actor.parentInstanceId,
-        lands: landsOf(actor),
-        workItem: !actor || !!actor.workItemId,
-        deliver: () => {
-          throw new Error("Discovery cannot execute tools");
-        },
-        handOff: () => {
-          throw new Error("Discovery cannot execute tools");
-        },
-        emit: () => {
-          throw new Error("Discovery cannot execute tools");
-        },
-        personOwed: () => {
-          throw new Error("Discovery cannot execute tools");
-        },
-        sendToUser: () => {
-          throw new Error("Discovery cannot execute tools");
-        },
-        spawn: () =>
-          Promise.reject(new Error("Discovery cannot execute tools")),
-      }),
+      ...tools(viewOf(actor)),
       ...admin,
       ...(options.tasks ? taskTools(undefined) : []),
       ...(options.projectFromSession ? [projectFromSessionTool()] : []),
@@ -790,36 +768,10 @@ export function createDelegationMcp(options: {
       } catch {
         caller = undefined;
       }
-      const entry = tools({
-        instanceId: "",
-        instanceById: options.instanceById,
-        formerIds: options.formerIds,
-        fleet: options.fleet,
-        cwd: "",
-        harness: harnessOf(caller),
-        projectId: caller?.projectId ?? undefined,
-        deliver: () => {
-          throw new Error("Reading the catalog sends nothing");
-        },
-        handOff: () => {
-          throw new Error("Reading the catalog sends nothing");
-        },
-        emit: () => {
-          throw new Error("Reading the catalog emits nothing");
-        },
-        personOwed: () => {
-          throw new Error("Reading the catalog asks nothing");
-        },
-        sendToUser: () => {
-          throw new Error("Reading the catalog sends nothing");
-        },
-        spawn: () =>
-          Promise.reject(new Error("Reading the catalog starts nothing")),
-      }).find((tool) => tool.name === name);
-      if (!entry) {
-        throw new Error(`Unknown tool ${name}`);
-      }
-      return await entry.call(input);
+      const projectId = caller?.projectId ?? undefined;
+      return await listDelegateTypesTool.call(input, {
+        actions: { listDelegateTypes: () => delegateTypesListed(projectId) },
+      });
     }
     return undefined;
   };
@@ -1048,7 +1000,7 @@ export function createDelegationMcp(options: {
   ): Promise<CallToolResult> => {
     const emitted: Envelope[] = [];
     const tree = options.delegationTree;
-    const entry = tools({
+    const deps: HandoffDeps = {
       instanceId: actor.id,
       instanceById: options.instanceById,
       formerIds: options.formerIds,
@@ -1075,11 +1027,15 @@ export function createDelegationMcp(options: {
       emit: (envelope) => emitted.push(envelope),
       spawn: (envelope) => options.spawn(envelope, actor),
       started: startedBy(actor, name, cut),
-    }).find((tool) => tool.name === name);
+    };
+    const entry = tools(viewOf(actor)).find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Tool ${name} is unavailable to this session`);
     }
-    const result = await entry.call(input);
+    const result = await bindTool(entry, {
+      actions: handoffActions(deps),
+      personOwed: deps.personOwed,
+    }).call(input);
     // A cut call's session is being stopped: its opening words would start it again.
     if (cut?.aborted) {
       return result;
@@ -1211,34 +1167,9 @@ export function createDelegationMcp(options: {
   };
 
   /** The server's instructions for the session `bound`. */
-  const instructionsFor = (
-    bound: InstanceRow | undefined,
-    binding: string | null
-  ): string =>
+  const instructionsFor = (bound: InstanceRow | undefined): string =>
     handoffInstructions(
-      {
-        instanceId: binding ?? "",
-        instanceById: options.instanceById,
-        formerIds: options.formerIds,
-        fleet: options.fleet,
-        cwd: bound?.cwd ?? "",
-        harness: harnessOf(bound),
-        mayStart: bound?.mayStart ?? undefined,
-        deliver: () => {
-          throw new Error("Instructions send nothing");
-        },
-        handOff: () => {
-          throw new Error("Instructions send nothing");
-        },
-        emit: () => undefined,
-        personOwed: () => {
-          throw new Error("Instructions ask nothing");
-        },
-        sendToUser: () => {
-          throw new Error("Instructions send nothing");
-        },
-        spawn: () => Promise.reject(new Error("Instructions start nothing")),
-      },
+      { mayStart: bound?.mayStart ?? undefined },
       listableOf(bound),
       options.decidesKinds()
     );
@@ -1269,9 +1200,7 @@ export function createDelegationMcp(options: {
         // A clean session's server says no instructions: its tools alone
         // (core `SpawnPayload.clean`).
         instructions:
-          initialize && !bound?.clean
-            ? instructionsFor(bound, binding)
-            : undefined,
+          initialize && !bound?.clean ? instructionsFor(bound) : undefined,
       }
     );
     const transport = new WebStandardStreamableHTTPServerTransport({
