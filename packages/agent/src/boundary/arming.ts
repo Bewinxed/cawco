@@ -48,10 +48,9 @@ import { watchCloneOf } from "./watch";
  * Writes one workspace's hook and its script again, in this build's form,
  * and serves its tool door: whether it was armed. A running boundary of an
  * older form is handed over here, behind the gate, and its handover arms the
- * new one ({@link handOver}); while this build's keeper is still owed the
+ * new one (ensure.ts `handOver`); while this build's keeper is still owed the
  * machine's endpoint (an update's agent starts before its keeper does), it is
- * armed as it is and handed over once that keeper is the machine's ({@link
- * ownKeeperOwed}); one whose handover fails is armed as it is and tried again
+ * armed as it is and handed over once that keeper is the machine's (decisions.ts `ownKeeperOwed`); one whose handover fails is armed as it is and tried again
  * at each look ({@link replaceSoon}). An older boundary an
  * earlier agent left running beside the current one is closed once nothing
  * runs in it ({@link closeWhenIdle}). Never throws: what fails is said.
