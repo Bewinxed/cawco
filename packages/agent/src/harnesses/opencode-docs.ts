@@ -1,5 +1,6 @@
 /**
- * OpenCode adapter. Subpath export: `@cawco/jsonl-parser/opencode`.
+ * OpenCode's transcripts as search documents (agent search/host.ts) and
+ * its usage rows as ranges (usage/scan-opencode.ts).
  *
  * OpenCode 2.0 keeps sessions in SQLite (`<data>/opencode/opencode.db`, one
  * database per server): `session_message` rows with a JSON `data` column (a
@@ -15,8 +16,13 @@
  */
 
 import { Database } from "bun:sqlite";
-import { section } from "./section.ts";
-import { type DocAuthor, TOOL_OUTPUT_CHARS, type TranscriptDoc, userAuthor } from "./text.ts";
+import {
+  type DocAuthor,
+  section,
+  TOOL_OUTPUT_CHARS,
+  type TranscriptDoc,
+  userAuthor,
+} from "@cawco/jsonl-parser";
 
 /** What a tool block answered, as 2.0 keeps it: its content's text parts, or its error. */
 interface ToolState {
@@ -26,10 +32,15 @@ interface ToolState {
 }
 
 interface MessageData {
-  time?: { created?: number; completed?: number };
-  text?: string;
+  content?: {
+    type?: string;
+    text?: string;
+    name?: string;
+    state?: ToolState;
+  }[];
   model?: { id?: string };
-  content?: { type?: string; text?: string; name?: string; state?: ToolState }[];
+  text?: string;
+  time?: { created?: number; completed?: number };
 }
 
 /** A settled tool block's words: its content's text, or its error's message, cut to `cap`. */
@@ -42,17 +53,19 @@ function toolOutputOf(state: ToolState | undefined, cap: number): string {
       ? (state.error?.message ?? "")
       : (state.content ?? [])
           .flatMap((part) =>
-            part.type === "text" && typeof part.text === "string" ? [part.text] : [],
+            part.type === "text" && typeof part.text === "string"
+              ? [part.text]
+              : []
           )
           .join("\n");
   return words.trim().slice(0, cap);
 }
 
 export interface ReadOpenCodeOptions {
-  /** Only rows with time_updated strictly greater than this (epoch ms). */
-  since?: number;
   /** Include reasoning (default true). */
   reasoning?: boolean;
+  /** Only rows with time_updated strictly greater than this (epoch ms). */
+  since?: number;
   /** How much of each tool's answer is kept, characters (default text.ts `TOOL_OUTPUT_CHARS`). */
   toolOutputChars?: number;
 }
@@ -74,12 +87,19 @@ interface Row {
 }
 
 /** A message's words, its reasoning, the tools it called and what they answered; null for one with none, or an answer still streaming. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: moved from jsonl-parser as it was written there: one pass over every kind of a message's content
 function wordsOf(
   row: Row,
   message: MessageData,
   reasoning: boolean,
-  outputCap: number,
-): { author: DocAuthor; output: string; text: string; thinking: string; tools: string[] } | null {
+  outputCap: number
+): {
+  author: DocAuthor;
+  output: string;
+  text: string;
+  thinking: string;
+  tools: string[];
+} | null {
   if (row.type === "user") {
     if (typeof message.text !== "string") {
       return null;
@@ -97,7 +117,11 @@ function wordsOf(
   for (const item of message.content ?? []) {
     if (typeof item.text === "string" && item.type === "text") {
       texts.push(item.text);
-    } else if (typeof item.text === "string" && item.type === "reasoning" && reasoning) {
+    } else if (
+      typeof item.text === "string" &&
+      item.type === "reasoning" &&
+      reasoning
+    ) {
       thoughts.push(item.text);
     } else if (item.type === "tool" && typeof item.name === "string") {
       tools.push(item.name);
@@ -141,13 +165,16 @@ export async function scanRanges<R>(
   table: string,
   sql: string,
   since: number,
-  each: (row: R) => void,
+  each: (row: R) => void
 ): Promise<void> {
   db.exec("BEGIN");
   try {
     const top =
-      (db.query(`SELECT max(rowid) AS top FROM ${table}`).get() as { top: number | null } | null)
-        ?.top ?? 0;
+      (
+        db.query(`SELECT max(rowid) AS top FROM ${table}`).get() as {
+          top: number | null;
+        } | null
+      )?.top ?? 0;
     const read = db.query<R, [number, number, number]>(sql);
     for (let from = 0; from < top; from += SCAN_RANGE) {
       section(`${table} read, a range at a time`, () => {
@@ -169,13 +196,17 @@ export async function scanRanges<R>(
  */
 export async function readOpenCodeDocs(
   dbPath: string,
-  options: ReadOpenCodeOptions = {},
+  options: ReadOpenCodeOptions = {}
 ): Promise<OpenCodeReadResult> {
   const db = new Database(dbPath, { readonly: true });
   try {
     const since = options.since ?? 0;
     if (
-      !db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'").get()
+      !db
+        .query(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'"
+        )
+        .get()
     ) {
       return { docs: [], watermark: since };
     }
@@ -193,6 +224,7 @@ export async function readOpenCodeDocs(
         watermark = Math.max(watermark, row.time_updated);
         let message: MessageData;
         try {
+          // biome-ignore lint/plugin/stored-json: OpenCode's own row, read as its 2.0 format writes it (moved from jsonl-parser as it was written there)
           message = JSON.parse(row.data) as MessageData;
         } catch {
           return;
@@ -201,7 +233,7 @@ export async function readOpenCodeDocs(
           row,
           message,
           options.reasoning !== false,
-          options.toolOutputChars ?? TOOL_OUTPUT_CHARS,
+          options.toolOutputChars ?? TOOL_OUTPUT_CHARS
         );
         if (!words) {
           return;
@@ -212,7 +244,9 @@ export async function readOpenCodeDocs(
           id: row.id,
           role: row.type,
           author: words.author,
-          timestamp: new Date(message.time?.created ?? row.time_created).toISOString(),
+          timestamp: new Date(
+            message.time?.created ?? row.time_created
+          ).toISOString(),
           text: words.text,
           ...(words.thinking ? { thinking: words.thinking } : {}),
           tools: words.tools.length > 0 ? words.tools.join(" ") : undefined,
@@ -220,8 +254,9 @@ export async function readOpenCodeDocs(
           cwd: row.directory,
           model: message.model?.id,
         });
-      },
+      }
     );
+    // biome-ignore lint/style/noNestedTernary: moved from jsonl-parser as it was written there: a three-way compare of ids
     docs.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     return { docs, watermark };
   } finally {
