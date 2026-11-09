@@ -1,7 +1,7 @@
 /**
  * The hub's error log, from a page: every error the page reports goes to the
  * hub, which writes it to its journal (hub dashboard-errors.ts), in the body
- * its route takes (core `hubRequest`). One reporter
+ * its route takes (Eden's client types it, platform/hub.ts). One reporter
  * per page, started once ({@link reportErrorsTo}): the dashboard's from its
  * client hook (hooks.client.ts), to `/api/dashboard-errors` on its own
  * origin; a decision page's from its host (decisions/host/host.ts), to core
