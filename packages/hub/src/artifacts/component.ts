@@ -7,6 +7,8 @@
  * report the canvas page posts (core `RenderReport`), never from the files
  * alone. Refusals name the valid shape and one example.
  */
+
+import type { DrawnKept } from "@cawco/core/doc-meta";
 import {
   CANVAS_SPEC_LIMITS,
   type CanvasDial,
@@ -15,7 +17,6 @@ import {
   type FrameRender,
   framesAlike,
   type Interaction,
-  type PageError,
   type RenderReport,
   type SectionRender,
   type SectionUndrawn,
@@ -318,14 +319,6 @@ export const unseen = (report: RenderReport, story?: string): boolean => {
     frames.length === 0 || frames.every((frame) => frame.state === "unseen")
   );
 };
-
-/** One states file's last draw as a component canvas's doc keeps it (`meta.drawn`): the section, when and by whom, and the page's errors with it. */
-export interface DrawnKept {
-  at: string;
-  by: RenderReport["by"];
-  errors: PageError[];
-  section: SectionRender;
-}
 
 /**
  * A stage's report with the canvas's last draws held past the stage: its
