@@ -541,7 +541,7 @@ const legD = async (legs: Legs) => {
   await restartHub(fleet);
   const end = await ended(legs, item, "D");
   const report = end?.result ?? "";
-  // Each step as the report's gate section says it (work-items.ts
+  // Each step as the report's gate section says it (landing-run.ts
   // `stepLine`): a kept pass "pass (not run again: …)", a run "pass (exit
   // 0, …)". Step two's run there is its second: the first was cut.
   const ran = (step: string) => report.includes(`- ${step}: pass (exit 0,`);
