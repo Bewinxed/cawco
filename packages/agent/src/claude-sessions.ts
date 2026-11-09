@@ -1,6 +1,6 @@
 /**
  * A Claude session's own data on this machine, by the classes core
- * `paths.ts` owns: where it is, the one carry that moves all of it into the
+ * `paths/claude.ts` owns: where it is, the one carry that moves all of it into the
  * dir its session runs in ({@link sessionConfigDir}), and the reads that
  * take it from there.
  *
