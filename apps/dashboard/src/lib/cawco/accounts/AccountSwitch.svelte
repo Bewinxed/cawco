@@ -16,9 +16,10 @@
    * and the account it runs on calls it off. Only while this tab's ask is on
    * its way to the hub does it take no picks.
    */
-  import { cawco } from "../client.svelte";
+
   import type { BoardRow } from "../links";
   import NsPopover from "../spawn/NsPopover.svelte";
+  import { accountsStore } from "../stores/accounts.svelte";
   import AccountName from "./AccountName.svelte";
   import { hueVar, nameOf } from "./model.svelte";
   import {
@@ -53,7 +54,9 @@
   const target = $derived(movingTo(instance));
   const shown = $derived.by(() => {
     const id = shownAccount(instance);
-    return cawco.accounts?.accounts.find((one) => one.id === id) ?? null;
+    return (
+      accountsStore.accounts?.accounts.find((one) => one.id === id) ?? null
+    );
   });
   const name = $derived(shown ? nameOf(shown) : "");
   const pickable = $derived(
