@@ -333,7 +333,7 @@ const IMPECCABLE_LAUNCHER = join("impeccable", "scripts", "impeccable");
 
 /**
  * The impeccable launcher: `$IMPECCABLE`, else the impeccable skill's in the
- * first of the fleet's skill layers that holds it (core paths.ts
+ * first of the fleet's skill layers that holds it (core paths/fleet.ts
  * `userSkillLayers`). The fleet may place impeccable as a plugin's skill, in
  * a vendored marketplace, and no `skills/impeccable` stands in the user layer
  * then: on the host every Chromium read said "no launcher" (r413).

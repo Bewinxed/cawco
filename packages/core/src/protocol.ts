@@ -189,7 +189,7 @@ export interface SpawnPayload {
   homeLoginMove?: { accountId: string };
   /**
    * A host-scope work item's session (hub work-items.ts `startHost`): the id
-   * of its host workspace, whose scratch dir (core paths.ts
+   * of its host workspace, whose scratch dir (core paths/workspace.ts
    * `workspaceScratchDir`) the machine makes, `outputs/` in it, and gives its
    * commands as `TMPDIR`, though they run on the host with no boundary.
    * What it leaves in `$TMPDIR/outputs/` the hub copies into its project's
@@ -678,7 +678,7 @@ export interface FsPayload {
   requestId: string;
   /**
    * `claude-home`: `path` is under the machine's user layer, Claude Code's
-   * own dir (`~/.claude`), as the machine itself places it (core paths.ts
+   * own dir (`~/.claude`), as the machine itself places it (core paths/claude.ts
    * `claudeHome`): no caller has to know a machine's home to reach it.
    */
   root?: "claude-home";
