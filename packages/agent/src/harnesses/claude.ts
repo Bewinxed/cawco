@@ -228,11 +228,13 @@ import type { FleetPart } from "../fleet-parts";
 import { type FleetPlaceSet, placeSetAt } from "../fleet-place-set";
 import { sessionGitEnv } from "../git-credential";
 import {
+  type CarryHost,
   type Harness,
   type HarnessContext,
   type HarnessSession,
   HeldProcessRefused,
   type KeeperCustody,
+  type SessionCarry,
   type TranscriptSpan,
   type TurnExtras,
 } from "../harness";
@@ -282,6 +284,7 @@ import {
   writtenAt,
 } from "../wakeups";
 import { FULL_CAPABILITIES } from "./capabilities";
+import { ClaudeCarry } from "./claude-carry";
 import { claudeStoredRun, homeLoginAccount } from "./claude-stored-run";
 import {
   CLAUDE_PROMPT_TYPES,
@@ -4863,6 +4866,9 @@ const readAsk = (
 const RING_START = 0;
 
 class ClaudeHarness implements Harness<"claude"> {
+  carrier(host: CarryHost): SessionCarry {
+    return new ClaudeCarry(this, host);
+  }
   readonly detectStartsNothing = true;
   readonly healsFleetMcp = true;
   readonly relaunchesOnManualCompact = true;
