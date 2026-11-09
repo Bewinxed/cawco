@@ -54,14 +54,14 @@ import {
   questionClose,
   settle,
 } from "./artifacts/tools";
-import {
-  type HandoffDeps,
-  handoffActions,
-  type ItemEnd,
+import type {
+  HandoffActions,
+  HandoffDeps,
+  ItemEnd,
 } from "./delegation-actions";
 import { decodeCursor } from "./find";
 import { handedInputsListed } from "./handed-input";
-import { type Presenter, sentence, tool } from "./mcp-tool";
+import { type McpToolOn, type Presenter, sentence, toolOn } from "./mcp-tool";
 import {
   type AskChanged,
   artifactBrowsedWords,
@@ -301,7 +301,7 @@ const inputsParameter = () =>
 
 /** `handoff`'s call: the message, with files for the receiver's inputs folder. */
 const handed =
-  (actions: ReturnType<typeof handoffActions>) =>
+  (actions: HandoffActions) =>
   ({
     target,
     message,
@@ -351,38 +351,72 @@ const NO_REPLY_WORDS: Record<
 };
 
 /** The tools themselves, separated from the server so they can be exercised directly. */
-export function handoffTools(deps: HandoffDeps) {
-  const actions = handoffActions(deps);
-  /** `artifact_update`'s `ask` then `title`, each through its own route; undefined when it names neither. */
-  const headWritten = async (
-    id: string,
-    ask: string | undefined,
-    title: string | undefined
-  ): Promise<HeadChanged | undefined> => {
-    if (ask === undefined && title === undefined) {
-      return;
-    }
-    const at = `/${encodeURIComponent(id)}`;
-    const asked =
-      ask === undefined
-        ? undefined
-        : ((await actions.artifactCall("POST", `${at}/ask`, {
-            ask,
-          })) as AskChanged);
-    const titled =
-      title === undefined
-        ? undefined
-        : ((await actions.artifactCall("POST", `${at}/title`, {
-            title,
-          })) as TitleChanged);
-    return {
-      id,
-      ...(asked ? { ask: asked.ask } : {}),
-      ...(titled ? { title: titled.title } : {}),
-    };
+/**
+ * What listing a session's tools reads of it: their words and which tools
+ * it gets turn on these alone (delegation-mcp.ts lists them with nothing
+ * else of the session).
+ */
+export type ToolView = Pick<
+  HandoffDeps,
+  "harness" | "hasParent" | "lands" | "mayStart" | "workItem"
+>;
+
+/** What a session's tool acts through as it is called: its actions, and whether the person is owed an answer. */
+export interface HandoffOn {
+  readonly actions: HandoffActions;
+  readonly personOwed: HandoffDeps["personOwed"];
+}
+
+/** What `list_delegate_types` acts through: the catalog alone, which a call with no session reads too. */
+export interface CatalogOn {
+  readonly actions: Pick<HandoffActions, "listDelegateTypes">;
+}
+
+const handoffTool = toolOn<HandoffOn>();
+const catalogTool = toolOn<CatalogOn>();
+
+/** `list_delegate_types`: the same for every session, and read by a call that names none. */
+export const listDelegateTypesTool = catalogTool(
+  "list_delegate_types",
+  "The live delegate types: what each is for and what it runs. A project's own types replace the fleet's of the same name. They rarely change, so one read serves a session. Running sessions are list_sessions'.",
+  {},
+  (_asked, _format, bound) => bound.actions.listDelegateTypes(),
+  delegateTypesWords
+);
+
+/** `artifact_update`'s `ask` then `title`, each through its own route; undefined when it names neither. */
+const headWritten = async (
+  actions: HandoffActions,
+  id: string,
+  ask: string | undefined,
+  title: string | undefined
+): Promise<HeadChanged | undefined> => {
+  if (ask === undefined && title === undefined) {
+    return;
+  }
+  const at = `/${encodeURIComponent(id)}`;
+  const asked =
+    ask === undefined
+      ? undefined
+      : ((await actions.artifactCall("POST", `${at}/ask`, {
+          ask,
+        })) as AskChanged);
+  const titled =
+    title === undefined
+      ? undefined
+      : ((await actions.artifactCall("POST", `${at}/title`, {
+          title,
+        })) as TitleChanged);
+  return {
+    id,
+    ...(asked ? { ask: asked.ask } : {}),
+    ...(titled ? { title: titled.title } : {}),
   };
+};
+
+export function handoffTools(view: ToolView): McpToolOn<HandoffOn>[] {
   const all = [
-    tool(
+    handoffTool(
       "generate_image",
       IMAGE_GENERATION_DESCRIPTION,
       {
@@ -429,7 +463,7 @@ export function handoffTools(deps: HandoffDeps) {
             `gemini-api only; left out, ${IMAGE_PROVIDER_MODELS["gemini-api"][0]}.`
           ),
       },
-      (request) => actions.generateImage(request),
+      (request, _format, bound) => bound.actions.generateImage(request),
       imageWords,
       {
         annotations: {
@@ -440,7 +474,7 @@ export function handoffTools(deps: HandoffDeps) {
         },
       }
     ),
-    tool(
+    handoffTool(
       "forge_post",
       "Open an issue, a pull/merge request or a comment on a repository's forge, with your machine's own sign-in. Default: this project's repository. Push the head branch first.",
       {
@@ -480,7 +514,7 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("What number names; default issue."),
       },
-      ({ kind, repo, title, body, head, base, number, on }) => {
+      ({ kind, repo, title, body, head, base, number, on }, _format, bound) => {
         const write = forgeWriteOf({
           kind,
           body: body ?? "",
@@ -490,7 +524,7 @@ export function handoffTools(deps: HandoffDeps) {
           ...(number ? { number } : {}),
           ...(on ? { on } : {}),
         });
-        return actions.forgePost({
+        return bound.actions.forgePost({
           write,
           ...(repo ? { repo } : {}),
         });
@@ -505,14 +539,8 @@ export function handoffTools(deps: HandoffDeps) {
         },
       }
     ),
-    tool(
-      "list_delegate_types",
-      "The live delegate types: what each is for and what it runs. A project's own types replace the fleet's of the same name. They rarely change, so one read serves a session. Running sessions are list_sessions'.",
-      {},
-      () => actions.listDelegateTypes(),
-      delegateTypesWords
-    ),
-    tool(
+    listDelegateTypesTool,
+    handoffTool(
       "list_sessions",
       LIST_SESSIONS_DESCRIPTION,
       {
@@ -547,8 +575,8 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(`Default ${SESSION_LIST_LIMIT}, max ${SESSION_LIST_MAX}.`),
         cursor: z.string().optional().describe("next_cursor."),
       },
-      ({ role, stopped, sort, since, limit, cursor }) =>
-        actions.listSessions({
+      ({ role, stopped, sort, since, limit, cursor }, _format, bound) =>
+        bound.actions.listSessions({
           role: role ?? "all",
           sort: sort ?? "active",
           limit: limit ?? SESSION_LIST_LIMIT,
@@ -559,14 +587,14 @@ export function handoffTools(deps: HandoffDeps) {
       sessionListWords,
       { annotations: READ_ONLY }
     ),
-    tool(
+    handoffTool(
       "handoff",
-      handoffDescription(sessionMayStart(deps).length === 0),
+      handoffDescription(sessionMayStart(view).length === 0),
       { ...handoffShape(), inputs: inputsParameter() },
-      handed(actions),
+      (asked, _format, bound) => handed(bound.actions)(asked),
       sentence
     ),
-    tool(
+    handoffTool(
       "start_session",
       "Start a new session of its own and give it work: its own sidebar row under this session and its own transcript, outliving this turn. " +
         "Unlike a delegate it reports nothing back. Use it when the user asks to spin something off, or for work in another directory or machine where no session runs yet; " +
@@ -612,19 +640,23 @@ export function handoffTools(deps: HandoffDeps) {
             "Default this session's; a pi session must name one for a harness that has modes. Omit for pi."
           ),
       },
-      ({
-        cwd,
-        prompt,
-        title,
-        spinOff,
-        type,
-        harness,
-        model,
-        account,
-        permissionMode,
-        machine,
-      }) =>
-        actions.startSession(cwd, prompt, title, {
+      (
+        {
+          cwd,
+          prompt,
+          title,
+          spinOff,
+          type,
+          harness,
+          model,
+          account,
+          permissionMode,
+          machine,
+        },
+        _format,
+        bound
+      ) =>
+        bound.actions.startSession(cwd, prompt, title, {
           spinOff,
           type,
           harness,
@@ -635,7 +667,7 @@ export function handoffTools(deps: HandoffDeps) {
         }),
       startedWords
     ),
-    tool(
+    handoffTool(
       "delegate",
       "Run bounded work in a new session with its own workspace and fresh context. It reports back once its work passes the hub's merge checks (its project's gate.md lists them), quoting the output of the commands that prove it.\n\n" +
         "A delegate costs a whole session: it reads the code again from nothing, its workspace is cut and its checks run, and you wait for its report. " +
@@ -739,31 +771,35 @@ export function handoffTools(deps: HandoffDeps) {
             "The task it does, like tsk-12: an attempt at it, your prompt above its task file, run where the task runs; landing moves it on. Not with workspace, host, cwd or machine."
           ),
       },
-      ({
-        prompt,
-        title,
-        type,
-        harness,
-        model,
-        account,
-        cwd,
-        skills,
-        workspace,
-        from,
-        fork,
-        clean,
-        may_start,
-        inputs,
-        machine,
-        lands,
-        host,
-        outputs,
-        group,
-        owns,
-        budget,
-        task,
-      }) =>
-        actions.delegate(prompt, {
+      (
+        {
+          prompt,
+          title,
+          type,
+          harness,
+          model,
+          account,
+          cwd,
+          skills,
+          workspace,
+          from,
+          fork,
+          clean,
+          may_start,
+          inputs,
+          machine,
+          lands,
+          host,
+          outputs,
+          group,
+          owns,
+          budget,
+          task,
+        },
+        _format,
+        bound
+      ) =>
+        bound.actions.delegate(prompt, {
           title,
           cwd,
           harness,
@@ -788,7 +824,7 @@ export function handoffTools(deps: HandoffDeps) {
         }),
       delegateWords
     ),
-    tool(
+    handoffTool(
       "delegate_list",
       "Your delegates, newest first, theirs nested: each one's state, cache warmth and report; then those queued for owned files and the workspaces held with unlanded work. Use it when you need where one stands; reports and refusals reach you by themselves. With target, that one delegate in full: its step now, its last steps, its context against its model's window, what it has made so far and its last words; use it while one works and you need its progress or context before its report.",
       {
@@ -819,9 +855,9 @@ export function handoffTools(deps: HandoffDeps) {
         ),
         before: isoTime().describe("ISO time: only items started before it."),
       },
-      ({ include, since, before, target, page }, format) => {
+      ({ include, since, before, target, page }, format, bound) => {
         const windowed = since !== undefined || before !== undefined;
-        return actions.delegateList({
+        return bound.actions.delegateList({
           include: include ?? (windowed ? "all" : "live"),
           ...(target === undefined
             ? {}
@@ -839,7 +875,7 @@ export function handoffTools(deps: HandoffDeps) {
       delegateListWords,
       { annotations: READ_ONLY }
     ),
-    tool(
+    handoffTool(
       "wait_item",
       "Declare a bounded wait on a command you started or a check your parent is running for you, then end your turn: the hub shows your parent what you wait for and wakes you when the wait's minutes run out or a message arrives. Any tool call but a CawCo read ends the wait.",
       {
@@ -855,13 +891,14 @@ export function handoffTools(deps: HandoffDeps) {
           .min(1, { error: WAIT_ITEM_LIMIT })
           .describe("What you are waiting for."),
       },
-      ({ minutes, reason }) => actions.waitItem(minutes, reason),
+      ({ minutes, reason }, _format, bound) =>
+        bound.actions.waitItem(minutes, reason),
       sentence,
       { inputError: WAIT_ITEM_LIMIT }
     ),
-    tool(
+    handoffTool(
       "finish_item",
-      finishItemDescription(deps.lands),
+      finishItemDescription(view.lands),
       {
         headline: z
           .string()
@@ -887,10 +924,10 @@ export function handoffTools(deps: HandoffDeps) {
             "Release it once it lands on main, with notes telling the person updating what changed for them: the project's gate.md Ship: command runs it. Your call."
           ),
       },
-      (request) => actions.finishItem(request),
+      (request, _format, bound) => bound.actions.finishItem(request),
       sentence
     ),
-    tool(
+    handoffTool(
       "continue_session",
       "Continue another session (a stuck delegate) in a fresh conversation, summarised by a model you pick; it stays one session. Never this session.",
       {
@@ -934,10 +971,10 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("What the summary focuses on, and its next step."),
       },
-      (input) => actions.continueSession(input),
+      (input, _format, bound) => bound.actions.continueSession(input),
       startedWords
     ),
-    tool(
+    handoffTool(
       "stop_delegate",
       "Stop one of your delegates: its item is cancelled; a later handoff reopens it. A queued delegate's id withdraws it from the queue.",
       {
@@ -945,10 +982,10 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .describe("Its handle, directory or id; or a queued delegate's id."),
       },
-      ({ target }) => actions.stopDelegate(target),
+      ({ target }, _format, bound) => bound.actions.stopDelegate(target),
       sentence
     ),
-    tool(
+    handoffTool(
       "discard_workspace",
       "Let go of a held workspace of your delegates' whose work you will not continue: what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes. Refused while it serves what waits on the person; ask lets him decide.",
       {
@@ -956,24 +993,25 @@ export function handoffTools(deps: HandoffDeps) {
         ask: z.boolean().optional(),
         reason: z.string().max(300).optional().describe("With ask: why."),
       },
-      ({ workspace, ask, reason }) =>
-        actions.discardWorkspace(workspace, {
+      ({ workspace, ask, reason }, _format, bound) =>
+        bound.actions.discardWorkspace(workspace, {
           ...(ask ? { ask } : {}),
           ...(reason ? { reason } : {}),
         }),
       sentence
     ),
-    tool(
+    handoffTool(
       "interrupt_delegate",
       "Interrupt one of your delegates mid-turn without ending it. It keeps its state and stays idle: " +
         "nothing automatic wakes it, only your handoff or the person's message.",
       {
         target: z.string().describe("Its handle, directory or id."),
       },
-      ({ target }) => Promise.resolve(actions.interruptDelegate(target)),
+      ({ target }, _format, bound) =>
+        Promise.resolve(bound.actions.interruptDelegate(target)),
       sentence
     ),
-    tool(
+    handoffTool(
       "machine_pause",
       "Pause a machine for some minutes: its turns stop and nothing starts there until then; work for it waits. resume: true ends it.",
       {
@@ -994,11 +1032,11 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("true ends its pause; give this or minutes."),
       },
-      ({ machine, minutes, resume }) =>
-        actions.machinePause(machine, minutes, resume),
+      ({ machine, minutes, resume }, _format, bound) =>
+        bound.actions.machinePause(machine, minutes, resume),
       sentence
     ),
-    tool(
+    handoffTool(
       "answer_delegate",
       'Answer an ask your delegate routed to you: answers keyed by the exact question text, each the chosen option label, copied from its "[delegate-ask ...]" message; deny refuses it; neither allows it as asked.',
       {
@@ -1010,13 +1048,13 @@ export function handoffTools(deps: HandoffDeps) {
           .describe("Question text → chosen option label."),
         deny: z.boolean().optional().describe("true refuses the ask."),
       },
-      ({ target, requestId, answers, deny }) =>
+      ({ target, requestId, answers, deny }, _format, bound) =>
         Promise.resolve(
-          actions.answerDelegate(target, requestId, answers, deny)
+          bound.actions.answerDelegate(target, requestId, answers, deny)
         ),
       sentence
     ),
-    tool(
+    handoffTool(
       "send_to_user",
       "Show the user a message in this session's transcript, pushed to their phone: what they must see as written before the task finishes, like a result they asked to hear at once. A question goes by ask, a choice by a decision card, and progress in your plan with todo_write.",
       {
@@ -1030,10 +1068,11 @@ export function handoffTools(deps: HandoffDeps) {
             "Absolute paths of images or videos (50 MB each), shown under it."
           ),
       },
-      ({ message, attachments }) => actions.sendToUser(message, attachments),
+      ({ message, attachments }, _format, bound) =>
+        bound.actions.sendToUser(message, attachments),
       sentence
     ),
-    tool(
+    handoffTool(
       "open_items",
       "Your open items, as every compaction lists them: read it first when one ends. Your plan, task to-dos, filed tasks, inbox notes, asks, and every question your tree put to the person, open or answered, yours first.",
       {
@@ -1043,11 +1082,11 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("next_cursor, for more questions."),
       },
-      ({ cursor }, format) => actions.openItems(cursor, format),
+      ({ cursor }, format, bound) => bound.actions.openItems(cursor, format),
       verbatim,
       { annotations: { readOnlyHint: true }, detailed: verbatim }
     ),
-    tool(
+    handoffTool(
       "set_title",
       "Name this session once its task is clear, and again only when the task changes.",
       {
@@ -1060,7 +1099,7 @@ export function handoffTools(deps: HandoffDeps) {
             "3–6 plain words, verb first, like 'Fix tray chip overflow'."
           ),
       },
-      ({ title }) => actions.setTitle(title),
+      ({ title }, _format, bound) => bound.actions.setTitle(title),
       sentence,
       {
         annotations: {
@@ -1071,17 +1110,17 @@ export function handoffTools(deps: HandoffDeps) {
         },
       }
     ),
-    tool(
+    handoffTool(
       NO_REPLY_TOOL,
-      NO_REPLY_WORDS[deps.harness].description,
+      NO_REPLY_WORDS[view.harness].description,
       {},
-      () => {
+      (_asked, _format, bound) => {
         // Thrown, the result is an error with no end-of-turn mark: the model
         // takes its next step, on any harness (core no-reply.ts).
-        if (deps.personOwed()) {
+        if (bound.personOwed()) {
           throw new Error(NO_REPLY_OWED);
         }
-        return Promise.resolve(NO_REPLY_WORDS[deps.harness].result);
+        return Promise.resolve(NO_REPLY_WORDS[view.harness].result);
       },
       sentence,
       {
@@ -1094,7 +1133,7 @@ export function handoffTools(deps: HandoffDeps) {
         },
       }
     ),
-    tool(
+    handoffTool(
       "show_image",
       "Show an image file to the user in this session's transcript, by path, without reading its pixels: whenever they should SEE a screenshot, render or diagram.",
       {
@@ -1104,16 +1143,17 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("One line under the image saying what it shows."),
       },
-      ({ path }) => Promise.resolve(actions.showImage(path)),
+      ({ path }, _format, bound) =>
+        Promise.resolve(bound.actions.showImage(path)),
       sentence
     ),
-    tool(
+    handoffTool(
       artifactList.name,
       artifactList.description,
       artifactList.input,
-      ({ cursor }) => {
+      ({ cursor }, _format, bound) => {
         const query = new URLSearchParams(cursor ? { cursor } : {}).toString();
-        return actions.artifactCall(
+        return bound.actions.artifactCall(
           "GET",
           `/list${query ? `?${query}` : ""}`
         ) as Promise<ArtifactList>;
@@ -1122,30 +1162,34 @@ export function handoffTools(deps: HandoffDeps) {
       { annotations: READ_ONLY }
     ),
     // A delegate may hand it to its parent instead (`to`), unopened.
-    deps.hasParent
-      ? tool(
+    view.hasParent
+      ? handoffTool(
           artifactCreate.name,
           artifactCreate.description + artifactCreateToParent.description,
           { ...artifactCreate.input, ...artifactCreateToParent.input },
-          (input) =>
-            actions.artifactCall("POST", "", input) as Promise<Created>,
+          (input, _format, bound) =>
+            bound.actions.artifactCall("POST", "", input) as Promise<Created>,
           artifactCreatedWords,
           { detailed: artifactCreatedDetailed }
         )
-      : tool(
+      : handoffTool(
           artifactCreate.name,
           artifactCreate.description,
           artifactCreate.input,
-          (input) =>
-            actions.artifactCall("POST", "", input) as Promise<Created>,
+          (input, _format, bound) =>
+            bound.actions.artifactCall("POST", "", input) as Promise<Created>,
           artifactCreatedWords,
           { detailed: artifactCreatedDetailed }
         ),
-    tool(
+    handoffTool(
       artifactUpdate.name,
       artifactUpdate.description,
       artifactUpdate.input,
-      async ({ id, statements, ask, title, ...change }): Promise<Updated> => {
+      async (
+        { id, statements, ask, title, ...change },
+        _format,
+        bound
+      ): Promise<Updated> => {
         const at = `/${encodeURIComponent(id)}`;
         const changes = Object.values(change).some(
           (value) => value !== undefined
@@ -1156,13 +1200,17 @@ export function handoffTools(deps: HandoffDeps) {
           );
         }
         // A new ask and title are checked and written first, so a refused one changes nothing.
-        const head = await headWritten(id, ask, title);
+        const head = await headWritten(bound.actions, id, ask, title);
         if (statements !== undefined) {
           return {
             change: "statements",
-            answer: (await actions.artifactCall("POST", `${at}/statements`, {
-              statements,
-            })) as Revised,
+            answer: (await bound.actions.artifactCall(
+              "POST",
+              `${at}/statements`,
+              {
+                statements,
+              }
+            )) as Revised,
           };
         }
         if (!changes && head) {
@@ -1175,7 +1223,7 @@ export function handoffTools(deps: HandoffDeps) {
         return component
           ? {
               change: "component",
-              answer: (await actions.artifactCall(
+              answer: (await bound.actions.artifactCall(
                 "PATCH",
                 `${at}/component`,
                 change
@@ -1183,7 +1231,7 @@ export function handoffTools(deps: HandoffDeps) {
             }
           : {
               change: "page",
-              answer: (await actions.artifactCall(
+              answer: (await bound.actions.artifactCall(
                 "PATCH",
                 at,
                 change
@@ -1193,16 +1241,16 @@ export function handoffTools(deps: HandoffDeps) {
       artifactUpdatedWords,
       { detailed: artifactUpdatedDetailed }
     ),
-    tool(
+    handoffTool(
       settle.name,
       settle.description,
       settle.input,
-      ({ card, ...picked }) => {
+      ({ card, ...picked }, _format, bound) => {
         const hash = card.lastIndexOf("#");
         if (hash <= 0 || hash === card.length - 1) {
           throw new Error(`“${card}” names no card: write <page>#<card>.`);
         }
-        return actions.artifactCall(
+        return bound.actions.artifactCall(
           "POST",
           `/${encodeURIComponent(card.slice(0, hash))}/settle`,
           { card: card.slice(hash + 1), ...picked }
@@ -1210,23 +1258,23 @@ export function handoffTools(deps: HandoffDeps) {
       },
       settledWords
     ),
-    tool(
+    handoffTool(
       questionClose.name,
       questionClose.description,
       questionClose.input,
-      (closing) =>
-        actions.artifactCall(
+      (closing, _format, bound) =>
+        bound.actions.artifactCall(
           "POST",
           "/questions/close",
           closing
         ) as Promise<QuestionClosed>,
       questionClosedWords
     ),
-    tool(
+    handoffTool(
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
-      async ({ id, state, ...asked }) => {
+      async ({ id, state, ...asked }, _format, bound) => {
         // Each read field given into the query, a frame's `state` as JSON; a flag left off stays out.
         const query = new URLSearchParams(
           Object.entries({
@@ -1238,7 +1286,7 @@ export function handoffTools(deps: HandoffDeps) {
         ).toString();
         let target = id;
         if (target === undefined) {
-          const [newest] = (await actions.artifactCall("GET", "")) as {
+          const [newest] = (await bound.actions.artifactCall("GET", "")) as {
             id: string;
           }[];
           if (!newest) {
@@ -1246,7 +1294,7 @@ export function handoffTools(deps: HandoffDeps) {
           }
           target = newest.id;
         }
-        return (await actions.artifactCall(
+        return (await bound.actions.artifactCall(
           "GET",
           `/${encodeURIComponent(target)}${query ? `?${query}` : ""}`
         )) as ArtifactRead;
@@ -1254,18 +1302,18 @@ export function handoffTools(deps: HandoffDeps) {
       artifactReadWords,
       { annotations: READ_ONLY, detailed: artifactReadDetailed }
     ),
-    tool(
+    handoffTool(
       designMap.name,
       designMap.description,
       designMap.input,
-      (ask, format) => {
+      (ask, format, bound) => {
         const query = new URLSearchParams([
           ...Object.entries(ask)
             .filter(([, value]) => value !== undefined)
             .map(([key, value]): [string, string] => [key, String(value)]),
           ["response_format", format],
         ]).toString();
-        return actions.artifactCall(
+        return bound.actions.artifactCall(
           "GET",
           `/design-map${query ? `?${query}` : ""}`
         ) as Promise<DesignMap>;
@@ -1273,23 +1321,23 @@ export function handoffTools(deps: HandoffDeps) {
       designMapWords,
       { annotations: READ_ONLY }
     ),
-    tool(
+    handoffTool(
       artifactShow.name,
       artifactShow.description,
       artifactShow.input,
-      ({ id }) =>
-        actions.artifactCall(
+      ({ id }, _format, bound) =>
+        bound.actions.artifactCall(
           "POST",
           `/${encodeURIComponent(id)}/show?by=agent`
         ) as Promise<Shown>,
       artifactShownWords
     ),
-    tool(
+    handoffTool(
       artifactBrowse.name,
       artifactBrowse.description,
       artifactBrowse.input,
-      ({ id }) =>
-        actions.artifactCall(
+      ({ id }, _format, bound) =>
+        bound.actions.artifactCall(
           "POST",
           `/${encodeURIComponent(id)}/browse`
         ) as Promise<Browsed & { link: string }>,
@@ -1303,12 +1351,12 @@ export function handoffTools(deps: HandoffDeps) {
         },
       }
     ),
-    tool(
+    handoffTool(
       artifactPromote.name,
       artifactPromote.description,
       artifactPromote.input,
-      ({ id }) =>
-        actions.artifactCall(
+      ({ id }, _format, bound) =>
+        bound.actions.artifactCall(
           "POST",
           `/${encodeURIComponent(id)}/promote`
         ) as Promise<Promoted>,
@@ -1322,22 +1370,22 @@ export function handoffTools(deps: HandoffDeps) {
         },
       }
     ),
-    tool(
+    handoffTool(
       artifactDelete.name,
       artifactDelete.description,
       artifactDelete.input,
-      ({ id }) =>
-        actions.artifactCall(
+      ({ id }, _format, bound) =>
+        bound.actions.artifactCall(
           "DELETE",
           `/${encodeURIComponent(id)}?by=agent`
         ) as Promise<Removed>,
       artifactRemovedWords
     ),
-    tool(
+    handoffTool(
       commentRead.name,
       commentRead.description,
       commentRead.input,
-      ({ artifact, filter, since }) => {
+      ({ artifact, filter, since }, _format, bound) => {
         // The session reads them itself: what it reads counts as heard.
         const query = new URLSearchParams({
           filter,
@@ -1345,7 +1393,7 @@ export function handoffTools(deps: HandoffDeps) {
           ...(artifact ? { artifact } : {}),
           ...(since ? { since } : {}),
         }).toString();
-        return actions.artifactCall(
+        return bound.actions.artifactCall(
           "GET",
           `/comments?${query}`
         ) as Promise<CommentRead>;
@@ -1353,24 +1401,24 @@ export function handoffTools(deps: HandoffDeps) {
       commentReadWords,
       { annotations: READ_ONLY }
     ),
-    tool(
+    handoffTool(
       commentReply.name,
       commentReply.description,
       commentReply.input,
-      ({ pin, ...reply }) =>
-        actions.artifactCall(
+      ({ pin, ...reply }, _format, bound) =>
+        bound.actions.artifactCall(
           "POST",
           `/comments/${encodeURIComponent(pin)}/reply`,
           reply
         ) as Promise<CommentReplied>,
       commentRepliedWords
     ),
-    tool(
+    handoffTool(
       commentResolve.name,
       commentResolve.description,
       commentResolve.input,
-      ({ pin, ...resolve }) =>
-        actions.artifactCall(
+      ({ pin, ...resolve }, _format, bound) =>
+        bound.actions.artifactCall(
           "POST",
           `/comments/${encodeURIComponent(pin)}/resolve`,
           resolve
@@ -1380,8 +1428,8 @@ export function handoffTools(deps: HandoffDeps) {
   ];
   return all.filter(
     (entry) =>
-      spawningToolAllowed(entry.name, sessionMayStart(deps)) &&
-      (!["finish_item", "wait_item"].includes(entry.name) || !!deps.workItem)
+      spawningToolAllowed(entry.name, sessionMayStart(view)) &&
+      (!["finish_item", "wait_item"].includes(entry.name) || !!view.workItem)
   );
 }
 
@@ -1482,7 +1530,7 @@ const BLOCKS =
 
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
-  deps: HandoffDeps,
+  view: Pick<ToolView, "mayStart">,
   listable: Listable,
   kinds: readonly Kind[]
 ): string {
@@ -1498,7 +1546,7 @@ export function handoffInstructions(
     ? `\n\ngenerate_image makes images on any model through this machine's own sign-in to an image provider (the fleet's default, ${DEFAULT_IMAGE_PROVIDER} unless changed, or the one provider names): this session makes its own.`
     : "";
   const loading = `\n\n${loadingLine(listable)}`;
-  const mayStart = sessionMayStart(deps);
+  const mayStart = sessionMayStart(view);
   if (!startsAny(mayStart)) {
     // A leaf that may start a few types hands them the work they name and
     // waits on their reports like any parent.
