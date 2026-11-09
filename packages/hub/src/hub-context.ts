@@ -24,6 +24,7 @@ import type { ArchiveView } from "@cawco/core/archive";
 import type { AskAnswer } from "@cawco/core/asks";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import type { Bounded } from "@cawco/core/bounded";
+import type { CommandQueue } from "@cawco/core/commands/controls";
 import type {
   FleetAgent,
   FleetPlugin,
@@ -176,6 +177,7 @@ import type { ProjectDelegateTypes } from "./project-delegate-types";
 import type { projectDelete } from "./project-delete";
 import type { createProjectEdits } from "./project-edit";
 import type { ProjectAsk, ProjectMade } from "./project-making";
+import type { MergeDeps } from "./project-merge";
 import type { createProjectOut, placeAddedOf } from "./project-out";
 import type { createProjectStops } from "./project-stops";
 import type { ProjectTrash } from "./project-trash";
@@ -365,6 +367,7 @@ export interface HubContext {
   coldWork: (
     instanceId: string
   ) => Promise<Unlanded | { error: string } | null>;
+  commandQueues: Map<string, (queue: CommandQueue | null) => void>;
   connectAsks: ReturnType<typeof createConnectAsks>;
   connections: ReturnType<typeof createConnections>;
   contact: ReturnType<typeof createMachineContact>;
@@ -677,6 +680,7 @@ export interface HubContext {
   mcpChanges: FleetMcpChanges;
   mcpReady: Promise<unknown>;
   memoryWatch: ReturnType<typeof createTurnWatch>;
+  merging: MergeDeps;
   modelRefusal: (
     machineId: string,
     harness: HarnessKind,
