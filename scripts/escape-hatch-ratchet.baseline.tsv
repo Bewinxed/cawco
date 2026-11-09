@@ -345,9 +345,10 @@ suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/opencode-transcript.ts	2
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/opencode.ts	5
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/harnesses/pi-runtime.ts	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/live-sessions.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/preview.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/session-containers.ts	1
-suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/session.ts	5
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/session.ts	4
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/agent/src/stage-host/host.ts	3
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/cli/src/cli.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	packages/core/src/hooks.ts	1

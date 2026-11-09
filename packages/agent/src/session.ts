@@ -87,7 +87,6 @@ import type {
   LaunchGrant,
   SendPayload,
   SessionAddress,
-  SessionPulse,
   SpawnPayload,
   StopPayload,
 } from "@cawco/core/protocol";
@@ -159,7 +158,6 @@ import {
   CONTROL_BEGIN_TOOL_SIGNIN,
   CONTROL_COMPLETE_TOOL_SIGNIN,
 } from "@cawco/core/tools";
-import { getToolGlance } from "@cawco/core/transcript-rules";
 import type { WindowAsk } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { harnessWords } from "@cawco/core/words/harness";
@@ -232,6 +230,7 @@ import { isDirectory } from "./is-directory";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
 import { watchLeaks } from "./leak-watch";
 import { createLeftRunning } from "./left-running";
+import { LiveSessions } from "./live-sessions";
 import { measureMemoryRoom } from "./machine-room";
 import { mcpGateOf, mcpHost } from "./mcp-host";
 import { retireInstalls } from "./mcp-install";
@@ -531,9 +530,6 @@ const TAIL_LINES = 4;
 const tail = (output: string): string =>
   output.trim().split("\n").slice(-TAIL_LINES).join("\n");
 
-/** At most one pulse per instance per this long, unless busy/blocked moves. */
-const PULSE_THROTTLE_MS = 1000;
-
 /**
  * How long a session stays at rest before its processes are stopped: no turn
  * running, nothing it asked still open, nothing it runs in the background,
@@ -774,7 +770,7 @@ export class SessionSupervisor {
 
   constructor() {
     gaugeTables("supervisor", {
-      sessions: this.#sessions,
+      sessions: this.#live.sessions,
       asleep: this.#asleep,
       handed: this.#handed,
       queues: this.#queues,
@@ -788,14 +784,14 @@ export class SessionSupervisor {
       failures: this.#failures,
       generations: this.#generations,
       placed: this.#placed,
-      activeAt: this.#activeAt,
-      pulseAt: this.#pulseAt,
+      activeAt: this.#live.activeAt,
+      pulseAt: this.#live.pulseAt,
       keepAlive: this.#keepAlive,
     });
     // Each live session's own tables, summed by name across sessions.
     gaugeGroup("session", () => {
       const totals: Record<string, number> = {};
-      for (const session of this.#sessions.values()) {
+      for (const session of this.#live.sessions.values()) {
         for (const [name, size] of Object.entries(session.tables?.() ?? {})) {
           totals[name] = (totals[name] ?? 0) + size;
         }
@@ -852,23 +848,14 @@ export class SessionSupervisor {
       })
     );
   }
-  readonly #sessions = new Map<string, HarnessSession>();
-  /**
-   * When each carried session was last seen doing, or holding, anything: the
-   * moment its rest is counted from ({@link IDLE_SLEEP_MS}). Moved by every
-   * turn starting or ending, every ask parked or settled and every send, and
-   * by each sweep that finds the session not at rest.
-   */
-  readonly #activeAt = new Map<string, number>();
+  /** The sessions this agent carries now, and their pulse (live-sessions.ts). */
+  readonly #live = new LiveSessions({
+    adopting: (instanceId) => this.#adopting.has(instanceId),
+    keptAlive: (instanceId) => this.#keepAlive.has(instanceId),
+    sink: (frame) => this.sink(frame),
+  });
   /** The sessions this daemon put to sleep, until their next start ({@link sleep}). */
   readonly #asleep = new Set<string>();
-  /**
-   * Sessions this daemon is stopping itself (a sleep, a stop, a relaunch, a
-   * move's carry): their process closing, on whatever signal or exit, is
-   * that stop's to say, never a failure and never a process going away on
-   * its own.
-   */
-  readonly #ending = new WeakSet<HarnessSession>();
   /** Each session's shell calls running now, by tool use: their commands, off its own frames ({@link #noteShell}). */
   readonly #shells = new Map<string, Map<string, string>>();
   /** Each session's command trees, recorded as they start, ended when its harness process dies (left-running.ts). */
@@ -893,7 +880,7 @@ export class SessionSupervisor {
    * the agent before is held there by its process (boundary/holding.ts `attachedIn`).
    */
   boundedWorkspaces(): string[] {
-    return [...this.#sessions.keys()].flatMap((instanceId) => {
+    return [...this.#live.sessions.keys()].flatMap((instanceId) => {
       const workspace = this.#placed.get(instanceId)?.workspace;
       return workspace ? [workspace] : [];
     });
@@ -963,7 +950,7 @@ export class SessionSupervisor {
   readonly #keepers = new KeeperPool();
   /** The machine's fleet convergence, which reads the live sessions only to tell one to heal (fleet-converger.ts). */
   readonly #fleet = new FleetConverger({
-    session: (instanceId) => this.#sessions.get(instanceId),
+    session: (instanceId) => this.#live.sessions.get(instanceId),
     ids: () => this.instanceIds,
     cwdOf: (instanceId) => this.#resumable.get(instanceId)?.cwd,
     emit: (envelope) => this.emit(envelope),
@@ -1057,8 +1044,6 @@ export class SessionSupervisor {
       }
     }
   }
-  /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
-  readonly #busy = new Set<string>();
   /** Attached sessions whose CLI runs a boundary hook that fails open, until the relaunch that replaces it ({@link BOUNDARY_RELAUNCH}). */
   readonly #failOpen = new Set<string>();
   /** Claude processes that ran a manual `/compact`, until the relaunch that replaces them ({@link COMPACT_RELAUNCH}). */
@@ -1098,22 +1083,6 @@ export class SessionSupervisor {
     string,
     { adapter: Harness; sessionKey: string; cwd: string }
   >();
-
-  /**
-   * Per-instance pulse, folded from the frames already passing through (Part 2
-   * of per-instance subscription). Only the parts a rail needs without frames:
-   * the tool in flight, the parked-permission count, and the running-subagent
-   * task ids. `busy` reuses {@link #busy}; the pulse is rebuilt on emit.
-   */
-  readonly #pulseTool = new Map<
-    string,
-    { name: string; glance: string; toolId: string }
-  >();
-  readonly #pulseBlocked = new Map<string, number>();
-  readonly #pulseSubagents = new Map<string, Set<string>>();
-  /** Last emit per instance — the 1/sec throttle — and its trailing-edge timer. */
-  readonly #pulseAt = new Map<string, number>();
-  readonly #pulseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   readonly #daemonFunctions: Record<string, ControlMethod> = {
     // A generation runs in this process, so a restart cuts it: none starts behind a raised fence.
@@ -1553,12 +1522,12 @@ export class SessionSupervisor {
 
   /** The sessions running right now — what `register` reconciles the hub against. */
   get instanceIds(): string[] {
-    return [...this.#sessions.keys()];
+    return [...this.#live.sessions.keys()];
   }
 
   get sessionAddresses(): SessionAddress[] {
     const addresses = new Map<string, SessionAddress>();
-    for (const [instanceId, session] of this.#sessions) {
+    for (const [instanceId, session] of this.#live.sessions) {
       if (traitsOf(session.harness).custody === "server" && session.sessionId) {
         addresses.set(instanceId, {
           instanceId,
@@ -1601,7 +1570,7 @@ export class SessionSupervisor {
   get custodyInstanceIds(): string[] {
     return [
       ...new Set([
-        ...this.#sessions.keys(),
+        ...this.#live.sessions.keys(),
         ...this.#adopting.keys(),
         ...[...this.#queues.keys()].filter((key) => key && !key.includes(":")),
       ]),
@@ -1727,8 +1696,9 @@ export class SessionSupervisor {
     const serverBusy = await serverBusyInstances();
     return [
       ...new Set([
-        ...[...this.#busy].filter(
-          (id) => traitsOf(this.#sessions.get(id)?.harness).custody !== "server"
+        ...[...this.#live.busy].filter(
+          (id) =>
+            traitsOf(this.#live.sessions.get(id)?.harness).custody !== "server"
         ),
         ...this.#turnPending,
         ...serverBusy,
@@ -1811,84 +1781,6 @@ export class SessionSupervisor {
     );
   }
 
-  /** The pulse as it stands, computed from the parts rather than stored. */
-  #buildPulse(instanceId: string): SessionPulse {
-    const blocked = (this.#pulseBlocked.get(instanceId) ?? 0) > 0;
-    const busy = this.#busy.has(instanceId);
-    const running = this.#pulseSubagents.get(instanceId)?.size ?? 0;
-    const activity = ((): SessionPulse["activity"] => {
-      if (blocked) {
-        return "blocked";
-      }
-      return busy || running > 0 ? "working" : "idle";
-    })();
-    return {
-      instanceId,
-      busy,
-      activity,
-      currentTool: this.#pulseTool.get(instanceId) ?? null,
-      runningSubagents: running,
-      at: Date.now(),
-    };
-  }
-
-  /**
-   * Whether this daemon speaks for an instance: it carries the session, or a
-   * reattach has claimed the child and is deciding or attaching it — a turn
-   * that child is running is this daemon's to report from the decision on.
-   */
-  #speaksFor(instanceId: string): boolean {
-    return this.#sessions.has(instanceId) || this.#adopting.has(instanceId);
-  }
-
-  /**
-   * Pushes the current pulse, throttled to {@link PULSE_THROTTLE_MS} per
-   * instance. A busy/blocked transition always goes immediately; everything
-   * else waits for the trailing edge of the window.
-   */
-  #emitPulse(instanceId: string, important: boolean): void {
-    if (!this.#speaksFor(instanceId) || this.#keepAlive.has(instanceId)) {
-      return;
-    }
-    const now = Date.now();
-    const last = this.#pulseAt.get(instanceId) ?? 0;
-    const sendNow = () => {
-      const timer = this.#pulseTimers.get(instanceId);
-      if (timer) {
-        clearTimeout(timer);
-      }
-      this.#pulseTimers.delete(instanceId);
-      this.#pulseAt.set(instanceId, Date.now());
-      this.sink({
-        kind: "pulse",
-        instanceId,
-        pulse: this.#buildPulse(instanceId),
-      });
-    };
-    if (important || now - last >= PULSE_THROTTLE_MS) {
-      sendNow();
-    } else if (!this.#pulseTimers.has(instanceId)) {
-      this.#pulseTimers.set(
-        instanceId,
-        setTimeout(
-          () => {
-            this.#pulseTimers.delete(instanceId);
-            if (!this.#speaksFor(instanceId)) {
-              return;
-            }
-            this.#pulseAt.set(instanceId, Date.now());
-            this.sink({
-              kind: "pulse",
-              instanceId,
-              pulse: this.#buildPulse(instanceId),
-            });
-          },
-          PULSE_THROTTLE_MS - (now - last)
-        )
-      );
-    }
-  }
-
   /**
    * The carried sessions the hub wants kept awake, as its last heartbeat ack
    * listed them (`HeartbeatAckPayload.keepAwake`): what only the hub knows of
@@ -1906,13 +1798,6 @@ export class SessionSupervisor {
     }
   }
 
-  /** A carried session did something: its rest is counted from now. */
-  #touch(instanceId: string): void {
-    if (this.#sessions.has(instanceId)) {
-      this.#activeAt.set(instanceId, Date.now());
-    }
-  }
-
   /**
    * A session taken over from the agent before this one has been at rest
    * since it last wrote, not since this agent met it, and its harness's own
@@ -1926,7 +1811,7 @@ export class SessionSupervisor {
     cwd: string
   ): Promise<void> {
     const met = Date.now();
-    this.#activeAt.set(instanceId, met);
+    this.#live.activeAt.set(instanceId, met);
     if (!session.sessionId) {
       return;
     }
@@ -1936,10 +1821,10 @@ export class SessionSupervisor {
     // Unless it has done something since, or is no longer this session.
     if (
       info?.lastModified &&
-      this.#sessions.get(instanceId) === session &&
-      this.#activeAt.get(instanceId) === met
+      this.#live.sessions.get(instanceId) === session &&
+      this.#live.activeAt.get(instanceId) === met
     ) {
-      this.#activeAt.set(instanceId, Math.min(met, info.lastModified));
+      this.#live.activeAt.set(instanceId, Math.min(met, info.lastModified));
     }
   }
 
@@ -1987,10 +1872,10 @@ export class SessionSupervisor {
         return { why: "an ask is waiting for its answer" };
       }
     }
-    if (this.#busy.has(instanceId)) {
+    if (this.#live.busy.has(instanceId)) {
       return { why: "a turn is running" };
     }
-    if ((this.#pulseSubagents.get(instanceId)?.size ?? 0) > 0) {
+    if ((this.#live.pulseSubagents.get(instanceId)?.size ?? 0) > 0) {
       return { why: "a subagent is running" };
     }
     if (!session.sessionId) {
@@ -2034,7 +1919,7 @@ export class SessionSupervisor {
    * handed one) or an ask it parked, whose answer goes to this process alone.
    */
   #inTurn(instanceId: string): boolean {
-    if (this.#busy.has(instanceId)) {
+    if (this.#live.busy.has(instanceId)) {
       return true;
     }
     for (const ask of this.#openAsks.values()) {
@@ -2067,7 +1952,7 @@ export class SessionSupervisor {
     console.info(turnWords.relaunchWaits(instanceId));
     try {
       while (
-        this.#sessions.get(instanceId) === running &&
+        this.#live.sessions.get(instanceId) === running &&
         this.#inTurn(instanceId)
       ) {
         if (wait.signal.aborted) {
@@ -2111,7 +1996,7 @@ export class SessionSupervisor {
     instanceId: string,
     retire = false
   ): Promise<{ asleep: boolean; awake?: string }> {
-    const session = this.#sessions.get(instanceId);
+    const session = this.#live.sessions.get(instanceId);
     if (!session) {
       return { asleep: this.#asleep.has(instanceId) };
     }
@@ -2122,7 +2007,7 @@ export class SessionSupervisor {
     const processGeneration = this.#generations.get(instanceId);
     // Carried, and listed on every beat, until it has stopped: a beat that no
     // longer listed it first would have the hub settle it as ended.
-    this.#ending.add(session);
+    this.#live.ending.add(session);
     await session.stop();
     // Asleep only once no keeper holds its process, as a stop says `stopped`
     // only then ({@link #stop}). `session.stop()` closes the CLI's stdin and
@@ -2136,7 +2021,7 @@ export class SessionSupervisor {
       (error: unknown) =>
         error instanceof Error ? error : new Error(String(error))
     );
-    this.#sessions.delete(instanceId);
+    this.#live.sessions.delete(instanceId);
     this.#forgetPulse(instanceId);
     if (left) {
       // Still running past its kill: not asleep, and the hub hears why.
@@ -2236,7 +2121,7 @@ export class SessionSupervisor {
         restless[instanceId] = "its custody is still being decided";
         continue;
       }
-      const session = this.#sessions.get(instanceId);
+      const session = this.#live.sessions.get(instanceId);
       if (!session) {
         continue;
       }
@@ -2394,14 +2279,14 @@ export class SessionSupervisor {
     if (refused) {
       return { state: "failed", error: refused };
     }
-    const running = this.#sessions.get(instanceId);
+    const running = this.#live.sessions.get(instanceId);
     if (running && held?.exited.has(instanceId)) {
       // Its process is gone and nothing told this daemon: nothing of it can
       // answer a stop, and nothing writes its conversation.
-      this.#sessions.delete(instanceId);
-      this.#busy.delete(instanceId);
+      this.#live.sessions.delete(instanceId);
+      this.#live.busy.delete(instanceId);
       this.#forgetPulse(instanceId);
-      this.#ending.add(running);
+      this.#live.ending.add(running);
       running
         .dispose()
         .catch((error: unknown) =>
@@ -2478,10 +2363,10 @@ export class SessionSupervisor {
         `[carry] ${instanceId}: no keeper lists its process, yet this daemon holds it running; it is stopped as any other`
       );
     }
-    this.#sessions.delete(instanceId);
+    this.#live.sessions.delete(instanceId);
     this.#forgetPulse(instanceId);
     // Ended by this daemon for a move: its end is no failure.
-    this.#ending.add(running);
+    this.#live.ending.add(running);
     const at = Date.now();
     const stopped = await readWithin(CARRY_STOP_MS, () => running.stop());
     switch (stopped.kind) {
@@ -2525,7 +2410,7 @@ export class SessionSupervisor {
    * ({@link #retire}).
    */
   async #sweepIdle(): Promise<void> {
-    const carried = [...this.#sessions];
+    const carried = [...this.#live.sessions];
     if (carried.length === 0) {
       return;
     }
@@ -2540,11 +2425,11 @@ export class SessionSupervisor {
       const awake = await this.#awake(instanceId, session, serverBusy);
       if (awake) {
         if (!awake.unsure) {
-          this.#touch(instanceId);
+          this.#live.touch(instanceId);
         }
         continue;
       }
-      if (now - (this.#activeAt.get(instanceId) ?? now) < IDLE_SLEEP_MS) {
+      if (now - (this.#live.activeAt.get(instanceId) ?? now) < IDLE_SLEEP_MS) {
         continue;
       }
       const queue = (this.#queues.get(instanceId) ?? Promise.resolve())
@@ -2568,99 +2453,32 @@ export class SessionSupervisor {
     this.#cacheCold.delete(instanceId);
     this.#keepAlive.delete(instanceId);
     this.#failureRun.delete(instanceId);
-    this.#busy.delete(instanceId);
-    this.#activeAt.delete(instanceId);
+    this.#live.busy.delete(instanceId);
+    this.#live.activeAt.delete(instanceId);
     this.#line.delete(instanceId);
     this.#streams.forget(instanceId);
     // The process this mark counted in is over — a relaunch or a death.
     // Whatever produces frames next is not replaying the hub's own past.
     this.#ingested.delete(instanceId);
-    this.#pulseTool.delete(instanceId);
-    this.#pulseBlocked.delete(instanceId);
+    this.#live.pulseTool.delete(instanceId);
+    this.#live.pulseBlocked.delete(instanceId);
     for (const [requestId, ask] of this.#openAsks) {
       if ("instanceId" in ask && ask.instanceId === instanceId) {
         this.#openAsks.delete(requestId);
       }
     }
-    this.#pulseSubagents.delete(instanceId);
-    this.#pulseAt.delete(instanceId);
-    const timer = this.#pulseTimers.get(instanceId);
+    this.#live.pulseSubagents.delete(instanceId);
+    this.#live.pulseAt.delete(instanceId);
+    const timer = this.#live.pulseTimers.get(instanceId);
     if (timer) {
       clearTimeout(timer);
     }
-    this.#pulseTimers.delete(instanceId);
+    this.#live.pulseTimers.delete(instanceId);
     // A fleet MCP install no row names any more may have waited on this
     // session's process alone (mcp-install.ts).
     retireInstalls(() => this.instanceIds).catch((error: unknown) =>
       warn(`retiring old fleet MCP installs failed: ${errorText(error)}`)
     );
-  }
-
-  /**
-   * Folds one neutral frame into the pulse, then emits. Only the main loop's
-   * frames move the tool; a subagent's carry `parent_tool_use_id` and belong to
-   * the subagent count, not the rail's tool line.
-   */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: folds every neutral frame shape (assistant tool_use, user tool_result, …) into the pulse in one pass
-  #foldPulse(
-    instanceId: string,
-    adapter: Harness,
-    message: NeutralMessage
-  ): void {
-    const main = !(
-      "parent_tool_use_id" in message && message.parent_tool_use_id
-    );
-    if (message.type === "assistant" && main) {
-      for (const block of message.message.content) {
-        if (block.type !== "tool_use") {
-          continue;
-        }
-        this.#pulseTool.set(instanceId, {
-          name: block.name,
-          glance: getToolGlance(block.input as Record<string, unknown>),
-          toolId: block.id,
-        });
-        this.#emitPulse(instanceId, false);
-        return;
-      }
-      return;
-    }
-    if (message.type === "user" && main) {
-      const { content } = message.message;
-      if (!Array.isArray(content)) {
-        return;
-      }
-      for (const block of content) {
-        if (block.type !== "tool_result") {
-          continue;
-        }
-        this.#pulseTool.delete(instanceId);
-        this.#emitPulse(instanceId, false);
-        return;
-      }
-      return;
-    }
-    if (message.type === "result") {
-      this.#pulseTool.delete(instanceId);
-      this.#emitPulse(instanceId, false);
-      return;
-    }
-    const change = adapter.subagentChange(message);
-    if (!change) {
-      return;
-    }
-    const running = this.#pulseSubagents.get(instanceId);
-    if (change.kind === "started") {
-      if (running) {
-        running.add(change.taskId);
-      } else {
-        this.#pulseSubagents.set(instanceId, new Set([change.taskId]));
-      }
-      this.#emitPulse(instanceId, false);
-    } else if (running?.has(change.taskId)) {
-      running.delete(change.taskId);
-      this.#emitPulse(instanceId, false);
-    }
   }
 
   /**
@@ -2685,8 +2503,8 @@ export class SessionSupervisor {
     // A stage speaks to this daemon alone (its stdout): each that answers is
     // written down and ended, and the next daemon starts it again at its port.
     carryStages();
-    for (const instanceId of [...this.#sessions.keys()]) {
-      this.#sessions.delete(instanceId);
+    for (const instanceId of [...this.#live.sessions.keys()]) {
+      this.#live.sessions.delete(instanceId);
       this.#forgetPulse(instanceId);
     }
   }
@@ -2862,7 +2680,7 @@ export class SessionSupervisor {
       );
       this.#fleet.healFleetMcp([{ instanceId, mcp: true, settings: true }]);
     } catch (problem) {
-      if (stopped?.aborted || this.#sessions.get(instanceId) !== session) {
+      if (stopped?.aborted || this.#live.sessions.get(instanceId) !== session) {
         return;
       }
       // Its process ending refuses what it was asked: its closing says so.
@@ -2878,12 +2696,12 @@ export class SessionSupervisor {
             )
             .catch(() => undefined)
         : undefined;
-      if (alive === false || this.#sessions.get(instanceId) !== session) {
+      if (alive === false || this.#live.sessions.get(instanceId) !== session) {
         return;
       }
-      this.#ending.add(session);
-      this.#sessions.delete(instanceId);
-      this.#busy.delete(instanceId);
+      this.#live.ending.add(session);
+      this.#live.sessions.delete(instanceId);
+      this.#live.busy.delete(instanceId);
       this.#forgetPulse(instanceId);
       // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
       await session.stop().catch(() => {});
@@ -2942,7 +2760,7 @@ export class SessionSupervisor {
   ): Promise<void> {
     if (
       !(session && this.#compactedHere.has(session)) ||
-      this.#sessions.get(instanceId) !== session
+      this.#live.sessions.get(instanceId) !== session
     ) {
       return;
     }
@@ -2970,7 +2788,7 @@ export class SessionSupervisor {
       (payload.reattachOnly || payload.resume) &&
       !payload.resume?.atMessage &&
       !payload.relaunch &&
-      this.#sessions.has(instanceId)
+      this.#live.sessions.has(instanceId)
     ) {
       if (ack) {
         this.sink({
@@ -3071,7 +2889,7 @@ export class SessionSupervisor {
         );
         return;
       }
-      if (payload.resume && !this.#sessions.has(instanceId)) {
+      if (payload.resume && !this.#live.sessions.has(instanceId)) {
         // A resume can also arrive after a failed custody attachment. Read
         // sessiond and join adoption before allowing the normal absent-process
         // spawn; an attachment failure never authorises replacing a held child.
@@ -3131,7 +2949,7 @@ export class SessionSupervisor {
       // process under the same id, settling the old one first, once its turn
       // has ended. A process is never ended mid-turn for a start again (a
       // mode, an account move, a hook), whoever asked for it.
-      let running = this.#sessions.get(instanceId);
+      let running = this.#live.sessions.get(instanceId);
       if (running) {
         if (this.#reuseRecovery(payload)) {
           return;
@@ -3150,13 +2968,13 @@ export class SessionSupervisor {
           }
           return;
         }
-        running = this.#sessions.get(instanceId);
+        running = this.#live.sessions.get(instanceId);
       }
       if (running) {
-        this.#sessions.delete(instanceId);
+        this.#live.sessions.delete(instanceId);
         this.#forgetPulse(instanceId);
-        // Ended by this daemon: its end is no failure ({@link #ending}).
-        this.#ending.add(running);
+        // Ended by this daemon: its end is no failure ({@link LiveSessions.ending}).
+        this.#live.ending.add(running);
         await running.stop();
       }
       // What the process this replaces was handed and never read goes back to
@@ -3250,7 +3068,7 @@ export class SessionSupervisor {
       if (refused) {
         throw refused;
       }
-      this.#sessions.set(instanceId, session);
+      this.#live.sessions.set(instanceId, session);
       if (boundary && this.#failOpen.delete(instanceId)) {
         console.info(
           `boundary: relaunched ${instanceId} onto the fail-closed hook`
@@ -3263,13 +3081,13 @@ export class SessionSupervisor {
           "dateActivity"
         );
       } else {
-        this.#activeAt.set(instanceId, Date.now());
+        this.#live.activeAt.set(instanceId, Date.now());
       }
       this.#asleep.delete(instanceId);
       // A reattach that met a running turn said so before there was a session
-      // to carry the pulse ({@link #emitPulse} drops it): said now.
-      if (this.#busy.has(instanceId)) {
-        this.#emitPulse(instanceId, true);
+      // to carry the pulse ({@link LiveSessions.emitPulse} drops it): said now.
+      if (this.#live.busy.has(instanceId)) {
+        this.#live.emitPulse(instanceId, true);
       }
       // The session is in place. Worth saying out loud for a relaunch, whose
       // caller has nothing else to wait on.
@@ -3611,7 +3429,7 @@ export class SessionSupervisor {
         // rebuilt from a replay, and a line the hub already has still tells
         // this agent what its own session is doing.
         if (!keepAlive) {
-          this.#foldPulse(instanceId, adapter, message);
+          this.#live.foldPulse(instanceId, adapter, message);
           this.#streams.note(instanceId, adapter.kind, message);
         }
         // AT MOST ONCE. The hub's mark is the hub's word, so a line at or below
@@ -3649,12 +3467,12 @@ export class SessionSupervisor {
         if (this.#openAsks.has(request.requestId)) {
           return;
         }
-        this.#touch(instanceId);
-        this.#pulseBlocked.set(
+        this.#live.touch(instanceId);
+        this.#live.pulseBlocked.set(
           instanceId,
-          (this.#pulseBlocked.get(instanceId) ?? 0) + 1
+          (this.#live.pulseBlocked.get(instanceId) ?? 0) + 1
         );
-        this.#emitPulse(instanceId, true);
+        this.#live.emitPulse(instanceId, true);
         const body = {
           kind: "permission_request" as const,
           instanceId,
@@ -3669,23 +3487,23 @@ export class SessionSupervisor {
         this.#settleAsk(instanceId, requestId, outcome, false, answer),
       busy: (active) => {
         if (active) {
-          this.#busy.add(instanceId);
+          this.#live.busy.add(instanceId);
         } else {
-          this.#busy.delete(instanceId);
+          this.#live.busy.delete(instanceId);
         }
         // A keep-alive ping is the hub's maintenance, not the session doing
         // anything: its rest is still counted from its own last turn.
         if (!this.#keepAlive.has(instanceId)) {
-          this.#touch(instanceId);
+          this.#live.touch(instanceId);
         }
-        this.#emitPulse(instanceId, true);
+        this.#live.emitPulse(instanceId, true);
       },
       session: (sessionId) =>
         this.#spinOffs.noteQuestSession(instanceId, sessionId, adapter.kind),
       failed: (error) => {
         // A process this daemon ended (a sleep, a stop, a relaunch, a move)
         // ends as that stop says, whatever its harness made of it.
-        if (holder.session && this.#ending.has(holder.session)) {
+        if (holder.session && this.#live.ending.has(holder.session)) {
           this.#endedHere(instanceId, error);
           return;
         }
@@ -3698,13 +3516,13 @@ export class SessionSupervisor {
         // failure: a failed row holds no workspace (workspaces.ts `holdsOf`),
         // and a CLI left running in one was closed under ({@link #endFailed}).
         if (holder.session) {
-          this.#ending.add(holder.session);
+          this.#live.ending.add(holder.session);
         }
         this.#endFailed(instanceId, error, processGeneration);
       },
       died: (signal, error, cut) => {
         const { session } = holder;
-        if (session && this.#ending.has(session)) {
+        if (session && this.#live.ending.has(session)) {
           this.#endedHere(instanceId, error);
           return;
         }
@@ -3714,7 +3532,7 @@ export class SessionSupervisor {
         if (
           recovery ||
           !session ||
-          this.#sessions.get(instanceId) !== session
+          this.#live.sessions.get(instanceId) !== session
         ) {
           if (recovery) {
             this.#failures.set(instanceId, String(error));
@@ -3723,8 +3541,8 @@ export class SessionSupervisor {
           }
           return;
         }
-        this.#sessions.delete(instanceId);
-        this.#busy.delete(instanceId);
+        this.#live.sessions.delete(instanceId);
+        this.#live.busy.delete(instanceId);
         this.#forgetPulse(instanceId);
         this.#gone(instanceId, processGeneration, {
           signal,
@@ -3744,10 +3562,10 @@ export class SessionSupervisor {
       // beat that still listed it read it running again over its failure.
       refused: (error) => {
         const { session } = holder;
-        if (session && this.#sessions.get(instanceId) === session) {
-          this.#ending.add(session);
-          this.#sessions.delete(instanceId);
-          this.#busy.delete(instanceId);
+        if (session && this.#live.sessions.get(instanceId) === session) {
+          this.#live.ending.add(session);
+          this.#live.sessions.delete(instanceId);
+          this.#live.busy.delete(instanceId);
           this.#forgetPulse(instanceId);
         }
         this.#fail(instanceId, error, processGeneration);
@@ -3776,16 +3594,16 @@ export class SessionSupervisor {
         }
         if (
           holder.session &&
-          this.#sessions.get(instanceId) === holder.session
+          this.#live.sessions.get(instanceId) === holder.session
         ) {
-          this.#sessions.delete(instanceId);
-          this.#busy.delete(instanceId);
+          this.#live.sessions.delete(instanceId);
+          this.#live.busy.delete(instanceId);
           this.#forgetPulse(instanceId);
           // Its process went away of its own accord: a failure has said so
           // (`#fail`), and anything else is the session at rest, its next
           // message waking it ({@link #gone}). One this daemon is stopping
           // (a sleep, a stop) is said by the one stopping it.
-          if (this.#ending.has(holder.session)) {
+          if (this.#live.ending.has(holder.session)) {
             return;
           }
           if (this.#failures.has(instanceId)) {
@@ -3937,7 +3755,7 @@ export class SessionSupervisor {
   ): Promise<void> {
     const { instanceId } = spec;
     // Started or attached by what ran ahead of it in the queue.
-    if (this.#sessions.has(instanceId)) {
+    if (this.#live.sessions.has(instanceId)) {
       return;
     }
     const claim = Promise.withResolvers<void>();
@@ -3949,10 +3767,10 @@ export class SessionSupervisor {
       );
       this.#turnPending.delete(instanceId);
       if (running) {
-        this.#busy.add(instanceId);
+        this.#live.busy.add(instanceId);
         // The hub forgot this session's pulse at the register: the rail's
         // Working list hears it from here, not once it is attached.
-        this.#emitPulse(instanceId, true);
+        this.#live.emitPulse(instanceId, true);
       }
       await this.#adoptClaimed(
         adapter,
@@ -3961,8 +3779,11 @@ export class SessionSupervisor {
         stopped
       );
     } catch (problem) {
-      if (!this.#sessions.has(instanceId) && this.#busy.delete(instanceId)) {
-        this.#emitPulse(instanceId, true);
+      if (
+        !this.#live.sessions.has(instanceId) &&
+        this.#live.busy.delete(instanceId)
+      ) {
+        this.#live.emitPulse(instanceId, true);
       }
       await this.#heldNotAttached(adapter, spec, proc, problem, stopped);
     } finally {
@@ -4046,7 +3867,7 @@ export class SessionSupervisor {
       await custodyProbe(answered, stopped);
     } catch (problem) {
       if (stopped?.aborted) {
-        this.#ending.add(session);
+        this.#live.ending.add(session);
         // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the stop behind it ends the child either way
         await session.dispose().catch(() => {});
       }
@@ -4107,14 +3928,14 @@ export class SessionSupervisor {
     });
     holder.session = session;
     // Attached: the live child is this session's process from here, running.
-    this.#sessions.set(spec.instanceId, session);
+    this.#live.sessions.set(spec.instanceId, session);
     detach(
       this.#dateActivity(spec.instanceId, adapter, session, spec.cwd),
       "dateActivity"
     );
     session.attached?.();
-    if (this.#busy.has(spec.instanceId)) {
-      this.#emitPulse(spec.instanceId, true);
+    if (this.#live.busy.has(spec.instanceId)) {
+      this.#live.emitPulse(spec.instanceId, true);
     }
     this.#adopting.delete(spec.instanceId);
     settle();
@@ -4198,7 +4019,7 @@ export class SessionSupervisor {
     if (spec.keepAliveTurn) {
       this.#keepAlive.set(spec.instanceId, spec.keepAliveTurn);
     }
-    if (this.#sessions.has(spec.instanceId)) {
+    if (this.#live.sessions.has(spec.instanceId)) {
       return "attached";
     }
     if (!(
@@ -4435,8 +4256,8 @@ export class SessionSupervisor {
     }
     warn(`${instanceId}: ${error.reason} (${error.procId})`);
     this.#keeperRefused.set(instanceId, error);
-    this.#sessions.delete(instanceId);
-    this.#busy.delete(instanceId);
+    this.#live.sessions.delete(instanceId);
+    this.#live.busy.delete(instanceId);
     this.#forgetPulse(instanceId);
     // The keeper refused its input, not its life: the process may run on,
     // driven by nothing. It alone is ended, by its pid ({@link
@@ -4566,7 +4387,7 @@ export class SessionSupervisor {
       return true;
     }
     const held = this.#handed.get(instanceId)?.get(message.uuid);
-    const session = this.#sessions.get(instanceId);
+    const session = this.#live.sessions.get(instanceId);
     if (!(held && session)) {
       return false;
     }
@@ -4607,7 +4428,7 @@ export class SessionSupervisor {
    */
   #noProcessFor(payload: SendPayload, keepAlive: boolean): boolean {
     const { instanceId } = payload;
-    if (this.#sessions.has(instanceId)) {
+    if (this.#live.sessions.has(instanceId)) {
       return false;
     }
     if (keepAlive) {
@@ -4744,7 +4565,7 @@ export class SessionSupervisor {
   }
 
   /**
-   * A process this daemon ended itself ({@link #ending}) has gone: whoever
+   * A process this daemon ended itself ({@link LiveSessions.ending}) has gone: whoever
    * ended it says so (the hub for a stop or a move, a sleep for itself), so
    * its harness's word on the way out is only logged, never a failure.
    */
@@ -4832,7 +4653,7 @@ export class SessionSupervisor {
   #reject(instanceId: string, uuid: string, error: unknown): void {
     const said = error instanceof Error ? error.message : String(error);
     if (
-      !this.#sessions.has(instanceId) ||
+      !this.#live.sessions.has(instanceId) ||
       this.#keeperRefused.has(instanceId)
     ) {
       const handed = this.#handed.get(instanceId)?.get(uuid)?.payload;
@@ -4892,7 +4713,7 @@ export class SessionSupervisor {
     if (this.#noProcessFor(payload, keepAlive)) {
       return;
     }
-    const session = this.#sessions.get(instanceId);
+    const session = this.#live.sessions.get(instanceId);
     if (!session) {
       return;
     }
@@ -4910,7 +4731,7 @@ export class SessionSupervisor {
         );
       }
       if (
-        this.#busy.has(instanceId) ||
+        this.#live.busy.has(instanceId) ||
         [...this.#openAsks.values()].some(
           (ask) => "instanceId" in ask && ask.instanceId === instanceId
         )
@@ -4919,7 +4740,7 @@ export class SessionSupervisor {
       }
       this.#keepAlive.set(instanceId, message.uuid);
     } else {
-      this.#touch(instanceId);
+      this.#live.touch(instanceId);
       // A send is the reader trying again: whatever failed before it is not
       // the session looping on its own.
       this.#failureRun.delete(instanceId);
@@ -5012,9 +4833,9 @@ export class SessionSupervisor {
     // and never read as it hears this said `stopped`.
     this.#asleep.delete(instanceId);
     try {
-      const session = this.#sessions.get(instanceId);
+      const session = this.#live.sessions.get(instanceId);
       if (session) {
-        this.#ending.add(session);
+        this.#live.ending.add(session);
       }
       if (!harness) {
         throw new Error(
@@ -5033,7 +4854,7 @@ export class SessionSupervisor {
           instanceId,
           key: sessionId ?? session?.sessionId,
           sharedElsewhere: (key) =>
-            [...this.#sessions].some(
+            [...this.#live.sessions].some(
               ([id, held]) =>
                 id !== instanceId &&
                 held.harness === kind &&
@@ -5067,7 +4888,7 @@ export class SessionSupervisor {
           return;
         }
         ({ ended, sharedConversation } = stopped);
-        this.#sessions.delete(instanceId);
+        this.#live.sessions.delete(instanceId);
         this.#forgetPulse(instanceId);
       } else if (session) {
         this.#forgetPulse(instanceId);
@@ -5076,7 +4897,7 @@ export class SessionSupervisor {
         // the session meanwhile had the hub settle it as ended — what it was
         // holding failed "ended" before this said "stopped".
         await session.stop();
-        this.#sessions.delete(instanceId);
+        this.#live.sessions.delete(instanceId);
       }
       if (custody?.kind !== "server") {
         await endHeld(instanceId);
@@ -5503,7 +5324,7 @@ export class SessionSupervisor {
    * ({@link CONTROL_WORK_IN_FLIGHT}): null with no process here, or none held.
    */
   #workInFlight(instanceId: string): WorkInFlight | null {
-    const session = this.#sessions.get(instanceId);
+    const session = this.#live.sessions.get(instanceId);
     const later = session?.heldForLater?.() ?? [];
     if (!session || later.length === 0) {
       return null;
@@ -5512,7 +5333,7 @@ export class SessionSupervisor {
   }
 
   #session(instanceId: string): HarnessSession {
-    const session = this.#sessions.get(instanceId);
+    const session = this.#live.sessions.get(instanceId);
     if (!session) {
       throw new NotRunning(instanceId);
     }
@@ -5547,14 +5368,14 @@ export class SessionSupervisor {
     if (!this.sink(settled)) {
       this.#unheardSettles.set(requestId, settled);
     }
-    this.#touch(instanceId);
-    const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
+    this.#live.touch(instanceId);
+    const left = (this.#live.pulseBlocked.get(instanceId) ?? 1) - 1;
     if (left === 0) {
-      this.#pulseBlocked.delete(instanceId);
+      this.#live.pulseBlocked.delete(instanceId);
     } else {
-      this.#pulseBlocked.set(instanceId, left);
+      this.#live.pulseBlocked.set(instanceId, left);
     }
-    this.#emitPulse(instanceId, true);
+    this.#live.emitPulse(instanceId, true);
   }
 }
 
