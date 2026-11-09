@@ -627,7 +627,7 @@ const HOST_FILE = ".cawco/stage/host.mjs";
  * {@link HOST_FILE} (agent stage.ts runs `exec <runtime> .cawco/stage/host.mjs`
  * inside the boundary), its working dir (or the PWD it was given) in
  * `clone`; with its argv for the
- * leg's words. Never the boundary's executor (agent boundary/
+ * leg's words. Never the boundary's executor (agent boundary/exec.ts
  * `execScript`), a bash script that names the whole command as one argument
  * from the same folder and hands it to the boundary: stopping that stops no
  * host (host run r114 did, and the read was answered).
