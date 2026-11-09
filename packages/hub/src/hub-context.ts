@@ -16,6 +16,7 @@ import type {
   AccountProvider,
   CompactStage,
   EndedBy,
+  HomeStore,
   ProviderInfo,
 } from "@cawco/core/accounts";
 import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
@@ -32,7 +33,7 @@ import type {
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import type { FleetMcpServerView } from "@cawco/core/fleet-secrets";
-import type { FramePayload } from "@cawco/core/frames";
+import type { ControlResultFrame, FramePayload } from "@cawco/core/frames";
 import type {
   HandoverCommand,
   HandoverEvent,
@@ -169,6 +170,7 @@ export interface HubContext {
   ) => Promise<ReturnType<typeof placeAddedOf>>;
   admission: ReturnType<typeof createAdmission>;
   advanceCompaction: (instanceId: string) => void;
+  advanceMove: (move: LoginMove) => Promise<void>;
   agentMoved: (
     name: string,
     expectedHash: string | undefined
@@ -350,6 +352,11 @@ export interface HubContext {
     activityBound: boolean;
   };
   forgetInstances: (ids: readonly string[]) => void;
+  forgetOn: (
+    account: Pick<Account, "id" | "provider">,
+    machineId: string,
+    into?: string | null
+  ) => Promise<Bounded<ControlResultFrame>>;
   forgetPending: (
     instanceId: string,
     why: string,
@@ -463,6 +470,7 @@ export interface HubContext {
   lifetime: HubLifetimeShape;
   limitRefused: Set<string>;
   linkMarketplace: (source: string) => MarketplaceLink;
+  liveFrom: (move: LoginMove) => string[];
   locateSession: (id: string) => Promise<Located>;
   losePending: (instanceId: string, runsAgain: boolean, why?: string) => void;
   MOVE_TICK_MS: number;
@@ -500,6 +508,19 @@ export interface HubContext {
     store,
     storeProvider,
   }: Pick<LoginMove, "machineId" | "store" | "storeProvider">) => string;
+  moveResults: Map<
+    string,
+    {
+      accountId: string;
+      at: number;
+      error?: string | undefined;
+      machineId: string;
+      provider: string;
+      kept?: string | undefined;
+      store: HomeStore;
+      storeProvider: string;
+    }
+  >;
   moveRowsToAccount: (
     machineId: string,
     rows: readonly {
@@ -836,6 +857,7 @@ export interface HubContext {
   ) => string[] | null;
   tasks: ReturnType<typeof createTasks>;
   tickLeaves: () => void;
+  tickMoves: () => void;
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;
