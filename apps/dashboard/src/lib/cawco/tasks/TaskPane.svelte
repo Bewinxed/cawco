@@ -62,7 +62,7 @@
   import { newestRead } from "#lib/platform/newest-read.js";
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
   import { artifactNamed } from "../artifact-names.svelte";
-  import { cawco } from "../client.svelte";
+
   import { rowHref } from "../links";
   import {
     addComment,
@@ -89,6 +89,7 @@
   import { sessionPlace, sessionTitle } from "../session-names.svelte";
   import PageSurface from "../side/PageSurface.svelte";
   import SideSurface from "../side/SideSurface.svelte";
+  import { tickersStore } from "../stores/tickers.svelte";
   import type { MarkStatus } from "../TreeMark.svelte";
   import { openBeside } from "./beside.svelte";
   import { resultStamp } from "./review-stamp";
@@ -255,7 +256,7 @@
   let heard = { id: "", changes: 0 };
   $effect(() => {
     const id = taskId;
-    const changes = cawco.taskChangedOf(projectId, id);
+    const changes = tickersStore.taskChangedOf(projectId, id);
     if (heard.id === id && heard.changes !== changes) {
       untrack(() => detach(read(id), "read"));
     }
