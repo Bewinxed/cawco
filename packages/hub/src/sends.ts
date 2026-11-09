@@ -352,6 +352,51 @@ const pendingSends = (seed: SentMessageRow[]) => {
   };
 };
 
+/** What a session's machine and item hold a send for ({@link workHoldOf}). */
+interface WorkHolds {
+  blocked: boolean;
+  finishing: boolean;
+  first: WorkHold | undefined;
+  held: boolean;
+  paused: boolean;
+}
+
+type WorkHold = Extract<
+  SendHold,
+  "paused" | "finishing" | "held" | "recut" | "blocked"
+>;
+
+const NO_WORK_HOLD: WorkHolds = {
+  blocked: false,
+  finishing: false,
+  first: undefined,
+  held: false,
+  paused: false,
+};
+
+/** The hold a send is said to wait for, the rest in order behind it. */
+const firstWorkHold = (holds: {
+  blocked: boolean;
+  finishing: boolean;
+  held: boolean;
+  paused: boolean;
+  recut: boolean;
+}): WorkHold | undefined => {
+  if (holds.paused) {
+    return "paused";
+  }
+  if (holds.blocked) {
+    return "blocked";
+  }
+  if (holds.finishing) {
+    return "finishing";
+  }
+  if (holds.recut) {
+    return "recut";
+  }
+  return holds.held ? "held" : undefined;
+};
+
 export type SendsContext = Pick<
   HubContext,
   | "accountWords"
@@ -2532,27 +2577,13 @@ export const createSends = (ctx: SendsContext) => {
     const limited =
       !(refused || keepAlive || ahead) &&
       heldAtLimit(instanceId, message.origin, message.uuid);
-    // Kept while the owner has its machine paused (machine-pause.ts), and
-    // while an interrupt holds its item and this sender may not wake it.
-    const paused =
-      !(refused || keepAlive) &&
-      ctx.machinePause.until(machineId) !== undefined;
-    const held =
-      !(refused || keepAlive) &&
-      ctx.workItems.heldFor(instanceId, message.origin);
-    // Kept while its item is blocked: what it cannot start without is missing.
-    const blocked =
-      !(refused || keepAlive) && ctx.workItems.blockedFor(instanceId);
-    // Kept while a retired workspace is cut again for it: the cut starts now.
-    if (held) {
-      ctx.workItems.recutFor(instanceId);
-    }
-    // Kept while its item finishes: its landing runs, or the turn that
-    // called finish_item is still ending. Handed now, it would join that
-    // turn and reopen nothing; it goes as the session's next turn.
-    const finishing =
-      !(refused || keepAlive) &&
-      ctx.workItems.finishingFor(instanceId, message.origin);
+    // Kept while the owner has its machine paused, its item is blocked or
+    // held or finishing ({@link workHoldOf}): the cut of a retired workspace
+    // starts as soon as anything holds this send.
+    const { paused, held, blocked, finishing } =
+      refused || keepAlive
+        ? NO_WORK_HOLD
+        : workHoldOf(instanceId, machineId, message.origin, "every-hold");
     const agent = refused ? undefined : ctx.registry.agent(machineId);
     // Held for a machine inside its window, never failed there (core
     // handover.ts `send`).
@@ -2564,8 +2595,9 @@ export const createSends = (ctx: SendsContext) => {
           (command) =>
             command.kind === "send-verdict" && command.verdict === "hold"
         );
-    const accepted =
-      Boolean(agent) || away || kept || paused || held || finishing || blocked;
+    const keptForItsSession = kept || held || finishing || blocked;
+    const keptInHub = keptForItsSession || paused;
+    const accepted = Boolean(agent) || away || keptInHub;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
     const waitSummary =
@@ -2577,7 +2609,7 @@ export const createSends = (ctx: SendsContext) => {
           ? `${content}${waitSummary}`
           : [...content, { type: "text", text: waitSummary }];
     }
-    if (agent && !(kept || limited || paused || held || finishing || blocked)) {
+    if (agent && !(keptInHub || limited)) {
       if (keepAlive) {
         ctx.db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
@@ -2586,11 +2618,7 @@ export const createSends = (ctx: SendsContext) => {
     }
     const owed =
       away ||
-      kept ||
-      paused ||
-      held ||
-      finishing ||
-      blocked ||
+      keptInHub ||
       (agent !== undefined &&
         !keepAlive &&
         (limited || (!ahead && sendWaits(instanceId))));
@@ -2609,7 +2637,7 @@ export const createSends = (ctx: SendsContext) => {
     }
     // Kept for its machine alone, not for its session, an interrupt's hold
     // or its item's finish.
-    if (owed && !agent && !(kept || held || finishing || blocked)) {
+    if (owed && !agent && !keptForItsSession) {
       owedForMachine(machineId, message.uuid);
     }
     // Built after the send has gone: the machine is handed the image bytes,
@@ -2659,11 +2687,7 @@ export const createSends = (ctx: SendsContext) => {
     }
     publishSend(record);
     // A send that woke its session goes out behind what was kept for it.
-    if (
-      agent &&
-      owed &&
-      !(kept || away || limited || paused || held || finishing || blocked)
-    ) {
+    if (agent && owed && !(keptInHub || away || limited)) {
       releaseOwed({ instanceId });
     }
     // Kept at its account's limit: the move it owes, or one another account
@@ -2788,29 +2812,44 @@ export const createSends = (ctx: SendsContext) => {
   };
 
   /**
-   * A send kept for its machine's pause, while its session's item finishes,
-   * for an interrupt's hold on that item against this sender, or while its
-   * retired workspace is cut again ({@link deliverToSession}).
+   * THE ONE READING of what a session's machine and item hold a send for
+   * (its order, {@link holdOf}, {@link owedHeld} and
+   * {@link deliverToSession} all read it): its machine's pause, its item
+   * blocked, its item's finish, its item's hold, the workspace of a held item
+   * retired and cut again. `first` is what the send is said to wait for.
+   *
+   * A hold asks for the cut of a retired workspace in two different ways,
+   * kept deliberately: `every-hold` (a send arriving, {@link deliverToSession})
+   * cuts whenever the item's hold keeps it, whatever else also holds it;
+   * `recut-only` (a send already owed, {@link owedHeld}) cuts only when the
+   * cut is what it waits for, nothing before it in the order;
+   * `words-only` ({@link holdOf}) is a reading and starts nothing.
    */
-  const pausedOrHeld = (
-    row: InstanceRow,
-    origin: SentMessage["origin"] | undefined
-  ):
-    | Extract<SendHold, "paused" | "finishing" | "held" | "recut" | "blocked">
-    | undefined => {
-    if (ctx.machinePause.until(row.machineId) !== undefined) {
-      return "paused";
+  const workHoldOf = (
+    instanceId: string,
+    machineId: string,
+    origin: SentMessage["origin"] | undefined,
+    cutWhen: "every-hold" | "recut-only" | "words-only"
+  ): WorkHolds => {
+    const paused = ctx.machinePause.until(machineId) !== undefined;
+    const held = !!origin && ctx.workItems.heldFor(instanceId, origin);
+    const blocked = ctx.workItems.blockedFor(instanceId);
+    // Kept while a retired workspace is cut again for it: the cut starts now.
+    if (cutWhen === "every-hold" && held) {
+      ctx.workItems.recutFor(instanceId);
     }
-    if (ctx.workItems.blockedFor(row.id)) {
-      return "blocked";
+    // Kept while its item finishes: its landing runs, or the turn that
+    // called finish_item is still ending. Handed now, it would join that
+    // turn and reopen nothing; it goes as the session's next turn.
+    const finishing =
+      !!origin && ctx.workItems.finishingFor(instanceId, origin);
+    const recut =
+      held && !!origin && ctx.workItems.recutHold(instanceId, origin);
+    const first = firstWorkHold({ paused, blocked, finishing, recut, held });
+    if (cutWhen === "recut-only" && first === "recut") {
+      ctx.workItems.recutFor(instanceId);
     }
-    if (origin && ctx.workItems.finishingFor(row.id, origin)) {
-      return "finishing";
-    }
-    if (!(origin && ctx.workItems.heldFor(row.id, origin))) {
-      return;
-    }
-    return ctx.workItems.recutHold(row.id, origin) ? "recut" : "held";
+    return { paused, held, blocked, finishing, first };
   };
 
   /**
@@ -2861,7 +2900,10 @@ export const createSends = (ctx: SendsContext) => {
         ? "signin"
         : "limit";
     }
-    return (row && pausedOrHeld(row, origin)) ?? machineHold(record, row);
+    return (
+      (row && workHoldOf(row.id, row.machineId, origin, "words-only").first) ??
+      machineHold(record, row)
+    );
   };
 
   /** {@link holdOf}'s last word: its machine away, its start held, or sends before it. */
@@ -2964,37 +3006,18 @@ export const createSends = (ctx: SendsContext) => {
 
   /**
    * Whether an owed send stays kept for its session's account limit, its
-   * machine's pause, its item's finish (work-items.ts `finishingFor`), or
-   * its item's hold ({@link WorkItems.heldFor}). Held for
+   * machine's pause, or the rest of its item's holds. Held for
    * its workspace's turn or cut, the wait that releases it is asked for
-   * here too, as the send path asks for it.
+   * here too, as the send path asks for it ({@link workHoldOf}).
    */
   const owedHeld = (
     instanceId: string,
     machineId: string,
     origin: SentMessage["origin"],
     uuid: string
-  ): boolean => {
-    if (
-      heldAtLimit(instanceId, origin, uuid) ||
-      ctx.machinePause.until(machineId) !== undefined
-    ) {
-      return true;
-    }
-    if (
-      ctx.workItems.finishingFor(instanceId, origin) ||
-      ctx.workItems.blockedFor(instanceId)
-    ) {
-      return true;
-    }
-    if (!ctx.workItems.heldFor(instanceId, origin)) {
-      return false;
-    }
-    if (ctx.workItems.recutHold(instanceId, origin)) {
-      ctx.workItems.recutFor(instanceId);
-    }
-    return true;
-  };
+  ): boolean =>
+    heldAtLimit(instanceId, origin, uuid) ||
+    workHoldOf(instanceId, machineId, origin, "recut-only").first !== undefined;
 
   /**
    * `send` is owed to a session compacting after a move (a step of it, or
