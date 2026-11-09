@@ -268,35 +268,19 @@ function refusalOf(
   return refusal(refused);
 }
 
-/** The content types Eden reads a body as JSON by. */
-const JSON_TYPE = /^application\/(?:problem\+)?json(?:;|$)/u;
-
-/** The status a JSON route answers with, named when Eden's parse of its body fails and leaves none. */
-const OK = 200;
+/** The content types Eden reads a body as JSON by (treaty2's parse by `Content-Type`). */
+export const JSON_TYPE = /^application\/(?:problem\+)?json(?:;|$)/u;
 
 /** The status of an answer with no body. */
 const NO_CONTENT = 204;
 
 /**
- * `call` as it settles, a body that says it is JSON and doesn't parse (Eden
- * rejects with the parser's `SyntaxError`) thrown as the hub not answering.
- */
-const settled = <T>(
-  call: Promise<HubAnswer<T>> | HubAnswer<T>
-): Promise<HubAnswer<T>> =>
-  Promise.resolve(call).catch((error: unknown) => {
-    if (error instanceof SyntaxError) {
-      throw new Error(`${noAnswer(OK)}.`, { cause: error });
-    }
-    throw error;
-  });
-
-/**
  * An answered body as Eden read it, which must be JSON: Elysia sends a
  * route's bare `true` or number as text, and Eden reads those; a body that
- * is no JSON at all (a proxy's page, an empty answer), which Eden hands back
- * as its text, is the hub not answering ({@link noAnswer}). A 204 says it
- * has no body, and is answered as Eden reads it.
+ * is no JSON at all (a proxy's page, an empty answer, one that says it is
+ * JSON and doesn't parse: hub.ts `readable`), which Eden hands back as its
+ * text, is the hub not answering at its own status ({@link noAnswer}). A
+ * 204 says it has no body, and is answered as Eden reads it.
  */
 function bodyOf<T>(answer: Extract<HubAnswer<T>, { error: null }>): T {
   const kind = answer.response.headers.get("content-type") ?? "";
@@ -322,7 +306,7 @@ export async function hubData<T>(
   call: Promise<HubAnswer<T>> | HubAnswer<T>,
   refusal: Refusal = hubRefusal
 ): Promise<T> {
-  const answer = await settled(call);
+  const answer = await call;
   if (answer.error) {
     throw refusalOf(answer, refusal);
   }
@@ -338,14 +322,8 @@ export async function hubDone(
   call: Promise<HubAnswer<unknown>>,
   refusal: Refusal = hubRefusal
 ): Promise<void> {
-  const answer = await call.catch((error: unknown) => {
-    // A body that says it is JSON and doesn't parse: an answer all the same.
-    if (error instanceof SyntaxError) {
-      return null;
-    }
-    throw error;
-  });
-  if (answer?.error) {
+  const answer = await call;
+  if (answer.error) {
     throw refusalOf(answer, refusal);
   }
 }
@@ -370,7 +348,7 @@ export async function hubReached(
 export async function hubRead<T>(
   call: Promise<HubAnswer<T>>
 ): Promise<HubRead<T>> {
-  const answer = await settled(call);
+  const answer = await call;
   if (answer.error) {
     return {
       ok: false,
