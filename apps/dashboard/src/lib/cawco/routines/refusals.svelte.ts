@@ -8,7 +8,7 @@
 import { SvelteMap } from "svelte/reactivity";
 import { z } from "zod";
 import { RoutineRefusalSchema } from "#lib/cawco/stored-shapes.js";
-import { readJson, writeJson } from "../storage";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 
 export type RoutineAct = "run" | "pause" | "resume" | "keep" | "remove";
 

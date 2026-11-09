@@ -1,5 +1,5 @@
-import { frameObserver } from "#lib/cawco/frame-observer.js";
-import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
+import { frameObserver } from "#lib/platform/frame-observer.js";
+import { dur, ease } from "#lib/platform/motion/curves.svelte.js";
 import { tv } from "#lib/utils.js";
 
 /**

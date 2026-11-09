@@ -14,7 +14,7 @@
  */
 
 import { DraftRecordSchema } from "#lib/cawco/stored-shapes.js";
-import { newId } from "./id";
+import { newId } from "#lib/platform/id.js";
 import { database, done, result, DRAFTS as STORE } from "./idb";
 import type {
   DraftCanvas,

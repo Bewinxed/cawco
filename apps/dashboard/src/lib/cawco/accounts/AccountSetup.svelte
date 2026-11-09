@@ -54,18 +54,6 @@
   } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import StickyFoot from "#lib/cawco/config/StickyFoot.svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
-  import {
-    appear,
-    dur,
-    easeOut,
-    lifting,
-    motionOk,
-    pinned,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { depart, land } from "#lib/cawco/motion/share.svelte.js";
   import {
     AtLimitSchema,
     StrategyChoiceSchema,
@@ -80,6 +68,18 @@
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
+  import {
+    appear,
+    dur,
+    easeOut,
+    lifting,
+    motionOk,
+    pinned,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
+  import { depart, land } from "#lib/platform/motion/share.svelte.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import HarnessBlock from "../HarnessBlock.svelte";

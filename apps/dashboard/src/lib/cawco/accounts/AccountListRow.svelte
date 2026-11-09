@@ -24,7 +24,6 @@
   import type { Account, RefusalVerdict } from "@cawco/core/accounts";
   import { accountsWords as words } from "@cawco/core/words/accounts";
   import { checkRefusalOf } from "#lib/cawco/client.svelte.js";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
@@ -32,6 +31,7 @@
     IconRefresh,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import {
     hueVar,
     nameOf,

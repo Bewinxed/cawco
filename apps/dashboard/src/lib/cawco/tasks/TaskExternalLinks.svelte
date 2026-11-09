@@ -35,7 +35,6 @@
     refOfUrl,
   } from "@cawco/core/external-items";
   import { externalItemWords as words } from "@cawco/core/words/external-items";
-  import { failureWords } from "#lib/cawco/hub-read.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import type { TaskComment } from "#lib/cawco/project-tasks.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
@@ -43,6 +42,7 @@
   import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconRefresh } from "#lib/icons.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import { formatAgeShort, formatTimestamp } from "#lib/utils/time.js";
   import { cn } from "#lib/utils.js";
   import LinkStateGlyph, { type LinkGlyph } from "./LinkStateGlyph.svelte";

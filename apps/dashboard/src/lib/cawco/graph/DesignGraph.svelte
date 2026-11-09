@@ -48,14 +48,6 @@
   import { graphWords as words } from "@cawco/core/words/graph";
   import { mergeProps } from "bits-ui";
   import { onMount, type Snippet, untrack } from "svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
-  import {
-    dur,
-    motionOk,
-    numberOf,
-    sheetSlide,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { track } from "#lib/cawco/track.js";
   import {
     BarGlass,
     BarItem,
@@ -87,6 +79,14 @@
     IconTablet,
     IconTuning,
   } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import {
+    dur,
+    motionOk,
+    numberOf,
+    sheetSlide,
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { track } from "#lib/platform/track.js";
   import { browser } from "$app/env";
   import { besideLine, DIVIDER } from "./beside";
   import Dials from "./Dials.svelte";
