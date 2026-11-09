@@ -55,9 +55,7 @@ import {
   resolvePin,
   writePin,
 } from "../../../packages/core/src/comments/model";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import { commentWords } from "../../../packages/core/src/words/comments";
-import type { CommentRead } from "../../../packages/hub/src/artifacts/shapes";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
@@ -279,11 +277,10 @@ const legM = async (
     Boolean,
     15_000
   ).catch(() => undefined);
-  const read = await fleet.api<CommentRead>(
-    hubRequest("GET /api/instances/:id/artifacts/comments", {
-      path: { id: session },
-      query: { artifact, filter: "all" },
-    })
+  const read = await fleet.api((hub) =>
+    hub.api
+      .instances({ id: session })
+      .artifacts.comments.get({ query: { artifact, filter: "all" } })
   );
   const told = read.artifacts[0]?.pins.find((one) => one.id === pin);
   replier.leave();
@@ -1073,11 +1070,10 @@ const legW = async (kit: Kit, fleet: KitFleet, session: string) => {
     "(w) the whole pin through comment_read",
     async () =>
       (
-        await fleet.api<CommentRead>(
-          hubRequest("GET /api/instances/:id/artifacts/comments", {
-            path: { id: session },
-            query: { artifact, filter: "all" },
-          })
+        await fleet.api((hub) =>
+          hub.api
+            .instances({ id: session })
+            .artifacts.comments.get({ query: { artifact, filter: "all" } })
         )
       ).artifacts[0]?.pins.find((one) => one.id === whole.id),
     Boolean,

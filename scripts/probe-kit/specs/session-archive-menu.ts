@@ -26,9 +26,9 @@
  */
 import { join } from "node:path";
 import type { FrameLocator, Page } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
+import { answerText, hubAt } from "../hub";
 import { type Kit, open, type Spec, type View } from "../kit";
 import { shaped } from "../words";
 
@@ -151,18 +151,13 @@ const run = async (kit: Kit) => {
   // Rows written behind the hub's back: the board reads a session's row
   // again when the hub changes it (board.ts `refreshBoard`), so the
   // delegate is renamed through the hub, as the person renames one.
-  const renamed = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PATCH /api/instances/:id", {
-      path: { id: delegate },
-      body: { title: DELEGATE },
-    })
-  );
+  const renamed = await hubAt(fleet.base)
+    .api.instances({ id: delegate })
+    .patch({ title: DELEGATE });
   kit.check(
     "setup: the delegate's work item and workspace are written, and the hub reads its row again",
-    renamed.ok,
-    `${renamed.status} ${(await renamed.text()).slice(0, 300)}`
+    renamed.error === null,
+    `${renamed.status} ${answerText(renamed).slice(0, 300)}`
   );
   const workspaceState = () =>
     fleet.query<{ state: string }>(
@@ -170,18 +165,15 @@ const run = async (kit: Kit) => {
       workspace
     )[0]?.state ?? "none";
 
-  const board = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/instances/:id/artifacts", {
-      path: { id: plain },
-      body: {
-        kind: "preview",
-        does: "try",
-        title: "Probe try artifact",
-        ask: "Try the board",
-        name: "board",
-        port,
-        path: "/",
-      },
+  const board = await fleet.api((hub) =>
+    hub.api.instances({ id: plain }).artifacts.post({
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try the board",
+      name: "board",
+      port,
+      path: "/",
     })
   );
 

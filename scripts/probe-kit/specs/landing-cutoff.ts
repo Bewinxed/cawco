@@ -88,7 +88,6 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { hubRequest } from "../../../packages/core/src/hub-request";
 import {
   isAlive,
   listedPid,
@@ -100,6 +99,7 @@ import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { delegateStarted } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-CUTOFF-([ABCDEFG])/u;
@@ -621,24 +621,20 @@ const run = async (kit: Kit) => {
     };
     const repo = join(fleet.sandbox, "code");
     await newRepo(repo, `[lfs]\n\turl = ${named.address}/lfs\n`);
-    const project = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Landing cut-off",
-          machineId: MACHINE,
-          cwd: repo,
-        },
+    const project = await fleet.api((client) =>
+      client.api.projects.post({
+        name: "Landing cut-off",
+        machineId: MACHINE,
+        cwd: repo,
       })
     );
     const otherRepo = join(fleet.sandbox, "other");
     await newRepo(otherRepo);
-    const other = await fleet.api<{ id: string }>(
-      hubRequest("POST /api/projects", {
-        body: {
-          name: "Another project",
-          machineId: MACHINE,
-          cwd: otherRepo,
-        },
+    const other = await fleet.api((client) =>
+      client.api.projects.post({
+        name: "Another project",
+        machineId: MACHINE,
+        cwd: otherRepo,
       })
     );
     COMMIT.D = [
@@ -687,17 +683,17 @@ const run = async (kit: Kit) => {
       /** Run once its background sleep runs, before it is let finish. */
       hook?: (armed: Armed) => Promise<T>
     ) => {
-      const item = await fleet.api<{ instanceId: string; workItemId: string }>(
-        hubRequest("POST /api/work-items", {
-          body: {
+      const item = delegateStarted(
+        await fleet.api((client) =>
+          client.api["work-items"].post({
             parentInstanceId: parent,
             title: `Commit and land ${tag}`,
             prompt: `PROBE-CUTOFF-${tag}: commit, then finish.`,
             harness: "claude",
             model: "claude-haiku-4-5",
             cwd: repo,
-          },
-        })
+          })
+        )
       );
       const itemOf = () =>
         fleet.query<ItemRow>(

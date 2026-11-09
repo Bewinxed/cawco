@@ -53,15 +53,14 @@
  */
 
 import type { Page, WebSocketRoute } from "playwright-core";
-import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import {
   AWAY_AFTER_DEFAULT_MS,
   AWAY_AFTER_MIN_MS,
-  type PersonView,
 } from "../../../packages/core/src/notifications";
 import { updatesWords } from "../../../packages/core/src/words/updates";
 import { MACHINE, until } from "../../scratch-fleet";
 import { caw } from "../caw-head";
+import { answerText, hubAt } from "../hub";
 import {
   type Engine,
   type Kit,
@@ -251,22 +250,17 @@ const report = async (
   fleet: KitFleet,
   state: Record<string, unknown>
 ): Promise<void> => {
-  const response = await fetchHub(
-    fetch,
-    fleet.base,
-    hubRequest("PUT /api/binary-updates/machines/:machineId/state", {
-      path: { machineId: MACHINE },
-      body: {
-        channel: "nightly",
-        hostsHub: true,
-        updatedAt: Date.now(),
-        ...state,
-      },
-    })
-  );
-  if (!response.ok) {
+  const response = await hubAt(fleet.base)
+    .api["binary-updates"].machines({ machineId: MACHINE })
+    .state.put({
+      channel: "nightly",
+      hostsHub: true,
+      updatedAt: Date.now(),
+      ...state,
+    });
+  if (response.error !== null) {
     throw new Error(
-      `the state was not put: ${response.status} ${await response.text()}`
+      `the state was not put: ${response.status} ${answerText(response)}`
     );
   }
 };
@@ -556,7 +550,7 @@ const leg = async (
   const name = `${engine} ${view}`;
   const check = (what: string, ok: boolean, detail: unknown) =>
     kit.check(`${name}: ${what}`, ok, JSON.stringify(detail));
-  const person = () => fleet.api<PersonView>(hubRequest("GET /api/person"));
+  const person = () => fleet.api((hub) => hub.api.person.get());
   /** A fresh page, a key pressed in it, and the hub saying the person is here. */
   const fresh = async () => {
     const page = await kit.page(view, { engine });
@@ -685,10 +679,8 @@ const leg = async (
   await installedHere(given);
 
   // d and e. No input for the away clock, after Update when idle or no choice.
-  await fleet.api(
-    hubRequest("POST /api/person/away-clock", {
-      body: { awayAfterMs: AWAY_AFTER_MIN_MS },
-    })
+  await fleet.api((hub) =>
+    hub.api.person["away-clock"].post({ awayAfterMs: AWAY_AFTER_MIN_MS })
   );
   for (const [label, choose] of [
     ["d: after Update when idle", true],
@@ -731,11 +723,9 @@ const leg = async (
     noErrors(label.slice(0, 1), update);
     await page.close();
   }
-  await fleet.api(
-    hubRequest("POST /api/person/away-clock", {
-      body: {
-        awayAfterMs: AWAY_AFTER_DEFAULT_MS,
-      },
+  await fleet.api((hub) =>
+    hub.api.person["away-clock"].post({
+      awayAfterMs: AWAY_AFTER_DEFAULT_MS,
     })
   );
 };
