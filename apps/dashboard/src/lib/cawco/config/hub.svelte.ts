@@ -1,5 +1,5 @@
 import { configureWords } from "@cawco/core/words/configure";
-import { cawco } from "../client.svelte";
+import { connectionStore } from "../hub/socket.svelte";
 
 /**
  * Why a write cannot happen right now, or null when it can. Every section's
@@ -10,4 +10,4 @@ import { cawco } from "../client.svelte";
  * moved everything under it.
  */
 export const hubDown = (): string | null =>
-  cawco.status === "connected" ? null : configureWords.hubDown;
+  connectionStore.status === "connected" ? null : configureWords.hubDown;

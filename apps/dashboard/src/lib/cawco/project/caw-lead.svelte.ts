@@ -53,6 +53,7 @@ import {
   configureCaw,
   type ProjectRow,
 } from "../client.svelte";
+import { connectionStore } from "../hub/socket.svelte";
 import type { BoardRow } from "../links";
 import { minimizedAsks } from "../minimized-asks.svelte";
 import type { TaskSummary } from "../project-tasks";
@@ -441,7 +442,7 @@ export class CawLead {
       this.project !== null ||
       this.waited ||
       this.#reading() ||
-      cawco.hub === "unreachable"
+      connectionStore.hub === "unreachable"
   );
 
   /** Turns the project's events on or off, or moves them to another harness or model. */
@@ -495,7 +496,7 @@ export class CawLead {
   readonly status = $derived.by((): CawStatus => {
     // A wait stands over whatever he was: the hub away, or another
     // project's board on its way.
-    if (cawco.hub === "unreachable") {
+    if (connectionStore.hub === "unreachable") {
       return "reconnecting";
     }
     if (this.#reading()) {
