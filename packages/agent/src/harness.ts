@@ -293,6 +293,18 @@ export interface HarnessSession {
 }
 
 /**
+ * What the sends handed to a session's process and not read yet keep it
+ * from, in {@link HarnessSession.holding}'s words: stopping the process
+ * before it reads them loses them. Nothing when it holds none.
+ */
+export const unreadSendsHeld = (
+  unread: ReadonlySet<string>
+): string | undefined =>
+  unread.size > 0
+    ? `it holds ${unread.size} send(s) it has not read yet`
+    : undefined;
+
+/**
  * How much of a session's stored conversation a read returns:
  *
  * - `chain`: what the model reads now (claude: its active chain, which
