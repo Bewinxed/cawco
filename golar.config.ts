@@ -8,7 +8,8 @@
  *
  * The rules: the hub-path ban (scripts/lint/hub-path-door.ts) over every
  * caller of the hub's source; the problem rule (scripts/lint/problem-kept.ts)
- * over the hub's own; the switch check (scripts/lint/switch-exhaustiveness.ts) over
+ * over the hub's own; Eden's requests read by hub-read's readers alone
+ * (scripts/lint/eden-answers-read.ts) over the dashboard's source; the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
  * files, every script's (scripts/, each package's and the dashboard's
  * scripts/), cawrier's and the site's, and the design rules (scripts/lint/design) over the dashboard's
@@ -23,6 +24,7 @@ import { execFileSync } from "node:child_process";
 import { getEnvironmentData, isMainThread } from "node:worker_threads";
 import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
+import { edenAnswersRead } from "./scripts/lint/eden-answers-read.ts";
 import { hubPathDoor } from "./scripts/lint/hub-path-door.ts";
 import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
 import { problemKept } from "./scripts/lint/problem-kept.ts";
@@ -36,6 +38,8 @@ const SWITCH_FIXTURES = `${LINT_FIXTURES}*.ts`;
 const DESIGN_FIXTURES = `${LINT_FIXTURES}design/*.{svelte,ts}`;
 /** The hub paths the door's rule must refuse, and those it must let stand. */
 const HUB_PATH_FIXTURES = `${LINT_FIXTURES}hub-path.ts`;
+/** The Eden requests read outside hub-read's readers that the rule must refuse. */
+const EDEN_ANSWERS_FIXTURES = `${LINT_FIXTURES}eden-answers.ts`;
 /** The bindings of `fetch` to another sender the alias rule must refuse. */
 const FETCH_ALIAS_FIXTURES = `${LINT_FIXTURES}fetch-alias*.ts`;
 
@@ -135,6 +139,10 @@ export default defineConfig({
       {
         files: hub.map(literal),
         rules: [problemKept],
+      },
+      {
+        files: [...designed.map(literal), EDEN_ANSWERS_FIXTURES],
+        rules: [edenAnswersRead],
       },
     ],
   },
