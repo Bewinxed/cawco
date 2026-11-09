@@ -11,6 +11,7 @@
  * says the arrangement changed (`blocks.changed`), so a second screen shows
  * a change as it lands.
  */
+
 import {
   type BlockArrangement,
   type BlockPlace,
@@ -25,6 +26,7 @@ import {
   hubJson,
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
+import { newestRead } from "#lib/platform/newest-read.js";
 
 export const isBlockPage = (value: string): value is ShownBlockPage =>
   (SHOWN_BLOCK_PAGES as readonly string[]).includes(value);
@@ -38,7 +40,7 @@ export class ProjectBlocks {
   /** The hub's words for a page's last refused write. */
   refused = $state<Partial<Record<ShownBlockPage, string>>>({});
   /** Reads so far: only the newest one's answer is kept. */
-  #reads = 0;
+  readonly #reads = newestRead();
 
   constructor(projectId: () => string, kept: () => string[] | null) {
     this.#projectId = projectId;
@@ -47,14 +49,13 @@ export class ProjectBlocks {
 
   async read(): Promise<void> {
     const id = this.#projectId();
-    this.#reads += 1;
-    const ticket = this.#reads;
+    const newest = this.#reads.next();
     try {
       const next = await hubJson<BlockArrangement>(
         hubRequest("GET /api/projects/:id/blocks", { path: { id } }),
         { failure: refusedOrUnreached }
       );
-      if (id === this.#projectId() && ticket === this.#reads) {
+      if (id === this.#projectId() && newest()) {
         this.arrangement = next;
       }
     } catch {
