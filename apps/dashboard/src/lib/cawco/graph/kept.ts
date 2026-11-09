@@ -6,7 +6,7 @@
  * opens on the state it names.
  */
 import { GraphKeptSchema } from "#lib/cawco/stored-shapes.js";
-import { readJson, writeJson } from "../storage";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 
 /** One component's kept state: a state of its states file, and one of its variants (null: the state as written). */
 export interface KeptState {

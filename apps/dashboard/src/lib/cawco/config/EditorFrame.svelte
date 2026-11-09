@@ -18,17 +18,17 @@
    */
   import { configureWords } from "@cawco/core/words/configure";
   import { onMount, type Snippet, untrack } from "svelte";
+  import { BarMore } from "#lib/components/ui/bar-glass/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { IconTrash } from "#lib/icons.js";
   import {
     CURVE,
     dur,
     motionOk,
     reveal,
     revealHere,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
-  import { BarMore } from "#lib/components/ui/bar-glass/index.js";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { IconTrash } from "#lib/icons.js";
+  } from "#lib/platform/motion/curves.svelte.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
   import { page } from "$app/state";
   import { cawco } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";

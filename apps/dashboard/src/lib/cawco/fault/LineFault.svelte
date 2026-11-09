@@ -16,7 +16,7 @@
   import { commonWords } from "@cawco/core/words/common";
   import { regionFaultWords } from "@cawco/core/words/region-fault";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { appearOnMount } from "../motion/curves.svelte";
+  import { appearOnMount } from "#lib/platform/motion/curves.svelte.js";
   import type { FaultCaw } from "./caw";
   import FaultDetails from "./FaultDetails.svelte";
   import ShowDetails from "./ShowDetails.svelte";

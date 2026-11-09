@@ -189,18 +189,6 @@ import {
   WS_RECONNECT_MAX_ATTEMPTS,
   WS_RECONNECT_MAX_DELAY,
 } from "#lib/config.js";
-import type { SubagentState } from "#lib/utils/flow-types.js";
-import { browser } from "$app/env";
-import { page as servedPage } from "$app/state";
-import { activityOf, runningSubagents, sessionActivity } from "./activity";
-import { deletePreview } from "./artifact-api";
-import { Keyed, Pulse, type PulseReading, unlessSame } from "./board.svelte";
-import { currentClientId } from "./client-id";
-import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
-import { type DelegateRecord, delegateRecord } from "./delegate-record";
-import { devDebug } from "./dev-debug";
-import { heardFrame, heardSince, readLeaves } from "./heard";
-import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   deadlineIn,
   type HubFailure,
@@ -210,8 +198,21 @@ import {
   machineAway,
   failureWords as messageOf,
   refusalClause,
-} from "./hub-read";
-import { newId } from "./id";
+} from "#lib/platform/hub-read.js";
+import { newId } from "#lib/platform/id.js";
+import { unlessSame } from "#lib/platform/unless-same.js";
+import type { SubagentState } from "#lib/utils/flow-types.js";
+import { browser } from "$app/env";
+import { page as servedPage } from "$app/state";
+import { activityOf, runningSubagents, sessionActivity } from "./activity";
+import { deletePreview } from "./artifact-api";
+import { Keyed, Pulse, type PulseReading } from "./board.svelte";
+import { currentClientId } from "./client-id";
+import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
+import { type DelegateRecord, delegateRecord } from "./delegate-record";
+import { devDebug } from "./dev-debug";
+import { heardFrame, heardSince, readLeaves } from "./heard";
+import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   type BoardRow,
   type InstanceIndex,
