@@ -230,6 +230,7 @@ import {
   type SessionCarry,
   type TranscriptSpan,
   type TurnExtras,
+  unreadSendsHeld,
 } from "../harness";
 import { HUB_AWAY_BOUND_MS } from "../hub-away";
 import { KeeperPool } from "../keepers";
@@ -289,9 +290,9 @@ import {
   withHarnessNote,
 } from "./claude-transcript";
 import { claudeCompactsAt, claudeEnvWindow } from "./compaction-points";
+import { credentialControls } from "./credential-controls";
 import { keeperCustody } from "./keeper-custody";
 import { neutralSubagentChange } from "./neutral-subagents";
-import { credentialControls, SessionLedger } from "./session-ledger";
 import { tailLines } from "./transcript-tail";
 
 /**
@@ -2345,7 +2346,7 @@ class ClaudeSession implements HarnessSession {
    * started as the next turn after that `result`. Stopping the process before
    * then loses it ({@link holding}).
    */
-  readonly #unread = new SessionLedger();
+  readonly #unread = new Set<string>();
   /** The session credential's install and verify ({@link credentialControls}). */
   readonly #credentialControls = credentialControls(
     (credential, initial) =>
@@ -2907,9 +2908,9 @@ class ClaudeSession implements HarnessSession {
             // the call is never moved to the background for it, which the
             // CLI tells the model the person did ("Command was manually
             // backgrounded by user", Claude Code 2.1.309).
-            this.#unread.handed(uuid);
+            this.#unread.add(uuid);
           } else {
-            this.#unread.read(uuid);
+            this.#unread.delete(uuid);
           }
           if (lifecycle.state === "started") {
             turn.ran();
@@ -3087,7 +3088,7 @@ class ClaudeSession implements HarnessSession {
       }
       this.#delivery.clear();
       // Gone with the process: the supervisor hands back what it never read.
-      this.#unread.readAll();
+      this.#unread.clear();
       ctx.closed?.();
     }
   }
@@ -3549,7 +3550,7 @@ class ClaudeSession implements HarnessSession {
   }
 
   holding(forMove = false): string | undefined {
-    const unread = this.#unread.held();
+    const unread = unreadSendsHeld(this.#unread);
     if (unread) {
       return unread;
     }
@@ -3715,7 +3716,7 @@ class ClaudeSession implements HarnessSession {
       this.#input.push(outgoing);
       return;
     }
-    this.#unread.handed(message.uuid);
+    this.#unread.add(message.uuid);
     // Into a running turn the CLI queues it and says `started` when it is
     // read (measured 2.1.280).
     this.#ctx.busy(true);
@@ -4145,7 +4146,7 @@ class ClaudeSession implements HarnessSession {
     if (this.#input.withdraw(uuid)) {
       this.#delivery.get(uuid)?.resolve();
       this.#delivery.delete(uuid);
-      this.#unread.read(uuid);
+      this.#unread.delete(uuid);
       if (!this.#turn.running && this.#delivery.size === 0) {
         this.#turn.end();
         this.#ctx.busy(false);
@@ -4173,7 +4174,7 @@ class ClaudeSession implements HarnessSession {
     if (reply?.response?.cancelled !== true) {
       return "started";
     }
-    this.#unread.read(uuid);
+    this.#unread.delete(uuid);
     return "withdrawn";
   }
 
