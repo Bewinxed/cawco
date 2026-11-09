@@ -24,11 +24,11 @@ import { workLeft } from "./narrowing";
 import { commandsEnded } from "./processes";
 import {
   closeWhenIdle,
+  isStale,
   lookOnce,
+  lookUnderWay,
   replaceSoon,
   sayWhyLeft,
-  stale,
-  staleLook,
 } from "./staleness";
 import { start } from "./start";
 import {
@@ -180,7 +180,7 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
     closeWhenIdle(id);
   }
   // A look begun before they were added may have passed them by.
-  await staleLook;
+  await lookUnderWay();
   await lookOnce();
   // A look passes over a workspace whose boundary is starting
   // (lifecycle.ts `closeRetiring`), as one is while a session there is launched
@@ -192,7 +192,7 @@ const closeLeftRetiring = async (ids: readonly string[]): Promise<number> => {
   });
   if (pending.length > 0) {
     await Promise.all(pending);
-    await staleLook;
+    await lookUnderWay();
     await lookOnce();
   }
   const after = await Promise.all(
@@ -264,7 +264,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
       continue;
     }
     const boundary = boundaryProcId(id, held.gen);
-    if (!stale.has(id) && elsewhere.some((proc) => proc.procId === boundary)) {
+    if (!isStale(id) && elsewhere.some((proc) => proc.procId === boundary)) {
       console.info(
         `[workspace] ${id}: its boundary runs on a retiring session keeper, and is handed over to one on the current keeper`
       );
