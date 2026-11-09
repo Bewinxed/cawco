@@ -6,7 +6,7 @@
  * live view with private writes on Linux, an APFS clone on macOS), which
  * lands by its change set. The hub owns the workspace record; the machine
  * makes the copy, runs its boundary while something holds it (a session
- * attached, a live work item, a preview, a command: boundary.ts `liveWhy`)
+ * attached, a live work item, a preview, a command: boundary/holding.ts `liveWhy`)
  * and starts it again on its next command once a quiet one has closed, and
  * removes it all on archive. Every read of the copy from here runs in it as
  * it is held ({@link accessOf}): never the person's folder beneath a Linux
@@ -87,17 +87,12 @@ import {
   isPlace,
 } from "@cawco/core/workspace-policy";
 import { z } from "zod";
-import {
-  addAccount,
-  addSpill,
-  closeBoundary,
-  ensureBoundary,
-  heldBy,
-  ownInodes,
-  setProject,
-  stopWorkspaceBoundary,
-  whileBoundaryClosed,
-} from "./boundary";
+import { stopWorkspaceBoundary, whileBoundaryClosed } from "./boundary/control";
+import { addAccount, addSpill } from "./boundary/decisions";
+import { closeBoundary, ensureBoundary } from "./boundary/lifecycle";
+import { setProject } from "./boundary/looks";
+import { ownInodes } from "./boundary/package-managers";
+import { heldBy } from "./boundary/watch";
 import {
   carryFolder,
   carryReadme,
@@ -591,7 +586,7 @@ let unmarkedSwept = false;
 
 /**
  * Once per agent, at the hub's first answer to a beat that names its live
- * workspaces (`liveWorkspaces`, so they are known, boundary.ts `heldBy`):
+ * workspaces (`liveWorkspaces`, so they are known, boundary/watch.ts `heldBy`):
  * each clone a cut of a build before the cut mark (bada22d43) left behind, `create.json` naming its path and no
  * `cut.json`, cleared as a failed cut is (an `unmade` archive), when all of
  * these hold: its path is where a delegate's cut goes
@@ -1968,7 +1963,7 @@ const swiftPackages = async (dir: string, depth = 6): Promise<string[]> => {
  * - on macOS, Xcode's DerivedData folders whose `info.plist` names a project
  *   inside the clone (the boundary's xcodebuild puts every build's in
  *   `DerivedData.noindex/`), and SwiftPM's build dirs for each of the clone's
- *   packages, `swiftpm/build/<md5 of the package dir>` (boundary.ts's swift
+ *   packages, `swiftpm/build/<md5 of the package dir>` (boundary/'s swift
  *   shim names them so).
  * Read before the copy goes: its packages are found in it.
  */
@@ -2300,7 +2295,7 @@ const endViewProcesses = async (workspace: WorkspaceRef): Promise<void> => {
  * working directory or executable there, or its command line naming a path
  * there) that is CawCo's ({@link whoseLeft}), SIGKILLed, reading again
  * after each round. The boundary's own stop ends what runs inside it, each
- * process it started by name on macOS (boundary.ts `killAnswering`); a
+ * process it started by name on macOS (boundary/processes.ts `killAnswering`); a
  * process that left it before its profile carried that name, or that a
  * session's host shell left, is ended here. On the Mac on 2026-10-24 a
  * `vite preview` from workspace bcaa39e4's clone, its parent launchd,
