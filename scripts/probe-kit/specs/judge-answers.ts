@@ -35,6 +35,10 @@
  */
 import { chmod, copyFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import {
+  JUDGE_PROTOCOL_FILE,
+  judgeArgv,
+} from "../../../packages/agent/src/boundary/protocol";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
@@ -234,6 +238,11 @@ const run = async (kit: Kit) => {
     join(ROOT, "packages", "core", "src", "workspace-judge.ts"),
     join(state, "workspace-judge.ts")
   );
+  await mkdir(dirname(join(state, JUDGE_PROTOCOL_FILE)), { recursive: true });
+  await copyFile(
+    join(ROOT, "packages", "agent", "src", "boundary", "protocol.ts"),
+    join(state, JUDGE_PROTOCOL_FILE)
+  );
   // In the run's temp dir, as the workspace's socket dir is short: a socket's
   // path has a length limit (104 bytes on macOS).
   const socket = join(
@@ -242,7 +251,15 @@ const run = async (kit: Kit) => {
   );
   const script = join(state, "boundary-judge.ts");
   const judge = Bun.spawn(
-    [bun, script, socket, ...parts.judgeHanded(policy), "probe-build"],
+    [
+      bun,
+      script,
+      ...judgeArgv({
+        socket,
+        ...parts.judgeHanded(policy),
+        build: "probe-build",
+      }),
+    ],
     {
       env: process.env,
       cwd: dirname(script),
