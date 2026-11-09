@@ -12,9 +12,12 @@
   import { accountsWords } from "@cawco/core/words/accounts";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { patchAccount, putRouting } from "#lib/cawco/client.svelte.js";
   import { savedShown } from "#lib/cawco/config/EditorFooter.svelte";
   import EditorFrame from "#lib/cawco/config/EditorFrame.svelte";
+  import {
+    patchAccount,
+    putRouting,
+  } from "#lib/cawco/stores/accounts.svelte.js";
   import {
     TabItem,
     Tabs,
