@@ -427,7 +427,7 @@
 
   /**
    * A shell combo (each one a ⌘ or Ctrl chord) is the shell's from anywhere,
-   * a text field included, as an artifact's page leaves it (preview-overlay
+   * a text field included, as an artifact's page leaves it (preview overlay/
    * page.ts): the field gets first claim, and one it handled
    * (`defaultPrevented`) stays its own. On Apple's systems ⌃ in a field is
    * the field's text key (`fieldKeeps`).
