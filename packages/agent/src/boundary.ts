@@ -8391,7 +8391,7 @@ export const whileSandboxDown = <T>(
  *  - whatever stops a workspace's boundary for good ({@link stopNow}: an
  *    archive, a held workspace's close, a stage clone's cut), before its
  *    judge goes. The hub closes a workspace only once its items' sessions are
- *    asleep or ended (work-items.ts `holdOn`, `archiveNow`), so a CLI still
+ *    asleep or ended (workspaces.ts `holdsOf`, `archiveNow`), so a CLI still
  *    in the clone is one whose session the hub filed gone; left there, its
  *    judge gone, every call it made was refused, and the agent's next start
  *    revived the boundary for it. On obelisk (2026-10-18) a `from` cut of
