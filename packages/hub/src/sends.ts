@@ -46,6 +46,7 @@ import { SEND_STATES } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
+import { ElysiaStatus } from "elysia";
 import type { PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
@@ -2266,7 +2267,16 @@ export const createSends = (ctx: SendsContext) => {
     if (!notes || plan?.awaySeen === notes.notes) {
       return undefined;
     }
-    detach(ctx.plans.seeAway(instanceId), "away notes recapped are seen");
+    detach(
+      ctx.plans.seeAway(instanceId).then((seen) => {
+        if (seen instanceof ElysiaStatus) {
+          console.warn(
+            `[away notes recapped are seen] failed: ${seen.response.detail}`
+          );
+        }
+      }),
+      "away notes recapped are seen"
+    );
     const waiting = planWaitsOf(
       instanceId,
       plan?.steps ?? [],
