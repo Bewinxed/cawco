@@ -51,6 +51,7 @@ import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { damagedHubRecordWords } from "@cawco/core/words/damaged";
 import { Elysia, t } from "elysia";
+import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import { hidden } from "./hidden";
 import { refusal } from "./refusal";
@@ -442,19 +443,19 @@ export function createBinaryUpdates(options: Options) {
           case "fetching":
             // Not yet: the machine waits and asks again, its own attempt
             // standing, and says how far the hub is.
-            return new Response(
-              JSON.stringify({
-                fetching: {
-                  received: archive.received,
-                  total: archive.total,
-                },
-              } satisfies ArchiveFetching),
+            return problemResponse(
               {
                 status: 503,
-                headers: {
-                  "content-type": "application/json",
-                  "retry-after": String(ARCHIVE_ASK_AGAIN_S),
-                },
+                code: "refused",
+                detail: JSON.stringify({
+                  fetching: {
+                    received: archive.received,
+                    total: archive.total,
+                  },
+                } satisfies ArchiveFetching),
+              },
+              {
+                "retry-after": String(ARCHIVE_ASK_AGAIN_S),
               }
             );
           case "failed":
