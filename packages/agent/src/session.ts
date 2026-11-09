@@ -6782,7 +6782,7 @@ export class SessionSupervisor {
       return this.#workInFlight(instanceId);
     }
     const session = this.#session(instanceId);
-    if (method === "withdrawSend" && !traitsOf(session.harness).withdrawSend) {
+    if (method === "withdrawSend" && !traitsOf(session.harness).queuesSends) {
       return "started";
     }
     // A credential the hub installs in a live session is known before the
