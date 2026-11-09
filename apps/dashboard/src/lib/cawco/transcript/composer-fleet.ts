@@ -10,7 +10,6 @@
  * comment card) loads none of it.
  */
 import {
-  cawco,
   readOlderPage,
   replaceQueued,
   userTurnActions,
@@ -29,6 +28,7 @@ import { hubSeam } from "../hub-live";
 import SkillChip from "../SkillChip.svelte";
 import { boardStore } from "../stores/board.svelte";
 import { mcpServersStore } from "../stores/mcp-servers.svelte";
+import { sessionsStore } from "../stores/sessions.svelte";
 import { CanvasRoom } from "./canvas-room.svelte";
 import DelegateTray from "./DelegateTray.svelte";
 import {
@@ -61,7 +61,6 @@ export const composerFleet = {
   RecallWheel,
   SkillChip,
   SuggestionChips,
-  cawco,
   forgetRelaunch,
   harnessBlockOf,
   hubSeam,
@@ -88,6 +87,7 @@ export const composerFleet = {
   relaunchUnblocked,
   replaceQueued,
   retryRelaunch,
+  sessionsStore,
   signInToMcp,
   userTurnActions,
 };

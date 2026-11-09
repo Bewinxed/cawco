@@ -19,7 +19,7 @@ import {
   hubJson,
   hubRefusal,
 } from "#lib/platform/hub-read.js";
-import { machineControl } from "./client.svelte";
+import { machineControl } from "./stores/machines";
 
 /** What `GET /api/tools` answers with. */
 export interface ToolsSnapshot {
