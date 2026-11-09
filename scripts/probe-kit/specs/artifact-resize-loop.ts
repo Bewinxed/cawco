@@ -74,7 +74,7 @@ import type { Frame, Page } from "playwright-core";
 import type { Pin } from "../../../packages/core/src/comments/model";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { requestOf } from "../hub";
+import { pageHub } from "../hub";
 import {
   COMPOSER,
   type Kit,
@@ -1428,27 +1428,17 @@ export const runFiles = async (
   const said = heard(page);
   await open(page, `${base}/session/${leg.session}`, "[data-files-control]");
   if (leg.panel === "shut") {
-    await page.evaluate(
-      (request) => fetch(request.path, request),
-      await requestOf((hub) =>
-        hub.api.instances({ id: leg.session }).preview.delete()
-      )
-    );
+    await pageHub(page).api.instances({ id: leg.session }).preview.delete();
     await page
       .locator('[data-slot="side-card"]')
       .waitFor({ state: "detached", timeout: 30_000 });
   } else {
     // Opened beside the session as its agent opens it: a leg before may
     // have shut it, and the hub keeps it shut.
-    await page.evaluate(
-      (request) => fetch(request.path, request),
-      await requestOf((hub) =>
-        hub.api
-          .instances({ id: leg.session })
-          .artifacts({ artifact: leg.artifact })
-          .show.post()
-      )
-    );
+    await pageHub(page)
+      .api.instances({ id: leg.session })
+      .artifacts({ artifact: leg.artifact })
+      .show.post();
     await page
       .locator(PANEL_FRAME)
       .first()

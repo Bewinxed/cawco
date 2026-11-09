@@ -71,7 +71,7 @@ import { unhandled } from "../../../packages/core/src/unhandled";
 import { askRecordedWords } from "../../../packages/core/src/words/ask-lines";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { answerText, type HubAsk, payloadOf, requestOf } from "../hub";
+import { answerText, type HubAsk, pageHub, payloadOf } from "../hub";
 import { delegateStarted, type Kit, open, ROOT, type Spec } from "../kit";
 
 const TAG = /PROBE-AUTH-([A-Z])/u;
@@ -494,20 +494,8 @@ const spec: Spec = {
       .click();
     const after = await until(
       "the browser paired",
-      async () =>
-        paired.evaluate(
-          (request) =>
-            fetch(request.path, request).then(
-              (response) =>
-                response.json() as Promise<{
-                  caller: string;
-                  device: { id: string; name: string } | null;
-                  mode: string;
-                }>
-            ),
-          await requestOf((hub) => hub.api.auth.get())
-        ),
-      (value) => value.mode === "pairing" && value.device !== null,
+      async () => (await pageHub(paired).api.auth.get()).data,
+      (value) => value?.mode === "pairing" && value.device !== null,
       30_000
     );
     const cookie = (await paired.context().cookies()).find(
@@ -515,8 +503,8 @@ const spec: Spec = {
     );
     check(
       "(o1) the browser that turned it on is the first paired device, named by its browser; its cookie is HttpOnly and SameSite=Lax",
-      after.caller === "owner" &&
-        after.device?.name === "Chrome on Linux" &&
+      after?.caller === "owner" &&
+        after?.device?.name === "Chrome on Linux" &&
         cookie?.httpOnly === true &&
         cookie.sameSite === "Lax",
       JSON.stringify({ after, cookie: cookie && { ...cookie, value: "…" } })
@@ -838,17 +826,8 @@ const spec: Spec = {
     await approve.click();
     const strangerAuth = await until(
       "the new browser paired",
-      async () =>
-        stranger
-          .evaluate(
-            (request) =>
-              fetch(request.path, request).then(
-                (response) => response.json() as Promise<{ caller: string }>
-              ),
-            await requestOf((hub) => hub.api.auth.get())
-          )
-          .catch(() => undefined),
-      (value) => value.caller === "owner",
+      async () => (await pageHub(stranger).api.auth.get()).data,
+      (value) => value?.caller === "owner",
       60_000
     );
     await stranger.waitForLoadState("domcontentloaded");
@@ -860,7 +839,7 @@ const spec: Spec = {
     );
     check(
       "(p5) the paired browser approves it: the new browser is the person's now and opens the app",
-      strangerAuth.caller === "owner"
+      strangerAuth?.caller === "owner"
     );
 
     // (p5b) A link from another site opens the app as the paired device:
