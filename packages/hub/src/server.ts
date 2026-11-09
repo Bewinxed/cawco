@@ -1061,7 +1061,6 @@ import {
 import { createRepoPublish } from "./repo-publish";
 import { makesRoutines, talksWithPerson } from "./roles";
 import { agentListRoutes, agentMediaRoutes } from "./routes/agents";
-import { bearerOf } from "./routes/bearer";
 import { delegateEventRoutes } from "./routes/delegate-events";
 import { delegationRoutes } from "./routes/delegation";
 import { fileRoutes } from "./routes/files";
@@ -1087,6 +1086,7 @@ import { modelWindowRoutes } from "./routes/model-windows";
 import { moveRoutes } from "./routes/moves";
 import { pendingRoutes } from "./routes/pending";
 import { continueBody } from "./routes/session-bodies";
+import { sessionCallerRefusal } from "./routes/session-caller";
 import { sessionIdentityRoutes } from "./routes/session-identities";
 import { toolRoutes } from "./routes/tools";
 import { trashRoutes } from "./routes/trash";
@@ -35133,18 +35133,15 @@ export const createServer = (
         },
         async ({ body, request, status, server }) => {
           server?.timeout(request, 0);
-          // A session's own credential, or none: the gate let through only
-          // a session, the person, or the hub acting for a session's tool.
-          const authorization = bearerOf(request);
-          const identity = identities.resolve(authorization);
-          if (authorization !== null && !identity) {
-            return status(401, "Invalid session credential");
-          }
-          if (identity && identity.instanceId !== body.parentInstanceId) {
-            return status(
-              403,
-              "Session credential does not belong to the work item's parent"
-            );
+          const stranger = sessionCallerRefusal(
+            identities,
+            request,
+            body.parentInstanceId,
+            "Session credential does not belong to the work item's parent",
+            status
+          );
+          if (stranger !== undefined) {
+            return stranger;
           }
           if (!(
             body.parentInstanceId.trim() &&
@@ -35198,18 +35195,15 @@ export const createServer = (
           },
         },
         ({ body, request, status }) => {
-          // A session's own credential, or none: the gate let through only
-          // a session, the person, or the hub acting for a session's tool.
-          const authorization = bearerOf(request);
-          const identity = identities.resolve(authorization);
-          if (authorization !== null && !identity) {
-            return status(401, "Invalid session credential");
-          }
-          if (identity && identity.instanceId !== body.instanceId) {
-            return status(
-              403,
-              "Session credential does not belong to the waiting instanceId"
-            );
+          const stranger = sessionCallerRefusal(
+            identities,
+            request,
+            body.instanceId,
+            "Session credential does not belong to the waiting instanceId",
+            status
+          );
+          if (stranger !== undefined) {
+            return stranger;
           }
           try {
             return {
@@ -35248,18 +35242,15 @@ export const createServer = (
           }),
         },
         async ({ body, status, request, server }) => {
-          // A session's own credential, or none: the gate let through only
-          // a session, the person, or the hub acting for a session's tool.
-          const authorization = bearerOf(request);
-          const identity = identities.resolve(authorization);
-          if (authorization !== null && !identity) {
-            return status(401, "Invalid session credential");
-          }
-          if (identity && identity.instanceId !== body.instanceId) {
-            return status(
-              403,
-              "Session credential does not belong to the finishing instanceId"
-            );
+          const stranger = sessionCallerRefusal(
+            identities,
+            request,
+            body.instanceId,
+            "Session credential does not belong to the finishing instanceId",
+            status
+          );
+          if (stranger !== undefined) {
+            return stranger;
           }
           server?.timeout(request, 0);
           const { instanceId, ...finished } = body;
@@ -35288,18 +35279,15 @@ export const createServer = (
           }),
         },
         ({ body, request, status }) => {
-          // A session's own credential, or none: the gate let through only
-          // a session, the person, or the hub acting for a session's tool.
-          const authorization = bearerOf(request);
-          const identity = identities.resolve(authorization);
-          if (authorization !== null && !identity) {
-            return status(401, "Invalid session credential");
-          }
-          if (identity && identity.instanceId !== body.from) {
-            return status(
-              403,
-              "Session credential does not belong to the stop's requester"
-            );
+          const stranger = sessionCallerRefusal(
+            identities,
+            request,
+            body.from,
+            "Session credential does not belong to the stop's requester",
+            status
+          );
+          if (stranger !== undefined) {
+            return stranger;
           }
           const [requester] = db.getInstancesByIds([body.from]);
           // A delegate named by a former id is stopped by its id now.
@@ -35335,18 +35323,15 @@ export const createServer = (
           }),
         },
         ({ body, request, status }) => {
-          // A session's own credential, or none: the gate let through only
-          // a session, the person, or the hub acting for a session's tool.
-          const authorization = bearerOf(request);
-          const identity = identities.resolve(authorization);
-          if (authorization !== null && !identity) {
-            return status(401, "Invalid session credential");
-          }
-          if (identity && identity.instanceId !== body.from) {
-            return status(
-              403,
-              "Session credential does not belong to the withdraw's requester"
-            );
+          const stranger = sessionCallerRefusal(
+            identities,
+            request,
+            body.from,
+            "Session credential does not belong to the withdraw's requester",
+            status
+          );
+          if (stranger !== undefined) {
+            return stranger;
           }
           try {
             const text = workItems.withdrawQueued(body.from, body.target);
