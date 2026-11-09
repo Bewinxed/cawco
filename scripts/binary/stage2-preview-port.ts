@@ -1,7 +1,7 @@
 /**
  * Prints the hub's preview port for one session's open preview, as a
  * dashboard learns it: the `previews` of the `instances` frame its dashboard
- * socket sends (server.ts `boardExtras`, preview.ts `previewFrame`). Run inside
+ * socket sends (board.ts `boardExtras`, preview.ts `previewFrame`). Run inside
  * a container by the installed binary acting as bun (BUN_BE_BUN=1), so the
  * container needs no runtime of its own.
  *   cawco stage2-preview-port.ts <hub http url> <instanceId>
