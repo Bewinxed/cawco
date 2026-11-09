@@ -56,7 +56,7 @@ export type PermissionMode = (typeof WIRE_PERMISSION_MODES)[number];
  * report `dontAsk` or `auto` as its mode, and the TestFlight builds still
  * installable (20261015 to 20261018) were built to send either (hub
  * scripts/wire-compat.ts). The hub refuses a start in one with the
- * machine's own list (hub server.ts `modeRefusal`), and an agent refuses one
+ * machine's own list (hub launches.ts `modeRefusal`), and an agent refuses one
  * that reaches it ({@link offeredMode}).
  */
 export const PERMISSION_MODES = [

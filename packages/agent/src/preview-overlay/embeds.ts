@@ -1,7 +1,7 @@
 /**
  * Comment mode across an origin: a frame of another origin in the page (a
  * decision page's Preview of a component canvas or a dev server's preview,
- * each on an embed origin of its own, hub server.ts `embedAt`), pointed at
+ * each on an embed origin of its own, hub preview-browse.ts `embedAt`), pointed at
  * element by element, never as one box.
  *
  * The page's overlay cannot read a frame of another origin (frames.ts). The
