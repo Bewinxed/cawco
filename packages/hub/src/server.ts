@@ -309,13 +309,13 @@ import { createArtifactEvents } from "./artifact-events";
 import { createArtifactPages } from "./artifact-pages";
 import { createArtifactSessions } from "./artifact-session";
 import { titlesSaid, titleUntitledOnce } from "./artifact-titles";
+import { boardOf } from "./artifacts/access";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
 import { ArtifactRefusal } from "./artifacts/refusals";
 import { artifactRoutes } from "./artifacts/routes";
 import {
   type Artifacts,
-  boardOf,
   createArtifacts,
   SHOWN_WAIT_MS,
 } from "./artifacts/service";
