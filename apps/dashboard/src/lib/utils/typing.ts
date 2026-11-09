@@ -24,7 +24,7 @@ const APPLE =
  * chord is the shell's from a field unless the field handled it
  * (`defaultPrevented`); plain keys are never shortcuts (WCAG 2.1.4,
  * Character Key Shortcuts). The preview overlay keeps the same rule for an
- * artifact's page (preview-overlay page.ts `fieldKeeps`).
+ * artifact's page (preview overlay/page.ts `fieldKeeps`).
  */
 export function fieldKeeps(event: KeyboardEvent): boolean {
   return APPLE && event.ctrlKey && !event.metaKey && isTyping();

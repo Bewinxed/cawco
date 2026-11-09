@@ -16,8 +16,11 @@
     "dist",
     "src/canvas-host",
     "src/file-viewer",
-    "src/preview-overlay",
     "src/stage-host/canvas"
   ],
-  "references": [{ "path": "../core" }, { "path": "../jsonl-parser" }]
+  "references": [
+    { "path": "../core" },
+    { "path": "../jsonl-parser" },
+    { "path": "../preview" }
+  ]
 }
