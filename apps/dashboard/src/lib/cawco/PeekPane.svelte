@@ -59,7 +59,6 @@
   } from "./activity";
   import ContextMeter from "./ContextMeter.svelte";
   import {
-    answeredOr,
     cawco,
     openSession,
     type PendingPermission,
@@ -72,6 +71,7 @@
     submitCommand,
   } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
+  import { answeredOr } from "./hub/control";
   import { conversationHref } from "./links";
   import OsMark from "./OsMark.svelte";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
