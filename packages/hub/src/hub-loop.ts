@@ -31,7 +31,7 @@ import { loopWords } from "@cawco/core/words/loop";
 
 /**
  * A hold the hub's own tick says once it ends. Half the hub's 10 s read
- * deadline (server.ts `READ_TIMEOUT_MS`): a hold this long already makes a
+ * deadline (machine-read-timeouts.ts `READ_TIMEOUT_MS`): a hold this long already makes a
  * reply late somewhere.
  */
 const HUB_LATE_MS = 5000;
