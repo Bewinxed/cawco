@@ -708,11 +708,10 @@ import {
   blockWords,
   createWorkItems,
   mayStartRefusal,
-  outputsFolder,
-  type Unlanded,
   type WorkItemRequest,
 } from "./work-items";
 import { createWorkspaceRetire } from "./workspace-retire";
+import { outputsFolder, type Unlanded } from "./workspaces";
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
 /**
