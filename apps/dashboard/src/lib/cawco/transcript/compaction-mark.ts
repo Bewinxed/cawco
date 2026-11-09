@@ -4,8 +4,8 @@
  * list that waits for him all mean the same picture.
  */
 import { untrack } from "svelte";
+import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { cawStill } from "../home/caw-still.svelte";
-import { dur } from "../motion/curves.svelte";
 
 /** His `compacted` file, in an 18px box (`cawStill` gives it 2px of canvas past it). */
 export const COMPACTION_MARK = {

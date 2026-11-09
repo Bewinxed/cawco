@@ -23,7 +23,7 @@ import {
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
 import { z } from "zod";
-import { readJson, writeJson } from "#lib/cawco/storage.js";
+import { readJson, writeJson } from "#lib/platform/storage.js";
 import type { FleetOffer } from "./decides-client";
 
 /** Each row a member's settings can hold, in the order they stand. */

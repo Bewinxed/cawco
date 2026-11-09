@@ -27,7 +27,7 @@
   } from "#lib/cawco/home/Caw.svelte";
   import { ARTBOARD, BOX } from "#lib/cawco/home/caw-artboard.js";
   import { deviceRatio } from "#lib/cawco/home/device-ratio.svelte.js";
-  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { cawLeave } from "./motion";
   import { TRAY_STATUSES, type TrayPose } from "./tray.svelte";

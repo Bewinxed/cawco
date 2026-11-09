@@ -19,10 +19,10 @@
   import { commonWords } from "@cawco/core/words/common";
   import { connectWords } from "@cawco/core/words/connect";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { tickingClock } from "#lib/platform/motion/clock.svelte.js";
+  import { land } from "#lib/platform/motion/share.svelte.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
-  import { tickingClock } from "../motion/clock.svelte";
-  import { land } from "../motion/share.svelte";
   import { checkKey } from "./Checklist.svelte";
   import { connect } from "./installs.svelte";
   import MonoWell from "./MonoWell.svelte";

@@ -25,8 +25,8 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconSearch } from "#lib/icons.js";
+  import { frameSize } from "#lib/platform/frame-observer.js";
   import { barGlass } from "../bar-glass.svelte";
-  import { frameSize } from "../frame-observer";
   import { TURN_CLOCK } from "../turn/clock";
   import type {
     Place,

@@ -16,8 +16,8 @@
   import { findInWords } from "@cawco/core/words/find-in";
   import type { Attachment } from "svelte/attachments";
   import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
-  import { frameSize } from "../frame-observer";
-  import { unfold } from "../motion/fold.svelte";
+  import { frameSize } from "#lib/platform/frame-observer.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
   import { holdComposerLayer } from "../transcript/composer-layer.svelte";
   import type { ConversationFind } from "./conversation-find.svelte";
   import FindPlaces from "./FindPlaces.svelte";

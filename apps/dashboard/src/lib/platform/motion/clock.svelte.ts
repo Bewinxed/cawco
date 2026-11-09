@@ -14,7 +14,7 @@
  * reading the time now.
  */
 import type { Attachment } from "svelte/attachments";
-import { watchRendered } from "#lib/utils/rendered.js";
+import { watchRendered } from "#lib/platform/rendered.js";
 
 /**
  * The phone's navigation sheet, open over the page.
@@ -111,7 +111,7 @@ export function tickingClock(running: () => boolean): Clock {
       // Rendered and on screen are two questions, and a clock asks both.
       // `watchRendered` answers only the first: content an ancestor skips has
       // no layout, and one merely scrolled past the fold is still laid out
-      // (utils/rendered). So the viewport is watched here as well — a clock
+      // (platform/rendered). So the viewport is watched here as well — a clock
       // scrolled out of view is nobody's clock, laid out or not.
       const watching = watchRendered(node, (rendered) => {
         drawn = rendered;

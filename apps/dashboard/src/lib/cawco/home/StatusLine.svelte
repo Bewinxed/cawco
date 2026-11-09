@@ -8,7 +8,7 @@
    * away the board holds its last rows under it. The machines live beside
    * Jump (MachinesButton), whose glyph says when one is down.
    */
-  import { crossOut } from "../motion/curves.svelte";
+  import { crossOut } from "#lib/platform/motion/curves.svelte.js";
   import { home } from "./home-state.svelte";
 </script>
 
