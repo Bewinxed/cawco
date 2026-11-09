@@ -42,10 +42,8 @@ import type {
   FleetPlugin,
   FleetSkillMeta,
   FleetSyncReport,
-  MachineHookScript,
   MarketplaceLink,
   MarketplaceRead,
-  SkillFile,
 } from "@cawco/core/fleet";
 import type { FleetItems } from "@cawco/core/fleet-items";
 import type { FramePayload, PreviewFrame } from "@cawco/core/frames";
@@ -190,13 +188,7 @@ import type { createLaws } from "./laws";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { createLimitMoves } from "./limit-moves";
 import type { createLoginMoves } from "./login-moves";
-import type {
-  ControlResult,
-  MemoryRead,
-  ReadRefused,
-  RouteSet,
-  Unanswered,
-} from "./machine-answers";
+import type { ControlResult, Unanswered } from "./machine-answers";
 import type { createMachineCalls } from "./machine-calls";
 import type { createMachineCommands } from "./machine-commands";
 import type { createMachineContact } from "./machine-contact";
@@ -388,18 +380,7 @@ export interface HubContext {
     send: () => Envelope | undefined
   ) => Promise<Bounded<ControlResult>>;
   /** Sends a hub frame to every dashboard. */
-  awayAnswer: <Answer>(
-    set: RouteSet,
-    machineId: string,
-    answer: Unanswered,
-    status: (code: 503 | 504, said: string) => Answer
-  ) => Answer;
   awayError: (machineId: string) => MachineAway;
-  awayStatus: (
-    set: RouteSet,
-    machineId: string,
-    words?: string
-  ) => { code: 503; said: string };
   awayWords: (machineId: string, answer: Unanswered) => string;
   binaryUpdateStates: Map<string, BinaryUpdateState>;
   boardBase: Map<string, BoardInstanceRow>;
@@ -623,19 +604,14 @@ export interface HubContext {
   handAgain: ReturnType<typeof createMachineCalls>["handAgain"];
   handMoveRefusal: (row: StoredRow, account: Account) => string | undefined;
   handoffs: Map<string, { from: string; at: number }>;
-  harnessConfigDelete: (
-    kind: HarnessConfigKind,
-    name: string,
-    status: (code: 404, text: string) => unknown
-  ) => unknown;
+  harnessConfigDelete: (kind: HarnessConfigKind, name: string) => unknown;
   harnessConfigList: (kind: HarnessConfigKind) => {
     rows: FleetHarnessConfig[];
   };
   harnessConfigPut: (
     kind: HarnessConfigKind,
     name: string,
-    body: HarnessConfigBody,
-    status: (code: 400, text: string) => unknown
+    body: HarnessConfigBody
   ) => unknown;
   harnessReportOf: (
     machineId: string,
@@ -646,7 +622,6 @@ export interface HubContext {
     string,
     { machineId: string; since: number; reason: string }
   >;
-  historyAway: (fault: HistoryFault) => Response;
   homeCredentialOf: (
     machineId: string,
     store: HomeStore,
@@ -666,14 +641,6 @@ export interface HubContext {
   ) => LoginMove | undefined;
   homeMovedAccountOn: (machineId: string) => string | undefined;
   homeStamps: ReturnType<typeof createAccountSignin>["homeStamps"];
-  hookCopyOff: <Refused>(
-    body: { id: string; machineId: string },
-    set: RouteSet,
-    status: (code: 404 | 500 | 503 | 504, said: string) => Refused
-  ) => Promise<
-    | { current: FleetHook; copy: MachineHookScript | null }
-    | { refused: Refused }
-  >;
   hookDraftOf: (
     current: FleetHook | undefined,
     patch: Record<string, unknown> & {
@@ -1042,10 +1009,6 @@ export interface HubContext {
   pulses: Map<string, SessionPulse>;
   push: ReturnType<typeof createPush>;
   pushAgents: (machineId: string) => Promise<void>;
-  pushTarget: <Refused>(
-    body: { machineId: string },
-    status: (code: 404, said: string) => Refused
-  ) => { config: ReturnType<DbShape["fleetConfig"]> } | { refused: Refused };
   readAgent: (
     machineId: string,
     method: string,
@@ -1055,11 +1018,6 @@ export interface HubContext {
     instanceId?: string | undefined
   ) => Promise<Bounded<ControlResult>>;
   readLaunchDirs: ReturnType<typeof createAccountCarry>["readLaunchDirs"];
-  readMachineHookScript: (
-    machineId: string,
-    id: string,
-    set: RouteSet
-  ) => Promise<{ ok: true; copy: MachineHookScript | null } | ReadRefused>;
   readMachineMedia: (
     machineId: string,
     path: string
@@ -1069,7 +1027,6 @@ export interface HubContext {
     | "timeout"
     | { refused: string }
   >;
-  readMachineMemory: (machineId: string, set: RouteSet) => Promise<MemoryRead>;
   readMarketplaceSource: (source: string) => Promise<MarketplaceRead>;
   readSessionProcess: (
     row: { id: string; machineId: string },
@@ -1313,12 +1270,6 @@ export interface HubContext {
     answer: { kind: "unanswered"; after: number; reason: "timeout" | "dead" }
   ) => string;
   skillChoices: Map<string, string[]>;
-  skillFilesOff: <Refused>(
-    machineId: string,
-    args: unknown[],
-    set: RouteSet,
-    status: (code: 400 | 503 | 504, said: string) => Refused
-  ) => Promise<{ files: SkillFile[] } | { refused: Refused }>;
   skillRow: (row: FleetSkillMeta) => FleetSkillMeta;
   sleepFinished: ReturnType<typeof createLoginMoves>["sleepFinished"];
   socketAddress: (ws: AuthSocket) => string | null;
@@ -1501,11 +1452,6 @@ export interface HubContext {
     what: string
   ) => Error;
   unansweredFault: (machineId: string, answer: Unanswered) => string;
-  unansweredStatus: (
-    set: RouteSet,
-    machineId: string,
-    answer: Unanswered
-  ) => { code: 503 | 504; said: string };
   undoRemovedSignin: (account: Account, machineId: string) => Promise<string>;
   unknownAccountsOf: ReturnType<
     typeof createAccountSignin

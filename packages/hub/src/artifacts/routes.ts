@@ -34,6 +34,7 @@ import type { Operation } from "rfc6902";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
+import { refusal } from "../refusal";
 import type { StateAsk } from "./component";
 import { COMPONENT_EXAMPLE, CREATE_SHAPE } from "./component";
 import { ArtifactRefusal } from "./refusals";
@@ -290,9 +291,11 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       }
       // Files' own reads: the validator's word is enough there.
       if (path.endsWith("/search") || path.includes("/thumbnail")) {
-        return new Response("Files asked in a shape the hub doesn't take.", {
-          status: 422,
-        });
+        return refusal(
+          422,
+          "files-asked-shape-hub",
+          "Files asked in a shape the hub doesn't take."
+        );
       }
       let shape = SHAPES.read;
       if (path.endsWith("/design-map")) {
@@ -305,7 +308,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       } else if (!(path.endsWith("/sheet") || path.endsWith("/view"))) {
         shape = SHAPES.update;
       }
-      return new Response(shape, { status: 422 });
+      return refusal(422, "artifact-shape", shape);
     })
     // Every artifact the session holds: its panel's menu.
     .get("/api/instances/:id/artifacts", ({ params }) => {
@@ -969,7 +972,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         try {
           const png = artifacts.thumbnailFile(params.artifact, params.scheme);
           if (!png) {
-            return new Response("No picture yet.", { status: 404 });
+            return refusal(404, "no-picture-yet", "No picture yet.");
           }
           return new Response(new Uint8Array(png), {
             headers: {
