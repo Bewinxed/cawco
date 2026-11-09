@@ -9,10 +9,8 @@
  */
 import { ARTIFACT_TITLE_LIMIT } from "@cawco/core/artifact-kinds";
 import type { ArtifactRow } from "./db/artifacts";
+import { ARTIFACT_TITLES } from "./db/migration-names";
 import { readKept } from "./decision-program";
-
-/** The pass's name in `data_migrations`. */
-const ARTIFACT_TITLES = "artifact_titles";
 
 /** Where a row's title came from. */
 export type TitleSource = "page" | "ask" | "name";
