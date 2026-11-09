@@ -24,10 +24,10 @@ as-unknown-as	{ __cawcoCanvas?: { reports: number } }	scripts/probe-kit/specs/sh
 as-unknown-as	{ __cawcoCanvas?: { swept?: boolean }; }	scripts/probe-kit/specs/web/stage-focus.ts	1
 as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void }; }	apps/dashboard/src/routes/(app)/motion/breath-floor/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; adoptInstances: (r	apps/dashboard/src/routes/(app)/motion/folder-proof/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; state: { projects:	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; state: { sessions:	apps/dashboard/src/routes/(app)/motion/tab-bench.ts	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; state: { status: s	apps/dashboard/src/routes/(app)/motion/delegate-tray/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { state: { sessions: Record<string, SessionState> } }; }	apps/dashboard/src/routes/(app)/motion/recall/+page.svelte	1
+as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; connectionState: {	apps/dashboard/src/routes/(app)/motion/delegate-tray/+page.svelte	1
+as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; projectsState: { p	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
+as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; sessionsState: { s	apps/dashboard/src/routes/(app)/motion/tab-bench.ts	1
+as-unknown-as	{ __cawcoDebug: { sessionsState: { sessions: Record<string, SessionState	apps/dashboard/src/routes/(app)/motion/recall/+page.svelte	1
 as-unknown-as	{ __cawcoDeliver: (data: unknown) => void }	packages/agent/src/chromium.ts	1
 as-unknown-as	{ __cawcoDeliver?: (data: unknown) => void }	scripts/probe-kit/specs/app-comment-mode.ts	1
 as-unknown-as	{ __cawcoGraph: CanvasGraph }	packages/agent/src/stage-host/canvas/embed.ts	1
