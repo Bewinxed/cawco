@@ -84,7 +84,7 @@ const delegated = (
       };
 
 /** What `delegate` asks for, as its route's body takes it. */
-export type DelegateAsk = Parameters<WorkItemCallsDeps["delegateTypeFor"]>[0] &
+type DelegateAsk = Parameters<WorkItemCallsDeps["delegateTypeFor"]>[0] &
   Omit<Parameters<WorkItemCallsDeps["delegatedAttempt"]>[0], "task"> & {
     task?: string;
   };
@@ -140,15 +140,12 @@ export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
     return delegated(started, plain.title);
   },
 
-  /** `wait_item` for `instanceId`'s item. */
-  waitItem: (instanceId: string, minutes: unknown, reason: unknown): string =>
-    ctx.workItems.waitItem(instanceId, minutes, reason),
-
-  /** `finish_item` for `instanceId`'s item: its landing gate run, its answer said. */
-  finishItem: (
-    instanceId: string,
-    finished: Parameters<WorkItems["finishItem"]>[1]
-  ): Promise<string> => ctx.workItems.finishItem(instanceId, finished),
+  // `wait_item`, `finish_item`, `stop_delegate` on a queued delegate and
+  // an item's read are work-items.ts's own, called as they are.
+  waitItem: ctx.workItems.waitItem,
+  finishItem: ctx.workItems.finishItem,
+  withdrawQueued: ctx.workItems.withdrawQueued,
+  item: ctx.workItems.item,
 
   /**
    * `stop_delegate`: the session `instanceId` names (a former id by its id
@@ -175,10 +172,6 @@ export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
     });
   },
 
-  /** `stop_delegate` on a queued delegate: its words, or nothing when `target` names none. */
-  withdrawQueued: (from: string, target: string): string | undefined =>
-    ctx.workItems.withdrawQueued(from, target),
-
   /**
    * What item `id`'s workspace holds on no remote now (workspaces.ts
    * `unlandedOf`), or why it could not be read, and what it serves, which
@@ -199,9 +192,6 @@ export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
         }
       : undefined;
   },
-
-  /** Item `id`, or nothing. */
-  item: (id: string) => ctx.workItems.item(id),
 
   discard: discardCall(ctx),
 });
