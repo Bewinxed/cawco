@@ -6,7 +6,6 @@
 # output; the design rules report them in the file's own text (the Golar
 # fork's `sourceRange`), so each is held to its column too.
 scripts/lint/fixtures/unhandled-state.ts:11:11 switch-exhaustiveness-check
-scripts/lint/fixtures/resize-delivery-late.ts:5:1 house/resize-delivery-first
 scripts/lint/fixtures/design/planted.svelte:15:23 house/no-raw-duration-read
 scripts/lint/fixtures/design/planted.svelte:18:13 design/no-unknown-classes
 scripts/lint/fixtures/design/planted.svelte:19:13 design/no-arbitrary-values
