@@ -32,8 +32,8 @@ import { WorkspaceCutSchema } from "@cawco/core/stored-shapes";
 import type { WorkspaceCut } from "@cawco/core/workspace/controls";
 import { z } from "zod";
 import { placedAsMade } from "./fleet";
+import { hostGit } from "./git/run";
 import { isGitDir } from "./git-dir";
-import { hostGit } from "./host-git";
 import { straysAmong } from "./stand-ins";
 
 /** A cut under way: the clone's path, the repository it is cut from, and the commit a cut again starts at (none for a first cut). */
