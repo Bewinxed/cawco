@@ -21,7 +21,6 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import type { SchemaObject } from "openapi-typescript";
 import { hubInProcess } from "./hub-in-process";
-import { toolInputs } from "./tool-inputs";
 
 const check = process.argv.includes("--check");
 const ROOT = resolve(import.meta.dir, "../../..");
@@ -115,12 +114,6 @@ const schemas: Record<string, Schema> = {};
 for (const route of routes) {
   schemas[`${route.method} ${route.path}`] = await requestOf(route);
 }
-// Every tool a session is listed, by its name: what the tool door and
-// `cawco tool` call. Loaded after the hub, whose modules it shares.
-const tools = await toolInputs();
-for (const [name, input] of [...tools].sort(([a], [b]) => a.localeCompare(b))) {
-  schemas[`tool ${name}`] = await jsonSchemaOf(input);
-}
 lifetime.close();
 rmSync(scratch, { recursive: true, force: true });
 const read = performance.now();
@@ -160,14 +153,13 @@ const text = await fmt.formatText(
  * table (\`bun run route-types\` in packages/hub); never edited by hand.
  *
  * What each hub route takes, keyed \`METHOD /path\` as the hub declares it:
- * its path parameters, query and JSON body; and each tool's arguments, keyed
- * \`tool <name>\`. Read through hub-request.ts.
+ * its path parameters, query and JSON body. Read through hub-request.ts.
  */
 ${printed}`
 );
 const printedAt = performance.now();
 const where = relative(ROOT, OUT);
-const timing = `${routes.length} route(s) and ${tools.size} tool(s), ${text.length} bytes; hub ${Math.round(read - started)} ms, printed ${Math.round(printedAt - read)} ms`;
+const timing = `${routes.length} route(s), ${text.length} bytes; hub ${Math.round(read - started)} ms, printed ${Math.round(printedAt - read)} ms`;
 
 if (check) {
   let kept = "";
