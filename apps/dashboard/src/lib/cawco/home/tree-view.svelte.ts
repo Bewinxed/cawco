@@ -6,7 +6,7 @@
  * under its "N older" row (older.ts), and which lines are out.
  */
 import type { Attachment } from "svelte/attachments";
-import type { BoardRow } from "../client.svelte";
+import type { BoardRow } from "../links";
 import { DELEGATE_WINDOW, failedIn, listedOf, runningIds } from "../older";
 import { openTrees, type TreeList } from "../open-trees.svelte";
 import { collapse, type TreeLine } from "../tree";
