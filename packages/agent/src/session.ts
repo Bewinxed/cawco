@@ -2137,13 +2137,15 @@ export class SessionSupervisor {
     if (traitsOf(session.harness).custody === "server") {
       const busy = serverBusy ?? (await serverBusyInstances());
       if (busy.includes(instanceId)) {
-        return { why: "the opencode server reports its turn running" };
-      }
-      // `opencode:…` is the server's activity not known, or an operation of
-      // the adapter's own in flight: no word on this session either way.
-      if (busy.some((id) => id.startsWith("opencode:"))) {
         return {
-          why: "the opencode server cannot say whether a turn is running",
+          why: `the ${session.harness} server reports its turn running`,
+        };
+      }
+      // `<harness>:…` is its server's activity not known, or an operation of
+      // the adapter's own in flight: no word on this session either way.
+      if (busy.some((id) => id.startsWith(`${session.harness}:`))) {
+        return {
+          why: `the ${session.harness} server cannot say whether a turn is running`,
           unsure: true,
         };
       }
