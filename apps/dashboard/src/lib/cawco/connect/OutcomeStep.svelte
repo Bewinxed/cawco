@@ -31,9 +31,10 @@
     motionOk,
   } from "#lib/platform/motion/curves.svelte.js";
   import { barGlass } from "../bar-glass.svelte";
-  import { cawco } from "../client.svelte";
+
   import HarnessBlock from "../HarnessBlock.svelte";
   import { machineBlocksOf } from "../harness-block.svelte";
+  import { boardStore } from "../stores/board.svelte";
   import { connect } from "./installs.svelte";
   import MonoWell from "./MonoWell.svelte";
   import PasswordField from "./PasswordField.svelte";
@@ -61,12 +62,12 @@
       : null
   );
   const machine = $derived(
-    cawco.machines.find((one) => one.machineId === install.machineId)
+    boardStore.machines.find((one) => one.machineId === install.machineId)
   );
   /** What its harnesses step could not bring up, standing on the machine. */
   const blocks = $derived(machine ? machineBlocksOf(machine) : []);
   const inFleet = $derived(
-    cawco.machines.some(
+    boardStore.machines.some(
       (one) =>
         one.machineId === install.machineId ||
         one.hostname.split(".")[0]?.toLowerCase() === name.toLowerCase()

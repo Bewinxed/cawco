@@ -9,6 +9,7 @@ import type { HubRead } from "#lib/platform/hub-read.js";
 import { cawco } from "./client.svelte";
 import { resolveSessionTitle } from "./links";
 import { sessionAnswer } from "./session-names.svelte";
+import { boardStore } from "./stores/board.svelte";
 import { workingSet } from "./working-set.svelte";
 import { contextOf } from "./workspace/workspace.svelte";
 
@@ -35,7 +36,7 @@ export function sessionName(
   served: Record<string, HubRead<string>>,
   cwdFallback?: string
 ): SessionName {
-  const row = cawco.instanceIndex.byId.get(id);
+  const row = boardStore.instanceIndex.byId.get(id);
   const view = cawco.session(id);
   const ctx = contextOf(id);
   // A session the board does not hold is named as the hub's names have it
