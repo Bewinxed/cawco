@@ -11374,14 +11374,15 @@ export const createServer = (
     db.turnUsage.put(session.id, turn.rows, turn.seen);
     // Its spend is recorded: a charge whose move it was goes.
     admission.recorded();
-    // A Claude turn that reached the model and said nothing of its account's
-    // limits left them where they stood: its Claude Code reports every move.
+    // A turn that reached the model and said nothing of its account's limits
+    // left them where they stood, on a harness that reports every move of
+    // the account's own windows (Claude Code).
     const reached = turn.rows.some(
       (row) => row.inputTokens + row.outputTokens > 0
     );
     const { accountId } = session;
     if (
-      traitsOf(session.harness).accountModel === "dir" &&
+      traitsOf(session.harness).providerLimit === "account" &&
       accountId &&
       reached &&
       confirmReading(db, accountId, session.machineId, at) &&
@@ -13117,7 +13118,7 @@ export const createServer = (
                 db.mergeAgentHarnesses(message.machineId, filed);
                 capabilityReports.delete(message.machineId);
                 const claudeReport = reported.find(
-                  (report) => traitsOf(report.harness).accountModel === "dir"
+                  (report) => traitsOf(report.harness).accountDir
                 );
                 // The machine's word on Claude moves with its Claude report,
                 // not only at its register: a keychain unlocked from the

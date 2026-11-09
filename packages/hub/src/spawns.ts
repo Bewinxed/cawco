@@ -672,8 +672,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     placed: { accountId?: string }
   ): { accountId?: string } => {
     if (
-      traitsOf(payload.harness).accountModel !== "dir" ||
-      !payload.resume ||
+      !(traitsOf(payload.harness).accountDir && payload.resume) ||
       payload.resume.fork ||
       !placed.accountId
     ) {
@@ -851,7 +850,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     task: { projectId: string | null; taskId?: string }
   ): ItemPlacement => {
     const placed = placedOrRefused(machineId, { ...session, cwd: "" }, task);
-    if (traitsOf(session.harness).accountModel !== "dir") {
+    if (!traitsOf(session.harness).accountDir) {
       return placed;
     }
     const launchesOn = launchedOn(
@@ -889,7 +888,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     instanceId: string
   ): string | undefined => {
     const [row] = ctx.db.getInstancesByIds([instanceId]);
-    if (traitsOf(row?.harness).accountModel !== "dir") {
+    if (!traitsOf(row?.harness).accountDir) {
       return;
     }
     const owed = ctx.owedOn(row);
