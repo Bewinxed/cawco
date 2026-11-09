@@ -194,10 +194,12 @@ import {
   type HubFailure,
   hubFailure,
   hubFetch,
+  hubJson,
   hubRefusal,
   machineAway,
   failureWords as messageOf,
   refusalClause,
+  refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { unlessSame } from "#lib/platform/unless-same.js";
@@ -225,7 +227,6 @@ import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { type HeldPlan, handlePlanMessage } from "./plan";
 import { presenceAgain, presenceClientId } from "./presence";
-import { send as askHub } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type CommandRefusal, refusals } from "./refusals.svelte";
 import { noteChange } from "./repeated-keys";
@@ -7058,15 +7059,18 @@ function keepRelayJourney(journey: RelayJourneyView): void {
 
 /** The stream relay's journey as the hub has it now, with this page's domain; a failed read throws its words. */
 export async function readRelayJourney(): Promise<void> {
-  const read = await askHub<RelayAnswer>(hubRequest("GET /api/stream-relay"));
+  const read = await hubJson<RelayAnswer>(hubRequest("GET /api/stream-relay"), {
+    failure: refusedOrUnreached,
+  });
   state.relayDomain = read.domain;
   keepRelayJourney(read.journey);
 }
 
 /** One act on the stream relay's journey: the hub's answer kept, its refusal thrown in its words. */
 export async function actOnRelay(act: RelayAct): Promise<void> {
-  const answered = await askHub<RelayAnswer>(
-    hubRequest("POST /api/stream-relay/act", { body: act })
+  const answered = await hubJson<RelayAnswer>(
+    hubRequest("POST /api/stream-relay/act", { body: act }),
+    { failure: refusedOrUnreached }
   );
   state.relayDomain = answered.domain;
   keepRelayJourney(answered.journey);
@@ -7076,15 +7080,18 @@ export async function actOnRelay(act: RelayAct): Promise<void> {
 export async function reportRelayProof(
   report: RelayProofReport
 ): Promise<void> {
-  const answered = await askHub<RelayAnswer>(
-    hubRequest("POST /api/stream-relay/proof", { body: report })
+  const answered = await hubJson<RelayAnswer>(
+    hubRequest("POST /api/stream-relay/proof", { body: report }),
+    { failure: refusedOrUnreached }
   );
   keepRelayJourney(answered.journey);
 }
 
 /** A 60 s credential for this screen's proof of the relay. */
 export function relayTry(): Promise<RelayTry> {
-  return askHub<RelayTry>(hubRequest("GET /api/stream-relay/try"));
+  return hubJson<RelayTry>(hubRequest("GET /api/stream-relay/try"), {
+    failure: refusedOrUnreached,
+  });
 }
 
 /** Fleet watch's needs-you notices, as the hub holds them now. */
@@ -7188,7 +7195,10 @@ export function dismissProjectJoin(instanceId: string): void {
 
 /** A project's conversation: on or off, its harness, its session, why it cannot start, its spend. */
 export const cawOf = (projectId: string): Promise<ProjectConversationView> =>
-  askHub(hubRequest("GET /api/projects/:id/caw", { path: { id: projectId } }));
+  hubJson(
+    hubRequest("GET /api/projects/:id/caw", { path: { id: projectId } }),
+    { failure: refusedOrUnreached }
+  );
 
 /** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
 export const configureCaw = async (
@@ -7201,11 +7211,12 @@ export const configureCaw = async (
     on?: boolean;
   }
 ): Promise<ProjectConversationView> => {
-  const view = await askHub<ProjectConversationView>(
+  const view = await hubJson<ProjectConversationView>(
     hubRequest("PATCH /api/projects/:id/caw", {
       path: { id: projectId },
       body: change,
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
   // The hub's answer is where he stands: the project's row says so now,
   // before the `projects.changed` it sent brings the row read again.
@@ -7231,21 +7242,23 @@ export const configureCaw = async (
  * online.
  */
 export const conversationStart = (projectId: string): Promise<CawStart> =>
-  askHub<CawStart>(
+  hubJson<CawStart>(
     hubRequest("POST /api/projects/:id/caw/place", {
       path: { id: projectId },
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 export const nameConversation = async (
   projectId: string,
   instanceId: string
 ): Promise<ProjectConversationView> => {
-  const view = await askHub<ProjectConversationView>(
+  const view = await hubJson<ProjectConversationView>(
     hubRequest("POST /api/projects/:id/caw/conversation", {
       path: { id: projectId },
       body: { instanceId },
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
   const row = state.projects.find((project) => project.id === projectId);
   if (row) {
@@ -7268,14 +7281,17 @@ export interface RoutineState {
 
 /** A routine as it stands now. */
 export const readRoutine = (routineId: string): Promise<RoutineState> =>
-  askHub(hubRequest("GET /api/routines/:id", { path: { id: routineId } }));
+  hubJson(hubRequest("GET /api/routines/:id", { path: { id: routineId } }), {
+    failure: refusedOrUnreached,
+  });
 
 /** Where a project's design-system offer stands (hub design-offers.ts). */
 export const readDesignOffer = (projectId: string): Promise<DesignOfferState> =>
-  askHub(
+  hubJson(
     hubRequest("GET /api/projects/:id/design-offer", {
       path: { id: projectId },
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /** Answers it: Build files the task, Not now records it; the offer as it stands after. */
@@ -7283,38 +7299,43 @@ export const answerDesignOffer = (
   projectId: string,
   answer: "build" | "dismiss"
 ): Promise<DesignOfferState> =>
-  askHub(
+  hubJson(
     hubRequest(
       answer === "build"
         ? "POST /api/projects/:id/design-offer/build"
         : "POST /api/projects/:id/design-offer/dismiss",
       { path: { id: projectId } }
-    )
+    ),
+    { failure: refusedOrUnreached }
   );
 
 /** Where an offer of Git LFS for a place's left-out large files stands (hub lfs-offers.ts). */
 export const readLfsOffer = (id: string): Promise<LfsOfferState> =>
-  askHub(hubRequest("GET /api/lfs-offers/:id", { path: { id } }));
+  hubJson(hubRequest("GET /api/lfs-offers/:id", { path: { id } }), {
+    failure: refusedOrUnreached,
+  });
 
 /** Answers it: Track commits the files through LFS, Not now records it; the offer as it stands after. */
 export const answerLfsOffer = (
   id: string,
   answer: "track" | "dismiss"
 ): Promise<LfsOfferState> =>
-  askHub(
+  hubJson(
     hubRequest(
       answer === "track"
         ? "POST /api/lfs-offers/:id/track"
         : "POST /api/lfs-offers/:id/dismiss",
       { path: { id } }
-    )
+    ),
+    { failure: refusedOrUnreached }
   );
 
 /** The fleet's connections, never their keys (`GET /api/connections`). */
 export const readConnections = async (): Promise<ConnectionView[]> =>
   (
-    await askHub<{ connections: ConnectionView[] }>(
-      hubRequest("GET /api/connections")
+    await hubJson<{ connections: ConnectionView[] }>(
+      hubRequest("GET /api/connections"),
+      { failure: refusedOrUnreached }
     )
   ).connections;
 
@@ -7323,11 +7344,12 @@ export const changeRoutine = (
   routineId: string,
   change: { enabled?: boolean; keep?: boolean }
 ): Promise<RoutineState> =>
-  askHub(
+  hubJson(
     hubRequest("PATCH /api/routines/:id", {
       path: { id: routineId },
       body: change,
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /** "Ask Caw for a view": your words to the project's conversation, which drafts it; the session they went to. */
@@ -7335,17 +7357,19 @@ export const requestView = (
   projectId: string,
   text: string
 ): Promise<{ instanceId: string }> =>
-  askHub(
+  hubJson(
     hubRequest("POST /api/projects/:id/view-requests", {
       path: { id: projectId },
       body: { text },
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /** What a project has spent: today, this month, its conversations' share, each attempt. */
 export const projectSpend = (projectId: string): Promise<ProjectSpend> =>
-  askHub(
-    hubRequest("GET /api/projects/:id/spend", { path: { id: projectId } })
+  hubJson(
+    hubRequest("GET /api/projects/:id/spend", { path: { id: projectId } }),
+    { failure: refusedOrUnreached }
   );
 
 /** Sets what an attempt at the project's tasks may spend; null clears it. */
@@ -7361,29 +7385,35 @@ export const setProjectCap = (
     usd: number | null;
   }
 ): Promise<{ cap: ProjectCap | null }> =>
-  askHub(
+  hubJson(
     hubRequest("PUT /api/projects/:id/cap", {
       path: { id: projectId },
       body: change,
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /** What reaching a project's cap does where the project sets nothing. */
 export const spendSettings = (): Promise<{ onCap: OnCap }> =>
-  askHub(hubRequest("GET /api/spend-settings"));
+  hubJson(hubRequest("GET /api/spend-settings"), {
+    failure: refusedOrUnreached,
+  });
 
 export const setSpendSettings = (onCap: OnCap): Promise<{ onCap: OnCap }> =>
-  askHub(hubRequest("PUT /api/spend-settings", { body: { onCap } }));
+  hubJson(hubRequest("PUT /api/spend-settings", { body: { onCap } }), {
+    failure: refusedOrUnreached,
+  });
 
 export const setProjectBudget = (
   projectId: string,
   budget: ProjectSpend["budget"]
 ): Promise<unknown> =>
-  askHub(
+  hubJson(
     hubRequest("PATCH /api/projects/:id/dispatch", {
       path: { id: projectId },
       body: { budget },
-    })
+    }),
+    { failure: refusedOrUnreached }
   );
 
 /**
