@@ -78,7 +78,7 @@ interface Plan {
    * executor and, on Linux, the host script, each as a boundary of
    * {@link FORM_GENERATION} has them, so every generation of one form has
    * the same. A boundary started in another form is handed over
-   * ({@link handOver}, REPORT.md §7.7).
+   * (ensure.ts `handOver`, REPORT.md §7.7).
    */
   readonly form: string;
   /** Each part {@link form} hashes over, hashed on its own, by name ({@link formFrom}). */
@@ -94,7 +94,7 @@ interface Plan {
  * unreadable)", its linux-sandbox-utils.js 0.0.81), and a file's bind keeps
  * the file it was made over, so a bound file written again, or a bound dir
  * made since the boundary started, is a later form, and a boundary in use is
- * handed over to it ({@link rearmMoved}). Seatbelt grants by path rule,
+ * handed over to it (looks.ts `rearmMoved`). Seatbelt grants by path rule,
  * there or not.
  */
 export const SYNCED_PART = "synced";
@@ -266,7 +266,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       ],
       reachedHostSockets: [TEST_MANAGER_SOCKET, REMOTE_AUTOMATION_SOCKET],
       // How every process this generation starts is found, wherever it
-      // moves and whatever it runs ({@link MEMBERSHIP_PREFIX}).
+      // moves and whatever it runs (boundary-policy.ts `MEMBERSHIP_PREFIX`).
       members: [membershipName(id), membershipName(id, gen)],
     });
     const file = join(generationDir(id, gen), "boundary.sb");
@@ -379,7 +379,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       ],
       // The host starts here, never in the clone: Bun reads bunfig.toml and
       // .env from where it starts (boundary-host.ts). It names its sandbox
-      // here too ({@link placeOf}).
+      // here too (state.ts `placeOf`).
       cwd: generationDir(id, gen),
       env: {
         ...(standalone ? { BUN_BE_BUN: "1" } : {}),
