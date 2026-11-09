@@ -178,7 +178,7 @@ import type { PromotedFile } from "../../../packages/hub/src/artifacts/shapes";
 import type { ArtifactTool } from "../../../packages/hub/src/artifacts/tools";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { requestOf } from "../hub";
+import { pageHub } from "../hub";
 import {
   type Kit,
   type KitFleet,
@@ -1832,16 +1832,10 @@ const headChecks = async ({
     (one) => one.id === session
   );
   const sentAt = Date.now();
-  const status = await desk.evaluate(
-    (request) =>
-      fetch(request.path, request).then((response) => response.status),
-    await requestOf((hub) =>
-      hub.api
-        .instances({ id: session })
-        .artifacts({ artifact: id })
-        .send.post({ text: "The denied state reads wrong" })
-    )
-  );
+  const { status } = await pageHub(desk)
+    .api.instances({ id: session })
+    .artifacts({ artifact: id })
+    .send.post({ text: "The denied state reads wrong" });
   const sent = await until(
     "the head's Sent line",
     () => lineOf(desk),
