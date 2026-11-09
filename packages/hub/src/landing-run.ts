@@ -5,7 +5,6 @@ import {
   type ForgeWrite,
 } from "@cawco/core/forge-post";
 import type { CheckoutMove, LandsMode } from "@cawco/core/injected";
-import { machineCalled } from "@cawco/core/machine-names";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
@@ -49,6 +48,7 @@ import {
   reportedDiffstat,
   reportedRange,
 } from "./landing";
+import { machineName } from "./machine-name";
 import { CommandStopped, WouldWait } from "./machine-pause";
 import { handle } from "./presenters/words";
 import {
@@ -622,9 +622,6 @@ export const createLandingRun = (deps: LandingRunDeps) => {
     update,
     workspaces,
   } = deps;
-  /** A machine as a landing's line names it: its hostname as the fleet shows it. */
-  const machineName = (machineId: string): string =>
-    machineCalled(machineId, db.listAgents());
   /**
    * Each landing this hub process runs, by item: aborted as its item ends
    * ({@link finish}), which cancels every command the landing has running,
@@ -975,7 +972,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
             outcome,
             { head: "Not landed", target: base },
             workspace,
-            machineName(workspace.machineId)
+            machineName(db, workspace.machineId)
           ),
         };
     }
@@ -1081,7 +1078,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
         workspace,
         branch,
         item.lands,
-        machineName(workspace.machineId),
+        machineName(db, workspace.machineId),
         gate
       );
     }
@@ -1118,7 +1115,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
   ): Promise<Landed> => {
     const { base } = workspace;
     const branch = landingBranch(item);
-    const machine = machineName(workspace.machineId);
+    const machine = machineName(db, workspace.machineId);
     const title =
       (item.projectId && item.taskId
         ? taskTitle?.(item.projectId, item.taskId)
@@ -1270,7 +1267,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
     return {
       kind: "done",
       gate: checked,
-      line: `Landed: ${applied.applied} ${applied.applied === 1 ? "path" : "paths"} of this workspace's changes are in ${read.folder} on ${machineName(workspace.machineId)}.${changedList(read.changed)}`,
+      line: `Landed: ${applied.applied} ${applied.applied === 1 ? "path" : "paths"} of this workspace's changes are in ${read.folder} on ${machineName(db, workspace.machineId)}.${changedList(read.changed)}`,
     };
   };
   /**
@@ -1825,7 +1822,7 @@ export const createLandingRun = (deps: LandingRunDeps) => {
             refused,
             { head: "Not pushed", target: `branch ${branch}` },
             workspace,
-            machineName(workspace.machineId)
+            machineName(db, workspace.machineId)
           ),
         }
       : undefined;
