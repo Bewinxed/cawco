@@ -21,7 +21,6 @@
  *   bun scripts/probe-kit/run.ts view-args
  */
 
-import { hubPath } from "../../../packages/agent/src/hub-client";
 import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply } from "../../scratch-fleet";
@@ -87,10 +86,12 @@ const run = async (kit: Kit) => {
   );
 
   // 2. The route.
+  // A variable, not a literal: TypeScript refuses an extra property only on
+  // a fresh object literal, so this reaches the route through Eden. `stage: undefined` is what JSON leaves out.
+  const tooMuch = { limit: 5, stage: undefined };
   const routeRefused = await fleet
-    .postGiven(
-      hubPath.api.projects({ id: project.id })["view-tools"].tasks["~path"],
-      { limit: 5 }
+    .api((hub) =>
+      hub.api.projects({ id: project.id })["view-tools"].tasks.post(tooMuch)
     )
     .then(
       (answer) => `answered ${JSON.stringify(answer)}`,
