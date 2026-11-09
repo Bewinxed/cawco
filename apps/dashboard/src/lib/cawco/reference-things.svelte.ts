@@ -22,6 +22,8 @@ import { cawco } from "./client.svelte";
 import { planProgress } from "./plan/PlanPane.svelte";
 import { readTask, stageLabel, type TaskView } from "./project-tasks";
 import type { Routine } from "./routines/routines-api";
+import { plansStore } from "./stores/plans.svelte";
+import { tickersStore } from "./stores/tickers.svelte";
 
 /** The kinds this module names. */
 export type ThingKind = Extract<
@@ -70,7 +72,7 @@ function askOnce<T>(key: string, read: () => Promise<T>): T | null | undefined {
 
 /** A task as the hub answered it, read again whenever its project's tasks moved. */
 const taskOf = (project: string, task: string): TaskView | null | undefined => {
-  const moved = cawco.taskChangedOf(project, task);
+  const moved = tickersStore.taskChangedOf(project, task);
   return askOnce(`task:${project}/${task}@${moved}`, () =>
     readTask(project, task)
   );
@@ -78,7 +80,7 @@ const taskOf = (project: string, task: string): TaskView | null | undefined => {
 
 /** A session's plan: the store's, else the hub's answer. */
 const planOf = (session: string): SessionPlan | null | undefined =>
-  cawco.planOf(session) ??
+  plansStore.planOf(session) ??
   askOnce(`plan:${session}`, () =>
     readJson<SessionPlan>(
       hubRequest("GET /api/instances/:id/plan", { path: { id: session } })

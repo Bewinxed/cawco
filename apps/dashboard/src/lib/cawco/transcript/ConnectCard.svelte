@@ -61,6 +61,7 @@
   } from "../client.svelte";
   import CawFace from "../home/CawFace.svelte";
   import { hubSeam } from "../hub-live";
+  import { mcpServersStore } from "../stores/mcp-servers.svelte";
   import type { Message } from "../types";
   import ConnectAddress from "./ConnectAddress.svelte";
   import ConnectRow from "./ConnectRow.svelte";
@@ -149,8 +150,9 @@
   /** The server as the fleet reads it now: signed in, and as whom. */
   const server = $derived(
     connect
-      ? ((cawco.fleetMcp ?? []).find((one) => one.name === connect.server) ??
-          null)
+      ? ((mcpServersStore.fleetMcp ?? []).find(
+          (one) => one.name === connect.server
+        ) ?? null)
       : null
   );
   // The hub's word that it signed in, while this card waited on it.
