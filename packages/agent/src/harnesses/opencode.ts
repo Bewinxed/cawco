@@ -824,7 +824,7 @@ const toOpencodeMcp = (config: FleetMcpConfig): Record<string, unknown> => {
  * 2.0 never does: its `startServer` runs only for a config add or change, a
  * `connect`, a credential switch and an expired HTTP session, and a start
  * that failed ends at `entry.status = { status: "failed", error }` with no
- * retry (packages/core/src/mcp/index.ts, the same at v2.0.29 and v2.0.32).
+ * retry (anomalyco/opencode/packages/core/src/mcp/index.ts, the same at v2.0.29 and v2.0.32).
  * `failed` carries only the error's words, so a server that will never start
  * reads as one that was slow once, and both are tried again. Ours: the first
  * try 15 s on (a start that timed out on a loaded machine is usually moments
@@ -868,8 +868,8 @@ const recordOf = (value: unknown): Record<string, unknown> =>
  * The fleet's servers written whole to {@link OPENCODE_FLEET_MCP}, which
  * each server takes in its launch config, and none of them in
  * `opencode.json`. OpenCode watches its config dirs from every location of
- * every server running and reloads a changed `opencode.json` there (core
- * config.ts: `watcher.subscribe(target, requestReload)`, then `reload()`
+ * every server running and reloads a changed `opencode.json` there (OpenCode's
+ * core/config.ts: `watcher.subscribe(target, requestReload)`, then `reload()`
  * publishes `config.updated`, on which config/plugin/mcp.ts reloads MCP;
  * v2.0.29), so a server named there was started in each booted location of
  * each generation, the one being replaced too, beside the new generation's
@@ -4652,7 +4652,7 @@ class OpencodeHarness implements Harness<"opencode"> {
    * MCP servers ({@link OPENCODE_FLEET_MCP}), and its `plan` agent off
    * ({@link PLAN_AGENT_OFF_CONFIG}). The launch
    * config is the highest of a server's config documents but managed
-   * settings (core config.ts `load`: `...content, ...managedSettings`), so a
+   * settings (OpenCode's core/config.ts `load`: `...content, ...managedSettings`), so a
    * fleet server wins over a user's own of the same name.
    */
   async #launchConfig(): Promise<Record<string, unknown>> {
