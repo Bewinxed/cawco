@@ -1,5 +1,6 @@
 /**
- * The values the server renders the first paint from: the rail's width, the
+ * The values the server renders the first paint from: the rail's width and
+ * whether it is put away, the
  * last narrow-or-wide, the config page's card heights, the workspace's
  * layout and its sessions' places, and the folder tabs' measured shapes
  * (fluid-tabs/fold-memory.ts). The page keeps each in its own
@@ -11,6 +12,7 @@
  */
 export const PREFS = [
   "cawco-rail-width",
+  "cawco-rail-hidden",
   "cawco-narrow",
   "cawco-config-cards",
   "cawco-workspace",

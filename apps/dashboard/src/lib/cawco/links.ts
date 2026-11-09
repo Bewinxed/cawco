@@ -58,25 +58,6 @@ export interface InstanceIndex<T extends SessionInstance = SessionInstance> {
   bySession: ReadonlyMap<string, readonly T[]>;
 }
 
-export function indexInstances<T extends SessionInstance>(
-  instances: readonly T[]
-): InstanceIndex<T> {
-  const byId = new Map<string, T>();
-  const bySession = new Map<string, T[]>();
-  for (const row of instances) {
-    byId.set(row.id, row);
-    if (row.sessionId) {
-      const held = bySession.get(row.sessionId);
-      if (held) {
-        held.push(row);
-      } else {
-        bySession.set(row.sessionId, [row]);
-      }
-    }
-  }
-  return { byId, bySession };
-}
-
 /** Location settles shared session keys; the newest row settles true duplicates. */
 export function instanceForSession<T extends SessionInstance>(
   index: InstanceIndex<T>,

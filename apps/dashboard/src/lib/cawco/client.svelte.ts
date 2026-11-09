@@ -9914,6 +9914,12 @@ export const cawco = {
     Object.values(state.sessions[instanceId]?.subagents ?? {})
       .filter(isRealSubagent)
       .sort(branchOrder),
+  /**
+   * The person's sends the session has not read yet, where this page holds
+   * its transcript (an open tab, the peek): one will start its next turn.
+   */
+  queuedOf: (instanceId: string): number =>
+    state.sessions[instanceId]?.queued.length ?? 0,
   /** Background tasks that are not real subagents. */
   backgroundTasksOf: (instanceId: string): number =>
     Object.values(state.sessions[instanceId]?.subagents ?? {}).filter(

@@ -15,7 +15,7 @@
    * On a phone the rail is a sheet the bar's burger opens; on a desktop it is a
    * resizable column whose width is this browser's, not the fleet's.
    */
-  import { onMount, untrack } from "svelte";
+  import { flushSync, onMount, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
@@ -37,7 +37,12 @@
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import { setSidebar } from "#lib/components/ui/sidebar/context.svelte.js";
   import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { IconChevronLeft, IconSearch, IconSidebar } from "#lib/icons.js";
+  import {
+    IconChevronLeft,
+    IconSearch,
+    IconSidebar,
+    IconSidebarLinear,
+  } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { fieldKeeps } from "#lib/utils/typing.js";
   import { browser, dev } from "$app/env";
@@ -99,6 +104,8 @@
   });
 
   const RAIL_KEY = "cawco-rail-width";
+  /** Whether the sidebar is put away on a desk, as this browser keeps it. */
+  const RAIL_HIDDEN_KEY = "cawco-rail-hidden";
   const RAIL_MIN = 216;
   const RAIL_MAX = 520;
   const clamp = (px: number) =>
@@ -123,8 +130,13 @@
      *  the rail no longer renders the default and jumps on hydration. Null
      *  when the reader has no width of their own: the token's stands. */
     railWidth: initialRailWidth = null,
-  }: { children: import("svelte").Snippet; railWidth?: number | null } =
-    $props();
+    /** Read from the `cawco-rail-hidden` cookie server-side, as the width is: the sidebar put away on a desk is away from the first paint. */
+    railHidden: initialRailHidden = false,
+  }: {
+    children: import("svelte").Snippet;
+    railWidth?: number | null;
+    railHidden?: boolean;
+  } = $props();
 
   // Seeded once from the server's reading; dragging owns it after that.
   let railWidth = $state<number | null>(
@@ -323,6 +335,86 @@
         { duration: dur("--dur-control"), easing: ease("--ease-out") }
       );
     }
+  }
+
+  /**
+   * The sidebar put away on a desk (Hide sidebar, beside Files in the top
+   * bar's glass), kept per browser and for the server's first paint. The
+   * same button brings it back.
+   */
+  let railHidden = $state(untrack(() => initialRailHidden));
+  /** The rail on its way out: drawn over the page, out of its layout, as it slides. */
+  let railLeaving = $state(false);
+  /** The page beside the rail: it slides as the rail does. */
+  let mainBox = $state<HTMLElement | null>(null);
+  let railMoves: Animation[] = [];
+
+  /**
+   * Hides or shows the sidebar. The page is laid out at its new width once,
+   * and then only transforms move: the rail slides between
+   * `translateX(-100%)` and its place (mirrored right to left) and the page
+   * slides from the rail's width off to its own place, on the one clock
+   * (`--dur-panel`, `--ease-drawer`). The rail's width and the page's
+   * place are never animated: each frame of that laid out the transcript
+   * and the panes. With less motion the rail fades instead.
+   */
+  function toggleRail(): void {
+    const rail = railBox;
+    const main = mainBox;
+    const hide = !railHidden;
+    for (const move of railMoves) {
+      move.cancel();
+    }
+    railMoves = [];
+    railHidden = hide;
+    railLeaving = hide && motionOk.current && rail !== null && main !== null;
+    // The page takes its new width in this one layout, before anything moves.
+    flushSync();
+    store("local", RAIL_HIDDEN_KEY, hide ? "1" : "0");
+    keepPrefs({ "cawco-rail-hidden": hide ? "1" : null });
+    if (!(rail && main)) {
+      return;
+    }
+    const { width } = rail.getBoundingClientRect();
+    const rtl = getComputedStyle(rail).direction === "rtl";
+    const away = rtl ? "translateX(100%)" : "translateX(-100%)";
+    const by = `translateX(${rtl ? -width : width}px)`;
+    const back = `translateX(${rtl ? width : -width}px)`;
+    const timing = {
+      duration: dur("--dur-panel"),
+      easing: ease("--ease-drawer"),
+    };
+    if (!motionOk.current) {
+      if (!hide) {
+        railMoves = [
+          rail.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: dur("--dur-fade"),
+            easing: ease("--ease-out"),
+          }),
+        ];
+      }
+      return;
+    }
+    if (hide) {
+      // Out of the layout at once, drawn where it stood, sliding away.
+      railMoves = [
+        rail.animate([{ transform: "none" }, { transform: away }], timing),
+        main.animate([{ transform: by }, { transform: "none" }], timing),
+      ];
+      railMoves[0]?.finished.then(
+        () => {
+          railLeaving = false;
+        },
+        () => {
+          railLeaving = false;
+        }
+      );
+      return;
+    }
+    railMoves = [
+      rail.animate([{ transform: away }, { transform: "none" }], timing),
+      main.animate([{ transform: back }, { transform: "none" }], timing),
+    ];
   }
 
   // The sheet is a place you go through, not one you stay in. It leaves as
@@ -1195,7 +1287,7 @@
     data-slot="shell"
     data-first-paint={firstRender.held || undefined}
     data-first-render={!firstRender.held || undefined}
-    class="@container/shell flex h-dvh w-full bg-surface-recess overflow-hidden"
+    class="@container/shell relative flex h-dvh w-full bg-surface-recess overflow-hidden"
     style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
   >
     <!-- The rail holds the screen's leading edge, so it keeps a landscape
@@ -1204,7 +1296,9 @@
     <aside
       data-slot="rail"
       data-full={full || undefined}
-      class="hidden desk:flex data-full:hidden relative w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
+      data-away={(railHidden && !railLeaving) || undefined}
+      data-leaving={railLeaving || undefined}
+      class="hidden desk:flex data-full:hidden data-away:hidden relative data-leaving:absolute data-leaving:inset-y-0 data-leaving:start-0 data-leaving:z-10 w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
       style="--sidebar-width: var(--rail-w, {firstWidth === null
         ? 'var(--c-sidebar-w)'
         : `${firstWidth}px`})"
@@ -1287,6 +1381,7 @@
       class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w data-under:timeline-scope-transcript-head"
       data-peek-beside={peekBeside() || undefined}
       data-under={under || undefined}
+      bind:this={mainBox}
     >
       <!-- The bar: the comp's height (`--c-top-bar-h`, so what floats under
            it lands under it); hosted folder tabs stand on its floor. The
@@ -1474,10 +1569,23 @@
               <!-- Caw's head: what needs you, and its drawer. -->
               <NeedsCaw />
             {/snippet}
-            {#if railed && files.session}
-              <!-- Files, the conversation on screen's artifacts and
-                   attachments, leads the group. -->
-              <FilesItem count={filesCounted} />
+            {#if railed}
+              <!-- The sidebar, put away and brought back on a desk; Files
+                   (the conversation on screen's artifacts and attachments)
+                   beside it. -->
+              <BarItem
+                data-rail-toggle
+                icon={IconSidebarLinear}
+                label={railHidden
+                  ? sidebarWords.showSidebar
+                  : sidebarWords.hideSidebar}
+                layout="desk"
+                onclick={toggleRail}
+                open={!railHidden}
+              />
+              {#if files.session}
+                <FilesItem count={filesCounted} />
+              {/if}
             {/if}
             <!-- Drawn on every screen and hidden on the phone's glass by its
                  layout (`desk`: the shell container's desk line,

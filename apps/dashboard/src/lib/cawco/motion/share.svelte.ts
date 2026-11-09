@@ -18,8 +18,21 @@
  * else that the source becomes (a field that opens into a palette): it
  * starts moved onto the source, cut to the source's box around its `anchor`
  * (the part of it that is the source), and travels home as the cut opens.
+ * `mode: "move"` only moves it: a row that changed width or height on the
+ * way (a regroup's new indent, a line it gained) is drawn at its new size
+ * from the first frame, so its words never squash.
+ *
+ * A regroup (`regroup`: a list's groupings changed) departs every
+ * `[data-regroup]` box under its root under that box's own key, and each
+ * lands where it is drawn next with `landRegroup`: the same row, group
+ * parent or heading moves to its new place, never closing and opening
+ * again. Its keys are its own (`regroup:`), apart from a row's tab flight
+ * (`session:`) and Jump's (`jump`), so a session opened just after a regroup
+ * flies its tab from where its row is now.
  */
-import { CURVE, dur, motionOk } from "./curves.svelte";
+import { tick } from "svelte";
+import { CURVE, dur, ease, motionOk } from "./curves.svelte";
+import { reflowsFrom, handOver as restReflow } from "./rows.svelte";
 
 interface Departure {
   at: number;
@@ -194,9 +207,10 @@ export interface LandOptions {
   easing?: string;
   /**
    * `clip` opens the destination out of the source's box instead of scaling
-   * it; `grow` also moves it there first (see above).
+   * it; `grow` also moves it there first (see above); `move` only moves it,
+   * from the source's inline-start top corner to its own.
    */
-  mode?: "scale" | "clip" | "grow";
+  mode?: "scale" | "clip" | "grow" | "move";
   ms?: number;
   /**
    * Fly in the task that mounted the destination rather than at its first
@@ -234,6 +248,19 @@ function restingRect(node: HTMLElement): DOMRect {
     animation.currentTime = was[at];
   });
   return rect;
+}
+
+/**
+ * A move from the source's inline-start top corner to the destination's
+ * (the right edges under right-to-left), translation only: the destination
+ * is drawn at its own size all the way.
+ */
+function moveFrames(rtl: boolean, from: DOMRect, to: DOMRect): Keyframe[] {
+  const dx = rtl ? from.right - to.right : from.left - to.left;
+  return [
+    { transform: `translate(${dx}px, ${from.top - to.top}px)` },
+    { transform: "none" },
+  ];
 }
 
 function fly(node: HTMLElement, from: Departure, options: LandOptions) {
@@ -285,6 +312,10 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
           clipPath: `inset(0px 0px 0px 0px round ${getComputedStyle(node).borderRadius})`,
         },
       ]
+    );
+  } else if (mode === "move") {
+    effects.push(
+      moveFrames(getComputedStyle(node).direction === "rtl", from.rect, to)
     );
   } else if (mode === "clip") {
     const top = from.rect.top - to.top;
@@ -338,11 +369,17 @@ export function land(key: () => string | undefined, options: LandOptions = {}) {
         return;
       }
       const from = departures.get(name);
-      if (!from || from.source === node) {
+      // A box that moves stays itself: drawn again where it now stands, it
+      // flies from where it stood (a regroup that kept its group's list).
+      if (!from || (from.source === node && options.mode !== "move")) {
         return;
       }
       departures.delete(name);
       if (!motionOk.current || performance.now() - from.at > from.ttl) {
+        return;
+      }
+      if (options.mode === "move") {
+        moveLater(node, from, options);
         return;
       }
       if (options.now) {
@@ -398,3 +435,205 @@ export function closeInto(
     { duration: ms, easing, fill: "forwards" }
   );
 }
+
+/* ── Moves, in one batch a frame ───────────────────────────────────── */
+
+interface Move {
+  from: Departure;
+  node: HTMLElement;
+  options: LandOptions;
+}
+
+/** The moves waiting for the next frame. */
+let moves: Move[] = [];
+/** Called once a batch's flights have all landed. */
+let landed: (() => void)[] = [];
+
+/**
+ * Starts a move with the next frame, beside every other one that frame:
+ * every destination is read first, then every flight started, so a regroup
+ * of forty rows lays the rail out once rather than once a row.
+ */
+function moveLater(node: HTMLElement, from: Departure, options: LandOptions) {
+  if (moves.length === 0) {
+    requestAnimationFrame(flyMoves);
+  }
+  moves.push({ node, from, options });
+}
+
+/** The box a node scrolls in: its nearest ancestor that scrolls, else the window. */
+function scrollBoxOf(node: HTMLElement, known: Map<Element, DOMRect>): DOMRect {
+  for (let at = node.parentElement; at; at = at.parentElement) {
+    const held = known.get(at);
+    if (held) {
+      return held;
+    }
+    const { overflowY } = getComputedStyle(at);
+    if (overflowY === "auto" || overflowY === "scroll") {
+      const rect = at.getBoundingClientRect();
+      known.set(at, rect);
+      return rect;
+    }
+  }
+  return new DOMRect(0, 0, innerWidth, innerHeight);
+}
+
+const meets = (a: DOMRect, b: DOMRect): boolean =>
+  a.bottom > b.top && a.top < b.bottom && a.right > b.left && a.left < b.right;
+
+function flyMoves(): void {
+  const batch = moves.filter(({ node }) => node.isConnected);
+  moves = [];
+  const done = landed;
+  landed = [];
+  // Every read first.
+  const boxes = new Map<Element, DOMRect>();
+  const reads = batch.map((move) => ({
+    ...move,
+    to: move.node.getBoundingClientRect(),
+    box: scrollBoxOf(move.node, boxes),
+    rtl: getComputedStyle(move.node).direction === "rtl",
+  }));
+  const timing = { duration: dur("--dur-panel"), easing: CURVE.drawer };
+  // Then every flight. One whose old and new places are both out of its
+  // box's sight lands with no flight: nobody sees it travel.
+  const flights: Promise<unknown>[] = [];
+  for (const { node, from, options, to, box, rtl } of reads) {
+    if (to.width === 0 || to.height === 0) {
+      continue;
+    }
+    if (!(meets(from.rect, box) || meets(to, box))) {
+      continue;
+    }
+    // Where it stood: nothing to travel.
+    if (
+      Math.abs(from.rect.top - to.top) < 0.5 &&
+      Math.abs(from.rect.left - to.left) < 0.5 &&
+      Math.abs(from.rect.right - to.right) < 0.5
+    ) {
+      continue;
+    }
+    const run = node.animate(moveFrames(rtl, from.rect, to), {
+      id: FLIGHT,
+      duration: options.ms ?? timing.duration,
+      easing: options.easing ?? timing.easing,
+    });
+    flights.push(run.finished);
+  }
+  Promise.allSettled(flights).then(() => {
+    for (const settle of done) {
+      settle();
+    }
+  });
+}
+
+/* ── A regroup ─────────────────────────────────────────────────────── */
+
+/** Bumped by every regroup, so a box that stays mounted lands again. */
+let generation = $state(0);
+
+/** A group parent's own box: a copy fades out where one went. */
+const PARENT = "[data-regroup-parent]";
+
+/**
+ * A regroup under `root`: every `[data-regroup]` box departs under its own
+ * key, every `reflow` container around it is handed the change (none of its
+ * rows' coming and going is a change for it to draw), and `change` regroups.
+ * Then a group parent that went fades out where it stood, one that is new
+ * fades in where it stands, and once the flights have landed `settled`
+ * runs (the nesting lines read again, motion/branch).
+ */
+export function regroup(
+  root: HTMLElement,
+  change: () => void,
+  settled?: () => void
+): void {
+  const before = new Set<string>();
+  const parents: { key: string; copy: HTMLElement; rect: DOMRect }[] = [];
+  const base = root.getBoundingClientRect();
+  // Where a gone parent's copy stands is read here, before the change:
+  // read between the copies' writes, each read laid the page out again.
+  const scrolled = root.scrollTop;
+  for (const box of root.querySelectorAll<HTMLElement>("[data-regroup]")) {
+    const key = box.dataset.regroup;
+    if (!key) {
+      continue;
+    }
+    before.add(key);
+    const rect = box.getBoundingClientRect();
+    departBox(key, box, true, rect);
+    if (box.matches(PARENT) && motionOk.current) {
+      parents.push({ key, copy: box.cloneNode(true) as HTMLElement, rect });
+    }
+  }
+  for (const container of reflowsFrom(root)) {
+    restReflow(container);
+  }
+  generation += 1;
+  change();
+  tick().then(() => {
+    const now = new Set<string>();
+    const fadeIn = {
+      duration: dur("--dur-panel"),
+      easing: ease("--ease-out"),
+    };
+    const fadeOut = {
+      duration: dur("--dur-exit"),
+      easing: ease("--ease-out"),
+      fill: "forwards" as const,
+    };
+    for (const box of root.querySelectorAll<HTMLElement>("[data-regroup]")) {
+      const key = box.dataset.regroup;
+      if (!key) {
+        continue;
+      }
+      now.add(key);
+      // New here: it fades in where it stands, on the flights' clock.
+      if (!before.has(key) && motionOk.current) {
+        box.animate([{ opacity: 0 }, { opacity: 1 }], fadeIn);
+      }
+    }
+    for (const { key, copy, rect } of parents) {
+      if (now.has(key)) {
+        continue;
+      }
+      // Gone: a copy of it fades out where it stood, over what is there now.
+      copy.removeAttribute("data-regroup");
+      copy.setAttribute("aria-hidden", "true");
+      copy.inert = true;
+      Object.assign(copy.style, {
+        position: "absolute",
+        insetInlineStart: "auto",
+        left: `${rect.left - base.left}px`,
+        top: `${rect.top - base.top + scrolled}px`,
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+        margin: "0",
+        pointerEvents: "none",
+      });
+      root.append(copy);
+      copy
+        .animate([{ opacity: 1 }, { opacity: 0 }], fadeOut)
+        .finished.finally(() => copy.remove());
+    }
+    if (settled) {
+      if (moves.length > 0) {
+        landed.push(settled);
+      } else {
+        settled();
+      }
+    }
+  });
+}
+
+/**
+ * Lands a regroup's box (`data-regroup={key}`) where it is drawn now, from
+ * where it stood: moved only, its own size from the first frame.
+ */
+export const landRegroup = (key: () => string) =>
+  land(
+    // `generation` is read, so a box that stays mounted lands again after
+    // each regroup; it is never below 0.
+    () => (generation >= 0 ? key() : undefined),
+    { mode: "move" }
+  );

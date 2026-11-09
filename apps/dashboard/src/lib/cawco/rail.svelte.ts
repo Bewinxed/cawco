@@ -11,17 +11,6 @@ import { readJson, writeJson } from "./storage";
 
 const RAIL_LAYOUT_KEY = "cawco-rail-layout";
 
-/**
- * How the rail orders the sessions inside a project and in its flat lists.
- * `recent` is the default because the question a rail is opened to answer is
- * "where was I", and only a timestamp answers that; `name` is for the reader
- * who navigates by memory of the title; `state` is the old behaviour, blocked
- * before working before idle, for triage rather than resumption.
- */
-export type RailSort = "recent" | "name" | "state";
-
-const SORTS: readonly string[] = ["recent", "name", "state"];
-
 /** A project the reader pinned: it sorts to the top of the rail's Projects. */
 interface Pin {
   id: string;
@@ -29,20 +18,10 @@ interface Pin {
 }
 
 export interface RailLayout {
-  /**
-   * Whether delegate sessions are listed at all. Off by default: a session that
-   * fans out ten delegates puts eleven rows in the rail, ten of which are work
-   * the reader handed off precisely so they would not have to watch it. Off,
-   * every list in the rail shows only sessions nobody delegated; on, delegates
-   * are back, nested under the session that spawned them as before.
-   */
-  delegates: boolean;
   /** Machine ids in the reader's order; anything not named here sorts after. */
   machines: string[];
   /** Pinned projects, which Projects lists first. */
   pins: Pin[];
-  /** How session lists are ordered. See {@link RailSort}. */
-  sort: RailSort;
 }
 
 const isPin = (value: Pin | undefined): value is Pin =>
@@ -60,10 +39,6 @@ function read(): RailLayout {
     machines: Array.isArray(stored.machines)
       ? stored.machines.filter((id) => typeof id === "string")
       : [],
-    sort: SORTS.includes(stored.sort ?? "")
-      ? (stored.sort as RailSort)
-      : "recent",
-    delegates: stored.delegates === true,
   };
 }
 
@@ -75,20 +50,6 @@ const save = () => writeJson(RAIL_LAYOUT_KEY, layout);
 export const rail = {
   get machineOrder(): string[] {
     return layout.machines;
-  },
-  get sort(): RailSort {
-    return layout.sort;
-  },
-  setSort(sort: RailSort): void {
-    layout.sort = sort;
-    save();
-  },
-  get delegates(): boolean {
-    return layout.delegates;
-  },
-  setDelegates(show: boolean): void {
-    layout.delegates = show;
-    save();
   },
   isPinned: (projectId: string): boolean =>
     layout.pins.some((pin) => pin.id === projectId),

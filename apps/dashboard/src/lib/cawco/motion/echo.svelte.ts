@@ -57,6 +57,34 @@ const ECHOES = 3;
 
 /** When each echo's last cycle ends, on the document's timeline. */
 const ends = new WeakMap<Element, number>();
+/**
+ * The same, for an echo that names whose it is (`data-echo-key`, a
+ * session's id, with its status as `data-echo-status`): kept by that name,
+ * not by its element. A list drawn again (a regroup remounts every row)
+ * draws new elements for the same marks, and keyed by element each one that
+ * had rested beat three more cycles, news that was none. A new status is
+ * news: its end is read afresh.
+ */
+const keyedEnds = new Map<string, { end: number; status: string }>();
+
+/** When `echo`'s last cycle ends, if it was ever started. */
+function endOf(echo: Element): number | undefined {
+  const { echoKey, echoStatus = "" } = (echo as HTMLElement).dataset;
+  if (echoKey === undefined) {
+    return ends.get(echo);
+  }
+  const held = keyedEnds.get(echoKey);
+  return held?.status === echoStatus ? held.end : undefined;
+}
+
+function setEnd(echo: Element, end: number): void {
+  const { echoKey, echoStatus = "" } = (echo as HTMLElement).dataset;
+  if (echoKey === undefined) {
+    ends.set(echo, end);
+  } else {
+    keyedEnds.set(echoKey, { end, status: echoStatus });
+  }
+}
 
 /**
  * One beat's keyframes, the first `share` of the cycle: the echo leaves the
@@ -149,7 +177,7 @@ export function echoBeat(): Attachment<HTMLElement> {
       }
       const now = Number(document.timeline.currentTime ?? 0);
       echoes.forEach((echo, place) => {
-        const end = ends.get(echo);
+        const end = endOf(echo);
         if (end !== undefined && now >= end) {
           stop(echo);
           return;
@@ -176,12 +204,12 @@ export function echoBeat(): Attachment<HTMLElement> {
       const loop = dur("--dur-loop");
       const into = (now - origin - (place * loop) / BEATS) % cycle;
       const start = now - (into < 0 ? into + cycle : into);
-      const end = ends.get(echo);
+      const end = endOf(echo);
       const iterations =
         end === undefined
           ? ECHOES
           : Math.max(1, Math.ceil((end - start) / cycle - 1e-6));
-      ends.set(echo, start + iterations * cycle);
+      setEnd(echo, start + iterations * cycle);
       const animation = echo.animate(beatFrames(loop / cycle), {
         duration: cycle,
         iterations,

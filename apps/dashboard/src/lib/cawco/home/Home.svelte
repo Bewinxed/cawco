@@ -1,11 +1,12 @@
 <script lang="ts">
   /**
-   * The home: a status line, and the sessions grouped by what they are
-   * doing — Working and Finished as two tabs, then (on the phone) Recent.
-   * What needs the operator, and every notice, is Caw's panel's (NeedsCaw):
-   * nothing here says it a second time. The same list is the phone's home
-   * page (`page`) and the wide screen's sidebar (`rail`), where the
-   * transcripts take the rest of the screen and Recent sits under Projects.
+   * The home: a status line, and the sessions in the one Recent list
+   * (RecentList). What needs the operator, and every notice, is Caw's
+   * panel's (NeedsCaw); a session waiting on them keeps its place in Recent
+   * too, with its mark. The same list is the phone's home page (`page`) and
+   * the wide screen's sidebar (`rail`), where the transcripts take the rest
+   * of the screen. Fleet on a desk (`wide`) is the hub and the machines
+   * alone: the sidebar beside it already lists the sessions.
    *
    * What it never does: claim the fleet is empty while the hub is not live.
    * Then the rows stay as last known and greyed, there is no Caw, and the
@@ -19,45 +20,48 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { page } from "$app/state";
   import MachinesEmpty from "../MachinesEmpty.svelte";
+  import MachinesList from "../MachinesList.svelte";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import StartingRows from "../spawn/StartingRows.svelte";
   import UsageMeter from "../UsageMeter.svelte";
+  import { workspace } from "../workspace/workspace.svelte";
   import Caw from "./Caw.svelte";
   import FirstRunHere from "./FirstRunHere.svelte";
   import { firstRunSteps } from "./first-run.svelte";
-  import HomeRecent from "./HomeRecent.svelte";
   import { home } from "./home-state.svelte";
+  import RecentList from "./RecentList.svelte";
   import StatusLine from "./StatusLine.svelte";
-  import WorkTabs from "./WorkTabs.svelte";
 
   let {
     variant,
     wide = false,
-    markedElsewhere,
+    active,
   }: {
     /** `page` is the phone's home; `rail` is the wide screen's sidebar. */
     variant: "page" | "rail";
     /**
-     * The page on a desk, beside the rail (SessionSurface, Fleet pressed with
-     * tabs open): the rail's usage strip and Start session stand there
-     * already, so the page holds the groups alone, at the reading measure.
+     * Fleet on a desk, beside the rail (SessionSurface): the hub and the
+     * machines, each machine with its harnesses and its limits, at the
+     * reading measure. No session list: the sidebar holds it.
      */
     wide?: boolean;
-    /** In the rail: the open conversation's row is the project tree's to mark. */
-    markedElsewhere?: (id: string) => boolean;
+    /** The conversation in front, for its Recent row's pill; the page reads it itself. */
+    active?: string | null;
   } = $props();
 
-  const stale = $derived(!home.live);
-  /**
-   * The tabs are changing their rows and driving the list's height
-   * themselves (WorkTabs `relaying`): the home is not the rail's reflow's
-   * box to move until they are done.
-   */
-  let relaying = $state(false);
-  /**
+  /** The conversation in front: the rail's own answer, else the page's. */
+  const current = $derived.by(() => {
+    if (active !== undefined) {
+      return active;
+    }
+    return page.url.pathname.startsWith("/session")
+      ? workspace.activeSessionId
+      : null;
+  }); /**
    * Nothing anywhere yet: the one empty state the home keeps. Asked of the
    * home's `empty`, never of Recent: this home is in the rail on every page,
    * and reading the list here built it — every stored transcript on every
@@ -82,7 +86,7 @@
       home.live &&
       !machineless &&
       machinesThere === null &&
-      home.needs.length + home.working.length + home.finished.length === 0 &&
+      home.needs.length === 0 &&
       home.empty
   );
   /** Caw is on the page: from a first run until he has faded out. */
@@ -131,18 +135,13 @@
   });
 </script>
 
-<!-- Every state change here travels (motion/rows `reflow`): a request
-     arriving opens its place while what follows slides down, one leaving
-     closes, a session moving from Working to Finished closes in one list
-     and its count pops on the other tab, a re-sort slides, a group's box
-     follows its height, and Caw comes and goes by his own clips. With less
-     motion, only the fades run. In the rail the home is one box of the
-     rail's own reflow, so what is under it slides as it grows. -->
+<!-- Every state change here travels (motion/rows `reflow`): a row arriving
+     opens its place while what follows slides down, one leaving (Done)
+     closes, and Caw comes and goes by his own clips. With less motion, only
+     the fades run. In the rail the home is one box of the rail's own
+     reflow, so what is under it slides as it grows. -->
 <!-- In the rail it is one block of the rail's own scroller, at its full
-     height: the rail scrolls, the home does not shrink into it. Nothing is
-     ruled under it: the rail parts its sections with space alone (the
-     groups' own padding, the footer with no border), and the tabs' rule is
-     the one seam in this block. -->
+     height: the rail scrolls, the home does not shrink into it. -->
 <section
   aria-label="Home"
   class={[
@@ -151,7 +150,8 @@
     variant === "rail" && "flex-none",
   ]}
   data-home-variant={variant}
-  data-flip={variant === "rail" && !relaying ? "box" : undefined}
+  data-flip={variant === "rail" ? "box" : undefined}
+  data-regroup-root={variant === "page" || undefined}
   {@attach reflow({ on: ["data-bare"] })}
 >
   <!-- Bare, nothing in it: in the rail, live and read with nothing needing
@@ -170,10 +170,11 @@
     <!-- The line every other line on this screen is believed by; live and
          read, it says nothing and takes no room. -->
     <StatusLine />
-    {#if variant === "page" && !wide && home.limitsShown}
+    {#if variant === "page" && home.limitsShown}
       <!-- The phone has no rail: the rail's usage strip stands here (owner
            pick i), on the home's own ground, while a machine is online
-           (home `limitsShown`). -->
+           (home `limitsShown`). Fleet on a desk shows the limits too: the
+           hub and the machines are what it is for. -->
       <!-- The strip's card lines up with the status line's text. -->
       <div class="-mx-space-2">
         <UsageMeter variant="home" />
@@ -181,30 +182,28 @@
     {/if}
   </div>
 
-  <!-- The groups stand from the first frame. Until the first read is in,
-       the Working and Finished tabs stand over rows that wait (WorkTabs
-       `waiting`), so the tab row is where it will be and the list
-       cross-fades in under it; nothing else here is claimed before then. -->
   <div
     class={[
       "flex flex-col",
       variant === "page" && "gap-space-5 px-space-5 pt-space-2 pb-space-7",
       wide && "w-full max-w-c-measure",
-      variant === "rail" && "gap-space-3 px-space-2 pt-space-1 pb-space-2",
+      variant === "rail" && "gap-space-3 px-space-2 pt-space-1 empty:p-0",
     ]}
   >
     <!-- The starts the New Session form left running, each its own row
          until the reader has seen how it ended (spawn/parked). -->
     <StartingRows />
-    {#if !noFleet}
-      <WorkTabs
-        {markedElsewhere}
-        onstart={() => newSession()}
-        {stale}
-        {variant}
-        waiting={!home.ready}
-        bind:relaying
-      />
+    {#if wide && !noFleet && !machineless}
+      <!-- Fleet on a desk: each machine, its harnesses and its state (its
+           menu on right-click), then Add machine. -->
+      <section
+        aria-label="Machines"
+        class="flex flex-col gap-space-2"
+        data-flip
+      >
+        <h2 class="m-0 px-space-2 type-label text-ink-strong">Machines</h2>
+        <MachinesList />
+      </section>
     {/if}
 
     {#if machinesThere}
@@ -225,7 +224,7 @@
       <!-- Caw only on a fleet with nothing in it yet, or while a machine
            has not answered: the one empty state then. Nothing is going on,
            so he sleeps; while a machine is awaited he is awake. With sessions
-           somewhere, a tab with none says so itself (WorkTabs). He comes in
+           somewhere, Recent says what it holds itself. He comes in
            by his enter, or by a fade where his status has none, and fades
            out, keeping his place until he has gone. -->
       <figure
@@ -257,11 +256,14 @@
         <FirstRunHere />
       </div>
     {/if}
-
-    {#if variant === "page" && !noFleet}
-      <HomeRecent />
-    {/if}
   </div>
+
+  {#if !(wide || noFleet)}
+    <!-- The one Recent list: the rail's section, or the phone's page of it. -->
+    <div class={[variant === "page" && "px-space-3 pb-space-7"]}>
+      <RecentList active={current} {variant} />
+    </div>
+  {/if}
 
   {#if variant === "page" && !wide && !noFleet && !machineless}
     <!-- The phone's thumb reaches the bottom; Start session lives there,

@@ -31,6 +31,7 @@ import type { LayoutServerLoad } from "./$types";
  */
 const RAIL_KEY = "cawco-rail-width";
 const RAIL_MIN = 216;
+const RAIL_HIDDEN_KEY = "cawco-rail-hidden";
 const RAIL_MAX = 520;
 
 /**
@@ -102,6 +103,8 @@ export const load: LayoutServerLoad = async ({
     Number.isFinite(stored) && stored > 0
       ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(stored)))
       : null;
+  /** The sidebar put away on a desk (Shell's Hide sidebar), drawn so from the first paint. */
+  const railHidden = pref(RAIL_HIDDEN_KEY) === "1";
 
   // Each folder tab's box as last measured, so its shape is drawn true from
   // the first paint (fluid-tabs/fold-memory.ts).
@@ -162,6 +165,7 @@ export const load: LayoutServerLoad = async ({
   if (!workspace) {
     return {
       railWidth,
+      railHidden,
       narrow,
       workspace,
       names,
@@ -200,6 +204,7 @@ export const load: LayoutServerLoad = async ({
   if (open.length === 0) {
     return {
       railWidth,
+      railHidden,
       narrow,
       workspace,
       names,
@@ -283,6 +288,7 @@ export const load: LayoutServerLoad = async ({
 
   return {
     railWidth,
+    railHidden,
     narrow,
     workspace,
     names,

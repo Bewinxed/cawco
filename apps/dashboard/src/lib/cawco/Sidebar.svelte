@@ -1,31 +1,25 @@
 <script lang="ts">
-  import type { Activity } from "@cawco/core/activity";
-  import { topsIn } from "@cawco/core/project-membership";
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { sidebarWords } from "@cawco/core/words/sidebar";
   /**
-   * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
-   * (ui/sidebar/*), following the Fluid Functionalism inset preset pattern:
+   * Fleet sidebar, on the shadcn-svelte sidebar primitives (ui/sidebar/*):
    *
-   *   • Header: the CawCo icon + workspace name, search input, "+ New" row
-   *   • Content: Fleet nav group, Machines group, Projects (collapsible groups
-   *     with sub-items for sessions), Running-now and Not-running sections
-   *   • Footer: user avatar + machine count
-   *
-   * The rail is now built from SidebarGroup / SidebarMenu / SidebarMenuButton /
-   * SidebarMenuSubButton rather than hand-rolled CSS, inheriting
-   * built-in hover, active, focus, and spacing from the component library.
+   *   • Header: the CawCo icon and wordmark, Start session
+   *   • Content: Fleet, then two sections, each a hairline seam above it:
+   *     Recent (home/RecentList: every session the person started or wrote
+   *     in, grouped by up to three levels) and Projects (every project, one
+   *     row each with its running count on its mark, grouped by area and
+   *     machine from the same kind of menu)
+   *   • Footer: the usage strip, the reader's avatar and the settings
    *
    * A session says what it is doing on its mark (SessionMark: an echo, or a
    * dot on its corner) rather than in a text pill.
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { SvelteSet } from "svelte/reactivity";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
   import CawLoopSwitcher from "#lib/components/ui/CawLoopSwitcher.svelte";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import SoundSwitcher from "#lib/components/ui/SoundSwitcher.svelte";
@@ -41,55 +35,40 @@
     IconPlus,
     IconSearch,
     IconSettings,
-    IconSort,
   } from "#lib/icons.js";
-  import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import {
-    type BoardRow,
-    cawco,
-    isFailed,
-    isResumable,
-    isStale,
-    type ProjectRow,
-  } from "./client.svelte";
+  import { cawco, type ProjectRow } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import { files, filesCount } from "./files/files.svelte";
-  import { folderPrefs } from "./folder-prefs.svelte";
+  import { areaIdOf, areas } from "./home/areas.svelte";
+  import GroupMenu from "./home/GroupMenu.svelte";
+  import GroupParent from "./home/GroupParent.svelte";
+  import {
+    grouping,
+    inForce,
+    PROJECT_OPTIONS,
+    type ProjectGroupBy,
+  } from "./home/grouping.svelte";
   import Home from "./home/Home.svelte";
-  import HomeRecent from "./home/HomeRecent.svelte";
-  import { home, lastAt } from "./home/home-state.svelte";
-  import { rowHref } from "./links";
+  import { home, isDelegate, machineName } from "./home/home-state.svelte";
+  import { nestList } from "./home/NestList.svelte";
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { markHue } from "./mark";
-  import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
-  import { echoBeat } from "./motion/echo.svelte";
-  import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
+  import { nestsLanded } from "./motion/branch.svelte";
   import { reflow } from "./motion/rows.svelte";
-  import OlderRows, { olderOut } from "./OlderRows.svelte";
-  import {
-    DELEGATE_WINDOW,
-    failedIn,
-    listedOf,
-    PROJECT_WINDOW,
-    type Reading,
-    runningIds,
-  } from "./older";
-  import { openTrees, type TreeList } from "./open-trees.svelte";
+  import { landRegroup, regroup } from "./motion/share.svelte";
   import PresenceMenu from "./PresenceMenu.svelte";
   import ProjectEndTray from "./ProjectEndTray.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { endAtRail } from "./project-end.svelte";
   import { folderOf } from "./projects";
-  import { type RailSort, rail } from "./rail.svelte";
+  import { rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
-  import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
-  import { sameRow } from "./same-row";
+  import { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
-  import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { projectTab, tabOfPath } from "./workspace/tabs";
   import { workspace } from "./workspace/workspace.svelte";
@@ -179,32 +158,8 @@
     workspace.openProject(projectId);
   }
 
-  /**
-   * The conversations the project tree draws right now, kept by each row
-   * as it mounts and leaves. The open one is marked once: by its row here
-   * when there is one, else by the home's Working or Finished above.
-   */
-  const treeRows = new SvelteSet<string>();
-  const inTree =
-    (id: string): Attachment =>
-    () => {
-      treeRows.add(id);
-      return () => treeRows.delete(id);
-    };
-
   /** The rail itself: its session rows open the session card (SessionHover). */
   let railEl = $state<HTMLElement>();
-
-  /** How a tree's rows open and fold (motion/branch): off each row's mark. */
-  const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
-  /**
-   * What stands in a row's lead slot under a project: a tree mark (a
-   * session's, the "N older" row's), or the glyph of a row that is neither
-   * ("No sessions"). The rail's arm ends there.
-   */
-  const LEAD = '[data-tree-mark], [data-slot="sidebar-row-lead"]';
-  /** A project's rows: each hangs off the project's own mark. */
-  const LEAD_TREE: BranchOptions = { glyph: LEAD };
 
   /**
    * How far the fleet's first read has come: 1 nothing yet, 2 machines and
@@ -256,22 +211,7 @@
 
   /* ---- projects ------------------------------------------------------- */
 
-  /** Which folders are shut is the reader's, kept in folder-prefs, so a reload keeps it. */
-  function toggle(project: ProjectRow) {
-    folderPrefs.setCollapsed(project.id, !folderPrefs.collapsed(project.id));
-  }
-
-  function collapseOthers(id: string) {
-    for (const project of orderedProjects) {
-      folderPrefs.setCollapsed(project.id, project.id !== id);
-    }
-  }
-
-  /**
-   * What is running now, as every list shows it.
-   */
-  const running = $derived(cawco.runningInstances);
-
+  /** Pinned first, then by name. */
   const orderedProjects = $derived.by(() =>
     [...cawco.projects].sort((a, b) => {
       const pa = rail.isPinned(a.id) ? 0 : 1;
@@ -284,473 +224,118 @@
   );
 
   /**
-   * Every row the lists hold, as they hold it.
-   */
-  const railRows = $derived(cawco.listedById);
-
-  /** The rows the projects' lists are built from (`built`). */
-  interface Built {
-    /** `rows` by id. */
-    byId: ReadonlyMap<string, BoardRow>;
-    notRunning: BoardRow[];
-    /** Every row the lists hold (client `listedRows`). */
-    rows: BoardRow[];
-    running: BoardRow[];
-  }
-  /**
-   * A row stands where it stood: the same row, or, for a session running
-   * now, one with the same place in its tree and project. Nothing else of a
-   * running session's row is read to build the lists: it is pressing, so it
-   * and its whole tree list as recent (older.ts), whose rows `splitOf`
-   * reads afresh.
-   */
-  const standsAsBefore = (
-    was: BoardRow | undefined,
-    row: BoardRow,
-    live: ReadonlySet<string>
-  ): boolean =>
-    was === row ||
-    (was !== undefined &&
-      live.has(row.id) &&
-      was.id === row.id &&
-      was.parentInstanceId === row.parentInstanceId &&
-      was.projectId === row.projectId &&
-      was.origin === row.origin &&
-      was.status === row.status);
-  const sameBuild = (
-    was: Built,
-    next: Built,
-    live: ReadonlySet<string>
-  ): boolean => {
-    // Position by position: `byId` is `rows` keyed, so the same rows in
-    // the same places are the same map.
-    const same = (from: BoardRow[], to: BoardRow[]): boolean =>
-      from.length === to.length &&
-      to.every((row, i) => standsAsBefore(from[i], row, live));
-    return (
-      same(was.running, next.running) &&
-      same(was.notRunning, next.notRunning) &&
-      same(was.rows, next.rows)
-    );
-  };
-  let builtWas: Built | undefined;
-  /**
-   * What the projects' lists are built from: the rows by id and the running
-   * and resting ones, kept as they were while every row stands where it
-   * stood (`standsAsBefore`). A turn moving on in a running session (its
-   * time, its counts) builds nothing again: the build read every row of
-   * the board, two thousand of them, for each one.
-   */
-  const built = $derived.by((): Built => {
-    const next: Built = {
-      byId: railRows,
-      rows: cawco.listedInstances,
-      running,
-      notRunning,
-    };
-    if (builtWas && sameBuild(builtWas, next, liveNow)) {
-      return builtWas;
-    }
-    builtWas = next;
-    return next;
-  });
-  const topOf = $derived(topsIn(built.byId));
-  /** The top a row's tree stands under, when it stands in the rail at all. */
-  const placedTop = (row: BoardRow): BoardRow | undefined => {
-    const top = topOf(row);
-    return standsAlone(top) ? top : undefined;
-  };
-  /**
-   * Every project's sessions, live and resting, as the rail lists them, in
-   * one pass over what runs and what rests: a turn ending re-reads each row
-   * once, where testing each project against every row read them all once
-   * per project. A project's top is what a person started there and its
-   * conversations (tree.ts `standsAlone`). Everything else (a delegate, an
-   * agent's check) hangs in the tree of the session that started it,
-   * folded into that one's count until opened, and stands nowhere else: one
-   * whose chain ends at no top (its parent gone) is in no project's list.
-   *
-   * A tree lists in the one project the hub wrote on its top
-   * (`projectId`), whatever machine and folder each row under it runs on: a
-   * delegate in a worktree on another machine still lists with its parent,
-   * and a session is never listed under a project whose folder merely holds
-   * its own. Every row of a tree comes with the chain it hangs from (the hub
-   * sends each listed row's ancestors), so no row stands at a project's top
-   * for want of its parent there: a parent at rest that is no list's row of
-   * its own (stopped before it had a conversation) is drawn for it.
-   */
-  const listed = $derived.by(() => {
-    const lists = new Map<
-      string,
-      { live: BoardRow[]; resting: BoardRow[]; held: Set<string> }
-    >();
-    const listOf = (id: string) => {
-      let list = lists.get(id);
-      if (!list) {
-        list = { live: [], resting: [], held: new Set() };
-        lists.set(id, list);
-      }
-      return list;
-    };
-    const { byId, running: live, notRunning: resting } = built;
-    const liveIds = new Set(live.map((row) => row.id));
-    /** Puts a row in its project's list, live or resting, with every row it hangs from. */
-    const place = (row: BoardRow): void => {
-      const top = placedTop(row);
-      if (!top?.projectId) {
-        return;
-      }
-      const list = listOf(top.projectId);
-      // Every row walked is held at once, so a chain that comes back on
-      // itself stops at the row it held: no set of its own per row.
-      for (
-        let at: BoardRow | undefined = row;
-        at && !list.held.has(at.id);
-        at = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined
-      ) {
-        list.held.add(at.id);
-        (liveIds.has(at.id) ? list.live : list.resting).push(at);
-        if (at === top) {
-          break;
-        }
-      }
-    };
-    for (const row of live) {
-      place(row);
-    }
-    for (const row of resting) {
-      if (!liveIds.has(row.id)) {
-        place(row);
-      }
-    }
-    return lists;
-  });
-
-  const NOTHING: BoardRow[] = [];
-
-  const sessionsOf = (project: ProjectRow): BoardRow[] =>
-    listed.get(project.id)?.live ?? NOTHING;
-
-  /**
    * A project's count, on its mark: the sessions running in it that are
-   * their own top. Its delegates are counted on their parent's mark; counted
-   * here too, a session and the ten it started read as eleven on the
-   * project, and the number is the project's status, not its rows.
+   * their own top, never a delegate (owner: "the working count shouldn't
+   * count delegates").
    */
-  const runningIn = (project: ProjectRow): number =>
-    sessionsOf(project).filter((row) => topOf(row) === row).length;
+  const runningIn = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const row of cawco.runningInstances) {
+      if (row.projectId && !isDelegate(row)) {
+        counts.set(row.projectId, (counts.get(row.projectId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  });
 
-  /* ---- recent and older ------------------------------------------------
-   * A project lists its recent sessions and folds the rest under one "N
-   * older" row, and so does a session with its delegates, at every depth:
-   * one rule (older.ts) and one row (OlderRows) for both.
-   */
+  /** The machine a project is placed on first: its primary place's. */
+  const machineOf = (project: ProjectRow): string =>
+    (project.places.find((place) => place.isPrimary) ?? project.places[0])
+      ?.machineId ?? "";
 
-  interface Split {
-    older: BoardRow[];
-    recent: BoardRow[];
+  /** A group of Projects: an area or a machine, and what hangs under it. */
+  interface ProjectGroup {
+    by: ProjectGroupBy;
+    groups: ProjectGroup[] | null;
+    key: string;
+    label: string;
+    path: string;
+    projects: ProjectRow[];
   }
-  const NO_SPLIT: Split = { recent: NOTHING, older: NOTHING };
+
+  /** The machines' order, the fleet's. */
+  const machinePlace = (id: string): number => {
+    const at = cawco.machines.findIndex((m) => m.machineId === id);
+    return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+  };
 
   /**
-   * `next`, or `was` where it lists the same rows in the same order, each
-   * the same in every field (same-row.ts): the kept rows are the ones the
-   * rows' menus act on. Activity and pulses are read by the rows themselves,
-   * per row.
+   * The projects under `levels`: areas in the person's order (none last),
+   * machines in the fleet's, each group's projects in the rail's order.
    */
-  const keep = (next: BoardRow[], was: BoardRow[] | undefined) =>
-    was !== undefined &&
-    next.length === was.length &&
-    next.every((row, i) => sameRow(row, was[i]))
-      ? was
-      : next;
+  function projectGroups(
+    list: ProjectRow[],
+    levels: ProjectGroupBy[],
+    above = "projects"
+  ): ProjectGroup[] {
+    const [by, ...rest] = levels;
+    if (!by) {
+      return [];
+    }
+    const groups = new Map<string, ProjectGroup>();
+    for (const project of list) {
+      const key =
+        by === "area" ? (areaIdOf(project) ?? "") : machineOf(project);
+      let group = groups.get(key);
+      if (!group) {
+        const label =
+          by === "area"
+            ? (key && areas.nameOf(key)) || sidebarWords.noArea
+            : machineName(key);
+        group = {
+          by,
+          key,
+          label,
+          path: `${above}/${by}:${key}`,
+          projects: [],
+          groups: null,
+        };
+        groups.set(key, group);
+      }
+      group.projects.push(project);
+    }
+    const out = [...groups.values()].sort((a, b) =>
+      by === "area"
+        ? areas.placeOf(a.key || null) - areas.placeOf(b.key || null)
+        : machinePlace(a.key) - machinePlace(b.key)
+    );
+    if (rest.length > 0) {
+      for (const group of out) {
+        group.groups = projectGroups(group.projects, rest, group.path);
+      }
+    }
+    return out;
+  }
 
-  /** The splits the last derivation handed out, by project. */
-  let lastSplits = new Map<string, Split>();
-
-  /** Every project's recent and older lists as built (`built`). */
-  const builtSplits = $derived(
-    new Map(
-      [...listed].map(([id, { live, resting }]) => [
-        id,
-        splitRows(live, resting),
-      ])
-    )
+  const projectLevels = $derived(inForce(grouping.projects));
+  const groupedProjects = $derived(
+    projectGroups(orderedProjects, projectLevels)
   );
 
-  /**
-   * Every project's recent and older lists, each recent row read afresh by
-   * id: the build keeps a running session's row as it stood (`built`), and
-   * those are all recent. A project whose rows did not change keeps the
-   * very arrays it had — and the split object holding them — so its lists'
-   * `{#each}` have nothing to do on a turn that ended somewhere else.
-   */
-  const splits = $derived.by(() => {
-    const next = new Map<string, Split>();
-    for (const [id, split] of builtSplits) {
-      const was = lastSplits.get(id);
-      const recent = keep(
-        split.recent.map((row) => railRows.get(row.id) ?? row),
-        was?.recent
-      );
-      const older = keep(split.older, was?.older);
-      next.set(
-        id,
-        was && recent === was.recent && older === was.older
-          ? was
-          : { recent, older }
-      );
-    }
-    lastSplits = next;
-    return next;
-  });
+  /** The rail's content: what a regroup moves (`data-regroup-root`). */
+  let content = $state<HTMLElement | null>(null);
 
-  const splitOf = (project: ProjectRow): Split =>
-    splits.get(project.id) ?? NO_SPLIT;
-
-  /**
-   * A project's rows as the trees they are, each under its top (the rail's
-   * `topOf`: a row lists where its top lists, so the top of every row here
-   * is in this project's rows too), split by the one rule. A tree stays
-   * whole on the side its top row is on, so a delegate of a recent session
-   * folds under it rather than standing alone among the older ones.
-   */
-  function splitRows(live: BoardRow[], resting: BoardRow[]): Split {
-    const all = [...live, ...resting];
-    const trees = new Map<string, { rows: BoardRow[]; top: BoardRow }>();
-    for (const row of all) {
-      const top = topOf(row);
-      const held = trees.get(top.id);
-      if (held) {
-        held.rows.push(row);
-      } else {
-        trees.set(top.id, { top, rows: [row] });
-      }
+  /** A press in Projects' menu: the projects move to their new places. */
+  function pickProjects(at: number, by: ProjectGroupBy): void {
+    if (!content) {
+      grouping.pickProjects(at, by);
+      return;
     }
-    const listedTops = listedOf(
-      [...trees.values()].map((held) => held.top),
-      (top) => trees.get(top.id)?.rows ?? NOTHING,
-      reading,
-      PROJECT_WINDOW
+    const root = content;
+    regroup(
+      root,
+      () => grouping.pickProjects(at, by),
+      () => nestsLanded(root)
     );
-    const recent: BoardRow[] = [];
-    const older: BoardRow[] = [];
-    for (const row of all) {
-      (listedTops.has(topOf(row).id) ? recent : older).push(row);
-    }
-    return { recent, older };
-  }
-
-  const NO_TREES: Branch[] = [];
-
-  /** The conversation in front is among these trees, at any depth. */
-  const inFront = (trees: Branch[]): boolean =>
-    activeSession !== null &&
-    trees.some(
-      (node) =>
-        node.row.id === activeSession ||
-        node.under.some((row) => row.id === activeSession)
-    );
-  /** Every row a list of trees holds: each tree's top and all under it. */
-  const rowsIn = (trees: Branch[]): number =>
-    trees.reduce((rows, node) => rows + 1 + node.count, 0);
-
-  /** What a project says when nothing in it runs: how much of it is resumable. */
-  const notRunning = $derived(
-    cawco.listedInstances.filter(
-      (row) => isResumable(row) || isStale(row) || isFailed(row)
-    )
-  );
-
-  /* ---- order -----------------------------------------------------------
-   *
-   * The rail could not answer "which one was I just in": every list was
-   * alphabetical-by-project then arbitrary, and no row carried a time. Both
-   * are fixed here — one `lastAt` per session, one comparator over it, and a
-   * sort the reader picks once and the rail remembers.
-   */
-
-  /*
-   * When a session last moved (home-state `lastAt`): the daemon's pulse is
-   * the freshest signal a rail has (it is broadcast for every session,
-   * subscribed or not); a row with no pulse yet falls back to the hub's own
-   * `updatedAt`, read once per row, and one with neither sorts to the
-   * bottom rather than pretending to be new.
-   */
-
-  const SORT_LABEL: Record<RailSort, string> = {
-    recent: sidebarWords.lastActivity,
-    name: "Name",
-    state: "State",
-  };
-
-  /** Blocked before working before idle — the triage order, for `state`. */
-  const STATE_ORDER: Record<Activity, number> = {
-    blocked: 0,
-    working: 1,
-    idle: 2,
-  };
-
-  /**
-   * One comparator for every session list in the rail, so "Running now" and a
-   * project's sub-list and "Not running" never disagree about what first means.
-   * Recency is the tiebreak under `name` and `state` alike: two idle sessions
-   * in one project are still told apart by which one you touched last.
-   */
-  function ordered(rows: BoardRow[], key: string): BoardRow[] {
-    // Held (motion/held-order): activity never moves a row, and a settled
-    // re-sort lands only while the pointer is away from the rail's lists.
-    return heldOrder(key, sorted(rows), (row) => row.id);
-  }
-
-  function sorted(rows: BoardRow[]): BoardRow[] {
-    const by = rail.sort;
-    // Each row's keys read once, not twice per comparison.
-    return rows
-      .map((row) => ({
-        row,
-        name: by === "name" ? sessionName(row) : "",
-        state: by === "state" ? STATE_ORDER[cawco.activityOf(row.id)] : 0,
-        at: lastAt(row),
-      }))
-      .sort((a, b) => {
-        if (by === "name") {
-          const cmp = a.name.localeCompare(b.name);
-          if (cmp !== 0) {
-            return cmp;
-          }
-        }
-        if (by === "state") {
-          const cmp = a.state - b.state;
-          if (cmp !== 0) {
-            return cmp;
-          }
-        }
-        return b.at - a.at;
-      })
-      .map((one) => one.row);
   }
 
   /**
-   * A session and the sessions it started. A delegate names its parent
-   * (`parentInstanceId`), and the rail was drawing every one of them at the
-   * root — a project with one session and six delegates read as seven peers,
-   * which is exactly backwards about what is running.
+   * The sessions waiting on you (core `waitingOnYou`), in the attention
+   * tone; else the ones running, never their delegates.
    */
-  interface Branch {
-    /** The rows under it, as branches of their own. */
-    children: Branch[];
-    /** Every row under it, at any depth. */
-    count: number;
-    /** The rows under it that fold under its "N older" row (older.ts). */
-    older: Branch[];
-    /** The rows under it that it lists. */
-    recent: Branch[];
-    row: BoardRow;
-    /** Every row under it, at any depth. */
-    under: BoardRow[];
-  }
-
-  /**
-   * `rows` as the tree they are (tree.ts), siblings sorted by the reader's
-   * {@link ordered} at every depth. Each parent shows its count and starts
-   * folded; whether it is open is the reader's (open-trees).
-   */
-  function branches(rows: BoardRow[], key: string): Branch[] {
-    const lines = tree(rows, {
-      order: (list, under) => ordered(list, `${key}:${under}`),
-    });
-    const byId = new Map<string, Branch>();
-    const roots: Branch[] = [];
-    // Tree order puts each parent before its children.
-    for (const line of lines) {
-      const node: Branch = {
-        row: line.row,
-        children: [],
-        count: line.descendants.length,
-        older: [],
-        recent: [],
-        under: line.descendants,
-      };
-      byId.set(line.row.id, node);
-      const parent = line.parent ? byId.get(line.parent) : undefined;
-      (parent ? parent.children : roots).push(node);
-    }
-    // Each parent's rows, recent and older, by the rule its project's are
-    // split by; both keep the reader's order.
-    for (const node of byId.values()) {
-      if (node.children.length === 0) {
-        continue;
-      }
-      const listedRows = listedOf(
-        node.children.map((child) => child.row),
-        (row) => byId.get(row.id)?.under ?? NOTHING,
-        reading,
-        DELEGATE_WINDOW
-      );
-      for (const child of node.children) {
-        (listedRows.has(child.row.id) ? node.recent : node.older).push(child);
-      }
-    }
-    return roots;
-  }
-
-  /**
-   * One clock for every row in the rail. A row that ticked for itself would
-   * put a timer per session on a list of two hundred, and they all read the
-   * same minute.
-   */
-  let now = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 30_000);
-    return () => clearInterval(timer);
-  });
-  /**
-   * The sessions running now, the very set it was while they are the same
-   * ones: a turn moving on in one changes its row, not this.
-   */
-  let liveWere: ReadonlySet<string> = new Set();
-  const liveNow = $derived.by(() => {
-    const ids = runningIds();
-    if (
-      ids.size !== liveWere.size ||
-      [...ids].some((id) => !liveWere.has(id))
-    ) {
-      liveWere = ids;
-    }
-    return liveWere;
-  });
-  /** What the older rule reads of the fleet, once for every list in the rail. */
-  const reading = $derived<Reading>({
-    lastAt,
-    now,
-    running: liveNow,
-  });
-
-  /** The age column, and the full sentence behind it on hover. */
-  const ageOf = (row: BoardRow): string => {
-    const at = lastAt(row);
-    return at === 0 ? "" : formatAgeShort(at, now);
-  };
-  const ageHint = (row: BoardRow): string => {
-    const at = lastAt(row);
-    return at === 0
-      ? "No activity recorded"
-      : `${sidebarWords.lastActivity} ${formatDistanceToNow(new Date(at))}`;
-  };
-
-  /* ---- helpers -------------------------------------------------------- */
-
-  const sessionName = (row: BoardRow): string =>
-    row.title?.trim() ||
-    row.cwd.split("/").filter(Boolean).pop() ||
-    row.id.slice(0, 8);
-
-  /** The sessions waiting on you (core `waitingOnYou`), in the attention tone; else the ones running. */
   const fleetCount = $derived(
-    cawco.waitingCount || cawco.runningInstances.length
+    cawco.waitingCount ||
+      cawco.runningInstances.filter((row) => !isDelegate(row)).length
   );
   /** A project row's link in the rail: its end's tray hands the focus back to it. */
   const railLinkId = (projectId: string) => `rail-project-${projectId}`;
@@ -780,106 +365,100 @@
 {/snippet}
 
 <!-- The sidebar primitives (Header, Content, Footer) expect a flex-column
-     parent — the old `.rail` class provided this; now it's an explicit wrapper
-     since the Shell's own `<aside>` doesn't set the direction. -->
-<!-- When a session last moved, in the ~28px a rail can spare. Every session
-     row in the rail renders this, so "which one was I just in" is answered by
-     looking down one column instead of opening six of them. -->
+     parent: an explicit wrapper, since the Shell's own `<aside>` doesn't set
+     the direction. -->
 
-<!-- A session, and when it is open the sessions it started, on a rail of
-     their own that leaves its mark (app.css .kit-nest): the same row at
-     every depth, each parent folded until its count is clicked. The row
-     opens the session; the count opens the rows under it. -->
-
-<!-- What a parent folds away (older.ts), under one "N older" row, the last
-     row on its rail: a project's older sessions, a session's older
-     delegates, a delegate's own. -->
-{#snippet olderRows(
-  id: string,
-  count: number,
-  failed: number,
-  front: boolean,
-  trees: Branch[],
-  list: TreeList
-)}
-  {#if count > 0}
-    <OlderRows
-      {count}
-      {failed}
-      {front}
-      {id}
-      keyOf={(node) => node.row.id}
-      {list}
-      {trees}
+{#snippet projectRow(project: ProjectRow)}
+  {@const runningCount = runningIn.get(project.id) ?? 0}
+  {@const href = `/project/${project.id}`}
+  {@const here =
+    (onWorkspace && workspace.activeTab === projectTab(project.id)) ||
+    path.startsWith(`${href}/`)}
+  <li
+    class="group/menu-item relative"
+    data-flip="box"
+    data-sidebar="menu-item"
+    data-slot="sidebar-menu-item"
+  >
+    <FolderMenu
+      cwd={folderOf(project)}
+      onnew={() => newSession({ projectId: project.id })}
+      {project}
     >
-      {#snippet tree(node)}
-        {@render subRow(node, list)}
-      {/snippet}
-    </OlderRows>
-  {/if}
+      <Sidebar.MenuButton isActive={here} row="list">
+        {#snippet child({ props })}
+          <!-- The row is the link to the project's page; its mark says how
+               many of its sessions run now. Its sessions are in Recent. -->
+          <a
+            {href}
+            {...props}
+            id={railLinkId(project.id)}
+            aria-current={here ? "page" : undefined}
+            onclickcapture={(event) => openProjectTab(event, project.id)}
+            class="{props.class} mark-line coarse:h-c-btn-h-lg"
+            data-regroup="regroup:project:{project.id}"
+            {@attach landRegroup(() => `regroup:project:${project.id}`)}
+          >
+            <ProjectMark
+              count={runningCount}
+              hue={markHue(folderOf(project))}
+              name={project.name}
+            />
+            <span
+              class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
+              >{project.name}
+              {#if runningCount > 0}
+                <span class="sr-only">, {runningCount} running</span>
+              {/if}</span
+            >
+          </a>
+        {/snippet}
+      </Sidebar.MenuButton>
+    </FolderMenu>
+    <!-- An end asked from this row's menu, under it. -->
+    <div
+      data-slot="sidebar-end"
+      class="contents"
+      style:--ask-indent="var(--space-1)"
+      style:--ask-end="var(--space-1)"
+      style:--fault-indent="var(--space-2)"
+      style:--fault-end="var(--space-2)"
+    >
+      <ProjectEndTray
+        at={endAtRail(project.id)}
+        opener={() => document.getElementById(railLinkId(project.id))}
+        parks
+        projectId={project.id}
+      />
+    </div>
+  </li>
 {/snippet}
 
-{#snippet subRow(node: Branch, list: TreeList)}
-  {@const row = node.row}
-  {@const unfolded = node.count > 0 && openTrees.has(row.id, list)}
-  <!-- The row's box (`data-flip="box"`): when its delegates open, it takes
-       their room at once and its edge travels down to it, the rows under
-       it sliding with that edge (motion/rows). -->
-  <li
-    class="group/menu-sub-item relative"
-    data-flip="box"
-    data-session-row={row.id}
-    data-sidebar="menu-sub-item"
-    data-slot="sidebar-menu-sub-item"
-    {@attach inTree(row.id)}
-  >
-    <!-- The one session row (SessionRow), on one line; its mark says how
-         many delegates it has and opens them. -->
-    <SessionRow
-      active={activeSession === row.id}
-      compact
-      fold={node.count > 0
-        ? {
-            count: node.count,
-            open: unfolded,
-            ontoggle: () => openTrees.toggle(row.id, list),
-          }
-        : null}
-      hint={ageHint(row)}
-      href={rowHref(row.id)}
-      instance={row}
-      machineId={row.machineId}
-      peek={false}
-      title={sessionName(row)}
-      trail={ageOf(row)}
-    />
-    {#if unfolded}
-      <!-- Its delegates, on a rail of their own that grows from this row's
-           mark; each swipes out along its arm as the rail reaches it, and
-           folds back into it the same way (motion/branch). reflow never
-           copies or uncovers what is inside (`data-flip-anchor`). -->
-      <ul
-        data-nest
-        class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) ps-(--nest-pad)"
-        data-flip-anchor
-        in:branch={TREE}
-        out:branch={TREE}
-        {@attach nestFrom("[data-tree-mark]")}
-      >
-        {#each node.recent as child (child.row.id)}
-          {@render subRow(child, list)}
-        {/each}
-        {@render olderRows(
-          row.id,
-          rowsIn(node.older),
-          failedIn(node.older.flatMap((held) => [held.row, ...held.under])),
-          inFront(node.older),
-          node.older,
-          list
-        )}
-      </ul>
-    {/if}
-  </li>
+{#snippet projectLevel(groups: ProjectGroup[])}
+  {#each groups as group (group.path)}
+    {@const open = !grouping.folded(group.path)}
+    <li class="relative">
+      <GroupParent
+        by={group.by}
+        count={group.projects.length}
+        groupKey={group.key}
+        label={group.label}
+        path={group.path}
+      />
+      {#if open}
+        {#snippet held()}
+          {#if group.groups}
+            {@render projectLevel(group.groups)}
+          {:else}
+            {#each group.projects as project (project.id)}
+              {@render projectRow(project)}
+            {/each}
+          {/if}
+        {/snippet}
+        {@render nestList(held)}
+      {/if}
+    </li>
+  {/each}
 {/snippet}
 
 <div
@@ -962,7 +541,14 @@
        session starting, a count moving. Every group, row, count and status
        mark is `data-flip`, so it arrives and leaves in place and what it moves
        slides instead of jumping (motion/rows `reflow`). -->
-  <Sidebar.Content pad="rail" {@attach reflow()} {@attach scroller}>
+  <Sidebar.Content
+    bind:ref={content}
+    class="relative"
+    data-regroup-root
+    pad="rail"
+    {@attach reflow()}
+    {@attach scroller}
+  >
     {#if sheet && onsearch}
       <!-- The phone's search: the Jump palette's field, which opens Jump
            hanging from the bar's glass, standing where the sheet starts; a
@@ -1058,68 +644,38 @@
         </Sidebar.Menu>
       </div>
     </Sidebar.Group>
-    <Home markedElsewhere={(id) => treeRows.has(id)} variant="rail" />
+    <!-- Recent, the sessions: what the home holds in the rail (its status
+         line, the starts under way, the one Recent list). -->
+    <Home active={activeSession} variant="rail" />
 
-    <!-- The groups built from the fleet come in together, once every read
-         they need is in (`stage` 3): Projects straight under the home.
-         Arriving each on its own, a later group pushed
-         the ones before it down; arriving together, nothing drawn moves.
+    <!-- Projects come in once every read they need is in (`stage` 3).
          Until then, rows standing where they will be. -->
     {#if stage >= 3}
-      <!-- Projects. Its working sessions echo in turn, top to bottom
-           (motion/echo). -->
-      <Sidebar.Group data-flip pad="rail" {@attach echoBeat()}>
+      <!-- Projects, the index of every project: one row each, its running
+           count on its mark, grouped by the same kind of menu as Recent
+           (area first). A seam and room above it, as above Recent. -->
+      <Sidebar.Group data-flip="box" pad="rail">
         <!-- Its controls end where the rows do, inside the row (the label's
-             `end="action"`) and their group as wide as they are; past the
-             rows' edge they stood in the gutter the rail's grip takes
-             presses in (Shell, "Resize sidebar"). The word gives way first
-             (DESIGN.md, The Truncate Inside Rule). -->
-        <Sidebar.GroupLabel end="action" pad="rail">
-          <span class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+             `end="action"`). The word gives way first (DESIGN.md, The
+             Truncate Inside Rule). It travels as Recent above it regroups. -->
+        <Sidebar.GroupLabel
+          seam="section"
+          data-regroup="regroup:heading:projects"
+          end="action"
+          pad="rail"
+          {@attach landRegroup(() => "regroup:heading:projects")}
+        >
+          <span
+            class="min-w-0 flex-auto overflow-hidden text-ellipsis whitespace-nowrap"
             >Projects</span
           >
-          <!-- The sort lives here rather than once per list because it governs all
-           of them at once: a rail whose projects were ordered by recency and
-           whose "Not running" was ordered by name would be two rails. -->
           <div class="ms-auto flex flex-none items-center gap-space-row">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <Button
-                    {...props}
-                    aria-label={sidebarWords.sortSessions(
-                      SORT_LABEL[rail.sort]
-                    )}
-                    size="icon-sm"
-                    title="Sort sessions — {SORT_LABEL[rail.sort]}"
-                    variant="ghost"
-                  >
-                    <IconSort />
-                  </Button>
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="start" width="compact">
-                <DropdownMenu.Group>
-                  <DropdownMenu.GroupHeading
-                    >Sort sessions by</DropdownMenu.GroupHeading
-                  >
-                  <DropdownMenu.RadioGroup
-                    onValueChange={(value) => rail.setSort(value as RailSort)}
-                    value={rail.sort}
-                  >
-                    <DropdownMenu.RadioItem value="recent"
-                      >{sidebarWords.lastActivity}</DropdownMenu.RadioItem
-                    >
-                    <DropdownMenu.RadioItem value="name"
-                      >Name</DropdownMenu.RadioItem
-                    >
-                    <DropdownMenu.RadioItem value="state"
-                      >State</DropdownMenu.RadioItem
-                    >
-                  </DropdownMenu.RadioGroup>
-                </DropdownMenu.Group>
-              </DropdownMenu.Content>
-            </DropdownMenu.Root>
+            <GroupMenu
+              label={sidebarWords.groupProjects}
+              levels={grouping.projects}
+              onpick={pickProjects}
+              options={PROJECT_OPTIONS}
+            />
             <!-- Where a forgotten project waits, from the list it left
                  (Forgotten projects, /project/forgotten). -->
             <Tip label={projectEndWords.forgottenTitle}>
@@ -1161,157 +717,22 @@
           </p>
         {:else}
           <div {@attach highlight(PILL)}>
-            <Sidebar.Menu gap="tight" {@attach holdWhileInside("rail:")}>
-              {#each orderedProjects as project (project.id)}
-                {@const runningCount = runningIn(project)}
-                {@const expanded = !folderPrefs.collapsed(project.id)}
-                {@const href = `/project/${project.id}`}
-                {@const here =
-                  (onWorkspace &&
-                    workspace.activeTab === projectTab(project.id)) ||
-                  path.startsWith(`${href}/`)}
-                <li
-                  class="group/menu-item relative"
-                  data-flip="box"
-                  data-sidebar="menu-item"
-                  data-slot="sidebar-menu-item"
-                >
-                  <FolderMenu
-                    cwd={folderOf(project)}
-                    oncollapseothers={() => collapseOthers(project.id)}
-                    onnew={() => newSession({ projectId: project.id })}
-                    {project}
-                  >
-                    <Sidebar.MenuButton isActive={here} row="list">
-                      {#snippet child({ props })}
-                        <!-- The row is the link to the project's page. Its
-                             mark says what is running in it, as a session's
-                             says its delegates, and is the switch that folds
-                             its sessions, as a session's mark folds its
-                             delegates; its press never reaches the link. Under
-                             a finger the switch reaches sideways to the name,
-                             the row's own gap (`row="list"`), as a session
-                             row's does. -->
-                        <a
-                          {href}
-                          {...props}
-                          id={railLinkId(project.id)}
-                          aria-current={here ? "page" : undefined}
-                          onclickcapture={(event) =>
-                            openProjectTab(event, project.id)}
-                          class="{props.class} mark-line"
-                          style:--mark-hit-gap="var(--space-3)"
-                        >
-                          <ProjectMark
-                            count={runningCount}
-                            hue={markHue(folderOf(project))}
-                            name={project.name}
-                            ontoggle={() => toggle(project)}
-                            open={expanded}
-                          />
-                          <span
-                            class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
-                            >{project.name}
-                            {#if runningCount > 0}
-                              <span class="sr-only"
-                                >, {runningCount} running</span
-                              >
-                            {/if}</span
-                          >
-                        </a>
-                      {/snippet}
-                    </Sidebar.MenuButton>
-                  </FolderMenu>
-                  <!-- An end asked from this row's menu, under it. -->
-                  <div
-                    data-slot="sidebar-end"
-                    class="contents"
-                    style:--ask-indent="var(--space-1)"
-                    style:--ask-end="var(--space-1)"
-                    style:--fault-indent="var(--space-2)"
-                    style:--fault-end="var(--space-2)"
-                  >
-                    <ProjectEndTray
-                      at={endAtRail(project.id)}
-                      opener={() =>
-                        document.getElementById(railLinkId(project.id))}
-                      parks
-                      projectId={project.id}
-                    />
-                  </div>
-
-                  <!-- Its sessions hang under it the way a session's delegates
-                       hang under theirs: on a rail that leaves the project's
-                       mark, each row joined to it by its own arm, opening and
-                       folding with the same motion (motion/branch). Every
-                       level of the tree steps in by the rail's own measure
-                       (app.css .kit-nest), so a session under a project and a
-                       delegate under a session are set in alike. -->
-                  {#if expanded}
-                    {@const lists = splitOf(project)}
-                    {@const front = lists.older.some(
-                      (row) => row.id === activeSession
-                    )}
-                    <ul
-                      data-nest
-                      class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) ps-(--nest-pad)"
-                      data-flip-anchor
-                      data-sidebar="menu-sub"
-                      data-slot="sidebar-menu-sub"
-                      in:branch={LEAD_TREE}
-                      out:branch={LEAD_TREE}
-                      {@attach nestFrom("[data-tree-mark]", LEAD)}
-                    >
-                      {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
-                        {@render subRow(node, "projects")}
-                      {/each}
-                      <!-- Its older trees are built only while they are out:
-                           a project keeps hundreds. -->
-                      {@render olderRows(
-                        project.id,
-                        lists.older.length,
-                        failedIn(lists.older),
-                        front,
-                        olderOut(project.id, front, "projects")
-                          ? branches(lists.older, `rail:${project.id}:older`)
-                          : NO_TREES,
-                        "projects"
-                      )}
-                      {#if lists.older.length + lists.recent.length === 0}
-                        <Sidebar.MenuSubItem data-flip>
-                          <Sidebar.MenuSubButton
-                            data-branch-item
-                            onclick={(event: MouseEvent) =>
-                              newSession(
-                                { projectId: project.id },
-                                event.currentTarget as HTMLElement
-                              )}
-                            row="compact"
-                            tone="muted"
-                          >
-                            <span
-                              data-slot="sidebar-row-lead"
-                              class={SLOT}
-                              data-box><IconPlus class="size-icon-sm" /></span
-                            >
-                            <span>No sessions — start one</span>
-                          </Sidebar.MenuSubButton>
-                        </Sidebar.MenuSubItem>
-                      {/if}
-                    </ul>
-                  {/if}
-                </li>
-              {/each}
-            </Sidebar.Menu>
+            {#if projectLevels.length === 0}
+              <Sidebar.Menu gap="tight">
+                {#each orderedProjects as project (project.id)}
+                  {@render projectRow(project)}
+                {/each}
+              </Sidebar.Menu>
+            {:else}
+              <ul class="m-0 flex min-w-0 list-none flex-col gap-space-3 p-0">
+                {@render projectLevel(groupedProjects)}
+              </ul>
+            {/if}
           </div>
         {/if}
       </Sidebar.Group>
     {:else}
       {@render pending(6)}
-    {/if}
-    {#if !narrow}
-      <!-- Everything else that can be opened, after the projects. -->
-      <HomeRecent inset />
     {/if}
     {#if sheet}
       <!-- The machines, where a phone keeps them: each with its status and

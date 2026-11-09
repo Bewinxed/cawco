@@ -66,4 +66,31 @@ export const sidebarWords = {
   /** The sessions' sort: its button, named with the order it holds, and the order by last activity. */
   sortSessions: (order: string) => `Sort sessions — currently ${order}`,
   lastActivity: "Last activity",
+  /** The sidebar's one list of the sessions the person started or wrote in. */
+  recent: "Recent",
+  /** Recent with nothing in it. */
+  recentNone: "Sessions you start or write to land here.",
+  /** The groupings menu on Recent and on Projects: its button's name. */
+  groupSessions: "Group sessions",
+  groupProjects: "Group projects",
+  /** The groupings menu's columns: the first level, then each one under it. */
+  groupBy: "Group by",
+  thenBy: "Then by",
+  /** What a level groups by. */
+  byDay: "Day",
+  byProject: "Project",
+  byArea: "Area",
+  byMachine: "Machine",
+  /** The day groups: a session falls in the day the person last wrote to it or started it. */
+  today: "Today",
+  yesterday: "Yesterday",
+  older: "Older",
+  /** The group of sessions in no project, and of projects in no area. */
+  noProject: "No project",
+  noArea: "No area",
+  /** A session whose turn ended with nothing left to start it again: the person's move. */
+  yourTurn: "Your turn",
+  /** The top bar's button that puts the sidebar away on a desk, and brings it back. */
+  hideSidebar: "Hide sidebar",
+  showSidebar: "Show sidebar",
 };

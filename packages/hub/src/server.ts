@@ -10480,7 +10480,11 @@ export const createServer = (
     }
     // The person wrote to it: the sidebar's Recent list orders it by this
     // and lists it again after a Done.
-    if (accepted && byPerson(message.origin) && db.noteWrote(instanceId, record.acceptedAt)) {
+    if (
+      accepted &&
+      byPerson(message.origin) &&
+      db.noteWrote(instanceId, record.acceptedAt)
+    ) {
       publishInstances(machineId);
     }
     // The send it retries goes first, so a screen folds that row away as

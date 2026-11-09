@@ -64747,24 +64747,6 @@
               }
             ]
           },
-          "doneAt": {
-            "description": "When the person pressed Done on it (an archive), on the hub's clock: off\nthe sidebar's Recent list until they write to it again. Null otherwise.",
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
           "cwd": {
             "description": "The directory the session was launched in; see `launchDir`.",
             "type": "string"
@@ -64792,6 +64774,24 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "doneAt": {
+            "description": "When the person pressed Done on it (an archive), on the hub's clock: off\nthe sidebar's Recent list until they write to it again. Null otherwise.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
             ]
           },
           "effort": {
@@ -65026,6 +65026,20 @@
             "description": "Its latest turn ended with work of its own that will start it again\n(harness.ts `waitsOnItself`: a background command, a monitor, a wake-up\nit set itself). The sidebar counts it as still working.",
             "type": "boolean"
           },
+          "workItemId": {
+            "description": "The work item this session runs: every delegate is one, and a session\nnever runs more than one. Null on a session nobody delegated, and on a\ndelegate from before work items existed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workspaceId": {
+            "description": "The workspace of its own its work item runs in (a delegate's clone), as\nthe board reads it off that item: what the session menu's Archive\nworkspace names (dashboard LiveSessionMenu). Null on a session with no\nwork item.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "wroteAt": {
             "description": "When the person last wrote to it (a send of theirs the hub accepted,\nharness.ts `byPerson`), on the hub's clock. Null when they never did.",
             "anyOf": [
@@ -65042,20 +65056,6 @@
               {
                 "type": "number"
               }
-            ]
-          },
-          "workItemId": {
-            "description": "The work item this session runs: every delegate is one, and a session\nnever runs more than one. Null on a session nobody delegated, and on a\ndelegate from before work items existed.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "workspaceId": {
-            "description": "The workspace of its own its work item runs in (a delegate's clone), as\nthe board reads it off that item: what the session menu's Archive\nworkspace names (dashboard LiveSessionMenu). Null on a session with no\nwork item.",
-            "type": [
-              "null",
-              "string"
             ]
           }
         },

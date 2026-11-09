@@ -8,18 +8,14 @@
  * (OlderRows), unless only one remains: a fold that would hide one row lists
  * it instead, at the same height.
  *
- * The window is the parent's: a project lists every session of the last day
- * (PROJECT_WINDOW), a handful at most. A session's delegates have none
+ * The window is the parent's. A session's delegates have none
  * (DELEGATE_WINDOW): one session starts a hundred in a day, and a day's
  * worth listed whole is the four thousand pixels of rail the fold is for.
  */
 
-import { DAY_MS } from "@cawco/core/time";
 import { type BoardRow, cawco } from "./client.svelte";
 import { sessionStatus } from "./session-status";
 
-/** A project lists every session that moved in the last day. */
-export const PROJECT_WINDOW = DAY_MS;
 /** A session lists its newest delegates, however lately the rest moved. */
 export const DELEGATE_WINDOW = 0;
 /** Rows a parent lists unfolded, and its older box shows before it scrolls. */
@@ -104,7 +100,3 @@ const foldedWords = (count: number, word: string): string =>
 /** The failures a folded line keeps out of sight, as its words say them. */
 export const failedWords = (failed: number): string =>
   foldedWords(failed, "failed");
-
-/** The sessions with a live process a folded line keeps out of sight. */
-export const runningWords = (running: number): string =>
-  foldedWords(running, "running");

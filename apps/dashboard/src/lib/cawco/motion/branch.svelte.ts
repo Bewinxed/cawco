@@ -204,6 +204,42 @@ function restOf(glyph: HTMLElement): { x: number; y: number } {
   };
 }
 
+/** How far an element is drawn off its layout by its own `translate` and `transform`'s move. */
+function movedBy(element: Element): number {
+  const style = getComputedStyle(element);
+  const [, dy = 0] =
+    style.translate === "none"
+      ? []
+      : style.translate.split(" ").map((length) => Number.parseFloat(length));
+  const moved =
+    style.transform === "none" ? 0 : new DOMMatrixReadOnly(style.transform).m42;
+  return dy + moved;
+}
+
+/**
+ * An element's centre, down, where it is laid out: where it is drawn, less
+ * what moves it and every box around it up to `within` (excluded). A row
+ * still flying to its place (motion/share, a regroup: the move is on the
+ * row's own box, around its glyph) is read where it lands, not where it is
+ * on the way, so a line measured mid-flight joins the right rows.
+ */
+function laidY(element: HTMLElement, within: Element | null): number {
+  const box = element.getBoundingClientRect();
+  let moved = 0;
+  for (
+    let at: Element | null = element;
+    at && at !== within && !at.contains(within);
+    at = at.parentElement
+  ) {
+    moved += movedBy(at);
+  }
+  return box.top + box.height / 2 - moved;
+}
+
+/** Whether a list is laid out right to left: its rails stand from its right edge. */
+const rtlOf = (node: Element): boolean =>
+  getComputedStyle(node).direction === "rtl";
+
 /** The parent row's own element around a group, and its glyph. */
 function parentGlyph(group: HTMLElement, selector: string) {
   const host = group.parentElement?.closest<HTMLElement>(
@@ -272,21 +308,31 @@ function nestOf(
   // less its own ride (`restOf`; nothing else here moves vertically on its
   // own transform; see `railsOf`).
   const mark = layoutBox(parent);
+  const list = layoutBox(node);
+  // Across from the list's inline start: its right edge, right to left.
+  const rtl = rtlOf(node);
   const first =
     node.getBoundingClientRect().top +
     node.clientTop +
     Number.parseFloat(getComputedStyle(node).paddingTop);
+  const centre = mark.left + mark.width / 2;
   const vars: Record<string, string> = {
-    "--nest-x": px(mark.left + mark.width / 2 - layoutBox(node).left),
-    "--nest-lead": px(first - (restOf(parent).y + parent.offsetHeight / 2)),
+    "--nest-x": px(rtl ? list.left + list.width - centre : centre - list.left),
+    "--nest-lead": px(first - (laidY(parent, node) + parent.offsetHeight / 2)),
   };
   const row = node.querySelector<HTMLElement>(":scope > li");
   const own = row?.querySelector<HTMLElement>(child);
   if (row && own) {
     vars["--nest-glyph-y"] = px(
-      restOf(own).y - row.getBoundingClientRect().top
+      laidY(own, row) - row.getBoundingClientRect().top
     );
-    vars["--nest-reach"] = px(layoutBox(own).left - layoutBox(row).left);
+    const ownBox = layoutBox(own);
+    const rowBox = layoutBox(row);
+    vars["--nest-reach"] = px(
+      rtl
+        ? rowBox.left + rowBox.width - (ownBox.left + ownBox.width)
+        : ownBox.left - rowBox.left
+    );
   }
   return [node, vars];
 }
@@ -450,6 +496,19 @@ export function nestFrom(
   };
 }
 
+/**
+ * Every nesting list under `root` reads its rails again, read all then
+ * written: a regroup's rows have landed (motion/share `regroup`), so each
+ * line stands where its rows came to rest.
+ */
+export function nestsLanded(root: Element): void {
+  measureNests(
+    [...root.querySelectorAll(NEST)].filter(
+      (list) => nests.has(list) && !isUnshown(list) && !skippedAt(list)
+    )
+  );
+}
+
 /* ── The fold's shape ──────────────────────────────────────────────── */
 
 /**
@@ -602,9 +661,14 @@ function railsOf(li: HTMLElement, frame: DOMRect, line: Line): Stretch[] {
       from: line.base + (at - line.at),
       height: Number.parseFloat(style.height),
       width: Number.parseFloat(style.width),
+      // The elbow's corner is its end-start one (app.css .kit-nest).
       corner:
         pseudo === "::before"
-          ? Number.parseFloat(style.borderBottomLeftRadius) || 0
+          ? Number.parseFloat(
+              style.direction === "rtl"
+                ? style.borderBottomRightRadius
+                : style.borderBottomLeftRadius
+            ) || 0
           : 0,
     });
   }

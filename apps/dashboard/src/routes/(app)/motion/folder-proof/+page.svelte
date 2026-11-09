@@ -2,9 +2,6 @@
   import type { PulseFrame } from "@cawco/core/frames";
   import type { InstanceRow, SessionPulse } from "@cawco/core/protocol";
   import { onMount, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
-  import WorkTabs from "#lib/cawco/home/WorkTabs.svelte";
-  import { workTab } from "#lib/cawco/home/work-tab.svelte.js";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -21,15 +18,10 @@
    *   Taper (`--tab-rim-taper`, px), Subtle (`--tab-rim-mix-subtle`, an
    *   unchosen tab's rim strength) and Thickness (`--tab-rim-width`, the
    *   rim's stroke, px); `?taper=`, `?subtle=` and `?width=` start them;
-   * - the home's Working and Finished (`data-strip="work"`): the real
-   *   WorkTabs over twelve working sessions and fourteen finished, hosted as
-   *   the shell hosts it, in the rail's 228px column on the desk and across
-   *   the phone's home page under 900px.
    *
    * In the reader's theme; `?at=` the index of the session tab chosen
-   * first (1); `?work=` working | finished. `window.__ft.choose(id)` chooses
-   * a session tab and `window.__ft.work.choose(id)` Working or Finished, as
-   * a click does; `ids` and `chosen()` on each say the rest.
+   * first (1). `window.__ft.choose(id)` chooses a session tab, as a click
+   * does; `ids` and `chosen()` say the rest.
    *
    * A click on a tab chooses it here, in the bench's own group; the strip's
    * own choice goes to the workspace, which holds no such group and would
@@ -102,20 +94,6 @@
     updatedAt: ago === null ? now : now - ago,
   });
 
-  // The home's Working and Finished (WorkTabs), fed the same way: sessions
-  // that are working (their pulses say so) and sessions whose turn ended
-  // unseen, twelve and fourteen with the strip's own four that ended, so
-  // both counts take two figures, the tabs' widest.
-  const WORKING = 12;
-  const FINISHED = 14;
-  const workId = (n: number) =>
-    `0f1e2d3c-0000-4000-8000-0000000001${String(n).padStart(2, "0")}`;
-  const workRows = Array.from({ length: WORKING + FINISHED - 4 }, (_, n) =>
-    rowOf(workId(n), "running", n < WORKING ? null : 120_000 + n * 1000)
-  );
-  for (const row of workRows.slice(0, WORKING)) {
-    pulse(row.id, "working");
-  }
   debug.adoptInstances([
     ...ids.map((id, n) => {
       if (n === 3) {
@@ -126,12 +104,7 @@
       }
       return rowOf(id, "running", DOING[id] === "working" ? null : 60_000);
     }),
-    ...workRows,
   ]);
-  const WORK_IDS = ["working", "finished"] as const;
-  workTab.set(
-    page.url.searchParams.get("work") === "finished" ? "finished" : "working"
-  );
 
   const leaf = $state<LeafNode>(
     untrack(() =>
@@ -181,9 +154,6 @@
     return () => cancelAnimationFrame(frame);
   });
 
-  /** The drawer layout, where the home is the phone's page, not the rail's. */
-  const phone = new MediaQuery("(width < 900px)");
-
   /** The reader's theme, as the dashboard draws it: the rims' tokens are read again when it changes. */
   const scheme = $derived(theme.resolved);
 
@@ -194,27 +164,11 @@
     }
   }
 
-  let workEl = $state<HTMLElement>();
-  /** Chooses Working or Finished as a click on its tab does. */
-  function chooseWork(id: string) {
-    const at = WORK_IDS.indexOf(id as (typeof WORK_IDS)[number]);
-    workEl
-      ?.querySelectorAll<HTMLElement>(
-        '[data-slot="ff-tab"] > [data-slot="hit"]'
-      )
-      [at]?.click();
-  }
-
   onMount(() => {
     const bench = {
       ids,
       choose,
       chosen: () => leaf.active,
-      work: {
-        ids: [...WORK_IDS],
-        choose: chooseWork,
-        chosen: () => workTab.current,
-      },
     };
     Object.assign(window, { __ft: bench });
     return () => {
@@ -314,23 +268,5 @@
         >{width ?? "–"}px</output
       >
     </label>
-  </div>
-  <!-- The home's Working and Finished as the shell hosts them: in the
-       rail's column on the desk, across the phone's home page under a
-       finger. -->
-  <!-- The rail's column (Shell .rail, Home .rail .groups) on the desk; the
-       phone's home page (Home .page .groups) under 900px. Both stand on
-       surface-recess. -->
-  <div
-    class="min-h-0 w-c-sidebar-w flex-auto overflow-hidden bg-surface-recess px-space-2 pt-space-1 pb-space-2 max-desk:w-full max-desk:px-space-5 max-desk:pt-space-2 max-desk:pb-space-7"
-    data-strip="work"
-    bind:this={workEl}
-  >
-    <WorkTabs
-      onstart={() => undefined}
-      stale={false}
-      variant={phone.current ? "page" : "rail"}
-      waiting={false}
-    />
   </div>
 </div>

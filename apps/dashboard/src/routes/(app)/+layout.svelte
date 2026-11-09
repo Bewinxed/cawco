@@ -154,7 +154,9 @@
 {#if pairing}
   <PairingScreen />
 {:else}
-  <Shell railWidth={data.railWidth}>{@render children()}</Shell>
+  <Shell railHidden={data.railHidden} railWidth={data.railWidth}
+    >{@render children()}</Shell
+  >
   <CanvasStages />
   <LawsBroken />
 {/if}

@@ -1427,6 +1427,51 @@ public enum Words {
         }
 
         public static let lastActivity = "Last activity"
+
+        /// The sidebar's one list of the sessions the person started or wrote in.
+        public static let recent = "Recent"
+
+        /// Recent with nothing in it.
+        public static let recentNone = "Sessions you start or write to land here."
+
+        /// The groupings menu on Recent and on Projects: its button's name.
+        public static let groupSessions = "Group sessions"
+
+        public static let groupProjects = "Group projects"
+
+        /// The groupings menu's columns: the first level, then each one under it.
+        public static let groupBy = "Group by"
+
+        public static let thenBy = "Then by"
+
+        /// What a level groups by.
+        public static let byDay = "Day"
+
+        public static let byProject = "Project"
+
+        public static let byArea = "Area"
+
+        public static let byMachine = "Machine"
+
+        /// The day groups: a session falls in the day the person last wrote to it or started it.
+        public static let today = "Today"
+
+        public static let yesterday = "Yesterday"
+
+        public static let older = "Older"
+
+        /// The group of sessions in no project, and of projects in no area.
+        public static let noProject = "No project"
+
+        public static let noArea = "No area"
+
+        /// A session whose turn ended with nothing left to start it again: the person's move.
+        public static let yourTurn = "Your turn"
+
+        /// The top bar's button that puts the sidebar away on a desk, and brings it back.
+        public static let hideSidebar = "Hide sidebar"
+
+        public static let showSidebar = "Show sidebar"
     }
 
     public enum Tailnet {

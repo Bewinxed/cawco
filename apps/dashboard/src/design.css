@@ -2272,7 +2272,9 @@
     content: "";
     position: absolute;
     z-index: 1;
-    left: var(--nest-left);
+    /* From the list's inline start, so right to left mirrors it (motion/branch
+       measures --nest-x and --nest-reach from that edge too). */
+    inset-inline-start: var(--nest-left);
     pointer-events: none;
     border-color: var(--nest-ink);
     border-style: solid;
@@ -2290,9 +2292,9 @@
       calc(var(--nest-glyph-y) + var(--nest-gap) + var(--nest-line) / 2),
       var(--dpx, 1px)
     );
-    border-left-width: var(--nest-line);
+    border-inline-start-width: var(--nest-line);
     border-bottom-width: var(--nest-line);
-    border-bottom-left-radius: var(--radius-sm);
+    border-end-start-radius: var(--radius-sm);
   }
   & > li:first-child::before {
     top: calc(-1 * var(--nest-lead));
@@ -2306,7 +2308,7 @@
   & > li::after {
     top: calc(var(--nest-glyph-y) - var(--radius-sm));
     bottom: calc(-1 * var(--nest-gap));
-    border-left-width: var(--nest-line);
+    border-inline-start-width: var(--nest-line);
   }
   & > li:last-child::after {
     content: none;
@@ -2324,6 +2326,14 @@
   [data-branch-hold] & > li::after {
     /* biome-ignore lint/plugin/no-raw-css-values: no cut at the foot while the line holds, the same sentinel as --nest-cut-b's rest. */
     --nest-cut-b: 9999px;
+  }
+  /* Right to left the line's head travels leftward: its cut is on the left. */
+  [data-branch-draw]&:dir(rtl) > li::before,
+  [data-branch-draw]&:dir(rtl) > li::after,
+  [data-branch-draw] &:dir(rtl) > li::before,
+  [data-branch-draw] &:dir(rtl) > li::after {
+    /* biome-ignore lint/plugin/no-raw-css-values: no cut on these sides, the same sentinel as above, mirrored. */
+    clip-path: inset(-9999px -9999px var(--nest-cut-b) var(--nest-cut-r));
   }
 }
 

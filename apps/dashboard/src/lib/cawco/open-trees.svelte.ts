@@ -1,33 +1,17 @@
 /**
- * Which trees the reader has opened, one id at a time (tree.ts `collapse`),
- * in each list on its own: a parent opened in its project stays folded under
- * Working and Finished, and the rail's Working is not the home's. Every tree
- * starts folded; opening one is remembered per browser, per list.
+ * Which sessions the reader has unfolded to show their delegates, one id at
+ * a time (tree.ts `collapse`), in each list on its own: the rail's Recent is
+ * not the phone home's. Every tree starts folded; opening one is remembered
+ * per browser, per list.
  */
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { readJson, writeJson } from "./storage";
 
-/**
- * A list that shows trees: the rail's projects, the rail's Working and
- * Finished tabs, and the home's Working, Finished and Recent.
- */
-export type TreeList =
-  | "projects"
-  | "rail-working"
-  | "rail-finished"
-  | "home-working"
-  | "home-finished"
-  | "home-recent";
+/** A list that shows trees: the rail's Recent, and the phone home's. */
+export type TreeList = "rail-recent" | "home-recent";
 
-const LISTS: readonly TreeList[] = [
-  "projects",
-  "rail-working",
-  "rail-finished",
-  "home-working",
-  "home-finished",
-  "home-recent",
-];
+const LISTS: readonly TreeList[] = ["rail-recent", "home-recent"];
 
 const keyOf = (list: TreeList): string => `cawco-open-trees:${list}`;
 
@@ -41,8 +25,7 @@ const open = Object.fromEntries(
 
 /**
  * Parents whose older rows are out (older.ts, OlderRows), in each list on its
- * own: a project's older sessions, a session's older delegates. In memory, so
- * a reload shuts them.
+ * own: a session's older delegates. In memory, so a reload shuts them.
  */
 export const olderOpen = Object.fromEntries(
   LISTS.map((list) => [list, new SvelteSet<string>()])

@@ -40,6 +40,7 @@
 
 <TreeMark
   {count}
+  echoKey={id}
   faceAlways={caw !== null}
   fill="var(--mark-{markHue(place)})"
   {ontoggle}

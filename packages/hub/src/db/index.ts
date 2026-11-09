@@ -1383,6 +1383,11 @@ export interface DbShape {
   readonly markAttemptUnmet: (itemId: string) => void;
   /** Marks the one-time data migration `name` run: it never runs again. */
   readonly markDataMigrated: (name: string) => void;
+  /**
+   * The person pressed Done on these sessions (an archive) at `at`; a null
+   * `at` takes it back (unarchive). `updatedAt` stays, as {@link markSeen}'s.
+   */
+  readonly markDone: (instanceIds: string[], at: Date | null) => void;
   /** Where the fleet's marketplace `name` comes from; undefined for none. */
   readonly marketplaceSource: (name: string) => string | undefined;
   /**
@@ -1410,16 +1415,6 @@ export interface DbShape {
     instanceIds: string[],
     at: Date | null
   ) => (typeof instances.$inferSelect)[];
-  /**
-   * The person pressed Done on these sessions (an archive) at `at`; a null
-   * `at` takes it back (unarchive). `updatedAt` stays, as {@link markSeen}'s.
-   */
-  readonly markDone: (instanceIds: string[], at: Date | null) => void;
-  /**
-   * The person wrote to the session at `at` (a send of theirs the hub
-   * accepted): its `wroteAt`. False when the hub keeps no row for it.
-   */
-  readonly noteWrote: (id: string, at: Date) => boolean;
   /** A project's fact uses and declined rewrites (memory.ts). */
   readonly memoryFacts: MemoryFactsDb;
   /**
@@ -1564,6 +1559,11 @@ export interface DbShape {
   ) => void;
   /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
   readonly noteWatchLine: (id: string, line: WatchLine) => void;
+  /**
+   * The person wrote to the session at `at` (a send of theirs the hub
+   * accepted): its `wroteAt`. False when the hub keeps no row for it.
+   */
+  readonly noteWrote: (id: string, at: Date) => boolean;
   /** What a device was shown and what has been cleared, by collapse id (notifications.ts). */
   readonly notifications: {
     /** Shown under this collapse id: outstanding again, and no longer cleared. */

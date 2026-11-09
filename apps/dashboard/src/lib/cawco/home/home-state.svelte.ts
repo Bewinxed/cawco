@@ -8,11 +8,10 @@
  *   every artifact waiting on the operator (core artifact-needs.ts),
  *   longest wait first by the moment the hub raised it (`raisedAt`), so
  *   every device lists them alike.
- * - Working: sessions mid-turn, with what each is doing now.
- * - Finished: sessions whose turn ended, or that failed, since this device
- *   last opened them (the `finished` choice).
- * - Recent: everything else that can be opened — every session none of the
- *   groups above shows, and the transcripts stored on the machines.
+ * - Working: every session mid-turn (the tab's icon reads it).
+ * - Seen: what "ended since you last looked" means (`endedUnseen`), the
+ *   unread mark of the sidebar's Recent list (recent.svelte.ts), and Done,
+ *   the archive that takes a session off it (`archive`).
  */
 import type { ApprovedActionView } from "@cawco/core/actions";
 import { archiveRefusal } from "@cawco/core/archive";
@@ -20,7 +19,6 @@ import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import type { ArtifactReason, ArtifactStop } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
-import type { NeutralSessionInfo } from "@cawco/core/harness";
 import type { PairingRequest, WaitingMachine } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { Install } from "@cawco/core/install";
@@ -61,16 +59,9 @@ import { buildConvergence, machineSync, syncNotice } from "../convergence";
 import { machineFaults } from "../fleet-faults";
 import { harnessWords, machineBlocksOf } from "../harness-block.svelte";
 import { hubAuth } from "../hub-auth.svelte";
-import {
-  catalogTitle,
-  conversationHref,
-  indexInstances,
-  instanceForSession,
-  resolveSessionTitle,
-} from "../links";
+import { conversationHref, resolveSessionTitle } from "../links";
 import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
-import { heldOrder } from "../motion/held-order.svelte";
 import { asksHere, onPhone, person, rowAsks } from "../person.svelte";
 import {
   listTasksWaiting,
@@ -78,16 +69,13 @@ import {
   type TaskSummary,
 } from "../project-tasks";
 import { folderOf } from "../projects";
-import { rail } from "../rail.svelte";
-import { sameRow } from "../same-row";
 import { onRow } from "../session-acts.svelte";
 import { sessionName as tabName } from "../session-name";
 import { sessionTitle } from "../session-names.svelte";
-import { rooted, standsAlone, tree } from "../tree";
-import { choices } from "./choices.svelte";
+import { standsAlone } from "../tree";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
-   What "finished since you last looked" means is the owner's looking on
+   What "ended since you last looked" means is the owner's looking on
    any device: each session and run carries `seenAt` from the hub, and
    every dashboard hears it change on the frames it already reads. Every
    time read against it is the hub's too (`endedAt`): no device's clock,
@@ -114,7 +102,7 @@ interface SeenMark {
  *
  * - `seen`: what this dashboard marked seen. A look is marked in the moment
  *   it happens; an archive once the hub has taken it, so the row leaves
- *   Finished on the hub's answer rather than a frame later. Each goes once
+ *   its unread mark on the hub's answer rather than a frame later. Each goes once
  *   the row's `seenAt` reaches the hub's stamp of it, so a later change on
  *   the hub (an unarchive on another device) is never masked.
  * - `cleared`: what this dashboard unarchived: the `seenAt` the row still
@@ -261,11 +249,11 @@ function sendUnsent(): void {
 }
 
 /**
- * Takes sessions off Finished without opening
- * them, so each is listed again only when it ends another turn. Only what
+ * Done: takes sessions off the sidebar's Recent list without opening
+ * them, until the person writes to it again (the hub's `doneAt`). Only what
  * `home.archivable` allows is ever offered; the hub holds the same rule
  * (core `archiveRefusal`). Each is asked on its own: its row says
- * "Archiving…" and leaves Finished on the hub's answer, and one the hub
+ * "Archiving…" and leaves Recent on the hub's answer, and one the hub
  * refuses stays, its reason under it, while the others go.
  */
 export function archive(ids: string[]): void {
@@ -294,7 +282,7 @@ export function archive(ids: string[]): void {
 }
 
 /**
- * Puts an archived session back in Finished: the hub clears its `seenAt`
+ * Puts an archived session back on Recent: the hub clears its `seenAt`
  * and leaves keep-alive as it is. As archive's, the row moves on the hub's
  * answer, and a refusal stays on it.
  */
@@ -654,26 +642,6 @@ export type NeedsItem =
 export const askView = (item: AskItem): string =>
   item.origin ?? item.instanceId;
 
-interface RecentItem {
-  at: number;
-  href: string;
-  info: NeutralSessionInfo | null;
-  instance: BoardRow | null;
-  key: string;
-  machineId: string;
-  place: string;
-  title: string;
-}
-
-/** A transcript stored on a machine, before it is named (see `Home.#stored`). */
-interface StoredEntry {
-  at: number;
-  info: NeutralSessionInfo;
-  key: string;
-  machineId: string;
-  place: string;
-}
-
 /* ── Naming ────────────────────────────────────────────────────────── */
 
 export const instanceTitle = (row: BoardRow): string =>
@@ -782,161 +750,17 @@ function placeOf(machineId: string, cwd: string | null | undefined): string {
     : machineName(machineId);
 }
 
-export function placeOfRow(row: BoardRow): string {
+function placeOfRow(row: BoardRow): string {
   const where = projectOfRow(row);
   return where
     ? `${machineName(row.machineId)} · ${where}`
     : machineName(row.machineId);
 }
 
-export interface MachineGroup<T> {
-  machineId: string;
-  name: string;
-  os: string;
-  rows: T[];
-}
-
-/**
- * Rows under one header per machine, so a row never repeats where it runs.
- * The groups keep the order of their first row, so the most urgent row's
- * machine leads and each group keeps the list's own order inside it.
- */
-export function byMachine<T extends { machineId: string }>(
-  rows: T[]
-): MachineGroup<T>[] {
-  const groups = new Map<string, MachineGroup<T>>();
-  for (const row of rows) {
-    let group = groups.get(row.machineId);
-    if (!group) {
-      const machine = cawco.machines.find((m) => m.machineId === row.machineId);
-      group = {
-        machineId: row.machineId,
-        name: machineName(row.machineId),
-        os: machine?.os ?? "",
-        rows: [],
-      };
-      groups.set(row.machineId, group);
-    }
-    group.rows.push(row);
-  }
-  // One machine order for every list (the fleet's, as the machines popover
-  // lists them), so a machine keeps its place whichever list is shown.
-  const place = (id: string) => {
-    const at = cawco.machines.findIndex((m) => m.machineId === id);
-    return at === -1 ? Number.MAX_SAFE_INTEGER : at;
-  };
-  return [...groups.values()].sort(
-    (a, b) => place(a.machineId) - place(b.machineId)
-  );
-}
-
-/**
- * Ids in code-unit order, the order Swift's `<` gives them, so a tie in a
- * list falls the same way here and in the Apple app.
- */
-function compareIds(a: string, b: string): number {
-  if (a === b) {
-    return 0;
-  }
-  return a < b ? -1 : 1;
-}
-
-/** Recent's order: the latest first, ties by key. */
-const byRecency = (
-  a: { at: number; key: string },
-  b: { at: number; key: string }
-): number => b.at - a.at || compareIds(a.key, b.key);
-
-/**
- * Two lists each in `byRecency` order as one, in one pass: what sorting the
- * two together gives, the first list's item first where they tie.
- */
-function mergeByRecency(
-  first: RecentItem[],
-  second: RecentItem[]
-): RecentItem[] {
-  const merged: RecentItem[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < first.length && j < second.length) {
-    if (byRecency(second[j], first[i]) < 0) {
-      merged.push(second[j]);
-      j += 1;
-    } else {
-      merged.push(first[i]);
-      i += 1;
-    }
-  }
-  while (i < first.length) {
-    merged.push(first[i]);
-    i += 1;
-  }
-  while (j < second.length) {
-    merged.push(second[j]);
-    j += 1;
-  }
-  return merged;
-}
-
-/**
- * Whether two hub rows name a stored session alike: the same row in every
- * field (same-row.ts), since what names it (`catalogTitle`,
- * `conversationHref`, `placeOfRow` and its project) reads what it likes of
- * the row. A row holding no session, or one that is listed (`running`),
- * only lends its id: a stored transcript of a listed session is not in
- * Recent's stored half, and a row is looked up by session only through its
- * session.
- */
-function namesAlike(
-  a: BoardRow,
-  b: BoardRow | undefined,
-  running: ReadonlySet<string>
-): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (!b || a.id !== b.id || a.sessionId !== b.sessionId) {
-    return false;
-  }
-  if (!a.sessionId || running.has(a.sessionId)) {
-    return true;
-  }
-  return sameRow(a, b);
-}
-
 /** When a session last moved: its pulse, else the hub's own update time. */
 export function lastAt(row: BoardRow): number {
   return cawco.pulseAt(row.id) ?? epochOf(row, "updatedAt");
 }
-
-/**
- * `rows` newest first by {@link lastAt}, ties by id: each row's time read
- * once, never twice per comparison.
- */
-function newestFirst(rows: BoardRow[]): BoardRow[] {
-  return rows
-    .map((row) => ({ row, at: lastAt(row) }))
-    .sort((a, b) => b.at - a.at || compareIds(a.row.id, b.row.id))
-    .map((one) => one.row);
-}
-
-/**
- * A row says what Recent's membership reads as it said it before: the same
- * row, or one with the same id, parent, origin and status (its place in a
- * tree, whether it runs). Its time, title and counts are read afresh where
- * it is drawn ({@link freshRow}).
- */
-const standsAsItWas = (was: BoardRow | undefined, row: BoardRow): boolean =>
-  was === row ||
-  (was !== undefined &&
-    was.id === row.id &&
-    was.parentInstanceId === row.parentInstanceId &&
-    was.origin === row.origin &&
-    was.status === row.status);
-
-/** The board's row as it is now, by its id: one key's read. */
-const freshRow = (row: BoardRow): BoardRow =>
-  cawco.instanceIndex.byId.get(row.id) ?? row;
 
 /**
  * When a session's last turn ended, or it failed, whatever it is doing now:
@@ -980,7 +804,7 @@ export function archivedRow(row: BoardRow): boolean {
 
 /**
  * It ended after the owner last saw it: news. The one rule for both sides
- * of "seen" — Finished lists exactly these, and a conversation in front of
+ * of "seen" — Recent marks exactly these unread, and a conversation in front of
  * the owner is marked seen exactly when it is one of these.
  */
 export function endedUnseen(row: BoardRow): boolean {
@@ -1011,9 +835,6 @@ const seenThrough = new WeakMap<BoardRow, typeof marks>();
 /** When each working session joined Working this stint (see `working`). */
 const enteredWorking = new Map<string, number>();
 
-/** A list with nothing in it, the same one each time. */
-const NONE: BoardRow[] = [];
-
 /**
  * Work another session started: a delegate, Caw's work or an agent's
  * check, which only ever nests under the session that started it (tree.ts
@@ -1024,9 +845,6 @@ export const isDelegate = (row: BoardRow): boolean =>
   !standsAlone(row) ||
   (!!row.parentInstanceId &&
     cawco.instanceIndex.byId.has(row.parentInstanceId));
-
-/** The rail's delegates switch, kept: work handed off is listed only on request. */
-const listed = (row: BoardRow): boolean => rail.delegates || !isDelegate(row);
 
 /* ── The machines ──────────────────────────────────────────────────── */
 
@@ -1159,7 +977,7 @@ class Home {
 
   /**
    * A row and everything under it, listed or not (the Delegates switch hides
-   * rows, not what they are): what archiving a parent takes off Finished.
+   * rows, not what they are): what archiving a parent takes off Recent.
    */
   treeOf(id: string): string[] {
     const out: string[] = [];
@@ -1583,45 +1401,6 @@ class Home {
   });
 
   /**
-   * Every session that has ended since it was last opened, delegates
-   * included whatever the Delegates switch says: the list that shows them
-   * (WorkTabs) decides which delegates it lists, so a failed one is never
-   * missed.
-   */
-  readonly finished = $derived.by<BoardRow[]>(() => {
-    if (choices.finished === "a") {
-      return NONE;
-    }
-    return heldOrder(
-      "home:finished",
-      // The latest to end first. A failure says so on its own row (its
-      // mark, its line, the tab's numeral), not by jumping the queue. Two
-      // that ended together go by id, so every device lists them alike.
-      newestFirst(cawco.listedInstances.filter(endedUnseen)),
-      (row) => row.id
-    );
-  });
-
-  #workingListedWas: BoardRow[] | undefined;
-  #finishedListedWas: BoardRow[] | undefined;
-  /** What the Working tab lists of `working`, by the Delegates switch. */
-  readonly workingListed = $derived.by(() => {
-    this.#workingListedWas = unlessSame(
-      this.#workingListedWas,
-      listedIn(this.working)
-    );
-    return this.#workingListedWas;
-  });
-  /** What the Finished tab lists of `finished`, by the Delegates switch. */
-  readonly finishedListed = $derived.by(() => {
-    this.#finishedListedWas = unlessSame(
-      this.#finishedListedWas,
-      listedIn(this.finished)
-    );
-    return this.#finishedListedWas;
-  });
-
-  /**
    * Nothing to list anywhere: no session the hub lists, and no transcript
    * stored on any machine. Asked without building a list (one look per
    * machine), so the home's empty state costs nothing as the catalogs grow.
@@ -1632,246 +1411,6 @@ class Home {
       cawco.machines.every((machine) => !cawco.hasStored(machine.machineId))
     );
   }
-
-  /* ── Recent ──────────────────────────────────────────────────────────
-     Two halves. The stored transcripts — every catalog entry on every
-     machine, a thousand and more — are mapped and sorted only when a
-     catalog, a machine, the set of listed sessions or a hub row that names
-     one of them changes. The listed sessions, a few dozen, are re-derived on
-     every change and merged in, one pass. A turn ending changes the hub's
-     rows, the machines' list and the listed sessions' array — each a new
-     object on every `instances` frame — and used to map and sort the whole
-     catalog again, on every page, for the rail's count. */
-
-  /** The machines' ids and names, as text: the same text while none is added, removed or renamed. */
-  readonly #machineNames = $derived(
-    cawco.machines
-      .map(
-        (machine) =>
-          `${machine.machineId}\u0000${machineLabel(machine.hostname)}`
-      )
-      .join("\n")
-  );
-
-  /** The listed sessions' keys: the same set while they are the same keys. */
-  #runningWas: ReadonlySet<string> = new Set();
-  readonly #running = $derived.by<ReadonlySet<string>>(() => {
-    const keys = new Set<string>();
-    for (const row of cawco.listedInstances) {
-      if (row.sessionId) {
-        keys.add(row.sessionId);
-      }
-    }
-    const was = this.#runningWas;
-    if (keys.size !== was.size || [...keys].some((key) => !was.has(key))) {
-      this.#runningWas = keys;
-    }
-    return this.#runningWas;
-  });
-
-  /** Every stored transcript not behind a listed session, placed and in order. */
-  readonly #storedEntries = $derived.by<StoredEntry[]>(() => {
-    const running = this.#running;
-    const entries: StoredEntry[] = [];
-    for (const line of this.#machineNames.split("\n")) {
-      const [machineId, name] = line.split("\u0000");
-      if (!machineId) {
-        continue;
-      }
-      for (const info of cawco.catalogOf(machineId)) {
-        // A listed session's transcript is its row.
-        if (running.has(info.sessionId)) {
-          continue;
-        }
-        const where = projectOf(machineId, info.cwd);
-        entries.push({
-          key: `${machineId}:${info.sessionId}`,
-          info,
-          machineId,
-          place: where ? `${name} · ${where}` : name,
-          at: info.lastModified,
-        });
-      }
-    }
-    return entries.sort(byRecency);
-  });
-
-  /**
-   * The hub's rows as naming a stored transcript reads them: the same array
-   * while no row has moved in a way `namesAlike` sees, so a turn ending —
-   * a listed row's status and time — names nothing again.
-   */
-  #named: BoardRow[] = [];
-  readonly #namingRows = $derived.by<BoardRow[]>(() => {
-    const rows = cawco.instances;
-    const running = this.#running;
-    const was = this.#named;
-    if (
-      rows.length === was.length &&
-      rows.every((row, i) => namesAlike(row, was[i], running))
-    ) {
-      return was;
-    }
-    this.#named = rows;
-    return rows;
-  });
-
-  /** The stored half, named, in order. */
-  readonly #stored = $derived.by<RecentItem[]>(() => {
-    const index = indexInstances(this.#namingRows);
-    return this.#storedEntries.map((entry): RecentItem => ({
-      ...entry,
-      instance: null,
-      place: (() => {
-        const row = instanceForSession(index, entry.info.sessionId, {
-          machineId: entry.machineId,
-          cwd: entry.info.cwd,
-        });
-        return row ? placeOfRow(row) : entry.place;
-      })(),
-      title: catalogTitle(entry.info, index, entry.machineId),
-      href: conversationHref(entry.info.sessionId, index, {
-        machineId: entry.machineId,
-        cwd: entry.info.cwd,
-      }),
-    }));
-  });
-
-  /**
-   * The listed rows as Recent's membership reads them: `cawco.listedInstances`,
-   * or the very array it was while every row stands as it was
-   * ({@link standsAsItWas}). A turn moving on in a session changes its row
-   * and nothing Recent holds, so nothing below walks the board for it: the
-   * walks (a filter, the trees' roots and tops of two thousand rows) ran on
-   * every board delta.
-   */
-  #standingWas: BoardRow[] | undefined;
-  readonly #standing = $derived.by<BoardRow[]>(() => {
-    const next = cawco.listedInstances;
-    const was = this.#standingWas;
-    if (
-      was?.length === next.length &&
-      next.every((row, i) => standsAsItWas(was[i], row))
-    ) {
-      return was;
-    }
-    this.#standingWas = next;
-    return next;
-  });
-  /** {@link #standing} by id. */
-  readonly #standingById = $derived(
-    new Map(this.#standing.map((row) => [row.id, row] as const))
-  );
-
-  /**
-   * The listed sessions Recent holds: every one no other group shows,
-   * whatever its status or activity. Recent is the list of last resort, so
-   * it asks nothing more of a row. Asking that it be idle, asleep or failed
-   * left two with no row anywhere, and so no menu to stop or remove them
-   * by: a live session whose pulse says it waits on the reader while no ask
-   * of its own is parked (a delegate's ask its parent answers), and one
-   * stopped before it had a transcript whose pulse or delegates still say
-   * working. Which rows, not their order: it reads no row's time, so a
-   * pulse moving one wakes none of what counts them, and it hands back the
-   * array it handed back before while it holds the same rows.
-   */
-  #recentRowsWas: BoardRow[] | undefined;
-  readonly #recentRows = $derived.by<BoardRow[]>(() => {
-    // What the tabs list, not all they hold: with the Delegates switch off
-    // a tab holds a delegate it does not draw (one that ended unseen under a
-    // parent the reader has since opened), and left out here too it had no
-    // row anywhere. Its parent's tree in Recent is where it hangs then.
-    const shown = new Set([
-      ...this.workingListed.map((row) => row.id),
-      ...this.finishedListed.map((row) => row.id),
-      ...cawco.blocked.map((item) => item.instanceId),
-    ]);
-    const rows = this.#standing.filter((row) => !shown.has(row.id));
-    // What the Delegates switch means in every home list (WorkTabs
-    // `rowsOf`): off, a delegate is held only under a parent the list holds
-    // too, in that parent's tree; on, every one is held, under its parent.
-    this.#recentRowsWas = unlessSame(
-      this.#recentRowsWas,
-      rail.delegates ? rows : rooted(rows)
-    );
-    return this.#recentRowsWas;
-  });
-
-  /** Recent's sessions newest first, ties by id: read only where Recent is open. */
-  readonly #recentInOrder = $derived(
-    newestFirst(this.#recentRows.map(freshRow))
-  );
-
-  /**
-   * Recent's sessions as their trees (tree.ts), newest first: each one
-   * followed by its delegates, and with the Delegates switch on each
-   * ancestor Recent does not hold as a context line in its delegates' place,
-   * as Working and Finished draw theirs. Read only where Recent is open.
-   */
-  readonly recentLines = $derived.by(() =>
-    tree(this.#recentInOrder, {
-      context: rail.delegates
-        ? (id) => cawco.instanceIndex.byId.get(id)
-        : undefined,
-    })
-  );
-
-  /**
-   * How many of the sessions Recent holds, its delegates among them, have a
-   * live process (running or starting): what its closed header says, since
-   * nothing else on a closed list says something inside can still be stopped.
-   */
-  readonly recentRunning = $derived(
-    this.#recentRows.filter(
-      (row) => row.status === "running" || row.status === "starting"
-    ).length
-  );
-
-  /**
-   * Recent's own rows among the sessions: the top of each tree, as the
-   * lists have them. A
-   * delegate is in its parent's tree, never a row of the list, so the
-   * list's count and its cap are of these.
-   */
-  readonly #recentTops = $derived.by<ReadonlySet<BoardRow>>(() => {
-    const topOf = topsIn(this.#standingById);
-    return new Set(this.#recentRows.map(topOf));
-  });
-
-  /**
-   * Recent's own rows as the list draws them, newest first: built only
-   * where Recent is open (its count is {@link recentCount}'s, which never
-   * builds one).
-   */
-  readonly #recentLive = $derived.by<RecentItem[]>(() =>
-    [...this.#recentTops]
-      .map(freshRow)
-      .map((row): RecentItem => ({
-        key: row.id,
-        instance: row,
-        info: null,
-        machineId: row.machineId,
-        title: instanceTitle(row),
-        place: placeOfRow(row),
-        href: conversationHref(row.id, cawco.instanceIndex),
-        at: lastAt(row),
-      }))
-      .sort(byRecency)
-  );
-
-  /** How many Recent lists: what its closed disclosure says, without the list. */
-  readonly recentCount = $derived(
-    this.#recentTops.size + this.#storedEntries.length
-  );
-
-  /** Everything else that can be opened, latest first: read only where it is shown. */
-  readonly recent = $derived.by<RecentItem[]>(() =>
-    heldOrder(
-      "home:recent",
-      mergeByRecency(this.#recentLive, this.#stored),
-      (item) => item.key
-    )
-  );
 
   /**
    * What a wide screen opens with nothing open: the longest wait, where it
@@ -1897,7 +1436,7 @@ class Home {
     // The one that moved last; of two that moved together, the first listed.
     let latest: { at: number; id: string } | null = null;
     for (const row of cawco.runningInstances) {
-      if (!listed(row) || cancelled.has(row.id)) {
+      if (isDelegate(row) || cancelled.has(row.id)) {
         continue;
       }
       const at = lastAt(row);
@@ -1907,22 +1446,6 @@ class Home {
     }
     return latest?.id ?? null;
   });
-}
-
-/**
- * The rows of `all` a tab lists itself. Every delegate under a listed
- * parent, folded into its parent's count (tree.ts `rooted`); one whose
- * parent the tab does not list only when the Delegates switch is on: work
- * another session started is listed on its own on request. A failed one is
- * listed whatever the switch says, so a failure is never missed; a blocked
- * one is never in a tab, it is a Needs-you card above them.
- */
-function listedIn(all: BoardRow[]): BoardRow[] {
-  if (rail.delegates) {
-    return all;
-  }
-  const tops = new Set(rooted(all).map((row) => row.id));
-  return all.filter((row) => tops.has(row.id) || isFailed(row));
 }
 
 /**

@@ -116,6 +116,7 @@
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import { isSessionRow } from "./links";
   import { unfold } from "./motion/fold.svelte";
+  import { landRegroup } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import SessionMark from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
@@ -127,6 +128,7 @@
     sessionAct,
   } from "./session-acts.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
+  import type { MarkStatus } from "./TreeMark.svelte";
   import AccountDot from "./usage/AccountDot.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
 
@@ -147,6 +149,10 @@
     peek = true,
     fold = null,
     onarchive,
+    mark,
+    word,
+    quiet = false,
+    regroup,
   }: {
     instance?: BoardRow | null;
     info?: NeutralSessionInfo | null;
@@ -180,8 +186,20 @@
       open: boolean;
       ontoggle: () => void;
     } | null;
-    /** Takes it off the list without opening it (a finished row). */
+    /** Takes it off the list without opening it (a finished row; Recent's Done). */
     onarchive?: () => void;
+    /** What its mark draws, where the list says it (Recent: a failed delegate's dot, a session waiting on its own work). */
+    mark?: MarkStatus;
+    /** Its status word, where the list says it ("Your turn"). */
+    word?: string;
+    /**
+     * Nothing about it wants the reader: its name at 400, one weight step
+     * under a row that needs them or holds a reply they have not read
+     * (DESIGN.md, The Row Dress Rule).
+     */
+    quiet?: boolean;
+    /** Its key for a regroup's flight (motion/share `regroup`): its own box moves, never its item. */
+    regroup?: string;
   } = $props();
 
   /** Where a row's fault, note and question start: where its title does. */
@@ -195,7 +213,7 @@
   );
 
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
-  const status = $derived(sessionStatus(instance, done));
+  const status = $derived(mark ?? sessionStatus(instance, done));
   /** Stopped at its account's limit: the error its meta line says (switch.svelte.ts `stopWords`). */
   const stopped = $derived(instance ? stopWords(instance) : undefined);
   /** Where it runs, for its mark's hue: the same seed in every list. */
@@ -386,12 +404,13 @@
         data-stopped={stopped ? true : undefined}
         class={[
           "block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label",
+          quiet && "font-normal",
           stopped
             ? "text-status-fail-ink"
             : "group-data-context/session-row:group-not-data-current/session-row:text-ink-muted",
         ]}
         ><span class="sr-only"
-          >{pending ?? statusWord(instance, status)}:
+          >{pending ?? word ?? statusWord(instance, status)}:
         </span>
         {title}</span
       >
@@ -490,10 +509,12 @@
     data-flip
     data-peek={showPeek || undefined}
     data-stale={stale || undefined}
+    data-regroup={regroup}
     style:--action-size="var(--c-btn-h-sm)"
     style:--action-end={"calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1))"}
     style:--swipe-x="calc(var(--swipe, 0px) * -1)"
     {@attach onarchive ? swipeToArchive(onarchive) : undefined}
+    {@attach regroup ? landRegroup(() => regroup ?? "") : undefined}
   >
     {#if onarchive}
       <!-- What a finger uncovers as it draws the row away. -->
@@ -510,7 +531,7 @@
            name settles or Escape puts it back. -->
       <form
         data-slot="row"
-        class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-c-btn-h-lg py-space-1 pl-space-3 pr-space-3 text-inherit no-underline rounded-inherit group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
+        class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-c-btn-h-lg py-space-1 pl-space-3 pr-space-3 text-inherit no-underline rounded-inherit group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) coarse:group-data-compact/session-row:min-h-c-btn-h-lg group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
         data-rail-row
         style:--mark-hit-max={compact
           ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
@@ -533,7 +554,7 @@
         aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}
         class={cn(
-          "press-tint focus-inset flex coarse:min-h-c-btn-h-lg min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
+          "press-tint focus-inset flex coarse:min-h-c-btn-h-lg min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) coarse:group-data-compact/session-row:min-h-c-btn-h-lg group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
           trigger.class as string | undefined
         )}
         data-hover-session={instance?.id}

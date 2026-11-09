@@ -355,6 +355,7 @@ export {
 } from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
 export {
+  default as IconSidebarLinear,
   default as IconRoomLinear,
   default as IconUndockLinear,
 } from "~icons/solar/sidebar-minimalistic-linear";

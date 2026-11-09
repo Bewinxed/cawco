@@ -1093,11 +1093,6 @@ export interface InstanceRow {
   continuedInto?: string | null;
   /** When the hub first opened its row: when it was started. */
   createdAt?: string | number | Date | null;
-  /**
-   * When the person pressed Done on it (an archive), on the hub's clock: off
-   * the sidebar's Recent list until they write to it again. Null otherwise.
-   */
-  doneAt?: string | number | Date | null;
   /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
   /**
@@ -1116,6 +1111,11 @@ export interface InstanceRow {
    * row, so a reader never watches the label change as the transcript arrives.
    */
   derivedTitle?: string | null;
+  /**
+   * When the person pressed Done on it (an archive), on the hub's clock: off
+   * the sidebar's Recent list until they write to it again. Null otherwise.
+   */
+  doneAt?: string | number | Date | null;
   /**
    * The effort the session actually sends, as its agent last read it back from
    * the harness ({@link import("./harness").EFFORT_READ}): a level, `none` when
@@ -1237,11 +1237,6 @@ export interface InstanceRow {
    */
   wakesItself?: boolean;
   /**
-   * When the person last wrote to it (a send of theirs the hub accepted,
-   * harness.ts `byPerson`), on the hub's clock. Null when they never did.
-   */
-  wroteAt?: string | number | Date | null;
-  /**
    * The work item this session runs: every delegate is one, and a session
    * never runs more than one. Null on a session nobody delegated, and on a
    * delegate from before work items existed.
@@ -1254,6 +1249,11 @@ export interface InstanceRow {
    * work item.
    */
   workspaceId?: string | null;
+  /**
+   * When the person last wrote to it (a send of theirs the hub accepted,
+   * harness.ts `byPerson`), on the hub's clock. Null when they never did.
+   */
+  wroteAt?: string | number | Date | null;
 }
 
 export interface KeepAlive {

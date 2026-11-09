@@ -109,10 +109,7 @@ import type {
 import type { ArtifactSessionHeard as ArtifactSessionHeardType } from "./preview/artifact-session.svelte";
 import type { CalledArtifact as CalledArtifactType } from "./preview/source";
 import type { ComposeTarget as ComposeTargetType } from "./preview/wire";
-import type {
-  RailLayout as RailLayoutType,
-  RailSort as RailSortType,
-} from "./rail.svelte";
+import type { RailLayout as RailLayoutType } from "./rail.svelte";
 import type { CommandRefusal as CommandRefusalType } from "./refusals.svelte";
 import type {
   RoutineAct as RoutineActType,
@@ -581,13 +578,9 @@ export const CalledArtifactShape = z.object({
 
 const PinShape = z.object({ id: z.string(), kind: z.literal("project") });
 
-const RailSortShape = z.enum(["recent", "name", "state"]);
-
 export const RailLayoutShape = z.object({
-  delegates: z.boolean(),
   machines: z.array(z.string()),
   pins: z.array(PinShape),
-  sort: RailSortShape,
 });
 
 const CommandRefusalShape = z.object({
@@ -1065,7 +1058,6 @@ prove<
     Same<z.output<typeof ArtifactSessionFrameShape>, ArtifactSessionFrameType>,
     Same<z.output<typeof ArtifactSessionHeardShape>, ArtifactSessionHeardType>,
     Same<z.output<typeof CalledArtifactShape>, CalledArtifactType>,
-    Same<z.output<typeof RailSortShape>, RailSortType>,
     Same<z.output<typeof RailLayoutShape>, RailLayoutType>,
     Same<z.output<typeof CommandRefusalShape>, CommandRefusalType>,
     Same<z.output<typeof RoutineActShape>, RoutineActType>,

@@ -61,6 +61,7 @@
     noun = "delegate",
     switchLabel,
     faceAlways = false,
+    echoKey,
     face,
   }: {
     /** The rows under it, at every depth. */
@@ -92,6 +93,12 @@
     face: Snippet;
     /** The face stays on the tile with a count; the chevron never takes it. */
     faceAlways?: boolean;
+    /**
+     * Whose mark it is (a session's id): its echo is timed by that and its
+     * status, not by its element (motion/echo), so the same mark drawn again
+     * (a regroup) does not beat again once it has rested.
+     */
+    echoKey?: string;
   } = $props();
 
   const dot = $derived(
@@ -302,6 +309,8 @@
         data-slot="tile"
         class="absolute inset-(--reach) grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none opacity-0"
         data-echo
+        data-echo-key={echoKey}
+        data-echo-status={status}
       ></span>
     </span>
   {:else if status === "attn"}
@@ -314,6 +323,8 @@
       aria-hidden="true"
       class="absolute z-5 top-(--dot-off) right-(--dot-off) size-(--status-dot-size) rounded-pill bg-(--dot) pointer-events-none opacity-0 mark-beating:hidden"
       data-echo
+      data-echo-key={echoKey}
+      data-echo-status={status}
       style:--dot-off="calc(var(--status-dot-size) / -2)"
     ></span>
   {/if}
