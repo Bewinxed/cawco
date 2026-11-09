@@ -5,11 +5,12 @@
    */
   import { accountsWords } from "@cawco/core/words/accounts";
   import AccountSetup from "#lib/cawco/accounts/AccountSetup.svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import { accountsStore } from "#lib/cawco/stores/accounts.svelte.js";
 </script>
 
-{#if cawco.accounts !== null && cawco.accountProviders !== null}
+{#if accountsStore.accounts !== null && accountsStore.accountProviders !== null}
   <AccountSetup />
 {:else}
   <SectionFrame ready={false} section={{ label: accountsWords.setup.title }}>

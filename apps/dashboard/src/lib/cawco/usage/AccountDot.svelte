@@ -9,7 +9,7 @@
    */
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { nameOf } from "../accounts/model.svelte";
-  import { cawco } from "../client.svelte";
+  import { accountsStore } from "../stores/accounts.svelte";
 
   let {
     accountId,
@@ -22,10 +22,10 @@
 
   const account = $derived.by(() => {
     const found = accountId
-      ? cawco.accounts?.accounts.find((one) => one.id === accountId)
+      ? accountsStore.accounts?.accounts.find((one) => one.id === accountId)
       : undefined;
     const siblings = found
-      ? (cawco.accounts?.accounts ?? []).filter(
+      ? (accountsStore.accounts?.accounts ?? []).filter(
           (one) => one.provider === found.provider
         ).length
       : 0;
