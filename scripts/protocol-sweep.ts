@@ -1011,7 +1011,7 @@ const noRevive = (
       }
     : event;
 
-/** main before this change (boundary.ts `rearmListed`): the listing's error was never said where a session's start reads it. */
+/** main before this change (boundary/ `rearmListed`): the listing's error was never said where a session's start reads it. */
 const armingUnsaid = (
   _state: HandoverState,
   event: HandoverEvent,

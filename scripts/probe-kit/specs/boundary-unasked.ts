@@ -1,7 +1,7 @@
 /**
  * A workspace's boundary that ends unasked while a delegate still runs in it
  * is started again for the delegate's next command, on Linux and on macOS
- * alike (agent boundary.ts `restartUnasked`, `watchHost`), and not in a
+ * alike (agent boundary/lifecycle.ts `restartUnasked`, `watchHost`), and not in a
  * loop. On a scratch fleet (real hub, agent and sessiond; Claude Code
  * against the mock model). This spec delegates, so its fleet cuts
  * workspaces: it runs on the host, outside every boundary, on Linux (the srt
@@ -15,7 +15,7 @@
  * of the agent's ended it.
  *
  * - u1. The agent records the boundary started again unasked
- *   (`restarted-unasked`, agent boundary.ts `BoundaryDecision`), its record
+ *   (`restarted-unasked`, agent boundary/decisions.ts `BoundaryDecision`), its record
  *   names a new generation whose process is alive, the one the decision
  *   names.
  * - u2. The old process and the delegate's background sleep are gone within
@@ -52,7 +52,7 @@ const TAG = "PROBE-UNASKED";
 const SLEEP = ["sleep", "7315"];
 /** What each of its short commands prints; the command's own text never holds it. */
 const RAN = "RAN-ok";
-/** The executor's refusal when no boundary runs (agent boundary.ts `stoppedLine`). */
+/** The executor's refusal when no boundary runs (agent boundary/exec.ts `stoppedLine`). */
 const STOPPED = "boundary is not running";
 /** A process's entry in `/proc` (Linux) — macOS is read with `ps`. */
 const PID = /^\d+$/u;
@@ -154,7 +154,7 @@ const sleepPid = async (): Promise<Pid | undefined> => {
  * on Linux the srt host (`boundary-host.ts`, a binary install's
  * `srt/host.js`); on macOS the runner, which `sandbox-exec` runs in its own
  * place once it has entered the sandbox, under the same pid: its command
- * line is then the runner's bash, named `cawco-boundary` (agent boundary.ts
+ * line is then the runner's bash, named `cawco-boundary` (agent boundary/
  * `planFor`), no longer `sandbox-exec` (r189 on the Mac read pid 97318 as
  * no boundary for that). Undefined for any other process, or none.
  */
