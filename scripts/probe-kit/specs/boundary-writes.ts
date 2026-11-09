@@ -18,7 +18,7 @@
  *   workspace's ro claude-tmp, and the shell reads it after the notice
  *   (before the fix the CLI wrote it under its agent's temp dir, the host's
  *   `/tmp` on the owner's machine, which the boundary hides: "No such file or
- *   directory"; agent claude.ts `sessionEnv`, core paths.ts
+ *   directory"; agent claude.ts `sessionEnv`, core paths/workspace.ts
  *   `workspaceClaudeTmpDir`). The agent and sessiond run without the fleet's
  *   `CLAUDE_CODE_TMPDIR`, so the CLI's comes from the harness alone;
  * - a write to `~/.cache/cawco-orchestrator/probe-x`, under the read-denied
@@ -45,7 +45,7 @@
  *   failed with ERR_UNSUPPORTED_ESM_URL_SCHEME; agent bun-node-shim.ts);
  * - the impeccable skill's launcher (pbakaus/impeccable at {@link
  *   IMPECCABLE_COMMIT}, fetched into `$TMPDIR`) runs its engine: its
- *   `IMPECCABLE_HOME` is the workspaces' cache's `impeccable/` (core paths.ts
+ *   `IMPECCABLE_HOME` is the workspaces' cache's `impeccable/` (agent boundary-env.ts
  *   `workspaceCacheEnv`), the engine for the version its skill pins lands
  *   there on the host's disk, and `engine-probe` answers with that version
  *   (before the fix the launcher's default, `~/.impeccable`, was read-only:
@@ -274,7 +274,7 @@ const outputOf = (said: string): string =>
 
 /**
  * The background task's output, as the session's shell read it after the
- * CLI's completion notice, in the workspace's ro claude-tmp (core paths.ts
+ * CLI's completion notice, in the workspace's ro claude-tmp (core paths/workspace.ts
  * `workspaceClaudeTmpDir`, under the fleet's HOME, not this process's).
  */
 const checkBackgroundRead = (

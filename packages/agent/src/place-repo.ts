@@ -6,7 +6,7 @@
  *
  * The first commit takes the folder as git reads it: every file its own
  * ignore rules leave in (each `.gitignore` in it, and the person's global
- * excludes file), but for any whose text reads as a credential (core
+ * excludes file), but for any whose text reads as a credential (agent
  * secret-text.ts). A folder that is a git repository of its own is not
  * taken, as git takes no file of one. Nothing about a file's name decides
  * it: `Sessions.swift` and `tokens/` are a project's own. A file of
