@@ -1,3 +1,4 @@
+import { PICKED_TAKEN_BACK } from "./db/migration-names";
 /**
  * Who decides, at the hub (PRD §5.8, core decides.ts): each card a session
  * writes goes to the member the project's table names for its kind
@@ -233,9 +234,6 @@ const briefOf = (
     ].join("\n"),
   ].join("\n\n");
 };
-
-/** The once-pass's name in `data_migrations` ({@link createSettling} `takeBackPickedOnce`). */
-const PICKED_TAKEN_BACK = "picked_cards_taken_back";
 
 /**
  * Whether the person's entry on `kept`'s card takes it from its member: on
