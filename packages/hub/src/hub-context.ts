@@ -57,6 +57,7 @@ import type {
   AgentRow,
   BuildInfo,
   ContinuationJob,
+  DelegateEvent,
   Envelope,
   FsPayload,
   InstanceRow,
@@ -120,6 +121,7 @@ import type {
 } from "./db/stored-types";
 import type { createDecisions } from "./decisions";
 import type { DelegateTypesShape } from "./delegate-types";
+import type { createDelegateWaits } from "./delegate-waits";
 import type { DelegateResult } from "./delegation-actions";
 import type { createDelegationMcp } from "./delegation-mcp";
 import type { createDesignSystem } from "./design-system";
@@ -145,7 +147,7 @@ import type { KeepAliveRow } from "./keep-alive";
 import type { LabelledRow } from "./labels";
 import type { createLaws } from "./laws";
 import type { HubLifetimeShape } from "./lifetime";
-import type { StoredRow } from "./limit-moves";
+import type { MoveOffWhy, StoredRow } from "./limit-moves";
 import type {
   ControlResult,
   MemoryRead,
@@ -181,6 +183,7 @@ import type { RegistryShape } from "./registry";
 import type { Routines } from "./routines";
 import type { createRuleRows } from "./rule-rows";
 import type { RuleEngine } from "./rules";
+import type { Unstored } from "./sends";
 import type { createSessionIdentities } from "./session-identity";
 import type { createSessionLifecycle } from "./session-lifecycle";
 import type { SkillFolderReader } from "./skills";
@@ -193,6 +196,7 @@ import type { ToolReleases } from "./tool-releases";
 import type { createTranscripts } from "./transcripts";
 import type { createTreeStops } from "./tree-stops";
 import type { turnState } from "./turn-state";
+import type { UsageCounter } from "./usage-count";
 import type { HubSocket } from "./wire-socket";
 import type { createWorkItems, Unlanded, WorkItemRequest } from "./work-items";
 import type { RetireSweep } from "./workspace-retire";
@@ -409,6 +413,7 @@ export interface HubContext {
     workspace?: string;
   }) => Promise<{ type?: string }>;
   delegateTypes: DelegateTypesShape;
+  delegateWaits: ReturnType<typeof createDelegateWaits>;
   delegationMcp: ReturnType<typeof createDelegationMcp>;
   deletedProjects: ReturnType<typeof projectDelete>;
   deliverSend: (
@@ -510,6 +515,10 @@ export interface HubContext {
     string,
     { machineId: string; since: number; reason: string }
   >;
+  homeLoginMoveOf: (
+    machineId: string,
+    row: { accountId?: string | null; harness?: string | null }
+  ) => LoginMove | undefined;
   homeMovedAccountOn: (machineId: string) => string | undefined;
   hookCopyOff: <Refused>(
     body: { id: string; machineId: string },
@@ -532,6 +541,7 @@ export interface HubContext {
   hubRun: `${string}-${string}-${string}-${string}-${string}`;
   hubStep: (event: HandoverEvent) => HandoverCommand[];
   identities: ReturnType<typeof createSessionIdentities>;
+  inCustody: Map<string, { machineId: string; since: number; told: boolean }>;
   inFlightFor: (
     sourceId: string
   ) => Promise<{ work?: WorkInFlight | undefined } | { refusal: string }>;
@@ -572,6 +582,7 @@ export interface HubContext {
     suggestWhileTyping: boolean;
   };
   keepHookVersion: (hook: FleetHook) => void;
+  keepPrompt: (parked: Envelope) => boolean;
   keepRemovedMemory: (row: {
     path?: string;
     content: string;
@@ -729,6 +740,7 @@ export interface HubContext {
   ) => boolean;
   noteFreshStart: (row: InstanceRow) => void;
   noteInterrupt: (instanceId: string, hold?: boolean) => void;
+  noteWithdrawn: (asks: readonly Envelope[]) => void;
   noticesSeen: ReturnType<typeof createNoticesSeen>;
   notifications: ReturnType<typeof createNotifications>;
   /** Whether a machine's agent is connected. */
@@ -748,6 +760,11 @@ export interface HubContext {
   };
   owedOn: (row: StoredRow) => StoredRow;
   owedTargets: () => Map<string, string>;
+  oweMoveOff: (
+    instanceId: string,
+    accountId: string,
+    why: MoveOffWhy
+  ) => boolean;
   ownMachineIdRead: string | undefined;
   ownsPermission: (parked: Envelope) => boolean;
   parkForPerson: (envelope: Envelope<unknown>, outlivesHub?: boolean) => void;
@@ -801,6 +818,7 @@ export interface HubContext {
   projectOut: ReturnType<typeof createProjectOut>;
   projectStops: ReturnType<typeof createProjectStops>;
   projectTypes: ProjectDelegateTypes;
+  publishDelegateEvent: (machineId: string, event: DelegateEvent) => void;
   publishedAgents: Map<string, string>;
   publishedMetadata: Map<
     | "previews"
@@ -983,6 +1001,14 @@ export interface HubContext {
   ) =>
     | { payload: SettledSpawn; permissionMode: string | null }
     | { refusal: string; ask?: ModeAsk };
+  settlePending: (
+    instanceId: string,
+    why: string,
+    unstored: Unstored,
+    only?: (send: SentMessageRow) => boolean,
+    decided?: () => void,
+    refusal?: StoredSendRefusal
+  ) => void;
   sharedProblem: (
     name: string,
     config: Record<string, unknown>,
@@ -1110,6 +1136,7 @@ export interface HubContext {
   toolCallKeys: ReturnType<typeof createToolCallKeys>;
   toolReleases: ToolReleases;
   toolsMayHaveChanged: () => void;
+  touched: Map<string, number>;
   transcripts: ReturnType<typeof createTranscripts>;
   treeStops: ReturnType<typeof createTreeStops>;
   turnInFlight: ReturnType<typeof turnState>;
@@ -1136,6 +1163,7 @@ export interface HubContext {
   unnoteAtLimit: (row: { id: string }, id: string) => void;
   unpushable: Map<string, string>;
   unstrand: (instanceId: string) => void;
+  usageCounter: UsageCounter;
   waitingForProcess: Set<string>;
   wakeForSend: (
     agent: HubSocket,
