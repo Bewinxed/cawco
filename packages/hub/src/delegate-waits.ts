@@ -10,21 +10,21 @@
  * parent that went to the person when the parent went to rest unanswered
  * (ask-routing.ts `escalateRoutedAsks`).
  *
- * As an ask starts waiting ({@link DelegateWaits.asked}), its asker's parent
+ * As an ask starts waiting (`asked`), its asker's parent
  * (ask-routing.ts `delegateAskParent`: the session that started its work, live
  * or asleep with a conversation to wake from) is told one of three things:
  *
  * - an ask it may answer (a harness's prompt routed to it, a question): the
  *   ask itself, with how to answer it (ask-routing.ts `deliverDelegateAsk`);
- * - an ask only the person answers ({@link DelegateWaits.personOnly}): what
+ * - an ask only the person answers (`personOnly`): what
  *   it asks, that the person holds it, and that answer_delegate is refused
  *   for it;
  * - an ask it was handed that went to the person: that it is theirs now.
  *
- * As it leaves the pending ledger ({@link DelegateWaits.ended}) the parent
+ * As it leaves the pending ledger (`ended`) the parent
  * hears how: who answered and what they said, the person's take-over of a
  * browser, or its withdrawal; and a browser handed back, after its take-over
- * took the ask off every screen ({@link DelegateWaits.handedBack}). Only the
+ * took the ask off every screen (`handedBack`). Only the
  * parent's own answer goes untold, and an ask no screen was shown.
  *
  * Each word is the hub's, under its own origin (core `DELEGATE_WAIT_ORIGIN`),
