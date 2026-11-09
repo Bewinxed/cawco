@@ -783,6 +783,8 @@ interface DelegateEventFrame {
  * `frames`: everything a session produces, flowing agent→hub→dashboard. The
  * `frame` kind is a neutral message; `raw` on it carries the harness's own
  * event verbatim.
+ *
+ * @socketFrame fromHub
  */
 export type FramePayload =
   | FleetMcpFrame
