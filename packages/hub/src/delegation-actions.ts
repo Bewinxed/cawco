@@ -75,11 +75,8 @@ import {
   sessionRole,
   stopOf,
 } from "./session-list";
-import {
-  type HandoffInputs,
-  resolveSpawnType,
-  type Unlanded,
-} from "./work-items";
+import { type HandoffInputs, resolveSpawnType } from "./work-items";
+import type { Unlanded } from "./workspaces";
 
 // Every call this module makes is the hub calling its own routes, as itself
 // (hub-self.ts): `selfFetch` refuses any other origin.
