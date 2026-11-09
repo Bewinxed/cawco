@@ -38,13 +38,15 @@ import { start } from "./start";
 import {
   type Boundary,
   type Held,
+  isStarting,
   keepers,
+  markStarting,
   readHeld,
   readRetiring,
   retiringFileOf,
   running,
   sessiond,
-  starting,
+  startEnded,
 } from "./state";
 import { cleanGeneration, stopBoundary, stopGeneration } from "./stop";
 import { ensureAgain } from "./unasked";
@@ -156,7 +158,7 @@ const restartStubbed = async (): Promise<void> => {
       }
       if (
         alive.some((procId) => procId !== boundaryProcId(ref.id, held.gen)) ||
-        starting.has(ref.id)
+        isStarting(ref.id)
       ) {
         // An older boundary closes first, once idle ({@link closeIdle}).
         continue;
@@ -176,7 +178,7 @@ const restartStubbed = async (): Promise<void> => {
         }
         // Read again: what waited may have replaced it meanwhile.
         const now = await readHeld(ref.id);
-        if (starting.has(ref.id) || now?.gen !== held.gen) {
+        if (isStarting(ref.id) || now?.gen !== held.gen) {
           return;
         }
         const restart = restartIfIdle(ref, now);
@@ -186,8 +188,8 @@ const restartStubbed = async (): Promise<void> => {
         );
         // Its failure is said below; an ensure awaiting it gets it too.
         runs.catch(() => undefined);
-        starting.set(ref.id, runs);
-        const tried = await restart.finally(() => starting.delete(ref.id));
+        markStarting(ref.id, runs);
+        const tried = await restart.finally(() => startEnded(ref.id));
         if ("kept" in tried) {
           entry.commands = tried.kept.commands;
         }
@@ -244,7 +246,7 @@ const handOverStale = async (): Promise<void> => {
     return;
   }
   for (const ref of [...stale.values()]) {
-    if (starting.has(ref.id)) {
+    if (isStarting(ref.id)) {
       continue;
     }
     try {
@@ -293,7 +295,7 @@ const handOverStale = async (): Promise<void> => {
 const closeRetiring = async (): Promise<void> => {
   const seen = await snapshot();
   for (const id of [...retiring]) {
-    if (starting.has(id)) {
+    if (isStarting(id)) {
       continue;
     }
     try {
