@@ -576,7 +576,7 @@ const processesLeg = async (kit: Kit, scene: Scene): Promise<void> => {
   const retired = await scene.stateBecomes(wd.id, "archived");
   const left = [...(await sleeps(INSIDE_SLEEP)), ...(await sleeps(HOST_SLEEP))];
   // The keeper's process in the clone is ended as its boundary closes for
-  // good (boundary/lifecycle.ts `endUsers`), and the agent names it by its pid.
+  // good (boundary/stop.ts `endUsers`), and the agent names it by its pid.
   const ended = (await scene.fleet.logs("agent"))
     .split("\n")
     .find(
