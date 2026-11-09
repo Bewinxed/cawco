@@ -42,13 +42,14 @@ export interface ArtifactServiceDeps {
   /**
    * What decision page `name` drawn with `cards` does to its project's
    * links (decisions.ts `linksOf`): its `after`s naming no decision, and
-   * its decisions other pages come after. Said to its writer.
+   * its decisions other pages come after. Said to its writer. A project
+   * the hub does not keep is refused.
    */
   afterLinks: (
     projectId: string,
     name: string,
     cards: DecisionCard[]
-  ) => Promise<AfterLinks>;
+  ) => Promise<AfterLinks | { refused: string; status: 404 }>;
   /**
    * Who hears the person on `artifact`, which `writer` made: the one his
    * marks and the hub's own send of his answers go to (artifacts/taker.ts),

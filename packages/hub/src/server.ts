@@ -397,12 +397,7 @@ import {
   refiledStatements,
   scriptJson,
 } from "./decision-program";
-import {
-  createDecisions,
-  DecisionRefusal,
-  decidedTasks,
-  decisionRoutes,
-} from "./decisions";
+import { createDecisions, decidedTasks, decisionRoutes } from "./decisions";
 import type { DelegateResult } from "./delegate-result";
 import { delegateTypesRoutes } from "./delegate-types";
 import { createDelegateWaits, type NoticeMark } from "./delegate-waits";
@@ -4599,8 +4594,12 @@ export const createServer = (
       return { ok: true, revision: opened.frame.revision };
     },
     page: keptArtifactPage,
-    afterLinks: (projectId, name, cards) =>
-      decisions.linksOf(projectId, name, cards),
+    afterLinks: async (projectId, name, cards) => {
+      const links = await decisions.linksOf(projectId, name, cards);
+      return links instanceof ElysiaStatus
+        ? { status: links.status, refused: links.response.detail }
+        : links;
+    },
     keepPage: async (instance, name, page) => {
       const refused = await keepPage(instance, name, page);
       return refused && { status: refused.code, refused: refused.refused };
@@ -8635,13 +8634,13 @@ export const createServer = (
       );
       if ("refusal" in sent) {
         const { refusal: refused } = sent;
-        throw new DecisionRefusal(
-          refused.status === 409 || refused.status === 404
-            ? refused.status
-            : 503,
-          refused.message,
-          { cause: refused }
-        );
+        return {
+          status:
+            refused.status === 409 || refused.status === 404
+              ? refused.status
+              : 503,
+          refused: refused.message,
+        };
       }
       return sent.heard;
     },
