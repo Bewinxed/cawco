@@ -1,5 +1,5 @@
 /**
- * THE ONE RESOLVER of what a session hands another by name (core
+ * THE ONE RESOLVER of what a session hands another by name (hub
  * handed-input.ts `HeldInput`): a work item's report, an artifact, its pins,
  * a `find` hit's turns, a session's attachment, an item's assets, inline
  * text or a blob, each turned into named files by the hub, which holds them,
