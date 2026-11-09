@@ -629,7 +629,7 @@ export const createSends = (ctx: SendsContext) => {
       tellSender(row, reason);
     }
     // A compaction's own step refused: the compaction ends now, stopped,
-    // and what waited behind it goes ({@link stepEnded}).
+    // and what waited behind it goes (`stepEnded`).
     const plan = ctx.db.atLimit.compaction(row.instanceId);
     if (plan && ctx.stepUuids(plan).includes(row.uuid)) {
       queueMicrotask(() => ctx.advanceCompaction(row.instanceId));
@@ -681,7 +681,7 @@ export const createSends = (ctx: SendsContext) => {
    * it is the cut, not a failure of what it had read. `hold`: the
    * interrupt holds its delegated work until its parent, its conversation or the
    * reader writes to it (work-items.ts `interrupted`); a pause's own cut
-   * does not ({@link pauseBegan}).
+   * does not (`pauseBegan`).
    */
   const noteInterrupt = (instanceId: string, hold = true): void => {
     // A compaction after a move ends at an interrupt of either of its turns.
@@ -1150,7 +1150,7 @@ export const createSends = (ctx: SendsContext) => {
   };
 
   /**
-   * A send its machine hands back whole ({@link HeldSendFrame}): no process
+   * A send its machine hands back whole (core frames.ts `HeldSendFrame`): no process
    * took it — it found none, or the one it was handed to went away. The
    * hand-off it names must be its current one: a later hand-off overtook any
    * other, and owing that again would hand it twice. Once per session, what
@@ -2025,13 +2025,13 @@ export const createSends = (ctx: SendsContext) => {
    * never refused for the hold. It is accepted as owed (`sent_messages.owed`),
    * drawn queued like any pending send, and goes once the hold ends
    * ({@link releaseOwed}), in the order accepted. The holds: the session's
-   * start held while its machine installs an update ({@link holdingStarts}),
+   * start held while its machine installs an update (`holdingStarts`),
    * its machine's agent away within its reconnecting window
    * ({@link machinePresence}), its account at its limit or its compaction
    * after a move under way ({@link heldAtLimit}), its item finishing against
    * one who may reopen it (work-items.ts `finishingFor`), and a send owed before it
    * to the same session, which it never overtakes — but that compaction's
-   * own steps (`ahead`), which go first ({@link compactionSend}).
+   * own steps (`ahead`), which go first (`compactionSend`).
    *
    */
   const deliverSend = (
@@ -2049,7 +2049,7 @@ export const createSends = (ctx: SendsContext) => {
 
   /**
    * The session `instanceId`'s work goes on in now: the last of its
-   * continuations ({@link retireContinued}), or itself. A chain is followed
+   * continuations (`retireContinued`), or itself. A chain is followed
    * to its end; one that loops ends where it started.
    */
   const continuationNow = (instanceId: string): string => {
@@ -2367,7 +2367,7 @@ export const createSends = (ctx: SendsContext) => {
    * recap: nothing waits on the person to ask. A session with no news gets
    * nothing, nor does one this word already waits in. One send each: a
    * session whose process is up takes its turn now; one asleep is woken in
-   * its turn among the hub's own launches on its machine ({@link paceSpawn},
+   * its turn among the hub's own launches on its machine (`paceSpawn`,
    * SPAWN_PACE_MS apart), so a return to many never starts their processes
    * at once; one held (at its limit, its machine away or paused) gets it
    * when it next runs, as any send does.
@@ -2702,7 +2702,7 @@ export const createSends = (ctx: SendsContext) => {
    * hold), where a turn would only be refused; or, moved, its compaction
    * there under way ({@link compactions}), whose steps go first and alone, so
    * Claude Code never joins anything into its `/compact`; or its filing turn
-   * at its context threshold ({@link fileAtThreshold}), a plan of the same
+   * at its context threshold (`fileAtThreshold`), a plan of the same
    * kind, so the turn files and does nothing else. The controller's
    * own word at the reset is not held by its hold; a compaction holds
    * everything but its own steps, which go `ahead` and, handed back by a
@@ -2834,7 +2834,7 @@ export const createSends = (ctx: SendsContext) => {
    * that keeps it ({@link releaseOne}), with a line in the hub's log when it
    * changes; each hold's words name what releases it (delegation-actions.ts
    * `HOLD_WORDS`). A hub that starts reads each one back
-   * ({@link sayKeptAtStart}). Answers the record as stored.
+   * (`sayKeptAtStart`). Answers the record as stored.
    */
   const keepHold = (record: SentMessageRow): SentMessageRow => {
     const hold = holdOf(record);
@@ -2899,7 +2899,7 @@ export const createSends = (ctx: SendsContext) => {
       return "behind";
     }
     // A machine away was answered above, by why it is away; a start no hold
-    // keeps waits its turn among the hub's own ({@link paceSpawn}).
+    // keeps waits its turn among the hub's own (`paceSpawn`).
     const held = row && ctx.startHold(row.machineId)?.kind;
     return held && held !== "away" ? held : "starting";
   };
@@ -2967,7 +2967,7 @@ export const createSends = (ctx: SendsContext) => {
    * next (a person's message, a restart), so a process that keeps dying is
    * never started again by its own sends. A send goes only to a process that
    * is up or starting, and one whose start is still held keeps its sends
-   * owed until that start goes ({@link flushOwedStarts}). Each goes out as
+   * owed until that start goes (`flushOwedStarts`). Each goes out as
    * accepted now, under a hand-off of its own ({@link takeBack}): what its
    * machine settles at its register never counts it among the sends a
    * restart lost, as it never reached the machine before.
@@ -3115,7 +3115,7 @@ export const createSends = (ctx: SendsContext) => {
    * message since CawCo moved its checkout ({@link toldMove}). Its
    * record keeps it whole as handed (`envelope`, with this hand-off and that
    * line), in the same write as its new hand-off: what a machine that comes
-   * back is handed again ({@link handAgain}), and what a fold or a
+   * back is handed again (`handAgain`), and what a fold or a
    * hand-back owes again, is the send as it was last handed, never as it
    * was accepted. Its row is still drawn from its words as sent (`body`):
    * that line is the agent's alone.
