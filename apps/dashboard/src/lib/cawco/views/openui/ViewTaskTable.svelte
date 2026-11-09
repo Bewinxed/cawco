@@ -6,6 +6,7 @@
    */
   import { createTable, tableFeatures } from "@tanstack/svelte-table";
   import * as Table from "#lib/components/ui/table/index.js";
+  import { plainClick } from "#lib/platform/plain-click.js";
   import { fieldText, rowsOf, type ViewTaskRow, viewContext } from "./context";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
@@ -39,12 +40,7 @@
   });
 
   function open(event: MouseEvent, id: string) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey
-    ) {
+    if (!plainClick(event)) {
       return;
     }
     event.preventDefault();
