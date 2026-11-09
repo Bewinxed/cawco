@@ -75,6 +75,15 @@ export const PREVIEW_DOWNS = [
  * overlay embeds.ts `tellDrawn`).
  */
 export type PreviewDown = (typeof PREVIEW_DOWNS)[number];
+
+/** A machine's refusal of a preview's start that names the hop that is down: its kind travels beside its words (core frames.ts `ControlRefusal`). */
+export class PreviewStartDown extends Error {
+  readonly down: PreviewDown;
+  constructor(down: PreviewDown, message: string) {
+    super(message);
+    this.down = down;
+  }
+}
 export const PREVIEW_DOWN_META = "cawco-preview-down";
 /** The machine's own words for a `reach` or `server` failure, on the proxy's page beside {@link PREVIEW_DOWN_META}. */
 export const PREVIEW_WHY_META = "cawco-preview-why";
