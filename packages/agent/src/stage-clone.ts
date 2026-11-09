@@ -18,7 +18,7 @@
  *   never a place's: its `node_modules` are its own to write;
  * - installed by the project's own package manager inside its boundary
  *   ({@link installStage}, stage-install.ts, every stage's one install
- *   path), where its bun links from the workspaces' cache (boundary/
+ *   path), where its bun links from the workspaces' cache (boundary/package-managers.ts
  *   `writeBunConfig`);
  * - kept in step with the checkout ({@link syncStageClone}): a new HEAD
  *   fetched and checked out, then every path the checkout's `git status`
