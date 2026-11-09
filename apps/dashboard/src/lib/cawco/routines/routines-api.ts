@@ -14,7 +14,11 @@ import type { RelayView } from "@cawco/core/relays";
 import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
 import { hub } from "#lib/platform/hub.js";
-import { hubJson, refusedOrUnreached } from "#lib/platform/hub-read.js";
+import {
+  hubData,
+  hubJson,
+  refusedOrUnreached,
+} from "#lib/platform/hub-read.js";
 
 /** One run, as the hub answers it (times in ms). */
 export type RoutineRun = RoutineRunView;
@@ -216,38 +220,31 @@ export interface RoutineFormHub {
  * project's delegate type catalog.
  */
 export const routineFormHub: RoutineFormHub = {
-  create: async (projectId, draft) => {
-    const answer = await hub.api.routines.post({
-      projectId,
-      target: draft.target,
-      name: draft.name.trim(),
-      prompt: draft.prompt.trim(),
-      cron: draft.cron.trim(),
-      timeZone: draft.timeZone,
-      delegateType: draft.delegateType,
-    });
-    if (answer.error) {
-      throw refusedOrUnreached(answer);
-    }
-    return answer.data;
-  },
-  preview: async (cron, timeZone) => {
-    const answer = await hub.api.routines.schedule.get({
-      query: { cron: cron.trim(), timeZone },
-    });
-    if (answer.error) {
-      throw refusedOrUnreached(answer);
-    }
-    return answer.data;
-  },
+  create: (projectId, draft) =>
+    hubData(
+      hub.api.routines.post({
+        projectId,
+        target: draft.target,
+        name: draft.name.trim(),
+        prompt: draft.prompt.trim(),
+        cron: draft.cron.trim(),
+        timeZone: draft.timeZone,
+        delegateType: draft.delegateType,
+      }),
+      refusedOrUnreached
+    ),
+  preview: (cron, timeZone) =>
+    hubData(
+      hub.api.routines.schedule.get({
+        query: { cron: cron.trim(), timeZone },
+      }),
+      refusedOrUnreached
+    ),
   types: async (projectId) => {
-    const answer = await hub.api
-      .projects({ id: projectId })
-      ["delegate-types"].get();
-    if (answer.error) {
-      throw refusedOrUnreached(answer);
-    }
-    const catalog = answer.data;
+    const catalog = await hubData(
+      hub.api.projects({ id: projectId })["delegate-types"].get(),
+      refusedOrUnreached
+    );
     return catalog.types.map(({ name, description }) => ({
       name,
       description,
@@ -256,31 +253,19 @@ export const routineFormHub: RoutineFormHub = {
 };
 
 /** Pauses or resumes a routine, or keeps one past its days: the routine after. */
-export const updateRoutine = async (
+export const updateRoutine = (
   routineId: string,
   change: { enabled?: boolean; keep?: boolean }
-) => {
-  const answer = await hub.api.routines({ id: routineId }).patch(change);
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+) =>
+  hubData(
+    hub.api.routines({ id: routineId }).patch(change),
+    refusedOrUnreached
+  );
 
 /** Runs a routine now, beside its schedule: the run the hub started. */
-export const runRoutineNow = async (routineId: string) => {
-  const answer = await hub.api.routines({ id: routineId }).run.post();
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const runRoutineNow = (routineId: string) =>
+  hubData(hub.api.routines({ id: routineId }).run.post(), refusedOrUnreached);
 
 /** Deletes a routine; its past runs stay in the project's history. */
-export const deleteRoutine = async (routineId: string) => {
-  const answer = await hub.api.routines({ id: routineId }).delete();
-  if (answer.error) {
-    throw refusedOrUnreached(answer);
-  }
-  return answer.data;
-};
+export const deleteRoutine = (routineId: string) =>
+  hubData(hub.api.routines({ id: routineId }).delete(), refusedOrUnreached);
