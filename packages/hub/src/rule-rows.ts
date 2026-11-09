@@ -30,14 +30,18 @@ export const createRuleRows = (db: DbShape) => (list: Rule[]) => {
       removedAt: gone?.removedAt.getTime() ?? null,
     };
   };
-  return list.map((rule) => ({
-    ...rule,
-    stats: stats.get(rule.id) ?? {
-      ruleId: rule.id,
-      pending: 0,
-      totalFires: 0,
-      lastFiredAt: null,
-    },
-    orphaned: orphanOf(rule),
-  }));
+  return list.map((rule) => {
+    // Absent rather than undefined, as JSON sends it.
+    const orphaned = orphanOf(rule);
+    return {
+      ...rule,
+      stats: stats.get(rule.id) ?? {
+        ruleId: rule.id,
+        pending: 0,
+        totalFires: 0,
+        lastFiredAt: null,
+      },
+      ...(orphaned ? { orphaned } : {}),
+    };
+  });
 };
