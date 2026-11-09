@@ -77,7 +77,7 @@ const stateOf = (text: string): { state: StateAsk } | { link: string } => {
 
 const refused = (error: unknown) => {
   if (error instanceof ArtifactRefusal) {
-    return new Response(error.message, { status: error.status });
+    return refusal(error.status, "artifact-refused", error.message);
   }
   throw error;
 };

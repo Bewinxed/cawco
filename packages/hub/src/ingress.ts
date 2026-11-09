@@ -1788,7 +1788,7 @@ export const INGRESS_TOOLS: ReadonlySet<string> = new Set([
   "connector_poll_delete",
 ]);
 
-const attempt = refusalAttempt(IngressRefusal);
+const attempt = refusalAttempt(IngressRefusal, "ingress-refused");
 
 const ROUTE_FIELDS = {
   source: t.String(),

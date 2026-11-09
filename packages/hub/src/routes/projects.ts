@@ -214,13 +214,13 @@ export const projectRoutes = ({
           ),
         }),
       },
-      async ({ params, body, status }) => {
+      async ({ params, body }) => {
         try {
           const { project } = await projectEdits.edit(params.id, body);
           return { ...projectOut(project), cap: caps.capOf(project) };
         } catch (error) {
           if (error instanceof ProjectEditRefusal) {
-            return status(error.status, error.message);
+            return refusal(error.status, "project-edit-refused", error.message);
           }
           throw error;
         }
@@ -293,7 +293,7 @@ export const projectRoutes = ({
       {
         body: t.Optional(t.Object({ fromDisk: t.Optional(t.Boolean()) })),
       },
-      async ({ params, body, status, request }) => {
+      async ({ params, body, request }) => {
         const fromDisk = body?.fromDisk === true;
         const head = `${projectTrashWords.deleteLine(params.id)} ${askerOf(request)} fromDisk=${fromDisk}`;
         const machines =
@@ -323,7 +323,11 @@ export const projectRoutes = ({
             console.log(
               `${head} outcome=refused status=${error.status}: ${error.message}`
             );
-            return status(error.status, error.message);
+            return refusal(
+              error.status,
+              "project-delete-refused",
+              error.message
+            );
           }
           throw error;
         }
@@ -344,7 +348,7 @@ export const projectRoutes = ({
           })
         ),
       },
-      async ({ params, body, status, request }) => {
+      async ({ params, body, request }) => {
         const asked = askerOf(request);
         try {
           const restored = await forgottenProjects.restore(
@@ -371,7 +375,11 @@ export const projectRoutes = ({
             console.log(
               `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=refused status=${error.status}: ${error.message}`
             );
-            return status(error.status, error.message);
+            return refusal(
+              error.status,
+              "project-restore-refused",
+              error.message
+            );
           }
           throw error;
         }
@@ -381,12 +389,12 @@ export const projectRoutes = ({
     .post(
       "/api/projects/:id/places",
       { body: t.Object({ machineId: t.String(), path: t.String() }) },
-      async ({ params, body, status }) => {
+      async ({ params, body }) => {
         try {
           return await addProjectPlace(params.id, body.machineId, body.path);
         } catch (error) {
           if (error instanceof PlaceRefusal) {
-            return status(error.status, error.message);
+            return refusal(error.status, "place-refused", error.message);
           }
           throw error;
         }

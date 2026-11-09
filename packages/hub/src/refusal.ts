@@ -1,4 +1,4 @@
-import { problem, status, type ValidationErrorResponse } from "elysia";
+import { problem, type ValidationErrorResponse } from "elysia";
 
 /**
  * A refusal a route answers: its status, a stable code naming the cause, and
@@ -63,17 +63,24 @@ const rethrow = (error: unknown): never => {
   throw error;
 };
 
-/** A refusal of `Kind` as the route's answer; anything else goes to `otherwise`, thrown on by default. */
+/** A thrown refusal of `Kind` as the route's {@link refusal}, under `code`; anything else goes to `otherwise`, thrown on by default. */
 export const refusalAnswer =
-  <R = never>(Kind: RefusalKind, otherwise: (error: unknown) => R = rethrow) =>
+  <const Code extends string, R = never>(
+    Kind: RefusalKind,
+    code: Code,
+    otherwise: (error: unknown) => R = rethrow
+  ) =>
   (error: unknown) =>
     error instanceof Kind
-      ? status(error.status, error.message)
+      ? refusal(error.status, code, error.message)
       : otherwise(error);
 
-/** Runs a route's work, answering a refusal of `Kind` with its status. */
-export const refusalAttempt = (Kind: RefusalKind) => {
-  const answer = refusalAnswer(Kind);
+/** Runs a route's work, answering a thrown refusal of `Kind` as {@link refusalAnswer}. */
+export const refusalAttempt = <const Code extends string>(
+  Kind: RefusalKind,
+  code: Code
+) => {
+  const answer = refusalAnswer(Kind, code);
   return async <T>(work: () => T | Promise<T>) => {
     try {
       return await work();

@@ -1937,7 +1937,7 @@ export const createCaw = ({
 
 export type Caw = ReturnType<typeof createCaw>;
 
-const answer = refusalAnswer(CawRefusal, (error) =>
+const answer = refusalAnswer(CawRefusal, "caw-refused", (error) =>
   refusal(
     502,
     "caw-failed",

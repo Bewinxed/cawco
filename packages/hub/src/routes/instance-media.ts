@@ -32,12 +32,13 @@ export const instanceMediaRoutes = ({
           write: t.Any(),
         }),
       },
-      async ({ params, body, status, request, server }) => {
+      async ({ params, body, request, server }) => {
         const [row] = db.listedInstancesByIds([params.id]);
         const write = readForgeAsk({ repo: "-", write: body.write })?.write;
         if (!(row && write)) {
-          return status(
+          return refusal(
             row ? 400 : 404,
+            "forge-post-refused",
             row ? "forge_post takes one write." : "Unknown calling session."
           );
         }

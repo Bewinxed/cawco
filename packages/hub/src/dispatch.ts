@@ -137,7 +137,7 @@ import type {
 } from "@cawco/core/task-views";
 import type { StageKind, TaskMover } from "@cawco/core/views";
 import { judgedWords } from "@cawco/core/words/judged";
-import { Elysia, status, t } from "elysia";
+import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
@@ -159,6 +159,7 @@ import {
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
+import { refusal } from "./refusal";
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
@@ -2489,7 +2490,7 @@ export type Dispatcher = ReturnType<typeof createDispatcher>;
 /** A refusal or failure as the route's answer. */
 const answer = (error: unknown) => {
   const { code, message } = failure(error);
-  return status(code, message);
+  return refusal(code, "dispatch-refused", message);
 };
 
 /** Runs a route's work, a failure answered with its status. */

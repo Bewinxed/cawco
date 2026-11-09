@@ -85,7 +85,7 @@ export const fleetSkillRoutes = (
             ...boundFields,
           }),
         },
-        async ({ params, body, set, status }) => {
+        async ({ params, body, set }) => {
           if (!SKILL_NAME.test(params.name)) {
             return refusal(
               400,
@@ -138,7 +138,7 @@ export const fleetSkillRoutes = (
           const fromFolder = await installFromFolder(
             params.name,
             { ...body, source: body.source },
-            (code, refused) => status(code, refused)
+            (code, refused) => refusal(code, "skill-refused", refused)
           );
           if (fromFolder) {
             return fromFolder;

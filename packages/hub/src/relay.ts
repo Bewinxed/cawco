@@ -1318,7 +1318,7 @@ export const RELAY_TOOLS: ReadonlySet<string> = new Set([
   "relay_remove",
 ]);
 
-const attempt = refusalAttempt(RelayRefusal);
+const attempt = refusalAttempt(RelayRefusal, "relay-refused");
 
 /** What a relay is made of, as the owner sends it to preview or make one. */
 const RELAY_FIELDS = t.Object({

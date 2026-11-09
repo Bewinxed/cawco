@@ -161,7 +161,7 @@ export const instanceEditRoutes = (
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates one multi-field patch, applies its live mode, and only then changes metadata
-        async ({ params, body, status }) => {
+        async ({ params, body }) => {
           const { kind, permissionMode, model } = body;
           const title = body.title?.trim();
           if (body.title !== undefined && !title) {
@@ -196,7 +196,7 @@ export const instanceEditRoutes = (
           if (permissionMode !== undefined) {
             const refused = await applyPermissionMode(current, permissionMode);
             if (refused) {
-              return status(refused.code, refused.error);
+              return refusal(refused.code, "mode-refused", refused.error);
             }
           }
           const named = title
