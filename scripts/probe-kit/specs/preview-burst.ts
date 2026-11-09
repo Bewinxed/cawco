@@ -911,7 +911,7 @@ async function realJoin(kit: Kit): Promise<void> {
     Boolean,
     300_000
   ).catch(() => "no answer")) as string;
-  // The sheet's own origin (hub server.ts `frameAddress`).
+  // The sheet's own origin (hub artifact-pages.ts `frameAddress`).
   const id = ANSWERED_ID.exec(created)?.[1] ?? "";
   const { port } = (await (
     await fetchHub(
@@ -949,7 +949,7 @@ async function realJoin(kit: Kit): Promise<void> {
     .catch(() => false);
   await page.close();
   // The bridge is the preview's, named by the hub's key for the artifact's
-  // own origin (server.ts `frameOrigin`: `embedKey` of `artifacts.origin`),
+  // own origin (artifact-pages.ts `frameOrigin`: `embedKey` of `artifacts.origin`),
   // never by the session: a sheet has been served on its artifact's own
   // origin since f536f2675, and that origin is the row's own since 9e9a255cf.
   const { artifactOrigin } =

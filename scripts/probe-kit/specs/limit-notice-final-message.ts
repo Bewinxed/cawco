@@ -24,7 +24,7 @@
  * - (no reply) a turn ending on no_reply_needed with nothing after is
  *   silent; one that began after it is not.
  * - (worked) a turn that called a tool has worked for every frame after it
- *   (server.ts `takeCredentialTurn` does not run it again); one that died
+ *   (limit-moves.ts `takeCredentialTurn` does not run it again); one that died
  *   there with no result, then a next turn whose first frame is Claude
  *   Code's credential refusal: that turn has not worked, so it runs again.
  *
