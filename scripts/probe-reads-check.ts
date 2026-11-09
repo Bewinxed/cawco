@@ -21,13 +21,29 @@
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import ts from "typescript";
 
 const ROOT = join(import.meta.dir, "..");
 /** A wait for the notice: its tag's name, however the probe matches it. */
 const WAITS = /artifact-responses/u;
-/** The session's read of an artifact through Eden (`.instances({…}).artifacts({…}).get(`); its `/view` is the person's. */
-const SESSION_READ =
-  /\.instances\(\{[^)]*\}\)\s*\.artifacts\(\{[^)]*\}\)\s*\.get\(/gu;
+
+/** Whether `node` is a call of `.<name>(…)`. */
+const callOf = (node: ts.Node, name: string): node is ts.CallExpression =>
+  ts.isCallExpression(node) &&
+  ts.isPropertyAccessExpression(node.expression) &&
+  node.expression.name.text === name;
+
+/** Whether `node` is the session's read of an artifact through Eden (`.instances(…).artifacts(…).get(…)`); its `/view` is the person's. */
+const isSessionRead = (node: ts.CallExpression): boolean => {
+  const callee = node.expression;
+  return (
+    ts.isPropertyAccessExpression(callee) &&
+    callee.name.text === "get" &&
+    callOf(callee.expression, "artifacts") &&
+    ts.isPropertyAccessExpression(callee.expression.expression) &&
+    callOf(callee.expression.expression.expression, "instances")
+  );
+};
 
 const filesUnder = (dir: string): string[] =>
   readdirSync(dir).flatMap((name) => {
@@ -40,14 +56,24 @@ const filesUnder = (dir: string): string[] =>
     return path.endsWith(".ts") ? [path] : [];
   });
 
+/** Each line of `text` (from `file`) that reads the session's read route. */
+const readsIn = (file: string, text: string): string[] => {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  const lines: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && isSessionRead(node)) {
+      const { line } = source.getLineAndCharacterOfPosition(node.getStart());
+      lines.push(`${relative(ROOT, file)}:${line + 1}`);
+    }
+    node.forEachChild(visit);
+  };
+  visit(source);
+  return lines;
+};
+
 /** Each line of `text` (from `file`) that reads the session's read route, when `text` waits for a responses notice. */
 export const sessionReads = (file: string, text: string): string[] =>
-  WAITS.test(text)
-    ? [...text.matchAll(SESSION_READ)].map(
-        (read) =>
-          `${relative(ROOT, file)}:${text.slice(0, read.index).split("\n").length}`
-      )
-    : [];
+  WAITS.test(text) ? readsIn(file, text) : [];
 
 /** Planted: a probe waiting for the notice that polls the session's read (line 3) and reads his view (line 4); one that waits for nothing may read it. */
 const PLANTED_WAITS = `const told = (one: Seen) => one.last.includes("[cawco:artifact-responses id=");
