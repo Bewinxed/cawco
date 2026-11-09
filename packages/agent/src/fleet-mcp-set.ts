@@ -2,7 +2,7 @@
  * The fleet's own MCP servers as this machine launches them, every command
  * already resolved (mcp-launcher.ts); each project's placed copies are in
  * their place's file (fleet-place-set.ts). Written whole by each converge of
- * the servers (session.ts `#syncFleet`) into a file of CawCo's own
+ * the servers (fleet-converger.ts `#syncFleet`) into a file of CawCo's own
  * ({@link fleetMcpSetFile}), and
  * read by every CawCo session as it starts and as the fleet changes: Claude
  * Code's through the SDK's `mcpServers` and `setMcpServers`, pi's through
