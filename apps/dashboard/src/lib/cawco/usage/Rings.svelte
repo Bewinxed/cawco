@@ -32,7 +32,7 @@
    * motion: every change lands at once.
    */
   import { onMount, untrack } from "svelte";
-  import { CURVE, dur, motionOk } from "../motion/curves.svelte";
+  import { CURVE, dur, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import type { RingAccount } from "./rings";
 
   let {

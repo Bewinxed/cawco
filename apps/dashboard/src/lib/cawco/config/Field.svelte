@@ -7,9 +7,9 @@
    * something, or nothing, to say.
    */
   import type { Snippet } from "svelte";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { crossIn, crossOut } from "#lib/platform/motion/curves.svelte.js";
+  import { unfold } from "#lib/platform/motion/fold.svelte.js";
+  import { morph } from "#lib/platform/motion/morph.svelte.js";
 
   let {
     id,

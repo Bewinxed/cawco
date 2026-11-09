@@ -3,8 +3,6 @@
     Toaster as Sonner,
     type ToasterProps as SonnerProps,
   } from "svelte-sonner";
-  import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
-  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconError,
@@ -12,6 +10,8 @@
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
+  import { navSheet } from "#lib/platform/motion/clock.svelte.js";
+  import { dur, ease, motionOk } from "#lib/platform/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { cn } from "#lib/utils.js";
 

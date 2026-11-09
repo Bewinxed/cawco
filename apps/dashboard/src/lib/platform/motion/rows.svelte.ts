@@ -2,8 +2,8 @@ import {
   deliverWithRoot,
   type FrameObserver,
   frameObserver,
-} from "#lib/cawco/frame-observer.js";
-import { watchRendered } from "#lib/utils/rendered.js";
+} from "#lib/platform/frame-observer.js";
+import { watchRendered } from "#lib/platform/rendered.js";
 import {
   dur,
   ease,

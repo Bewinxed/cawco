@@ -6,15 +6,15 @@
    * screen under 900px — the same entries at a touch height.
    */
   import { configureWords as words } from "@cawco/core/words/configure";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
     dur,
     easeOut,
     motionOk,
     popScale,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
-  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  } from "#lib/platform/motion/curves.svelte.js";
   import { badgeOf, countOf } from "./counts.svelte";
   import { unsavedIn } from "./drafts.svelte";
   import { GROUPS, type SectionSlug } from "./sections";

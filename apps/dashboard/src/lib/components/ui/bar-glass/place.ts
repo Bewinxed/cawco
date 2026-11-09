@@ -11,7 +11,7 @@
  * change of the glass's markup and, in the next frame (frameObserver), of
  * any item's size.
  */
-import { frameObserver } from "#lib/cawco/frame-observer.js";
+import { frameObserver } from "#lib/platform/frame-observer.js";
 
 const PART =
   '[data-bar-item], button, a[href], [role="button"], [role="tablist"], [role="radiogroup"], [role="group"]';

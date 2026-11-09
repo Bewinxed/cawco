@@ -4,8 +4,9 @@
  * session than the others, and none of them flashes through the id, the
  * folder and a mid-transcript message on the way to the real title.
  */
+
+import type { HubRead } from "#lib/platform/hub-read.js";
 import { cawco } from "./client.svelte";
-import type { HubRead } from "./hub-read";
 import { resolveSessionTitle } from "./links";
 import { sessionAnswer } from "./session-names.svelte";
 import { workingSet } from "./working-set.svelte";
