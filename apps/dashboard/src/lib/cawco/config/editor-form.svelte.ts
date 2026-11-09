@@ -8,8 +8,8 @@
  * the editor's head, the row kept. Made as its editor starts.
  */
 import { detach } from "@cawco/core/detach";
+import { failureWords as message } from "#lib/platform/hub-read.js";
 import { goto } from "$app/navigation";
-import { failureWords as message } from "../hub-read";
 import { savedShown } from "./EditorFooter.svelte";
 
 /** `said` when `name`, trimmed, is another row's: two rows of one name cannot be told apart. */

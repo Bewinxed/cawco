@@ -23,7 +23,11 @@
  * the stylesheet's parking places take over again.
  */
 import { flushSync } from "svelte";
-import { integrate, spring as play, type Sample } from "../motion/spring";
+import {
+  integrate,
+  spring as play,
+  type Sample,
+} from "#lib/platform/motion/spring.js";
 import { catchSettle, gatherParked, type Parked } from "./parked";
 import { type LeafNode, workspace } from "./workspace.svelte";
 
