@@ -23,8 +23,6 @@ export interface HarnessTraits {
    * credential the harness is handed, and a session's model picks which.
    */
   readonly accountDir: boolean;
-  /** A model id on it may be bare, one unique among its providers' rows, and is read to its full id off the harness's report. */
-  readonly bareModelIds: boolean;
   /** After a compaction's boundary the session may still report the compaction failed (hub compaction.ts `compactionFailedAfterBoundary`). */
   readonly boundaryBeforeCompactionFailure: boolean;
   /**
@@ -54,8 +52,6 @@ export interface HarnessTraits {
    * proves no absence by not being listed.
    */
   readonly custody: "keeper" | "server";
-  /** A session that names no model runs its harness's pick for its directory, asked first (hub server.ts `asksPiDefault`). */
-  readonly defaultModelFromDirectory: boolean;
   /**
    * What the machine's own sign-in to it is, the one CawCo can move into an
    * account. `dir`: one login, its whole home config dir (`~/.claude`).
@@ -101,6 +97,13 @@ export interface HarnessTraits {
   /** Whether a machine with this harness missing fails the fleet's check: the one every machine runs, and that accounts sign in on. */
   readonly requiredOnEveryMachine: boolean;
   /**
+   * Whether it resolves a model name to `provider/id` itself, on each
+   * machine: a bare id (one unique among its providers' rows) by the
+   * machine's report of its resolution, and no model or `default` by its
+   * pick in the session's directory, asked of the machine at the start.
+   */
+  readonly resolvesModelNames: boolean;
+  /**
    * Which row is the anchor of a rewind. `user-turn`: the selected user turn
    * itself. `assistant-before`: the assistant frame before it.
    */
@@ -116,7 +119,6 @@ export interface HarnessTraits {
 
 const CLAUDE_TRAITS = {
   accountDir: true,
-  bareModelIds: false,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: true,
   cleanStart: true,
@@ -124,7 +126,6 @@ const CLAUDE_TRAITS = {
   contextWindow: "hub",
   costMeaning: "estimated",
   custody: "keeper",
-  defaultModelFromDirectory: false,
   listsAllConversations: true,
   liveSkillReload: true,
   modelCatalog: "account",
@@ -136,6 +137,7 @@ const CLAUDE_TRAITS = {
   queuesSends: true,
   readsStoredContext: true,
   requiredOnEveryMachine: true,
+  resolvesModelNames: false,
   rewindAnchor: "assistant-before",
   soleProvider: "anthropic",
   startsWithoutConversation: false,
@@ -143,7 +145,6 @@ const CLAUDE_TRAITS = {
 
 const OPENCODE_TRAITS = {
   accountDir: false,
-  bareModelIds: false,
   boundaryBeforeCompactionFailure: true,
   catalogProvesGone: false,
   cleanStart: false,
@@ -151,7 +152,6 @@ const OPENCODE_TRAITS = {
   contextWindow: "catalog",
   costMeaning: "real",
   custody: "server",
-  defaultModelFromDirectory: false,
   listsAllConversations: false,
   liveSkillReload: false,
   modelCatalog: "machine",
@@ -163,6 +163,7 @@ const OPENCODE_TRAITS = {
   queuesSends: false,
   readsStoredContext: false,
   requiredOnEveryMachine: false,
+  resolvesModelNames: false,
   rewindAnchor: "user-turn",
   soleProvider: null,
   startsWithoutConversation: true,
@@ -170,7 +171,6 @@ const OPENCODE_TRAITS = {
 
 const PI_TRAITS = {
   accountDir: false,
-  bareModelIds: true,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: false,
   cleanStart: true,
@@ -178,7 +178,6 @@ const PI_TRAITS = {
   contextWindow: "catalog",
   costMeaning: "real",
   custody: "keeper",
-  defaultModelFromDirectory: true,
   listsAllConversations: true,
   liveSkillReload: false,
   modelCatalog: "machine",
@@ -190,13 +189,14 @@ const PI_TRAITS = {
   queuesSends: false,
   readsStoredContext: false,
   requiredOnEveryMachine: false,
+  resolvesModelNames: true,
   rewindAnchor: "assistant-before",
   soleProvider: null,
   startsWithoutConversation: false,
 } as const satisfies HarnessTraits;
 
 /** Each harness's traits: the one table. */
-export const HARNESS_TRAITS = {
+const HARNESS_TRAITS = {
   claude: CLAUDE_TRAITS,
   opencode: OPENCODE_TRAITS,
   pi: PI_TRAITS,
@@ -210,7 +210,6 @@ export const HARNESS_TRAITS = {
  */
 const UNKNOWN_TRAITS: HarnessTraits = {
   accountDir: false,
-  bareModelIds: false,
   boundaryBeforeCompactionFailure: false,
   catalogProvesGone: false,
   cleanStart: true,
@@ -218,7 +217,6 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   contextWindow: "catalog",
   costMeaning: "real",
   custody: "keeper",
-  defaultModelFromDirectory: false,
   listsAllConversations: true,
   liveSkillReload: false,
   modelCatalog: "machine",
@@ -230,6 +228,7 @@ const UNKNOWN_TRAITS: HarnessTraits = {
   queuesSends: false,
   readsStoredContext: false,
   requiredOnEveryMachine: false,
+  resolvesModelNames: false,
   rewindAnchor: "assistant-before",
   soleProvider: null,
   startsWithoutConversation: false,
