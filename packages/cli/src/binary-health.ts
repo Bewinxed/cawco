@@ -10,11 +10,12 @@
  * whether it is the hub's silence rather than the build's own
  * ({@link HealthProblem}).
  */
-import type { BinaryInstallation } from "./binary-installation";
-import { type Bounded, readWithin } from "./bounded";
-import { hubRequest } from "./hub-request";
-import { machineFetch } from "./machine-key";
-import { unhandled } from "./unhandled";
+
+import { machineFetch } from "@cawco/agent/machine-fetch";
+import type { BinaryInstallation } from "@cawco/core/binary-installation";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { hubRequest } from "@cawco/core/hub-request";
+import { unhandled } from "@cawco/core/unhandled";
 
 /**
  * How long one request of a probe is waited on: 30 s, and never past the

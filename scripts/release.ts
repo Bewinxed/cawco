@@ -52,12 +52,12 @@ import {
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { machineFetch } from "../packages/agent/src/machine-fetch";
 import { AGENT_BUNDLE_EXECUTABLE } from "../packages/core/src/agent-bundle";
 import { releaseTag } from "../packages/core/src/binary-distribution";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
 import { hubInit, hubRequest } from "../packages/core/src/hub-request";
-import { machineFetch } from "../packages/core/src/machine-key";
 import { hubDbPath } from "../packages/core/src/paths/hub";
 import {
   type ReleaseManifest,
