@@ -35,15 +35,15 @@ import { HOST_FILES } from "./protocol";
 const BoundaryShape = z.object({
   /** The temp root its sessions' Claude Code CLIs run with (`CLAUDE_CODE_TMPDIR`, core `workspaceClaudeTmpDir`): written on the host, read inside, so a background task's output is there for the session's shell. */
   claudeTmp: z.string(),
-  /** `exec [--session [--cwd-out FILE] | --claude] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}), and FILE gets the directory it ended in; `--claude` is a claude session's shell prefix's ({@link execScript}). */
+  /** `exec [--session [--cwd-out FILE] | --claude] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}), and FILE gets the directory it ended in; `--claude` is a claude session's shell prefix's (exec.ts `execScript`). */
   exec: z.string(),
-  /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
+  /** The PreToolUse hook a claude session runs before each tool call (hook-judge.ts `hookScript`). */
   hook: z.string(),
   /** The process sessiond holds: the srt host (Linux) or the runner (macOS). */
   pid: z.number(),
   /** The workspace's policy file, which every harness judges its file tools by (`workspace-policy.ts`). */
   policy: z.string(),
-  /** A claude session's shell prefix, `CLAUDE_CODE_SHELL_PREFIX` ({@link claudePrefixScript}): every shell command, shell-form hook and stdio MCP start of its CLI runs through it, inside the boundary. */
+  /** A claude session's shell prefix, `CLAUDE_CODE_SHELL_PREFIX` (hook-judge.ts `claudePrefixScript`): every shell command, shell-form hook and stdio MCP start of its CLI runs through it, inside the boundary. */
   prefix: z.string(),
   /** The workspace's scratch dir, its commands' `TMPDIR` (on macOS by its short name, `workspaceTmpDir`): `~/.cawco/tmp/<id8>` (`workspaceScratchDir`), on disk and outside the clone. */
   scratch: z.string(),
@@ -51,7 +51,7 @@ const BoundaryShape = z.object({
 
 export type Boundary = Readonly<z.infer<typeof BoundaryShape>>;
 
-/** A form's parts, each by name with its own hash ({@link Plan.parts}). */
+/** A form's parts, each by name with its own hash (plan.ts `Plan.parts`). */
 const FormPartsSchema = z.record(z.string(), z.string()).readonly();
 
 export type FormParts = z.infer<typeof FormPartsSchema>;
@@ -59,8 +59,8 @@ export type FormParts = z.infer<typeof FormPartsSchema>;
 /** What `boundary.json` keeps: the boundary, and what proves it is still the one this machine started. */
 const HeldSchema = BoundaryShape.extend({
   /**
-   * The form it was started in ({@link formOf}). One of another form, or of
-   * none, is handed over ({@link handOver}).
+   * The form it was started in (plan.ts `formOf`). One of another form, or of
+   * none, is handed over (ensure.ts `handOver`).
    */
   form: z.string().optional(),
   /**
@@ -70,8 +70,8 @@ const HeldSchema = BoundaryShape.extend({
    */
   gen: z.string(),
   /**
-   * What its form was made of, part by part ({@link Plan.parts}), so a move
-   * names what moved ({@link movedParts}). None on one an earlier build
+   * What its form was made of, part by part (plan.ts `Plan.parts`), so a move
+   * names what moved (plan.ts `movedParts`). None on one an earlier build
    * started.
    */
   parts: FormPartsSchema.optional(),
@@ -81,10 +81,9 @@ const HeldSchema = BoundaryShape.extend({
 export type Held = z.infer<typeof HeldSchema>;
 
 /**
- * An older boundary still running beside the current one ({@link handOver}):
+ * An older boundary still running beside the current one (ensure.ts `handOver`):
  * its record. The commands still running in it, or on their way into it,
- * are each its executor's own mark in its generation's dir ({@link
- * commandsIn}).
+ * are each its executor's own mark in its generation's dir (processes.ts `commandsIn`).
  */
 export type Retiring = Held;
 
@@ -96,7 +95,7 @@ export interface Place {
   /**
    * Every process of the sandbox when its runner was ready (its init, srt's
    * shell and socat bridges, the runner): anything else that descends from
-   * its init is the workspace's work ({@link inTree}, {@link busyOld}).
+   * its init is the workspace's work (processes.ts `inTree`, processes.ts `busyOld`).
    */
   readonly idle: readonly number[];
   /** The sandbox's init, whose mount table the executor checks before each command. */
@@ -136,9 +135,8 @@ export const grantedPolicy = (
 
 /**
  * Lines for a workspace's next session command, which its executor shows on
- * stderr before the command's own output and then removes ({@link
- * execScript}'s `--session`): what CawCo did to the work without being asked
- * ({@link replaceNarrowed}). In the state dir, which nothing inside writes.
+ * stderr before the command's own output and then removes (exec.ts `execScript`'s `--session`): what CawCo did to the work without being asked
+ * (ensure.ts `replaceNarrowed`). In the state dir, which nothing inside writes.
  */
 export const noticeOf = (id: string): string => join(stateDir(id), "notice");
 
@@ -274,7 +272,7 @@ export const refusal = (id: string, why: string): Error =>
   );
 
 /**
- * `read`'s answer; a {@link DamagedRecord} it finds is reported
+ * `read`'s answer; a ../../core/src/state-file.ts `DamagedRecord` it finds is reported
  * ({@link reportDamaged}) and thrown on: what reads the record stops there,
  * and every other workspace goes on.
  */
@@ -291,7 +289,7 @@ export const reported = async <T>(read: Promise<T>): Promise<T> => {
 
 /**
  * The record of workspace `id`'s running boundary; undefined when there is
- * none or it cannot be read, and a {@link DamagedRecord}, reported, when it
+ * none or it cannot be read, and a ../../core/src/state-file.ts `DamagedRecord`, reported, when it
  * is there and does not parse.
  */
 export const readHeld = (id: string): Promise<Held | undefined> =>
@@ -370,7 +368,7 @@ export const readRetiring = async (id: string): Promise<Retiring[]> => {
   return records.filter((record): record is Retiring => Boolean(record));
 };
 
-/** Each workspace's close under way (quiet, {@link closeQuietly}, or an archive's, {@link closedWhile}); it never rejects. An ensure waits for it. */
+/** Each workspace's close under way (quiet, looks.ts `closeQuietly`, or an archive's, holding.ts `closedWhile`); it never rejects. An ensure waits for it. */
 const closing = new Map<string, Promise<void>>();
 
 /** Workspace `id`'s close under way, if any. */

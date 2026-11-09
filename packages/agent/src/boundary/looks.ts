@@ -135,9 +135,9 @@ let narrowAgain: { readonly cause: NarrowCause } | undefined;
  * checked for a narrowed access ({@link recheckNarrowed}) at once:
  *
  * - its accounts (`accounts.json`) and its sessions' spill folders
- *   (`spills.json`), which only grow: written by {@link boundaryFor} and the
+ *   (`spills.json`), which only grow: written by control.ts `boundaryFor` and the
  *   workspace's create, each followed by an ensure, which checks
- *   ({@link ensure});
+ *   (ensure.ts `ensure`);
  * - its project (`project.json`): a change of it checks at once
  *   ({@link setProject}, written by those and a browser door's);
  * - its project's folder on the hub (`projectFolder`): moved away only by
@@ -149,7 +149,7 @@ let narrowAgain: { readonly cause: NarrowCause } | undefined;
  *   (`accountLayers`' config dirs, `credentialStores`): an account's sign-in
  *   or removal checks ({@link accountsChangedHere});
  * - this build (`binaryRoot`, the form): the agent's start re-arms every
- *   boundary in use, through an ensure ({@link rearmHooks});
+ *   boundary in use, through an ensure (control.ts `rearmHooks`);
  * - the clone's alternates, the toolchains under home (`homeToolchains`),
  *   Xcode's developer dir, a place's own files (`ownerOnlyIn`, `linkedIn`,
  *   `protectedIn`) and every link a path resolves through: no event says
@@ -238,7 +238,7 @@ const recheckNow = async (
 /**
  * The workspaces whose boundary is in use: a session attached, a live work
  * item, a preview, a command, or work running in it ({@link liveWhy},
- * {@link workLeft}); every running one while the hub has not said which
+ * narrowing.ts `workLeft`); every running one while the hub has not said which
  * items are live.
  */
 const inUseNow = async (): Promise<string[]> => {
@@ -273,15 +273,15 @@ const inUseNow = async (): Promise<string[]> => {
 /**
  * Each boundary in use whose form's part the fleet sync writes moved since
  * it started ({@link SYNCED_PART}, fleet-converged.ts `syncedHeld`), handed over to one
- * of the form now as soon as nothing runs in it ({@link ensure}'s
- * lifecycle.ts `replaceOlder`), so a session's next command, hook or server start
+ * of the form now as soon as nothing runs in it (ensure.ts `ensure`'s
+ * ensure.ts `replaceOlder`), so a session's next command, hook or server start
  * runs in it: after a fleet sync made a path a boundary reads (the fleet's
  * hook scripts), a session started before it reaches what it holds. A sync
  * that moved nothing a boundary reads moves no form part of its own, and
  * nothing is handed over for it: a form that moved otherwise (a build, the
- * workspace's policy) is the boundary's next use's to take ({@link ensure}),
- * and one already waiting for its work to end ({@link stale}) is handed over
- * by the look that waits (lifecycle.ts `handOverStale`). One started by a build
+ * workspace's policy) is the boundary's next use's to take (ensure.ts `ensure`),
+ * and one already waiting for its work to end (staleness.ts `stale`) is handed over
+ * by the look that waits (stale-look.ts `handOverStale`). One started by a build
  * that kept no parts is its next use's too. One not in use takes the form
  * now at its next ensure.
  */
@@ -373,7 +373,7 @@ export const liveFacts = async (
  * everything in them, and its judges and doors, as nothing holds it any more:
  * its clone, state dir, scratch dir, policy, hook and executor stay. Its
  * record goes (`boundary.json`), so a judge's exit arms nothing again
- * (lifecycle.ts `watchJudge`) and its executor, until the next start, says the
+ * (judge-process.ts `watchJudge`) and its executor, until the next start, says the
  * boundary is not running. Its next {@link ensureBoundary} (a session's
  * spawn or wake, the hub's land or check) starts a new
  * one and arms it. The gate is up while it closes, and an executor already on
@@ -490,7 +490,7 @@ const sweepQuiet = async (): Promise<void> => {
  * another build, refuses or misjudges each one. A workspace between states
  * ({@link settling}) is looked at on the next beat; so is every workspace
  * while the start-up reading is not whole (blocked is its own named state,
- * lifecycle.ts `ArmingBlocked`), and the start's arming is waited out first.
+ * arming.ts `ArmingBlocked`), and the start's arming is waited out first.
  *
  * Born red, once: dad89261b^ (the start before it revived a workspace a CLI
  * runs in with no boundary), with this check laid on, a keeper holding a
@@ -614,7 +614,7 @@ let quietTimer: ReturnType<typeof setInterval> | undefined;
  * then at every live workspace's judge ({@link judgesAnswer}); and on macOS
  * ends what boundaries started before this build's membership names left
  * once their workspace went ({@link lookAtPreTag}), and looks at each
- * boundary's folder (lifecycle.ts `watchCloneOf`). Once per agent.
+ * boundary's folder (watch.ts `watchCloneOf`). Once per agent.
  */
 export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   holders = given;
@@ -630,7 +630,7 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
     }
     looking = true;
     // Each macOS boundary's folder looked at too: a deletion its watchers
-    // missed closes its boundary within a sweep ({@link watchCloneOf}).
+    // missed closes its boundary within a sweep (watch.ts `watchCloneOf`).
     lookAtEveryFolder();
     sweepQuiet()
       .then(async () =>

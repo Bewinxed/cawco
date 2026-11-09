@@ -99,7 +99,7 @@ const LAUNCHED_HOOK = new RegExp(
 /** The shell form before the exec form: `'<hook>' || exit 2`. */
 const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/u;
 
-/** One word of a command {@link shellQuote} built: `'…'`, with `'\''` for a quote. */
+/** One word of a command ../../core/src/shell-quote.ts `shellQuote` built: `'…'`, with `'\''` for a quote. */
 const QUOTED_WORD = /'((?:[^']|'\\'')*)'/gu;
 
 const HOOK_EVENTS_FLAG = /(^| )--include-hook-events( |$)/u;
@@ -125,7 +125,7 @@ export interface LaunchedHook {
   readonly names: readonly string[];
   /**
    * What the hook runs, each checked as the CLI would use it, when its
-   * failing lets a command through. The workspace's {@link hookScript}
+   * failing lets a command through. The workspace's hook-judge.ts `hookScript`
    * refuses on any failure and needs none. The form before it — cawco's own
    * binary, by the version that launched the CLI, then `boundary-hook` —
    * fails open with whatever it names gone.
@@ -133,7 +133,7 @@ export interface LaunchedHook {
   readonly needs: readonly { readonly path: string; readonly mode: number }[];
   /**
    * Whether the CLI runs its shell commands through the workspace's shell
-   * prefix ({@link claudePrefixScript}): one launched with the exec-form hook
+   * prefix (hook-judge.ts `claudePrefixScript`): one launched with the exec-form hook
    * was launched with the prefix too (claude.ts `sessionEnv`). One launched
    * before either has its shell calls rewritten through the executor as its
    * build did (the judge tells it by its environment naming no prefix), and
