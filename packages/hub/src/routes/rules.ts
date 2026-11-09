@@ -41,7 +41,7 @@ const ruleBody = t.Object({
     areaId: t.Optional(t.String()),
     harness: t.Optional(t.String()),
     model: t.Optional(t.String()),
-    role: t.Optional(t.Union(MEMORY_ROLES.map((role) => t.Literal(role)))),
+    role: t.Optional(t.UnionEnum(MEMORY_ROLES)),
     delegateType: t.Optional(t.String()),
   }),
 });
