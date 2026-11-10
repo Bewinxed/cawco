@@ -14,10 +14,10 @@ import { problemResponse } from "elysia/error";
 import type { Browsed } from "./artifacts/shapes";
 import { dashboardUrl } from "./dashboard-url";
 import type { ArtifactRow } from "./db/artifacts";
+import { artifactOrigin } from "./db/previews";
 import type { HubContext } from "./hub-context";
 import { servedByMachine } from "./preview";
 import { mintSessionTicket } from "./preview-access";
-import { embedKey } from "./preview-origin";
 import type { AnyProblem } from "./refusal";
 import { unreachable } from "./unreachable";
 
@@ -337,7 +337,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
    * a sheet of its session's, at the version its media draws (`artifactId`,
    * artifacts service `newestVersion`): whatever machine serves it (a port
    * or a folder), whether or not a panel shows it, on its own origin
-   * ({@link embedKey}), so a next version held for the owner's panel
+   * ({@link artifactOrigin}), so a next version held for the owner's panel
    * stands on an origin apart from the one the panel shows; its origin's
    * listener started, and its address as the page reached it, the source's
    * start path on it. A preview no
@@ -360,7 +360,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     if (!(row && owner && servedByMachine(row))) {
       return {};
     }
-    const key = embedKey(row.origin);
+    const key = artifactOrigin(row.origin);
     const unopened = ({ response }: AnyProblem) => {
       console.warn(`[preview] ${response.detail}`);
       return { unopened: response.detail };
