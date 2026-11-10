@@ -304,7 +304,6 @@ as-unknown-as	new ( url: string, options: { headers: Record<string, string> } ) 
 as-unknown-as	new ( url: string, options: { headers: Record<string, string> } ) => Web	scripts/probe-kit/specs/hub-loopback.ts	1
 as-unknown-as	new ( url: string, options?: { headers: Record<string, string> } ) => We	scripts/probe-kit/specs/hub-auth.ts	1
 as-unknown-as	new ( url: string, options?: { headers: Record<string, string> } ) => We	scripts/scratch-fleet.ts	1
-as-unknown-as	number	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Parameters< typeof lfsOffers.createLfsOffers >[0]["db"]	scripts/probe-kit/specs/host-lfs.ts	1
 as-unknown-as	Parameters<typeof accountsRead>[2]	scripts/probe-kit/specs/account-refused.ts	1
@@ -328,7 +327,6 @@ as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	Record<string, unknown>	scripts/probe-kit/frames.ts	1
 as-unknown-as	Redraw	scripts/probe-kit/specs/comments.ts	3
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
-as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	SendPayload	packages/hub/src/stream.ts	1
