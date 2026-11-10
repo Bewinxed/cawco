@@ -503,7 +503,7 @@ export function handleStreamMessage(
   if (typeof message !== "object" || message === null) {
     return false;
   }
-  const { type } = message as { type?: unknown };
+  const type = "type" in message ? message.type : undefined;
   if (typeof type !== "string" || !STREAM_MESSAGE_TYPES.has(type)) {
     return false;
   }
