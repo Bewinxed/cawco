@@ -79,6 +79,7 @@ import {
   fromRoot,
   type Motion,
   motionOf,
+  namedOf,
   pageError,
   readAnimation,
   snapshot,
@@ -246,20 +247,11 @@ export interface Column {
 }
 
 /** A story's interaction reading, from its off-screen probe. */
-interface Probe {
+export interface Probe {
   delta: Map<
     Interaction,
     { animations: AnimationRead[]; changed: ReturnType<typeof deltaOf> }
   >;
-}
-
-/** A story mounted in the rig for its probe, and what it reads. */
-interface RigProbe {
-  body: HTMLElement;
-  mounted: Mounted | undefined;
-  reached: Interaction[];
-  read: Probe;
-  story: Story;
 }
 
 /** One states file's section of the page, whatever the page draws of it. */
@@ -295,8 +287,6 @@ const sectionOfPath = (path: string): string | null => {
 /** The next task: the page draws and answers between two. */
 const nextTask = () => new Promise<void>((done) => setTimeout(done, 0));
 
-/** How many stories a probe pass holds mounted at once. Ours: a few, as the rig's reads hold, never a whole sheet's in one task. */
-const PROBE_KEPT = 3;
 /**
  * How long the rig's work stands aside after the person acts on the page
  * (a reach, a reveal, Compare, the move's play or scrub, a dial, the
@@ -549,7 +539,7 @@ export interface Mode {
   selected: (story: string | null) => void;
   /** A section's module loaded (or loaded again as it was edited): its stories are to be drawn. */
   shown: (section: Section) => void;
-  /** Vite applied an update (a component's own edit redrew through its framework's HMR): what was read of the stories is read again. */
+  /** Vite sent an update (any page's, this page's or not): what the mode lays out is laid out again. A section an edit reaches is read again as it is shown. */
   updated: () => void;
 }
 
@@ -606,8 +596,12 @@ export interface Page {
   /** Every move of a section played in the rig: what each fires, for the report. */
   playAll: (section: Section, sweep?: (to: string) => void) => Promise<void>;
   post: () => Promise<void>;
-  /** Every story of a section that reaches an interaction, probed in the rig. */
-  probeAll: (section: Section) => Promise<void>;
+  /** A story mounted in the rig probed in each interaction it reaches (`atState`: the body read in each state, held), its reading. */
+  probe: (
+    body: HTMLElement,
+    reached: Exclude<Interaction, "rest">[],
+    atState: (interaction: Exclude<Interaction, "rest">) => void
+  ) => Promise<Probe>;
   quietly: (promise: Promise<unknown>) => void;
   /** The interactions a story drawn in `body` reaches: each whose CSS rules match an element in it. */
   reachedIn: (body: HTMLElement) => Interaction[];
@@ -910,6 +904,13 @@ export function boot(options: BootOptions): void {
   probeBox.append(probeMark);
   document.body.append(probeBox);
   const conditions = new Map<string, number | null>();
+  /**
+   * Each condition's answer at a width, by `<its rule>@<width>`: a width
+   * condition answers alike at one width every time, and each answer read
+   * restyled and laid out the page (a component's `MediaQuery` asks at
+   * every mount: 88 ms of a 14-story sheet's read).
+   */
+  const answers = new Map<string, boolean>();
   /** Whether `condition` holds in a container `width` px wide; null where the engine takes no such condition. */
   const holdsAt = (condition: string, width: number): boolean | null => {
     let at = conditions.get(condition);
@@ -929,11 +930,17 @@ export function boot(options: BootOptions): void {
     if (at === null) {
       return null;
     }
+    const key = `${at}@${width}`;
+    const known = answers.get(key);
+    if (known !== undefined) {
+      return known;
+    }
     probeBox.style.inlineSize = `${width}px`;
     probeMark.dataset.q = String(at);
-    return (
-      getComputedStyle(probeMark).getPropertyValue("--cawco-q").trim() === "1"
-    );
+    const holds =
+      getComputedStyle(probeMark).getPropertyValue("--cawco-q").trim() === "1";
+    answers.set(key, holds);
+    return holds;
   };
 
   window.matchMedia = (query: string) => {
@@ -1325,40 +1332,6 @@ export function boot(options: BootOptions): void {
 
   /* --- Probes: each story's states read off screen ----------------------- */
 
-  /**
-   * A section's stories that reach an interaction, probed together in the
-   * rig: each mounted in a body of its own, then each interaction forced on
-   * every body that reaches it and released, all read from computed style
-   * (measure.ts `motionOf`, `firedBetween`): the delta, and the transitions
-   * and keyframes each state fires. The engine's animation list is never
-   * asked: Chromium's `getAnimations` costs as many animations as the page
-   * holds, whatever it is asked on (a body, one element or the document
-   * took 1,038 ms each with 10,000 looping elsewhere on the page, 9 ms with
-   * 1,000), and a person's panel of the pairing canvas held 10,869, the
-   * heavy probe canvas 32,400. So a pass costs its own section's elements,
-   * whatever the page around it holds.
-   */
-  async function probeAll(section: Section): Promise<void> {
-    const asked = (section.mod?.SHEET.stories ?? []).map((story) => ({
-      story,
-      reached: (section.interactions.get(story.name) ?? []).filter(
-        (one) => one !== "rest"
-      ),
-    }));
-    for (const { story, reached } of asked) {
-      if (reached.length === 0) {
-        section.probes.delete(story.name);
-      }
-    }
-    const probed = asked.filter((one) => one.reached.length > 0);
-    // A few at a time, each pass its own tasks: the whole sheet mounted and read at once held the page for seconds under load.
-    for (let at = 0; at < probed.length; at += PROBE_KEPT) {
-      await turn();
-      await probeTogether(section, probed.slice(at, at + PROBE_KEPT));
-    }
-    later();
-  }
-
   /** The person's last act on the page (performance.now()). */
   let actedAt = Number.NEGATIVE_INFINITY;
   for (const type of PERSON_ACTS) {
@@ -1377,51 +1350,7 @@ export function boot(options: BootOptions): void {
     }
   }
 
-  async function probeTogether(
-    section: Section,
-    asked: { reached: Interaction[]; story: Story }[]
-  ): Promise<void> {
-    const probes: RigProbe[] = asked.map(({ story, reached }) => {
-      const body = document.createElement("div");
-      // Held from its first frame: nothing in the rig runs while it waits to be read.
-      body.className = `cawco-frame-body ${HELD}`;
-      sizeBody(
-        body,
-        widthOf(story, "own"),
-        screenFilled.has(fillKey(section.file, story.name))
-      );
-      rig.append(body);
-      const mounted = mountInto(
-        body,
-        section,
-        story.name,
-        argsOf(section, story.name),
-        {}
-      );
-      return { body, mounted, read: { delta: new Map() }, reached, story };
-    });
-    try {
-      // Once mounted, as a drawing stands: its stories' first frames done.
-      await frameTick();
-      for (const interaction of ["hover", "focus", "pressed"] as const) {
-        const now = probes.filter((one) => one.reached.includes(interaction));
-        if (now.length === 0) {
-          continue;
-        }
-        await probeInteraction(now, interaction);
-      }
-    } finally {
-      for (const one of probes) {
-        one.mounted?.unmount();
-        one.body.remove();
-      }
-    }
-    for (const one of probes) {
-      section.probes.set(one.story.name, one.read);
-    }
-  }
-
-  /** A probe phase run as one task, named for the page's timeline (`cawco probe`, its interaction and phase in its detail). */
+  /** A probe step run as one task, named for the page's timeline (`cawco probe`, its interaction and phase in its detail). */
   function probePhase<T>(
     interaction: Interaction,
     phase: string,
@@ -1439,77 +1368,100 @@ export function boot(options: BootOptions): void {
     }
   }
 
-  /** `interaction` forced on every probe that reaches it, or let go. */
+  /** `interaction` forced on `body`, or let go. */
   const forced = (
-    probes: RigProbe[],
+    body: HTMLElement,
     interaction: Exclude<Interaction, "rest">,
     on: boolean
   ) => {
-    for (const one of probes) {
-      for (const state of FORCED[interaction]) {
-        one.body.classList.toggle(allClass(state), on);
-      }
-    }
-  };
-  const stillProbes = (probes: RigProbe[], on: boolean) => {
-    for (const one of probes) {
-      one.body.classList.toggle(HELD, on);
+    for (const state of FORCED[interaction]) {
+      body.classList.toggle(allClass(state), on);
     }
   };
 
   /**
-   * One interaction read on every probe that reaches it, in four tasks, a
-   * read of their styles each, the page's frames between: their declared
-   * motion at rest and forced (measure.ts `motionOf`, the hold let go only
-   * within the task, so what it would run never starts), then, held still
-   * (`cawco-held`, PAGE_CSS: no keyframes, no transitions, so each read is
-   * the base style, never a frame of a loop or a transition on its way),
-   * their values at rest and forced: the delta, and what the state fires
-   * (measure.ts `firedBetween`). Each read restyles the page, as many
-   * animations as it holds, so a task holds one.
+   * A story mounted in `body`, standing at rest, probed in each interaction
+   * it reaches, read from computed style alone (measure.ts `motionOf`,
+   * `firedBetween`): the delta each state makes, and the transitions and
+   * keyframes it fires. `atState` reads the body in each state as the
+   * state's values are read, its frame for the report. The engine's
+   * animation list is never asked: Chromium's `getAnimations` costs as
+   * many animations as the page holds, whatever it is asked on (a body,
+   * one element or the document took 1,038 ms each with 10,000 looping
+   * elsewhere on the page, 9 ms with 1,000), and a person's panel of the
+   * pairing canvas held 10,869, the heavy probe canvas 32,400. So a probe
+   * costs its own story's elements, whatever the page around it holds.
+   *
+   * Each style the body takes costs a restyle of every element in it,
+   * through the project's whole sheet (the dashboard's 5,455 rules: 6 ms
+   * for a 151-element body), so each is taken once and read whole, a task
+   * of its own: at rest, the keyframes it names; each state forced, the
+   * motion it declares (the hold let go only within the task, so what it
+   * would run never starts); then held still (`cawco-held`, PAGE_CSS: no
+   * keyframes, no transitions, so each read is the base style, never a
+   * frame of a loop or a transition on its way), its values at rest, then
+   * each state's values and frame. Of the values, a transition's
+   * properties are read only where it runs (a duration past 0): every
+   * element declares `all 0s`, and reading all it names read every
+   * watched property twice more on every element.
    */
-  async function probeInteraction(
-    probes: RigProbe[],
-    interaction: Exclude<Interaction, "rest">
-  ): Promise<void> {
-    const declared = (on: boolean) =>
-      probePhase(interaction, on ? "motion forced" : "motion at rest", () => {
-        stillProbes(probes, false);
-        forced(probes, interaction, on);
-        const motion = probes.map((one) => motionOf(one.body));
-        forced(probes, interaction, false);
-        stillProbes(probes, true);
-        return motion;
-      });
-    const rest = declared(false);
-    await nextTask();
-    const atState = declared(true);
-    await nextTask();
-    const before = probePhase(interaction, "values at rest", () =>
-      probes.map((one, at) => ({
-        watched: snapshot(one.body),
-        moved: valuesOf(atState[at] as Motion),
-      }))
-    );
-    await nextTask();
-    probePhase(interaction, "values forced", () => {
-      forced(probes, interaction, true);
-      probes.forEach((one, at) => {
-        const was = before[at] as (typeof before)[number];
-        const motion = atState[at] as Motion;
-        one.read.delta.set(interaction, {
-          animations: firedBetween(
-            rest[at] as Motion,
-            motion,
-            was.moved,
-            valuesOf(motion)
-          ),
-          changed: deltaOf(was.watched, snapshot(one.body), root),
+  async function probe(
+    body: HTMLElement,
+    reached: Exclude<Interaction, "rest">[],
+    atState: (interaction: Exclude<Interaction, "rest">) => void
+  ): Promise<Probe> {
+    const read: Probe = { delta: new Map() };
+    if (reached.length === 0) {
+      return read;
+    }
+    const named = probePhase("rest", "motion at rest", () => namedOf(body));
+    body.classList.add(HELD);
+    try {
+      const motions = new Map<Interaction, Motion>();
+      for (const interaction of reached) {
+        await turn();
+        motions.set(
+          interaction,
+          probePhase(interaction, "motion forced", () => {
+            body.classList.remove(HELD);
+            forced(body, interaction, true);
+            const motion = motionOf(body);
+            forced(body, interaction, false);
+            body.classList.add(HELD);
+            return motion;
+          })
+        );
+      }
+      await turn();
+      const before = probePhase("rest", "values at rest", () => ({
+        watched: snapshot(body),
+        moved: valuesOf(...motions.values()),
+      }));
+      for (const interaction of reached) {
+        await turn();
+        probePhase(interaction, "values forced", () => {
+          const motion = motions.get(interaction) as Motion;
+          forced(body, interaction, true);
+          try {
+            read.delta.set(interaction, {
+              animations: firedBetween(
+                named,
+                motion,
+                before.moved,
+                valuesOf(motion)
+              ),
+              changed: deltaOf(before.watched, snapshot(body), root),
+            });
+            atState(interaction);
+          } finally {
+            forced(body, interaction, false);
+          }
         });
-      });
-      forced(probes, interaction, false);
-    });
-    await nextTask();
+      }
+    } finally {
+      body.classList.remove(HELD);
+    }
+    return read;
   }
 
   /* --- Moves: `from` + `play` ------------------------------------------ */
@@ -1823,8 +1775,22 @@ export function boot(options: BootOptions): void {
     window.__cawcoSheetChosen = chosen;
     mode?.selected(chosen);
   });
-  /** The pane's view: scheme, widths, motion. */
+  /** The view as it draws: the page's scheme as the scheme it stands in now. */
+  const drawnView = () =>
+    JSON.stringify({
+      ...view,
+      scheme: view.scheme === "page" ? pageScheme() : view.scheme,
+    });
+  /**
+   * The pane's view: scheme, widths, motion. A view that draws as the page
+   * already does redresses nothing and reads nothing again: the design
+   * graph says its view to every page it loads (DesignGraph's view effect,
+   * on `link.loads`), its scheme the dashboard's, which the page drew in
+   * already as its own (`page`), so every load read every section twice,
+   * the second read straight after the first.
+   */
   const setView = (next: Partial<View>) => {
+    const was = drawnView();
     const motionWas = view.motion;
     Object.assign(view, {
       ...(next.scheme ? { scheme: next.scheme } : {}),
@@ -1832,6 +1798,9 @@ export function boot(options: BootOptions): void {
       ...(next.motion ? { motion: next.motion } : {}),
       ...(typeof next.fit === "boolean" ? { fit: next.fit } : {}),
     });
+    if (drawnView() === was) {
+      return;
+    }
     if (view.motion !== motionWas) {
       for (const sheet of sheetsNow()) {
         forceMotion(sheet, view.motion);
@@ -1964,7 +1933,7 @@ export function boot(options: BootOptions): void {
     ownArgsOf,
     playAll,
     post,
-    probeAll,
+    probe,
     quietly,
     reachedIn,
     rewriteAll,

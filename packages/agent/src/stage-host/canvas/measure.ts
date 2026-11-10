@@ -379,68 +379,133 @@ const msOf = (time: string): number =>
 const nth = (list: string[], at: number): string =>
   list.length === 0 ? "" : (list[at % list.length] as string);
 
-/** An element's motion as its computed style declares it: the properties it transitions and the keyframes it runs, each with its timing. */
-interface ElementMotion {
-  animation: {
-    delay: string[];
-    duration: string[];
-    easing: string[];
-    name: string[];
-  };
-  transition: {
-    delay: string[];
-    duration: string[];
-    easing: string[];
-    property: string[];
-  };
+/** One transition or keyframes run an element declares: the property it transitions (`all` for every one) or the keyframes it names, with its timing. */
+interface Run {
+  delay: number;
+  duration: number;
+  easing: string;
+  name: string;
 }
+
+/**
+ * An element's motion as its computed style declares it: the transitions
+ * that run (a duration past 0, a property named) and the keyframes it
+ * names. A transition of no duration runs nothing, and every element
+ * declares one (`all 0s`, the initial value), so none is kept.
+ */
+interface ElementMotion {
+  animations: Run[];
+  transitions: Run[];
+}
+/** Each element of a body that declares motion; one that declares none is left out. */
 export type Motion = Map<Element, ElementMotion>;
+
+/** The transitions `style` runs: its timing lists read only when one of its durations is past 0. */
+function transitionsOf(style: CSSStyleDeclaration): Run[] {
+  const durations = listOf(style.transitionDuration);
+  if (!durations.some((one) => msOf(one) > 0)) {
+    return [];
+  }
+  const delays = listOf(style.transitionDelay);
+  const easings = listOf(style.transitionTimingFunction);
+  return listOf(style.transitionProperty).flatMap((name, at) => {
+    const duration = msOf(nth(durations, at));
+    return duration > 0 && name !== "none"
+      ? [
+          {
+            name,
+            duration,
+            delay: msOf(nth(delays, at)),
+            easing: nth(easings, at) || "ease",
+          },
+        ]
+      : [];
+  });
+}
+
+/** The keyframes `style` names: its timing lists read only when it names one. */
+function animationsOf(style: CSSStyleDeclaration): Run[] {
+  const names = listOf(style.animationName);
+  if (names.every((one) => one === "none")) {
+    return [];
+  }
+  const durations = listOf(style.animationDuration);
+  const delays = listOf(style.animationDelay);
+  const easings = listOf(style.animationTimingFunction);
+  return names.flatMap((name, at) =>
+    name === "none"
+      ? []
+      : [
+          {
+            name,
+            duration: msOf(nth(durations, at)),
+            delay: msOf(nth(delays, at)),
+            easing: nth(easings, at) || "ease",
+          },
+        ]
+  );
+}
 
 export function motionOf(body: Element): Motion {
   const motion: Motion = new Map();
   for (const el of elementsOf(body)) {
     const style = getComputedStyle(el);
-    motion.set(el, {
-      transition: {
-        property: listOf(style.transitionProperty),
-        duration: listOf(style.transitionDuration),
-        delay: listOf(style.transitionDelay),
-        easing: listOf(style.transitionTimingFunction),
-      },
-      animation: {
-        name: listOf(style.animationName),
-        duration: listOf(style.animationDuration),
-        delay: listOf(style.animationDelay),
-        easing: listOf(style.animationTimingFunction),
-      },
-    });
+    const transitions = transitionsOf(style);
+    const animations = animationsOf(style);
+    if (transitions.length > 0 || animations.length > 0) {
+      motion.set(el, { transitions, animations });
+    }
   }
   return motion;
 }
 
-/** The properties an element transitions by name (`all` stands for every watched one). */
-const transitioned = (lists: ElementMotion): string[] =>
-  lists.transition.property.flatMap((one) => {
-    if (one === "all") {
-      return [...WATCHED];
+/** The keyframes each element of a body names, by element; one that names none is left out. */
+export type Named = Map<Element, Set<string>>;
+
+/** What a body's elements name of keyframes now: a state's motion is read against them (a name already running fires nothing new). */
+export function namedOf(body: Element): Named {
+  const named: Named = new Map();
+  for (const el of elementsOf(body)) {
+    const names = listOf(getComputedStyle(el).animationName).filter(
+      (one) => one !== "none"
+    );
+    if (names.length > 0) {
+      named.set(el, new Set(names));
     }
-    return one === "none" ? [] : [one];
-  });
+  }
+  return named;
+}
+
+/** The properties a transition runs on by name (`all` stands for every watched one). */
+const runOn = (run: Run): readonly string[] =>
+  run.name === "all" ? WATCHED : [run.name];
 
 /** Each element's value of every property it transitions, now: what a state's change is read from. */
 export type Values = Map<Element, Map<string, string>>;
 
-export function valuesOf(motion: Motion): Values {
+/** Each element's value now of every property a transition of `motions` runs on (an element in several, each property once). */
+export function valuesOf(...motions: Motion[]): Values {
+  const names = new Map<Element, Set<string>>();
+  for (const motion of motions) {
+    for (const [el, { transitions }] of motion) {
+      const own = names.get(el) ?? new Set<string>();
+      names.set(el, own);
+      for (const run of transitions) {
+        for (const name of runOn(run)) {
+          own.add(name);
+        }
+      }
+    }
+  }
   const values: Values = new Map();
-  for (const [el, lists] of motion) {
-    const names = transitioned(lists);
-    if (names.length === 0) {
+  for (const [el, own] of names) {
+    if (own.size === 0) {
       continue;
     }
     const style = getComputedStyle(el);
     values.set(
       el,
-      new Map(names.map((name) => [name, style.getPropertyValue(name)]))
+      new Map([...own].map((name) => [name, style.getPropertyValue(name)]))
     );
   }
   return values;
@@ -450,56 +515,51 @@ export function valuesOf(motion: Motion): Values {
  * What a state fires, read from computed style alone, never from the
  * engine's animation list: a transition for each property an element
  * transitions (a duration past 0) whose value the state changed, and a CSS
- * animation for each keyframes name the state adds to an element. A probe
- * forces a state by its class, so no script hears it, and what it fires
- * is CSS's: its declared motion is all of it.
+ * animation for each keyframes name the state adds to an element (one it
+ * named at rest, `named`, is no new run). A probe forces a state by its
+ * class, so no script hears it, and what it fires is CSS's: its declared
+ * motion is all of it.
  */
 export function firedBetween(
-  rest: Motion,
+  named: Named,
   forced: Motion,
   before: Values,
   after: Values
 ): AnimationRead[] {
   const fired: AnimationRead[] = [];
-  for (const [el, lists] of forced) {
-    const { transition, animation } = lists;
-    transition.property.forEach((named, at) => {
-      const duration = msOf(nth(transition.duration, at));
-      if (duration <= 0 || named === "none") {
-        return;
-      }
-      const properties = named === "all" ? [...WATCHED] : [named];
-      for (const property of properties) {
+  for (const [el, { transitions, animations }] of forced) {
+    for (const run of transitions) {
+      for (const property of runOn(run)) {
         const was = before.get(el)?.get(property);
         const now = after.get(el)?.get(property);
         if (was !== undefined && now !== undefined && was !== now) {
           fired.push({
             kind: "transition",
             property,
-            duration,
-            delay: msOf(nth(transition.delay, at)),
-            easing: nth(transition.easing, at) || "ease",
+            duration: run.duration,
+            delay: run.delay,
+            easing: run.easing,
             start: 0,
             target: describe(el),
           });
         }
       }
-    });
-    const had = new Set(rest.get(el)?.animation.name ?? []);
-    animation.name.forEach((name, at) => {
-      if (name === "none" || had.has(name)) {
-        return;
+    }
+    const had = named.get(el);
+    for (const run of animations) {
+      if (had?.has(run.name)) {
+        continue;
       }
       fired.push({
         kind: "animation",
-        property: name,
-        duration: msOf(nth(animation.duration, at)),
-        delay: msOf(nth(animation.delay, at)),
-        easing: nth(animation.easing, at) || "ease",
+        property: run.name,
+        duration: run.duration,
+        delay: run.delay,
+        easing: run.easing,
         start: 0,
         target: describe(el),
       });
-    });
+    }
   }
   return fired;
 }

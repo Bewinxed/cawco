@@ -144,6 +144,7 @@ import {
   type Mode,
   type Mounted,
   type Page,
+  type Probe,
   type Section,
   type SectionFailure,
 } from "./runtime";
@@ -163,8 +164,6 @@ const MOTION_MS = 3000;
 const QUIET_MS = 250;
 /** The rest a drawing comes to as it mounts: its own arrivals (a read-back the hub answered) have played. */
 const REST_MS = 600;
-/** How many stories a section's read keeps mounted in the rig at once. Ours: a few, never a whole sheet's. */
-const SWEEP_KEPT = 3;
 /** The quiet after the last edit or view change before the report's sections are read again. Ours. */
 const READ_AGAIN_MS = 300;
 /** The gap between two stories' boxes in a section's read, px: their places in the report, one under another. */
@@ -2213,65 +2212,68 @@ export function bootStage(page: Page): Mode {
     });
   }
 
-  /** A story mounted in the rig read at rest and in each interaction its CSS reaches, its box at `y`. */
-  function readMounted(
-    section: Section,
-    one: ReturnType<typeof mountInRig>[number],
-    y: number
-  ): FrameRender[] {
-    if (page.fillsScreen(section, one.story, one.body)) {
-      page.dressBody(one.body, rigColumn(), one.story, true);
-    }
-    const reached = page.reachedIn(one.body);
-    section.interactions.set(one.story.name, reached);
-    return reached.map((interaction) => {
-      const forced = interaction === "rest" ? [] : FORCED[interaction];
-      for (const pseudo of forced) {
-        one.body.classList.add(allClass(pseudo));
-      }
-      const read = rigRender(
-        one.story,
-        one.body,
-        { ...rigColumn(), interaction },
-        one.into.error,
-        y
-      );
-      for (const pseudo of forced) {
-        one.body.classList.remove(allClass(pseudo));
-      }
-      return read;
-    });
-  }
-
   /**
-   * A section's stories read in the rig, {@link SWEEP_KEPT} at a time: each
-   * mounted as the drawing would be (the view's scheme, its own width or
-   * the one picked), read at rest and in each interaction its CSS reaches,
-   * then taken down; their boxes one under another, as a column.
+   * A section's stories read in the rig, one at a time, each its own
+   * tasks: mounted as the drawing would be (the view's scheme, its own
+   * width or the one picked), read at rest once its first frames are
+   * drawn, then probed in each interaction its CSS reaches (runtime.ts
+   * `probe`), each state's frame read as its values are; then taken down,
+   * its box under the one before, as a column. One mount serves its frames
+   * and its probe: the probe mounted every story a second time.
    */
   async function readInRig(section: Section): Promise<void> {
     const stories = section.mod?.SHEET.stories ?? [];
     const read: FrameRender[] = [];
+    const probes = new Map<string, Probe>();
     let y = 0;
-    for (let at = 0; at < stories.length; at += SWEEP_KEPT) {
-      // Each batch its own turn: never while the person's act is still being answered.
+    for (const story of stories) {
+      // Never while the person's act is still being answered.
       await page.turn();
-      const batch = mountInRig(section, stories.slice(at, at + SWEEP_KEPT));
+      sweepOn(section, "draw");
+      const [one] = mountInRig(section, [story]);
+      if (!one) {
+        continue;
+      }
       try {
         await frameTick();
+        // Read in a task of its own, never inside the frame it waited for.
+        await page.turn();
         page.rewriteAll();
-        for (const one of batch) {
-          read.push(...readMounted(section, one, y));
-          y += one.body.offsetHeight + ROW_GAP;
+        if (page.fillsScreen(section, story, one.body)) {
+          page.dressBody(one.body, rigColumn(), story, true);
         }
+        const reached = page.reachedIn(one.body);
+        section.interactions.set(story.name, reached);
+        const at = y;
+        const frameIn = (interaction: Interaction) =>
+          rigRender(
+            story,
+            one.body,
+            { ...rigColumn(), interaction },
+            one.into.error,
+            at
+          );
+        read.push(frameIn("rest"));
+        sweepOn(section, "probe");
+        const probed = await page.probe(
+          one.body,
+          reached.filter(
+            (interaction): interaction is Exclude<Interaction, "rest"> =>
+              interaction !== "rest"
+          ),
+          (interaction) => read.push(frameIn(interaction))
+        );
+        if (probed.delta.size > 0) {
+          probes.set(story.name, probed);
+        }
+        y += one.body.offsetHeight + ROW_GAP;
       } finally {
-        for (const one of batch) {
-          one.mounted?.unmount();
-          one.body.remove();
-        }
+        one.mounted?.unmount();
+        one.body.remove();
       }
     }
     reads.set(section, read);
+    section.probes = probes;
   }
 
   /** The sections whose read is under way: a report says them as drawing, never their half-read frames. */
@@ -2280,8 +2282,8 @@ export function bootStage(page: Page): Mode {
   const unswept = new Set(state.sweeps);
 
   /**
-   * A section read for the report: its stories in the rig, then their
-   * probes, then its moves; one pass at a time. A report says it as drawing
+   * A section read for the report: its stories in the rig, each with its
+   * probe, then its moves; one pass at a time. A report says it as drawing
    * from the read's start to its end, then posts it.
    */
   function readSection(section: Section): Promise<void> {
@@ -2293,8 +2295,6 @@ export function bootStage(page: Page): Mode {
       .then(async () => {
         sweepOn(section, "draw");
         await readInRig(section);
-        sweepOn(section, "probe");
-        await page.probeAll(section);
         await page.playAll(section, (to) => sweepOn(section, "move", to));
       })
       .finally(() => {
@@ -2578,10 +2578,13 @@ export function bootStage(page: Page): Mode {
     },
     reported: () => undefined,
     restyled: () => laid(),
-    updated: () => {
-      laid();
-      readAgain();
-    },
+    // An update reads nothing again: Vite sends every page each update the
+    // stage's graph takes, whatever page holds its modules (its client
+    // fires `vite:afterUpdate` though it applied none), so an edit to any
+    // file of the project read every open canvas again. One a section's
+    // frames are drawn from updates that section's own module (host.ts
+    // `hotUpdate`), and it is read again as it is shown (`cawco:section`).
+    updated: () => laid(),
     redressed: () => {
       relay();
       readAgain();

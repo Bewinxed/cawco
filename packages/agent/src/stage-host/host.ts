@@ -987,9 +987,9 @@ function previewFile(): string | null {
  * reach the runtime as window events: `cawco:updates` with the modules an
  * update names, before it applies (a section that failed to load, among
  * them, loads again), `cawco:after-update` after any
- * update (a component's own edit redraws through its framework's HMR and
- * loads again each section drawn from it, and the canvas reads its frames
- * again), `cawco:stage-error` with Vite's error for a module it couldn't
+ * update, this page's or not (a component's own edit redraws through its
+ * framework's HMR and loads again each section drawn from it, which reads
+ * its frames again; the canvas lays its drawing out), `cawco:stage-error` with Vite's error for a module it couldn't
  * serve, which a section that didn't load says, and {@link SECTION_WRITTEN}
  * with a states file found missing that is written now, whose section loads
  * again, fresh (`?t=`: its failed import is never the browser's to reuse).
