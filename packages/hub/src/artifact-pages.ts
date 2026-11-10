@@ -30,8 +30,7 @@ import {
 } from "./preview";
 import { embedKey } from "./preview-origin";
 import { changeFolderFiles, readFolderFile } from "./project-folder";
-import { ProjectRefusal, projectRefusalOf } from "./project-refusal";
-import { type Refused, refusal } from "./refusal";
+import { refusal } from "./refusal";
 import { unreachable } from "./unreachable";
 
 /**
@@ -43,26 +42,16 @@ import { unreachable } from "./unreachable";
  * `index.html` is committed by the session; a revision is another commit at
  * the same place, so the canvas and its picks stay.
  */
-interface PageRefusal {
-  code: 400 | 404 | 409 | 413 | 422 | 503 | 504;
-  refused: string;
-}
-
 /** Where page.html and what it names are read: the session's machine, or the project folder. */
 type PageOrigin =
   { dir: string; machineId: string } | { projectId: string; folder: string };
 
-/**
- * A page artifact's HTML (artifacts/service.ts `page`), built as the
- * decision-page skill builds one: from inline `html`, from page.html in
- * `dir` on the session's machine, or from `decisions/<name>/page.html` in
- * the session's project folder (Caw's, written with folder_write), else the page
- * already published there as it is. In a project, what was built is
- * committed to `decisions/<name>/index.html` by the session, as before.
- */
-type BuiltArtifactPage =
-  | { html: string; program?: BuiltProgram }
-  | { refused: string; status: PageRefusal["code"] };
+/** The machine that holds a page's work folder is not connected. */
+const pageMachineAway = () =>
+  refusal(503, "page-machine-away", "Machine is not connected");
+/** The machine that holds a page's work folder did not answer. */
+const pageMachineLate = () =>
+  refusal(504, "page-machine-late", "Machine did not answer");
 
 /** Where a program's Images are read from: its work folder, the project's folder, and on a revision the pictures its page shows and the machine each is read on. */
 interface ImageAt {
@@ -396,16 +385,10 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
   };
 
   /** A file of the project folder's, or undefined when it is not there. */
-  const folderText = async (
-    projectId: string,
-    path: string
-  ): Promise<string | undefined> => {
+  const folderText = async (projectId: string, path: string) => {
     const file = await readFolderFile(projectId, path);
     if (file instanceof ElysiaStatus) {
-      if (file.status === 404) {
-        return undefined;
-      }
-      throw projectRefusalOf(file);
+      return file.status === 404 ? undefined : file;
     }
     return file.content;
   };
@@ -414,39 +397,43 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
   const folderPageSources = async (origin: {
     projectId: string;
     folder: string;
-  }): Promise<{ source: string; sources: PageSources } | undefined> => {
+  }) => {
     const source = await folderText(
       origin.projectId,
       `${origin.folder}/page.html`
     );
-    return source === undefined
-      ? undefined
-      : {
-          source,
-          sources: {
-            mockup: (id) =>
-              folderText(
-                origin.projectId,
-                `${origin.folder}/mockups/${id}.html`
-              ),
-            // The folder takes text only: its pages show the kit's stills.
-            image: () => Promise.resolve(undefined),
-          },
-        };
+    if (source === undefined || source instanceof ElysiaStatus) {
+      return source;
+    }
+    const read: { source: string; sources: PageSources } = {
+      source,
+      sources: {
+        mockup: async (id) => {
+          const mockup = await folderText(
+            origin.projectId,
+            `${origin.folder}/mockups/${id}.html`
+          );
+          // The page's build throws what it cannot read (decision-page.ts).
+          if (mockup instanceof ElysiaStatus) {
+            throw new Error(mockup.response.detail);
+          }
+          return mockup;
+        },
+        // The folder takes text only: its pages show the kit's stills.
+        image: () => Promise.resolve(undefined),
+      },
+    };
+    return read;
   };
 
   /** Reads page.html and what it names from `origin`; a refusal when page.html is not there. */
-  const pageSources = async (
-    origin: PageOrigin
-  ): Promise<
-    { source: string; sources: PageSources } | PageRefusal | undefined
-  > => {
+  const pageSources = async (origin: PageOrigin) => {
     if ("projectId" in origin) {
       return await folderPageSources(origin);
     }
     const agent = ctx.registry.agent(origin.machineId);
     if (!agent) {
-      return { code: 503, refused: "Machine is not connected" };
+      return pageMachineAway();
     }
     const readText = async (path: string) => {
       const read = await ctx.callFs(origin.machineId, agent, {
@@ -465,15 +452,16 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     const file = posix.join(origin.dir, "page.html");
     const source = await readText(file).catch(() => null);
     if (source === null) {
-      return { code: 504, refused: "Machine did not answer" };
+      return pageMachineLate();
     }
     if (source === undefined) {
-      return {
-        code: 404,
-        refused: `${file} is not there; write the page as page.html in that folder, from the skill's kit/page.html.`,
-      };
+      return refusal(
+        404,
+        "page-source-missing",
+        `${file} is not there; write the page as page.html in that folder, from the skill's kit/page.html.`
+      );
     }
-    return {
+    const found: { source: string; sources: PageSources } = {
       source,
       sources: {
         mockup: (id) =>
@@ -491,7 +479,14 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
         },
       },
     };
+    return found;
   };
+
+  /** page.html and what it names in session `row`'s project's folder at `folder`; undefined outside a project. */
+  const inFolder = (row: InstanceRow, folder: string) =>
+    row.projectId
+      ? folderPageSources({ projectId: row.projectId, folder })
+      : undefined;
 
   /** Inline HTML names nothing beside it: no mockups, no images but the kit's. */
   const inlineSources: PageSources = {
@@ -504,18 +499,18 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     row: InstanceRow,
     folder: string,
     from: { html: string } | { dir: string } | { folder: true }
-  ): Promise<{ source: string; sources: PageSources } | BuiltArtifactPage> => {
+  ) => {
     if ("html" in from) {
-      return { source: from.html, sources: inlineSources };
+      const inline: { source: string; sources: PageSources } = {
+        source: from.html,
+        sources: inlineSources,
+      };
+      return inline;
     }
     const read =
       "dir" in from
         ? await pageSources({ dir: from.dir, machineId: row.machineId })
-        : row.projectId &&
-          (await folderPageSources({ projectId: row.projectId, folder }));
-    if (read && "refused" in read) {
-      return { status: read.code, refused: read.refused };
-    }
+        : await inFolder(row, folder);
     if (read) {
       return read;
     }
@@ -523,19 +518,26 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       row.projectId && "folder" in from
         ? await folderText(row.projectId, `${folder}/index.html`)
         : undefined;
+    if (published instanceof ElysiaStatus) {
+      return published;
+    }
     if (published !== undefined) {
-      return { html: published };
+      const kept: { html: string; program?: BuiltProgram } = {
+        html: published,
+      };
+      return kept;
     }
     return row.projectId && "folder" in from
-      ? {
-          status: 404,
-          refused: `${folder}/ has no page.html or published page yet; pass dir with your work folder, or write ${folder}/page.html into the project's folder.`,
-        }
-      : {
-          status: 400,
-          refused:
-            "A page takes html, or dir with your work folder that holds page.html.",
-        };
+      ? refusal(
+          404,
+          "page-unpublished",
+          `${folder}/ has no page.html or published page yet; pass dir with your work folder, or write ${folder}/page.html into the project's folder.`
+        )
+      : refusal(
+          400,
+          "page-source-unnamed",
+          "A page takes html, or dir with your work folder that holds page.html."
+        );
   };
 
   /** The most one Image's file may hold. Our bound: a page's pictures load with it. */
@@ -604,34 +606,40 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     row: InstanceRow,
     folder: string,
     from: PageFrom
-  ): Promise<(ImageAt & { text: string }) | PageRefusal | undefined> => {
+  ) => {
     if ("program" in from) {
-      return {
+      const given: ImageAt & { text: string } = {
         text: from.program,
         dir: from.dir,
         shown: from.shown,
         readOn: from.readOn,
       };
+      return given;
     }
     if ("dir" in from) {
       const agent = ctx.registry.agent(row.machineId);
       if (!agent) {
-        return { code: 503, refused: "Machine is not connected" };
+        return pageMachineAway();
       }
       const read = await ctx.callFs(row.machineId, agent, {
         op: "read",
         path: posix.join(from.dir, PROGRAM_FILE),
       });
       if (read.kind === "unanswered") {
-        return { code: 504, refused: "Machine did not answer" };
+        return pageMachineLate();
       }
-      return read.value.ok
+      const inDir: (ImageAt & { text: string }) | undefined = read.value.ok
         ? { text: read.value.result as string, dir: from.dir }
         : undefined;
+      return inDir;
     }
     if ("folder" in from && row.projectId) {
       const text = await folderText(row.projectId, `${folder}/${PROGRAM_FILE}`);
-      return text === undefined ? undefined : { text, inFolder: true };
+      if (text === undefined || text instanceof ElysiaStatus) {
+        return text;
+      }
+      const kept: ImageAt & { text: string } = { text, inFolder: true };
+      return kept;
     }
   };
 
@@ -662,20 +670,6 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       : { bytes: read.bytes };
   };
 
-  /** A folder's refusal of a page's commit, as the page's refusal. */
-  const pageRefusalOf = (refused: Refused): PageRefusal => ({
-    code: refused.status === 413 ? 413 : 400,
-    refused: refused.response.detail,
-  });
-
-  /** A folder's refusal thrown on by {@link folderText}, as the page's refusal; anything else throws. */
-  const folderPageRefusal = (error: unknown): PageRefusal => {
-    if (!(error instanceof ProjectRefusal)) {
-      throw error;
-    }
-    return { code: error.status === 413 ? 413 : 400, refused: error.message };
-  };
-
   /**
    * A project's decision page kept in its folder as its source: a
    * program's page.oui, or an HTML page's built index.html, the other taken
@@ -687,35 +681,37 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     name: string,
     keep: { content: string; path: string },
     drop: string
-  ): Promise<PageRefusal | undefined> => {
+  ) => {
     const { projectId } = row;
     if (!projectId) {
       return;
     }
-    try {
-      const [kept, dropped] = await Promise.all([
-        folderText(projectId, keep.path),
-        folderText(projectId, drop),
-      ]);
-      if (kept === keep.content && dropped === undefined) {
-        return;
+    const [kept, dropped] = await Promise.all([
+      folderText(projectId, keep.path),
+      folderText(projectId, drop),
+    ]);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
+    if (dropped instanceof ElysiaStatus) {
+      return dropped;
+    }
+    if (kept === keep.content && dropped === undefined) {
+      return;
+    }
+    const changed = await changeFolderFiles(
+      projectId,
+      {
+        writes: kept === keep.content ? [] : [keep],
+        deletes: dropped === undefined ? [] : [drop],
+      },
+      {
+        author: { name: sessionLabel(row).name },
+        message: `decisions: ${name}`,
       }
-      const changed = await changeFolderFiles(
-        projectId,
-        {
-          writes: kept === keep.content ? [] : [keep],
-          deletes: dropped === undefined ? [] : [drop],
-        },
-        {
-          author: { name: sessionLabel(row).name },
-          message: `decisions: ${name}`,
-        }
-      );
-      if (changed instanceof ElysiaStatus) {
-        return pageRefusalOf(changed);
-      }
-    } catch (error) {
-      return folderPageRefusal(error);
+    );
+    if (changed instanceof ElysiaStatus) {
+      return changed;
     }
     ctx.decisionsChanged(projectId);
   };
@@ -725,7 +721,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     row: InstanceRow,
     name: string,
     page: { html: string; program?: string }
-  ): Promise<PageRefusal | undefined> => {
+  ) => {
     const folder = `decisions/${name}`;
     return page.program === undefined
       ? keepInFolder(
@@ -758,30 +754,30 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     row: InstanceRow,
     projectId: string,
     name: string
-  ): Promise<PageRefusal | undefined> => {
-    try {
-      const held = await Promise.all(
-        pageSourcesOf(name).map(async (path) =>
-          (await folderText(projectId, path)) === undefined ? [] : [path]
-        )
-      );
-      const deletes = held.flat();
-      if (deletes.length === 0) {
-        return;
+  ) => {
+    const held = await Promise.all(
+      pageSourcesOf(name).map((path) => folderText(projectId, path))
+    );
+    const refused = held.find((one) => one instanceof ElysiaStatus);
+    if (refused instanceof ElysiaStatus) {
+      return refused;
+    }
+    const deletes = pageSourcesOf(name).filter(
+      (_, at) => held[at] !== undefined
+    );
+    if (deletes.length === 0) {
+      return;
+    }
+    const changed = await changeFolderFiles(
+      projectId,
+      { writes: [], deletes },
+      {
+        author: { name: sessionLabel(row).name },
+        message: `decisions: ${name} deleted`,
       }
-      const changed = await changeFolderFiles(
-        projectId,
-        { writes: [], deletes },
-        {
-          author: { name: sessionLabel(row).name },
-          message: `decisions: ${name} deleted`,
-        }
-      );
-      if (changed instanceof ElysiaStatus) {
-        return pageRefusalOf(changed);
-      }
-    } catch (error) {
-      return folderPageRefusal(error);
+    );
+    if (changed instanceof ElysiaStatus) {
+      return changed;
     }
     ctx.decisionsChanged(projectId);
   };
@@ -792,11 +788,11 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     name: string,
     from: PageFrom,
     artifact: ArtifactNamed
-  ): Promise<BuiltArtifactPage> => {
+  ) => {
     const folder = `decisions/${name}`;
     const program = await programFrom(row, folder, from);
-    if (program && "refused" in program) {
-      return { status: program.code, refused: program.refused };
+    if (program instanceof ElysiaStatus) {
+      return program;
     }
     if (program) {
       const built = await buildProgram(
@@ -805,22 +801,30 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
         artifact,
         ctx.db.decides.kinds()
       );
-      return built instanceof ElysiaStatus
-        ? { status: built.status, refused: built.response.detail }
-        : { html: built.html, program: built };
+      if (built instanceof ElysiaStatus) {
+        return built;
+      }
+      const page: { html: string; program?: BuiltProgram } = {
+        html: built.html,
+        program: built,
+      };
+      return page;
     }
     if ("program" in from) {
-      return { status: 400, refused: "A program is required." };
+      return refusal(400, "page-program-missing", "A program is required.");
     }
     const read = await artifactPageSources(row, folder, from);
-    if (!("source" in read)) {
+    if (read instanceof ElysiaStatus || !("source" in read)) {
       return read;
     }
     const built = await buildDecisionPage(read.source, read.sources);
     if ("problem" in built) {
-      return { status: 422, refused: built.problem };
+      return refusal(422, "page-unbuilt", built.problem);
     }
-    return { html: built.html };
+    const page: { html: string; program?: BuiltProgram } = {
+      html: built.html,
+    };
+    return page;
   };
 
   /**
@@ -834,16 +838,16 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     from: PageFrom,
     keep: boolean,
     artifact: ArtifactNamed
-  ): Promise<BuiltArtifactPage> => {
+  ) => {
     const built = await buildArtifactPage(row, name, from, artifact);
-    if ("refused" in built || !keep) {
+    if (built instanceof ElysiaStatus || !keep) {
       return built;
     }
     const refused = await keepPage(row, name, {
       html: built.html,
       ...(built.program ? { program: built.program.program } : {}),
     });
-    return refused ? { status: refused.code, refused: refused.refused } : built;
+    return refused ?? built;
   };
 
   return {
