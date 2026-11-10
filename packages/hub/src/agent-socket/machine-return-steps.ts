@@ -258,13 +258,19 @@ export const machineReturnStepsOf = (ctx: MachineReturnContext) => {
     const { message } = ret;
     // Its browsers read from it whole: every row, take-overs
     // included, is what the machine holds now.
-    ctx.browsers
-      .connected(message.machineId)
-      .catch((error: unknown) =>
-        console.warn(
-          `[browser] ${ctx.machineName(message.machineId)}'s browsers were not read as it registered: ${error instanceof Error ? error.message : String(error)}`
-        )
+    const unread = (why: string) =>
+      console.warn(
+        `[browser] ${ctx.machineName(message.machineId)}'s browsers were not read as it registered: ${why}`
       );
+    ctx.browsers.connected(message.machineId).then(
+      (refused) => {
+        if (refused) {
+          unread(refused.response.detail);
+        }
+      },
+      (error: unknown) =>
+        unread(error instanceof Error ? error.message : String(error))
+    );
     ctx.browserStream.connected(message.machineId);
     ctx.relayJourney.connected(message.machineId);
   };
