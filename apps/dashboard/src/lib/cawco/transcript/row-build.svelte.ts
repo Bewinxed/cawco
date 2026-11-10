@@ -130,13 +130,15 @@ export interface RowBuildHost {
     readonly ledger: (fold: Fold) => void;
   };
   readonly atBottom: boolean;
-  buffer: number;
-  frontHeld: string[];
   readonly isFocused: boolean;
   readonly landed: boolean;
   lastWrite: number | null;
+  readonly mounted: {
+    buffer: number;
+    frontHeld: string[];
+    readonly onList: () => Set<string>;
+  };
   olderRoom: number;
-  readonly onList: () => Set<string>;
   readonly scroller: HTMLElement | undefined;
   readonly session: SessionState;
   readonly slides: {
@@ -484,8 +486,8 @@ export class RowBuild {
     if (steps.front) {
       // Handed over with nothing mounted past what is (`frontHeld`): the
       // screen above fills a step a task (`buffer`).
-      this.#host.frontHeld = [...this.#host.onList()];
-      this.#host.buffer = 0;
+      this.#host.mounted.frontHeld = [...this.#host.mounted.onList()];
+      this.#host.mounted.buffer = 0;
     }
     // The page that ends the conversation's pages takes the strip before
     // the list with it (`Built.before`).
