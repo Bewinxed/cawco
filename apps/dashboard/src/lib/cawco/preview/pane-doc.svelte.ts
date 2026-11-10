@@ -7,7 +7,6 @@ import {
   pinHeld,
   type RefusedReplies,
   type RefusedWrites,
-  type ThreadEntry,
   withKeptReplies,
 } from "@cawco/core/comments/model";
 import { pinProblem } from "@cawco/core/comments/validate";
@@ -38,6 +37,13 @@ import type { PreviewReach } from "./preview-reach.svelte";
 
 const refusedKey = (id: string) => `cawco-refused-replies:${id}`;
 const sendRefusedKey = (id: string) => `cawco-refused-send:${id}`;
+/** One pin's refused writes as the page keeps them: what it says besides is left out. */
+const PageRepliesSchema = z.object({
+  entries: z.array(z.unknown()),
+  why: z.string(),
+  resolved: z.unknown().optional(),
+  deleted: z.unknown().optional(),
+});
 /** `said` as the page's refused replies, each part checked: what isn't one is left out. */
 function pageRepliesOf(said: unknown): RefusedReplies {
   if (!said || typeof said !== "object" || Array.isArray(said)) {
@@ -45,23 +51,15 @@ function pageRepliesOf(said: unknown): RefusedReplies {
   }
   const kept: RefusedReplies = {};
   for (const [pin, one] of Object.entries(said)) {
-    const { entries, why, resolved, deleted } = (one ?? {}) as {
-      deleted?: unknown;
-      entries?: unknown;
-      resolved?: unknown;
-      why?: unknown;
-    };
-    if (typeof why !== "string" || !Array.isArray(entries)) {
+    const parsed = PageRepliesSchema.safeParse(one);
+    if (!parsed.success) {
       continue;
     }
-    const valid = entries.filter(
-      (entry): entry is ThreadEntry =>
-        !!entry &&
-        typeof entry === "object" &&
-        typeof (entry as ThreadEntry).id === "string" &&
-        typeof (entry as ThreadEntry).text === "string" &&
-        (entry as ThreadEntry).by === "person"
-    );
+    const { entries, why, resolved, deleted } = parsed.data;
+    const valid = entries.flatMap((entry) => {
+      const found = ThreadEntrySchema.safeParse(entry);
+      return found.success && found.data.by === "person" ? [found.data] : [];
+    });
     // Its delete, or its resolve or reopen, the hub refused, beside its replies.
     const act = {
       ...(typeof resolved === "boolean" ? { resolved } : {}),
@@ -407,7 +405,11 @@ export class PaneDoc {
   pageSays(id: string, now: unknown) {
     const { [id]: _was, ...rest } = this.pagePins;
     this.pagePins =
-      now !== null && pinProblem(now) === null && (now as Pin).id === id
+      typeof now === "object" &&
+      now !== null &&
+      "id" in now &&
+      now.id === id &&
+      pinProblem(now) === null
         ? { ...rest, [id]: now as Pin }
         : rest;
   }
@@ -440,24 +442,29 @@ export class PaneDoc {
     // The replies the hub refused that the page keeps, every one each time: they stand in their threads.
     this.pageReplies = pageRepliesOf(message.replies);
     // The pins the page holds while its link isn't synced (a reload's, given back by the device among them): those the pane's doc lacks stand as the page's.
-    for (const pin of Array.isArray(message.pins) ? message.pins : []) {
-      const one = pin as Partial<Pin> | null;
-      const id = one?.id;
+    const pins: unknown[] = Array.isArray(message.pins) ? message.pins : [];
+    for (const pin of pins) {
       if (
-        !(typeof id === "string" && one) ||
-        this.view?.pins.some((held) => held.id === id)
+        typeof pin !== "object" ||
+        pin === null ||
+        !("id" in pin) ||
+        typeof pin.id !== "string" ||
+        this.view?.pins.some((held) => held.id === pin.id)
       ) {
         continue;
       }
       // One the hub refused breaks a bound by its nature (the hub's reason says which): it is listed whole, so its words stay in reach.
       if (
-        one.notSent &&
-        typeof one.number === "number" &&
-        Array.isArray(one.thread)
+        "notSent" in pin &&
+        pin.notSent &&
+        "number" in pin &&
+        typeof pin.number === "number" &&
+        "thread" in pin &&
+        Array.isArray(pin.thread)
       ) {
-        this.pagePins = { ...this.pagePins, [id]: one as Pin };
+        this.pagePins = { ...this.pagePins, [pin.id]: pin as Pin };
       } else {
-        this.pageSays(id, pin);
+        this.pageSays(pin.id, pin);
       }
     }
   }
