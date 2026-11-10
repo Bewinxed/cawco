@@ -104,6 +104,10 @@ import type {
   V2Event,
 } from "@opencode/client";
 import { z } from "zod";
+import type {
+  OpencodeAccountsHost,
+  OpencodeOwnCredential,
+} from "../agent-ports";
 import { CHROME_DEVTOOLS } from "../browser/door";
 import { gitIn, infoExcludeOf } from "../checkout-exclude";
 import { harnessMcpUrl } from "../delegation";
@@ -146,7 +150,6 @@ import { gaugeTables } from "../memory";
 import { probeStarted } from "../probe-count";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import {
-  type OpencodeOwnCredential,
   onAccountCredential,
   opencodeAccountEnv,
   opencodeCredentialsOf,
@@ -155,7 +158,6 @@ import {
   opencodeOwnIntegrations,
   opencodeOwnSignInTypes,
   readHeld,
-  setOpencodeAccountsHost,
 } from "../provider-accounts";
 import { withAccountReads } from "../provider-usage";
 import { fenced } from "../restart";
@@ -2135,6 +2137,9 @@ export class OpencodeHarness implements Harness<"opencode"> {
   /** Session moves between servers in flight, by OpenCode session id: one at a time each. */
   readonly #moves = new Map<string, Promise<void>>();
 
+  /** What provider accounts reach OpenCode's own sign-ins and servers through (daemon.ts hands it to them). */
+  readonly accountsHost: OpencodeAccountsHost;
+
   constructor() {
     this.#accountApplying = false;
     this.#disposed = false;
@@ -2173,7 +2178,7 @@ export class OpencodeHarness implements Harness<"opencode"> {
         );
       }
     });
-    setOpencodeAccountsHost({
+    this.accountsHost = {
       carryOut: (account) => this.#carryOut(account),
       ownCredentials: () => ownCredentials(),
       removeOwnCredential: async (id) => {
@@ -2185,7 +2190,7 @@ export class OpencodeHarness implements Harness<"opencode"> {
           `the removal of credential ${id}`
         );
       },
-    });
+    };
   }
 
   /**
@@ -7277,4 +7282,6 @@ function slotName(slot: ServerSlot): string {
     : `account ${slot.account}'s`;
 }
 
-export const opencodeHarness: Harness<"opencode"> = new OpencodeHarness();
+const harness = new OpencodeHarness();
+export const opencodeHarness: Harness<"opencode"> = harness;
+export const opencodeAccounts = harness.accountsHost;

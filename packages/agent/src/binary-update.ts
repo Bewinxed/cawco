@@ -102,7 +102,12 @@ import {
   withKeepers,
 } from "./keepers";
 import { pinsBackFor, runBinaryPins } from "./pin-record";
-import { lowerFence, raiseFence, restartReadiness } from "./restart";
+import {
+  lowerFence,
+  raiseFence,
+  restartReadiness,
+  type SupervisorHolds,
+} from "./restart";
 import {
   KeeperKept,
   keeperJob,
@@ -164,9 +169,10 @@ const holdKeys = (holds: readonly RestartHold[]): string[] =>
  * say is no answer: nothing is applied blind.
  */
 async function readReadiness(
-  hub: string | undefined
+  hub: string | undefined,
+  supervisorHolds: SupervisorHolds
 ): Promise<RestartReadiness> {
-  const local = restartReadiness();
+  const local = restartReadiness(supervisorHolds);
   if (!hub) {
     return local;
   }
@@ -597,9 +603,15 @@ export class BinaryUpdater {
    */
   readonly #outlasted = new Set<string>();
   readonly #report: (state: BinaryUpdateState) => void;
+  /** What the agent's supervisor holds a restart for (restart.ts). */
+  readonly #supervisorHolds: SupervisorHolds;
 
-  constructor(report: (state: BinaryUpdateState) => void) {
+  constructor(
+    report: (state: BinaryUpdateState) => void,
+    supervisorHolds: SupervisorHolds
+  ) {
     this.#report = report;
+    this.#supervisorHolds = supervisorHolds;
   }
 
   get state(): BinaryUpdateState {
@@ -1907,7 +1919,7 @@ export class BinaryUpdater {
       return undefined;
     }
     if (!(this.#flags.commanded || capped())) {
-      const now = await readReadiness(hub);
+      const now = await readReadiness(hub, this.#supervisorHolds);
       if (holdKeys(now.holds).some((key) => this.#outlasted.has(key))) {
         await this.#waitOn(before, now.holds);
         return undefined;
@@ -1919,11 +1931,11 @@ export class BinaryUpdater {
       // Never written: an agent that dies mid-drain comes back `ready`, not
       // `installing` with no helper.
       await this.#tellHubUnwritten({ phase: "installing" });
-      let reading = await readReadiness(hub);
+      let reading = await readReadiness(hub, this.#supervisorHolds);
       const deadline = Date.now() + DRAIN_MS;
       while (!reading.ready && Date.now() < deadline) {
         await Bun.sleep(DRAIN_POLL_MS);
-        reading = await readReadiness(hub);
+        reading = await readReadiness(hub, this.#supervisorHolds);
       }
       if (await this.#cancelled(before)) {
         return undefined;

@@ -263,6 +263,7 @@ import { harness, harnesses } from "./harnesses";
 import { transcriptIndexes } from "./harnesses/claude-transcript";
 import {
   OPENCODE_REPORTED_FILES,
+  opencodeAccounts,
   removeCawcoSessionConfigs,
 } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
@@ -284,7 +285,7 @@ import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { holdHubLink, isMachineAgent } from "./machine-agent";
-import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
+import { startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
 import {
   moveCancel,
@@ -317,14 +318,9 @@ import {
   piProviders,
   providerAccountReports,
   readHomeCredentials,
-  setBorrowAsk,
   setProviderKey,
 } from "./provider-accounts";
-import {
-  machineGoKey,
-  readDueProviderAccounts,
-  setProviderReadingSink,
-} from "./provider-usage";
+import { machineGoKey, readDueProviderAccounts } from "./provider-usage";
 import {
   forgetRevoked,
   outbound,
@@ -332,7 +328,7 @@ import {
   storedHashes,
 } from "./redaction";
 import { removeFolder } from "./remove-folder";
-import { fenced, setRestartSource } from "./restart";
+import { fenced } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
@@ -837,7 +833,10 @@ const watchOpencodeReport = (
 };
 
 /** The provider-account controls, each telling the machine's harnesses when the accounts moved. */
-const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
+const registerProviderAccounts = (
+  supervisor: SessionSupervisor,
+  ports: AgentPorts
+): void => {
   const changing =
     <T>(work: () => Promise<T>) =>
     async (): Promise<T> => {
@@ -876,12 +875,12 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
   );
   supervisor.declareControl(CONTROL_FORGET_PROVIDER_ACCOUNT, (id) =>
     changing(async () => {
-      await forgetProviderAccount(id as string);
+      await forgetProviderAccount(id as string, ports);
       return { forgotten: true };
     })()
   );
   supervisor.declareControl(CONTROL_READ_HOME_CREDENTIALS, () =>
-    readHomeCredentials()
+    readHomeCredentials(ports)
   );
   supervisor.declareControl(
     CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -890,7 +889,8 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
         joinProviderAccount(
           from as string,
           into as string,
-          expected as AccountIdentity
+          expected as AccountIdentity,
+          ports
         )
       )()
   );
@@ -900,6 +900,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       changing(() =>
         moveHomeCredential(
           id as string,
+          ports,
           store as HomeCredential["store"],
           storeProvider as string,
           expected as AccountIdentity
@@ -907,7 +908,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       )()
   );
   supervisor.declareControl(CONTROL_LEND_ACCOUNT, (id) =>
-    lendAccount(id as string)
+    lendAccount(id as string, ports)
   );
   supervisor.declareControl(
     CONTROL_BORROW_ACCOUNT,
@@ -915,6 +916,7 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
       changing(() =>
         borrowAccount(
           id as string,
+          ports,
           lender as string,
           lent as LentAccess,
           store as HomeCredential["store"],
@@ -1770,7 +1772,8 @@ const attach = (
   sessions: () => ReturnType<typeof readSessions>,
   /** What launches ask the hub as they start; this connection carries them once registered. */
   launchAsks: LaunchAsks,
-  /** Where the agent's frames leave: this connection from here. */
+  /** What the agent sends through, and the line its frames leave on: this connection from here. */
+  ports: AgentPorts,
   hubLine: HubLine,
   /**
    * Called once the socket is open and the register has gone out — the moment
@@ -2861,7 +2864,7 @@ const attach = (
       const named = ack.sessions ?? [];
       (async () => {
         if (unknown.length > 0) {
-          await forgetUnknownAccounts(unknown);
+          await forgetUnknownAccounts(unknown, ports);
           providerAccountsChanged();
         }
         if (named.length > 0) {
@@ -3219,18 +3222,6 @@ const attach = (
       once: true,
     });
 
-    // A turn on an account reads its windows shortly after; they go to the
-    // hub on this connection as they come.
-    setProviderReadingSink((accounts) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        send(socket, {
-          verb: "usage",
-          machineId: identity.machineId,
-          payload: { accounts },
-        });
-      }
-    });
-
     // Usage, cost & limits (USAGE-SPEC.md §5): scan the machine's transcripts
     // and opencode DB, then report absolute bucket totals with OpenCode Go's
     // windows. A scan failure must never kill the daemon — it hosts the user's
@@ -3248,7 +3239,7 @@ const attach = (
             fetchOpenCodeGoLimits(machineGoKey())
           );
           const accounts = yield* Effect.promise(() =>
-            readDueProviderAccounts()
+            readDueProviderAccounts(ports)
           );
           send(socket, {
             verb: "usage",
@@ -3382,8 +3373,28 @@ const startDaemon = (rediscover = false) =>
     // is enough: each attempt calls `session` anew, in the same tick that
     // reads this.
     let hubUrl = url;
+    // The supervisor, from when it is made until it detaches: what the
+    // gateway and the updater ask what a restart would cut read it (restart.ts).
+    let supervising: SessionSupervisor | undefined;
+    const machineIdValue = yield* Effect.promise(() => machineId());
+    // What the modules send through, built before any of them starts; every
+    // frame leaves on the hub connection that is up (`HubLine`).
+    const hubLine = new HubLine();
+    const framed = (frame: unknown): void =>
+      hubLine.send({ verb: "frames", machineId: "", payload: frame });
+    const ports: AgentPorts = {
+      borrowAsk: framed,
+      commandQueue: framed,
+      moveProgress: framed,
+      opencodeAccounts,
+    };
     yield* Effect.acquireRelease(
-      Effect.promise(() => startMcpGateway(() => hubUrl)),
+      Effect.promise(() =>
+        startMcpGateway(() => hubUrl, {
+          freshen: (accountId) => freshen(accountId, ports),
+          supervisorHolds: () => supervising?.restartHolds(),
+        })
+      ),
       (listener) => Effect.sync(() => listener.stop(true))
     );
     // Only now: its echo's kernel-picked port could otherwise be the
@@ -3391,7 +3402,6 @@ const startDaemon = (rediscover = false) =>
     watchFromItsOwnThread();
     // The hub on this computer's loopback, started by each register (hub-loopback.ts `carryHub`).
     yield* Effect.addFinalizer(() => Effect.promise(() => stopCarrying()));
-    const machineIdValue = yield* Effect.promise(() => machineId());
     // Set for this process's own readers (core machine-id.ts `machineId` takes
     // the id from here; git-credential.ts `hubOrigin`, move.ts and host-lfs.ts
     // read the hub) and for what it starts with an env built from this one.
@@ -3427,23 +3437,13 @@ const startDaemon = (rediscover = false) =>
       os: `${platform()}-${arch()}`,
     };
 
-    // What the modules send through, built before any of them starts; every
-    // frame leaves on the hub connection that is up (`HubLine`).
-    const hubLine = new HubLine();
-    const framed = (frame: unknown): void =>
-      hubLine.send({ verb: "frames", machineId: "", payload: frame });
-    const ports: AgentPorts = {
-      commandQueue: framed,
-      moveProgress: framed,
-    };
-
     // Outlives any one connection: a hub restart must not kill running sessions.
     const supervisor = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const created = new SessionSupervisor(ports);
         // What a restart would cut is the supervisor's to say from here on
         // (`restart.ts`); the updater and `cawco service restart` read it.
-        setRestartSource(() => created.restartHolds());
+        supervising = created;
         return created;
       }),
       (running) =>
@@ -3455,7 +3455,7 @@ const startDaemon = (rediscover = false) =>
           Effect.andThen(
             Effect.sync(() => {
               running.detach();
-              setRestartSource(undefined);
+              supervising = undefined;
             })
           )
         )
@@ -3485,7 +3485,9 @@ const startDaemon = (rediscover = false) =>
 
     // Updates arrive only as signed builds from the hub: this one object owns
     // the update tick, the "Install now" command and the policy the hub pushes.
-    const updater = new BinaryUpdater(reportBinaryUpdate);
+    const updater = new BinaryUpdater(reportBinaryUpdate, () =>
+      supervising?.restartHolds()
+    );
     supervisor.declareControl(UPDATE_CAWCO, (command) =>
       updater.installNow(
         (command ?? {}) as { commandId?: string; version?: string }
@@ -3502,11 +3504,7 @@ const startDaemon = (rediscover = false) =>
     // OAuth sign-in (the store's only writer, which also writes each
     // account's OpenCode store), the refresh pi sessions ask for, and
     // OpenCode's own store cleared of the markers CawCo kept there before.
-    registerProviderAccounts(supervisor);
-    setAccountFreshener((accountId) => freshen(accountId));
-    setBorrowAsk((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
+    registerProviderAccounts(supervisor, ports);
     yield* Effect.promise(() =>
       dropOpencodeMarkers().catch((error: unknown) =>
         console.warn(
@@ -3516,7 +3514,7 @@ const startDaemon = (rediscover = false) =>
     );
     yield* Effect.forkScoped(
       Effect.repeat(
-        Effect.promise(() => freshenAll()),
+        Effect.promise(() => freshenAll(ports)),
         Schedule.spaced(ACCOUNT_REFRESH_INTERVAL)
       )
     );
@@ -4055,6 +4053,7 @@ const startDaemon = (rediscover = false) =>
             hubUrl,
             sessions,
             launchAsks,
+            ports,
             hubLine,
             markLive
           )

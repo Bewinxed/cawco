@@ -51,6 +51,9 @@ import { imageGenerationWords } from "../../../packages/core/src/words/image-gen
 import { fakeAgy } from "../fake-agy";
 import type { Kit, Spec } from "../kit";
 
+/** This probe's machine has no hub: a borrowed sign-in's ask goes nowhere. */
+const NO_HUB = { borrowAsk: (): void => undefined };
+
 /** A 1×1 PNG. */
 const PNG_1X1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -183,7 +186,7 @@ export default {
       try {
         return {
           ok: true,
-          image: await generateImage(out, {
+          image: await generateImage(NO_HUB, out, {
             prompt: "a probe",
             provider: "antigravity",
             ...input,
@@ -387,7 +390,7 @@ export default {
     );
 
     await agy.mode("hang");
-    const ready = await antigravity.readiness();
+    const ready = await antigravity.readiness(NO_HUB);
     if (!ready.ready) {
       check("i. ready before the stopped run", false, ready.reason);
       return;

@@ -9,12 +9,39 @@
  * `HubLine`). With none up, before the first or between two, the frame is
  * dropped.
  */
+import type { AccountBorrowFrame } from "@cawco/core/accounts";
 import type { CommandQueueFrame } from "@cawco/core/commands/controls";
 import type { MoveProgressFrame } from "@cawco/core/move";
 
 export interface AgentPorts {
+  /** A borrower's ask for a fresh access token of a lender's sign-in (provider-accounts.ts). */
+  readonly borrowAsk: (frame: AccountBorrowFrame) => void;
   /** A command's place in the slot queues (hub-command.ts). */
   readonly commandQueue: (frame: CommandQueueFrame) => void;
   /** A project move's progress (move.ts). */
   readonly moveProgress: (frame: MoveProgressFrame) => void;
+  /** What the OpenCode harness does for the accounts here (provider-accounts.ts). */
+  readonly opencodeAccounts: OpencodeAccountsHost;
+}
+
+/**
+ * One of OpenCode's own sign-ins on this machine: a credential on the
+ * machine's OpenCode server. 2.0 keeps them in that server's database, not in
+ * a file (a 1.x `auth.json` is imported into it when 2.0 first converts the
+ * 1.x database).
+ */
+export interface OpencodeOwnCredential {
+  id: string;
+  integrationID: string;
+  value: Record<string, unknown>;
+}
+
+/** What the OpenCode harness does for the accounts here, through its servers. */
+export interface OpencodeAccountsHost {
+  /** Every session in the account's server's database moved to the machine's server, and that server ended. */
+  carryOut: (accountId: string) => Promise<void>;
+  /** The credential OpenCode uses for each provider on the machine's server (CawCo's own never). */
+  ownCredentials: () => Promise<OpencodeOwnCredential[]>;
+  /** One of those removed from the machine's server. */
+  removeOwnCredential: (id: string) => Promise<void>;
 }

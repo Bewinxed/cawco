@@ -241,6 +241,8 @@ const run = async (kit: Kit) => {
     await import("../../../packages/agent/src/mcp-gate");
   const { startMcpGateway } =
     await import("../../../packages/agent/src/mcp-oauth");
+  const { freshen } =
+    await import("../../../packages/agent/src/provider-accounts");
   // The Agent SDK the agent itself runs Claude Code through, at the agent's version.
   const { query } = await import("@anthropic-ai/claude-agent-sdk");
   const bun = Bun.which("bun") ?? process.execPath;
@@ -403,7 +405,10 @@ const run = async (kit: Kit) => {
     servers: { probegate },
     signedOut: [],
   });
-  const gateway = await startMcpGateway(() => "ws://127.0.0.1:9/ws");
+  const gateway = await startMcpGateway(() => "ws://127.0.0.1:9/ws", {
+    freshen: (accountId) => freshen(accountId, { borrowAsk: () => undefined }),
+    supervisorHolds: () => undefined,
+  });
   const gate = mcpGateOf(id);
   mcpHost.joinGate(id, "probe:1");
 
