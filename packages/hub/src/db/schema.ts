@@ -4478,8 +4478,8 @@ export const artifacts = sqliteTable(
       onDelete: "cascade",
     }),
     /**
-     * The preview origin this row's own frames load (hub preview.ts
-     * `embedKey`): an id of its own, minted once when the row is made
+     * The preview origin this row's own frames load (db/previews.ts
+     * `artifactOrigin`): an id of its own, minted once when the row is made
      * (db/artifacts.ts `create`), never renamed. A held next version has
      * its own; opening it hands its origin to the artifact, and the
      * artifact's own goes with the version's row (`handOrigin`). Its port,
