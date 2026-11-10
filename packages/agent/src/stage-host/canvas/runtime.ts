@@ -33,7 +33,6 @@ import {
   type CanvasSpec,
   canvasSpecOf,
   FORMS,
-  type FormName,
   type Interaction,
   type MoveRender,
   type PageError,
@@ -71,7 +70,6 @@ import {
   deltaOf,
   firedBetween,
   fromRoot,
-  type Motion,
   motionOf,
   pageError,
   readAnimation,
@@ -83,6 +81,7 @@ import {
   type Bridge,
   type CanvasState,
   type Column,
+  type Csf,
   detailsOf,
   FAILED_LINE,
   FORCED,
@@ -91,9 +90,11 @@ import {
   type Mode,
   type Mounted,
   type MountSpec,
+  objectOf,
   type Page,
   type PageBy,
   type Probe,
+  readCsf,
   type Section,
   type SectionFailure,
   type SectionModule,
@@ -497,8 +498,11 @@ export function boot(options: BootOptions): void {
             rule.style.getPropertyValue("background") ||
             background;
           color = rule.style.getPropertyValue("color") || color;
-        } else if ("cssRules" in rule && !(rule instanceof CSSStyleRule)) {
-          visit((rule as CSSGroupingRule).cssRules);
+        } else if (
+          rule instanceof CSSGroupingRule &&
+          !(rule instanceof CSSStyleRule)
+        ) {
+          visit(rule.cssRules);
         }
       }
     };
@@ -641,7 +645,7 @@ export function boot(options: BootOptions): void {
       addListener: rest.addListener.bind(rest),
       removeListener: rest.removeListener.bind(rest),
       dispatchEvent: rest.dispatchEvent.bind(rest),
-    } as MediaQueryList;
+    };
   };
 
   /* --- Sections ----------------------------------------------------------- */
@@ -702,9 +706,7 @@ export function boot(options: BootOptions): void {
     if (width === null) {
       return "fit";
     }
-    const preset = (Object.keys(FORMS) as FormName[]).find(
-      (one) => FORMS[one] === width
-    );
+    const preset = Object.entries(FORMS).find(([, one]) => one === width)?.[0];
     return `${preset ?? "width"} ${width}`;
   };
 
@@ -718,11 +720,9 @@ export function boot(options: BootOptions): void {
     name: string
   ): Record<string, unknown> => {
     const mod = section.mod?.module ?? {};
-    const meta = (mod.default ?? {}) as Record<string, unknown>;
-    const csf = csfOf(mod, name);
     return {
-      ...((meta.args ?? {}) as object),
-      ...((csf?.args ?? {}) as object),
+      ...readCsf(mod.default)?.args,
+      ...csfOf(mod, name)?.args,
       ...(overrides.get(`${section.file}|${name}`) ?? {}),
     };
   };
@@ -732,18 +732,8 @@ export function boot(options: BootOptions): void {
   });
 
   /** A story's CSF object (a function story is its `render`). */
-  const csfOf = (
-    mod: Record<string, unknown>,
-    name: string
-  ): Record<string, unknown> | null => {
-    const value = mod[name];
-    if (!value) {
-      return null;
-    }
-    return typeof value === "function"
-      ? { render: value, ...(value as unknown as Record<string, unknown>) }
-      : (value as Record<string, unknown>);
-  };
+  const csfOf = (mod: Record<string, unknown>, name: string): Csf | null =>
+    readCsf(mod[name]);
 
   /** What the adapter mounts for story `name` of `section`, with `args`. */
   function specFor(
@@ -752,19 +742,19 @@ export function boot(options: BootOptions): void {
     args: Record<string, unknown>
   ): MountSpec {
     const mod = section.mod?.module ?? {};
-    const meta = (mod.default ?? {}) as Record<string, unknown>;
+    const meta = readCsf(mod.default) ?? {};
     const csf = csfOf(mod, name) ?? {};
     return {
       args,
       context: {
         args,
         id: name,
-        name: (csf.name ?? name) as string,
-        title: (meta.title ?? section.file) as string,
+        name: csf.name ?? name,
+        title: meta.title ?? section.file,
         parameters: {
-          ...((options.preview.parameters ?? {}) as object),
-          ...((meta.parameters ?? {}) as object),
-          ...((csf.parameters ?? {}) as object),
+          ...objectOf(options.preview.parameters),
+          ...meta.parameters,
+          ...csf.parameters,
         },
         argTypes: {},
         globals: {},
@@ -774,8 +764,8 @@ export function boot(options: BootOptions): void {
       render: csf.render ?? meta.render,
       // The story's innermost, then the meta's, then the preview file's, as Storybook nests them.
       decorators: [
-        ...((csf.decorators ?? []) as unknown[]),
-        ...((meta.decorators ?? []) as unknown[]),
+        ...(csf.decorators ?? []),
+        ...(meta.decorators ?? []),
         ...(Array.isArray(options.preview.decorators)
           ? options.preview.decorators
           : []),
@@ -955,8 +945,10 @@ export function boot(options: BootOptions): void {
   function loadSection(section: Section): Promise<void> {
     section.loading ??= (async () => {
       const since = performance.now();
+      let loaded: SectionModule;
       try {
-        section.mod = await options.load(section.file, !!section.failure);
+        loaded = await options.load(section.file, !!section.failure);
+        section.mod = loaded;
       } catch (error) {
         heard(error);
         section.failure = await loadFailure(error, since);
@@ -965,14 +957,13 @@ export function boot(options: BootOptions): void {
         section.loading = undefined;
         return;
       }
-      show(section);
+      show(section, loaded);
     })();
     return section.loading;
   }
 
   /** A section's module, loaded: what every mode reads of it, then the mode's drawing. */
-  function show(section: Section): void {
-    const mod = section.mod as SectionModule;
+  function show(section: Section, mod: SectionModule): void {
     // Its stories measured afresh as they mount (`fillsScreen`): an edit may have given one a height of its own.
     for (const story of mod.SHEET.stories) {
       screenFilled.delete(fillKey(section.file, story.name));
@@ -1156,28 +1147,32 @@ export function boot(options: BootOptions): void {
     await nextTask();
     const atState = declared(true);
     await nextTask();
-    const before = probePhase(interaction, "values at rest", () =>
-      probes.map((one, at) => ({
-        watched: snapshot(one.body),
-        moved: valuesOf(atState[at] as Motion),
-      }))
+    const read = probePhase(interaction, "values at rest", () =>
+      probes.flatMap((one, at) => {
+        const calm = rest[at];
+        const motion = atState[at];
+        return calm && motion
+          ? [
+              {
+                calm,
+                motion,
+                moved: valuesOf(motion),
+                probe: one,
+                watched: snapshot(one.body),
+              },
+            ]
+          : [];
+      })
     );
     await nextTask();
     probePhase(interaction, "values forced", () => {
       forced(probes, interaction, true);
-      probes.forEach((one, at) => {
-        const was = before[at] as (typeof before)[number];
-        const motion = atState[at] as Motion;
-        one.read.delta.set(interaction, {
-          animations: firedBetween(
-            rest[at] as Motion,
-            motion,
-            was.moved,
-            valuesOf(motion)
-          ),
-          changed: deltaOf(was.watched, snapshot(one.body), root),
+      for (const { calm, motion, moved, probe, watched } of read) {
+        probe.read.delta.set(interaction, {
+          animations: firedBetween(calm, motion, moved, valuesOf(motion)),
+          changed: deltaOf(watched, snapshot(probe.body), root),
         });
-      });
+      }
       forced(probes, interaction, false);
     });
     await nextTask();
@@ -1187,9 +1182,9 @@ export function boot(options: BootOptions): void {
 
   /** Stories of a section that declare a flow move: `from` and a `play`. */
   const movesOf = (section: Section): { from: string; to: string }[] =>
-    (section.mod?.SHEET.stories ?? [])
-      .filter((one) => one.play && one.from)
-      .map((one) => ({ from: one.from as string, to: one.name }));
+    (section.mod?.SHEET.stories ?? []).flatMap((one) =>
+      one.play && one.from ? [{ from: one.from, to: one.name }] : []
+    );
 
   /** Plays move `to` (from its `from`) in `body`: mounted from the start story's args, then its `play`; every animation it fired, read as it started. */
   async function playIn(
@@ -1199,13 +1194,14 @@ export function boot(options: BootOptions): void {
   ): Promise<{ mounted: Mounted | undefined; move: MoveRender }> {
     const mod = section.mod?.module ?? {};
     const csf = csfOf(mod, to) ?? {};
+    const { play } = csf;
     const from = String(
       csf.from ??
         section.mod?.SHEET.stories.find((one) => one.name === to)?.from ??
         ""
     );
     const move: MoveRender = { from, to, animations: [] };
-    if (!(from && typeof csf.play === "function")) {
+    if (!(from && play)) {
       move.error = {
         message: `${to} has no from and play to move by.`,
         file: null,
@@ -1220,7 +1216,7 @@ export function boot(options: BootOptions): void {
     await frameTick();
     const seen = new Set<Animation>();
     const reads: AnimationRead[] = [];
-    const t0 = document.timeline.currentTime as number;
+    const t0 = Number(document.timeline.currentTime);
     let watching = true;
     const watch = () => {
       for (const one of body.getAnimations({ subtree: true })) {
@@ -1236,8 +1232,8 @@ export function boot(options: BootOptions): void {
     requestAnimationFrame(watch);
     let current = { ...args };
     try {
-      const played = await readWithin(PLAY_LIMIT_MS, () =>
-        (csf.play as (context: object) => Promise<void>)({
+      const played = await readWithin(PLAY_LIMIT_MS, async () =>
+        play({
           args: current,
           canvasElement: body,
           canvas: queriesIn(body),
@@ -1331,7 +1327,7 @@ export function boot(options: BootOptions): void {
       if (!answer.ok) {
         return;
       }
-      read = (await answer.json()) as SheetRead;
+      read = await answer.json();
     } catch {
       // The stage is away: the next load of the section asks again.
       return;
@@ -1520,7 +1516,7 @@ export function boot(options: BootOptions): void {
     section.mod = mod;
     section.interactions.clear();
     section.probes.clear();
-    show(section);
+    show(section, mod);
     dispatchEvent(new CustomEvent("cawco:hmr"));
   });
   // A states file it found missing is written: its section loads again, with no reload of the canvas.

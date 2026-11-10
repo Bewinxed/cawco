@@ -115,16 +115,15 @@ export function splitWidth(list: string): WidthSplit {
     return { kind: "none" };
   }
   const read = partsOf(list, COMMA).map(queryOf);
-  if (read.some((one) => one === null)) {
+  const queries = read.flatMap((one) => one ?? []);
+  if (queries.length !== read.length) {
     return { kind: "kept" };
   }
-  const parts = (read as { conditions: string[]; type: string }[]).map(
-    (one) => ({
-      rest: one.conditions.filter((c) => !widthAlone(c)),
-      type: one.type,
-      width: one.conditions.filter(widthAlone),
-    })
-  );
+  const parts = queries.map((one) => ({
+    rest: one.conditions.filter((c) => !widthAlone(c)),
+    type: one.type,
+    width: one.conditions.filter(widthAlone),
+  }));
   // A width condition tied up with another (`((width < 600px) or (hover))`): the window keeps it.
   if (parts.some((one) => one.rest.some(asksWidth))) {
     return { kind: "kept" };
@@ -243,7 +242,7 @@ function asFrame(
  * `kept`.
  */
 export function frameWidths(
-  container: CSSStyleSheet | CSSGroupingRule | CSSStyleRule,
+  container: CSSStyleSheet | CSSGroupingRule | CSSKeyframesRule | CSSStyleRule,
   kept: Set<string>
 ): void {
   let rules: CSSRuleList;
@@ -253,20 +252,28 @@ export function frameWidths(
     return;
   }
   for (let index = 0; index < rules.length; index += 1) {
-    const rule = rules[index] as CSSRule;
-    if (CONVERTED.has(rule)) {
+    const rule = rules.item(index);
+    if (!rule || CONVERTED.has(rule)) {
       continue;
     }
-    if (rule instanceof CSSMediaRule) {
+    // Keyframes hold no `@media` rule: only their frames' declarations are read.
+    if (
+      rule instanceof CSSMediaRule &&
+      !(container instanceof CSSKeyframesRule)
+    ) {
       asFrame(container, index, rule, kept);
     }
-    const now = container.cssRules[index] as CSSRule;
+    const now = container.cssRules.item(index);
+    if (!now) {
+      continue;
+    }
     CONVERTED.add(now);
     if ("style" in now && now.style instanceof CSSStyleDeclaration) {
       screenUnits(now.style);
     }
-    if ("cssRules" in now) {
-      frameWidths(now as CSSGroupingRule, kept);
+    // A keyframes rule too: its frames' declarations hold screen units.
+    if (now instanceof CSSGroupingRule || now instanceof CSSKeyframesRule) {
+      frameWidths(now, kept);
     }
   }
 }

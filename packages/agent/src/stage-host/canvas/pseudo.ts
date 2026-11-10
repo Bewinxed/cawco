@@ -71,11 +71,10 @@ const findPseudoStates = (selector: string): PseudoStateMatch[] => {
     match = pseudoStatePattern.exec(selector)
   ) {
     if (!isEscaped(selector, match.index)) {
-      matches.push({
-        index: match.index,
-        state: match[1] as PseudoState,
-        text: match[0],
-      });
+      const state = PSEUDO_STATES.find((one) => one === match[1]);
+      if (state) {
+        matches.push({ index: match.index, state, text: match[0] });
+      }
     }
   }
   return matches;
@@ -126,7 +125,7 @@ const extractPseudoStates = (
     without += selector.slice(cursor, match.index);
     if (
       match.index > 0 &&
-      selectorStartPattern.test(selector[match.index - 1] as string)
+      selectorStartPattern.test(selector.charAt(match.index - 1))
     ) {
       without += "*";
     }
@@ -259,8 +258,8 @@ function rewriteContainer(
 ): number {
   let count = 0;
   for (let index = 0; index < container.cssRules.length; index += 1) {
-    const rule = container.cssRules[index] as CSSRule;
-    if (REWRITTEN.has(rule)) {
+    const rule = container.cssRules.item(index);
+    if (!rule || REWRITTEN.has(rule)) {
       continue;
     }
     let target: CSSRule = rule;
@@ -270,7 +269,7 @@ function rewriteContainer(
         try {
           container.insertRule(text, index + 1);
           container.deleteRule(index);
-          target = container.cssRules[index] as CSSRule;
+          target = container.cssRules.item(index) ?? target;
           count += 1;
         } catch {
           into.refused.add(rule.selectorText);
@@ -278,8 +277,8 @@ function rewriteContainer(
       }
     }
     REWRITTEN.add(target);
-    if ("cssRules" in target && (target as CSSGroupingRule).cssRules.length) {
-      count += rewriteContainer(target as CSSGroupingRule, into, left - count);
+    if (target instanceof CSSGroupingRule && target.cssRules.length) {
+      count += rewriteContainer(target, into, left - count);
     }
     if (count >= left) {
       break;
@@ -343,8 +342,8 @@ export function forceMotion(
       REDUCE.lastIndex = 0;
       NO_PREFERENCE.lastIndex = 0;
     }
-    if ("cssRules" in rule) {
-      forceMotion(rule as CSSGroupingRule, motion);
+    if (rule instanceof CSSGroupingRule) {
+      forceMotion(rule, motion);
     }
   }
 }
