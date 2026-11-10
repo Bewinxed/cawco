@@ -118,7 +118,10 @@ function frontOnly(prior: Row[], next: Row[]): boolean {
   if (from < 0) {
     return false;
   }
-  const to = index.get(prior[from].key) as number;
+  const to = index.get(prior[from].key);
+  if (to === undefined) {
+    return false;
+  }
 
   return (
     next.length - to === prior.length - from &&
