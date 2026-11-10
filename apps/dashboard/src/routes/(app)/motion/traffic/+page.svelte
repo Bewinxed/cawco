@@ -58,7 +58,7 @@
    * `rev`), which is what the transcript's build depends on for its rows.
    */
   function push(m: Omit<Message, "instanceId">): void {
-    session.messages.push({ instanceId: INSTANCE, ...m } as Message);
+    session.messages.push({ instanceId: INSTANCE, ...m });
     session.rev += 1;
   }
 
@@ -298,7 +298,7 @@
               type: "assistant",
               content: `An older turn, read back (${i + 1} of ${count}).`,
               timestamp: now(),
-            } as Message);
+            });
           }
           session.messages = [...older, ...session.messages];
           session.rev += 1;

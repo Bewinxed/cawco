@@ -38,17 +38,13 @@
 
   const debug = window.__cawcoDebug;
   const now = Date.now();
-  const messages = Array.from(
-    { length: SENT },
-    (_, i): Message =>
-      ({
-        id: `recall-sent-${i}`,
-        instanceId: ID,
-        type: "user",
-        content: `${SAID[i % SAID.length]} (${i + 1})`,
-        timestamp: new Date(now - (SENT - i) * 7 * 60_000).toISOString(),
-      }) as Message
-  );
+  const messages = Array.from({ length: SENT }, (_, i): Message => ({
+    id: `recall-sent-${i}`,
+    instanceId: ID,
+    type: "user",
+    content: `${SAID[i % SAID.length]} (${i + 1})`,
+    timestamp: new Date(now - (SENT - i) * 7 * 60_000).toISOString(),
+  }));
   debug.sessionsState.sessions[ID] = { ...blankSession(ID), messages };
 
   /** The session's `/` menu: skills (a plugin's among them) and a built-in. */
