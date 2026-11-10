@@ -69,7 +69,6 @@
   import { sheetWords } from "@cawco/core/words/sheet";
   import { shellWords } from "@cawco/core/words/shell";
   import { type Snippet, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
   import { z } from "zod";
   import {
     ComposeTargetSchema,
@@ -84,7 +83,6 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { PHONE_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconAlert,
     IconArchive,
@@ -129,7 +127,6 @@
     writeJson,
   } from "#lib/platform/storage.js";
   import { track } from "#lib/platform/track.js";
-  import { floor as visibleFloor } from "#lib/platform/visible-viewport.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
@@ -156,7 +153,7 @@
   } from "../canvas/stage.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { artifactReached } from "../files/reached";
-  import { besideLine, inspectorBesideLine } from "../graph/beside";
+  import { besideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
   import {
@@ -215,6 +212,7 @@
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { artifactAddress } from "./page-source";
+  import { PaneLayout } from "./pane-layout.svelte";
   import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
   import { enterPreviews, turnedAwayWords } from "./pass";
@@ -287,6 +285,7 @@
     instanceId: () => instanceId,
     paneSubject,
   });
+  const paneLayout = new PaneLayout({ sheet: () => sheet });
   let iframe = $state<HTMLIFrameElement>();
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
@@ -338,7 +337,6 @@
   let headRoomTaken = $state(false);
   let loaded = $state(false);
   let reload = $state(0);
-  let well = $state<HTMLDivElement>();
   /**
    * The preview's own origin, never the dashboard's, picked by where this
    * tab reached the dashboard (core `previewRoute`): host mode's name when
@@ -627,7 +625,7 @@
     // Let go off screen, the cover stands waiting again in a pane put away:
     // what that starts is finished there, as the put-away's own pass does.
     settling?.();
-    settling = section ? settleAway(section) : null;
+    settling = paneLayout.section ? settleAway(paneLayout.section) : null;
   }
   $effect(() => {
     if (paneSubject.isCanvas) {
@@ -665,7 +663,7 @@
    * `data-pane`).
    */
   const tabReached = $derived.by(() => {
-    const docked = section
+    const docked = paneLayout.section
       ?.closest<HTMLElement>('[data-slot="pane"][data-pane]')
       ?.getAttribute("data-pane");
     return !!docked && warm.reached(docked);
@@ -1475,21 +1473,6 @@
       : null;
   });
   const inspecting = $derived(!!inspector && inspectOpen);
-  /** A phone's screen (DESIGN.md's phone line). */
-  const phone = new MediaQuery(PHONE_QUERY);
-  /**
-   * The inspector: a right panel beside the page where the well holds the
-   * stage at its least and the inspector (graph/beside.ts), picked from the
-   * pane's own width, never the window's alone; else a sheet over the
-   * page's foot (the spec's §5), as on a phone, in the pane's sheet over the
-   * conversation, or in a narrow pane on a desk.
-   */
-  const inspectorLayout = $derived.by((): "panel" | "sheet" => {
-    if (sheet || phone.current) {
-      return "sheet";
-    }
-    return wellW > 0 && wellW < inspectorBesideLine() ? "sheet" : "panel";
-  });
   /** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
   const errorPlace = (error: {
     column: number | null;
@@ -1547,21 +1530,6 @@
         ).length
       : 0
   );
-  /** The well's width, px: where the design graph's room stands beside its stage (graph/beside.ts). */
-  let wellW = $state(0);
-  $effect(() => {
-    const node = well;
-    if (!node) {
-      return;
-    }
-    const read = () => {
-      wellW = node.clientWidth;
-    };
-    read();
-    const watch = frameObserver(read);
-    watch.observe(node);
-    return () => watch.disconnect();
-  });
   /**
    * The inspector stands in the design graph's room, under its states,
    * where the room stands beside the stage (a desk's wide pane): the states
@@ -1571,47 +1539,16 @@
   const inspectorInRoom = $derived(
     paneSubject.isSheet &&
       inspecting &&
-      inspectorLayout === "panel" &&
-      wellW > 0 &&
-      wellW >= besideLine()
+      paneLayout.inspectorLayout === "panel" &&
+      paneLayout.wellW > 0 &&
+      paneLayout.wellW >= besideLine()
   );
-  /** The pane's own width, px: the rail's room is the pane's, not the window's. */
-  let paneW = $state(0);
-  $effect(() => {
-    const pane = section;
-    if (!pane) {
-      return;
-    }
-    const read = () => {
-      paneW = pane.clientWidth;
-    };
-    read();
-    const watch = frameObserver(read);
-    watch.observe(pane);
-    return () => watch.disconnect();
-  });
-  /** A pane this wide or wider holds the rail beside its page (the artifact panel's surface brief, The Comments rail: "a pane under 640px" takes it as the foot sheet). */
-  const RAIL_BESIDE_FROM = 640;
-  /** The rail is the well's foot sheet: on a phone, and in a pane under 640px. */
-  const railSheet = $derived(
-    sheet || phone.current || (paneW > 0 && paneW < RAIL_BESIDE_FROM)
-  );
-  /**
-   * Where the rail stands is known: on a phone or in the drawer at once,
-   * else once the pane's width is read. Until then neither rail is drawn,
-   * so a narrow pane never draws the rail beside its page for a frame and
-   * trades it for the foot sheet.
-   */
-  const railPlaced = $derived(sheet || phone.current || paneW > 0);
   /**
    * What the sheet covers told again as it comes to rest (ThreadSheet
    * `onmoved`): measured as it mounts it stood below the well, covering
    * nothing, so no pin was lifted clear of it.
    */
   let sayCovered: (() => void) | null = null;
-  /** A composer and a thread are the well's foot sheet: on a phone, and under a finger (comment design §3). */
-  const coarse = new MediaQuery("(pointer: coarse)");
-  const floatSheet = $derived(sheet || phone.current || coarse.current);
   let sending = $state(false);
   $effect(() => {
     const id = paneSubject.artifactId;
@@ -1834,13 +1771,6 @@
       post({ jsonrpc: "2.0", id: asked.id, result: null });
     }
   }
-  /** The floating head's room over the well's top, px: its own height as laid out; none without a head. */
-  function headRoomPx(): number {
-    return (
-      section?.querySelector<HTMLElement>('[data-slot="side-head"]')
-        ?.offsetHeight ?? 0
-    );
-  }
   /** Tells the page which artifact it is, where its doc is synced, and the dashboard's theme. */
   function announce() {
     connected = false;
@@ -1856,7 +1786,7 @@
         bareScroll: !inset,
         // The head's room over the page's top, px: a document CawCo draws
         // takes it on its own scroller and says so (`cawco:head-room`).
-        headRoom: inset ? 0 : headRoomPx(),
+        headRoom: inset ? 0 : paneLayout.headRoomPx(),
         ...(paneSubject.artifact
           ? {
               artifact: {
@@ -1959,7 +1889,7 @@
     if (!openPin) {
       lastDrawn = closingPin;
     } else if (
-      floatSheet ||
+      paneLayout.floatSheet ||
       threadPushed ||
       !connected ||
       pinHeard === openPin
@@ -2000,51 +1930,12 @@
   let pageFoot = $state(0);
   /** A whole-page comment asked from the rail beside the page: its composer hangs from the rail's glass, not over the page. */
   const pageHung = $derived(
-    composingPage && !!composing && listOpen && !railSheet
+    composingPage && !!composing && listOpen && !paneLayout.railSheet
   );
   /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a composer or a place picker stands, so neither covers the other; a thread opens in it (`threadPushed`). */
   const railAway = $derived(
-    listOpen && railSheet && (!!composing || !!picking)
+    listOpen && paneLayout.railSheet && (!!composing || !!picking)
   );
-  /**
-   * How much of the well's foot a software keyboard covers, px: what stands
-   * at the foot over the page (the Comments sheet, a thread's or the
-   * composer's foot sheet, the inspector's sheet) is lifted by it, so the
-   * field being typed in stands over the keyboard while the page under them
-   * keeps its box (a phone's preview sheet holds its place for a field of
-   * its own: SideSheet). Written on the well as `--keyboard-lift`; 0 with
-   * no keyboard (visible-viewport's `data-keyboard`), and under a pinch
-   * zoom (`floor.bottom` 0). Read as the visible area is published and as
-   * the well resizes, in the frame after. With no keyboard up it is 0
-   * wherever the well stands: read while a phone's sheet stood at its
-   * first stop, the well's foot below the screen, it lifted the inspector
-   * 168px off the foot once the sheet stood at full, the sheet's move
-   * resizing nothing.
-   */
-  $effect(() => {
-    const node = well;
-    const { bottom } = visibleFloor;
-    if (!node) {
-      return;
-    }
-    const read = () => {
-      const covered =
-        bottom > 0 && document.documentElement.hasAttribute("data-keyboard")
-          ? Math.max(
-              0,
-              Math.round(node.getBoundingClientRect().bottom - bottom)
-            )
-          : 0;
-      node.style.setProperty("--keyboard-lift", `${covered}px`);
-    };
-    read();
-    const watch = frameObserver(read);
-    watch.observe(node);
-    return () => {
-      watch.disconnect();
-      node.style.removeProperty("--keyboard-lift");
-    };
-  });
   /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
   let listFilter = $state<RailList>("open");
   let listScroll = $state(0);
@@ -2061,7 +1952,9 @@
    */
   $effect(() => {
     const frame = iframe;
-    const floating = floatSheet ? (cardFloat ?? composerFloat ?? null) : null;
+    const floating = paneLayout.floatSheet
+      ? (cardFloat ?? composerFloat ?? null)
+      : null;
     const sheetCard = threadPushed ? (railSurface ?? null) : floating;
     if (!(frame && connected)) {
       return;
@@ -2137,7 +2030,9 @@
    * taller controls): a document CawCo draws pads its scroller by it.
    */
   $effect(() => {
-    const head = section?.querySelector<HTMLElement>('[data-slot="side-head"]');
+    const head = paneLayout.section?.querySelector<HTMLElement>(
+      '[data-slot="side-head"]'
+    );
     if (!(iframe && connected && head && !inset)) {
       return;
     }
@@ -2519,12 +2414,12 @@
       listHold !== "ready" ||
       checkedFor === id ||
       paneSubject.isCanvas ||
-      !railPlaced
+      !paneLayout.railPlaced
     ) {
       return;
     }
     checkedFor = id;
-    if (!railSheet && untrack(() => checkCount) > 0) {
+    if (!paneLayout.railSheet && untrack(() => checkCount) > 0) {
       untrack(() => {
         listFilter = "check";
         showList(true);
@@ -3073,7 +2968,7 @@
     const id = previewPinId(message.id);
     const mark = previewBox(message.mark);
     // None under a finger, and none while a thread or a composer stands.
-    if (coarse.current || openPin || composing) {
+    if (paneLayout.coarse.current || openPin || composing) {
       dropPeek();
       return;
     }
@@ -3176,7 +3071,7 @@
       event.ctrlKey ||
       event.altKey ||
       // The pane's own: its rail stands in its card.
-      !(target instanceof Node && section?.contains(target)) ||
+      !(target instanceof Node && paneLayout.section?.contains(target)) ||
       (target instanceof HTMLElement &&
         (target.isContentEditable ||
           ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) ||
@@ -3603,20 +3498,17 @@
       }
     }
   }
-  /**
-   * Closing goes back where it came from: the preview opened out of its tool
-   * row's box (`preview:<session>`), so as it closes, a stand-in the size of
-   * the pane shrinks into that row and fades (closeInto, --ease-drawer) while
-   * the pane itself leaves. A row scrolled away or not mounted has nothing
-   * to land in, and the pane simply leaves. In the phone's sheet the sheet
-   * sliding down is its one exit (SideSheet), so nothing flies.
-   */
-  let section = $state<HTMLElement>();
   let shown = false;
   $effect(() => {
     const open = paneSubject.preview?.state === "open";
-    if (shown && !open && !sheet && section && paneSubject.artifact) {
-      closeToRow(section, paneSubject.artifact.id);
+    if (
+      shown &&
+      !open &&
+      !sheet &&
+      paneLayout.section &&
+      paneSubject.artifact
+    ) {
+      closeToRow(paneLayout.section, paneSubject.artifact.id);
     }
     shown = open;
   });
@@ -3664,7 +3556,11 @@
   }
   /** The rail's bottom sheet stands up (ThreadSheet `open`). */
   const railSheetOpen = $derived(
-    listOpen && railPlaced && !paneSubject.isCanvas && railSheet && !railAway
+    listOpen &&
+      paneLayout.railPlaced &&
+      !paneSubject.isCanvas &&
+      paneLayout.railSheet &&
+      !railAway
   );
   /** The rail's bottom sheet is drawn: from its open until it has slid down (ThreadSheet `onclosed`). */
   let railSheetDrawn = $state(false);
@@ -3677,9 +3573,9 @@
    */
   const threadPushed = $derived(
     listOpen &&
-      railPlaced &&
+      paneLayout.railPlaced &&
       !paneSubject.isCanvas &&
-      railSheet &&
+      paneLayout.railSheet &&
       openPin !== null
   );
   /**
@@ -3892,7 +3788,7 @@
   );
   $effect(() => {
     const frameNode = iframe;
-    const wellNode = well;
+    const wellNode = paneLayout.well;
     if (!(frameNode && wellNode)) {
       frameBox = null;
       return;
@@ -4380,7 +4276,7 @@
     down={linkDown ? NOT_REACHING : null}
     label={commentsTitle}
     onclick={() => showList(!listOpen)}
-    open={railSheet ? railSheetOpen : listOpen}
+    open={paneLayout.railSheet ? railSheetOpen : listOpen}
     held={heldCount}
     {pinsShown}
     toCheck={checkCount}
@@ -4525,7 +4421,7 @@
      the page's mode seam (the artifact panel's surface brief, The Comments
      rail; the owner's pick "Beside the page"). -->
 {#snippet railBeside()}
-  {#if listOpen && railPlaced && !paneSubject.isCanvas && !railSheet}
+  {#if listOpen && paneLayout.railPlaced && !paneSubject.isCanvas && !paneLayout.railSheet}
     <RailFloat>
       {@render railOf("beside")}
     </RailFloat>
@@ -4539,11 +4435,11 @@
     data-preview-inset
     aria-label={paneSubject.artifact?.title ?? "Preview"}
     class="@container flex flex-col flex-1 min-h-0"
-    bind:this={section}
+    bind:this={paneLayout.section}
   >
     <div
       class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-well rounded-sm bg-surface-well"
-      bind:this={well}
+      bind:this={paneLayout.well}
     >
       {@render framed()}
     </div>
@@ -4564,8 +4460,8 @@
     {switcherAt}
     titleControl={paneSubject.artifact ? artifactTitle : undefined}
     beside={railBeside}
-    bind:section
-    bind:well
+    bind:section={paneLayout.section}
+    bind:well={paneLayout.well}
   >
     {@render framed()}
   </SideSurface>
@@ -4595,7 +4491,7 @@
       data-ready={!current || loaded || undefined}
       data-panel-inspector={(!paneSubject.isSheet &&
         inspecting &&
-        inspectorLayout === "panel") ||
+        paneLayout.inspectorLayout === "panel") ||
         undefined}
       class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
       style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
@@ -4727,7 +4623,7 @@
       <div
         data-slot="graph-host"
         data-panel-inspector={(inspecting &&
-          inspectorLayout === "panel" &&
+          paneLayout.inspectorLayout === "panel" &&
           !inspectorInRoom) ||
           undefined}
         class="absolute inset-0 data-panel-inspector:w-(--frame-w)"
@@ -4761,7 +4657,7 @@
             }
           }}
           onroom={() => showInspector(false)}
-          paneSheet={inspecting && inspectorLayout === "sheet"}
+          paneSheet={inspecting && paneLayout.inspectorLayout === "sheet"}
           spec={sheetCanvas.spec}
           stale={linkDown !== null}
         />
@@ -5007,7 +4903,7 @@
   {#if inspector && inspecting && !unreached && !inspectorInRoom}
     <SheetInspector
       {inspector}
-      layout={inspectorLayout}
+      layout={paneLayout.inspectorLayout}
       onclose={() => showInspector(false)}
     />
   {/if}
@@ -5129,7 +5025,7 @@
         label={commentWords.comment}
         mark={composing.at?.mark ?? null}
         room={{ w: roomW, h: roomH }}
-        sheet={floatSheet}
+        sheet={paneLayout.floatSheet}
         slot="pin-composer"
         bind:float={composerFloat}
       >
@@ -5140,7 +5036,7 @@
          another's never moves to it. -->
     {#if cardPin && kit && replyDraft && !threadPushed}
       {#key cardPin.id}
-        {#if floatSheet}
+        {#if paneLayout.floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
                bottom sheet, dragged between its stops (ThreadSheet): it
                opens at half its room, the page lifted so the pin's pill
