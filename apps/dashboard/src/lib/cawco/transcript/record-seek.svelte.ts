@@ -21,7 +21,6 @@ import { FAR_FROM_LATEST } from "./scroll-pin.svelte";
 /** The most frames a seek re-centres for while rows around it measure: our own call. */
 const SEEK_FRAMES = 30;
 export interface RecordSeekHost {
-  announcement: string;
   readonly arrivals: {
     readonly tickets: Map<string, Ticket>;
   };
@@ -50,6 +49,9 @@ export interface RecordSeekHost {
     readonly scroller: HTMLElement | undefined;
     readonly stopFollow: () => void;
     readonly tailTop: (node: HTMLElement) => number;
+  };
+  readonly region: {
+    announcement: string;
   };
   readonly rowBuild: {
     readonly builtPrint: string;
@@ -139,7 +141,7 @@ export class RecordSeek {
     if (index < 0) {
       this.marked = null;
       this.unfound = this.#host.older.paged()?.olderFault ? "unread" : "gone";
-      this.#host.announcement = this.unfoundWords;
+      this.#host.region.announcement = this.unfoundWords;
       return;
     }
     // Find's own seek marks the words, not the row, and its place is said
@@ -162,7 +164,7 @@ export class RecordSeek {
     // The finder's own words for the key that brought the reader here
     // ("↵ open at that line", docs/tom/find-and-mention-chosen.md).
     if (!found) {
-      this.#host.announcement = "Opened at that line.";
+      this.#host.region.announcement = "Opened at that line.";
     }
     if (this.#host.pin.scroller) {
       const distance =
