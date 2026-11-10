@@ -50,6 +50,7 @@ import {
   machinesUpdatedWords,
 } from "./presenters/hub";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
+import type { AnyProblem } from "./refusal";
 import { TRIM_PROPOSE } from "./unused-trim";
 
 /** One `find` for a session: its input, and the form it asked. */
@@ -162,7 +163,9 @@ export interface HubToolsDeps {
     why: string | undefined,
     toolUseId: string | undefined
   ) => Promise<
-    DesignWritten | { files: string[]; proposal: string; waiting: string }
+    | DesignWritten
+    | { files: string[]; proposal: string; waiting: string }
+    | AnyProblem
   >;
   /** One `find` call for the calling session (find-tool.ts `call`). */
   find: FindCall;

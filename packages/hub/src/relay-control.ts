@@ -284,7 +284,10 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       // A design proposal (design-system.ts): written and committed, or
       // declined, its session told either way.
       if (ctx.designSystem.owns(requestId)) {
-        await ctx.designSystem.answer(requestId, result);
+        const failed = await ctx.designSystem.answer(requestId, result);
+        if (failed) {
+          throw new Error(failed.response.detail);
+        }
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
         }
