@@ -54,9 +54,10 @@ export class ListWhole {
     if (size > (this.#host.pin.list?.getViewportSize() ?? 0)) {
       return size;
     }
-    const inner = this.#host.pin.listing?.firstElementChild as
-      HTMLElement | null | undefined;
-    return Number.parseFloat(inner?.style.height ?? "");
+    const inner = this.#host.pin.listing?.firstElementChild;
+    return Number.parseFloat(
+      inner instanceof HTMLElement ? inner.style.height : ""
+    );
   }
 
   /**

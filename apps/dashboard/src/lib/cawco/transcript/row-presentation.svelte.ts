@@ -56,12 +56,14 @@ interface Taker {
 export function perSettled<T>(
   read: (settled: Row[]) => T
 ): (settled: Row[]) => T {
-  const seen = new WeakMap<Row[], T>();
+  const seen = new WeakMap<Row[], { value: T }>();
   return (settled) => {
-    if (!seen.has(settled)) {
-      seen.set(settled, read(settled));
+    let kept = seen.get(settled);
+    if (!kept) {
+      kept = { value: read(settled) };
+      seen.set(settled, kept);
     }
-    return seen.get(settled) as T;
+    return kept.value;
   };
 }
 
@@ -305,8 +307,11 @@ export class RowPresentation {
    * place while it fades (`Row`'s handoff): inert, unheard, and carrying none
    * of the hooks the list and the flights find rows by.
    */
-  ghostOf(node: HTMLElement): HTMLElement {
-    const copy = node.cloneNode(true) as HTMLElement;
+  ghostOf(node: HTMLElement): HTMLElement | null {
+    const copy = node.cloneNode(true);
+    if (!(copy instanceof HTMLElement)) {
+      return null;
+    }
     copy.removeAttribute("data-row");
     copy.inert = true;
     copy.setAttribute("aria-hidden", "true");

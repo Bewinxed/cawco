@@ -283,7 +283,10 @@ export class ListLanding {
         for (const item of container.children) {
           const box = item.getBoundingClientRect();
           if (box.bottom > view.top && box.top < view.bottom) {
-            if ((item as HTMLElement).style.visibility === "hidden") {
+            if (
+              item instanceof HTMLElement &&
+              item.style.visibility === "hidden"
+            ) {
               return false;
             }
             boxes.push(box);

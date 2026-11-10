@@ -230,7 +230,7 @@ export class MountedRows {
         key === undefined ||
         index === undefined ||
         (index >= first && index <= last) ||
-        (item as HTMLElement).style.visibility === "hidden"
+        (item instanceof HTMLElement && item.style.visibility === "hidden")
       ) {
         continue;
       }
@@ -328,7 +328,7 @@ export class MountedRows {
         ?.dataset.row;
       if (key && !this.aside.has(key)) {
         holding.push(key);
-        if ((item as HTMLElement).style.visibility === "hidden") {
+        if (item instanceof HTMLElement && item.style.visibility === "hidden") {
           unmeasured.add(key);
         }
       }
