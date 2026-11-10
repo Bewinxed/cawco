@@ -381,12 +381,10 @@
     };
     pressed = choice;
     // Parked on the session's own row, which reads "Needs you" until now.
-    submitCommand(
-      job.targetInstanceId,
-      job.targetMachineId,
-      "permission.answer",
-      { requestId: askId, result }
-    );
+    submitCommand(job.targetInstanceId, job.targetMachineId, {
+      kind: "permission.answer",
+      intent: { requestId: askId, result },
+    });
   }
 
   /**

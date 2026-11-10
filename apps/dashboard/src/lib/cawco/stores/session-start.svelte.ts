@@ -273,8 +273,7 @@ export function sendFirstPrompt(
     submitCommand(
       instanceId,
       machineId,
-      "send",
-      { text: first, extras },
+      { kind: "send", intent: { text: first, extras } },
       commandId
     );
   }
@@ -289,8 +288,7 @@ export function sendFirstPrompt(
     submitCommand(
       instanceId,
       machineId,
-      "send",
-      { text: one.text, extras: one.extras },
+      { kind: "send", intent: { text: one.text, extras: one.extras } },
       one.commandId
     );
   }

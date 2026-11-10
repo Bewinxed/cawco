@@ -562,7 +562,10 @@
     if (!(editable && machineId) || pending("model") || next === model) {
       return;
     }
-    submitCommand(sessionId, machineId, "set-model", { model: next });
+    submitCommand(sessionId, machineId, {
+      kind: "set-model",
+      intent: { model: next },
+    });
   }
   function changeEffort(next: EffortLevel) {
     if (
@@ -572,7 +575,10 @@
     ) {
       return;
     }
-    submitCommand(sessionId, machineId, "set-effort", { effort: next });
+    submitCommand(sessionId, machineId, {
+      kind: "set-effort",
+      intent: { effort: next },
+    });
   }
   async function changePermission(next: PermissionMode) {
     if (
@@ -587,8 +593,11 @@
     // harness: entering them from another mode starts the session again in
     // place. Between the two the CLI stays in bypass, and a switch is enough.
     if (!bypasses(next) || bypasses(session?.permissionMode)) {
-      submitCommand(sessionId, machineId, "set-permission-mode", {
-        mode: next,
+      submitCommand(sessionId, machineId, {
+        kind: "set-permission-mode",
+        intent: {
+          mode: next,
+        },
       });
       return;
     }

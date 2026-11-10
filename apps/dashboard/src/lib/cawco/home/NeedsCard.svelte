@@ -533,9 +533,12 @@
       }
       return;
     }
-    submitCommand(item.instanceId, item.machineId, "permission.answer", {
-      requestId: item.request.requestId,
-      result: permissionAnswer(item.request, kind),
+    submitCommand(item.instanceId, item.machineId, {
+      kind: "permission.answer",
+      intent: {
+        requestId: item.request.requestId,
+        result: permissionAnswer(item.request, kind),
+      },
     });
   }
 

@@ -179,24 +179,33 @@ function againOf(
   switch (asked.kind) {
     case "interrupt":
       return () => {
-        submitCommand(sessionId, machineId, "interrupt", {});
+        submitCommand(sessionId, machineId, { kind: "interrupt", intent: {} });
       };
     case "set-model":
       return () => {
-        submitCommand(sessionId, machineId, "set-model", {
-          model: arg as string,
+        submitCommand(sessionId, machineId, {
+          kind: "set-model",
+          intent: {
+            model: arg as string,
+          },
         });
       };
     case "set-effort":
       return () => {
-        submitCommand(sessionId, machineId, "set-effort", {
-          effort: arg as EffortLevel,
+        submitCommand(sessionId, machineId, {
+          kind: "set-effort",
+          intent: {
+            effort: arg as EffortLevel,
+          },
         });
       };
     case "set-permission-mode":
       return () => {
-        submitCommand(sessionId, machineId, "set-permission-mode", {
-          mode: arg as PermissionMode,
+        submitCommand(sessionId, machineId, {
+          kind: "set-permission-mode",
+          intent: {
+            mode: arg as PermissionMode,
+          },
         });
       };
     // An answer's ask has gone; a send says itself on its row and composer.
@@ -508,7 +517,7 @@ function answeredHere(requestId: string): boolean {
 }
 
 /** What each command kind carries, in the shape the caller already has to hand. */
-export interface CommandIntents {
+interface CommandIntents {
   interrupt: Record<string, never>;
   "permission.answer": { requestId: string; result: PermissionResult };
   /** `replaces`: the failed send this one retries, which the hub then retires. */
@@ -532,16 +541,20 @@ export interface CommandIntents {
   "set-permission-mode": { mode: PermissionMode };
 }
 
+/** One command to submit: its kind, and the intent that kind takes. */
+export type CommandRequest = {
+  [K in CommandKind]: { kind: K; intent: CommandIntents[K] };
+}[CommandKind];
+
 /**
  * The wire payload for a kind: exactly what the hub's relay operation for it
  * takes. `requestId` is the command id — the correlation the control path
  * already has, reused rather than a second one invented alongside it.
  */
-function wirePayload<K extends CommandKind>(
-  kind: K,
+function wirePayload(
+  request: CommandRequest,
   instanceId: string,
-  commandId: string,
-  intent: CommandIntents[K]
+  commandId: string
 ): SendPayload | ControlPayload | { sendId: string } {
   const controlPayload = (method: string, args: unknown[]): ControlPayload => ({
     instanceId,
@@ -549,11 +562,11 @@ function wirePayload<K extends CommandKind>(
     method,
     args,
   });
-  switch (kind) {
+  switch (request.kind) {
     case "send.withdraw":
-      return { sendId: (intent as CommandIntents["send.withdraw"]).sendId };
+      return { sendId: request.intent.sendId };
     case "send": {
-      const { text, extras, replaces } = intent as CommandIntents["send"];
+      const { text, extras, replaces } = request.intent;
       // The command's id is the message's: one identity from the press on. A
       // retry names the failed send it stands in for.
       return {
@@ -566,8 +579,7 @@ function wirePayload<K extends CommandKind>(
       };
     }
     case "permission.answer": {
-      const { requestId, result } =
-        intent as CommandIntents["permission.answer"];
+      const { requestId, result } = request.intent;
       return {
         instanceId,
         requestId,
@@ -578,21 +590,16 @@ function wirePayload<K extends CommandKind>(
     case "interrupt":
       return controlPayload("interrupt", []);
     case "set-model":
-      return controlPayload("setModel", [
-        (intent as CommandIntents["set-model"]).model,
-      ]);
+      return controlPayload("setModel", [request.intent.model]);
     case "set-permission-mode":
-      return controlPayload("setPermissionMode", [
-        (intent as CommandIntents["set-permission-mode"]).mode,
-      ]);
+      return controlPayload("setPermissionMode", [request.intent.mode]);
     case "set-effort":
-      return controlPayload("setEffort", [
-        (intent as CommandIntents["set-effort"]).effort,
-      ]);
+      return controlPayload("setEffort", [request.intent.effort]);
     default:
-      // A kind the contract grew and this map did not. Loud rather than
-      // silently dispatched as whatever the last branch happened to be.
-      throw new Error(`No wire payload for command kind ${String(kind)}.`);
+      // A kind the contract grew and this map did not: the type check names
+      // it here, and a kind off the wire throws rather than being sent as
+      // whatever the last branch happened to be.
+      return unhandled("command kind", request);
   }
 }
 
@@ -602,11 +609,10 @@ function wirePayload<K extends CommandKind>(
  * {@link latestCommandFor}). The envelope goes to the hub and the hub's acks
  * move the stages, so nothing local is fabricated on the way.
  */
-export function submitCommand<K extends CommandKind>(
+export function submitCommand(
   instanceId: string,
   machineId: string,
-  kind: K,
-  intent: CommandIntents[K],
+  request: CommandRequest,
   /**
    * Minted by the caller when it has to know the id before the command goes
    * out — the composer, whose text flies into the row a send's id keys.
@@ -615,10 +621,11 @@ export function submitCommand<K extends CommandKind>(
    */
   commandId = newId()
 ): string {
+  const { kind } = request;
   // A bench's hub answers it in place of the wire (dev only).
   const bench = standingBench();
   if (import.meta.env.DEV && bench) {
-    bench(instanceId, kind, intent);
+    bench(instanceId, kind, request.intent);
     return commandId;
   }
   // Everything below either reaches the ledger or becomes a record in it;
@@ -626,13 +633,37 @@ export function submitCommand<K extends CommandKind>(
   const settlesAt = SETTLES_AT[kind];
   // A new command answers what was said of the last ones.
   clearCommandFaults(instanceId);
-  if (SETTINGS_KINDS.has(kind) || kind === "interrupt") {
-    const { model, effort, mode } = intent as Partial<
-      CommandIntents["set-model"] &
-        CommandIntents["set-effort"] &
-        CommandIntents["set-permission-mode"]
-    >;
-    rememberControlAsk(commandId, machineId, model ?? effort ?? mode);
+  switch (request.kind) {
+    case "set-model":
+      rememberControlAsk(
+        commandId,
+        machineId,
+        request.intent.model ?? undefined
+      );
+      break;
+    case "set-effort":
+      rememberControlAsk(
+        commandId,
+        machineId,
+        request.intent.effort ?? undefined
+      );
+      break;
+    case "set-permission-mode":
+      rememberControlAsk(
+        commandId,
+        machineId,
+        request.intent.mode ?? undefined
+      );
+      break;
+    case "interrupt":
+      rememberControlAsk(commandId, machineId, undefined);
+      break;
+    case "send":
+    case "send.withdraw":
+    case "permission.answer":
+      break;
+    default:
+      unhandled("command kind", request);
   }
 
   // REGISTERED BEFORE ANYTHING THAT CAN FAIL, and that ordering is the whole
@@ -648,8 +679,8 @@ export function submitCommand<K extends CommandKind>(
   // afterwards, held nothing at all when the throw happened before the wire —
   // the operator got a toast and their typed words were gone, which is the
   // original defect wearing a different hat.
-  if (kind === "send") {
-    const { text, extras, replaces } = intent as CommandIntents["send"];
+  if (request.kind === "send") {
+    const { text, extras, replaces } = request.intent;
     rememberSend(commandId, instanceId, machineId, text, extras ?? {});
     // Kept past a reload too, until it settles (send-store.ts).
     keepSend({
@@ -664,8 +695,8 @@ export function submitCommand<K extends CommandKind>(
       console.warn(`[cawco] send ${commandId} not kept for a reload`, error)
     );
   }
-  if (kind === "permission.answer") {
-    const { requestId } = intent as CommandIntents["permission.answer"];
+  if (request.kind === "permission.answer") {
+    const { requestId } = request.intent;
     rememberAnswerSurface(commandId, instanceId, requestId);
     answers.set(requestId, commandId);
   }
@@ -685,10 +716,10 @@ export function submitCommand<K extends CommandKind>(
       presenceId: presenceClientId(),
     };
     payload = {
-      ...(wirePayload(kind, instanceId, commandId, intent) as object),
+      ...wirePayload(request, instanceId, commandId),
       provenance,
     };
-    effects = streamEffectsFor(instanceId, kind, intent, commandId);
+    effects = streamEffectsFor(instanceId, request, commandId);
   } catch (error) {
     // THE CONTRACT THIS FUNCTION SHARES WITH THE LEDGER: it never throws.
     //
@@ -709,8 +740,8 @@ export function submitCommand<K extends CommandKind>(
     // nobody can reach. It is wrapped because it is the one thing left that
     // could throw, and a throw from a catch block is the silence this whole
     // function exists to abolish.
-    if (kind === "send") {
-      const { text, extras, replaces } = intent as CommandIntents["send"];
+    if (request.kind === "send") {
+      const { text, extras, replaces } = request.intent;
       try {
         noteSendSubmitted(instanceId, text, extras ?? {}, commandId, replaces);
       } catch {
@@ -901,8 +932,7 @@ export function retrySend(commandId: string): void {
   submitCommand(
     entry.instanceId,
     entry.machineId,
-    "send",
-    { text: entry.text, extras: entry.extras },
+    { kind: "send", intent: { text: entry.text, extras: entry.extras } },
     commandId
   );
 }
@@ -965,8 +995,7 @@ export async function retryFailed(message: Message): Promise<void> {
   retries[message.id as string] = submitCommand(
     message.instanceId,
     session(message.instanceId).machineId,
-    "send",
-    { text, extras, replaces: message.id }
+    { kind: "send", intent: { text, extras, replaces: message.id } }
   );
 }
 
@@ -1054,11 +1083,13 @@ export async function resumeKeptSends(): Promise<void> {
     submitCommand(
       kept.instanceId,
       kept.machineId,
-      "send",
       {
-        text: kept.text,
-        extras: kept.extras,
-        ...(kept.replaces ? { replaces: kept.replaces } : {}),
+        kind: "send",
+        intent: {
+          text: kept.text,
+          extras: kept.extras,
+          ...(kept.replaces ? { replaces: kept.replaces } : {}),
+        },
       },
       kept.commandId
     );
@@ -1114,16 +1145,18 @@ export async function replaceQueued(
   const withdraw = submitCommand(
     message.instanceId,
     session(message.instanceId).machineId,
-    "send.withdraw",
     {
-      sendId: message.id,
-      replace: {
-        extras: {
-          attachments: resentAttachments(message),
-          images,
+      kind: "send.withdraw",
+      intent: {
+        sendId: message.id,
+        replace: {
+          extras: {
+            attachments: resentAttachments(message),
+            images,
+          },
+          replacement,
+          replacementId,
         },
-        replacement,
-        replacementId,
       },
     }
   );
@@ -1140,8 +1173,7 @@ export function removeSend(message: Message): string {
   return submitCommand(
     message.instanceId,
     session(message.instanceId).machineId,
-    "send.withdraw",
-    { sendId: message.id }
+    { kind: "send.withdraw", intent: { sendId: message.id } }
   );
 }
 
@@ -1219,16 +1251,15 @@ function announceSendFailure(record: CommandRecord): void {
  * session — it fails with the hub's own reason instead. The revive belongs on
  * the hub side of the command, not in every client.
  */
-function streamEffectsFor<K extends CommandKind>(
+function streamEffectsFor(
   instanceId: string,
-  kind: K,
-  intent: CommandIntents[K],
+  request: CommandRequest,
   commandId: string
 ): StreamEffects | undefined {
   const target = session(instanceId);
-  switch (kind) {
+  switch (request.kind) {
     case "send.withdraw": {
-      const { sendId, replace } = intent as CommandIntents["send.withdraw"];
+      const { sendId, replace } = request.intent;
       return {
         settled: (stage) => {
           if (
@@ -1246,11 +1277,13 @@ function streamEffectsFor<K extends CommandKind>(
               submitCommand(
                 instanceId,
                 target.machineId,
-                "send",
                 {
-                  text: replace.replacement,
-                  extras: replace.extras,
-                  replaces: sendId,
+                  kind: "send",
+                  intent: {
+                    text: replace.replacement,
+                    extras: replace.extras,
+                    replaces: sendId,
+                  },
                 },
                 replace.replacementId
               );
@@ -1260,7 +1293,7 @@ function streamEffectsFor<K extends CommandKind>(
       };
     }
     case "send": {
-      const { text, extras, replaces } = intent as CommandIntents["send"];
+      const { text, extras, replaces } = request.intent;
       // The row is keyed by the id of the command it IS, which is the whole
       // join between a rendered message and the ledger's word on it.
       return {
@@ -1291,7 +1324,7 @@ function streamEffectsFor<K extends CommandKind>(
         },
       };
     case "permission.answer": {
-      const { requestId } = intent as CommandIntents["permission.answer"];
+      const { requestId } = request.intent;
       // The ask stands, its pressed answer pending, until the hub has taken
       // the answer; refused, it stands still, the refusal under its buttons
       // (the session's card, the Needs row), and can be answered again.
@@ -1317,7 +1350,7 @@ function streamEffectsFor<K extends CommandKind>(
       };
     }
     case "set-model": {
-      const { model } = intent as CommandIntents["set-model"];
+      const { model } = request.intent;
       const previous = target.model;
       return {
         submitted: () => {
@@ -1333,7 +1366,7 @@ function streamEffectsFor<K extends CommandKind>(
       };
     }
     case "set-permission-mode": {
-      const { mode } = intent as CommandIntents["set-permission-mode"];
+      const { mode } = request.intent;
       const previous = target.permissionMode;
       return {
         submitted: () => {
@@ -1352,7 +1385,7 @@ function streamEffectsFor<K extends CommandKind>(
       };
     }
     case "set-effort": {
-      const { effort } = intent as CommandIntents["set-effort"];
+      const { effort } = request.intent;
       const previous = target.effort;
       return {
         submitted: () => {
