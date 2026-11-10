@@ -77,7 +77,7 @@
         atLimit: routing.atLimit,
       }) || order.join() !== accounts.map((account) => account.id).join()
   );
-  const limitLanes = $derived([accounts[0], accounts[1]] as [Account, Account]);
+  const limitLanes = $derived<[Account, Account]>([accounts[0], accounts[1]]);
 
   let saving = $state(false);
   let refused = $state<string | undefined>(undefined);
@@ -163,19 +163,19 @@
     <Tabs
       onValueChange={(value) => {
         toward = value === "delegates" ? 1 : -1;
-        tab = value as Kind;
+        if (value === "yours" || value === "delegates") {
+          tab = value;
+        }
       }}
       value={tab}
     >
       <TabsList aria-label={words.whichSessions}>
-        {#each [["yours", words.yours], ["delegates", words.delegates]] as [kind, label] (kind)}
+        {#each [["yours", words.yours], ["delegates", words.delegates]] as const as [kind, label] (kind)}
           <TabItem {label} value={kind}>
             {#snippet trail()}
               <span
                 class="ms-space-1 font-normal text-ink-muted @max-kinds/kinds:hidden"
-                >{words.trail(
-                  strategyLabel(draft[kind as Kind].strategy)
-                )}</span
+                >{words.trail(strategyLabel(draft[kind].strategy))}</span
               >
             {/snippet}
           </TabItem>

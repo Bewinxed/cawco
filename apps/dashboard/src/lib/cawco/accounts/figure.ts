@@ -76,7 +76,8 @@ class Track {
   }
 
   get last(): Key {
-    return this.k.at(-1) as Key;
+    const [last] = this.k.slice(-1);
+    return last;
   }
 
   /** From `t`, move to `v` over `d` seconds on `e`. */
@@ -113,7 +114,7 @@ class Track {
       [this.p]: key.v,
       easing: key.e,
     }));
-    if ((f.at(-1)?.offset as number) < 1) {
+    if ((f.at(-1)?.offset ?? 1) < 1) {
       f.push({ offset: 1, [this.p]: this.last.v });
     }
     return f;
@@ -149,7 +150,7 @@ export class Timeline {
   /** Shows the last frame, standing still. */
   rest(): void {
     for (const t of this.tracks) {
-      (t.el.style as unknown as Record<string, string>)[t.p] = t.at(this.E);
+      t.el.style[t.p] = t.at(this.E);
     }
     this.#words(this.E);
   }
@@ -922,7 +923,8 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
             return f(t);
           }
         }
-        return (clocks.at(-1) as (typeof clocks)[number])[2](t);
+        const [final] = clocks.slice(-1);
+        return final[2](t);
       });
       F.seam(7.0, 1.0);
       return F;
