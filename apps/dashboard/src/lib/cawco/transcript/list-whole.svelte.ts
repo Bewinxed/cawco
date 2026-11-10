@@ -4,7 +4,9 @@ export interface ListWholeHost {
   readonly endMoved: (shift: number) => void;
   readonly list: VirtualizerHandle | undefined;
   readonly listing: HTMLElement | undefined;
-  readonly olderRoom: number;
+  readonly older: {
+    readonly olderRoom: number;
+  };
   readonly pinNext: () => void;
   readonly pinned: () => boolean;
 }
@@ -79,7 +81,8 @@ export class ListWhole {
     if (!(viewport > 0 && this.rooms.measured && Number.isFinite(height))) {
       return false;
     }
-    const range = this.#host.olderRoom + height + this.rooms.foot - viewport;
+    const range =
+      this.#host.older.olderRoom + height + this.rooms.foot - viewport;
     const over = range <= 0 ? 0 : ((-range % 1) + 1) % 1;
     const next = over < 0.001 || over > 0.999 ? 0 : over;
     if (Math.abs(next - this.spare) <= 0.001) {

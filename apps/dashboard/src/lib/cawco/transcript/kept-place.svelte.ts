@@ -127,7 +127,9 @@ export interface KeptPlaceHost {
     readonly buffer: number;
     readonly unseen: boolean;
   };
-  readonly paged: () => SessionState | null;
+  readonly older: {
+    readonly paged: () => SessionState | null;
+  };
   readonly rowBuild: {
     readonly built: Built;
   };
@@ -203,7 +205,7 @@ export class KeptPlace {
       ? rowAt(
           this.#host.rowDraw.renderedRows,
           this.resume.at,
-          this.#host.paged()?.cursor === null
+          this.#host.older.paged()?.cursor === null
         )
       : rowHolding(this.#host.rowDraw.renderedRows, this.resume.block);
   };
