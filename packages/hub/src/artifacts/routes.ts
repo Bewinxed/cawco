@@ -29,7 +29,7 @@ import {
   STORY_FILE,
   type StoryOp,
 } from "@cawco/core/stage";
-import { Elysia, t, ValidationError } from "elysia";
+import { Elysia, ElysiaStatus, t, ValidationError } from "elysia";
 import type { Operation } from "rfc6902";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
@@ -37,7 +37,6 @@ import { PROGRAM_MAX } from "../decision-program";
 import { refusal } from "../refusal";
 import type { StateAsk } from "./component";
 import { COMPONENT_EXAMPLE, CREATE_SHAPE } from "./component";
-import { ArtifactRefusal } from "./refusals";
 import { type Artifacts, THUMBNAIL_BYTES } from "./service";
 import type {
   CanvasChange,
@@ -58,7 +57,7 @@ const STATE_ASK = z.object({
 /** A preview's or a page's state: the query or hash its own link for that state adds. */
 const STATE_LINK = /^[?#]\S+$/u;
 /** A read's `state`, from its JSON: a component's frame, or a preview's or a page's state link; refused with the shape when it is neither. */
-const stateOf = (text: string): { state: StateAsk } | { link: string } => {
+const stateOf = (text: string) => {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -66,20 +65,15 @@ const stateOf = (text: string): { state: StateAsk } | { link: string } => {
     value = null;
   }
   if (typeof value === "string" && STATE_LINK.test(value)) {
-    return { link: value };
+    const link: { link: string } = { link: value };
+    return link;
   }
   const read = STATE_ASK.safeParse(value);
   if (!read.success) {
-    throw new ArtifactRefusal(400, SHAPES.read as string);
+    return refusal(400, "artifact-read-state-shape", SHAPES.read);
   }
-  return { state: read.data };
-};
-
-const refused = (error: unknown) => {
-  if (error instanceof ArtifactRefusal) {
-    return refusal(error.status, "artifact-refused", error.message);
-  }
-  throw error;
+  const state: { state: StateAsk } = { state: read.data };
+  return state;
 };
 
 /** A thumbnail's scheme as the pane sends it: base64 PNG, or null where none was drawn. */
@@ -88,13 +82,13 @@ const thumbnailPng = t.Nullable(
 );
 
 /** A base64 PNG's bytes; refused when it is not a PNG. */
-const pngOf = (base64: string | null): Uint8Array | null => {
+const pngOf = (base64: string | null) => {
   if (base64 === null) {
     return null;
   }
   const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
   if (!PNG_SIGNATURE.every((byte, i) => bytes[i] === byte)) {
-    throw new ArtifactRefusal(422, "A thumbnail is a PNG.");
+    return refusal(422, "artifact-thumbnail-not-png", "A thumbnail is a PNG.");
   }
   return bytes;
 };
@@ -205,7 +199,7 @@ const canvasFields = {
 };
 
 /** What a malformed body was refused for, in the tool's words with its valid shape: never the validator's own text (component canvas G3). */
-const SHAPES: Record<string, string> = {
+const SHAPES = {
   create: CREATE_SHAPE,
   update:
     'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
@@ -240,14 +234,20 @@ const sheetChange = {
 const sheetChangeOf = (body: {
   args?: Extract<SheetChange, { args: unknown }>["args"];
   story?: StoryOp;
-}): SheetChange => {
-  if ((body.args === undefined) === (body.story === undefined)) {
-    throw new ArtifactRefusal(
-      400,
-      "A sheet takes exactly one of args or story."
-    );
+}) => {
+  if (body.args !== undefined && body.story === undefined) {
+    const args: SheetChange = { args: body.args };
+    return args;
   }
-  return body.args ? { args: body.args } : { story: body.story as StoryOp };
+  if (body.story !== undefined && body.args === undefined) {
+    const story: SheetChange = { story: body.story };
+    return story;
+  }
+  return refusal(
+    400,
+    "artifact-sheet-change-one",
+    "A sheet takes exactly one of args or story."
+  );
 };
 
 /** The one change an update names (a decision page's statements and a component canvas each have their own route): a page's html or patch, a canvas's elements, delete or mermaid. */
@@ -257,16 +257,27 @@ const changeOf = (body: {
   html?: string;
   mermaid?: string;
   patch?: unknown[];
-}): Exclude<PageChange, { statements: string }> | CanvasChange => {
+}) => {
   const named = (
     ["html", "patch", "elements", "delete", "mermaid"] as const
   ).filter((key) => body[key] !== undefined);
-  if (named.length !== 1) {
-    throw new ArtifactRefusal(
-      400,
-      "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group or dials go through their own routes."
-    );
-  }
+  return named.length === 1
+    ? oneChange(body)
+    : refusal(
+        400,
+        "artifact-update-change-one",
+        "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group or dials go through their own routes."
+      );
+};
+
+/** The change a body naming exactly one ({@link changeOf}) names. */
+const oneChange = (body: {
+  delete?: string[];
+  elements?: SkeletonElement[];
+  html?: string;
+  mermaid?: string;
+  patch?: unknown[];
+}): Exclude<PageChange, { statements: string }> | CanvasChange => {
   if (body.html !== undefined) {
     return { html: body.html };
   }
@@ -277,8 +288,40 @@ const changeOf = (body: {
     return { elements: body.elements };
   }
   return body.delete === undefined
-    ? { mermaid: body.mermaid as string }
+    ? { mermaid: body.mermaid ?? "" }
     : { delete: body.delete };
+};
+
+/** An artifact's read as its route asks it (`artifact_read`): its state's JSON read first, refused with the read's shape when it is none. */
+const readAsked = async (
+  artifacts: Artifacts,
+  instanceId: string,
+  id: string,
+  query: {
+    detail?: "summary" | "story";
+    png?: boolean;
+    render?: boolean;
+    save?: string;
+    since?: number;
+    state?: string;
+    story?: string;
+    verify?: boolean;
+    width?: number;
+  }
+) => {
+  const state = query.state ? stateOf(query.state) : undefined;
+  if (state instanceof ElysiaStatus) {
+    return state;
+  }
+  return await artifacts.read(instanceId, id, query.since, query.png === true, {
+    ...(query.detail ? { detail: query.detail } : {}),
+    ...(query.story ? { story: query.story } : {}),
+    ...(state ?? {}),
+    ...(query.save ? { save: query.save } : {}),
+    ...(query.render ? { render: true } : {}),
+    ...(query.verify ? { verify: true } : {}),
+    ...(query.width === undefined ? {} : { width: query.width }),
+  });
 };
 
 export const artifactRoutes = (artifacts: Artifacts) =>
@@ -311,25 +354,15 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       return refusal(422, "artifact-shape", shape);
     })
     // Every artifact the session holds: its panel's menu.
-    .get("/api/instances/:id/artifacts", ({ params }) => {
-      try {
-        return artifacts.list(params.id);
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .get("/api/instances/:id/artifacts", ({ params }) =>
+      artifacts.list(params.id)
+    )
     // Files' list: the session's artifacts that reached the person. The
     // dashboard's alone, so out of the app's API document.
     .get(
       "/api/instances/:id/artifacts/files",
       { detail: { hide: true } },
-      ({ params }) => {
-        try {
-          return artifacts.files(params.id);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => artifacts.files(params.id)
     )
     // What the session's tree asked the person, open or answered and not
     // yet taken (core session-questions.ts): its own screen's list. The
@@ -337,26 +370,14 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     .get(
       "/api/instances/:id/questions",
       { detail: { hide: true } },
-      ({ params }) => {
-        try {
-          return artifacts.sessionQuestions(params.id);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params }) => artifacts.sessionQuestions(params.id)
     )
     // Files' search: the session's artifacts a query matches by name or by
     // the words on their page, best first, with the words round a hit.
     .get(
       "/api/instances/:id/artifacts/search",
       { query: t.Object({ q: t.String({ maxLength: 200 }) }) },
-      ({ params, query }) => {
-        try {
-          return artifacts.search(params.id, query.q);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, query }) => artifacts.search(params.id, query.q)
     )
     // A screen's thumbnail of a page or preview, kept as its latest picture.
     .put(
@@ -369,15 +390,19 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }),
       },
       ({ params, body }) => {
-        try {
-          return artifacts.keepThumbnail(params.id, params.artifact, {
-            light: pngOf(body.light),
-            dark: pngOf(body.dark),
-            single: body.single,
-          });
-        } catch (error) {
-          return refused(error);
+        const light = pngOf(body.light);
+        if (light instanceof ElysiaStatus) {
+          return light;
         }
+        const dark = pngOf(body.dark);
+        if (dark instanceof ElysiaStatus) {
+          return dark;
+        }
+        return artifacts.keepThumbnail(params.id, params.artifact, {
+          light,
+          dark,
+          single: body.single,
+        });
       }
     )
     // A page of every artifact the session acts on, with whose move each is (artifact_list).
@@ -389,16 +414,11 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           waiting: t.Optional(t.BooleanString()),
         }),
       },
-      ({ params, query }) => {
-        try {
-          return artifacts.status(params.id, {
-            cursor: query.cursor,
-            waitingOnly: query.waiting === true,
-          });
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, query }) =>
+        artifacts.status(params.id, {
+          cursor: query.cursor,
+          waitingOnly: query.waiting === true,
+        })
     )
     .post(
       "/api/instances/:id/artifacts",
@@ -457,21 +477,22 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }),
       },
       async ({ params, body }) => {
-        try {
-          const { kind } = body;
-          if (kind === "sheet") {
-            throw new ArtifactRefusal(
-              400,
-              `A component's states are a component canvas now: kind "component", with does and ask. Example: ${COMPONENT_EXAMPLE}.`
-            );
-          }
-          if (body.draft && kind !== "canvas") {
-            throw new ArtifactRefusal(400, "Only a canvas is a draft.");
-          }
-          return await artifacts.create(params.id, { ...body, kind });
-        } catch (error) {
-          return refused(error);
+        const { kind } = body;
+        if (kind === "sheet") {
+          return refusal(
+            400,
+            "artifact-kind-sheet",
+            `A component's states are a component canvas now: kind "component", with does and ask. Example: ${COMPONENT_EXAMPLE}.`
+          );
         }
+        if (body.draft && kind !== "canvas") {
+          return refusal(
+            400,
+            "artifact-draft-not-canvas",
+            "Only a canvas is a draft."
+          );
+        }
+        return await artifacts.create(params.id, { ...body, kind });
       }
     )
     .get(
@@ -500,27 +521,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           verify: t.Optional(t.BooleanString()),
         }),
       },
-      ({ params, query }) => {
-        try {
-          return artifacts.read(
-            params.id,
-            params.artifact,
-            query.since,
-            query.png === true,
-            {
-              ...(query.detail ? { detail: query.detail } : {}),
-              ...(query.story ? { story: query.story } : {}),
-              ...(query.state ? stateOf(query.state) : {}),
-              ...(query.save ? { save: query.save } : {}),
-              ...(query.render ? { render: true } : {}),
-              ...(query.verify ? { verify: true } : {}),
-              ...(query.width === undefined ? {} : { width: query.width }),
-            }
-          );
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, query }) =>
+        readAsked(artifacts, params.id, params.artifact, query)
     )
     .patch(
       "/api/instances/:id/artifacts/:artifact",
@@ -541,15 +543,10 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }),
       },
       async ({ params, body }) => {
-        try {
-          return await artifacts.update(
-            params.id,
-            params.artifact,
-            changeOf(body)
-          );
-        } catch (error) {
-          return refused(error);
-        }
+        const change = changeOf(body);
+        return change instanceof ElysiaStatus
+          ? change
+          : await artifacts.update(params.id, params.artifact, change);
       }
     )
     // A component canvas's change by its session (artifact_update): a states file's story args or op, or the canvas's own edges, groups or dials.
@@ -561,54 +558,41 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         detail: { hide: true },
       },
       async ({ params, body }) => {
-        try {
-          const { edges, group, dials, args, story } = body;
-          const canvas = [edges, group, dials].some((one) => one !== undefined);
-          if (canvas && (args !== undefined || story !== undefined)) {
-            throw new ArtifactRefusal(
-              400,
-              "edges, group and dials change the canvas itself: send them apart from a states file's args or story."
-            );
-          }
-          return canvas
-            ? await artifacts.canvasUpdate(params.id, params.artifact, {
-                edges,
-                group,
-                dials,
-              })
-            : await artifacts.sheetUpdate(
-                params.id,
-                params.artifact,
-                sheetChangeOf({ args, story })
-              );
-        } catch (error) {
-          return refused(error);
+        const { edges, group, dials, args, story } = body;
+        const canvas = [edges, group, dials].some((one) => one !== undefined);
+        if (canvas && (args !== undefined || story !== undefined)) {
+          return refusal(
+            400,
+            "artifact-component-change-mixed",
+            "edges, group and dials change the canvas itself: send them apart from a states file's args or story."
+          );
         }
+        if (canvas) {
+          return await artifacts.canvasUpdate(params.id, params.artifact, {
+            edges,
+            group,
+            dials,
+          });
+        }
+        const change = sheetChangeOf({ args, story });
+        return change instanceof ElysiaStatus
+          ? change
+          : await artifacts.sheetUpdate(params.id, params.artifact, change);
       }
     )
     // Any kind's head line (artifact_update's ask): checked as a create's is, then every open view's head morphs to it.
     .post(
       "/api/instances/:id/artifacts/:artifact/ask",
       { body: t.Object({ ask: askField }), detail: { hide: true } },
-      ({ params, body }) => {
-        try {
-          return artifacts.askUpdate(params.id, params.artifact, body.ask);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) =>
+        artifacts.askUpdate(params.id, params.artifact, body.ask)
     )
     // Any kind's title (artifact_update's title): checked as a create's is, then every surface that names it says it.
     .post(
       "/api/instances/:id/artifacts/:artifact/title",
       { body: t.Object({ title: titleField }), detail: { hide: true } },
-      ({ params, body }) => {
-        try {
-          return artifacts.titleUpdate(params.id, params.artifact, body.title);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) =>
+        artifacts.titleUpdate(params.id, params.artifact, body.title)
     )
     // A card settled for the person (settle, Who decides): written as the person's pick is, with who settled it.
     .post(
@@ -624,13 +608,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           ),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await artifacts.settle(params.id, params.artifact, body);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await artifacts.settle(params.id, params.artifact, body)
     )
     // question_close: the session takes a question from the person's answer, or withdraws it; nothing is deleted.
     .post(
@@ -642,13 +621,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           why: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.why }),
         }),
       },
-      ({ params, body }) => {
-        try {
-          return artifacts.closeQuestion(params.id, body);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) => artifacts.closeQuestion(params.id, body)
     )
     // A decision page's revision (artifact_update's statements): merged into its program by name; what changed.
     .post(
@@ -658,32 +631,18 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           statements: t.String({ minLength: 1, maxLength: PROGRAM_MAX }),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await artifacts.revise(
-            params.id,
-            params.artifact,
-            body.statements
-          );
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await artifacts.revise(params.id, params.artifact, body.statements)
     )
     // The person's Save in a sheet's inspector, or its story buttons: written by the stage, told to the session.
     .post(
       "/api/instances/:id/artifacts/:artifact/sheet",
       { body: t.Object(sheetChange) },
       async ({ params, body }) => {
-        try {
-          return await artifacts.sheetWrite(
-            params.id,
-            params.artifact,
-            sheetChangeOf(body)
-          );
-        } catch (error) {
-          return refused(error);
-        }
+        const change = sheetChangeOf(body);
+        return change instanceof ElysiaStatus
+          ? change
+          : await artifacts.sheetWrite(params.id, params.artifact, change);
       }
     )
     // A component canvas's map for its panel: its component (the one its
@@ -696,30 +655,15 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           component: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
         }),
       },
-      async ({ params, query }) => {
-        try {
-          return await artifacts.mapOf(
-            params.id,
-            params.artifact,
-            query.component
-          );
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, query }) =>
+        await artifacts.mapOf(params.id, params.artifact, query.component)
     )
     // The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session.
     .post(
       "/api/instances/:id/artifacts/:artifact/verify",
-      async ({ params }) => {
-        try {
-          return {
-            verify: await artifacts.verifyFor(params.id, params.artifact),
-          };
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params }) => ({
+        verify: await artifacts.verifyFor(params.id, params.artifact),
+      })
     )
     // The library of the session's workspace: its components, paged, or one's card (design_map).
     .get(
@@ -738,20 +682,15 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           ),
         }),
       },
-      async ({ params, query }) => {
-        try {
-          return await artifacts.designMap(params.id, {
-            ...(query.dir ? { dir: query.dir } : {}),
-            ...(query.query ? { query: query.query } : {}),
-            ...(query.component ? { component: query.component } : {}),
-            ...(query.limit ? { limit: query.limit } : {}),
-            ...(query.cursor ? { cursor: query.cursor } : {}),
-            ...(query.response_format === "detailed" ? { detailed: true } : {}),
-          });
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, query }) =>
+        await artifacts.designMap(params.id, {
+          ...(query.dir ? { dir: query.dir } : {}),
+          ...(query.query ? { query: query.query } : {}),
+          ...(query.component ? { component: query.component } : {}),
+          ...(query.limit ? { limit: query.limit } : {}),
+          ...(query.cursor ? { cursor: query.cursor } : {}),
+          ...(query.response_format === "detailed" ? { detailed: true } : {}),
+        })
     )
     // Removes the artifact (the panel's Remove; artifact_delete with by=agent).
     // The panel that showed it shows the next newest after the person's
@@ -759,17 +698,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     .delete(
       "/api/instances/:id/artifacts/:artifact",
       { query: handQuery },
-      async ({ params, query }) => {
-        try {
-          return await artifacts.remove(
-            params.id,
-            params.artifact,
-            query.by ?? "person"
-          );
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, query }) =>
+        await artifacts.remove(params.id, params.artifact, query.by ?? "person")
     )
     // The person's pins on the session's artifacts, with their threads (comment_read).
     .get(
@@ -790,18 +720,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           reader: t.Optional(t.Literal("session")),
         }),
       },
-      ({ params, query }) => {
-        try {
-          return artifacts.commentRead(params.id, {
-            artifact: query.artifact,
-            filter: query.filter ?? "open",
-            since: query.since,
-            bySession: query.reader === "session",
-          });
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, query }) =>
+        artifacts.commentRead(params.id, {
+          artifact: query.artifact,
+          filter: query.filter ?? "open",
+          since: query.since,
+          bySession: query.reader === "session",
+        })
     )
     // The agent answers a pin in its thread (comment_reply).
     .post(
@@ -818,13 +743,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           asks: t.Optional(t.Boolean()),
         }),
       },
-      ({ params, body }) => {
-        try {
-          return artifacts.commentReply(params.id, params.pin, body);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) => artifacts.commentReply(params.id, params.pin, body)
     )
     // The agent resolves a pin (comment_resolve).
     .post(
@@ -836,13 +755,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           ),
         }),
       },
-      ({ params, body }) => {
-        try {
-          return artifacts.commentResolve(params.id, params.pin, body.text);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) =>
+        artifacts.commentResolve(params.id, params.pin, body.text)
     )
     // Whether a view has it on screen within 10 s, or why not; 503 when its
     // server could not start. The person's show unless by=agent (artifact_show).
@@ -871,31 +785,20 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           })
         ),
       },
-      async ({ params, query, body }) => {
-        try {
-          return await artifacts.show(
-            params.id,
-            params.artifact,
-            query.by ?? "person",
-            body?.at ?? { top: true }
-          );
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params, query, body }) =>
+        await artifacts.show(
+          params.id,
+          params.artifact,
+          query.by ?? "person",
+          body?.at ?? { top: true }
+        )
     )
     // Where the session's own browser opens the artifact (artifact_browse):
     // a one-time address, and when it stops opening. The tool alone calls it.
     .post(
       "/api/instances/:id/artifacts/:artifact/browse",
       { detail: { hide: true } },
-      async ({ params }) => {
-        try {
-          return await artifacts.browse(params.id, params.artifact);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params }) => await artifacts.browse(params.id, params.artifact)
     )
     // A view (a dashboard tab, the app) has the artifact on screen at the
     // open frame's revision, or could not load it: the waiting show answers.
@@ -909,50 +812,26 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           error: t.Optional(t.UnionEnum(SHOWN_FAILURES)),
         }),
       },
-      ({ params, body }) => {
-        try {
-          return artifacts.shown(params.id, params.artifact, body);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      ({ params, body }) => artifacts.shown(params.id, params.artifact, body)
     )
     // The artifact's doc as a person's view reads it (the app's panel): its
     // picks and their send. No read of the session's, and it never wakes a stage.
-    .get("/api/instances/:id/artifacts/:artifact/view", ({ params }) => {
-      try {
-        return artifacts.viewOf(params.id, params.artifact);
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .get("/api/instances/:id/artifacts/:artifact/view", ({ params }) =>
+      artifacts.viewOf(params.id, params.artifact)
+    )
     // The artifact into its project's folder at artifacts/<name>/, one commit (artifact_promote).
     .post(
       "/api/instances/:id/artifacts/:artifact/promote",
-      async ({ params }) => {
-        try {
-          return await artifacts.promote(params.id, params.artifact);
-        } catch (error) {
-          return refused(error);
-        }
-      }
+      async ({ params }) => await artifacts.promote(params.id, params.artifact)
     )
     // A draft canvas went out with the composer's send: no longer a draft.
-    .post("/api/instances/:id/artifacts/:artifact/sent", ({ params }) => {
-      try {
-        return artifacts.sent(params.id, params.artifact);
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .post("/api/instances/:id/artifacts/:artifact/sent", ({ params }) =>
+      artifacts.sent(params.id, params.artifact)
+    )
     // The artifact's own tab (the dashboard's /artifact/<id>) finds its session.
-    .get("/api/artifacts/:artifact", ({ params }) => {
-      try {
-        return artifacts.find(params.artifact);
-      } catch (error) {
-        return refused(error);
-      }
-    })
+    .get("/api/artifacts/:artifact", ({ params }) =>
+      artifacts.find(params.artifact)
+    )
     // An artifact's latest picture in a scheme (Files' cards). The list names
     // it with its `at`, so a new one is a new address and this one never
     // changes under it.
@@ -969,27 +848,22 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         query: t.Object({ at: t.Optional(t.String()) }),
       },
       ({ params }) => {
-        try {
-          const png = artifacts.thumbnailFile(params.artifact, params.scheme);
-          if (!png) {
-            return refusal(404, "no-picture-yet", "No picture yet.");
-          }
-          return new Response(new Uint8Array(png), {
-            headers: {
-              "content-type": "image/png",
-              "cache-control": "private, max-age=31536000, immutable",
-            },
-          });
-        } catch (error) {
-          return refused(error);
+        const png = artifacts.thumbnailFile(params.artifact, params.scheme);
+        if (png instanceof ElysiaStatus) {
+          return png;
         }
+        if (!png) {
+          return refusal(404, "no-picture-yet", "No picture yet.");
+        }
+        return new Response(new Uint8Array(png), {
+          headers: {
+            "content-type": "image/png",
+            "cache-control": "private, max-age=31536000, immutable",
+          },
+        });
       }
     )
     // A canvas as a send carries it: the .excalidraw file, the outline, the picture.
-    .get("/api/artifacts/:artifact/export", ({ params }) => {
-      try {
-        return artifacts.export(params.artifact);
-      } catch (error) {
-        return refused(error);
-      }
-    });
+    .get("/api/artifacts/:artifact/export", ({ params }) =>
+      artifacts.export(params.artifact)
+    );

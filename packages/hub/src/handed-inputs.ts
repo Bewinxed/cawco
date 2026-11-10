@@ -23,7 +23,6 @@ import { dataUrlBytes } from "@cawco/core/captures";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
 import { INPUTS_LIMIT_BYTES } from "@cawco/core/workspace/controls";
 import { ElysiaStatus } from "elysia";
-import { ArtifactRefusal } from "./artifacts/refusals";
 import type { Artifacts } from "./artifacts/service";
 import type { HandedReceiver } from "./artifacts/shapes";
 import type { WorkItemRow } from "./db/project-work";
@@ -31,7 +30,7 @@ import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
 import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
 import { listFolder, readFolderBytes } from "./project-folder";
-import { refusal } from "./refusal";
+import { type Refused, refusal } from "./refusal";
 
 /**
  * One file the hub writes into `inputs/`: its name there, what it was handed
@@ -212,22 +211,9 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     return files;
   };
 
-  /** What the artifacts read, their thrown refusal in the input's words. */
-  const artifactRead = async <T>(entry: string, read: () => T | Promise<T>) => {
-    try {
-      return await read();
-    } catch (error) {
-      if (error instanceof ArtifactRefusal) {
-        return unhanded(
-          error.status,
-          "handed-artifact-refused",
-          entry,
-          error.message
-        );
-      }
-      throw error;
-    }
-  };
+  /** The artifacts' refusal of what the input names, in the input's words. */
+  const artifactRefused = (entry: string, { status, response }: Refused) =>
+    unhanded(status, "handed-artifact-refused", entry, response.detail);
 
   /**
    * An artifact's files (artifacts/service.ts `handed`); a component
@@ -235,11 +221,9 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
    */
   const artifact = async (caller: InstanceRow, id: string) => {
     const entry = `{ artifact: "${id}" }`;
-    const handed = await artifactRead(entry, () =>
-      deps.artifacts.handed(caller.id, id)
-    );
+    const handed = await deps.artifacts.handed(caller.id, id);
     if (handed instanceof ElysiaStatus) {
-      return handed;
+      return artifactRefused(entry, handed);
     }
     const { files, row, states } = handed;
     const from = `${row.kind} ${row.name}`;
@@ -278,16 +262,14 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
     return all;
   };
 
-  const pins = async (caller: InstanceRow, id: string) => {
-    const read = await artifactRead(`{ pins: "${id}" }`, () =>
-      deps.artifacts.commentRead(caller.id, {
-        artifact: id,
-        filter: "all",
-        bySession: false,
-      })
-    );
+  const pins = (caller: InstanceRow, id: string) => {
+    const read = deps.artifacts.commentRead(caller.id, {
+      artifact: id,
+      filter: "all",
+      bySession: false,
+    });
     if (read instanceof ElysiaStatus) {
-      return read;
+      return artifactRefused(`{ pins: "${id}" }`, read);
     }
     const [one] = read.artifacts;
     const name = one?.name ?? short(id);

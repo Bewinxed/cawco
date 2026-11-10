@@ -86,6 +86,7 @@ import {
   type Array as YArray,
   Map as YMap,
 } from "yjs";
+import type { Refused } from "../refusal";
 import {
   type ArtifactClient,
   type ArtifactDocs,
@@ -93,7 +94,6 @@ import {
   MAPS,
 } from "./docs";
 import { picturePath } from "./page-store";
-import { ArtifactRefusal, NothingNewToSend } from "./refusals";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
 const MESSAGE_SYNC = 0;
@@ -690,7 +690,7 @@ export const artifactPictures =
       instanceId: string,
       artifactId: string,
       body: MarkPictures
-    ) => { held: number }
+    ) => { held: number } | Refused
   ) =>
   async (
     request: Request,
@@ -725,18 +725,8 @@ export const artifactPictures =
     if (problem) {
       return problemResponse({ status: 400, code: "refused", detail: problem });
     }
-    try {
-      return Response.json(keep(instanceId, artifactId, body as MarkPictures));
-    } catch (error) {
-      if (error instanceof ArtifactRefusal) {
-        return problemResponse({
-          status: error.status,
-          code: "message",
-          detail: error.message,
-        });
-      }
-      throw error;
-    }
+    const kept = keep(instanceId, artifactId, body as MarkPictures);
+    return "response" in kept ? problemOf(kept) : Response.json(kept);
   };
 
 /** A checked send's body as the service takes it: its text trimmed, and only the fields it holds. */
@@ -820,7 +810,7 @@ export const artifactSend =
       artifactId: string,
       body: SendBody,
       route: string
-    ) => Promise<ArtifactChoices>,
+    ) => Promise<ArtifactChoices | Refused>,
     docs: ArtifactDocs
   ) =>
   async (
@@ -867,39 +857,29 @@ export const artifactSend =
         });
       }
     }
-    try {
-      return Response.json(
-        await send(
-          instanceId,
-          artifactId,
-          sentBody(body as SendBody),
-          `POST ${new URL(request.url).pathname}`
-        )
-      );
-    } catch (error) {
-      return refusedSend(error);
-    }
+    const sent = await send(
+      instanceId,
+      artifactId,
+      sentBody(body as SendBody),
+      `POST ${new URL(request.url).pathname}`
+    );
+    return "response" in sent ? refusedSend(sent) : Response.json(sent);
   };
 
 /**
  * The page's answer for a Send the service refused, in its words and
  * status; a Send with nothing new reads as sent (his press after every pick
  * had gone, by the hub's own send or an earlier press: what he asked for
- * holds). Anything else is thrown on.
+ * holds).
  */
-const refusedSend = (error: unknown): Response => {
-  if (error instanceof NothingNewToSend) {
-    return Response.json({ sent: "already" });
-  }
-  if (error instanceof ArtifactRefusal) {
-    return problemResponse({
-      status: error.status,
-      code: "message",
-      detail: error.message,
-    });
-  }
-  throw error;
-};
+const refusedSend = (refused: Refused): Response =>
+  refused.response.code === "artifact-nothing-new"
+    ? Response.json({ sent: "already" })
+    : problemOf(refused);
+
+/** A refusal the service answered, as the page reads it: Elysia's problem, its status, code and words. */
+const problemOf = ({ status, response }: Refused): Response =>
+  problemResponse({ status, code: response.code, detail: response.detail });
 
 /** The listener's handlers for artifact sockets. */
 export const artifactSocket = (docs: ArtifactDocs) => ({
