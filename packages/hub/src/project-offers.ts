@@ -33,6 +33,7 @@ import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
 import { Elysia, ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
+import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { ProjectOfferRow, ProjectRow } from "./db/projects";
 import { leafOf, sessionLabel } from "./labels";
@@ -85,7 +86,7 @@ export interface ProjectOffersDeps {
     timeoutMs?: number
   ) => Promise<CommandResult>;
   /** Notes a new project's start and sends its conversation the setup steps (caw.ts `setup`): its session, when it started. */
-  setup: (projectId: string, note: ProjectNote) => Promise<string | undefined>;
+  setup: (projectId: string, note: ProjectNote) => ReturnType<Caw["setup"]>;
   tasks: Tasks;
 }
 
@@ -435,6 +436,9 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
               ? `Its plan is on the board as ${plural(filed.length, "proposed task", "proposed tasks")}: ${filed.map((task) => task.id).join(", ")}.`
               : "",
           });
+      if (conversation instanceof ElysiaStatus) {
+        return conversation;
+      }
       const accepted: AcceptResult = {
         joined,
         project: { id: project.id, name: project.name },

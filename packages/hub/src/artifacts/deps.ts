@@ -18,6 +18,7 @@ import type {
 } from "@cawco/core/stage";
 import type { FolderWeight } from "@cawco/preview/proxy";
 import type { problem } from "elysia";
+import type { TellProblem } from "../caw-problems";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import type { FolderProblem } from "../decision-page";
 import type { ArtifactNamed, BuiltProgram } from "../decision-program";
@@ -463,7 +464,7 @@ export interface ArtifactServiceDeps {
     to: PageHearer,
     artifact: ArtifactRow,
     responses: { since: number }
-  ) => Promise<string>;
+  ) => Promise<string | TellProblem>;
   /**
    * The stage story file `file` runs on in a workspace (agent stage.ts
    * `ensureStage`), started or woken there and waited on: its port, root and
