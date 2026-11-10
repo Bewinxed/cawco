@@ -14,10 +14,10 @@ import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
 import type { LastErrorKind } from "@cawco/core/relaunch";
 import type { EndedTask } from "@cawco/core/session/controls";
 import { workWords } from "@cawco/core/words/work";
+import { ElysiaStatus } from "elysia";
 import type { HubLineMessage } from "./compaction";
 import type { PublicInstanceRow } from "./db/instances";
 import type { MachineLineKind } from "./db/schema";
-import type { SentMessageRow } from "./db/sends";
 import { TURN_UNRECORDED } from "./db/sends";
 import type { MachineLine } from "./db/session-lines";
 import type { HubContext } from "./hub-context";
@@ -267,7 +267,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
             ...(up && now ? await cutTaskOutput(now, task.taskId) : {}),
           });
         }
-        ctx.deliverSend({
+        const sent = ctx.deliverSend({
           verb: "send",
           machineId: now?.machineId ?? row.machineId,
           instanceId: row.id,
@@ -282,6 +282,11 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
             },
           },
         } satisfies Envelope<SendPayload>);
+        if (sent instanceof ElysiaStatus) {
+          console.warn(
+            `[hub] the cut tasks were not told to their session: ${sent.response.detail}`
+          );
+        }
       })(),
       "cut tasks"
     );
@@ -311,13 +316,14 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
    * made again for the same turn (a second register, a hub that died after
    * making it) is the same send, which {@link deliverSend} hands over once.
    * The hub's own word, never a person's, so it goes into the session itself.
+   * Why it did not go, in words, or nothing when it did.
    */
   const handTurnBack = (
     row: { id: string; machineId: string },
     turn: string,
     content: string
-  ): SentMessageRow =>
-    ctx.deliverToSession(
+  ): string | undefined => {
+    const sent = ctx.deliverToSession(
       {
         verb: "send",
         machineId: row.machineId,
@@ -335,6 +341,13 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       } satisfies Envelope<SendPayload>,
       false
     );
+    if (sent instanceof ElysiaStatus) {
+      return sent.response.detail;
+    }
+    return sent.state === "failed"
+      ? (sent.reason ?? "the send failed")
+      : undefined;
+  };
 
   /**
    * The turn of `row` a restart or a kill cut and nothing has taken up
@@ -471,7 +484,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     ) {
       return;
     }
-    ctx.deliverSend({
+    const sent = ctx.deliverSend({
       verb: "send",
       machineId: row.machineId,
       instanceId: row.id,
@@ -492,6 +505,11 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
         },
       },
     } satisfies Envelope<SendPayload>);
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[hub] a question asked again was not sent: ${sent.response.detail}`
+      );
+    }
   };
 
   /** Whether a send to the session is still pending, owed or handed, other than a keep-alive ping: that send is its next turn. */
@@ -531,7 +549,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
       askWithdrawnAgain(row, restartedAt);
       return;
     }
-    const sent = handTurnBack(
+    const unsent = handTurnBack(
       row,
       String(cut),
       askAgain(
@@ -539,10 +557,10 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
         `${restartedWords(restartedAt)}${cutWords ? `\n\n${cutWords}` : ""}`
       )
     );
-    if (sent.state === "failed") {
+    if (unsent !== undefined) {
       ctx.turnOver(row.id);
       console.warn(
-        `[hub] ${row.id}: the turn a restart cut was not handed back: ${sent.reason ?? "the send failed"}`
+        `[hub] ${row.id}: the turn a restart cut was not handed back: ${unsent}`
       );
       return;
     }
@@ -671,7 +689,7 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
     if (!(row && cut !== undefined)) {
       return false;
     }
-    const sent = handTurnBack(
+    const unsent = handTurnBack(
       row,
       String(cut),
       askAgain(
@@ -679,10 +697,10 @@ export const createCutTurns = (ctx: CutTurnsContext) => {
         `${killedWords(signal, killedAt)}${cutWords ? `\n\n${cutWords}` : ""}`
       )
     );
-    if (sent.state === "failed") {
+    if (unsent !== undefined) {
       ctx.turnOver(row.id);
       console.warn(
-        `[hub] ${ctx.sessionName(row)}: the turn its killed process was in couldn't be handed back: ${sent.reason ?? "the send failed"}. It starts again with its next message.`
+        `[hub] ${ctx.sessionName(row)}: the turn its killed process was in couldn't be handed back: ${unsent}. It starts again with its next message.`
       );
       return false;
     }

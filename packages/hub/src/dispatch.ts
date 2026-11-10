@@ -159,8 +159,7 @@ import {
   tailOf,
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
-import { ProjectRefusal } from "./project-refusal";
-
+import type { AnyProblem, ProblemStatus } from "./refusal";
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
@@ -174,15 +173,15 @@ import {
   type Tasks,
   type TaskView,
 } from "./tasks";
-import { isLive, WorkItemRefusal } from "./work-item-state";
+import { isLive } from "./work-item-state";
 import {
   budgetProblem,
   type CloneRef,
   DEFAULT_DELEGATE_TYPE,
-  OwnsOverlap,
   SESSION_TITLE_MAX,
   type WorkItemRequest,
   type WorkItemStart,
+  type WorkItems,
 } from "./work-items";
 import { capitalized, type WorkAsk, type WorkPlace } from "./work-place";
 
@@ -194,16 +193,20 @@ export interface DispatchDeps {
    * it starts, recorded as handed (work-items.ts `briefing`); nothing when
    * it has read it.
    */
-  readonly briefing: (request: WorkItemRequest) => string | undefined;
+  readonly briefing: (
+    request: WorkItemRequest
+  ) => ReturnType<WorkItems["briefing"]>;
   /**
    * The brief's project context for an attempt at `task` (memory.ts
    * `contextFor`): AGENTS.md and the knowledge files it needs, or "". Typed
    * here, not from memory.ts, whose import would close a cycle back to
    * this file (memory → presenters/project → ingress → dispatch); the
-   * folder's refusal is thrown on as a ProjectRefusal (server.ts), which
-   * {@link failure} answers.
+   * folder's problem is passed up.
    */
-  readonly context: (projectId: string, task: TaskView) => Promise<string>;
+  readonly context: (
+    projectId: string,
+    task: TaskView
+  ) => Promise<string | AnyProblem>;
   /**
    * The project's conversation, started now if it has none (caw.ts
    * `conversationFor`): for your ask on or off, for the dispatcher's own
@@ -265,7 +268,7 @@ export interface DispatchDeps {
     ) => { description: string; name: string }[];
   };
   /** Files and spawns a work item (work-items.ts `start`). */
-  readonly start: (request: WorkItemRequest) => Promise<WorkItemStart>;
+  readonly start: (request: WorkItemRequest) => ReturnType<WorkItems["start"]>;
   readonly tasks: Tasks;
   /**
    * How a delegate type lands its work, when it says. Fleet delegate types
@@ -800,26 +803,6 @@ const columnsOf = ({
   ...(runsOn === undefined ? {} : { runsOn }),
 });
 
-/**
- * A failure a start throws, as the words a caller reads and the status a
- * route answers: work-items' refusal (work-item-state.ts), a project's
- * folder refusal workspaces still throw (project-refusal.ts), and anything
- * else, the machine's.
- */
-const failure = (
-  error: unknown
-): { code: ProjectRefusal["status"] | 502; message: string } => {
-  const message = error instanceof Error ? error.message : String(error);
-  if (error instanceof ProjectRefusal) {
-    return { code: error.status, message };
-  }
-  if (error instanceof WorkItemRefusal) {
-    return { code: error.status, message };
-  }
-  // Anything else is the machine's: offline, or git turning the clone down.
-  return { code: 502, message };
-};
-
 /** The stage kinds an ended attempt sends its task to: done, `you`, or back to todo. */
 type AttemptLanding = Extract<StageKind, "done" | "todo" | "you">;
 
@@ -1260,6 +1243,16 @@ export const createDispatcher = ({
         )
       : [];
     const known = await context(project.id, task);
+    // Said again across the import cycle the context is read through (memory.ts).
+    if (typeof known !== "string") {
+      return problem<ProblemStatus, { code: string; detail: string }>(
+        known.status,
+        {
+          code: known.response.code,
+          detail: known.response.detail,
+        }
+      );
+    }
     return (design: string) =>
       briefOf({
         project,
@@ -1304,50 +1297,96 @@ export const createDispatcher = ({
       asked?.type ?? typeOf(task, active) ?? (await chosenType(project, task));
     const lands = asked?.lands ?? landsOf(project, task, type);
     try {
-      const brief = await briefFor(project, task, lands, {
-        asked: asked?.prompt,
-        previous,
-      });
-      if (brief instanceof ElysiaStatus) {
-        note(project.id, task, brief.response.detail);
-        return brief;
-      }
-      const request: WorkItemRequest = {
-        parentInstanceId: parent.id,
-        prompt: brief(""),
-        // The project's design system, as the attempt's clone holds it, for
-        // a task that needs it (spec §5.7, "Use").
-        ...(needsDesignSystem(project.template ?? null, task)
-          ? {
-              briefFromClone: async (clone: CloneRef) =>
-                brief(await designSection(clone)),
-            }
-          : {}),
-        title: asked?.title ?? titleOf(task),
-        type,
+      const started = await startBriefed(project, task, parent, {
+        asked,
         lands,
-        waitedOn: witnessesOf(task),
-        ...runsAs(task, asked),
-        ...placed,
-        ...(origin ? { origin } : {}),
-        // Only a start a person asked for names `you` here: his dashboard
-        // start or retry, or his own move into a `runs:` stage.
-        byPerson: origin === "you",
-        task: { id: task.id, projectId: project.id },
-      };
-      // A brief a session wrote waits for the guidance it has yet to read,
-      // as any delegate's does; no problem of the task's.
-      const guide = asked ? briefing(request) : undefined;
-      if (guide) {
-        return problem(409, { code: "dispatch-guidance-first", detail: guide });
+        origin,
+        placed,
+        previous,
+        type,
+      });
+      if (started instanceof ElysiaStatus) {
+        note(project.id, task, started.response.detail);
+        return started;
       }
-      const started = await start(request);
       problems.delete(keyOf(project.id, task.id));
       return started;
     } catch (error) {
-      note(project.id, task, failure(error).message);
+      note(
+        project.id,
+        task,
+        error instanceof Error ? error.message : String(error)
+      );
       throw error;
     }
+  };
+
+  /**
+   * An attempt's work item started, briefed from its task: the request
+   * built with the brief, a brief a session wrote held for the guidance it
+   * has yet to read, then {@link DispatchDeps.start}; what stops it comes
+   * back as its problem.
+   */
+  const startBriefed = async (
+    project: ProjectRow,
+    task: TaskView,
+    parent: InstanceRow,
+    {
+      asked,
+      lands,
+      origin,
+      placed,
+      previous,
+      type,
+    }: {
+      asked: AttemptAsk | undefined;
+      lands: LandsMode;
+      origin: Origin | undefined;
+      placed: Exclude<ReturnType<typeof placementOf>, { "~status": true }>;
+      previous: WorkItemRow | undefined;
+      type: string | undefined;
+    }
+  ) => {
+    const brief = await briefFor(project, task, lands, {
+      asked: asked?.prompt,
+      previous,
+    });
+    if (brief instanceof ElysiaStatus) {
+      return brief;
+    }
+    const request: WorkItemRequest = {
+      parentInstanceId: parent.id,
+      prompt: brief(""),
+      // The project's design system, as the attempt's clone holds it, for
+      // a task that needs it (spec §5.7, "Use").
+      ...(needsDesignSystem(project.template ?? null, task)
+        ? {
+            briefFromClone: async (clone: CloneRef) =>
+              brief(await designSection(clone)),
+          }
+        : {}),
+      title: asked?.title ?? titleOf(task),
+      type,
+      lands,
+      waitedOn: witnessesOf(task),
+      ...runsAs(task, asked),
+      ...placed,
+      ...(origin ? { origin } : {}),
+      // Only a start a person asked for names `you` here: his dashboard
+      // start or retry, or his own move into a `runs:` stage.
+      byPerson: origin === "you",
+      task: { id: task.id, projectId: project.id },
+    };
+    // A brief a session wrote waits for the guidance it has yet to read,
+    // as any delegate's does; no problem of the task's.
+    const guide = asked ? briefing(request) : undefined;
+    if (guide instanceof ElysiaStatus) {
+      return guide;
+    }
+    if (guide) {
+      return problem(409, { code: "dispatch-guidance-first", detail: guide });
+    }
+    return await start(request);
   };
 
   /** Moves a task whose attempt started into its active stage; answers where it is. */
@@ -1377,7 +1416,7 @@ export const createDispatcher = ({
         ? unmoved(moved.response.detail)
         : moved.stage;
     } catch (error) {
-      return unmoved(failure(error).message);
+      return unmoved(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -1453,19 +1492,12 @@ export const createDispatcher = ({
     if (moveRefused) {
       return moveRefused;
     }
-    const started = await launch(project, task, parent, active, {
+    const started = await launchOrQueue(project, task, parent, active, {
       asked,
       origin,
       previous,
-    }).catch((error: unknown) => {
-      if (!(error instanceof OwnsOverlap)) {
-        throw error;
-      }
-      return queuedForOwns(project, task, parent, stage, error, {
-        asked,
-        retry,
-        origin,
-      });
+      retry,
+      stage,
     });
     if (started instanceof ElysiaStatus || "queued" in started) {
       return started;
@@ -1495,6 +1527,41 @@ export const createDispatcher = ({
     return attempt;
   };
 
+  /** {@link launch}, or, while a live item owns files the attempt would own too, the attempt queued for them. */
+  const launchOrQueue = async (
+    project: ProjectRow,
+    task: TaskView,
+    parent: InstanceRow,
+    active: Stage | undefined,
+    {
+      asked,
+      origin,
+      previous,
+      retry,
+      stage,
+    }: {
+      asked: AttemptAsk | undefined;
+      origin: Origin | undefined;
+      previous: WorkItemRow | undefined;
+      retry: boolean;
+      stage: Stage | undefined;
+    }
+  ) => {
+    const launched = await launch(project, task, parent, active, {
+      asked,
+      origin,
+      previous,
+    });
+    return launched instanceof ElysiaStatus &&
+      launched.response.code === "work-item-owns-overlap"
+      ? queuedForOwns(project, task, parent, stage, launched.response.detail, {
+          asked,
+          retry,
+          origin,
+        })
+      : launched;
+  };
+
   /**
    * An attempt that waits for files a live item owns: queued, why `owns`,
    * under the stage the task is in (a hook's own), to start as items end
@@ -1508,7 +1575,7 @@ export const createDispatcher = ({
     task: TaskView,
     parent: InstanceRow,
     active: Stage | undefined,
-    overlap: OwnsOverlap,
+    because: string,
     {
       asked,
       retry,
@@ -1530,7 +1597,7 @@ export const createDispatcher = ({
       asked: asked ?? null,
     });
     console.log(
-      `[dispatch] ${project.name}: ${task.id}${retry ? "'s retry" : ""} waits for owned files: ${overlap.message}`
+      `[dispatch] ${project.name}: ${task.id}${retry ? "'s retry" : ""} waits for owned files: ${because}`
     );
     return {
       task: task.id,
@@ -1541,7 +1608,7 @@ export const createDispatcher = ({
       workItemId: null,
       workspaceId: null,
       instanceId: null,
-      text: `Queued ${retry ? "a retry of" : "an attempt at"} ${taskLink(project.id, task.id, task.title)}: ${overlap.message} The hub starts it, reporting to you, when the files are free.`,
+      text: `Queued ${retry ? "a retry of" : "an attempt at"} ${taskLink(project.id, task.id, task.title)}: ${because} The hub starts it, reporting to you, when the files are free.`,
     };
   };
 
@@ -1704,7 +1771,7 @@ export const createDispatcher = ({
           left -= 1;
         }
       } catch (error) {
-        unstarted(failure(error).message);
+        unstarted(error instanceof Error ? error.message : String(error));
       }
     }
   };
@@ -1778,7 +1845,7 @@ export const createDispatcher = ({
           unrun(ran.response.detail);
         }
       } catch (error) {
-        unrun(failure(error).message);
+        unrun(error instanceof Error ? error.message : String(error));
       }
     }
   };
@@ -1860,7 +1927,9 @@ export const createDispatcher = ({
             console.warn(`[dispatch] ${projectId}: ${refused.response.detail}`);
           }
         } catch (error) {
-          console.warn(`[dispatch] ${projectId}: ${failure(error).message}`);
+          console.warn(
+            `[dispatch] ${projectId}: ${error instanceof Error ? error.message : String(error)}`
+          );
         }
       } while (again.has(projectId));
     };
@@ -1957,7 +2026,7 @@ export const createDispatcher = ({
         return unstarted(started.response.detail);
       }
     } catch (error) {
-      return unstarted(failure(error).message);
+      return unstarted(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -2430,7 +2499,8 @@ export const createDispatcher = ({
             unmoved(refused.response.detail);
           }
         },
-        (error: unknown) => unmoved(failure(error).message)
+        (error: unknown) =>
+          unmoved(error instanceof Error ? error.message : String(error))
       )
       .finally(() => evaluate(projectId));
   };
@@ -2507,7 +2577,8 @@ export const createDispatcher = ({
               moved(refused.response.detail);
             }
           },
-          (error: unknown) => moved(failure(error).message)
+          (error: unknown) =>
+            moved(error instanceof Error ? error.message : String(error))
         )
         .then(() => hooked({ ...event, to: entered }))
         .then(
@@ -2516,7 +2587,8 @@ export const createDispatcher = ({
               hookedIn(refused.response.detail);
             }
           },
-          (error: unknown) => hookedIn(failure(error).message)
+          (error: unknown) =>
+            hookedIn(error instanceof Error ? error.message : String(error))
         )
         .finally(() => evaluate(event.projectId));
       return;
@@ -2720,20 +2792,6 @@ export const createDispatcher = ({
 
 export type Dispatcher = ReturnType<typeof createDispatcher>;
 
-/**
- * A start's failure that work-items or a machine threw ({@link failure}),
- * as the route's answer with its status, until work-items returns its
- * refusals; the dispatcher's own refusals are returned, as they are.
- */
-const startAnswered = async <T>(work: () => Promise<T>) => {
-  try {
-    return await work();
-  } catch (error) {
-    const { code, message } = failure(error);
-    return problem(code, { code: "dispatch-start-failed", detail: message });
-  }
-};
-
 /** Who starts an attempt by hand: the session it reports to, when one does. */
 const ATTEMPT_FROM = t.Object({ parentInstanceId: t.Optional(t.String()) });
 
@@ -2767,8 +2825,10 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
       ({ params, body, request, server }) => {
         // A workspace is cut on a machine; that can take a while.
         server?.timeout(request, 0);
-        return startAnswered(() =>
-          dispatcher.startFor(params.id, params.taskId, body.parentInstanceId)
+        return dispatcher.startFor(
+          params.id,
+          params.taskId,
+          body.parentInstanceId
         );
       }
     )
@@ -2779,8 +2839,10 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
       { body: ATTEMPT_FROM },
       ({ params, body, request, server }) => {
         server?.timeout(request, 0);
-        return startAnswered(() =>
-          dispatcher.retryFor(params.id, params.taskId, body.parentInstanceId)
+        return dispatcher.retryFor(
+          params.id,
+          params.taskId,
+          body.parentInstanceId
         );
       }
     );

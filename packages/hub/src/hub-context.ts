@@ -391,7 +391,7 @@ export interface HubContext {
   awayWords: (machineId: string, answer: Unanswered) => string;
   binaryUpdateStates: Map<string, BinaryUpdateState>;
   boardBase: Map<string, BoardInstanceRow>;
-  bounded: (payload: SpawnPayload, knownRow?: InstanceRow) => NamedSpawn;
+  bounded: ReturnType<typeof createLaunches>["bounded"];
   boundProblem: ({
     projectId,
     areaId,
@@ -514,14 +514,8 @@ export interface HubContext {
   delegateWaits: ReturnType<typeof createDelegateWaits>;
   delegationMcp: ReturnType<typeof createDelegationMcp>;
   deletedProjects: ReturnType<typeof projectDelete>;
-  deliverSend: (
-    asked: Envelope<SendPayload>,
-    ahead?: boolean
-  ) => SentMessageRow | undefined;
-  deliverToSession: (
-    envelope: Envelope<SendPayload>,
-    ahead: boolean
-  ) => SentMessageRow;
+  deliverSend: ReturnType<typeof createSends>["deliverSend"];
+  deliverToSession: ReturnType<typeof createSends>["deliverToSession"];
   designSystem: ReturnType<typeof createDesignSystem>;
   diedOnSignal: ReturnType<typeof createCutTurns>["diedOnSignal"];
   discardAsked: WorkItemCallsDeps["discardAsked"];
@@ -1225,12 +1219,7 @@ export interface HubContext {
         refusal?: StoredSendRefusal | undefined;
       }
     | undefined;
-  sendSpawn: (
-    agent: HubSocket | undefined,
-    machineId: string,
-    envelope: Envelope<SpawnPayload>,
-    paced?: boolean
-  ) => Envelope<unknown> | undefined;
+  sendSpawn: ReturnType<typeof createStartHolds>["sendSpawn"];
   /** Each session's sends still pending, by count (sends.ts `pendingSends`). */
   sendsPending: { count: (instanceId: string) => number };
   sentFrame: (arg0: SendPayload) => SentMessage;
@@ -1314,7 +1303,7 @@ export interface HubContext {
       | "role"
       | "startingSet"
     >
-  ) => Promise<void>;
+  ) => Promise<AnyProblem | undefined>;
   speaksContract: (range: { max: number; min: number } | undefined) => boolean;
   spendNow: () => UsageSpend;
   sshTunnels: SshTunnels;
@@ -1426,7 +1415,7 @@ export interface HubContext {
     id: string,
     cancelled: () => boolean,
     mode: PermissionMode
-  ) => Promise<string>;
+  ) => Promise<string | AnyProblem>;
   summarisers: Set<string>;
   summarizerOf: (row: { accountId?: string | null }) => {
     harness: HarnessKind;

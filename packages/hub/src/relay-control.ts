@@ -200,8 +200,12 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       );
     }
     const record = ctx.deliverSend(message);
+    const taken =
+      record instanceof ElysiaStatus
+        ? `not taken: ${record.response.detail}`
+        : (record?.state ?? "not taken");
     console.log(
-      `[hub] send -> ${message.payload.instanceId} (${record?.state ?? "not taken"})${
+      `[hub] send -> ${message.payload.instanceId} (${taken})${
         provenance
           ? ` client ${provenance.clientId ?? "?"} presence ${provenance.presenceId?.slice(0, 8) ?? "?"}`
           : ""

@@ -1,10 +1,10 @@
-import { ElysiaStatus, type problem } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DelegateResult } from "./delegate-result";
-import type { AttemptAsk } from "./dispatch";
+import type { AttemptAsk, Dispatcher } from "./dispatch";
+import type { AnyProblem, ProblemStatus } from "./refusal";
 
 import type { createTreeStops } from "./tree-stops";
-import { WorkItemRefusal } from "./work-item-state";
 import type { WorkItemRequest, WorkItemStart, WorkItems } from "./work-items";
 import type { Unlanded } from "./workspaces";
 
@@ -15,7 +15,7 @@ export interface WorkItemCallsDeps {
     instanceId: string
   ) => Promise<Unlanded | { error: string } | null>;
   readonly db: DbShape;
-  /** A `delegate` naming its task: an attempt at it (dispatch.ts). */
+  /** A `delegate` naming its task: an attempt at it (dispatch.ts), or what stops it (server.ts `delegatedAttempt`). */
   readonly delegatedAttempt: (
     asked: AttemptAsk &
       Pick<
@@ -27,7 +27,22 @@ export interface WorkItemCallsDeps {
         | "parentInstanceId"
         | "workspace"
       > & { task: string }
-  ) => Promise<DelegateResult>;
+  ) => Promise<
+    | DelegateResult
+    | ReturnType<
+        typeof problem<400, { code: "delegate-task-clean"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<400, { code: "delegate-task-placed"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<
+          400,
+          { code: "delegate-task-no-project"; detail: string }
+        >
+      >
+    | Exclude<Awaited<ReturnType<Dispatcher["startAttempt"]>>, { task: string }>
+  >;
   /** The delegate type a `delegate` with none names runs as. */
   readonly delegateTypeFor: (request: {
     fork?: boolean;
@@ -40,9 +55,9 @@ export interface WorkItemCallsDeps {
     workspace?: string;
   }) => Promise<{ type?: string }>;
   /**
-   * Asks the person whether workspace `id` goes (asks.ts); refused without
-   * a reason, or for a session the hub does not have (artifact-events.ts
-   * `discardAsked`).
+   * Asks the person whether workspace `id` goes (asks.ts); a problem when
+   * the workspace is not the session's, without a reason, or for a session
+   * the hub does not have (artifact-events.ts `discardAsked`).
    */
   readonly discardAsked: (
     from: string,
@@ -60,13 +75,14 @@ export interface WorkItemCallsDeps {
           { code: "discard-ask-session-unknown"; detail: string }
         >
       >
+    | AnyProblem
   >;
-  /** Workspace `id` discarded for `from`. */
+  /** Workspace `id` discarded for `from` (artifact-events.ts `discarded`): what it says, or the problem that stopped it. */
   readonly discarded: (
     from: string,
     id: string,
     arg2?: { approved?: boolean }
-  ) => Promise<string>;
+  ) => Promise<string | AnyProblem>;
   /** A session as the fleet names it. */
   readonly sessionName: (row: {
     derivedTitle?: string | null;
@@ -108,48 +124,24 @@ type DelegateAsk = Parameters<WorkItemCallsDeps["delegateTypeFor"]>[0] &
   };
 
 /**
- * `discard_workspace` from `from`: workspace `id` discarded, or, with
- * `ask`, the person asked to decide (asks.ts).
- */
-export const discardCall =
-  (ctx: Pick<WorkItemCallsDeps, "discardAsked" | "discarded">) =>
-  async (
-    from: string,
-    id: string,
-    asked: { ask?: boolean; reason?: string }
-  ): Promise<string> => {
-    const decided = asked.ask
-      ? await ctx.discardAsked(from, id, asked.reason)
-      : { approved: false };
-    // The work items' calls throw their refusals (`workItemCalls`).
-    if (decided instanceof ElysiaStatus) {
-      throw new WorkItemRefusal(decided.status, decided.response.detail);
-    }
-    if ("recorded" in decided) {
-      return decided.recorded;
-    }
-    return await ctx.discarded(from, id, { approved: decided.approved });
-  };
-
-/**
  * THE CALLS a session's work-item tools make (delegation-actions.ts), each
  * the same function its route calls (routes/work-items.ts,
  * routes/workspaces.ts): a tool calls it directly, a route after its own
- * checks of who calls and what the body holds. A refusal throws a
- * {@link WorkItemRefusal} with its status and words; anything else throws
- * the machine's words, which a route answers with 502.
+ * checks of who calls and what the body holds. What stops a call is a
+ * returned problem with its status, code and words; a machine's failure
+ * throws its words.
  */
 export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
   /** `delegate`: one work item for `parentInstanceId`, or an attempt at its `task`. */
-  async delegate(asked: DelegateAsk): Promise<DelegateResult> {
+  async delegate(asked: DelegateAsk) {
     if (!(
       asked.parentInstanceId.trim() &&
       ctx.db.getInstancesByIds([asked.parentInstanceId])[0]
     )) {
-      throw new WorkItemRefusal(
-        400,
-        "work item needs a known non-empty parentInstanceId"
-      );
+      return problem(400, {
+        code: "work-item-parent-needed",
+        detail: "work item needs a known non-empty parentInstanceId",
+      });
     }
     const { task, ...plain } = asked;
     if (task) {
@@ -159,7 +151,9 @@ export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
       ...plain,
       ...(await ctx.delegateTypeFor(plain)),
     });
-    return delegated(started, plain.title);
+    return started instanceof ElysiaStatus
+      ? started
+      : delegated(started, plain.title);
   },
 
   // `wait_item`, `finish_item`, `stop_delegate` on a queued delegate and
@@ -183,10 +177,11 @@ export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
       (row.parentInstanceId === requester.id ||
         ctx.workItems.ledBy(row.id, requester.id))
     )) {
-      throw new WorkItemRefusal(
-        403,
-        "you can only stop your own delegates, or the work items of the project whose conversation you are"
-      );
+      return problem(403, {
+        code: "work-item-stop-not-yours",
+        detail:
+          "you can only stop your own delegates, or the work items of the project whose conversation you are",
+      });
     }
     return ctx.treeStops.stop(row.id, {
       kind: "session",
@@ -215,7 +210,44 @@ export const workItemCalls = (ctx: WorkItemCallsDeps) => ({
       : undefined;
   },
 
-  discard: discardCall(ctx),
+  /**
+   * `discard_workspace` from `from`: workspace `id` discarded, or, with
+   * `ask`, the person asked to decide (asks.ts).
+   */
+  async discard(
+    from: string,
+    id: string,
+    asked: { ask?: boolean; reason?: string }
+  ) {
+    const decided = asked.ask
+      ? await ctx.discardAsked(from, id, asked.reason)
+      : { approved: false };
+    if ("recorded" in decided) {
+      return decided.recorded;
+    }
+    // Said again across the import cycle the discard is made through (artifact-events.ts).
+    if (!("approved" in decided)) {
+      return problem<ProblemStatus, { code: string; detail: string }>(
+        decided.status,
+        {
+          code: decided.response.code,
+          detail: decided.response.detail,
+        }
+      );
+    }
+    const discarded = await ctx.discarded(from, id, {
+      approved: decided.approved,
+    });
+    return typeof discarded === "string"
+      ? discarded
+      : problem<ProblemStatus, { code: string; detail: string }>(
+          discarded.status,
+          {
+            code: discarded.response.code,
+            detail: discarded.response.detail,
+          }
+        );
+  },
 });
 
 export type WorkItemCalls = ReturnType<typeof workItemCalls>;
