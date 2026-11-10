@@ -719,7 +719,7 @@ import {
   sendFrame as writeFrame,
 } from "./wire-socket";
 import { workItemCalls } from "./work-item-calls";
-import { isLive, WorkItemRefusal } from "./work-item-state";
+import { isLive } from "./work-item-state";
 import {
   blockWords,
   createWorkItems,
@@ -2665,7 +2665,7 @@ export const createServer = (
     if (!row) {
       return;
     }
-    deliverSend({
+    const sent = deliverSend({
       verb: "send",
       machineId: row.machineId,
       instanceId: row.id,
@@ -2686,6 +2686,9 @@ export const createServer = (
         },
       },
     });
+    if (sent instanceof ElysiaStatus) {
+      console.warn(`[hub] a note was not sent: ${sent.response.detail}`);
+    }
   };
   // The fleet's browsers and the browser asks that wait on the person
   // (browsers.ts, browser-tools.ts). Made before the settlement listener
@@ -6298,12 +6301,15 @@ export const createServer = (
     });
     // Kept on its row while its machine takes no start ({@link startHold}).
     // A restore is the hub's own launch: a boot's go one at a time.
-    sendSpawn(
+    const sent = sendSpawn(
       agent,
       row.machineId,
       { verb: "spawn", machineId: row.machineId, instanceId: row.id, payload },
       true
     );
+    if (sent instanceof ElysiaStatus) {
+      console.warn(`[hub] not restored: ${sent.response.detail}`);
+    }
   };
 
   /**
@@ -6852,10 +6858,19 @@ export const createServer = (
       if (chosen) {
         db.chooseMode(machineId, payload.harness ?? "claude", chosen);
       }
-      await spawnSession(machineId, payload, "person");
+      const spawned = await spawnSession(machineId, payload, "person");
+      // moves.ts reads a start that does not go as a rejection.
+      if (spawned instanceof ElysiaStatus) {
+        throw new Error(spawned.response.detail);
+      }
     },
     send: (envelope) => {
-      deliverSend(envelope);
+      const sent = deliverSend(envelope);
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[moves] its first message was not sent: ${sent.response.detail}`
+        );
+      }
     },
   });
 
@@ -7912,14 +7927,8 @@ export const createServer = (
     startHeld: startHeldWords,
     // The design check (design-verify.ts), made further down; nothing
     // finishes an item before the hub is up.
-    // A refused task read fails the finish_item, as a thrown one did.
-    designHold: async (item, submission) => {
-      const held = await designVerify.hold(item, submission);
-      if (held instanceof ElysiaStatus) {
-        throw new Error(held.response.detail);
-      }
-      return held;
-    },
+    // A task that cannot be read is the finish_item's problem.
+    designHold: (item, submission) => designVerify.hold(item, submission),
     designHeld: (itemId) => designVerify.held(itemId),
     lifetime,
     modelRefusal,
@@ -8028,26 +8037,29 @@ export const createServer = (
     placeAhead: placeItem,
     // A `delegate` call's session (a routine's run and a design check's
     // verifier among them); Caw's, when he made the call.
-    spawn: (machineId, payload, workItemId, fallbackMode, placed) =>
-      issueSpawn(
+    spawn: (machineId, payload, workItemId, fallbackMode, placed) => {
+      const issued = issueSpawn(
         machineId,
         payload,
         "delegate",
         workItemId,
         fallbackMode,
         placed
-      ),
+      );
+      return issued instanceof ElysiaStatus ? issued : undefined;
+    },
     // A send's record: what became of the words.
-    send: (envelope) =>
-      deliverSend(envelope) ?? { reason: null, state: "pending" },
+    send: (envelope) => {
+      const sent = deliverSend(envelope);
+      return sent instanceof ElysiaStatus
+        ? { reason: sent.response.detail, state: "failed" }
+        : (sent ?? { reason: null, state: "pending" });
+    },
     // The plan ↔ to-do link: the task's to-dos, ticked and proposed as the hub.
     todos: {
       read: async (projectId, taskId) => {
         const task = await tasks.get(projectId, taskId);
-        if (task instanceof ElysiaStatus) {
-          throw projectRefusalOf(task);
-        }
-        return task.todos;
+        return task instanceof ElysiaStatus ? task : task.todos;
       },
       write: async (projectId, taskId, changes, reason) => {
         const task = await tasks.todos(
@@ -8056,10 +8068,7 @@ export const createServer = (
           changes,
           hubActor(reason)
         );
-        if (task instanceof ElysiaStatus) {
-          throw projectRefusalOf(task);
-        }
-        return task;
+        return task instanceof ElysiaStatus ? task : undefined;
       },
     },
     call: callMachine,
@@ -8259,9 +8268,14 @@ export const createServer = (
       if (!row) {
         return;
       }
-      deliverSend(
+      const sent = deliverSend(
         sessionWord(row, text, { kind: "system", name: TASK_WAITS_ORIGIN })
       );
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[tasks] a wait's word was not sent: ${sent.response.detail}`
+        );
+      }
     },
   });
   // External items on tasks (external-items.ts): links and comments from
@@ -8451,7 +8465,7 @@ export const createServer = (
       "by the hub: its machine was paused",
       turnCutWords.pause(machineName(machineId), pauseClock(until.getTime()))
     );
-    deliverSend({
+    const sent = deliverSend({
       verb: "send",
       machineId,
       instanceId,
@@ -8469,6 +8483,11 @@ export const createServer = (
         },
       },
     });
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[hub] the end of a machine's pause was not told to a session: ${sent.response.detail}`
+      );
+    }
     console.log(
       `[pause] ${instanceId}: its turn was cut by its machine's pause`
     );
@@ -8615,7 +8634,11 @@ export const createServer = (
     // last chose for its harness on that machine), or refused, saying so,
     // when it names none.
     spawn: async (machineId, payload) => {
-      await spawnSession(machineId, payload, "project");
+      const spawned = await spawnSession(machineId, payload, "project");
+      // caw.ts reads a start that does not go as a rejection.
+      if (spawned instanceof ElysiaStatus) {
+        throw new Error(spawned.response.detail);
+      }
     },
     // Turning Caw off stops what he started the way a forget stops a
     // project's sessions: each row confirmed as its machine ends it.
@@ -8623,7 +8646,12 @@ export const createServer = (
       running: (projectId) => projectStops.running(projectId),
       stop: (projectId, ids) => projectStops.stop(projectId, ids),
     },
-    send: (envelope) => deliverToSession(byIdNow(envelope), false),
+    send: (envelope) => {
+      const sent = deliverToSession(byIdNow(envelope), false);
+      return sent instanceof ElysiaStatus
+        ? { reason: sent.response.detail, state: "failed" }
+        : sent;
+    },
     end: (instanceId) =>
       endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
     // Its row goes once its machine confirms the end (session-lifecycle.ts).
@@ -8785,11 +8813,20 @@ export const createServer = (
       online: (machineId) => Boolean(registry.agent(machineId)),
       push: (notice) => push.watchNotice(notice),
       send: (envelope) => {
-        deliverSend(envelope);
+        const sent = deliverSend(envelope);
+        if (sent instanceof ElysiaStatus) {
+          console.warn(
+            `[fleet-watch] a send to ${envelope.instanceId} was not taken: ${sent.response.detail}`
+          );
+        }
       },
       // Its triage: the hub's own reader of a stuck session, never a person's.
       spawn: async (machineId, payload, mode) => {
-        await spawnSession(machineId, payload, "check", mode);
+        const spawned = await spawnSession(machineId, payload, "check", mode);
+        // fleet-watch.ts reads a start that does not go as a rejection.
+        if (spawned instanceof ElysiaStatus) {
+          throw new Error(spawned.response.detail);
+        }
       },
       stop: (instanceId) =>
         endSession(instanceId, "stop", {
@@ -8804,13 +8841,7 @@ export const createServer = (
     // A brief a session wrote waits for the fleet's guidance, as a delegate's does.
     briefing: (request) => workItems.briefing(request),
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
-    context: async (projectId, task) => {
-      const context = await projectMemory.contextFor(projectId, task);
-      if (context instanceof ElysiaStatus) {
-        throw projectRefusalOf(context);
-      }
-      return context;
-    },
+    context: (projectId, task) => projectMemory.contextFor(projectId, task),
     // Its design system, read in the attempt's clone inside its boundary.
     // A clone it could not read fails the attempt's brief in the problem's
     // words, as the thrown one did (dispatch.ts reads a brief's words alone).
@@ -8927,7 +8958,7 @@ export const createServer = (
     // The person's note, their words alone with the page beside them for
     // the agent; or their act, CawCo's notice of it.
     tell: (instance, said, uuid) => {
-      deliverSend({
+      const sent = deliverSend({
         verb: "send",
         machineId: instance.machineId,
         instanceId: instance.id,
@@ -8936,6 +8967,11 @@ export const createServer = (
           message: personsMessage(said, uuid),
         },
       });
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[decisions] the person's note was not sent: ${sent.response.detail}`
+        );
+      }
     },
     // The person's words or act to the project's conversation (caw.ts `tellYours`).
     tellConversation: (projectId, said) =>
@@ -9149,6 +9185,9 @@ export const createServer = (
           },
         },
       });
+      if (record instanceof ElysiaStatus) {
+        return { kind: "refused", reason: record.response.detail };
+      }
       return record?.state === "failed"
         ? { kind: "refused", reason: record.reason ?? "The send failed." }
         : { kind: "taken", uuid };
@@ -9194,7 +9233,7 @@ export const createServer = (
       );
     }
     const instanceId = crypto.randomUUID();
-    await spawnFromHub(
+    const spawned = await spawnFromHub(
       row.machineId,
       {
         instanceId,
@@ -9215,6 +9254,9 @@ export const createServer = (
       undefined,
       row
     );
+    if (spawned instanceof ElysiaStatus) {
+      return spawned;
+    }
     plans.copySteps(row.id, instanceId);
     const opened = await goOnOpening(row, opening);
     if (typeof opened !== "string") {
@@ -9261,7 +9303,7 @@ export const createServer = (
   /** Your words or act about a task to a session ({@link personsMessage}). */
   const sendYours = (row: InstanceRow, said: PersonsSend): void => {
     try {
-      deliverSend({
+      const sent = deliverSend({
         verb: "send",
         machineId: row.machineId,
         instanceId: row.id,
@@ -9270,6 +9312,11 @@ export const createServer = (
           message: personsMessage(said, crypto.randomUUID()),
         },
       });
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[tasks] your words did not reach the session: ${sent.response.detail}`
+        );
+      }
     } catch (error) {
       console.warn(
         `[tasks] your words did not reach ${row.id}: ${error instanceof Error ? error.message : String(error)}`
@@ -9543,10 +9590,13 @@ export const createServer = (
     Pick<
       WorkItemRequest,
       "clean" | "cwd" | "host" | "machineId" | "parentInstanceId" | "workspace"
-    > & { task: string }): Promise<DelegateResult> => {
+    > & { task: string }) => {
     // An attempt runs on its task's own word, never clean.
     if (clean) {
-      throw new WorkItemRefusal(400, harnessWords.cleanWith("task"));
+      return problem(400, {
+        code: "delegate-task-clean",
+        detail: harnessWords.cleanWith("task"),
+      });
     }
     const placed = [
       ...(workspace ? ["workspace"] : []),
@@ -9555,17 +9605,17 @@ export const createServer = (
       ...(machineId ? ["machine"] : []),
     ];
     if (placed.length > 0) {
-      throw new WorkItemRefusal(
-        400,
-        `An attempt at ${task} runs where the task runs (its runs_on, at its project's place for its work), so it takes no ${placed.join(", ")}. Leave ${placed.length === 1 ? "it" : "them"} out, or delegate without task.`
-      );
+      return problem(400, {
+        code: "delegate-task-placed",
+        detail: `An attempt at ${task} runs where the task runs (its runs_on, at its project's place for its work), so it takes no ${placed.join(", ")}. Leave ${placed.length === 1 ? "it" : "them"} out, or delegate without task.`,
+      });
     }
     const [parent] = db.getInstancesByIds([parentInstanceId]);
     if (!parent?.projectId) {
-      throw new WorkItemRefusal(
-        400,
-        `This session belongs to no project, so it has no task ${task}. Delegate without task.`
-      );
+      return problem(400, {
+        code: "delegate-task-no-project",
+        detail: `This session belongs to no project, so it has no task ${task}. Delegate without task.`,
+      });
     }
     const started = await dispatcher.startAttempt(
       parent.projectId,
@@ -9574,7 +9624,7 @@ export const createServer = (
       { asked }
     );
     if (started instanceof ElysiaStatus) {
-      throw projectRefusalOf(started);
+      return started;
     }
     return delegatedResult(parent.projectId, asked.title.trim(), started);
   };
@@ -10399,6 +10449,17 @@ export const createServer = (
   });
   // A relayed tool call sent again under its key is answered, not run again.
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
+  /** The row of the session whose tool call this is, read fresh: its permission may have changed mid-call; the problem when the hub has none. */
+  const delegationCaller = (actor: InstanceRow) => {
+    const [requester] = db.getInstancesByIds([actor.id]);
+    if (!requester) {
+      return problem(400, {
+        code: "delegation-caller-unknown",
+        detail: "Unknown calling CawCo instanceId",
+      });
+    }
+    return requester;
+  };
   const delegationMcp = createDelegationMcp({
     workItemCalls: workItemCalls(ctx),
     lifetime,
@@ -10447,22 +10508,31 @@ export const createServer = (
     // and tree stopped, or its queued start withdrawn before it starts.
     stopStarted: (actor, started, tool) => {
       const why = turnCutWords.startedStopped(tool);
+      const notStopped = (reason: string) =>
+        console.warn(
+          `[delegation-mcp] ${actor.id}'s cut ${tool} started a ${started.kind} that could not be stopped: ${reason}`
+        );
       try {
         switch (started.kind) {
           case "session":
             treeStops.stop(started.instanceId, { kind: "hub", why });
             return;
-          case "queued-delegate":
-            workItems.withdrawQueued(actor.id, started.queued);
+          case "queued-delegate": {
+            const withdrawn = workItems.withdrawQueued(
+              actor.id,
+              started.queued
+            );
+            if (withdrawn instanceof ElysiaStatus) {
+              notStopped(withdrawn.response.detail);
+            }
             return;
+          }
           case "queued-task":
             db.dropQueuedTaskStart(started.projectId, started.taskId);
             return;
         }
       } catch (error) {
-        console.warn(
-          `[delegation-mcp] ${actor.id}'s cut ${tool} started a ${started.kind} that could not be stopped: ${error instanceof Error ? error.message : String(error)}`
-        );
+        notStopped(error instanceof Error ? error.message : String(error));
       }
     },
     projectFromSession: (actor) =>
@@ -10568,36 +10638,42 @@ export const createServer = (
       );
     },
     deliver: (envelope, actor) => {
-      const [requester] = db.getInstancesByIds([actor.id]);
-      if (!requester) {
-        throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
-      }
-      return Promise.resolve(sessionSend(envelope, requester));
+      const requester = delegationCaller(actor);
+      return Promise.resolve(
+        requester instanceof ElysiaStatus
+          ? requester
+          : sessionSend(envelope, requester)
+      );
     },
     // A handoff with inputs: written and sent in one step of the
     // receiver's workspace's turn (work-items.ts `handOff`).
-    handOff: (target, inputs, compose, actor) => {
-      const [requester] = db.getInstancesByIds([actor.id]);
-      if (!requester) {
-        throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
+    handOff: async (target, inputs, compose, actor) => {
+      const requester = delegationCaller(actor);
+      if (requester instanceof ElysiaStatus) {
+        return requester;
       }
-      return workItems.handOff(target, requester.id, inputs, (landed) => ({
-        ...sessionSend(compose(landed), requester),
-        ...(landed.cut ? { cut: true as const } : {}),
-      }));
+      return await workItems.handOff(target, requester.id, inputs, (landed) => {
+        const sent = sessionSend(compose(landed), requester);
+        return sent instanceof ElysiaStatus
+          ? sent
+          : { ...sent, ...(landed.cut ? { cut: true as const } : {}) };
+      });
     },
     projectAt: projectAtFolder,
     // A session's start_session: the caller's own machine unless it named
     // one, refused to a leaf (one that may not start any type), held until
     // in place.
-    spawn: (envelope, actor) => {
-      const [requester] = db.getInstancesByIds([actor.id]);
-      if (!requester) {
-        throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
+    spawn: async (envelope, actor) => {
+      const requester = delegationCaller(actor);
+      if (requester instanceof ElysiaStatus) {
+        return requester;
       }
       const refused = mayStartRefusal(requester, null);
       if (refused) {
-        throw new WorkItemRefusal(403, refused);
+        return problem(403, {
+          code: "work-item-may-not-start",
+          detail: refused,
+        });
       }
       const { fallbackPermissionMode, ...asked } = envelope.payload;
       // The agent's check, nested under the agent whatever its call named.
@@ -10609,7 +10685,7 @@ export const createServer = (
           ...(parentToolUseId ? { toolUseId: parentToolUseId } : {}),
         },
       };
-      return spawnSession(
+      return await spawnSession(
         envelope.machineId || requester.machineId,
         payload,
         "check",
@@ -10620,14 +10696,14 @@ export const createServer = (
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
       // on an envelope. Recheck the row in case its permission changed mid-call.
-      const [requester] = db.getInstancesByIds([actor.id]);
-      if (!requester) {
-        throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
+      const requester = delegationCaller(actor);
+      if (requester instanceof ElysiaStatus) {
+        return requester;
       }
       const { instanceId } = envelope;
       if (envelope.verb === "send") {
-        sessionSend(envelope as Envelope<SendPayload>, requester);
-        return;
+        const sent = sessionSend(envelope as Envelope<SendPayload>, requester);
+        return sent instanceof ElysiaStatus ? sent : undefined;
       }
       const control = envelope.payload as ControlPayload;
       if (!(
@@ -10648,17 +10724,21 @@ export const createServer = (
         (row.parentInstanceId === requester.id ||
           workItems.ledBy(row.id, requester.id))
       )) {
-        throw new WorkItemRefusal(
-          403,
-          "you can only control your own delegates, or the work items of the project whose conversation you are"
-        );
+        return problem(403, {
+          code: "delegation-control-not-yours",
+          detail:
+            "you can only control your own delegates, or the work items of the project whose conversation you are",
+        });
       }
       const retired = workItems.refusal(row, {
         kind: "peer",
         fromSession: requester.id,
       });
       if (retired) {
-        throw new WorkItemRefusal(409, retired.reason);
+        return problem(409, {
+          code: "delegation-control-retired",
+          detail: retired.reason,
+        });
       }
       const result = control.args?.[1] as PermissionResult;
       if (control.method === RESOLVE_PERMISSION) {
@@ -10674,10 +10754,16 @@ export const createServer = (
         const owned = db.asks.get(answer.requestId);
         const parked = pending.get(answer.requestId);
         if (parked && delegateWaits.personOnly(parked)) {
-          throw new WorkItemRefusal(403, delegateWaitWords.refused);
+          return problem(403, {
+            code: "delegation-ask-person-only",
+            detail: delegateWaitWords.refused,
+          });
         }
         if (owned && owned.instanceId !== row.id) {
-          throw new WorkItemRefusal(403, "That ask isn't this delegate's.");
+          return problem(403, {
+            code: "delegation-ask-not-theirs",
+            detail: "That ask isn't this delegate's.",
+          });
         }
         // Its refusal says which delegate the target named: an ask that is
         // no longer pending reads the same for every session otherwise.
@@ -10704,7 +10790,10 @@ export const createServer = (
       }
       const agent = registry.agent(row.machineId);
       if (!agent) {
-        throw new WorkItemRefusal(404, machineFault(row.machineId, "offline"));
+        return problem(404, {
+          code: "delegation-machine-offline",
+          detail: machineFault(row.machineId, "offline"),
+        });
       }
       sendFrame(agent, {
         ...envelope,

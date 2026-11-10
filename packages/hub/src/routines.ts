@@ -1205,6 +1205,9 @@ export const createRoutines = ({
         machineId: place.machineId,
       })
     );
+    if (begun instanceof ElysiaStatus) {
+      return begun;
+    }
     store.setRun(run.id, { state: "running", workItemId: begun.item.id });
     running.add(begun.item.instanceId);
     console.log(
