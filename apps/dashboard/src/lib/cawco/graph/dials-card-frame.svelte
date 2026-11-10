@@ -41,6 +41,13 @@
   const phone = new MediaQuery("(width < 640px)");
   const stage = $derived(phone.current ? 700 : 820);
   const nothing = () => undefined;
+  /**
+   * The card hugs the controls' grid (Dials' columns, their two gaps, its
+   * pad and edge), never past the reading measure, so no strip of the card
+   * stands empty beside the undo glyphs.
+   */
+  const CARD_W =
+    "min(var(--c-measure), calc(var(--c-graph-move-name-w) + var(--c-graph-control-w) + var(--c-btn-h-xs) + 4 * var(--space-3) + 2px))";
 </script>
 
 <div
@@ -49,10 +56,11 @@
   <div
     class={floatingSurface({
       class:
-        "flex max-h-(--card-max) w-full max-w-c-measure flex-col p-space-3",
+        "flex max-h-(--card-max) w-full max-w-(--card-w) flex-col p-space-3",
     })}
     data-slot="dials-card"
     style:--card-max={`${stage / 2}px`}
+    style:--card-w={CARD_W}
   >
     <Dials
       {dials}
