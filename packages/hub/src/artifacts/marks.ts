@@ -40,10 +40,10 @@ import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
 import type { HubTimer } from "../lifetime";
 import { storedFilePath } from "../media";
+import { refusal } from "../refusal";
 import type { ArtifactServiceDeps } from "./deps";
 import { heldPictures } from "./held-pictures";
 import type { createPageStore } from "./page-store";
-import { ArtifactRefusal } from "./refusals";
 import type { MarksOutcome } from "./shapes";
 
 /**
@@ -358,6 +358,13 @@ export const createMarks = (ctx: MarksContext) => {
       setMeta(live, "sentUrl", url);
     });
   };
+  /** A comment's Ask again or Try again while a delivery is on its way. */
+  const onTheirWay = () =>
+    refusal(
+      409,
+      "artifact-comments-on-their-way",
+      "Its comments are on their way to the session already, so this didn't go."
+    );
   /**
    * The person's Ask again on comments `again` of artifact `row`: an update
    * changed what each stands on and the agent never answered it there
@@ -370,18 +377,23 @@ export const createMarks = (ctx: MarksContext) => {
   const askAgain = async (row: ArtifactRow, again: ReadonlySet<string>) => {
     const instance = holder(row);
     if (!instance) {
-      throw new ArtifactRefusal(409, artifactToolWords.askAgainNoSession);
+      return refusal(
+        409,
+        "artifact-ask-again-no-session",
+        artifactToolWords.askAgainNoSession
+      );
     }
     const doc = docs.doc(row.id);
     const pins = [...readPins(doc).values()].filter((pin) => again.has(pin.id));
     if (pins.length === 0) {
-      throw new ArtifactRefusal(404, artifactToolWords.askAgainGone);
+      return refusal(
+        404,
+        "artifact-ask-again-gone",
+        artifactToolWords.askAgainGone
+      );
     }
     if (delivering.has(row.id)) {
-      throw new ArtifactRefusal(
-        409,
-        "Its comments are on their way to the session already, so this didn't go."
-      );
+      return onTheirWay();
     }
     const changes = getMeta(doc, "changes");
     const url = ctx.addressOf(row.id, doc);
@@ -415,8 +427,9 @@ export const createMarks = (ctx: MarksContext) => {
         outcome,
       });
       if (!outcome.ok) {
-        throw new ArtifactRefusal(
+        return refusal(
           503,
+          "artifact-comment-undelivered",
           `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. Ask again.`
         );
       }
@@ -432,23 +445,22 @@ export const createMarks = (ctx: MarksContext) => {
    */
   const retry = async (row: ArtifactRow, only: ReadonlySet<string>) => {
     if (!marksOwed(docs.doc(row.id)).owed.some((pin) => only.has(pin.id))) {
-      throw new ArtifactRefusal(
+      return refusal(
         409,
+        "artifact-comment-heard",
         "Nothing new to send on this comment: the session has heard all of it."
       );
     }
     if (delivering.has(row.id)) {
-      throw new ArtifactRefusal(
-        409,
-        "Its comments are on their way to the session already, so this didn't go."
-      );
+      return onTheirWay();
     }
     delivering.add(row.id);
     try {
       const outcome = await deliverMarks(row.id, only);
       if (outcome !== "nothing" && !outcome.ok) {
-        throw new ArtifactRefusal(
+        return refusal(
           503,
+          "artifact-comment-undelivered",
           `The session didn't get the comment: ${outcome.reason.replace(FINAL_STOP, "")}. It's kept; Try again.`
         );
       }
