@@ -3,10 +3,11 @@ import { detach } from "@cawco/core/detach";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
-import type { StageState, StageWarm } from "@cawco/core/stage";
+import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { ElysiaStatus } from "elysia";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
-import { ArtifactRefusal } from "../refusals";
+import { refusal } from "../../refusal";
 import type { ArtifactInput, Making, Placed } from "../shapes";
 import { sheetOf } from "./component";
 import type { KindContext } from "./context";
@@ -63,15 +64,12 @@ const machineNamed = (
   )?.machineId;
 
 /** A workspace port's source: refused without what serves it ({@link NOT_SERVED}). */
-const servedSource = (
-  input: ArtifactInput,
-  workspace: string
-): PreviewSource => {
-  if (!input.serve) {
-    throw new ArtifactRefusal(400, NOT_SERVED);
+const servedSource = (input: ArtifactInput, workspace: string) => {
+  if (!input.serve || input.port === undefined) {
+    return refusal(400, "artifact-preview-unserved", NOT_SERVED);
   }
-  return {
-    port: input.port as number,
+  const source: PreviewSource = {
+    port: input.port,
     ...(input.path === undefined ? {} : { path: input.path }),
     workspace,
     serve: {
@@ -79,6 +77,7 @@ const servedSource = (
       cwd: input.serve.cwd?.trim() || ".",
     },
   };
+  return source;
 };
 
 /** What PreviewKind reads of the artifact service ({@link KindContext}). */
@@ -142,14 +141,18 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * alone, a delegate in another workspace made a second artifact of the
    * same name (2026-10-31).
    */
-  const makingFor = (maker: InstanceRow, input: ArtifactInput): Making => {
+  const makingFor = (maker: InstanceRow, input: ArtifactInput) => {
     const owner = ctx.ownerFor(maker, input);
+    if (owner instanceof ElysiaStatus) {
+      return owner;
+    }
+    const alone: Making = { maker, owner };
     if (
       input.kind !== "preview" ||
       owner.id !== maker.id ||
       db.byName(maker.id, "preview", input.name)
     ) {
-      return { maker, owner };
+      return alone;
     }
     const up = [...above(maker)];
     const rank = (row: ArtifactRow): number => {
@@ -169,11 +172,12 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
       );
     const held = nearest && holder(nearest);
     if (!(nearest && held)) {
-      return { maker, owner };
+      return alone;
     }
-    return ctx.actsNoMore(held)
+    const lands: Making = ctx.actsNoMore(held)
       ? { maker, owner, lands: nearest }
       : { maker, owner: held };
+    return lands;
   };
   /**
    * The workspaces a create is making a preview from, by how many creates:
@@ -208,10 +212,7 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * `ServeSpec`): its state. One that can't start is the refusal, and nothing
    * is kept. None for any other source.
    */
-  const serveFirst = (
-    source: PreviewSource,
-    machineId: string | null
-  ): Promise<StageState | undefined> =>
+  const serveFirst = (source: PreviewSource, machineId: string | null) =>
     "port" in source && source.serve && source.workspace && machineId
       ? deps.serve(machineId, source.workspace, {
           ...source.serve,
@@ -297,11 +298,20 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         servers.set(`${served.workspace}@${served.port}`, media);
       }
     }
+    // A refused one is said as a failed one is.
+    const warmed = (refused: unknown) => {
+      if (refused instanceof ElysiaStatus) {
+        console.warn(`[stage warm-up] failed: ${refused.response.detail}`);
+      }
+    };
     for (const { workspace, ...warm } of sheets.values()) {
-      detach(deps.warmStage({ workspace }, warm), "stage warm-up");
+      detach(deps.warmStage({ workspace }, warm).then(warmed), "stage warm-up");
     }
     for (const media of servers.values()) {
-      detach(serveFirst(media.source, media.machineId), "stage warm-up");
+      detach(
+        serveFirst(media.source, media.machineId).then(warmed),
+        "stage warm-up"
+      );
     }
   };
   /**
@@ -309,30 +319,20 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * workspace's port on the workspace's machine, in its network; a port or a
    * folder on the machine `machine` names, else the session's.
    */
-  const previewSource = (
-    instance: InstanceRow,
-    input: ArtifactInput
-  ): { machineId: string; source: PreviewSource } => {
+  const previewSource = (instance: InstanceRow, input: ArtifactInput) => {
     const problem = previewProblem(input);
     if (problem) {
-      throw new ArtifactRefusal(400, problem);
+      return refusal(400, "artifact-preview-fields", problem);
     }
     const at = input.path === undefined ? {} : { path: input.path };
-    // A machine named is its host's port; else the port is in the workspace
-    // named, or the session's own.
-    const workspace =
-      input.port === undefined || input.machine !== undefined
-        ? undefined
-        : workspaceFor(instance, input.workspace);
-    if (workspace) {
-      return {
-        machineId: workspace.machineId,
-        source: servedSource(input, workspace.id),
-      };
+    const inWorkspace = workspaceSource(instance, input);
+    if (inWorkspace) {
+      return inWorkspace;
     }
     if (input.serve) {
-      throw new ArtifactRefusal(
+      return refusal(
         400,
+        "artifact-preview-serve-outside",
         "serve runs in a workspace, and this session runs in none: show a server on this machine's host by its port alone, which you keep running."
       );
     }
@@ -341,50 +341,71 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
         ? instance.machineId
         : machineNamed(deps.machines(), input.machine);
     if (!machineId) {
-      throw new ArtifactRefusal(
+      return refusal(
         404,
+        "artifact-preview-machine-unknown",
         `No machine named ${input.machine} is known to this hub.`
       );
     }
-    return {
-      machineId,
-      source:
-        input.port === undefined
-          ? { dir: input.dir as string, ...at }
-          : { port: input.port, ...at },
-    };
+    const source: PreviewSource =
+      input.port === undefined
+        ? { dir: input.dir ?? "", ...at }
+        : { port: input.port, ...at };
+    return { machineId, source };
+  };
+  /**
+   * A workspace port's source, on the workspace's machine, in its network;
+   * none for a machine named (its host's port) or a session in no
+   * workspace that names none.
+   */
+  const workspaceSource = (instance: InstanceRow, input: ArtifactInput) => {
+    const workspace =
+      input.port === undefined || input.machine !== undefined
+        ? undefined
+        : workspaceFor(instance, input.workspace);
+    if (!workspace || workspace instanceof ElysiaStatus) {
+      return workspace;
+    }
+    const served = servedSource(input, workspace.id);
+    return served instanceof ElysiaStatus
+      ? served
+      : { machineId: workspace.machineId, source: served };
   };
   /**
    * The workspace a port preview's server runs in, with its machine: the one
    * named, which must be the session's own or one of its delegates', else the
    * session's own; none for a session outside a workspace that names none.
    */
-  const workspaceFor = (
-    instance: InstanceRow,
-    needle: string | undefined
-  ): { id: string; machineId: string } | undefined => {
+  const workspaceFor = (instance: InstanceRow, needle: string | undefined) => {
     const mine = deps.ownWorkspace(instance);
     const asked = needle ?? mine;
     if (asked === undefined) {
       return;
     }
     const found = deps.workspaces(asked);
-    if (found.length !== 1) {
-      throw new ArtifactRefusal(
-        404,
-        found.length === 0
-          ? `No workspace ${asked} on this hub.`
-          : `${asked} names ${found.length} workspaces; pass the full workspace id.`
-      );
-    }
     const [workspace] = found;
+    if (found.length !== 1 || !workspace) {
+      return found.length === 0
+        ? refusal(
+            404,
+            "artifact-workspace-unknown",
+            `No workspace ${asked} on this hub.`
+          )
+        : refusal(
+            404,
+            "artifact-workspace-ambiguous",
+            `${asked} names ${found.length} workspaces; pass the full workspace id.`
+          );
+    }
     if (workspace.id !== mine && !deps.delegatesIn(instance, workspace.id)) {
-      throw new ArtifactRefusal(
+      return refusal(
         403,
+        "artifact-workspace-not-delegates",
         artifactToolWords.notYourDelegate(String(needle))
       );
     }
-    return workspace;
+    const own: { id: string; machineId: string } = workspace;
+    return own;
   };
 
   return {
