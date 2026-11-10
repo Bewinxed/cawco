@@ -47,10 +47,10 @@ import {
 import { type FrontMatterLine, frontMatterBlock } from "@cawco/core/fleet";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { areaFolder, FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
-import { refusal } from "./refusal";
+
 import { listOf, scalarOf } from "./task-file";
 
 /**
@@ -268,9 +268,9 @@ const parseTypeFile = (
     ...(extra.connections ? { connections: extra.connections } : {}),
     ...(extra.mayStart ? { mayStart: extra.mayStart } : {}),
   };
-  const problem = delegateTypeProblem(draft);
-  if (problem) {
-    return { problem, ignored };
+  const misfit = delegateTypeProblem(draft);
+  if (misfit) {
+    return { problem: misfit, ignored };
   }
   return {
     type: {
@@ -300,8 +300,8 @@ export const typeFileProblem = (
   if (!(path.startsWith(`${DELEGATES}/`) && match)) {
     return `${path} is not a type file: write delegates/<name>.md.`;
   }
-  const { problem, ignored } = parseTypeFile(match[1], path, content);
-  return problem ?? (ignored.length > 0 ? ignoredWords(ignored) : undefined);
+  const { problem: misfit, ignored } = parseTypeFile(match[1], path, content);
+  return misfit ?? (ignored.length > 0 ? ignoredWords(ignored) : undefined);
 };
 
 /**
@@ -355,13 +355,13 @@ const readFolderTypes = (
       problems.push({ path, problem: "larger than the folder reads", source });
       continue;
     }
-    const { type, problem, ignored } = parseTypeFile(
-      match[1],
-      path,
-      readFileSync(full, "utf8")
-    );
-    if (problem) {
-      problems.push({ path, problem, source });
+    const {
+      type,
+      problem: misfit,
+      ignored,
+    } = parseTypeFile(match[1], path, readFileSync(full, "utf8"));
+    if (misfit) {
+      problems.push({ path, problem: misfit, source });
     }
     if (ignored.length > 0) {
       problems.push({ path, problem: ignoredWords(ignored), source });
@@ -444,11 +444,10 @@ export const projectDelegateTypesRoutes = (
 ) =>
   new Elysia().get("/api/projects/:id/delegate-types", ({ params }) => {
     if (!projectExists(params.id)) {
-      return refusal(
-        404,
-        "no-project",
-        `The hub keeps no project ${params.id}.`
-      );
+      return problem(404, {
+        code: "no-project",
+        detail: `The hub keeps no project ${params.id}.`,
+      });
     }
     return types.catalog(params.id);
   });
