@@ -556,7 +556,16 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
                 )
               )
           ) {
-            detach(ctx.tasks.waitsMoved(project.id), "task waits moved");
+            detach(
+              ctx.tasks.waitsMoved(project.id).then((refused) => {
+                if (refused) {
+                  console.warn(
+                    `[task waits moved] failed: ${refused.response.detail}`
+                  );
+                }
+              }),
+              "task waits moved"
+            );
           }
         }
       })

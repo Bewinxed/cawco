@@ -144,12 +144,7 @@ import {
   writeFolderFiles,
   YOU,
 } from "./project-folder";
-import {
-  ProjectRefusal,
-  projectRefusalOf,
-  projectRefused,
-} from "./project-refusal";
-import { refusal } from "./refusal";
+import { type Refused, refusal } from "./refusal";
 import { type MachineFacts, runsOnValue } from "./runs-on";
 import {
   firstStage,
@@ -703,16 +698,11 @@ const LINE_BREAK = /[\r\n]/u;
 /** A project's stages, in its folder (§5.2). */
 export const STAGES_FILE = "stages.md";
 
-/** The project's stages.md as it stands; undefined while it has none. */
-export const stagesFileOf = async (
-  projectId: string
-): Promise<string | undefined> => {
+/** The project's stages.md as it stands; undefined while it has none, the folder's refusal when it does not read. */
+export const stagesFileOf = async (projectId: string) => {
   const file = await readFolderFile(projectId, STAGES_FILE);
   if (file instanceof ElysiaStatus) {
-    if (file.status === 404) {
-      return;
-    }
-    throw projectRefusalOf(file);
+    return file.status === 404 ? undefined : file;
   }
   return file.content;
 };
@@ -723,18 +713,19 @@ const DEFAULT_TEMPLATE: StagesTemplate = "code";
  * wait (Needs you's href, a show of its setup page: core `setupLanding`):
  * its folder holds stages.md, or its row a template. {@link stagesOf}
  * answers source `none` for the rest, but for a project whose task files
- * stand in for a template, which it records at its first read.
+ * stand in for a template, which it records at its first read. The
+ * folder's refusal of an unfit project id.
  */
 export const isSetUp = (
   projectId: string,
   project: { template: string | null } | undefined
-): boolean => {
+) => {
   if (project?.template) {
     return true;
   }
   const root = projectRoot(projectId);
   if (root instanceof ElysiaStatus) {
-    throw projectRefusalOf(root);
+    return root;
   }
   return existsSync(join(root, STAGES_FILE));
 };
@@ -751,53 +742,39 @@ const NOT_SET_UP: StagesReading = {
  * for (template-types.ts): what applying a template and filling a project's
  * types both write.
  */
-const missingTypes = async (
-  projectId: string,
-  types: readonly string[]
-): Promise<{ content: string; path: string }[]> => {
+const missingTypes = async (projectId: string, types: readonly string[]) => {
+  const none: { content: string; path: string }[] = [];
   if (types.length === 0) {
-    return [];
+    return none;
   }
   const names = await folderFileNames(projectId, "delegates");
   if (names instanceof ElysiaStatus) {
-    throw projectRefusalOf(names);
+    return names;
   }
   return typeFiles(types, new Set(names));
 };
 
-const removeStages = async (
-  projectId: string,
-  options: FolderWriteOptions
-): Promise<void> => {
+const removeStages = async (projectId: string, options: FolderWriteOptions) => {
   const deleted = await deleteFolderFile(projectId, STAGES_FILE, options);
   if (deleted instanceof ElysiaStatus && deleted.status !== 404) {
-    throw projectRefusalOf(deleted);
+    return deleted;
   }
 };
 
-const refuse = (code: 400 | 403 | 404 | 409 | 422, message: string): never => {
-  throw new ProjectRefusal(code, message);
-};
-
-/** tasks/ as the folder lists it, empty while there is none; the folder's refusal thrown on. */
-const taskListing = async (projectId: string): Promise<FolderListing> => {
+/** tasks/ as the folder lists it, empty while there is none; the folder's refusal otherwise. */
+const taskListing = async (projectId: string) => {
   const listed = await listFolder(projectId, "tasks");
-  if (!(listed instanceof ElysiaStatus)) {
+  if (!(listed instanceof ElysiaStatus) || listed.status !== 404) {
     return listed;
   }
-  if (listed.status !== 404) {
-    throw projectRefusalOf(listed);
-  }
-  return { entries: [], truncated: false, path: "tasks" };
+  const none: FolderListing = { entries: [], truncated: false, path: "tasks" };
+  return none;
 };
 
-/** A folder file's text as the tasks read it, the folder's refusal thrown on. */
-const taskText = async (projectId: string, path: string): Promise<string> => {
+/** A folder file's text as the tasks read it, or the folder's refusal. */
+const taskText = async (projectId: string, path: string) => {
   const file = await readFolderFile(projectId, path);
-  if (file instanceof ElysiaStatus) {
-    throw projectRefusalOf(file);
-  }
-  return file.content;
+  return file instanceof ElysiaStatus ? file : file.content;
 };
 
 const hashOf = (content: string): string =>
@@ -805,60 +782,90 @@ const hashOf = (content: string): string =>
 
 const WEB_LINK = /^https?:\/\//iu;
 
-/**
- * Refuses an artifact a result may not hand in, in a sentence naming it: a
- * file or a post that is neither one of the task's `outputs` nor in the
- * project folder, a post that is no `*.post.json`, a link that is not http(s).
- */
-const artifactProblem = async (
+/** The refusal of a file or a post a result hands in that is neither one of the task's `outputs` nor in the project folder, or a post that is no `*.post.json`. */
+const fileProblem = async (
   projectId: string,
   outputs: string[],
-  artifact: ResultArtifact
-): Promise<void> => {
-  if (artifact.kind === "link") {
-    if (!WEB_LINK.test(artifact.url)) {
-      refuse(422, `${artifact.url} is not an http(s) link.`);
-    }
-    return;
-  }
-  if (artifact.kind === "artifact") {
-    if (!artifact.artifactId.trim()) {
-      refuse(422, "Name the artifact by its id.");
-    }
-    return;
-  }
+  artifact: Extract<ResultArtifact, { path: string }>
+) => {
   const path = folderPath(artifact.path);
   if (path instanceof ElysiaStatus) {
-    throw projectRefusalOf(path);
+    return path;
   }
   if (artifact.kind === "post" && !path.endsWith(".post.json")) {
-    refuse(422, `${path} is no post: a post is a <task>.post.json file.`);
+    return refusal(
+      422,
+      "task-result-post-unfit",
+      `${path} is no post: a post is a <task>.post.json file.`
+    );
   }
   if (outputs.includes(path)) {
     return;
   }
   const there = await folderFileRaw(projectId, path).catch(() => undefined);
   if (there === undefined || there instanceof ElysiaStatus) {
-    refuse(
+    return refusal(
       422,
+      "task-result-file-unknown",
       `${path} is neither one of the task's outputs nor a file in the project folder. Name it as the task's outputs do, from the folder's root.`
     );
   }
 };
 
+/**
+ * The refusal of an artifact a result may not hand in, in a sentence naming
+ * it: a file or a post that is neither one of the task's `outputs` nor in
+ * the project folder, a post that is no `*.post.json`, a link that is not
+ * http(s); nothing when it may.
+ */
+const artifactProblem = async (
+  projectId: string,
+  outputs: string[],
+  artifact: ResultArtifact
+) => {
+  if (artifact.kind === "link") {
+    return WEB_LINK.test(artifact.url)
+      ? undefined
+      : refusal(
+          422,
+          "task-result-link-unfit",
+          `${artifact.url} is not an http(s) link.`
+        );
+  }
+  if (artifact.kind === "artifact") {
+    return artifact.artifactId.trim()
+      ? undefined
+      : refusal(
+          422,
+          "task-result-artifact-unnamed",
+          "Name the artifact by its id."
+        );
+  }
+  return await fileProblem(projectId, outputs, artifact);
+};
+
 // --- what a caller may write ------------------------------------------------------
 
-const oneLine = (what: string, text: string, limit: number): string => {
+const oneLine = (what: string, text: string, limit: number) => {
   const trimmed = text.trim();
   if (!trimmed) {
-    refuse(400, `The ${what} is empty; write a few words.`);
+    return refusal(
+      400,
+      "task-words-empty",
+      `The ${what} is empty; write a few words.`
+    );
   }
   if (LINE_BREAK.test(trimmed)) {
-    refuse(400, `The ${what} is one line; take out the line break.`);
+    return refusal(
+      400,
+      "task-words-line-break",
+      `The ${what} is one line; take out the line break.`
+    );
   }
   if (trimmed.length > limit) {
-    refuse(
+    return refusal(
       400,
+      "task-words-too-long",
       `The ${what} is ${trimmed.length} characters long; it stops at ${limit}.`
     );
   }
@@ -866,55 +873,83 @@ const oneLine = (what: string, text: string, limit: number): string => {
 };
 
 /** A description or acceptance criteria: free text that must not open a section of its own. */
-const block = (what: string, text: string): string => {
+const block = (what: string, text: string) => {
   if (text.length > TEXT_LIMIT) {
-    refuse(
+    return refusal(
       400,
+      "task-text-too-long",
       `The ${what} is ${text.length} characters long; it stops at ${TEXT_LIMIT}.`
     );
   }
   if (SECTION_LINE.test(text)) {
-    refuse(
+    return refusal(
       400,
+      "task-text-heading",
       `The ${what} holds a "## " heading, which would start a section of its own in the task file; use "### " inside it.`
     );
   }
   return text.trim();
 };
 
-const todoText = (text: string): string => {
+const todoText = (text: string) => {
   const line = oneLine("to-do", text, TODO_LIMIT);
-  if (TODO_MARKER_START.test(line)) {
-    refuse(
+  if (!(line instanceof ElysiaStatus) && TODO_MARKER_START.test(line)) {
+    return refusal(
       400,
+      "task-todo-marker",
       "A to-do's text cannot start with an id marker like [td-3]; the hub numbers to-dos itself."
     );
   }
   return line;
 };
 
-const items = (what: string, list: string[]): string[] => {
+/** Each of `list`'s to-dos' texts, read; the first refusal when one cannot stand. */
+const todoTexts = (list: readonly string[]) => {
+  const texts: string[] = [];
+  for (const text of list) {
+    const line = todoText(text);
+    if (line instanceof ElysiaStatus) {
+      return line;
+    }
+    texts.push(line);
+  }
+  return texts;
+};
+
+const items = (what: string, list: string[]) => {
   if (list.length > LIST_LIMIT) {
-    refuse(
+    return refusal(
       400,
+      "task-list-too-long",
       `${what} holds ${list.length} items; it stops at ${LIST_LIMIT}.`
     );
   }
-  return [
-    ...new Set(list.map((item) => oneLine(`${what} item`, item, ITEM_LIMIT))),
-  ];
+  const kept = new Set<string>();
+  for (const item of list) {
+    const line = oneLine(`${what} item`, item, ITEM_LIMIT);
+    if (line instanceof ElysiaStatus) {
+      return line;
+    }
+    kept.add(line);
+  }
+  return [...kept];
 };
 
-/** External items' URLs a caller gave, each one a source's item (core `refOfUrl`), refused in words when one is not. */
-const linksOf = (links: string[]): string[] =>
-  items("links", links).map((url) =>
-    refOfUrl(url)
-      ? url
-      : refuse(
-          400,
-          `“${url}” is not a GitHub issue, pull request or discussion, or a Linear issue: link one by its URL.`
-        )
-  );
+/** External items' URLs a caller gave, each one a source's item (core `refOfUrl`); refused in words when one is not. */
+const linksOf = (links: string[]) => {
+  const urls = items("links", links);
+  const unknown =
+    urls instanceof ElysiaStatus
+      ? undefined
+      : urls.find((url) => !refOfUrl(url));
+  return unknown === undefined
+    ? urls
+    : refusal(
+        400,
+        "task-link-unknown",
+        `“${unknown}” is not a GitHub issue, pull request or discussion, or a Linear issue: link one by its URL.`
+      );
+};
 
 /**
  * A task's links as its index row carries them: the file's `issue:` its
@@ -953,102 +988,131 @@ const fileLinksOf = (
 };
 
 /** A budget a caller gave, refused in its own words when it cannot stand. */
-const budgetOf = (budget: WorkBudget): WorkBudget => {
+const budgetOf = (budget: WorkBudget) => {
   const problem = budgetProblem(budget);
-  if (problem) {
-    refuse(400, problem);
-  }
-  return budget;
+  return problem ? refusal(400, "task-budget-unfit", problem) : budget;
 };
 
 /** Owned globs a caller gave, refused when one cannot stand. */
-const ownsOf = (owns: string[]): string[] => {
+const ownsOf = (owns: string[]) => {
   const problem = ownsProblem(owns);
-  if (problem) {
-    refuse(400, problem);
-  }
-  return items("owns", owns);
+  return problem
+    ? refusal(400, "task-owns-unfit", problem)
+    : items("owns", owns);
 };
 
-/** A draft's group, owned files and budget as its file's fields. */
-const limitsOf = (
-  draft: TaskDraft
-): Pick<TaskFields, "budget" | "group" | "owns"> => ({
-  group: draft.group ? oneLine("group", draft.group, 64) : null,
-  owns: ownsOf(draft.owns ?? []),
-  budget: draft.budget ? budgetOf(draft.budget) : null,
-});
+/** A draft's group, owned files and budget as its file's fields; the first refusal when one cannot stand. */
+const limitsOf = (draft: TaskDraft) => {
+  const group = draft.group ? oneLine("group", draft.group, 64) : null;
+  if (group instanceof ElysiaStatus) {
+    return group;
+  }
+  const owns = ownsOf(draft.owns ?? []);
+  if (owns instanceof ElysiaStatus) {
+    return owns;
+  }
+  const budget = draft.budget ? budgetOf(draft.budget) : null;
+  if (budget instanceof ElysiaStatus) {
+    return budget;
+  }
+  const limits: Pick<TaskFields, "budget" | "group" | "owns"> = {
+    group,
+    owns,
+    budget,
+  };
+  return limits;
+};
 
-const typeName = (type: string): string => {
+const typeName = (type: string) => {
   const name = type.trim();
-  if (!TYPE_NAME.test(name)) {
-    refuse(
-      400,
-      `“${type}” is not a delegate type name: letters, digits, ".", "_" and "-", up to 64.`
-    );
-  }
-  return name;
+  return TYPE_NAME.test(name)
+    ? name
+    : refusal(
+        400,
+        "task-type-name-unfit",
+        `“${type}” is not a delegate type name: letters, digits, ".", "_" and "-", up to 64.`
+      );
 };
 
-const stageName = (stage: string): string => {
+const stageName = (stage: string) => {
   const name = stage.trim();
-  if (!STAGE_NAME.test(name)) {
-    refuse(
-      400,
-      `“${stage}” is not a stage name: lowercase letters, digits, "_" and "-", starting with a letter.`
-    );
-  }
-  return name;
+  return STAGE_NAME.test(name)
+    ? name
+    : refusal(
+        400,
+        "task-stage-name-unfit",
+        `“${stage}” is not a stage name: lowercase letters, digits, "_" and "-", starting with a letter.`
+      );
 };
 
 const OWN_FIELDS: ReadonlySet<string> = new Set(TASK_FIELDS);
 
+/** One field a caller gave for a key a task file does not know, read; refused when its key or value cannot stand. */
+const extraFieldOf = (key: string, value: ExtraValue) => {
+  if (!EXTRA_KEY.test(key)) {
+    return refusal(
+      400,
+      "task-field-name-unfit",
+      `“${key}” is not a field name: letters, digits, "_" and "-", starting with a letter or "_".`
+    );
+  }
+  if (OWN_FIELDS.has(key)) {
+    return refusal(
+      400,
+      "task-field-own",
+      `${key} is one of a task file's own fields; set it through its own parameter, not fields.`
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 ? items(key, value) : [];
+  }
+  return value.trim() ? oneLine(key, value, ITEM_LIMIT) : "";
+};
+
 /**
  * Fields a caller gave for keys a task file does not know: each key a bare
  * YAML key outside a task file's own, each value one line or a list of them
- * ("" or [] takes the field out).
+ * ("" or [] takes the field out). The first refusal when one cannot stand.
  */
-const extraFieldsOf = (
-  fields: Record<string, ExtraValue>
-): [string, ExtraValue][] => {
+const extraFieldsOf = (fields: Record<string, ExtraValue>) => {
   const entries = Object.entries(fields);
   if (entries.length > LIST_LIMIT) {
-    refuse(
+    return refusal(
       400,
+      "task-fields-too-many",
       `fields holds ${entries.length} fields; it stops at ${LIST_LIMIT}.`
     );
   }
-  return entries.map(([key, value]): [string, ExtraValue] => {
-    if (!EXTRA_KEY.test(key)) {
-      refuse(
-        400,
-        `“${key}” is not a field name: letters, digits, "_" and "-", starting with a letter or "_".`
-      );
+  const read: [string, ExtraValue][] = [];
+  for (const [key, value] of entries) {
+    const field = extraFieldOf(key, value);
+    if (field instanceof ElysiaStatus) {
+      return field;
     }
-    if (OWN_FIELDS.has(key)) {
-      refuse(
-        400,
-        `${key} is one of a task file's own fields; set it through its own parameter, not fields.`
-      );
-    }
-    if (Array.isArray(value)) {
-      return [key, value.length > 0 ? items(key, value) : []];
-    }
-    return [key, value.trim() ? oneLine(key, value, ITEM_LIMIT) : ""];
-  });
+    read.push([key, field]);
+  }
+  return read;
 };
 
 const COMMENT_ENTRY_LINE = /^###\s/mu;
 
 /** A comment's text: markdown that opens neither a section nor a comment entry of its own. */
-const commentText = (text: string): string => {
+const commentText = (text: string) => {
   const written = block("comment", text);
+  if (written instanceof ElysiaStatus) {
+    return written;
+  }
   if (!written) {
-    refuse(400, "The comment is empty; write a few words.");
+    return refusal(
+      400,
+      "task-comment-empty",
+      "The comment is empty; write a few words."
+    );
   }
   if (COMMENT_ENTRY_LINE.test(written)) {
-    refuse(
+    return refusal(
       400,
+      "task-comment-heading",
       'The comment holds a "### " heading, which would start a comment entry of its own; use "#### " inside it.'
     );
   }
@@ -1269,16 +1333,30 @@ const viewOf = (
   ...times,
 });
 
-/** A task reference a caller gave, as `tsk-12`; refused when it names none. */
-const taskRef = (what: string, ref: string): string => {
+/** A task reference a caller gave, as its id (`tsk-12`) and number; refused when it names none. */
+const taskNumbered = (what: string, ref: string) => {
   const number = taskNumber(ref);
   return number === undefined
-    ? refuse(
+    ? refusal(
         400,
+        "task-id-unfit",
         `${what}: “${ref}” is not a task id; tasks are named like tsk-12.`
       )
-    : taskId(number);
+    : { id: taskId(number), number };
 };
+
+/** A task reference a caller gave, as `tsk-12`; refused when it names none. */
+const taskRef = (what: string, ref: string) => {
+  const asked = taskNumbered(what, ref);
+  return asked instanceof ElysiaStatus ? asked : asked.id;
+};
+
+/** Task files' names, each with its task's number; a name that is no task file's is left out. */
+const withNumbers = (names: readonly string[]) =>
+  names.flatMap((name) => {
+    const number = fileTaskNumber(name);
+    return number === undefined ? [] : [{ name, number }];
+  });
 
 /** Whether a flag the filter sets (`blocked`, `needsYou`) matches; one it leaves out always does. */
 const flagHolds = (asked: boolean | undefined, is: boolean): boolean =>
@@ -1345,61 +1423,107 @@ const EDGE_PHRASE: Record<TaskEdge, string> = {
   duplicate_of: "duplicate of",
 };
 
-/** Applies a patch to a task file; answers what it changed, for the commit message. */
-const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
-  const changed: string[] = [];
-  const set = (name: string, apply: () => void) => {
-    apply();
-    changed.push(name);
-  };
-  const { title, description, acceptance, type, rank, lands, group, budget } =
-    patch;
-  if (title !== undefined) {
-    set("title", () => doc.setTitle(oneLine("title", title, TITLE_LIMIT)));
+/** Sets one field of a task file through `apply`, and notes it in `changed`: what a patch changed, for its commit message. */
+const setField = (changed: string[], name: string, apply: () => void) => {
+  apply();
+  changed.push(name);
+};
+
+/** A patch's words (title, description, acceptance criteria) set; the first refusal when one cannot stand. */
+const patchWords = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
+  const { title, description, acceptance } = patch;
+  const line =
+    title === undefined ? undefined : oneLine("title", title, TITLE_LIMIT);
+  if (line instanceof ElysiaStatus) {
+    return line;
   }
-  if (description !== undefined) {
-    set("description", () =>
-      doc.setDescription(block("description", description))
-    );
+  const text =
+    description === undefined ? undefined : block("description", description);
+  if (text instanceof ElysiaStatus) {
+    return text;
   }
-  if (acceptance !== undefined) {
-    set("acceptance criteria", () =>
-      doc.setAcceptance(block("acceptance criteria", acceptance))
-    );
+  const criteria =
+    acceptance === undefined
+      ? undefined
+      : block("acceptance criteria", acceptance);
+  if (criteria instanceof ElysiaStatus) {
+    return criteria;
+  }
+  if (line !== undefined) {
+    setField(changed, "title", () => doc.setTitle(line));
+  }
+  if (text !== undefined) {
+    setField(changed, "description", () => doc.setDescription(text));
+  }
+  if (criteria !== undefined) {
+    setField(changed, "acceptance criteria", () => doc.setAcceptance(criteria));
+  }
+};
+
+/** A patch's type and rank set; the first refusal when one cannot stand. */
+const patchNames = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
+  const { type, rank } = patch;
+  const name = type ? typeName(type) : null;
+  if (name instanceof ElysiaStatus) {
+    return name;
+  }
+  const ranked = rank ? oneLine("rank", rank, 64) : null;
+  if (ranked instanceof ElysiaStatus) {
+    return ranked;
   }
   if (type !== undefined) {
-    set("type", () => doc.setField("type", type ? typeName(type) : null));
+    setField(changed, "type", () => doc.setField("type", name));
   }
   if (rank !== undefined) {
-    set("rank", () =>
-      doc.setField("rank", rank ? oneLine("rank", rank, 64) : null)
-    );
+    setField(changed, "rank", () => doc.setField("rank", ranked));
+  }
+};
+
+/** A patch's lands, runs_on, group and budget set; the first refusal when one cannot stand. */
+const patchLimits = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
+  const { lands, runsOn, group, budget } = patch;
+  const grouped = group ? oneLine("group", group, 64) : null;
+  if (grouped instanceof ElysiaStatus) {
+    return grouped;
+  }
+  const limit = budget ? budgetOf(budget) : null;
+  if (limit instanceof ElysiaStatus) {
+    return limit;
   }
   if (lands !== undefined) {
-    set("lands", () => doc.setField("lands", lands));
+    setField(changed, "lands", () => doc.setField("lands", lands));
   }
-  const { runsOn } = patch;
   if (runsOn !== undefined) {
-    set("runs_on", () => doc.setField("runs_on", runsOn));
+    setField(changed, "runs_on", () => doc.setField("runs_on", runsOn));
   }
   if (group !== undefined) {
-    set("group", () =>
-      doc.setField("group", group ? oneLine("group", group, 64) : null)
-    );
+    setField(changed, "group", () => doc.setField("group", grouped));
   }
   if (budget !== undefined) {
-    set("budget", () =>
-      doc.setField("budget", budget ? budgetOf(budget) : null)
-    );
+    setField(changed, "budget", () => doc.setField("budget", limit));
   }
-  if (patch.owns !== undefined) {
-    const owns = ownsOf(patch.owns);
-    set("owns", () => doc.setField("owns", owns));
+};
+
+/** A patch's owns and links set; the first refusal when one cannot stand. */
+const patchReach = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
+  const owns = patch.owns === undefined ? undefined : ownsOf(patch.owns);
+  if (owns instanceof ElysiaStatus) {
+    return owns;
   }
-  if (patch.links !== undefined) {
-    const links = linksOf(patch.links);
-    set("links", () => doc.setField("links", links));
+  const links = patch.links === undefined ? undefined : linksOf(patch.links);
+  if (links instanceof ElysiaStatus) {
+    return links;
   }
+  if (owns !== undefined) {
+    setField(changed, "owns", () => doc.setField("owns", owns));
+  }
+  if (links !== undefined) {
+    setField(changed, "links", () => doc.setField("links", links));
+  }
+};
+
+/** A patch's lists (checks, outputs, context, labels) and the fields a task file does not know set; the first refusal when one cannot stand. */
+const patchLists = (doc: TaskDoc, patch: TaskPatch, changed: string[]) => {
   for (const field of [
     "checks",
     "outputs",
@@ -1407,68 +1531,118 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
     "labels",
   ] as const satisfies readonly TaskField[]) {
     const list = patch[field];
-    if (list !== undefined) {
-      set(field, () => doc.setField(field, items(field, list)));
+    const read = list === undefined ? undefined : items(field, list);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    if (read !== undefined) {
+      setField(changed, field, () => doc.setField(field, read));
     }
   }
-  for (const [key, value] of extraFieldsOf(patch.fields ?? {})) {
-    set(key, () => doc.setExtra(key, value));
+  const extra = extraFieldsOf(patch.fields ?? {});
+  if (extra instanceof ElysiaStatus) {
+    return extra;
   }
-  return `update ${changed.join(", ") || "nothing"}`;
+  for (const [key, value] of extra) {
+    setField(changed, key, () => doc.setExtra(key, value));
+  }
+};
+
+/** Applies a patch to a task file; answers what it changed, for the commit message, or the refusal of the first field that cannot stand. */
+const applyPatch = (doc: TaskDoc, patch: TaskPatch) => {
+  const changed: string[] = [];
+  const refused =
+    patchWords(doc, patch, changed) ??
+    patchNames(doc, patch, changed) ??
+    patchLimits(doc, patch, changed) ??
+    patchReach(doc, patch, changed) ??
+    patchLists(doc, patch, changed);
+  return refused ?? `update ${changed.join(", ") || "nothing"}`;
 };
 
 /** A to-do change the file could not make, as the caller's refusal. */
-const found = (problem: string | undefined): void => {
-  if (problem !== undefined) {
-    refuse(404, problem);
-  }
-};
+const found = (problem: string | undefined) =>
+  problem === undefined
+    ? undefined
+    : refusal(404, "task-todo-unknown", problem);
 
-const mark = (
-  doc: TaskDoc,
-  refs: string[] | undefined,
-  done: boolean
-): string | undefined => {
+/** Ticks or unticks `refs`; what it did, for the commit, or the refusal of a to-do the file does not have. */
+const mark = (doc: TaskDoc, refs: string[] | undefined, done: boolean) => {
   if (!refs?.length) {
     return;
   }
   for (const ref of refs) {
-    found(doc.tickTodo(ref, done));
+    const missing = found(doc.tickTodo(ref, done));
+    if (missing) {
+      return missing;
+    }
   }
   return `${done ? "tick" : "untick"} ${refs.join(", ")}`;
 };
 
-/** Applies to-do changes: rewords, ticks, unticks, then adds (adds never renumber a position). */
-const applyTodos = (doc: TaskDoc, changes: TodoChanges): string => {
-  const said: string[] = [];
-  for (const { todo, text } of changes.edit ?? []) {
-    found(doc.editTodo(todo, todoText(text)));
+/** Rewords to-dos; what it did, for the commit, or the first refusal. */
+const reword = (doc: TaskDoc, edits: TodoChanges["edit"], said: string[]) => {
+  for (const { todo, text } of edits ?? []) {
+    const line = todoText(text);
+    if (line instanceof ElysiaStatus) {
+      return line;
+    }
+    const missing = found(doc.editTodo(todo, line));
+    if (missing) {
+      return missing;
+    }
     said.push(`reword ${todo}`);
+  }
+};
+
+/** Adds to-dos; what it did, for the commit, or the first refusal. */
+const addTodos = (doc: TaskDoc, adds: TodoChanges["add"], said: string[]) => {
+  const added: string[] = [];
+  for (const { text, under, proposed } of adds ?? []) {
+    const line = todoText(text);
+    if (line instanceof ElysiaStatus) {
+      return line;
+    }
+    const done = doc.addTodo(line, under, proposed);
+    if (typeof done === "string") {
+      return refusal(404, "task-todo-unknown", done);
+    }
+    added.push(done.id);
+  }
+  if (added.length > 0) {
+    said.push(`add ${added.join(", ")}`);
+  }
+};
+
+/** Applies to-do changes: rewords, ticks, unticks, then adds (adds never renumber a position); the first refusal when one cannot be made. */
+const applyTodos = (doc: TaskDoc, changes: TodoChanges) => {
+  const said: string[] = [];
+  const reworded = reword(doc, changes.edit, said);
+  if (reworded) {
+    return reworded;
   }
   for (const done of [
     mark(doc, changes.tick, true),
     mark(doc, changes.untick, false),
   ]) {
+    if (done instanceof ElysiaStatus) {
+      return done;
+    }
     if (done) {
       said.push(done);
     }
   }
-  const added: string[] = [];
-  for (const { text, under, proposed } of changes.add ?? []) {
-    const done = doc.addTodo(todoText(text), under, proposed);
-    if (typeof done === "string") {
-      refuse(404, done);
-    } else {
-      added.push(done.id);
-    }
+  const adding = addTodos(doc, changes.add, said);
+  if (adding) {
+    return adding;
   }
-  if (added.length > 0) {
-    said.push(`add ${added.join(", ")}`);
-  }
-  if (said.length === 0) {
-    refuse(400, "Name a to-do to tick, untick, add or reword.");
-  }
-  return said.join("; ");
+  return said.length === 0
+    ? refusal(
+        400,
+        "task-todos-none",
+        "Name a to-do to tick, untick, add or reword."
+      )
+    : said.join("; ");
 };
 
 const stagesView = (
@@ -1587,12 +1761,10 @@ export const mergedInMessage = (
 const REASON_LIMIT = 500;
 
 export const createTasks = (store: TaskStore) => {
-  /** Refuses your approval, with its line, while the store says it cannot go. */
-  const approvable = async (projectId: string, id: string): Promise<void> => {
+  /** The refusal of your approval, with its line, while the store says it cannot go. */
+  const approvable = async (projectId: string, id: string) => {
     const held = await store.approvalRefusal?.(projectId, id);
-    if (held) {
-      refuse(409, held);
-    }
+    return held ? refusal(409, "task-approval-held", held) : undefined;
   };
   /** One change to a project's tasks at a time, around the folder's own commits. */
   const inTurn = turnTaker();
@@ -1621,9 +1793,11 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /** A `runs_on` as written, refused when it names no capability and no machine the hub knows. */
-  const runsOnChecked = (value: string): string => {
+  const runsOnChecked = (value: string) => {
     const checked = runsOnValue(value, store.machines());
-    return "value" in checked ? checked.value : refuse(400, checked.problem);
+    return "value" in checked
+      ? checked.value
+      : refusal(400, "task-runs-on-unknown", checked.problem);
   };
 
   /** The project's attempts, by task, newest first. */
@@ -1873,10 +2047,10 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     rows: Pick<TaskIndexRow, "path" | "stage" | "updatedAt">[],
     stages: Stages | undefined
-  ): Promise<{ gone: ReadonlySet<string>; times: Map<string, TaskTimes> }> => {
+  ) => {
     const folder = await folderFileTimes(projectId, "tasks");
     if (folder instanceof ElysiaStatus) {
-      throw projectRefusalOf(folder);
+      return folder;
     }
     const { head, times } = folder;
     const seen = (path: string, observed: number) => {
@@ -1892,7 +2066,7 @@ export const createTasks = (store: TaskStore) => {
     if (later.some((row) => !seen(row.path, row.updatedAt.getTime()))) {
       const uncommitted = await folderUncommitted(projectId, "tasks");
       if (uncommitted instanceof ElysiaStatus) {
-        throw projectRefusalOf(uncommitted);
+        return uncommitted;
       }
       for (const row of later) {
         uncommittedSeen.set(`${projectId}\0${row.path}`, {
@@ -1926,10 +2100,11 @@ export const createTasks = (store: TaskStore) => {
         ...lifeOf(events, stages, kindIn(stages, row.stage)),
       };
     };
-    return {
+    const read: { gone: ReadonlySet<string>; times: Map<string, TaskTimes> } = {
       gone: goneTasks(folder),
       times: new Map(rows.map((row) => [row.path, recordOf(row)])),
     };
+    return read;
   };
 
   /** The highest task number each project has handed out, once read from its history. */
@@ -1947,23 +2122,27 @@ export const createTasks = (store: TaskStore) => {
       .attempts(projectId)
       .some((item) => item.taskId === id && isLive(item.state));
 
-  const known = (projectId: string): Tracker => {
+  /** The project's tracker; refused for a project the hub does not keep. */
+  const known = (projectId: string) => {
     const project = store.project(projectId);
-    if (!project) {
-      return refuse(404, `The hub keeps no project ${projectId}.`);
-    }
-    return project.tracker;
+    return project
+      ? project.tracker
+      : refusal(
+          404,
+          "task-project-unknown",
+          `The hub keeps no project ${projectId}.`
+        );
   };
 
-  /** Refuses a task write whose project was deleted since the change began. */
-  const stands = (projectId: string): void => {
-    if (!store.project(projectId)) {
-      refuse(
-        404,
-        `The project "${projectId}" was deleted, so its tasks can't change. Pick another.`
-      );
-    }
-  };
+  /** The refusal of a task write whose project was deleted since the change began. */
+  const stands = (projectId: string) =>
+    store.project(projectId)
+      ? undefined
+      : refusal(
+          404,
+          "task-project-deleted",
+          `The project "${projectId}" was deleted, so its tasks can't change. Pick another.`
+        );
 
   const indexRow = (
     projectId: string,
@@ -2048,13 +2227,10 @@ export const createTasks = (store: TaskStore) => {
    * in its history with a mover), read once per commit; undefined when no
    * such commit has it.
    */
-  const hubRecord = async (
-    projectId: string,
-    path: string
-  ): Promise<TaskDoc | undefined> => {
+  const hubRecord = async (projectId: string, path: string) => {
     const folder = await folderFileTimes(projectId, "tasks");
     if (folder instanceof ElysiaStatus) {
-      throw projectRefusalOf(folder);
+      return folder;
     }
     const entry = folder.times.get(path);
     const made = entry
@@ -2066,7 +2242,7 @@ export const createTasks = (store: TaskStore) => {
       ? await readFolderFileAt(projectId, made.commit, made.path)
       : undefined;
     if (record instanceof ElysiaStatus) {
-      throw projectRefusalOf(record);
+      return record;
     }
     return record === undefined ? undefined : new TaskDoc(path, record);
   };
@@ -2080,13 +2256,17 @@ export const createTasks = (store: TaskStore) => {
     path: string,
     content: string,
     record?: TaskDoc
-  ): Promise<{ lines: string[] | undefined } | undefined> => {
+  ) => {
     const written = new TaskDoc(path, content).read().comments;
     const kept = record ?? (await hubRecord(projectId, path));
-    return JSON.stringify(written) ===
-      JSON.stringify(kept?.read().comments ?? [])
-      ? undefined
-      : { lines: kept?.commentsSection() };
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
+    const comments: { lines: string[] | undefined } | undefined =
+      JSON.stringify(written) === JSON.stringify(kept?.read().comments ?? [])
+        ? undefined
+        : { lines: kept?.commentsSection() };
+    return comments;
   };
 
   /**
@@ -2099,13 +2279,21 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     path: string,
     content: string
-  ): Promise<Unsettled | undefined> => {
+  ) => {
     const record = await hubRecord(projectId, path);
+    if (record instanceof ElysiaStatus) {
+      return record;
+    }
     const kept = record?.read().fields.stage;
     const written = new TaskDoc(path, content).read().fields.stage;
     const comments = await strayComments(projectId, path, content, record);
+    if (comments instanceof ElysiaStatus) {
+      return comments;
+    }
     const stage = kept && kept !== written ? { stage: kept } : undefined;
-    return comments || stage ? { comments, stage } : undefined;
+    const fix: Unsettled | undefined =
+      comments || stage ? { comments, stage } : undefined;
+    return fix;
   };
 
   /** What a file written around the hub needs put back; one of them at least. */
@@ -2124,14 +2312,23 @@ export const createTasks = (store: TaskStore) => {
     path: string,
     content: string,
     row: TaskIndexRow | undefined,
-    stagesNow: () => Promise<Stages | undefined>
-  ): Promise<Unsettled | undefined> => {
+    stagesNow: () => ReturnType<typeof currentStages>
+  ) => {
+    const stages = row ? undefined : await stagesNow();
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
     const [start, comments] = await Promise.all([
-      row ? undefined : strayStart(projectId, path, content, await stagesNow()),
+      row ? undefined : strayStart(projectId, path, content, stages),
       strayComments(projectId, path, content),
     ]);
+    if (comments instanceof ElysiaStatus) {
+      return comments;
+    }
     const stage = strayStage(row, path, content);
-    return start || comments || stage ? { start, comments, stage } : undefined;
+    const fix: Unsettled | undefined =
+      start || comments || stage ? { start, comments, stage } : undefined;
+    return fix;
   };
 
   /**
@@ -2144,7 +2341,7 @@ export const createTasks = (store: TaskStore) => {
     path: string,
     content: string,
     rows: TaskIndexRow[] = store.index(projectId)
-  ): Promise<Unsettled | undefined> => {
+  ) => {
     const row = rows.find((each) => each.path === path);
     if (inArchive(path) || row?.hash === hashOf(content)) {
       return;
@@ -2251,7 +2448,7 @@ export const createTasks = (store: TaskStore) => {
     number: number,
     content: string,
     fix: Unsettled
-  ): Promise<string> => {
+  ) => {
     const id = taskId(number);
     const { restored, said, why, moved } = await settledDoc(
       projectId,
@@ -2259,7 +2456,10 @@ export const createTasks = (store: TaskStore) => {
       content,
       fix
     );
-    stands(projectId);
+    const gone = stands(projectId);
+    if (gone) {
+      return gone;
+    }
     const actor = hubActor(why);
     const written = await writeFolderFile(projectId, path, restored, {
       author: actor.author,
@@ -2269,7 +2469,7 @@ export const createTasks = (store: TaskStore) => {
       }),
     });
     if (written instanceof ElysiaStatus) {
-      throw projectRefusalOf(written);
+      return written;
     }
     store.put([indexRow(projectId, path, number, restored, hashOf(restored))]);
     console.info(`[tasks] ${projectId} ${id}: ${said}`);
@@ -2325,7 +2525,7 @@ export const createTasks = (store: TaskStore) => {
    * on a known task, a new task in a stage it may not start in, comments
    * written around the hub): it is settled in the turn (a change under way
    * finishes first), judged again there; the index does not take the file
-   * as written meanwhile.
+   * as written meanwhile. A refusal is said in the log, as a failure is.
    */
   const queueSettle = (projectId: string, path: string, number: number) => {
     const key = `${projectId}\0${path}`;
@@ -2333,32 +2533,51 @@ export const createTasks = (store: TaskStore) => {
       return;
     }
     settling.add(key);
+    const what = `task ${path} settle`;
     detach(
       inTurn(projectId, async () => {
         try {
-          const file = await readFolderFile(projectId, path);
-          if (file instanceof ElysiaStatus) {
-            throw projectRefusalOf(file);
-          }
-          const { content } = file;
-          const row = store.index(projectId).find((each) => each.path === path);
-          const fix = await unsettledOf(projectId, path, content, row, () =>
-            currentStages(projectId)
-          );
-          if (fix) {
-            await settle(projectId, path, number, content, fix);
-          } else if (row?.hash !== hashOf(content)) {
-            stands(projectId);
-            store.put([
-              indexRow(projectId, path, number, content, hashOf(content)),
-            ]);
+          const refused = await settleQueued(projectId, path, number);
+          if (refused) {
+            console.warn(`[${what}] failed: ${refused.response.detail}`);
           }
         } finally {
           settling.delete(key);
         }
       }),
-      `task ${path} settle`
+      what
     );
+  };
+
+  /** {@link queueSettle}'s work in the turn: the file settled, or indexed as it stands; the refusal that stopped it. */
+  const settleQueued = async (
+    projectId: string,
+    path: string,
+    number: number
+  ) => {
+    const file = await readFolderFile(projectId, path);
+    if (file instanceof ElysiaStatus) {
+      return file;
+    }
+    const { content } = file;
+    const row = store.index(projectId).find((each) => each.path === path);
+    const fix = await unsettledOf(projectId, path, content, row, () =>
+      currentStages(projectId)
+    );
+    if (fix instanceof ElysiaStatus) {
+      return fix;
+    }
+    if (fix) {
+      const settled = await settle(projectId, path, number, content, fix);
+      return settled instanceof ElysiaStatus ? settled : undefined;
+    }
+    if (row?.hash !== hashOf(content)) {
+      const gone = stands(projectId);
+      if (gone) {
+        return gone;
+      }
+      store.put([indexRow(projectId, path, number, content, hashOf(content))]);
+    }
   };
 
   /**
@@ -2366,11 +2585,12 @@ export const createTasks = (store: TaskStore) => {
    * the index last saw them; forgets rows whose files are gone. Answers the
    * index and what in tasks/ could not be listed.
    */
-  const sync = async (
-    projectId: string
-  ): Promise<{ problems: string[]; rows: TaskIndexRow[] }> => {
+  const sync = async (projectId: string) => {
     const problems: string[] = [];
     const listing = await taskListing(projectId);
+    if (listing instanceof ElysiaStatus) {
+      return listing;
+    }
     if (listing.truncated) {
       problems.push(
         "tasks/ holds more files than one listing reads; the ones past the cap are not listed."
@@ -2394,37 +2614,34 @@ export const createTasks = (store: TaskStore) => {
       }
     }
     // Read once, for every new file's start: a rebuilt index reads them all.
-    let stages: Promise<Stages | undefined> | undefined;
+    let stages: ReturnType<typeof currentStages> | undefined;
     const stagesNow = () => {
       stages ??= currentStages(projectId);
       return stages;
     };
     const read = await Promise.all(
       files.map(async ({ path, number }) => {
-        try {
-          const file = await readFolderFile(projectId, path);
-          if (file instanceof ElysiaStatus) {
-            problems.push(file.response.detail);
-            return;
-          }
-          const { content } = file;
-          const hash = hashOf(content);
-          const row = indexed.get(path);
-          if (row?.hash === hash) {
-            return;
-          }
-          if (await unsettledOf(projectId, path, content, row, stagesNow)) {
-            queueSettle(projectId, path, number);
-            return;
-          }
-          return indexRow(projectId, path, number, content, hash);
-        } catch (error) {
-          if (error instanceof ProjectRefusal) {
-            problems.push(error.message);
-            return;
-          }
-          throw error;
+        const file = await readFolderFile(projectId, path);
+        if (file instanceof ElysiaStatus) {
+          problems.push(file.response.detail);
+          return;
         }
+        const { content } = file;
+        const hash = hashOf(content);
+        const row = indexed.get(path);
+        if (row?.hash === hash) {
+          return;
+        }
+        const fix = await unsettledOf(projectId, path, content, row, stagesNow);
+        if (fix instanceof ElysiaStatus) {
+          problems.push(fix.response.detail);
+          return;
+        }
+        if (fix) {
+          queueSettle(projectId, path, number);
+          return;
+        }
+        return indexRow(projectId, path, number, content, hash);
       })
     );
     store.put(read.filter((row): row is TaskIndexRow => row !== undefined));
@@ -2445,27 +2662,27 @@ export const createTasks = (store: TaskStore) => {
         );
       }
     }
-    return { rows, problems };
+    const synced: { problems: string[]; rows: TaskIndexRow[] } = {
+      rows,
+      problems,
+    };
+    return synced;
   };
 
   /** The archived files in tasks/archive/, by name; none while there is no archive. */
-  const archivedNames = async (projectId: string): Promise<string[]> => {
+  const archivedNames = async (projectId: string) => {
     const names = await folderFileNames(projectId, ARCHIVE_DIR);
-    if (names instanceof ElysiaStatus) {
-      throw projectRefusalOf(names);
-    }
-    return names.filter((name) => fileTaskNumber(name) !== undefined);
+    return names instanceof ElysiaStatus ? names : withNumbers(names);
   };
 
   /** The archived file of task `number`, as the disk holds it; undefined when it is not archived. */
-  const archivedFile = async (
-    projectId: string,
-    number: number
-  ): Promise<string | undefined> => {
-    const name = (await archivedNames(projectId)).find(
-      (each) => fileTaskNumber(each) === number
-    );
-    return name ? `${ARCHIVE_DIR}/${name}` : undefined;
+  const archivedFile = async (projectId: string, number: number) => {
+    const names = await archivedNames(projectId);
+    if (names instanceof ElysiaStatus) {
+      return names;
+    }
+    const archived = names.find((each) => each.number === number);
+    return archived ? `${ARCHIVE_DIR}/${archived.name}` : undefined;
   };
 
   /**
@@ -2474,15 +2691,12 @@ export const createTasks = (store: TaskStore) => {
    * which a change is refused. Two files claiming one id read as the first; a
    * change to it is refused until one is renamed.
    */
-  const locate = async (
-    projectId: string,
-    ref: string,
-    forChange = false
-  ): Promise<{ path: string; number: number }> => {
+  const locate = async (projectId: string, ref: string, forChange = false) => {
     const number = taskNumber(ref);
     if (number === undefined) {
-      return refuse(
+      return refusal(
         400,
+        "task-id-unfit",
         `“${ref}” is not a task id; tasks are named like tsk-12.`
       );
     }
@@ -2490,53 +2704,90 @@ export const createTasks = (store: TaskStore) => {
       rows.filter((row) => row.number === number);
     let claims = find(store.index(projectId));
     if (claims.length === 0) {
-      claims = find((await sync(projectId)).rows);
+      const synced = await sync(projectId);
+      if (synced instanceof ElysiaStatus) {
+        return synced;
+      }
+      claims = find(synced.rows);
     }
     const [first] = claims;
     if (!first) {
-      const archived = await archivedFile(projectId, number);
-      if (archived && forChange) {
-        refuse(
-          409,
-          `${taskId(number)} is archived (${archived}), so it does not change; it is kept as it was.`
-        );
-      }
-      return archived
-        ? { path: archived, number }
-        : refuse(404, `The project has no task ${taskId(number)}.`);
+      return await archivedPlace(projectId, number, forChange);
     }
     if (forChange && claims.length > 1) {
-      refuse(
+      return refusal(
         409,
+        "task-claimed-twice",
         `${taskId(number)} is claimed by ${claims.length} files (${claims.map((row) => row.path).join(", ")}); rename all but one before changing it.`
       );
     }
-    return { path: first.path, number };
+    const place: { number: number; path: string } = {
+      path: first.path,
+      number,
+    };
+    return place;
+  };
+
+  /** Where {@link locate} finds task `number` off the board: its archived file, which a change is refused; refused when it is not archived either. */
+  const archivedPlace = async (
+    projectId: string,
+    number: number,
+    forChange: boolean
+  ) => {
+    const archived = await archivedFile(projectId, number);
+    if (archived instanceof ElysiaStatus) {
+      return archived;
+    }
+    if (!archived) {
+      return refusal(
+        404,
+        "task-missing",
+        `The project has no task ${taskId(number)}.`
+      );
+    }
+    if (forChange) {
+      return refusal(
+        409,
+        "task-archived",
+        `${taskId(number)} is archived (${archived}), so it does not change; it is kept as it was.`
+      );
+    }
+    const place: { number: number; path: string } = { path: archived, number };
+    return place;
   };
 
   /**
    * The archived tasks' rows, read from their files in tasks/archive/ as the
    * index would hold them; kept out of the index, which is the board's.
    */
-  const archivedRows = async (projectId: string): Promise<TaskIndexRow[]> => {
+  const archivedRows = async (projectId: string) => {
+    const names = await archivedNames(projectId);
+    if (names instanceof ElysiaStatus) {
+      return names;
+    }
     const read = await Promise.all(
-      (await archivedNames(projectId)).map(async (name) => {
+      names.map(async ({ name, number }) => {
         const path = `${ARCHIVE_DIR}/${name}`;
         const file = await readFolderFile(projectId, path);
-        if (file instanceof ElysiaStatus) {
-          throw projectRefusalOf(file);
-        }
-        const { content } = file;
-        return indexRow(
-          projectId,
-          path,
-          fileTaskNumber(name) as number,
-          content,
-          hashOf(content)
-        );
+        return file instanceof ElysiaStatus
+          ? file
+          : indexRow(
+              projectId,
+              path,
+              number,
+              file.content,
+              hashOf(file.content)
+            );
       })
     );
-    return read;
+    const rows: TaskIndexRow[] = [];
+    for (const row of read) {
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
+      rows.push(row);
+    }
+    return rows;
   };
 
   /** The tasks whose id, title or description holds `q`, case aside; descriptions read from the files. */
@@ -2572,49 +2823,90 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /** Every task id the project's index knows, for edge checks. */
-  const ids = async (projectId: string): Promise<Set<string>> =>
-    new Set((await sync(projectId)).rows.map((row) => row.id));
-
-  /** Edges as `tsk-…`, each one a task the project has. */
-  const targets = async (
-    projectId: string,
-    edge: string,
-    refs: string[],
-    self?: string
-  ): Promise<string[]> => {
-    if (refs.length === 0) {
-      return [];
-    }
-    const have = await ids(projectId);
-    return [
-      ...new Set(
-        refs.map((ref) => {
-          const number = taskNumber(ref);
-          if (number === undefined) {
-            return refuse(
-              400,
-              `${edge}: “${ref}” is not a task id; tasks are named like tsk-12.`
-            );
-          }
-          const id = taskId(number);
-          if (id === self) {
-            return refuse(400, `${self} cannot be ${edge} itself.`);
-          }
-          if (!have.has(id)) {
-            return refuse(404, `${edge}: the project has no task ${id}.`);
-          }
-          return id;
-        })
-      ),
-    ];
+  const ids = async (projectId: string) => {
+    const synced = await sync(projectId);
+    return synced instanceof ElysiaStatus
+      ? synced
+      : new Set(synced.rows.map((row) => row.id));
   };
 
+  /** Edge `ref` as `tsk-…`, a task the project has (in `have`); refused otherwise. */
+  const edgeTarget = (
+    have: ReadonlySet<string>,
+    edge: string,
+    ref: string,
+    self?: string
+  ) => {
+    const number = taskNumber(ref);
+    if (number === undefined) {
+      return refusal(
+        400,
+        "task-id-unfit",
+        `${edge}: “${ref}” is not a task id; tasks are named like tsk-12.`
+      );
+    }
+    const id = taskId(number);
+    if (id === self) {
+      return refusal(
+        400,
+        "task-edge-self",
+        `${self} cannot be ${edge} itself.`
+      );
+    }
+    return have.has(id)
+      ? id
+      : refusal(
+          404,
+          "task-edge-missing",
+          `${edge}: the project has no task ${id}.`
+        );
+  };
+
+  /** An edge as `tsk-…`, a task the project has; null for none given. */
   const single = async (
     projectId: string,
     edge: string,
     ref: string | undefined
-  ): Promise<string | null> =>
-    ref ? ((await targets(projectId, edge, [ref]))[0] ?? null) : null;
+  ) => {
+    if (!ref) {
+      return null;
+    }
+    const have = await ids(projectId);
+    return have instanceof ElysiaStatus ? have : edgeTarget(have, edge, ref);
+  };
+
+  /** The ids of the project's archived tasks. */
+  const archivedIds = async (projectId: string) => {
+    const names = await archivedNames(projectId);
+    return names instanceof ElysiaStatus
+      ? names
+      : new Set(names.map(({ number }) => taskId(number)));
+  };
+
+  /** A wait `one` as `actor`'s reader reads it, as a file keeps it: a task the board or the archive has (`have`, `archived`); refused otherwise. */
+  const waitFor = (
+    one: string,
+    reader: WaitReader,
+    have: ReadonlySet<string>,
+    archived: ReadonlySet<string>
+  ) => {
+    const read = readWait(one, reader);
+    if (read instanceof ElysiaStatus) {
+      return refusal(
+        400,
+        read.response.code,
+        `waits_on: ${read.response.detail}`
+      );
+    }
+    if (read.kind === "task" && !(have.has(read.id) || archived.has(read.id))) {
+      return refusal(
+        404,
+        "task-wait-missing",
+        `waits_on: the project has no task ${read.id}.`
+      );
+    }
+    return waitHandle(read);
+  };
 
   /**
    * Waits as `actor` writes them (task-waits.ts `readWait`), as a file keeps
@@ -2626,37 +2918,32 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     actor: TaskActor,
     written: string[]
-  ): Promise<string[]> => {
+  ) => {
+    const handles = new Set<string>();
     if (written.length === 0) {
-      return [];
+      return [...handles];
     }
     const reader = store.waitReader(projectId, actor);
     const have = await ids(projectId);
-    const archived = new Set(
-      (await archivedNames(projectId)).map((name) =>
-        taskId(fileTaskNumber(name) as number)
-      )
-    );
-    return [
-      ...new Set(
-        items("waits_on", written).map((one) => {
-          const target = readWait(one, reader);
-          if (target instanceof ElysiaStatus) {
-            return refuse(400, `waits_on: ${target.response.detail}`);
-          }
-          if (
-            target.kind === "task" &&
-            !(have.has(target.id) || archived.has(target.id))
-          ) {
-            return refuse(
-              404,
-              `waits_on: the project has no task ${target.id}.`
-            );
-          }
-          return waitHandle(target);
-        })
-      ),
-    ];
+    if (have instanceof ElysiaStatus) {
+      return have;
+    }
+    const archived = await archivedIds(projectId);
+    if (archived instanceof ElysiaStatus) {
+      return archived;
+    }
+    const listed = items("waits_on", written);
+    if (listed instanceof ElysiaStatus) {
+      return listed;
+    }
+    for (const one of listed) {
+      const handle = waitFor(one, reader, have, archived);
+      if (handle instanceof ElysiaStatus) {
+        return handle;
+      }
+      handles.add(handle);
+    }
+    return [...handles];
   };
 
   /**
@@ -2696,24 +2983,25 @@ export const createTasks = (store: TaskStore) => {
   };
 
   /**
-   * Refuses a write to task `id` that would close a cycle of waits or parts
-   * (`changed`, its fields as they would stand), naming the path by each
-   * task's link; nothing changes.
+   * The refusal of a write to task `id` that would close a cycle of waits
+   * or parts (`changed`, its fields as they would stand), naming the path
+   * by each task's link; nothing changes.
    */
   const refuseCycle = (
     projectId: string,
     id: string,
     changed: { partOf: string | null; waitsOn: string[] }
-  ): void => {
+  ) => {
     const rows = store.index(projectId);
     const cycle = cycleFrom(id, dependsOn(rows, new Map([[id, changed]])));
-    if (cycle) {
-      const byId = rowsById(rows);
-      const path = cycle
-        .map((at) => taskLink(projectId, at, byId.get(at)?.title ?? at))
-        .join(" → ");
-      refuse(409, taskLinkWords.cycle(path));
+    if (!cycle) {
+      return;
     }
+    const byId = rowsById(rows);
+    const path = cycle
+      .map((at) => taskLink(projectId, at, byId.get(at)?.title ?? at))
+      .join(" → ");
+    return refusal(409, "task-cycle", taskLinkWords.cycle(path));
   };
 
   /**
@@ -2721,17 +3009,19 @@ export const createTasks = (store: TaskStore) => {
    * task, or the pin thread its ask came from): a task the project has, or
    * a pin; nothing when it names neither.
    */
-  const foundInOf = async (
-    projectId: string,
-    given: string | undefined
-  ): Promise<string | null> => {
+  const foundInOf = async (projectId: string, given: string | undefined) => {
     const target = given ? waitTarget(given) : undefined;
     if (target?.kind === "pin") {
       return waitHandle(target);
     }
-    return target?.kind === "task" && (await ids(projectId)).has(target.id)
-      ? target.id
-      : null;
+    if (target?.kind !== "task") {
+      return null;
+    }
+    const have = await ids(projectId);
+    if (have instanceof ElysiaStatus) {
+      return have;
+    }
+    return have.has(target.id) ? target.id : null;
   };
 
   /** Where a new task starts: the stage asked for, if the actor may put it there, else the first todo stage. */
@@ -2739,25 +3029,35 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     asked: string | undefined,
     actor: TaskActor
-  ): Promise<string> => {
+  ) => {
     const stages = await usableStages(
       projectId,
       "tell where a new task starts"
     );
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
     const stage =
       asked === undefined ? firstStage(stages).name : stageName(asked);
+    if (stage instanceof ElysiaStatus) {
+      return stage;
+    }
     if (actor.mover === "action") {
-      refuse(403, "An approved action moves its task; it never files one.");
+      return refusal(
+        403,
+        "task-create-by-action",
+        "An approved action moves its task; it never files one."
+      );
     }
     const problem =
       actor.mover === "hub"
         ? hubProblem(stages, stage)
         : startProblem(stages, stage, actor.mover);
-    if (problem) {
-      refuse(stageNamed(stages, stage) ? 403 : 400, problem);
-    }
-    refuseNobody(projectId, stages, "A new task", "", stage, actor);
-    return stage;
+    return (
+      stageRefusal(stages, stage, problem) ??
+      refuseNobody(projectId, stages, "A new task", "", stage, actor) ??
+      stage
+    );
   };
 
   /**
@@ -2767,21 +3067,28 @@ export const createTasks = (store: TaskStore) => {
    * index, and what this process handed out; and past `above`. Read at the
    * moment of making a task, inside the project's turn.
    */
-  const nextNumber = async (projectId: string, above = 0): Promise<number> => {
+  const nextNumber = async (projectId: string, above = 0) => {
     const [folder, names, archived] = await Promise.all([
       folderFileTimes(projectId, "tasks"),
       folderFileNames(projectId, "tasks"),
       archivedNames(projectId),
     ]);
     if (folder instanceof ElysiaStatus) {
-      throw projectRefusalOf(folder);
+      return folder;
     }
     if (names instanceof ElysiaStatus) {
-      throw projectRefusalOf(names);
+      return names;
+    }
+    if (archived instanceof ElysiaStatus) {
+      return archived;
     }
     const { ever } = folder;
     let highest = Math.max(above, issued.get(projectId) ?? 0);
-    for (const name of [...ever, ...names, ...archived]) {
+    for (const name of [
+      ...ever,
+      ...names,
+      ...archived.map((each) => each.name),
+    ]) {
       highest = Math.max(highest, fileTaskNumber(name) ?? 0);
     }
     for (const row of store.index(projectId)) {
@@ -2815,33 +3122,40 @@ export const createTasks = (store: TaskStore) => {
    * starts, as a forgotten folder comes back), and a read before then would
    * find a project with tasks not set up.
    */
-  const templateOfTaskFiles = async (
-    projectId: string
-  ): Promise<StagesTemplate | null> => {
+  const templateOfTaskFiles = async (projectId: string) => {
     const all = await folderFileNames(projectId, "tasks");
     if (all instanceof ElysiaStatus) {
-      throw projectRefusalOf(all);
+      return all;
     }
     const names = all.filter(
       (name) => name.endsWith(".md") && fileTaskNumber(name) !== undefined
     );
-    const stages = await Promise.all(
-      names.map(async (name) => {
-        const path = `tasks/${name}`;
-        const file = await readFolderFile(projectId, path);
-        // One gone since the listing stands on no board.
-        if (file instanceof ElysiaStatus && file.status !== 404) {
-          throw projectRefusalOf(file);
-        }
-        const content = file instanceof ElysiaStatus ? undefined : file.content;
-        return content === undefined
-          ? undefined
-          : (new TaskDoc(path, content).read().fields.stage ?? "");
-      })
+    const files = await Promise.all(
+      names.map((name) => readFolderFile(projectId, `tasks/${name}`))
     );
-    const read = stages.filter((stage) => stage !== undefined);
-    return read.length === 0 ? null : templateHolding(read.filter(Boolean));
+    const read: string[] = [];
+    for (const [index, file] of files.entries()) {
+      // One gone since the listing stands on no board.
+      if (file instanceof ElysiaStatus) {
+        if (file.status !== 404) {
+          return file;
+        }
+        continue;
+      }
+      const path = `tasks/${names[index]}`;
+      read.push(new TaskDoc(path, file.content).read().fields.stage ?? "");
+    }
+    const template: StagesTemplate | null =
+      read.length === 0 ? null : templateHolding(read.filter(Boolean));
+    return template;
   };
+
+  /** The stages {@link stagesOf} answers: where they come from, the text, and how it reads. */
+  const stagesAs = (
+    source: StagesSource,
+    content: string,
+    reading: StagesReading
+  ) => ({ source, content, reading });
 
   /**
    * The project's stages as the hub applies them: stages.md as it reads; the
@@ -2853,30 +3167,27 @@ export const createTasks = (store: TaskStore) => {
    * row, project-trash.ts) is recorded once as the template its tasks stand
    * in ({@link templateOfTaskFiles}), so it keeps them.
    */
-  const stagesOf = async (
-    projectId: string
-  ): Promise<{
-    content: string;
-    reading: StagesReading;
-    source: StagesSource;
-  }> => {
+  const stagesOf = async (projectId: string) => {
     const file = await readFolderFile(projectId, STAGES_FILE);
     if (!(file instanceof ElysiaStatus)) {
-      return {
-        source: "file",
-        content: file.content,
-        reading: ruled(projectId, readStages(file.content)),
-      };
+      return stagesAs(
+        "file",
+        file.content,
+        ruled(projectId, readStages(file.content))
+      );
     }
     if (file.status !== 404) {
-      throw projectRefusalOf(file);
+      return file;
     }
     const project = store.project(projectId);
     const template =
       project?.template ??
       (project ? await templateOfTaskFiles(projectId) : null);
+    if (template instanceof ElysiaStatus) {
+      return template;
+    }
     if (!template) {
-      return { source: "none", content: "", reading: NOT_SET_UP };
+      return stagesAs("none", "", NOT_SET_UP);
     }
     if (!project?.template) {
       store.setTemplate(projectId, template);
@@ -2884,14 +3195,11 @@ export const createTasks = (store: TaskStore) => {
         `[tasks] project ${projectId} had task files and no stages; it is recorded as the ${template} template, whose stages they stand in.`
       );
     }
-    return {
-      source: "template",
-      content: templateText(template),
-      reading: ruled(projectId, {
-        ok: true,
-        stages: templateStages(template),
-      }),
-    };
+    return stagesAs(
+      "template",
+      templateText(template),
+      ruled(projectId, { ok: true, stages: templateStages(template) })
+    );
   };
 
   /**
@@ -2899,8 +3207,11 @@ export const createTasks = (store: TaskStore) => {
    * `withRetiredMoverAsSession`) is written again with a session in its
    * place, once, as the hub: the project's conversation moves as a session.
    */
-  const retireMover = async (projectId: string): Promise<void> => {
+  const retireMover = async (projectId: string) => {
     const content = await stagesFileOf(projectId);
+    if (content instanceof ElysiaStatus) {
+      return content;
+    }
     const next =
       content === undefined ? null : withRetiredMoverAsSession(content);
     if (next === null) {
@@ -2912,7 +3223,7 @@ export const createTasks = (store: TaskStore) => {
         "stages: the project's conversation moves as a session, so its moves are a session's",
     });
     if (written instanceof ElysiaStatus) {
-      throw projectRefusalOf(written);
+      return written;
     }
     console.info(
       `[tasks] project ${projectId}'s stages.md named the project's conversation as a mover of its own; a session makes those moves now.`
@@ -2926,8 +3237,11 @@ export const createTasks = (store: TaskStore) => {
    * stages stay, and so does the file of one whose row records another
    * template, which it would read in the file's place ({@link stagesOf}).
    */
-  const dropTemplateCopy = async (projectId: string): Promise<void> => {
+  const dropTemplateCopy = async (projectId: string) => {
     const content = await stagesFileOf(projectId);
+    if (content instanceof ElysiaStatus) {
+      return content;
+    }
     const template = store.project(projectId)?.template ?? null;
     if (
       !(content !== undefined && isCodeTemplate(content)) ||
@@ -2943,7 +3257,7 @@ export const createTasks = (store: TaskStore) => {
         "stages: the code template, as the hub has it; Review before done is the project's own setting",
     });
     if (deleted instanceof ElysiaStatus) {
-      throw projectRefusalOf(deleted);
+      return deleted;
     }
     console.info(
       `[tasks] project ${projectId}'s stages.md was the code template word for word; it reads the hub's code template now.`
@@ -2958,8 +3272,12 @@ export const createTasks = (store: TaskStore) => {
    * stages.md was written by hand or by Caw, can start every stage and every
    * task its skills file. A file of its own, readable or not, stays as it is.
    */
-  const fillTypes = async (projectId: string): Promise<void> => {
-    const { reading } = await stagesOf(projectId);
+  const fillTypes = async (projectId: string) => {
+    const read = await stagesOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const { reading } = read;
     if (!reading.ok) {
       return;
     }
@@ -2971,6 +3289,9 @@ export const createTasks = (store: TaskStore) => {
       (type) => !store.resolvesType(projectId, type)
     );
     const writes = await missingTypes(projectId, unresolved);
+    if (writes instanceof ElysiaStatus) {
+      return writes;
+    }
     if (writes.length === 0) {
       return;
     }
@@ -2980,48 +3301,61 @@ export const createTasks = (store: TaskStore) => {
       message: `delegates: ${names}, which its stages run or its template's skills file tasks with, and nothing defined (by hub)`,
     });
     if (written instanceof ElysiaStatus) {
-      throw projectRefusalOf(written);
+      return written;
     }
     console.info(
       `[tasks] project ${projectId}: wrote ${names}, which its stages run or its template's skills file tasks with, and nothing defined.`
     );
   };
 
-  /** {@link fillTypes} in the project's turn; a failure is said, never thrown. */
+  /** {@link fillTypes} in the project's turn; a failure or a refusal is said, never thrown. */
   const fillTypesSoon = (projectId: string): void => {
+    const unfilled = (why: string) =>
+      console.warn(
+        `[tasks] project ${projectId}'s delegate types were not filled: ${why}`
+      );
     detach(
-      inTurn(projectId, () => fillTypes(projectId)).catch((error: unknown) =>
-        console.warn(
-          `[tasks] project ${projectId}'s delegate types were not filled: ${error instanceof Error ? error.message : String(error)}`
-        )
+      inTurn(projectId, () => fillTypes(projectId)).then(
+        (refused) => {
+          if (refused) {
+            unfilled(refused.response.detail);
+          }
+        },
+        (error: unknown) =>
+          unfilled(error instanceof Error ? error.message : String(error))
       ),
       "fill a project's delegate types"
     );
   };
 
-  /** The project's stages; undefined while stages.md does not read. */
-  const currentStages = async (
-    projectId: string
-  ): Promise<Stages | undefined> => {
-    const { reading, source } = await stagesOf(projectId);
+  /** The project's stages; undefined while stages.md does not read; the folder's refusal when it does not read off the folder. */
+  const currentStages = async (projectId: string) => {
+    const read = await stagesOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const { reading, source } = read;
     return reading.ok && source !== "none" ? reading.stages : undefined;
   };
 
   /** The project's stages, or a refusal saying what in stages.md keeps the hub from `doing`. */
-  const usableStages = async (
-    projectId: string,
-    doing: string
-  ): Promise<Stages> => {
-    const { reading, source } = await stagesOf(projectId);
+  const usableStages = async (projectId: string, doing: string) => {
+    const read = await stagesOf(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const { reading, source } = read;
     if (source === "none") {
-      return refuse(
+      return refusal(
         409,
+        "task-not-set-up",
         `The project is not set up yet, so it has no stages and the hub cannot ${doing}. Its setup page writes them once the person sends it.`
       );
     }
     if (!reading.ok) {
-      return refuse(
+      return refusal(
         409,
+        "task-stages-unread",
         `stages.md does not read, so the hub cannot ${doing}. ${reading.problems.join(" ")} Fix it, or apply a template.`
       );
     }
@@ -3034,7 +3368,7 @@ export const createTasks = (store: TaskStore) => {
     number: number,
     content: string,
     stages: Stages | undefined
-  ): Promise<TaskView> => {
+  ) => {
     const doc = new TaskDoc(path, content);
     const parsed = doc.read();
     const hash = hashOf(content);
@@ -3042,11 +3376,15 @@ export const createTasks = (store: TaskStore) => {
     const observed =
       rows.find((row) => row.path === path)?.updatedAt ?? new Date();
     const stage = parsed.fields.stage ?? "";
-    const { gone, times } = await timesOf(
+    const read = await timesOf(
       projectId,
       [{ path, stage, updatedAt: observed }],
       stages
     );
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const { gone, times } = read;
     const context = contextOf(projectId, rows, stages, gone);
     const foundAt = parsed.fields.foundIn
       ? settleIn(context, parsed.fields.foundIn)
@@ -3091,9 +3429,22 @@ export const createTasks = (store: TaskStore) => {
     );
   };
 
+  /** {@link view} over the project's stages as they read now. */
+  const viewNow = async (
+    projectId: string,
+    path: string,
+    number: number,
+    content: string
+  ) => {
+    const stages = await currentStages(projectId);
+    return stages instanceof ElysiaStatus
+      ? stages
+      : view(projectId, path, number, content, stages);
+  };
+
   /**
    * Writes a task file through the folder (one commit) and re-indexes it;
-   * the folder's refusal answered. `fresh`: a new task, written only while
+   * the folder's refusal returned. `fresh`: a new task, written only while
    * no file claims its number (`folder-place-taken` otherwise).
    */
   const placeTask = async (
@@ -3107,7 +3458,10 @@ export const createTasks = (store: TaskStore) => {
   ) => {
     // A project deleted since the change began takes no task: before its
     // folder is written, and again in the step that indexes the task.
-    stands(projectId);
+    const gone = stands(projectId);
+    if (gone) {
+      return gone;
+    }
     const written = await writeFolderFile(projectId, path, content, {
       author: actor.author,
       message,
@@ -3116,39 +3470,12 @@ export const createTasks = (store: TaskStore) => {
     if (written instanceof ElysiaStatus) {
       return written;
     }
-    stands(projectId);
-    store.put([indexRow(projectId, path, number, content, hashOf(content))]);
-    return view(
-      projectId,
-      path,
-      number,
-      content,
-      await currentStages(projectId)
-    );
-  };
-
-  /** {@link placeTask}, the folder's refusal thrown on. */
-  const save = async (
-    projectId: string,
-    path: string,
-    number: number,
-    content: string,
-    actor: TaskActor,
-    message: string
-  ): Promise<TaskView> => {
-    const saved = await placeTask(
-      projectId,
-      path,
-      number,
-      content,
-      actor,
-      message,
-      false
-    );
-    if (saved instanceof ElysiaStatus) {
-      throw projectRefusalOf(saved);
+    const goneSince = stands(projectId);
+    if (goneSince) {
+      return goneSince;
     }
-    return saved;
+    store.put([indexRow(projectId, path, number, content, hashOf(content))]);
+    return await viewNow(projectId, path, number, content);
   };
 
   /**
@@ -3169,6 +3496,9 @@ export const createTasks = (store: TaskStore) => {
     const numbers: number[] = [];
     for (const { was } of numbered) {
       const number = await nextNumber(projectId);
+      if (number instanceof ElysiaStatus) {
+        return number;
+      }
       renames.set(taskId(was), taskId(number));
       numbers.push(number);
     }
@@ -3215,7 +3545,10 @@ export const createTasks = (store: TaskStore) => {
       };
     });
     // All of them in one commit, or none: a merge never half-lands.
-    stands(projectId);
+    const gone = stands(projectId);
+    if (gone) {
+      return gone;
+    }
     const merged = await writeFolderFiles(
       projectId,
       written.map(({ path, content }) => ({ path, content })),
@@ -3232,7 +3565,10 @@ export const createTasks = (store: TaskStore) => {
     if (merged instanceof ElysiaStatus) {
       return merged;
     }
-    stands(projectId);
+    const goneSince = stands(projectId);
+    if (goneSince) {
+      return goneSince;
+    }
     // The index is the board's: archived files stay out of it.
     store.put(
       written
@@ -3254,8 +3590,12 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     actor: TaskActor,
     make: (number: number) => { content: string; message: string; path: string }
-  ): Promise<TaskView> => {
-    let number = await nextNumber(projectId);
+  ) => {
+    const first = await nextNumber(projectId);
+    if (first instanceof ElysiaStatus) {
+      return first;
+    }
+    let number = first;
     for (let tries = 1; ; tries += 1) {
       const { path, content, message } = make(number);
       const saved = await placeTask(
@@ -3274,87 +3614,133 @@ export const createTasks = (store: TaskStore) => {
         saved.response.code !== "folder-place-taken" ||
         tries >= CLAIM_TRIES
       ) {
-        throw projectRefusalOf(saved);
+        return saved;
       }
       console.info(
         `[tasks] ${projectId} ${taskId(number)} was claimed by a file in tasks/ as it was made; taking the next number`
       );
-      number = await nextNumber(projectId, number);
+      const next = await nextNumber(projectId, number);
+      if (next instanceof ElysiaStatus) {
+        return next;
+      }
+      number = next;
     }
   };
 
   /**
-   * Reads a task's file, lets `apply` change it, and writes it back when it
-   * changed. `apply` answers what it did (its words, or with the stage move
-   * and reason it made), for the commit message.
+   * The file of the task `ref` names, read for a change inside the project's
+   * turn: a stage or comments written into it are put back first, so no
+   * commit of the hub's carries them on. Refused for a task that does not
+   * change; the folder's refusal when it does not read.
    */
-  const change = (
-    projectId: string,
-    ref: string,
-    actor: TaskActor,
-    apply: (doc: TaskDoc, id: string) => Promise<string | Did> | string | Did
-  ): Promise<TaskView> =>
-    inTurn(projectId, () => amend(projectId, ref, actor, apply));
-
-  /** {@link change} inside the project's turn, already taken: a write that changes other tasks with its own. */
-  const amend = async (
-    projectId: string,
-    ref: string,
-    actor: TaskActor,
-    apply: (doc: TaskDoc, id: string) => Promise<string | Did> | string | Did
-  ): Promise<TaskView> => {
-    known(projectId);
-    const { path, number } = await locate(projectId, ref, true);
-    const id = taskId(number);
+  const opened = async (projectId: string, ref: string) => {
+    const tracker = known(projectId);
+    if (tracker instanceof ElysiaStatus) {
+      return tracker;
+    }
+    const place = await locate(projectId, ref, true);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
+    const { path, number } = place;
     const read = await taskText(projectId, path);
-    // A stage or comments written into the file are put back before any
-    // change reads it, so no commit of the hub's carries them on.
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
     const fix = await fixFor(projectId, path, read);
+    if (fix instanceof ElysiaStatus) {
+      return fix;
+    }
     const content = fix
       ? await settle(projectId, path, number, read, fix)
       : read;
-    const doc = new TaskDoc(path, content);
-    const applied = await apply(doc, id);
+    if (content instanceof ElysiaStatus) {
+      return content;
+    }
+    return {
+      path,
+      number,
+      id: taskId(number),
+      content,
+      doc: new TaskDoc(path, content),
+    };
+  };
+
+  /**
+   * An {@link opened} task file written back once it changed, its commit
+   * saying what the change did (its words, or with the stage move and
+   * reason it made); the task as it stands.
+   */
+  const writeBack = async (
+    projectId: string,
+    file: Exclude<Awaited<ReturnType<typeof opened>>, Refused>,
+    actor: TaskActor,
+    applied: string | Did
+  ) => {
+    const { path, number, id, content, doc } = file;
     const { what, ...did } =
       typeof applied === "string" ? { what: applied } : applied;
     const next = doc.toString();
     if (next === content) {
-      return view(
-        projectId,
-        path,
-        number,
-        content,
-        await currentStages(projectId)
-      );
+      return await viewNow(projectId, path, number, content);
     }
-    return await save(
+    return await placeTask(
       projectId,
       path,
       number,
       next,
       actor,
-      commitMessage(actor, `task ${id}`, what, did)
+      commitMessage(actor, `task ${id}`, what, did),
+      false
     );
   };
 
-  /** Refuses a move into `to` with its problem, when it has one. */
-  const refuseMove = (
+  /**
+   * Reads a task's file, lets `apply` change it, and writes it back when it
+   * changed, inside the project's turn already taken ({@link opened},
+   * {@link writeBack}): a write that changes other tasks with its own.
+   */
+  const amend = async (
+    projectId: string,
+    ref: string,
+    actor: TaskActor,
+    apply: (doc: TaskDoc, id: string) => string | Did
+  ) => {
+    const file = await opened(projectId, ref);
+    return file instanceof ElysiaStatus
+      ? file
+      : await writeBack(projectId, file, actor, apply(file.doc, file.id));
+  };
+
+  /** {@link amend} in the project's turn. */
+  const change = (
+    projectId: string,
+    ref: string,
+    actor: TaskActor,
+    apply: (doc: TaskDoc, id: string) => string | Did
+  ) => inTurn(projectId, () => amend(projectId, ref, actor, apply));
+
+  /** A refused stage, with its problem when it has one: 400 for a stage the project lacks, 403 for one its rules close. */
+  const stageRefusal = (
     stages: Stages,
     to: string,
     problem: string | undefined
-  ): void => {
-    if (problem) {
-      refuse(stageNamed(stages, to) ? 403 : 400, problem);
+  ) => {
+    if (!problem) {
+      return;
     }
+    return stageNamed(stages, to)
+      ? refusal(403, "task-stage-refused", problem)
+      : refusal(400, "task-stage-unknown", problem);
   };
 
   /**
-   * Refuses a move into an active stage, or a new task filed there (`from`
-   * ""), with nothing to work on it there (stages.ts `nobodyProblem`):
-   * something must, its live attempt, the
-   * stage's `runs:`, or the project's dispatch, which starts one
-   * (dispatch.ts `hooked`). A tracker's move is a person's work elsewhere;
-   * the hub's own moves are its attempts'.
+   * The refusal of a move into an active stage, or a new task filed there
+   * (`from` ""), with nothing to work on it there (stages.ts
+   * `nobodyProblem`): something must, its live attempt, the stage's
+   * `runs:`, or the project's dispatch, which starts one (dispatch.ts
+   * `hooked`). A tracker's move is a person's work elsewhere; the hub's own
+   * moves are its attempts'.
    */
   const refuseNobody = (
     projectId: string,
@@ -3363,7 +3749,7 @@ export const createTasks = (store: TaskStore) => {
     from: string,
     to: string,
     actor: TaskActor
-  ): void => {
+  ) => {
     if (actor.mover === "hub" || actor.tracker !== undefined) {
       return;
     }
@@ -3371,9 +3757,7 @@ export const createTasks = (store: TaskStore) => {
       live: liveAt(projectId, id),
       dispatches: dispatches(projectId),
     });
-    if (nobody) {
-      refuse(409, nobody);
-    }
+    return nobody ? refusal(409, "task-stage-nobody", nobody) : undefined;
   };
 
   /**
@@ -3391,7 +3775,7 @@ export const createTasks = (store: TaskStore) => {
     actor: TaskActor,
     /** A close as a duplicate: any filer may make it, so the stage is checked as the hub's own moves are. */
     asClose = false
-  ): { from: string; to: string } | undefined => {
+  ) => {
     const from = doc.read().fields.stage ?? "";
     if (from === to) {
       return;
@@ -3400,21 +3784,26 @@ export const createTasks = (store: TaskStore) => {
       actor.mover === "action" &&
       !(actor.actionId && store.actionMove?.(projectId, id, to, actor.actionId))
     ) {
-      refuse(
+      return refusal(
         403,
+        "task-move-not-approved",
         `This task cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
       );
     }
-    refuseMove(
-      stages,
-      to,
-      actor.mover === "hub" || asClose
-        ? hubProblem(stages, to)
-        : moveProblem(stages, id, from, to, actor.mover)
-    );
-    refuseNobody(projectId, stages, id, from, to, actor);
+    const refused =
+      stageRefusal(
+        stages,
+        to,
+        actor.mover === "hub" || asClose
+          ? hubProblem(stages, to)
+          : moveProblem(stages, id, from, to, actor.mover)
+      ) ?? refuseNobody(projectId, stages, id, from, to, actor);
+    if (refused) {
+      return refused;
+    }
     doc.setField("stage", to);
-    return { from, to };
+    const moved: { from: string; to: string } = { from, to };
+    return moved;
   };
 
   /**
@@ -3431,7 +3820,7 @@ export const createTasks = (store: TaskStore) => {
     id: string,
     survivor: string,
     actor: TaskActor
-  ): Promise<Did> => {
+  ) => {
     const byId = rowsById(store.index(projectId));
     for (
       let at: string | null = survivor, seen = 0;
@@ -3439,8 +3828,9 @@ export const createTasks = (store: TaskStore) => {
       at = byId.get(at)?.duplicateOf ?? null, seen += 1
     ) {
       if (at === id) {
-        refuse(
+        return refusal(
           409,
+          "task-duplicate-cycle",
           `${taskLink(projectId, survivor, byId.get(survivor)?.title ?? survivor)} is already a duplicate of this task, so this task cannot be a duplicate of it. Nothing changed.`
         );
       }
@@ -3448,24 +3838,33 @@ export const createTasks = (store: TaskStore) => {
     doc.setField("duplicate_of", survivor);
     const phrase = `${EDGE_PHRASE.duplicate_of} ${survivor}`;
     const stages = await usableStages(projectId, "close a duplicate");
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
     const dropped = stages.stages.find((each) => each.kind === "dropped");
     if (!dropped) {
-      return refuse(
+      return refusal(
         409,
+        "task-no-dropped-stage",
         "The project has no stage of kind dropped, so this task cannot be closed as a duplicate. Add one to stages.md."
       );
     }
+    const kept: Did = { what: phrase };
     if (kindIn(stages, doc.read().fields.stage ?? "") === "dropped") {
-      return { what: phrase };
+      return kept;
     }
     const stage = moveTo(projectId, doc, id, stages, dropped.name, actor, true);
-    return stage
+    if (stage instanceof ElysiaStatus) {
+      return stage;
+    }
+    const closed: Did = stage
       ? {
           what: `${phrase}; stage ${stage.from || NO_STAGE} → ${stage.to}`,
           stage,
           reason: "duplicate",
         }
-      : { what: phrase };
+      : kept;
+    return closed;
   };
 
   /**
@@ -3479,28 +3878,36 @@ export const createTasks = (store: TaskStore) => {
     from: string,
     to: string | null,
     why: string
-  ): Promise<string[]> => {
+  ) => {
     const waiters = store
       .index(projectId)
       .filter((row) => row.waitsOn.includes(from) && row.id !== from);
     const moved: string[] = [];
     for (const waiter of waiters) {
-      await amend(projectId, waiter.id, hubActor(why), (doc, id) => {
-        const kept = doc.read().fields.waitsOn;
-        doc.setField("waits_on", [
-          ...new Set(
-            kept.flatMap((target) => {
-              if (target !== from) {
-                return [target];
-              }
-              return to && to !== id ? [to] : [];
-            })
-          ),
-        ]);
-        return to && to !== id
-          ? `waits on ${to}, not ${from}`
-          : `no longer waits on ${from}`;
-      });
+      const amended = await amend(
+        projectId,
+        waiter.id,
+        hubActor(why),
+        (doc, id) => {
+          const kept = doc.read().fields.waitsOn;
+          doc.setField("waits_on", [
+            ...new Set(
+              kept.flatMap((target) => {
+                if (target !== from) {
+                  return [target];
+                }
+                return to && to !== id ? [to] : [];
+              })
+            ),
+          ]);
+          return to && to !== id
+            ? `waits on ${to}, not ${from}`
+            : `no longer waits on ${from}`;
+        }
+      );
+      if (amended instanceof ElysiaStatus) {
+        return amended;
+      }
       moved.push(waiter.id);
     }
     return moved;
@@ -3511,36 +3918,95 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     ref: string,
     actor: TaskActor
-  ): Promise<TaskView> => {
-    const { path, number } = await locate(projectId, ref, true);
+  ) => {
+    const place = await locate(projectId, ref, true);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
+    const { path, number } = place;
     const id = taskId(number);
     if (
       attemptsByTask(projectId)
         .get(id)
         ?.some((attempt) => isLive(attempt.state))
     ) {
-      refuse(
+      return refusal(
         409,
+        "task-attempt-live",
         `An attempt at ${id} is live; stop it before archiving the task.`
       );
     }
     const read = await taskText(projectId, path);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
     const fix = await fixFor(projectId, path, read);
-    if (fix) {
-      await settle(projectId, path, number, read, fix);
+    if (fix instanceof ElysiaStatus) {
+      return fix;
+    }
+    const settled = fix
+      ? await settle(projectId, path, number, read, fix)
+      : undefined;
+    if (settled instanceof ElysiaStatus) {
+      return settled;
     }
     const to = archivePath(path);
-    stands(projectId);
+    const gone = stands(projectId);
+    if (gone) {
+      return gone;
+    }
     const moved = await moveFolderFile(projectId, path, to, {
       author: actor.author,
       message: commitMessage(actor, `task ${id}`, "archive"),
     });
     if (moved instanceof ElysiaStatus) {
-      throw projectRefusalOf(moved);
+      return moved;
     }
     store.drop(projectId, [path]);
     const content = await taskText(projectId, to);
-    return view(projectId, to, number, content, await currentStages(projectId));
+    return content instanceof ElysiaStatus
+      ? content
+      : await viewNow(projectId, to, number, content);
+  };
+
+  /** Where an archived task's file is, and what of it a write around the hub changed while it was archived ({@link archivedFix}). */
+  const archivedTask = async (projectId: string, ref: string) => {
+    const asked = taskNumbered("task", ref);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
+    const { id, number } = asked;
+    const synced = await sync(projectId);
+    if (synced instanceof ElysiaStatus) {
+      return synced;
+    }
+    const board = synced.rows.find((row) => row.number === number);
+    if (board) {
+      return refusal(
+        409,
+        "task-on-board",
+        `It is on the board (${board.path}), not archived.`
+      );
+    }
+    const from = await archivedFile(projectId, number);
+    if (from instanceof ElysiaStatus) {
+      return from;
+    }
+    if (!from) {
+      return refusal(404, "task-not-archived", "It is not archived.");
+    }
+    const read = await taskText(projectId, from);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const fix = await archivedFix(projectId, from, read);
+    if (fix instanceof ElysiaStatus) {
+      return fix;
+    }
+    const settled = fix
+      ? await settledDoc(projectId, from, read, fix)
+      : undefined;
+    return { id, number, from, settled };
   };
 
   /**
@@ -3553,26 +4019,17 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     ref: string,
     actor: TaskActor
-  ): Promise<TaskView> => {
-    const id = taskRef("task", ref);
-    const number = taskNumber(id) as number;
-    const board = (await sync(projectId)).rows.find(
-      (row) => row.number === number
-    );
-    if (board) {
-      refuse(409, `It is on the board (${board.path}), not archived.`);
+  ) => {
+    const archived = await archivedTask(projectId, ref);
+    if (archived instanceof ElysiaStatus) {
+      return archived;
     }
-    const from = await archivedFile(projectId, number);
-    if (!from) {
-      return refuse(404, "It is not archived.");
-    }
+    const { id, number, from, settled } = archived;
     const to = `tasks/${from.slice(ARCHIVE_DIR.length + 1)}`;
-    const read = await taskText(projectId, from);
-    const fix = await archivedFix(projectId, from, read);
-    const settled = fix
-      ? await settledDoc(projectId, from, read, fix)
-      : undefined;
-    stands(projectId);
+    const gone = stands(projectId);
+    if (gone) {
+      return gone;
+    }
     const moved = await moveFolderFile(projectId, from, to, {
       author: actor.author,
       message: commitMessage(
@@ -3584,60 +4041,84 @@ export const createTasks = (store: TaskStore) => {
       ...(settled ? { content: settled.restored } : {}),
     });
     if (moved instanceof ElysiaStatus) {
-      throw projectRefusalOf(moved);
+      return moved;
     }
     const content = await taskText(projectId, to);
-    stands(projectId);
+    if (content instanceof ElysiaStatus) {
+      return content;
+    }
+    const goneSince = stands(projectId);
+    if (goneSince) {
+      return goneSince;
+    }
     store.put([indexRow(projectId, to, number, content, hashOf(content))]);
-    return view(projectId, to, number, content, await currentStages(projectId));
+    return await viewNow(projectId, to, number, content);
   };
 
   /** A move's reason as given: one line, or nothing. */
-  const reasonOf = (reason: string | undefined): string | undefined =>
+  const reasonOf = (reason: string | undefined) =>
     reason?.trim() ? oneLine("reason", reason, REASON_LIMIT) : undefined;
 
   /**
-   * Each comment being written now, by the id its device chose: the same
-   * comment again meanwhile (a device sending it again after its answer was
-   * lost) is answered by the first one's commit, never written twice.
+   * The file the task `ref` names, the project's index caught up first, as a
+   * list does: the other tasks its edges name read as their files are now.
+   * Answers the index's rows with it.
    */
-  const commenting = new Map<string, Promise<TaskView>>();
+  const placeSynced = async (projectId: string, ref: string) => {
+    const tracker = known(projectId);
+    if (tracker instanceof ElysiaStatus) {
+      return tracker;
+    }
+    const synced = await sync(projectId);
+    if (synced instanceof ElysiaStatus) {
+      return synced;
+    }
+    const place = await locate(projectId, ref);
+    return place instanceof ElysiaStatus
+      ? place
+      : { ...place, rows: synced.rows };
+  };
 
   /** One task, its file read and parsed; the index catches up if the file moved. */
-  const readTask = async (
-    projectId: string,
-    ref: string
-  ): Promise<TaskView> => {
-    known(projectId);
-    // The index caught up first, as a list does: the other tasks this one's
-    // edges name read as their files are now.
-    const { rows } = await sync(projectId);
-    const { path, number } = await locate(projectId, ref);
+  const readTask = async (projectId: string, ref: string) => {
+    const place = await placeSynced(projectId, ref);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
+    const { path, number, rows } = place;
     const content = await taskText(projectId, path);
+    if (content instanceof ElysiaStatus) {
+      return content;
+    }
     const fix = await fixFor(projectId, path, content, rows);
+    if (fix instanceof ElysiaStatus) {
+      return fix;
+    }
     if (fix) {
       // Shown as it will be settled; the file gets it back in its turn.
       queueSettle(projectId, path, number);
     }
-    return view(
+    return await viewNow(
       projectId,
       path,
       number,
-      fix ? settledView(path, content, fix) : content,
-      await currentStages(projectId)
+      fix ? settledView(path, content, fix) : content
     );
   };
 
   /** A comment's entry, its commit, and who hears of it ({@link comment}); `via`, one carried from an outside source. */
-  const writeComment = (
+  const writeComment = async (
     projectId: string,
     ref: string,
     text: string,
     actor: TaskActor,
     via?: ExternalComment
-  ): Promise<TaskView> => {
+  ) => {
     const written = commentText(text);
-    return change(projectId, ref, actor, (doc) => {
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
+    const task = await change(projectId, ref, actor, (doc) => {
       doc.addComment(
         {
           name: via ? via.author.login : actor.author.name,
@@ -3654,40 +4135,82 @@ export const createTasks = (store: TaskStore) => {
           : `comment “${commentGist(written)}”`,
         change: COMMENT_CHANGE,
       };
-    }).then((task) =>
-      told(
-        {
-          kind: "changed",
-          projectId,
-          id: task.id,
-          comment: { actor, text: written },
-        },
-        task
-      )
-    );
+    });
+    return task instanceof ElysiaStatus
+      ? task
+      : told(
+          {
+            kind: "changed",
+            projectId,
+            id: task.id,
+            comment: { actor, text: written },
+          },
+          task
+        );
   };
 
-  /** The project's tasks from the index, caught up with the files first. */
-  const listTasks = async (
-    projectId: string,
-    filter: TaskFilter = {}
-  ): Promise<TaskList> => {
-    const tracker = known(projectId);
-    const partOf = filter.partOf ? taskRef("part_of", filter.partOf) : null;
+  /**
+   * Each comment being written now, by the id its device chose: the same
+   * comment again meanwhile (a device sending it again after its answer was
+   * lost) is answered by the first one's commit, never written twice.
+   */
+  const commenting = new Map<string, ReturnType<typeof writeComment>>();
+
+  /** The tasks the list's filter links (`link`); undefined when it names none, refused when it does not read. */
+  const linkedBy = (projectId: string, filter: TaskFilter) => {
     const linking = filter.link?.trim()
       ? store.linked(projectId, filter.link.trim())
       : undefined;
-    const linked =
-      typeof linking === "string"
-        ? refuse(400, linking)
-        : linking && new Set(linking);
-    const [{ rows: board, problems }, { reading }] = await Promise.all([
+    return typeof linking === "string"
+      ? refusal(400, "task-link-unread", linking)
+      : linking && new Set(linking);
+  };
+
+  /** What a list's filter asks of the project, read: its tracker, the whole it names and the tasks its link names; the first refusal when one does not read. */
+  const listAsked = (projectId: string, filter: TaskFilter) => {
+    const tracker = known(projectId);
+    if (tracker instanceof ElysiaStatus) {
+      return tracker;
+    }
+    const partOf = filter.partOf ? taskRef("part_of", filter.partOf) : null;
+    if (partOf instanceof ElysiaStatus) {
+      return partOf;
+    }
+    const linked = linkedBy(projectId, filter);
+    return linked instanceof ElysiaStatus
+      ? linked
+      : { tracker, partOf, linked };
+  };
+
+  /** The project's tasks from the index, caught up with the files first. */
+  const listTasks = async (projectId: string, filter: TaskFilter = {}) => {
+    const asked = listAsked(projectId, filter);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
+    const { tracker, partOf, linked } = asked;
+    const [synced, read] = await Promise.all([
       sync(projectId),
       stagesOf(projectId),
     ]);
+    if (synced instanceof ElysiaStatus) {
+      return synced;
+    }
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const { rows: board, problems } = synced;
+    const { reading } = read;
     const rows = filter.archived ? await archivedRows(projectId) : board;
+    if (rows instanceof ElysiaStatus) {
+      return rows;
+    }
     const stages = reading.ok ? reading.stages : undefined;
-    const { gone, times } = await timesOf(projectId, rows, stages);
+    const timed = await timesOf(projectId, rows, stages);
+    if (timed instanceof ElysiaStatus) {
+      return timed;
+    }
+    const { gone, times } = timed;
     const context = contextOf(projectId, board, stages, gone);
     const kept = rows
       .map((row) =>
@@ -3705,12 +4228,13 @@ export const createTasks = (store: TaskStore) => {
     const tasks = (
       filter.q?.trim() ? await saying(projectId, kept, filter.q) : kept
     ).sort(byRank);
-    return {
+    const list: TaskList = {
       tracker,
       tasks,
       problems,
       stagesProblems: reading.ok ? [] : reading.problems,
     };
+    return list;
   };
 
   /** A task by its link, labelled by its title: what a message names it by. */
@@ -3729,19 +4253,20 @@ export const createTasks = (store: TaskStore) => {
    * hears once what changed; and the answer names what became ready and
    * what still waits.
    */
-  const afterClose = async (
-    projectId: string,
-    id: string
-  ): Promise<Closing> => {
+  const afterClose = async (projectId: string, id: string) => {
     const before = await listTasks(projectId);
+    if (before instanceof ElysiaStatus) {
+      return before;
+    }
     const closed = before.tasks.find((task) => task.id === id);
     if (!closed) {
-      return {
+      const none: Closing = {
         nowReady: [],
         stillWaiting: [],
         unwaited: [],
         wholeClosed: null,
       };
+      return none;
     }
     const waiting = before.tasks.filter((task) =>
       task.waits.some((wait) => wait.target === id)
@@ -3752,8 +4277,17 @@ export const createTasks = (store: TaskStore) => {
           repoint(projectId, id, null, `${id} was dropped`)
         )
       : [];
+    if (unwaited instanceof ElysiaStatus) {
+      return unwaited;
+    }
     const wholeClosed = await closeWhole(projectId, closed, before.tasks);
+    if (wholeClosed instanceof ElysiaStatus) {
+      return wholeClosed;
+    }
     const after = await listTasks(projectId);
+    if (after instanceof ElysiaStatus) {
+      return after;
+    }
     const now = new Map(after.tasks.map((task) => [task.id, task]));
     const open = waiting
       .map((waiter) => now.get(waiter.id))
@@ -3762,7 +4296,7 @@ export const createTasks = (store: TaskStore) => {
           task !== undefined && !CLOSED_KINDS.has(task.kind ?? "todo")
       );
     tellWaiters(projectId, closed, dropped, waiting, now);
-    return {
+    const closing: Closing = {
       nowReady: open.filter((task) => task.ready).map((task) => task.id),
       stillWaiting: open
         .filter((task) => !task.ready)
@@ -3770,6 +4304,7 @@ export const createTasks = (store: TaskStore) => {
       unwaited,
       wholeClosed,
     };
+    return closing;
   };
 
   /** Each live session whose task waited on a task now closed hears once what changed. */
@@ -3809,7 +4344,7 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     part: TaskSummary,
     tasks: TaskSummary[]
-  ): Promise<string | null> => {
+  ) => {
     const whole = part.partOf
       ? tasks.find((task) => task.id === part.partOf)
       : undefined;
@@ -3826,26 +4361,144 @@ export const createTasks = (store: TaskStore) => {
     ) {
       return null;
     }
+    const unclosed = (why: string) =>
+      console.warn(
+        `[tasks] ${projectId} ${whole.id}: its last part is done, and it did not close: ${why}`
+      );
     const stages = await currentStages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
     const done = stages?.stages.find((stage) => stage.kind === "done");
     if (!done || done.hooks.by === "action") {
       return null;
     }
     try {
-      await moveTask(
+      const moved = await moveTask(
         projectId,
         whole.id,
         done.name,
         hubActor(`its last part, ${part.id}, is done`)
       );
+      if (moved instanceof ElysiaStatus) {
+        unclosed(moved.response.detail);
+        return null;
+      }
       return whole.id;
     } catch (error) {
-      console.warn(
-        `[tasks] ${projectId} ${whole.id}: its last part is done, and it did not close: ${error instanceof Error ? error.message : String(error)}`
-      );
+      unclosed(error instanceof Error ? error.message : String(error));
       return null;
     }
   };
+
+  /** Whether a move is your approval: yours, out of a stage of kind `you`, passing the task on (stages.ts `passesReview`). */
+  const approves = (
+    stages: Stages,
+    moved: { from: string; to: string },
+    actor: TaskActor
+  ): boolean =>
+    actor.mover === "you" &&
+    kindIn(stages, moved.from) === "you" &&
+    passesReview(stages, moved.from, moved.to);
+
+  /**
+   * A move of task `id` (its file `doc`) to `stage`, made on the file: the
+   * move, whether it is your approval, and what its commit says; refused
+   * when the stages do not read, the stage is not one, the move is not the
+   * actor's, or the store holds your approval.
+   */
+  const moveMade = async (
+    projectId: string,
+    doc: TaskDoc,
+    id: string,
+    stage: string,
+    actor: TaskActor,
+    why: string | undefined,
+    tickCriteria: boolean | undefined
+  ) => {
+    const stages = await usableStages(projectId, "check a stage change");
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
+    const to = stageName(stage);
+    if (to instanceof ElysiaStatus) {
+      return to;
+    }
+    const moved = moveTo(projectId, doc, id, stages, to, actor);
+    if (moved instanceof ElysiaStatus) {
+      return moved;
+    }
+    if (!moved) {
+      return { moved, approved: false, did: { what: `stage ${to}` } };
+    }
+    return await movedFile(projectId, doc, id, stages, moved, actor, {
+      why,
+      tickCriteria,
+    });
+  };
+
+  /**
+   * {@link moveMade} once the move is made on the file: its criteria ticked
+   * when asked, whether it is your approval (refused while the store holds
+   * it), and what its commit says.
+   */
+  const movedFile = async (
+    projectId: string,
+    doc: TaskDoc,
+    id: string,
+    stages: Stages,
+    moved: { from: string; to: string },
+    actor: TaskActor,
+    { why, tickCriteria }: { tickCriteria?: boolean; why?: string }
+  ) => {
+    if (tickCriteria) {
+      doc.tickCriteria();
+    }
+    const approved = approves(stages, moved, actor);
+    const held = approved ? await approvable(projectId, id) : undefined;
+    if (held) {
+      return held;
+    }
+    const because = approved ? `approved${why ? `: ${why}` : ""}` : why;
+    const did: Did = {
+      what: `stage ${moved.from || NO_STAGE} → ${moved.to}`,
+      stage: moved,
+      ...(because ? { reason: because } : {}),
+    };
+    return { moved, approved, did };
+  };
+
+  /** {@link moveMade} in the project's turn, the file written back: the task, the move and whether it was your approval. */
+  const moveWritten = (
+    projectId: string,
+    ref: string,
+    stage: string,
+    actor: TaskActor,
+    why: string | undefined,
+    tickCriteria: boolean | undefined
+  ) =>
+    inTurn(projectId, async () => {
+      const file = await opened(projectId, ref);
+      if (file instanceof ElysiaStatus) {
+        return file;
+      }
+      const made = await moveMade(
+        projectId,
+        file.doc,
+        file.id,
+        stage,
+        actor,
+        why,
+        tickCriteria
+      );
+      if (made instanceof ElysiaStatus) {
+        return made;
+      }
+      const task = await writeBack(projectId, file, actor, made.did);
+      return task instanceof ElysiaStatus
+        ? task
+        : { task, moved: made.moved, approved: made.approved };
+    });
 
   /**
    * Moves a task to another stage ({@link Tasks.move}); a move into a done
@@ -3858,35 +4511,23 @@ export const createTasks = (store: TaskStore) => {
     actor: TaskActor,
     reason?: string,
     options?: { tickCriteria?: boolean }
-  ): Promise<TaskView & { closing?: Closing }> => {
+  ) => {
     const why = reasonOf(reason);
-    const tick = options?.tickCriteria
-      ? (doc: TaskDoc) => doc.tickCriteria()
-      : () => 0;
-    let moved: { from: string; to: string } | undefined;
-    let approved = false;
-    const task = await change(projectId, ref, actor, async (doc, id) => {
-      const stages = await usableStages(projectId, "check a stage change");
-      const to = stageName(stage);
-      moved = moveTo(projectId, doc, id, stages, to, actor);
-      if (!moved) {
-        return `stage ${to}`;
-      }
-      tick(doc);
-      approved =
-        actor.mover === "you" &&
-        kindIn(stages, moved.from) === "you" &&
-        passesReview(stages, moved.from, to);
-      if (approved) {
-        await approvable(projectId, id);
-      }
-      const because = approved ? `approved${why ? `: ${why}` : ""}` : why;
-      return {
-        what: `stage ${moved.from || NO_STAGE} → ${to}`,
-        stage: moved,
-        ...(because ? { reason: because } : {}),
-      };
-    });
+    if (why instanceof ElysiaStatus) {
+      return why;
+    }
+    const done = await moveWritten(
+      projectId,
+      ref,
+      stage,
+      actor,
+      why,
+      options?.tickCriteria
+    );
+    if (done instanceof ElysiaStatus) {
+      return done;
+    }
+    const { task, moved, approved } = done;
     if (!moved) {
       return task;
     }
@@ -3902,12 +4543,16 @@ export const createTasks = (store: TaskStore) => {
       },
       task
     );
-    const wasOpen = !CLOSED_KINDS.has(
-      kindIn(await currentStages(projectId), moved.from) ?? "todo"
-    );
-    return wasOpen && (task.kind === "done" || task.kind === "dropped")
-      ? { ...task, closing: await afterClose(projectId, task.id) }
-      : task;
+    const stages = await currentStages(projectId);
+    if (stages instanceof ElysiaStatus) {
+      return stages;
+    }
+    const wasOpen = !CLOSED_KINDS.has(kindIn(stages, moved.from) ?? "todo");
+    if (!(wasOpen && (task.kind === "done" || task.kind === "dropped"))) {
+      return task;
+    }
+    const closing = await afterClose(projectId, task.id);
+    return closing instanceof ElysiaStatus ? closing : { ...task, closing };
   };
 
   /** A written wait to take out, matched to the target it names as kept; undefined when it names none of them. */
@@ -3926,36 +4571,59 @@ export const createTasks = (store: TaskStore) => {
     );
   };
 
-  /** Every task file of the project, the board's and the archive's, each read settled: a write around the hub put back first. */
-  const settledFiles = async (
-    projectId: string
-  ): Promise<{ content: string; number: number; path: string }[]> => {
+  /** One task file read settled: a write around the hub put back first. */
+  const settledFile = async (
+    projectId: string,
+    path: string,
+    number: number
+  ) => {
+    const content = await taskText(projectId, path);
+    if (content instanceof ElysiaStatus) {
+      return content;
+    }
+    const fix = await fixFor(projectId, path, content);
+    if (fix instanceof ElysiaStatus) {
+      return fix;
+    }
+    const settled = fix
+      ? await settle(projectId, path, number, content, fix)
+      : content;
+    return settled instanceof ElysiaStatus
+      ? settled
+      : { path, number, content: settled };
+  };
+
+  /** Every task file of the project, the board's and the archive's, each read settled ({@link settledFile}). */
+  const settledFiles = async (projectId: string) => {
     const names = await folderFileNames(projectId, "tasks");
     if (names instanceof ElysiaStatus) {
-      throw projectRefusalOf(names);
+      return names;
+    }
+    const archived = await archivedNames(projectId);
+    if (archived instanceof ElysiaStatus) {
+      return archived;
     }
     const paths = [
-      ...names
-        .filter((name) => fileTaskNumber(name) !== undefined)
-        .map((name) => `tasks/${name}`),
-      ...(await archivedNames(projectId)).map(
-        (name) => `${ARCHIVE_DIR}/${name}`
-      ),
+      ...withNumbers(names).map(({ name, number }) => ({
+        path: `tasks/${name}`,
+        number,
+      })),
+      ...archived.map(({ name, number }) => ({
+        path: `${ARCHIVE_DIR}/${name}`,
+        number,
+      })),
     ];
-    return await Promise.all(
-      paths.map(async (path) => {
-        const number = fileTaskNumber(path) as number;
-        const content = await taskText(projectId, path);
-        const fix = await fixFor(projectId, path, content);
-        return {
-          path,
-          number,
-          content: fix
-            ? await settle(projectId, path, number, content, fix)
-            : content,
-        };
-      })
+    const read = await Promise.all(
+      paths.map(({ path, number }) => settledFile(projectId, path, number))
     );
+    const files: { content: string; number: number; path: string }[] = [];
+    for (const file of read) {
+      if (file instanceof ElysiaStatus) {
+        return file;
+      }
+      files.push(file);
+    }
+    return files;
   };
 
   /** Task files a cutover rewrote, as one commit by the hub; the board's re-indexed. */
@@ -3964,8 +4632,11 @@ export const createTasks = (store: TaskStore) => {
     writes: { content: string; number: number; path: string }[],
     actor: TaskActor,
     what: string
-  ): Promise<void> => {
-    stands(projectId);
+  ) => {
+    const gone = stands(projectId);
+    if (gone) {
+      return gone;
+    }
     const written = await writeFolderFiles(
       projectId,
       writes.map(({ path, content }) => ({ path, content })),
@@ -3979,9 +4650,12 @@ export const createTasks = (store: TaskStore) => {
       }
     );
     if (written instanceof ElysiaStatus) {
-      throw projectRefusalOf(written);
+      return written;
     }
-    stands(projectId);
+    const goneSince = stands(projectId);
+    if (goneSince) {
+      return goneSince;
+    }
     store.put(
       writes
         .filter(({ path }) => !inArchive(path))
@@ -4000,7 +4674,7 @@ export const createTasks = (store: TaskStore) => {
    * written around the hub is settled first. Inside the project's turn.
    * Answers what it did, as counts.
    */
-  const migrateLinks = async (projectId: string): Promise<LinkMigration> => {
+  const migrateLinks = async (projectId: string) => {
     const counts: LinkMigration = {
       files: 0,
       waitsOn: 0,
@@ -4009,6 +4683,9 @@ export const createTasks = (store: TaskStore) => {
       related: 0,
     };
     const read = await settledFiles(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
     const titles = new Map(
       read.map(({ path, number, content }) => [
         taskId(number),
@@ -4058,12 +4735,15 @@ export const createTasks = (store: TaskStore) => {
     const actor = hubActor(
       "task links are one blocking edge: after is waits_on, parent is part_of, related is a See also comment"
     );
-    await writeCutover(
+    const cut = await writeCutover(
       projectId,
       writes,
       actor,
       `links: ${counts.waitsOn} after → waits_on, ${counts.partOf} parent → part_of, ${counts.seeAlso} related → See also`
     );
+    if (cut) {
+      return cut;
+    }
     console.info(
       `[tasks] project ${projectId}: task links migrated in ${counts.files} files: ${counts.waitsOn} after → waits_on, ${counts.partOf} parent → part_of, ${counts.related} related in ${counts.seeAlso} See also comments.`
     );
@@ -4092,39 +4772,74 @@ export const createTasks = (store: TaskStore) => {
       remove,
       was,
     }: { duplicateOf?: string; remove?: boolean; was: string | null }
-  ): Promise<
-    Omit<Did, "what"> & { said: string[]; survivor: string | null }
-  > => {
+  ) => {
+    const none: Omit<Did, "what"> & {
+      said: string[];
+      survivor: string | null;
+    } = { said: [], survivor: null };
     if (duplicateOf === undefined) {
-      return { said: [], survivor: null };
+      return none;
     }
     if (remove) {
-      if (was === taskRef("duplicate_of", duplicateOf)) {
+      const out = taskRef("duplicate_of", duplicateOf);
+      if (out instanceof ElysiaStatus) {
+        return out;
+      }
+      if (was === out) {
         doc.setField("duplicate_of", null);
       }
-      return {
-        said: [`no longer a duplicate of ${duplicateOf}`],
-        survivor: null,
-      };
+      return { ...none, said: [`no longer a duplicate of ${duplicateOf}`] };
     }
     const survivor = await single(projectId, "duplicate_of", duplicateOf);
-    if (!survivor || survivor === id) {
-      return refuse(400, "A task cannot be a duplicate of itself.");
+    if (survivor instanceof ElysiaStatus) {
+      return survivor;
     }
-    const { what, ...marked } = await markDuplicate(
-      projectId,
-      doc,
-      id,
-      survivor,
-      actor
-    );
-    return { ...marked, said: [what], survivor };
+    if (!survivor || survivor === id) {
+      return refusal(
+        400,
+        "task-duplicate-self",
+        "A task cannot be a duplicate of itself."
+      );
+    }
+    const marked = await markDuplicate(projectId, doc, id, survivor, actor);
+    if (marked instanceof ElysiaStatus) {
+      return marked;
+    }
+    const { what, ...did } = marked;
+    return { ...did, said: [what], survivor };
   };
 
-  /** A write that would make a task wait on itself or be its own part, refused by its path. */
-  const refuseSelf = (projectId: string, doc: TaskDoc, id: string): never => {
+  /** The refusal of a write that would make a task wait on itself or be its own part, by its path. */
+  const refuseSelf = (projectId: string, doc: TaskDoc, id: string) => {
     const self = linked(projectId, { id, title: doc.title() });
-    return refuse(409, taskLinkWords.cycle(`${self} → ${self}`));
+    return refusal(409, "task-cycle", taskLinkWords.cycle(`${self} → ${self}`));
+  };
+
+  /** The waits a link write takes out with `remove`, each matched to one kept; refused for one it does not hold. */
+  const waitsOut = (
+    projectId: string,
+    actor: TaskActor,
+    kept: string[],
+    waitsOn: string[]
+  ) => {
+    const reader = store.waitReader(projectId, actor);
+    const listed = items("waits_on", waitsOn);
+    if (listed instanceof ElysiaStatus) {
+      return listed;
+    }
+    const out: string[] = [];
+    for (const written of listed) {
+      const match = keptMatch(kept, written, reader);
+      if (match === undefined) {
+        return refusal(
+          404,
+          "task-wait-not-held",
+          `It waits on nothing named “${written}”. Nothing changed.`
+        );
+      }
+      out.push(match);
+    }
+    return out;
   };
 
   /** What a link write does to a task's waits: added, or taken out with `remove`. */
@@ -4134,41 +4849,40 @@ export const createTasks = (store: TaskStore) => {
     doc: TaskDoc,
     id: string,
     { waitsOn, remove }: TaskLinks
-  ): Promise<{
-    added: string[];
-    removed: string[];
-    said: string[];
-    waits: string[];
-  }> => {
+  ) => {
     const kept = doc.read().fields.waitsOn;
+    const waits: {
+      added: string[];
+      removed: string[];
+      said: string[];
+      waits: string[];
+    } = { waits: kept, added: [], removed: [], said: [] };
     if (waitsOn === undefined) {
-      return { waits: kept, added: [], removed: [], said: [] };
+      return waits;
     }
     if (remove) {
-      const reader = store.waitReader(projectId, actor);
-      const out = items("waits_on", waitsOn).map(
-        (written) =>
-          keptMatch(kept, written, reader) ??
-          refuse(
-            404,
-            `It waits on nothing named “${written}”. Nothing changed.`
-          )
-      );
+      const out = waitsOut(projectId, actor, kept, waitsOn);
+      if (out instanceof ElysiaStatus) {
+        return out;
+      }
       return {
+        ...waits,
         waits: kept.filter((target) => !out.includes(target)),
-        added: [],
         removed: out,
         said: [`no longer waits on ${out.join(", ")}`],
       };
     }
     const added = await waitsFor(projectId, actor, waitsOn);
+    if (added instanceof ElysiaStatus) {
+      return added;
+    }
     if (added.includes(id)) {
-      refuseSelf(projectId, doc, id);
+      return refuseSelf(projectId, doc, id);
     }
     return {
+      ...waits,
       waits: [...new Set([...kept, ...added])],
       added: added.filter((target) => !kept.includes(target)),
-      removed: [],
       said: [`waits on ${added.join(", ")}`],
     };
   };
@@ -4179,23 +4893,33 @@ export const createTasks = (store: TaskStore) => {
     doc: TaskDoc,
     id: string,
     { partOf, remove }: TaskLinks
-  ): Promise<{ partOf: string | null; said: string[] }> => {
+  ) => {
     const kept = doc.read().fields.partOf;
+    const whole: { partOf: string | null; said: string[] } = {
+      partOf: kept,
+      said: [],
+    };
     if (partOf === undefined) {
-      return { partOf: kept, said: [] };
+      return whole;
     }
     if (remove) {
       const out = taskRef("part_of", partOf);
+      if (out instanceof ElysiaStatus) {
+        return out;
+      }
       return {
         partOf: kept === out ? null : kept,
         said: [`no longer part of ${out}`],
       };
     }
-    const whole = await single(projectId, "part_of", partOf);
-    if (whole === id) {
-      refuseSelf(projectId, doc, id);
+    const parent = await single(projectId, "part_of", partOf);
+    if (parent instanceof ElysiaStatus) {
+      return parent;
     }
-    return { partOf: whole, said: [`part of ${whole}`] };
+    if (parent === id) {
+      return refuseSelf(projectId, doc, id);
+    }
+    return { partOf: parent, said: [`part of ${parent}`] };
   };
 
   /**
@@ -4236,27 +4960,497 @@ export const createTasks = (store: TaskStore) => {
    * so the project reads the template as the hub has it. A failure is
    * said in the log; the index stands as it was.
    */
-  const catchUp = async (projectId: string): Promise<void> => {
+  const catchUp = async (projectId: string) => {
     const has = await hasProjectFolder(projectId);
     if (has instanceof ElysiaStatus) {
-      throw projectRefusalOf(has);
+      return has;
     }
     if (!has) {
       return;
     }
-    try {
-      await inTurn(projectId, async () => {
-        await retireMover(projectId);
-        await dropTemplateCopy(projectId);
-        await fillTypes(projectId);
-        await migrateLinks(projectId);
-      });
-      await sync(projectId);
-    } catch (error) {
+    const uncaught = (why: string) =>
       console.warn(
-        `[tasks] project ${projectId}'s task index was not caught up: ${error instanceof Error ? error.message : String(error)}`
+        `[tasks] project ${projectId}'s task index was not caught up: ${why}`
+      );
+    try {
+      const refused = await inTurn(projectId, async () => {
+        for (const step of [
+          retireMover,
+          dropTemplateCopy,
+          fillTypes,
+          migrateLinks,
+        ]) {
+          const done = await step(projectId);
+          if (done instanceof ElysiaStatus) {
+            return done;
+          }
+        }
+      });
+      const synced = refused ? undefined : await sync(projectId);
+      const left =
+        refused ?? (synced instanceof ElysiaStatus ? synced : undefined);
+      if (left) {
+        uncaught(left.response.detail);
+      }
+    } catch (error) {
+      uncaught(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  /** A draft's stage, type and edges, each checked; the first refusal when one cannot stand. */
+  const draftEdges = async (
+    projectId: string,
+    draft: TaskDraft,
+    actor: TaskActor
+  ) => {
+    const stage = await startStage(projectId, draft.stage, actor);
+    if (stage instanceof ElysiaStatus) {
+      return stage;
+    }
+    const type = draft.type ? typeName(draft.type) : null;
+    if (type instanceof ElysiaStatus) {
+      return type;
+    }
+    const waitsOn = await waitsFor(projectId, actor, draft.waitsOn ?? []);
+    if (waitsOn instanceof ElysiaStatus) {
+      return waitsOn;
+    }
+    const partOf = await single(projectId, "part_of", draft.partOf);
+    if (partOf instanceof ElysiaStatus) {
+      return partOf;
+    }
+    const foundIn = await foundInOf(projectId, draft.foundIn);
+    if (foundIn instanceof ElysiaStatus) {
+      return foundIn;
+    }
+    return { stage, type, waitsOn, partOf, foundIn };
+  };
+
+  /** A draft's checks, outputs and context, each checked; the first refusal when one cannot stand. */
+  const draftWork = (draft: TaskDraft) => {
+    const checks = items("checks", draft.checks ?? []);
+    if (checks instanceof ElysiaStatus) {
+      return checks;
+    }
+    const outputs = items("outputs", draft.outputs ?? []);
+    if (outputs instanceof ElysiaStatus) {
+      return outputs;
+    }
+    const context = items("context", draft.context ?? []);
+    return context instanceof ElysiaStatus
+      ? context
+      : { checks, outputs, context };
+  };
+
+  /** A draft's lists, machines, limits and rank, each checked; the first refusal when one cannot stand. */
+  const draftLists = (draft: TaskDraft) => {
+    const work = draftWork(draft);
+    if (work instanceof ElysiaStatus) {
+      return work;
+    }
+    const runsOn = draft.runsOn ? runsOnChecked(draft.runsOn) : null;
+    if (runsOn instanceof ElysiaStatus) {
+      return runsOn;
+    }
+    const limits = limitsOf(draft);
+    if (limits instanceof ElysiaStatus) {
+      return limits;
+    }
+    const rank = draft.rank ? oneLine("rank", draft.rank, 64) : null;
+    if (rank instanceof ElysiaStatus) {
+      return rank;
+    }
+    const labels = items("labels", draft.labels ?? []);
+    if (labels instanceof ElysiaStatus) {
+      return labels;
+    }
+    const links = linksOf(draft.links ?? []);
+    if (links instanceof ElysiaStatus) {
+      return links;
+    }
+    return { ...work, runsOn, limits, rank, labels, links };
+  };
+
+  /** A draft's words (description, acceptance criteria, to-dos) and the fields a task file does not know, each checked; the first refusal when one cannot stand. */
+  const draftWords = (draft: TaskDraft) => {
+    const description = block("description", draft.description ?? "");
+    if (description instanceof ElysiaStatus) {
+      return description;
+    }
+    const acceptance = block("acceptance criteria", draft.acceptance ?? "");
+    if (acceptance instanceof ElysiaStatus) {
+      return acceptance;
+    }
+    const todos = todoTexts(draft.todos ?? []);
+    if (todos instanceof ElysiaStatus) {
+      return todos;
+    }
+    const extra = extraFieldsOf(draft.fields ?? {});
+    if (extra instanceof ElysiaStatus) {
+      return extra;
+    }
+    return { description, acceptance, todos, extra };
+  };
+
+  /**
+   * A new task's file as `draft` asks, every part checked in the order a
+   * create reads them: its title, its stage as `actor` may start it, its
+   * edges, lists and words; the first refusal when one cannot stand.
+   */
+  const drafted = async (
+    projectId: string,
+    draft: TaskDraft,
+    actor: TaskActor
+  ) => {
+    const title = oneLine("title", draft.title, TITLE_LIMIT);
+    if (title instanceof ElysiaStatus) {
+      return title;
+    }
+    const edges = await draftEdges(projectId, draft, actor);
+    if (edges instanceof ElysiaStatus) {
+      return edges;
+    }
+    const lists = draftLists(draft);
+    if (lists instanceof ElysiaStatus) {
+      return lists;
+    }
+    const words = draftWords(draft);
+    if (words instanceof ElysiaStatus) {
+      return words;
+    }
+    const { stage, type, waitsOn, partOf, foundIn } = edges;
+    const { checks, outputs, context, runsOn, limits, rank, labels, links } =
+      lists;
+    const fields: Partial<TaskFields> = {
+      stage,
+      type,
+      waitsOn,
+      partOf,
+      foundIn,
+      checks,
+      outputs,
+      context,
+      lands: draft.lands ?? null,
+      runsOn,
+      ...limits,
+      rank,
+      labels,
+      links,
+    };
+    return { title, stage, fields, ...words };
+  };
+
+  /**
+   * What a link write makes of task `id`'s file `doc`: its waits, its whole
+   * and its `duplicate_of`, set on the file and noted in `outcome`; the
+   * waits it took out, the move a close as a duplicate made, and what its
+   * commit says. Refused, nothing changed, for a cycle of waits or parts, a
+   * wait on itself, or a target that does not exist.
+   */
+  const linkMade = async (
+    projectId: string,
+    doc: TaskDoc,
+    id: string,
+    request: TaskLinks,
+    actor: TaskActor,
+    outcome: LinkOutcome
+  ) => {
+    const { waitsOn, partOf, duplicateOf, remove } = request;
+    const { fields } = doc.read();
+    const waits = await linkWaits(projectId, actor, doc, id, request);
+    if (waits instanceof ElysiaStatus) {
+      return waits;
+    }
+    const whole = await linkWhole(projectId, doc, id, request);
+    if (whole instanceof ElysiaStatus) {
+      return whole;
+    }
+    const cycle =
+      !remove && (waitsOn !== undefined || partOf !== undefined)
+        ? refuseCycle(projectId, id, {
+            partOf: whole.partOf,
+            waitsOn: waits.waits,
+          })
+        : undefined;
+    if (cycle) {
+      return cycle;
+    }
+    doc.setField("waits_on", waits.waits);
+    doc.setField("part_of", whole.partOf);
+    outcome.added = waits.added;
+    if (partOf !== undefined) {
+      outcome.partOf = whole.partOf;
+    }
+    const dup = await linkDuplicate(projectId, doc, id, actor, {
+      duplicateOf,
+      remove,
+      was: fields.duplicateOf,
+    });
+    if (dup instanceof ElysiaStatus) {
+      return dup;
+    }
+    outcome.duplicateOf = dup.survivor;
+    const what = [...waits.said, ...whole.said, ...dup.said].join("; ");
+    return { removed: waits.removed, moved: dup.stage, did: { ...dup, what } };
+  };
+
+  /**
+   * {@link linkMade} in the project's turn, the file written back, and
+   * every wait on a task closed as a duplicate moved to its survivor
+   * (`outcome.moved`): the task, the waits taken out and the move.
+   */
+  const linkWritten = (
+    projectId: string,
+    ref: string,
+    request: TaskLinks,
+    actor: TaskActor,
+    outcome: LinkOutcome
+  ) =>
+    inTurn(projectId, async () => {
+      const file = await opened(projectId, ref);
+      if (file instanceof ElysiaStatus) {
+        return file;
+      }
+      const made = await linkMade(
+        projectId,
+        file.doc,
+        file.id,
+        request,
+        actor,
+        outcome
+      );
+      if (made instanceof ElysiaStatus) {
+        return made;
+      }
+      const task = await writeBack(projectId, file, actor, made.did);
+      if (task instanceof ElysiaStatus) {
+        return task;
+      }
+      if (outcome.duplicateOf) {
+        const moved = await repoint(
+          projectId,
+          task.id,
+          outcome.duplicateOf,
+          `${task.id} closed as a duplicate of ${outcome.duplicateOf}`
+        );
+        if (moved instanceof ElysiaStatus) {
+          return moved;
+        }
+        outcome.moved = moved;
+      }
+      return { task, removed: made.removed, moved: made.moved };
+    });
+
+  /** Each live session whose task waited on `answered`, closed as a duplicate, hears that it waits on its survivor now. */
+  const tellRepointed = async (
+    projectId: string,
+    answered: TaskView,
+    outcome: LinkOutcome
+  ) => {
+    const survivor = outcome.duplicateOf;
+    if (!survivor || outcome.moved.length === 0) {
+      return;
+    }
+    told({ kind: "changed", projectId }, answered);
+    const list = await listTasks(projectId);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    const nameOf = (id: string) =>
+      linked(
+        projectId,
+        list.tasks.find((each) => each.id === id) ?? { id, title: id }
+      );
+    for (const waiter of list.tasks.filter((each) =>
+      outcome.moved.includes(each.id)
+    )) {
+      const session = liveSession(waiter);
+      if (session) {
+        store.tell?.(
+          session,
+          `[CawCo] ${linked(projectId, answered)}, which your task ${linked(projectId, waiter)} waited on, closed as a duplicate of ${nameOf(survivor)}: your task waits on that one now.`
+        );
+      }
+    }
+  };
+
+  /** A result's artifacts as kept: a file's or a post's path from the folder's root; the refusal of the first a result may not hand in, or of two marked primary. */
+  const handedIn = async (
+    projectId: string,
+    outputs: string[],
+    artifacts: ResultArtifact[]
+  ) => {
+    for (const artifact of artifacts) {
+      const problem = await artifactProblem(projectId, outputs, artifact);
+      if (problem) {
+        return problem;
+      }
+    }
+    if (artifacts.filter((artifact) => artifact.primary).length > 1) {
+      return refusal(
+        422,
+        "task-result-primary-twice",
+        "Mark one artifact `primary` at most: the one the reviewer sees first."
       );
     }
+    const handed: AttemptResult["artifacts"] = [];
+    for (const artifact of artifacts) {
+      if (artifact.kind === "link" || artifact.kind === "artifact") {
+        handed.push(artifact);
+        continue;
+      }
+      const rel = folderPath(artifact.path);
+      if (rel instanceof ElysiaStatus) {
+        return rel;
+      }
+      handed.push({ ...artifact, path: rel });
+    }
+    return handed;
+  };
+
+  /** A task's file deleted ({@link Tasks.remove}), inside the project's turn; refused while another task waits on it or is part of it. */
+  const removeFile = async (
+    projectId: string,
+    ref: string,
+    actor: TaskActor
+  ) => {
+    const place = await placeSynced(projectId, ref);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
+    const { path, number, rows } = place;
+    const id = taskId(number);
+    const waiting = new Set(
+      store.waiters(projectId, id).map((row) => row.path)
+    );
+    const held = holders(
+      rows.filter((row) => row.path !== path && waiting.has(row.path)),
+      rows.filter((row) => row.path !== path && row.partOf === id)
+    );
+    if (held) {
+      return refusal(
+        409,
+        "task-held",
+        `This task cannot be deleted: ${held}. Archive it instead, which they take as done, or take those edges out first.`
+      );
+    }
+    const content = await taskText(projectId, path);
+    if (content instanceof ElysiaStatus) {
+      return content;
+    }
+    const gone = stands(projectId);
+    if (gone) {
+      return gone;
+    }
+    const deleted = await deleteFolderFile(projectId, path, {
+      author: actor.author,
+      message: commitMessage(
+        actor,
+        `task ${id}`,
+        `delete “${new TaskDoc(path, content).title()}”`
+      ),
+    });
+    if (deleted instanceof ElysiaStatus) {
+      return deleted;
+    }
+    store.drop(projectId, [path]);
+    return { id, path };
+  };
+
+  /** stages.md written ({@link Tasks.putStages}), inside the project's turn; refused, with every problem, when it does not read. */
+  const stagesWritten = async (
+    projectId: string,
+    content: string,
+    actor: TaskActor,
+    message?: string
+  ) => {
+    const tracker = known(projectId);
+    if (tracker instanceof ElysiaStatus) {
+      return tracker;
+    }
+    const reading = readStages(content);
+    if (!reading.ok) {
+      return refusal(
+        422,
+        "task-stages-unfit",
+        `stages.md was not saved. ${reading.problems.join(" ")}`
+      );
+    }
+    const written = await writeFolderFile(projectId, STAGES_FILE, content, {
+      author: actor.author,
+      message: message?.trim() || `stages: update ${byWhom(actor)}`,
+    });
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
+    const filled = await fillTypes(projectId);
+    if (filled) {
+      return filled;
+    }
+    return stagesView(
+      "file",
+      content,
+      ruled(projectId, reading),
+      startersOf(projectId)
+    );
+  };
+
+  /** A template applied ({@link Tasks.applyTemplate}), inside the project's turn. */
+  const templateApplied = async (
+    projectId: string,
+    template: StagesTemplate,
+    actor: TaskActor
+  ) => {
+    const tracker = known(projectId);
+    if (tracker instanceof ElysiaStatus) {
+      return tracker;
+    }
+    const content = templateText(template);
+    const message = `stages: apply the ${template} template ${byWhom(actor)}`;
+    const types = await missingTypes(projectId, templateTypes(template));
+    if (types instanceof ElysiaStatus) {
+      return types;
+    }
+    const removed =
+      template === DEFAULT_TEMPLATE
+        ? await removeStages(projectId, { author: actor.author, message })
+        : undefined;
+    if (removed) {
+      return removed;
+    }
+    const writes = [
+      ...(template === DEFAULT_TEMPLATE
+        ? []
+        : [{ path: STAGES_FILE, content }]),
+      ...types,
+    ];
+    const written =
+      writes.length > 0
+        ? await writeFolderFiles(projectId, writes, {
+            author: actor.author,
+            message,
+          })
+        : undefined;
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
+    store.setTemplate(projectId, template);
+    const stages = templateStages(template);
+    const synced = await sync(projectId);
+    if (synced instanceof ElysiaStatus) {
+      return synced;
+    }
+    return {
+      ...stagesView(
+        template === DEFAULT_TEMPLATE ? "template" : "file",
+        content,
+        ruled(projectId, { ok: true, stages }),
+        startersOf(projectId)
+      ),
+      stranded: synced.rows
+        .filter((row) => !stageNamed(stages, row.stage))
+        .map((row) => row.id),
+    };
   };
 
   return {
@@ -4266,35 +5460,19 @@ export const createTasks = (store: TaskStore) => {
     /** One task, its file read and parsed; the index catches up if the file moved. */
     get: readTask,
 
-    create(
-      projectId: string,
-      draft: TaskDraft,
-      actor: TaskActor
-    ): Promise<TaskView> {
-      return inTurn(projectId, async () => {
-        known(projectId);
-        const title = oneLine("title", draft.title, TITLE_LIMIT);
-        const stage = await startStage(projectId, draft.stage, actor);
-        const fields: Partial<TaskFields> = {
-          stage,
-          type: draft.type ? typeName(draft.type) : null,
-          waitsOn: await waitsFor(projectId, actor, draft.waitsOn ?? []),
-          partOf: await single(projectId, "part_of", draft.partOf),
-          foundIn: await foundInOf(projectId, draft.foundIn),
-          checks: items("checks", draft.checks ?? []),
-          outputs: items("outputs", draft.outputs ?? []),
-          context: items("context", draft.context ?? []),
-          lands: draft.lands ?? null,
-          runsOn: draft.runsOn ? runsOnChecked(draft.runsOn) : null,
-          ...limitsOf(draft),
-          rank: draft.rank ? oneLine("rank", draft.rank, 64) : null,
-          labels: items("labels", draft.labels ?? []),
-          links: linksOf(draft.links ?? []),
-        };
-        const description = block("description", draft.description ?? "");
-        const acceptance = block("acceptance criteria", draft.acceptance ?? "");
-        const todos = (draft.todos ?? []).map(todoText);
-        const extra = extraFieldsOf(draft.fields ?? {});
+    /** A new task filed in the project's turn as `draft` asks ({@link drafted}), under the next free number; listeners hear it was created. */
+    async create(projectId: string, draft: TaskDraft, actor: TaskActor) {
+      const task = await inTurn(projectId, async () => {
+        const tracker = known(projectId);
+        if (tracker instanceof ElysiaStatus) {
+          return tracker;
+        }
+        const made = await drafted(projectId, draft, actor);
+        if (made instanceof ElysiaStatus) {
+          return made;
+        }
+        const { title, stage, fields, description, acceptance, todos, extra } =
+          made;
         return await fileNew(projectId, actor, (number) => {
           const path = taskPath(number, title);
           const doc = TaskDoc.create(path, {
@@ -4318,12 +5496,19 @@ export const createTasks = (store: TaskStore) => {
             ),
           };
         });
-      }).then((task) =>
-        told(
-          { kind: "created", projectId, id: task.id, stage: task.stage, actor },
-          task
-        )
-      );
+      });
+      return task instanceof ElysiaStatus
+        ? task
+        : told(
+            {
+              kind: "created",
+              projectId,
+              id: task.id,
+              stage: task.stage,
+              actor,
+            },
+            task
+          );
     },
 
     /**
@@ -4334,14 +5519,17 @@ export const createTasks = (store: TaskStore) => {
      * in the log: no task of this project is named by accident. Answers each
      * old id → its new id.
      */
-    adopt(
+    async adopt(
       projectId: string,
       files: { content: string; path: string }[],
       actor: TaskActor,
       from: string
-    ): Promise<Map<string, string>> {
-      return inTurn(projectId, async () => {
-        known(projectId);
+    ) {
+      const adopted = await inTurn(projectId, async () => {
+        const tracker = known(projectId);
+        if (tracker instanceof ElysiaStatus) {
+          return tracker;
+        }
         const numbered = files
           .map((file) => ({ file, was: fileTaskNumber(file.path) }))
           .filter(
@@ -4364,28 +5552,42 @@ export const createTasks = (store: TaskStore) => {
             renames.response.code !== "folder-place-taken" ||
             tries >= CLAIM_TRIES
           ) {
-            throw projectRefusalOf(renames);
+            return renames;
           }
           console.info(
             `[tasks] ${projectId}: ${renames.response.detail} ${from}'s tasks are numbered again.`
           );
         }
-      }).then((renames) => told({ kind: "changed", projectId }, renames));
+      });
+      return adopted instanceof ElysiaStatus
+        ? adopted
+        : told({ kind: "changed", projectId }, adopted);
     },
 
     /** Fields and owned sections; what the patch leaves out stays as written. */
-    update(
+    async update(
       projectId: string,
       ref: string,
       patch: TaskPatch,
       actor: TaskActor
-    ): Promise<TaskView> {
-      const checked = patch.runsOn
-        ? { ...patch, runsOn: runsOnChecked(patch.runsOn) }
-        : patch;
-      return change(projectId, ref, actor, (doc) =>
-        applyPatch(doc, checked)
-      ).then((task) => told({ kind: "changed", projectId, id: task.id }, task));
+    ) {
+      const runsOn = patch.runsOn ? runsOnChecked(patch.runsOn) : patch.runsOn;
+      if (runsOn instanceof ElysiaStatus) {
+        return runsOn;
+      }
+      const task = await inTurn(projectId, async () => {
+        const file = await opened(projectId, ref);
+        if (file instanceof ElysiaStatus) {
+          return file;
+        }
+        const applied = applyPatch(file.doc, { ...patch, runsOn });
+        return applied instanceof ElysiaStatus
+          ? applied
+          : await writeBack(projectId, file, actor, applied);
+      });
+      return task instanceof ElysiaStatus
+        ? task
+        : told({ kind: "changed", projectId, id: task.id }, task);
     },
 
     /**
@@ -4416,20 +5618,19 @@ export const createTasks = (store: TaskStore) => {
       ref: string,
       request: TaskLinks,
       actor: TaskActor
-    ): Promise<TaskView & { linked: LinkOutcome }> {
-      const { waitsOn, partOf, duplicateOf, remove } = request;
+    ) {
+      const { waitsOn, partOf, duplicateOf } = request;
       if (
         waitsOn === undefined &&
         partOf === undefined &&
         duplicateOf === undefined
       ) {
-        refuse(
+        return refusal(
           400,
+          "task-link-empty",
           "Give waits_on, part_of or duplicate_of: what the task waits on, the whole it is a part of, or the task it repeats."
         );
       }
-      let moved: { from: string; to: string } | undefined;
-      let removed: string[] = [];
       const outcome: LinkOutcome = {
         added: [],
         removed: [],
@@ -4437,93 +5638,44 @@ export const createTasks = (store: TaskStore) => {
         duplicateOf: null,
         moved: [],
       };
-      const task = await inTurn(projectId, async () => {
-        known(projectId);
-        const done = await amend(projectId, ref, actor, async (doc, id) => {
-          const { fields } = doc.read();
-          const waits = await linkWaits(projectId, actor, doc, id, request);
-          const whole = await linkWhole(projectId, doc, id, request);
-          if (!remove && (waitsOn !== undefined || partOf !== undefined)) {
-            refuseCycle(projectId, id, {
-              partOf: whole.partOf,
-              waitsOn: waits.waits,
-            });
-          }
-          doc.setField("waits_on", waits.waits);
-          doc.setField("part_of", whole.partOf);
-          ({ removed } = waits);
-          outcome.added = waits.added;
-          if (partOf !== undefined) {
-            outcome.partOf = whole.partOf;
-          }
-          const said = [...waits.said, ...whole.said];
-          const dup = await linkDuplicate(projectId, doc, id, actor, {
-            duplicateOf,
-            remove,
-            was: fields.duplicateOf,
-          });
-          moved = dup.stage;
-          outcome.duplicateOf = dup.survivor;
-          return { ...dup, what: [...said, ...dup.said].join("; ") };
-        });
-        if (outcome.duplicateOf) {
-          outcome.moved = await repoint(
-            projectId,
-            done.id,
-            outcome.duplicateOf,
-            `${done.id} closed as a duplicate of ${outcome.duplicateOf}`
-          );
-        }
+      const done = await linkWritten(projectId, ref, request, actor, outcome);
+      if (done instanceof ElysiaStatus) {
         return done;
-      });
+      }
+      const { task, removed, moved } = done;
       const answered =
         outcome.moved.length > 0 ? await readTask(projectId, task.id) : task;
+      if (answered instanceof ElysiaStatus) {
+        return answered;
+      }
       if (removed.length > 0) {
+        const stages = await currentStages(projectId);
+        if (stages instanceof ElysiaStatus) {
+          return stages;
+        }
         const context = contextOf(
           projectId,
           store.index(projectId),
-          await currentStages(projectId),
+          stages,
           new Set()
         );
         outcome.removed = removed.map((handle) => settleIn(context, handle));
       }
-      if (moved) {
-        told(
-          {
-            kind: "moved",
-            projectId,
-            id: task.id,
-            actor,
-            ...moved,
-            reason: "duplicate",
-          },
-          answered
-        );
-      } else {
-        told({ kind: "changed", projectId, id: task.id }, answered);
-      }
-      if (outcome.duplicateOf && outcome.moved.length > 0) {
-        told({ kind: "changed", projectId }, answered);
-        const survivor = outcome.duplicateOf;
-        const list = await listTasks(projectId);
-        const nameOf = (id: string) =>
-          linked(
-            projectId,
-            list.tasks.find((each) => each.id === id) ?? { id, title: id }
-          );
-        for (const waiter of list.tasks.filter((each) =>
-          outcome.moved.includes(each.id)
-        )) {
-          const session = liveSession(waiter);
-          if (session) {
-            store.tell?.(
-              session,
-              `[CawCo] ${linked(projectId, answered)}, which your task ${linked(projectId, waiter)} waited on, closed as a duplicate of ${nameOf(survivor)}: your task waits on that one now.`
-            );
-          }
-        }
-      }
-      return { ...answered, linked: outcome };
+      told(
+        moved
+          ? {
+              kind: "moved",
+              projectId,
+              id: task.id,
+              actor,
+              ...moved,
+              reason: "duplicate",
+            }
+          : { kind: "changed", projectId, id: task.id },
+        answered
+      );
+      const unlisted = await tellRepointed(projectId, answered, outcome);
+      return unlisted ?? { ...answered, linked: outcome };
     },
 
     /**
@@ -4532,26 +5684,42 @@ export const createTasks = (store: TaskStore) => {
      * and why (task-history.ts). Read from the folder's history as kept per
      * commit, so it spawns no git while HEAD stands.
      */
-    async history(projectId: string, ref: string): Promise<TaskHistory> {
-      known(projectId);
-      const id = taskRef("task", ref);
-      const number = taskNumber(id) as number;
+    async history(projectId: string, ref: string) {
+      const tracker = known(projectId);
+      if (tracker instanceof ElysiaStatus) {
+        return tracker;
+      }
+      const asked = taskNumbered("task", ref);
+      if (asked instanceof ElysiaStatus) {
+        return asked;
+      }
+      const { id, number } = asked;
       const times = await folderFileTimes(projectId, "tasks");
       if (times instanceof ElysiaStatus) {
-        throw projectRefusalOf(times);
+        return times;
       }
       const filed = taskFileIn(times, number);
       if (filed) {
-        return {
+        const history: TaskHistory = {
           id,
           path: filed.path,
           state: filed.state,
           events: [...historyOf(filed.entry)],
         };
+        return history;
       }
       // A file no commit has yet: the task stands, with no history.
-      const { path } = await locate(projectId, ref);
-      return { id, path, state: "live", events: [] };
+      const place = await locate(projectId, ref);
+      if (place instanceof ElysiaStatus) {
+        return place;
+      }
+      const none: TaskHistory = {
+        id,
+        path: place.path,
+        state: "live",
+        events: [],
+      };
+      return none;
     },
 
     /**
@@ -4566,39 +5734,47 @@ export const createTasks = (store: TaskStore) => {
      * source and carried here by the hub (external-items.ts), headed by its
      * author's login, the source and its URL.
      */
-    comment(
+    async comment(
       projectId: string,
       ref: string,
       text: string,
       actor: TaskActor,
       id?: string,
       via?: ExternalComment
-    ): Promise<TaskView> {
+    ) {
       if (!id) {
-        return writeComment(projectId, ref, text, actor, via);
+        return await writeComment(projectId, ref, text, actor, via);
       }
       const first = commenting.get(id);
       if (first !== undefined) {
-        return first;
+        return await first;
       }
       const said = store.commentSaid(id);
       if (said) {
-        if (
-          said.projectId !== projectId ||
-          said.taskId !== taskRef("task", ref)
-        ) {
-          refuse(409, "That comment is already on another task.");
+        const asked =
+          said.projectId === projectId ? taskRef("task", ref) : undefined;
+        if (asked instanceof ElysiaStatus) {
+          return asked;
         }
-        return readTask(projectId, ref);
+        if (asked === undefined || said.taskId !== asked) {
+          return refusal(
+            409,
+            "task-comment-elsewhere",
+            "That comment is already on another task."
+          );
+        }
+        return await readTask(projectId, ref);
       }
       const writing = writeComment(projectId, ref, text, actor).then((task) => {
-        store.noteComment({ id, projectId, taskId: task.id });
+        if (!(task instanceof ElysiaStatus)) {
+          store.noteComment({ id, projectId, taskId: task.id });
+        }
         return task;
       });
       commenting.set(id, writing);
       const done = () => commenting.delete(id);
       writing.then(done, done);
-      return writing;
+      return await writing;
     },
 
     /**
@@ -4618,39 +5794,35 @@ export const createTasks = (store: TaskStore) => {
         check?: string[];
         artifacts?: ResultArtifact[];
       }
-    ): Promise<AttemptResult> {
-      known(projectId);
-      const { path, number } = await locate(projectId, ref);
-      const content = await taskText(projectId, path);
-      const { outputs } = new TaskDoc(path, content).read().fields;
+    ) {
+      const tracker = known(projectId);
+      if (tracker instanceof ElysiaStatus) {
+        return tracker;
+      }
+      const place = await locate(projectId, ref);
+      if (place instanceof ElysiaStatus) {
+        return place;
+      }
+      const content = await taskText(projectId, place.path);
+      if (content instanceof ElysiaStatus) {
+        return content;
+      }
+      const { outputs } = new TaskDoc(place.path, content).read().fields;
       const summary = written.summary.trim();
       if (!summary) {
-        refuse(
+        return refusal(
           422,
+          "task-result-summary-missing",
           "Say what you did in `summary`: the reviewer reads it first."
         );
       }
-      const artifacts = written.artifacts ?? [];
-      for (const artifact of artifacts) {
-        await artifactProblem(projectId, outputs, artifact);
-      }
-      if (artifacts.filter((artifact) => artifact.primary).length > 1) {
-        refuse(
-          422,
-          "Mark one artifact `primary` at most: the one the reviewer sees first."
-        );
-      }
-      const handed: AttemptResult["artifacts"] = [];
-      for (const artifact of artifacts) {
-        if (artifact.kind === "link" || artifact.kind === "artifact") {
-          handed.push(artifact);
-          continue;
-        }
-        const rel = folderPath(artifact.path);
-        if (rel instanceof ElysiaStatus) {
-          throw projectRefusalOf(rel);
-        }
-        handed.push({ ...artifact, path: rel });
+      const handed = await handedIn(
+        projectId,
+        outputs,
+        written.artifacts ?? []
+      );
+      if (handed instanceof ElysiaStatus) {
+        return handed;
       }
       const result: AttemptResult = {
         summary,
@@ -4659,7 +5831,10 @@ export const createTasks = (store: TaskStore) => {
         at: Date.now(),
       };
       store.saveResult(workItemId, result);
-      return told({ kind: "changed", projectId, id: taskId(number) }, result);
+      return told(
+        { kind: "changed", projectId, id: taskId(place.number) },
+        result
+      );
     },
 
     /**
@@ -4670,20 +5845,24 @@ export const createTasks = (store: TaskStore) => {
      * one commit: it lists, its edges count by its stage, and it changes
      * again.
      */
-    archive(
+    async archive(
       projectId: string,
       ref: string,
       actor: TaskActor,
       archived = true
-    ): Promise<TaskView> {
-      return inTurn(projectId, () => {
-        known(projectId);
+    ) {
+      const task = await inTurn(projectId, async () => {
+        const tracker = known(projectId);
+        if (tracker instanceof ElysiaStatus) {
+          return tracker;
+        }
         return archived
-          ? archiveFile(projectId, ref, actor)
-          : unarchiveFile(projectId, ref, actor);
-      }).then((task) =>
-        told({ kind: "changed", projectId, id: task.id }, task)
-      );
+          ? await archiveFile(projectId, ref, actor)
+          : await unarchiveFile(projectId, ref, actor);
+      });
+      return task instanceof ElysiaStatus
+        ? task
+        : told({ kind: "changed", projectId, id: task.id }, task);
     },
 
     /**
@@ -4692,107 +5871,73 @@ export const createTasks = (store: TaskStore) => {
      * part of it (`part_of`), naming them: archive it instead, which they take
      * as done, or take their edges out first.
      */
-    remove(
-      projectId: string,
-      ref: string,
-      actor: TaskActor
-    ): Promise<{ id: string; path: string }> {
-      return inTurn(projectId, async () => {
-        known(projectId);
-        const { rows } = await sync(projectId);
-        const { path, number } = await locate(projectId, ref);
-        const id = taskId(number);
-        const waiting = new Set(
-          store.waiters(projectId, id).map((row) => row.path)
-        );
-        const held = holders(
-          rows.filter((row) => row.path !== path && waiting.has(row.path)),
-          rows.filter((row) => row.path !== path && row.partOf === id)
-        );
-        if (held) {
-          refuse(
-            409,
-            `This task cannot be deleted: ${held}. Archive it instead, which they take as done, or take those edges out first.`
-          );
-        }
-        const content = await taskText(projectId, path);
-        stands(projectId);
-        const deleted = await deleteFolderFile(projectId, path, {
-          author: actor.author,
-          message: commitMessage(
-            actor,
-            `task ${id}`,
-            `delete “${new TaskDoc(path, content).title()}”`
-          ),
-        });
-        if (deleted instanceof ElysiaStatus) {
-          throw projectRefusalOf(deleted);
-        }
-        store.drop(projectId, [path]);
-        return { id, path };
-      }).then((gone) =>
-        told({ kind: "changed", projectId, id: gone.id }, gone)
+    async remove(projectId: string, ref: string, actor: TaskActor) {
+      const gone = await inTurn(projectId, () =>
+        removeFile(projectId, ref, actor)
       );
+      return gone instanceof ElysiaStatus
+        ? gone
+        : told({ kind: "changed", projectId, id: gone.id }, gone);
     },
 
     /** Ticks, unticks, adds and rewords to-dos, all in one commit. */
-    todos(
+    async todos(
       projectId: string,
       ref: string,
       changes: TodoChanges,
       actor: TaskActor
-    ): Promise<TaskView> {
+    ) {
       const added = (changes.add ?? []).map(({ text }) => text.trim());
-      return change(projectId, ref, actor, (doc) =>
-        applyTodos(doc, changes)
-      ).then((task) =>
-        told(
-          {
-            kind: "changed",
-            projectId,
-            id: task.id,
-            ...(added.length > 0 ? { todos: { actor, added } } : {}),
-          },
-          task
-        )
-      );
+      const task = await inTurn(projectId, async () => {
+        const file = await opened(projectId, ref);
+        if (file instanceof ElysiaStatus) {
+          return file;
+        }
+        const applied = applyTodos(file.doc, changes);
+        return applied instanceof ElysiaStatus
+          ? applied
+          : await writeBack(projectId, file, actor, applied);
+      });
+      return task instanceof ElysiaStatus
+        ? task
+        : told(
+            {
+              kind: "changed",
+              projectId,
+              id: task.id,
+              ...(added.length > 0 ? { todos: { actor, added } } : {}),
+            },
+            task
+          );
     },
 
     /** The project's stages, moves, views and hooks, or what keeps stages.md from reading. */
-    async stages(projectId: string): Promise<StagesView> {
-      known(projectId);
-      const { source, content, reading } = await stagesOf(projectId);
+    async stages(projectId: string) {
+      const tracker = known(projectId);
+      if (tracker instanceof ElysiaStatus) {
+        return tracker;
+      }
+      const read = await stagesOf(projectId);
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      const { source, content, reading } = read;
       return stagesView(source, content, reading, startersOf(projectId));
     },
 
     /** Writes stages.md, once it reads; a file that does not is refused with every problem. */
-    putStages(
+    async putStages(
       projectId: string,
       content: string,
       actor: TaskActor,
       message?: string
-    ): Promise<StagesView> {
-      return inTurn(projectId, async () => {
-        known(projectId);
-        const reading = readStages(content);
-        if (!reading.ok) {
-          refuse(422, `stages.md was not saved. ${reading.problems.join(" ")}`);
-        }
-        const written = await writeFolderFile(projectId, STAGES_FILE, content, {
-          author: actor.author,
-          message: message?.trim() || `stages: update ${byWhom(actor)}`,
-        });
-        if (written instanceof ElysiaStatus) {
-          throw projectRefusalOf(written);
-        }
-        await fillTypes(projectId);
-        return stagesView(
-          "file",
-          content,
-          ruled(projectId, reading),
-          startersOf(projectId)
-        );
-      }).then((written) => told({ kind: "changed", projectId }, written));
+    ) {
+      const written = await inTurn(projectId, () =>
+        stagesWritten(projectId, content, actor, message)
+      );
+      return written instanceof ElysiaStatus
+        ? written
+        : told({ kind: "changed", projectId }, written);
     },
 
     /**
@@ -4804,49 +5949,17 @@ export const createTasks = (store: TaskStore) => {
      * and the tasks whose stage the template does not have (they stay where
      * they are until moved).
      */
-    applyTemplate(
+    async applyTemplate(
       projectId: string,
       template: StagesTemplate,
       actor: TaskActor
-    ): Promise<StagesView & { stranded: string[] }> {
-      return inTurn(projectId, async () => {
-        known(projectId);
-        const content = templateText(template);
-        const message = `stages: apply the ${template} template ${byWhom(actor)}`;
-        const types = await missingTypes(projectId, templateTypes(template));
-        if (template === DEFAULT_TEMPLATE) {
-          await removeStages(projectId, { author: actor.author, message });
-        }
-        const writes = [
-          ...(template === DEFAULT_TEMPLATE
-            ? []
-            : [{ path: STAGES_FILE, content }]),
-          ...types,
-        ];
-        if (writes.length > 0) {
-          const written = await writeFolderFiles(projectId, writes, {
-            author: actor.author,
-            message,
-          });
-          if (written instanceof ElysiaStatus) {
-            throw projectRefusalOf(written);
-          }
-        }
-        store.setTemplate(projectId, template);
-        const stages = templateStages(template);
-        const { rows } = await sync(projectId);
-        return {
-          ...stagesView(
-            template === DEFAULT_TEMPLATE ? "template" : "file",
-            content,
-            ruled(projectId, { ok: true, stages }),
-            startersOf(projectId)
-          ),
-          stranded: rows
-            .filter((row) => !stageNamed(stages, row.stage))
-            .map((row) => row.id),
-        };
-      }).then((written) => told({ kind: "changed", projectId }, written));
+    ) {
+      const written = await inTurn(projectId, () =>
+        templateApplied(projectId, template, actor)
+      );
+      return written instanceof ElysiaStatus
+        ? written
+        : told({ kind: "changed", projectId }, written);
     },
 
     /**
@@ -4857,8 +5970,11 @@ export const createTasks = (store: TaskStore) => {
      * once. The witness is the pick's value, so the same answer again tells
      * nobody.
      */
-    async waitsMoved(projectId: string): Promise<void> {
+    async waitsMoved(projectId: string) {
       const list = await listTasks(projectId);
+      if (list instanceof ElysiaStatus) {
+        return list;
+      }
       emit({ kind: "changed", projectId });
       for (const task of list.tasks) {
         tellMoved(projectId, task);
@@ -4870,12 +5986,12 @@ export const createTasks = (store: TaskStore) => {
      * `projectId` (null: none, so a task target names nothing): a plan
      * step's wait.
      */
-    async waitState(
-      projectId: string | null,
-      handle: string
-    ): Promise<WaitState> {
+    async waitState(projectId: string | null, handle: string) {
       const rows = projectId ? store.index(projectId) : [];
       const stages = projectId ? await currentStages(projectId) : undefined;
+      if (stages instanceof ElysiaStatus) {
+        return stages;
+      }
       return settleIn(
         contextOf(projectId ?? "", rows, stages, new Set()),
         handle
@@ -4892,18 +6008,30 @@ export const createTasks = (store: TaskStore) => {
       projectId: string | null,
       actor: TaskActor,
       written: string
-    ): Promise<string> {
+    ) {
       if (projectId) {
-        const [kept] = await waitsFor(projectId, actor, [written]);
-        return kept ?? refuse(400, `“${written}” names nothing to wait on.`);
+        const waits = await waitsFor(projectId, actor, [written]);
+        if (waits instanceof ElysiaStatus) {
+          return waits;
+        }
+        const [kept] = waits;
+        if (kept === undefined) {
+          return refusal(
+            400,
+            "task-wait-nothing",
+            `“${written}” names nothing to wait on.`
+          );
+        }
+        return kept;
       }
       const target = readWait(written, store.waitReader("", actor));
       if (target instanceof ElysiaStatus) {
-        return refuse(400, target.response.detail);
+        return target;
       }
       return target.kind === "task"
-        ? refuse(
+        ? refusal(
             400,
+            "task-wait-no-project",
             "This session is in no project, so it has no tasks to wait on."
           )
         : waitHandle(target);
@@ -4915,32 +6043,47 @@ export const createTasks = (store: TaskStore) => {
      * (external-items.ts); one commit, `comment_edited` in the history.
      * Listeners hear the task changed.
      */
-    editComment(
+    async editComment(
       projectId: string,
       ref: string,
       url: string,
       text: string,
       actor: TaskActor
-    ): Promise<TaskView> {
+    ) {
       const written = commentText(text);
-      return change(projectId, ref, actor, (doc, id) => {
-        if (!doc.editComment(url, written)) {
-          refuse(404, `${id} holds no comment carried from ${url}.`);
+      if (written instanceof ElysiaStatus) {
+        return written;
+      }
+      const task = await inTurn(projectId, async () => {
+        const file = await opened(projectId, ref);
+        if (file instanceof ElysiaStatus) {
+          return file;
+        }
+        if (!file.doc.editComment(url, written)) {
+          return refusal(
+            404,
+            "task-comment-not-carried",
+            `${file.id} holds no comment carried from ${url}.`
+          );
         }
         const source = refOfUrl(url)?.source;
-        return {
+        return await writeBack(projectId, file, actor, {
           what: `comment edited${source ? ` on ${externalItemWords.source[source]}` : ""}`,
           change: CHANGES.commentEdited,
-        };
-      }).then((task) =>
-        told({ kind: "changed", projectId, id: task.id }, task)
-      );
+        });
+      });
+      return task instanceof ElysiaStatus
+        ? task
+        : told({ kind: "changed", projectId, id: task.id }, task);
     },
 
     /** {@link migrateLinks} in the project's turn: what the hub runs for each project as it starts. */
-    migrateLinks(projectId: string): Promise<LinkMigration> {
+    migrateLinks(projectId: string) {
       return inTurn(projectId, async () => {
-        known(projectId);
+        const tracker = known(projectId);
+        if (tracker instanceof ElysiaStatus) {
+          return tracker;
+        }
         return await migrateLinks(projectId);
       });
     },
@@ -4976,27 +6119,32 @@ export const createTasks = (store: TaskStore) => {
      * person's or a session's, so the link is the issue the sync made or
      * read. Listeners hear the task changed.
      */
-    setIssue(
+    async setIssue(
       projectId: string,
       ref: string,
       url: string | null,
       actor: TaskActor
-    ): Promise<TaskView> {
-      return change(projectId, ref, actor, (doc) => {
+    ) {
+      const task = await change(projectId, ref, actor, (doc) => {
         doc.setField("issue", url);
         return url ? `issue ${url}` : "issue unlinked";
-      }).then((task) =>
-        told({ kind: "changed", projectId, id: task.id }, task)
-      );
+      });
+      return task instanceof ElysiaStatus
+        ? task
+        : told({ kind: "changed", projectId, id: task.id }, task);
     },
 
     /**
      * Catches up the index of every project that has a folder: what the hub
-     * does as it starts ({@link catchUp}, each in turn).
+     * does as it starts ({@link catchUp}, each in turn); the refusal of a
+     * project whose folder it cannot look for, which stops it.
      */
-    async syncAll(): Promise<void> {
+    async syncAll() {
       for (const projectId of store.projectIds()) {
-        await catchUp(projectId);
+        const refused = await catchUp(projectId);
+        if (refused) {
+          return refused;
+        }
       }
     },
 
@@ -5075,24 +6223,20 @@ export const taskRoutes = (tasks: Tasks) =>
         }),
       },
       async ({ params, query, request }) => {
-        try {
-          return await tasks.list(params.id, {
-            stage: query.stage,
-            kind: query.kind,
-            q: query.q,
-            label: query.label,
-            type: query.type,
-            partOf: query.partOf,
-            blocked: flagOf(query.blocked),
-            needsYou: flagOf(query.needsYou),
-            archived: query.archived === "1",
-            link: query.link,
-            // `field.<key>=<value>`: a field a task file does not know, to equal the value.
-            fields: fieldParams(new URL(request.url).searchParams),
-          });
-        } catch (error) {
-          return projectRefused(error);
-        }
+        return await tasks.list(params.id, {
+          stage: query.stage,
+          kind: query.kind,
+          q: query.q,
+          label: query.label,
+          type: query.type,
+          partOf: query.partOf,
+          blocked: flagOf(query.blocked),
+          needsYou: flagOf(query.needsYou),
+          archived: query.archived === "1",
+          link: query.link,
+          // `field.<key>=<value>`: a field a task file does not know, to equal the value.
+          fields: fieldParams(new URL(request.url).searchParams),
+        });
       }
     )
     .post(
@@ -5124,21 +6268,13 @@ export const taskRoutes = (tasks: Tasks) =>
           fields: t.Optional(FIELDS),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await tasks.create(params.id, body, YOU_WRITING);
-        } catch (error) {
-          return projectRefused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await tasks.create(params.id, body, YOU_WRITING)
     )
-    .get("/api/projects/:id/tasks/:taskId", async ({ params }) => {
-      try {
-        return await tasks.get(params.id, params.taskId);
-      } catch (error) {
-        return projectRefused(error);
-      }
-    })
+    .get(
+      "/api/projects/:id/tasks/:taskId",
+      async ({ params }) => await tasks.get(params.id, params.taskId)
+    )
     // One output an attempt handed in, by the name the task gives it
     // (`outputs: [post.md]`), from where the hub copied it
     // (`assets/tsk-12/post.md`): a picture, a video or a sound as itself,
@@ -5148,32 +6284,31 @@ export const taskRoutes = (tasks: Tasks) =>
       "/api/projects/:id/tasks/:taskId/outputs/file",
       { query: t.Object({ name: t.String() }) },
       async ({ params, query }) => {
-        try {
-          const task = await tasks.get(params.id, params.taskId);
-          if (!task.outputs.includes(query.name)) {
-            return refusal(
-              404,
-              "task-output-unknown",
-              `This task hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`
-            );
-          }
-          const extension = fileExtension(query.name);
-          const media = MEDIA_TYPES[extension];
-          const file = await folderFileRaw(
-            params.id,
-            `${outputsFolder({ id: "", taskId: task.id })}/${query.name}`,
-            media ? FOLDER_RAW_LIMIT : OUTPUT_FILE_LIMIT
-          );
-          if (file instanceof ElysiaStatus) {
-            return file;
-          }
-          return servedFile(
-            Bun.file(file.real),
-            IMAGE_TYPES[extension] ?? media ?? "text/plain; charset=utf-8"
-          );
-        } catch (error) {
-          return projectRefused(error);
+        const task = await tasks.get(params.id, params.taskId);
+        if (task instanceof ElysiaStatus) {
+          return task;
         }
+        if (!task.outputs.includes(query.name)) {
+          return refusal(
+            404,
+            "task-output-unknown",
+            `This task hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`
+          );
+        }
+        const extension = fileExtension(query.name);
+        const media = MEDIA_TYPES[extension];
+        const file = await folderFileRaw(
+          params.id,
+          `${outputsFolder({ id: "", taskId: task.id })}/${query.name}`,
+          media ? FOLDER_RAW_LIMIT : OUTPUT_FILE_LIMIT
+        );
+        if (file instanceof ElysiaStatus) {
+          return file;
+        }
+        return servedFile(
+          Bun.file(file.real),
+          IMAGE_TYPES[extension] ?? media ?? "text/plain; charset=utf-8"
+        );
       }
     )
     .patch(
@@ -5199,21 +6334,14 @@ export const taskRoutes = (tasks: Tasks) =>
           fields: t.Optional(FIELDS),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await tasks.update(params.id, params.taskId, body, YOU_ACTOR);
-        } catch (error) {
-          return projectRefused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await tasks.update(params.id, params.taskId, body, YOU_ACTOR)
     )
-    .delete("/api/projects/:id/tasks/:taskId", async ({ params }) => {
-      try {
-        return await tasks.remove(params.id, params.taskId, YOU_ACTOR);
-      } catch (error) {
-        return projectRefused(error);
-      }
-    })
+    .delete(
+      "/api/projects/:id/tasks/:taskId",
+      async ({ params }) =>
+        await tasks.remove(params.id, params.taskId, YOU_ACTOR)
+    )
     .post(
       "/api/projects/:id/tasks/:taskId/comments",
       {
@@ -5223,19 +6351,14 @@ export const taskRoutes = (tasks: Tasks) =>
           id: t.Optional(t.String()),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await tasks.comment(
-            params.id,
-            params.taskId,
-            body.text,
-            YOU_WRITING,
-            body.id
-          );
-        } catch (error) {
-          return projectRefused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await tasks.comment(
+          params.id,
+          params.taskId,
+          body.text,
+          YOU_WRITING,
+          body.id
+        )
     )
     .post(
       "/api/projects/:id/tasks/:taskId/archive",
@@ -5247,26 +6370,18 @@ export const taskRoutes = (tasks: Tasks) =>
           })
         ),
       },
-      async ({ params, body }) => {
-        try {
-          return await tasks.archive(
-            params.id,
-            params.taskId,
-            YOU_ACTOR,
-            body?.archived ?? true
-          );
-        } catch (error) {
-          return projectRefused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await tasks.archive(
+          params.id,
+          params.taskId,
+          YOU_ACTOR,
+          body?.archived ?? true
+        )
     )
-    .get("/api/projects/:id/tasks/:taskId/history", async ({ params }) => {
-      try {
-        return await tasks.history(params.id, params.taskId);
-      } catch (error) {
-        return projectRefused(error);
-      }
-    })
+    .get(
+      "/api/projects/:id/tasks/:taskId/history",
+      async ({ params }) => await tasks.history(params.id, params.taskId)
+    )
     .post(
       "/api/projects/:id/tasks/:taskId/stage",
       {
@@ -5277,19 +6392,22 @@ export const taskRoutes = (tasks: Tasks) =>
         }),
       },
       async ({ params, body }) => {
-        try {
-          // The dashboard reads the task; what the close did is a tool's answer.
-          const { closing: _closing, ...task } = await tasks.move(
-            params.id,
-            params.taskId,
-            body.stage,
-            YOU_ACTOR,
-            body.reason
-          );
-          return task as TaskView;
-        } catch (error) {
-          return projectRefused(error);
+        const moved = await tasks.move(
+          params.id,
+          params.taskId,
+          body.stage,
+          YOU_ACTOR,
+          body.reason
+        );
+        if (moved instanceof ElysiaStatus) {
+          return moved;
         }
+        if (!("closing" in moved)) {
+          return moved;
+        }
+        // The dashboard reads the task; what the close did is a tool's answer.
+        const { closing: _closing, ...task } = moved;
+        return task;
       }
     )
     .post(
@@ -5306,35 +6424,30 @@ export const taskRoutes = (tasks: Tasks) =>
         }),
       },
       async ({ params, body }) => {
-        try {
-          // The dashboard reads the task; what the write changed is a tool's answer.
-          const { linked: _linked, ...task } = await tasks.link(
-            params.id,
-            params.taskId,
-            body,
-            YOU_ACTOR
-          );
-          return task as TaskView;
-        } catch (error) {
-          return projectRefused(error);
+        const linked = await tasks.link(
+          params.id,
+          params.taskId,
+          body,
+          YOU_ACTOR
+        );
+        if (linked instanceof ElysiaStatus) {
+          return linked;
         }
+        // The dashboard reads the task; what the write changed is a tool's answer.
+        const { linked: _linked, ...task } = linked;
+        return task;
       }
     )
     .post(
       "/api/projects/:id/tasks/:taskId/todos",
       { body: t.Object({ text: t.String(), under: t.Optional(t.String()) }) },
-      async ({ params, body }) => {
-        try {
-          return await tasks.todos(
-            params.id,
-            params.taskId,
-            { add: [body] },
-            YOU_WRITING
-          );
-        } catch (error) {
-          return projectRefused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await tasks.todos(
+          params.id,
+          params.taskId,
+          { add: [body] },
+          YOU_WRITING
+        )
     )
     .patch(
       "/api/projects/:id/tasks/:taskId/todos/:todo",
@@ -5345,34 +6458,22 @@ export const taskRoutes = (tasks: Tasks) =>
         }),
       },
       async ({ params, body }) => {
-        try {
-          let changes: TodoChanges = {};
-          if (body.done !== undefined) {
-            changes = body.done
-              ? { tick: [params.todo] }
-              : { untick: [params.todo] };
-          }
-          if (body.text !== undefined) {
-            changes.edit = [{ todo: params.todo, text: body.text }];
-          }
-          return await tasks.todos(
-            params.id,
-            params.taskId,
-            changes,
-            YOU_ACTOR
-          );
-        } catch (error) {
-          return projectRefused(error);
+        let changes: TodoChanges = {};
+        if (body.done !== undefined) {
+          changes = body.done
+            ? { tick: [params.todo] }
+            : { untick: [params.todo] };
         }
+        if (body.text !== undefined) {
+          changes.edit = [{ todo: params.todo, text: body.text }];
+        }
+        return await tasks.todos(params.id, params.taskId, changes, YOU_ACTOR);
       }
     )
-    .get("/api/projects/:id/stages", async ({ params }) => {
-      try {
-        return await tasks.stages(params.id);
-      } catch (error) {
-        return projectRefused(error);
-      }
-    })
+    .get(
+      "/api/projects/:id/stages",
+      async ({ params }) => await tasks.stages(params.id)
+    )
     .put(
       "/api/projects/:id/stages",
       {
@@ -5381,28 +6482,13 @@ export const taskRoutes = (tasks: Tasks) =>
           message: t.Optional(t.String({ maxLength: 2000 })),
         }),
       },
-      async ({ params, body }) => {
-        try {
-          return await tasks.putStages(
-            params.id,
-            body.content,
-            YOU_ACTOR,
-            body.message
-          );
-        } catch (error) {
-          return projectRefused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await tasks.putStages(params.id, body.content, YOU_ACTOR, body.message)
     )
     .post(
       "/api/projects/:id/stages/template",
       { body: t.Object({ template: TEMPLATE }) },
-      async ({ params, body }) => {
-        try {
-          return await tasks.applyTemplate(params.id, body.template, YOU_ACTOR);
-        } catch (error) {
-          return projectRefused(error);
-        }
-      }
+      async ({ params, body }) =>
+        await tasks.applyTemplate(params.id, body.template, YOU_ACTOR)
     )
     .get("/api/stage-templates", () => tasks.templates());
