@@ -31,6 +31,7 @@ import { browserAskWords } from "@cawco/core/words/browser";
 import { z } from "zod";
 import { tool } from "./mcp-tool";
 import { parkedToolAsk, refuseSecondAsk } from "./parked-ask";
+import type { AnyProblem } from "./refusal";
 
 /** The session tools browsers give, by name: what a call is routed by (delegation-mcp.ts). */
 export const BROWSER_TOOLS: ReadonlySet<string> = new Set(["browser_ask"]);
@@ -91,14 +92,15 @@ export interface BrowserAsksDeps {
   /**
    * The page of browser `key` on `machineId` that `actor` has open on
    * `origin` (core `BROWSER_PAGE`, agent shield.ts `askedPage`): the ask is
-   * pinned to it. Throws the sentence the agent reads when it has none.
+   * pinned to it. Its machine's refusal, the sentence the agent reads, when
+   * the browser has none to give.
    */
   readonly pageOf: (
     actor: InstanceRow,
     key: BrowserKey,
     machineId: string,
     origin: string
-  ) => Promise<string>;
+  ) => Promise<string | AnyProblem>;
   /** Parks the ask for the person: the pending ledger, every screen, push. */
   readonly park: (envelope: Envelope) => void;
   /** Takes an answered ask off the pending ledger. */
@@ -121,17 +123,20 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
   const waiting = new Map<string, Waiter>();
 
   const asks = {
-    /** Parks `actor`'s browser ask and waits for the person's answer. */
+    /** Parks `actor`'s browser ask and waits for the person's answer; the browser's problem when it has no page to pin it to. */
     async ask(
       actor: InstanceRow,
       input: { origin: string; reason: string },
       toolUseId?: string
-    ): Promise<BrowserAskAnswer> {
+    ): Promise<BrowserAskAnswer | AnyProblem> {
       refuseSecondAsk(waiting, actor.id, "browser");
       const { key, machineId, artifactId } = deps.browserFor(actor);
       // Pinned before the person hears of it: an ask about a page the agent
       // has not open would hand them some other tab.
       const targetId = await deps.pageOf(actor, key, machineId, input.origin);
+      if (typeof targetId !== "string") {
+        return targetId;
+      }
       refuseSecondAsk(waiting, actor.id, "browser");
       const requestId = crypto.randomUUID();
       const ask: BrowserAskFrame = {

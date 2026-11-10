@@ -94,6 +94,7 @@ import type { Areas } from "./areas";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
+import type { decidesTable } from "./decides-file";
 import {
   type DispatchChange,
   type Dispatcher,
@@ -394,10 +395,16 @@ export interface ProjectSettingsDeps {
    * project-delegate-types.ts): each kind's member and each type, with
    * where it came from.
    */
-  readonly inEffect: (project: ProjectRow) => Promise<{
-    decides: { kind: string; member: string; from: SettingSource }[];
-    types: { name: string; from: SettingSource }[];
-  }>;
+  readonly inEffect: (project: ProjectRow) => Promise<
+    | {
+        decides: { kind: string; member: string; from: SettingSource }[];
+        types: { name: string; from: SettingSource }[];
+      }
+    | Extract<
+        Awaited<ReturnType<typeof decidesTable>>,
+        { readonly "~status": true }
+      >
+  >;
   /** Notes what happened in the project's conversation (caw.ts `notice`). */
   readonly note: (actor: InstanceRow, note: ProjectNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
@@ -996,6 +1003,9 @@ export const createProjectSettings = ({
     const from = (source: SettingSource) => areaWords.source(source, area);
     const { cap, cawMode, onCap } = project.inEffect;
     const folder = await inEffect(project);
+    if (folder instanceof ElysiaStatus) {
+      return folder;
+    }
     return projectSettingsWords.read({
       name: project.name,
       area,

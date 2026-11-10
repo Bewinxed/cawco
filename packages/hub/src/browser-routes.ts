@@ -72,13 +72,6 @@ const BASE = "/ws/browser";
 
 const HOP = "hub browser relay";
 
-/** Machine `machine`, which the hub does not reach now: its browser's refusal. */
-export const browserUnreached = (machine: string) =>
-  problem(503, {
-    code: "browser-machine-unreached",
-    detail: `${machine} is not connected, so its browser could not be reached. Try again once it is back.`,
-  });
-
 /** The bytes a WebSocket close reason may take (RFC 6455 §5.5: a control frame's payload is 125 bytes, two of them the code). */
 const REASON_BYTES = 123;
 
@@ -100,12 +93,18 @@ export interface BrowserStreamDeps {
   machineName: (machineId: string) => string;
   /** A credential of the fleet's stream relay, or null while it has none (stream-relay.ts). */
   mint: (userId: string, ttlMs: number) => BrowserRelay | null;
-  /** Where the hub reaches a port of the machine's: its address, or the hub's end of its SSH connection (ssh-tunnels.ts); refused ({@link browserUnreached}) when it is not connected. */
+  /** Where the hub reaches a port of the machine's: its address, or the hub's end of its SSH connection (ssh-tunnels.ts); refused (browser-machine-unreached) when it is not connected. */
   reach: (
     machineId: string,
     port: number
   ) => Promise<
-    { address: string; port: number } | ReturnType<typeof browserUnreached>
+    | { address: string; port: number }
+    | ReturnType<
+        typeof problem<
+          503,
+          { code: "browser-machine-unreached"; detail: string }
+        >
+      >
   >;
 }
 
