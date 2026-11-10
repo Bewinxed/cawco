@@ -130,7 +130,10 @@ export class ComposerSend {
     // before it redraws empty.
     const { text, extras } = draft.take();
     const id = newId();
-    departBox(`sent:${id}`, this.#parts.field() as HTMLDivElement);
+    const field = this.#parts.field();
+    if (field) {
+      departBox(`sent:${id}`, field);
+    }
     this.#parts.dismissMenu();
     this.#deliver(text, extras, id, cuts);
   }
@@ -192,7 +195,10 @@ export class ComposerSend {
     const chip = canvas?.folded ? this.#parts.canvasChip() : undefined;
     const id = newId();
     if (draft.text.trim() || !chip) {
-      departBox(`sent:${id}`, this.#parts.field() as HTMLDivElement);
+      const field = this.#parts.field();
+      if (field) {
+        departBox(`sent:${id}`, field);
+      }
     } else {
       departBox(`sent:${id}`, chip, false);
     }

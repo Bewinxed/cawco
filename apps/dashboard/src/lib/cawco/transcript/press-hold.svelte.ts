@@ -199,6 +199,7 @@ export class PressHold {
   onholddown = (event: PointerEvent): void => {
     const parts = this.#parts;
     const draft = parts.draft();
+    const { target } = event;
     if (event.pointerType === "pen") {
       this.#pen =
         parts.recallOf() &&
@@ -208,7 +209,7 @@ export class PressHold {
           parts.askOpen() ||
           parts.canvasUp()
         ) &&
-        !(event.target as Element).closest("button, a, input")
+        !(target instanceof Element && target.closest("button, a, input"))
           ? { id: event.pointerId, x: event.clientX, y: event.clientY }
           : null;
       return;
@@ -224,7 +225,7 @@ export class PressHold {
       return;
     }
     // Its own controls answer a press themselves.
-    if ((event.target as Element).closest("button, a, input")) {
+    if (target instanceof Element && target.closest("button, a, input")) {
       return;
     }
     const press = {

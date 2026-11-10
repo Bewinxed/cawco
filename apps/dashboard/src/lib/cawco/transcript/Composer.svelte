@@ -588,7 +588,7 @@
     }
   }
 
-  /* ---- recall: what you sent, and your queued message ----------------- */
+  /* ---- the pill ------------------------------------------------------- */
 
   /** The box the pill stands in, which the grown shape and its rows share. */
   let shell = $state<HTMLElement>();
@@ -1416,7 +1416,10 @@
           style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
           style:--cue-run="1lh"
           onclick={(event) => {
-            if (field && !field.contains(event.target as Node)) {
+            if (
+              field &&
+              !(event.target instanceof Node && field.contains(event.target))
+            ) {
               field.focus();
               mentionField?.select(draft.text.length);
             }

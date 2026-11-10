@@ -191,8 +191,8 @@ export class ComposerRecall {
         return;
       }
       const outside = (event: PointerEvent) => {
-        const target = event.target as Element;
-        if (!parts.shell()?.contains(target)) {
+        const { target } = event;
+        if (!(target instanceof Element && parts.shell()?.contains(target))) {
           this.wheel?.back();
         } else if (target.closest('[data-slot="grown-halo"]')) {
           this.wheel?.grab(event);
@@ -213,7 +213,8 @@ export class ComposerRecall {
       }
       let ours = untrack(() => parts.holding());
       const began = (event: TouchEvent) => {
-        ours = !!parts.shell()?.contains(event.target as Node);
+        const { target } = event;
+        ours = target instanceof Node && !!parts.shell()?.contains(target);
       };
       const moved = (event: TouchEvent) => {
         if (ours && event.cancelable) {
