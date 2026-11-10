@@ -250,7 +250,10 @@ export function unfold(
     "padding-bottom",
     "border-top-width",
     "border-bottom-width",
-  ].map((edge) => [edge, Number.parseFloat(styles.getPropertyValue(edge))]);
+  ].map((edge): [string, number] => [
+    edge,
+    Number.parseFloat(styles.getPropertyValue(edge)),
+  ]);
   const { parentElement: parent } = node;
   const column =
     parent !== null &&
@@ -262,7 +265,7 @@ export function unfold(
     ms ?? dur(direction === "out" ? "--duration-exit" : "--duration-pop");
   unfolding.set(node, {
     height,
-    edges: edges as [string, number][],
+    edges,
     margin: Number.parseFloat(styles.marginBlockEnd) || 0,
     ms: duration,
     easing: ease("--ease-out"),
