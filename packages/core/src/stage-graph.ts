@@ -431,6 +431,23 @@ export interface StageLaid {
   tall: number;
 }
 
+/**
+ * Page → pane: the drawing's page scrolled, and which way it went last (a
+ * scroll past the dead zone, not every pixel): the tools over the drawing's
+ * foot get out of the way on the way down and come back on the way up, as an
+ * iOS bottom toolbar does.
+ */
+export const STAGE_SCROLLED = "cawco:stage-scrolled";
+export interface StageScrolled {
+  down: boolean;
+}
+
+/** A {@link StageScrolled} as it crossed the frame; null when it is none. */
+export function stageScrolledOf(value: unknown): StageScrolled | null {
+  const said = isRecord(value) ? value : null;
+  return said && typeof said.down === "boolean" ? { down: said.down } : null;
+}
+
 /** Page → pane: the component threw as it mounted; the page draws the error formula in the drawing's place, with its own Try again. */
 export const STAGE_FAULT = "cawco:stage-fault";
 export interface StageFault {

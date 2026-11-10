@@ -521,7 +521,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Folder tabs:** fluid-tabs' folder variant on `surface-shelf` (Shapes, Folder tabs).
 
 ### Tooltip
-Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, `radius-sm`, with a rotated square arrow. It fades in over `--dur-fade` settling `--tip-rise` toward its trigger and leaves at once (The Enter Rule names it the one exception).
+Solid ink, never coral: `ink-solid` fill and diamond arrow, `on-ink` text, meta role, `radius-sm`. It fades in over `--dur-fade` settling `--tip-rise` toward its trigger, leaves at once (The Enter Rule's exception), and within one glass slides between items over `--dur-control`.
 
 ### Asking in the page
 The one way to ask before doing (`AskHere.svelte`, `ask-here.svelte.ts`). The question unfolds in the page's flow under the control that asked it, indented to its row's title: a raised tile holding the title in label, the consequence in meta, then Cancel (ghost) and the verb (destructive, or the grant's shield). It takes the focus on Cancel. The verb stays pending until its work ends; a refusal stays under the question in the refuser's words, and only work that went closes it. An action that reaches several things names them inside the question, read live.

@@ -1639,8 +1639,6 @@ public enum Words {
 
         public static let reducedMotion = "Reduce motion"
 
-        public static let verifyDesign = "Verify against the design system"
-
         /// The page's content process ended a second time for the same page (the first reloads it by itself): the system ended it, most often over its memory. The app hears it from WebKit; a browser never tells the parent page.
         public static let stoppedTitle = "This page stopped"
 

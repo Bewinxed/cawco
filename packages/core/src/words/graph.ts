@@ -308,9 +308,12 @@ export const graphWords = {
   /** A listed width that is also the component's own. */
   ownListed: (device: string, px: Figure) =>
     `${device}, ${px}, the component's own width`,
+  /** The stage drawn at the room it has: the width's default. */
+  adapt: "Adapt",
   phone: "Phone",
   tablet: "Tablet",
   desk: "Desktop",
+  wide: "Wide",
   widthOf: (device: string, px: Figure) => `${device}, ${px}`,
   scheme: "Appearance",
   light: "Light",

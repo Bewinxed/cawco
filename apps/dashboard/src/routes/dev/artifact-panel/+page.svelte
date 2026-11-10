@@ -4,7 +4,7 @@
    * artifact's title and its menu, the mode, the glass, Close), the page in
    * its well, the Comments rail beside the page on a desk and the Comments
    * sheet over it on a phone (under 640px), and a thread opened. The real
-   * parts (SideSurface, ArtifactMenu, CommentRail, ThreadSheet, PinCard) on
+   * parts (SideSurface, CommentRail, ThreadSheet, PinCard) on
    * real records (records.ts): the decision page title-bars-close, its five
    * pins as they stand, and the session's artifacts. The page is its own
    * picture (the bench reaches no hub, and the page's doc is the hub's), and
@@ -52,7 +52,6 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { pressOutside } from "#lib/cawco/press-outside.js";
-  import ArtifactMenu from "#lib/cawco/preview/ArtifactMenu.svelte";
   import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
   import ChangesTag from "#lib/cawco/preview/ChangesTag.svelte";
   import CommentComposer from "#lib/cawco/preview/CommentComposer.svelte";
@@ -62,7 +61,6 @@
   import type { RailList, RailSort } from "#lib/cawco/preview/comment-rows.js";
   import pageDesk from "#lib/cawco/preview/fixtures/title-bars-close-desk.webp";
   import pagePhone from "#lib/cawco/preview/fixtures/title-bars-close-phone.webp";
-  import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
   import ModeSwitch from "#lib/cawco/preview/ModeSwitch.svelte";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
@@ -71,7 +69,6 @@
   import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
   import { setSideExpand } from "#lib/cawco/side/expand.js";
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
-  import RailFloat from "#lib/cawco/side/RailFloat.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
@@ -82,11 +79,8 @@
     IconExternal,
     IconExternalLinear,
     IconInteract,
-    IconInteractLinear,
     IconPen,
-    IconPenLinear,
     IconPin,
-    IconPinLinear,
     IconRefresh,
     IconRefreshLinear,
   } from "#lib/icons.js";
@@ -239,12 +233,6 @@
   const heldCount = $derived(pins.filter(pinHeld).length);
   const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
   let mode = $state<"interact" | "comment" | "draw">("interact");
-  const MODE_GLYPHS = {
-    interact: IconInteractLinear,
-    comment: IconPinLinear,
-    draw: IconPenLinear,
-  };
-  const MODE_WORDS = { interact: "Interact", comment: "Comment", draw: "Draw" };
   /** A canvas's view (Map, Verify), standing for a component artifact's in the head. */
   const view = new CanvasViewState(INSTANCE);
   /** Changed since you looked: five stops, the tour not started. */
@@ -460,8 +448,6 @@
   });
   // The bench names no fleet: the panel's own words stand for the session's.
   const agent = "The session";
-  /** The decision page's own foot bar, px: what the overlay tells the pane of it (the picture's Send bar). */
-  const PAGE_FOOT = 66;
   /** The stops Changed since you looked steps through. */
   const CHANGES = 5;
 </script>
@@ -492,19 +478,11 @@
     >
   </DropdownMenu.RadioGroup>
 {/snippet}
-<!-- The mode's one-button form, as PreviewPane draws it. -->
-{#snippet modeCompact()}
-  <ModeButton
-    glyph={MODE_GLYPHS[mode]}
-    menu={modeMenu}
-    word={MODE_WORDS[mode]}
-  />
-{/snippet}
 {#snippet viewBar()}
-  <CanvasView onverify={() => undefined} {view} />
+  <CanvasView {view} />
 {/snippet}
 {#snippet viewMenu()}
-  <CanvasView as="sub" onverify={() => undefined} {view} />
+  <CanvasView as="sub" {view} />
 {/snippet}
 {#snippet commentsBar()}
   <CommentsButton
@@ -515,7 +493,7 @@
     }}
     held={heldCount}
     open={listOpen && !(phone.current && composing)}
-    toCheck={checked.length}
+    answers={checked.length}
   />
 {/snippet}
 {#snippet commentsMenu()}
@@ -540,30 +518,9 @@
   >
 {/snippet}
 
-{#snippet title()}
-  <ArtifactMenu
-    held={ARTIFACTS.map((one) => one.id)}
-    instanceId={INSTANCE}
-    line={shown?.ask ?? ""}
-    lineId="bench-line"
-    onrefused={() => undefined}
-    shown={{
-      id: shown?.id ?? "",
-      kind: "page",
-      title: shown?.title ?? "",
-    }}
-  />
-{/snippet}
-
 {#snippet railOf(layout: "beside" | "sheet")}
   <CommentRail
     bind:this={rail}
-    checks={{
-      count: checked.length,
-      pins: checked.filter((id): id is string => !!id),
-      changes: noChanges,
-      unasked: null,
-    }}
     down={null}
     focused={openPin}
     held={heldCount}
@@ -603,7 +560,6 @@
     bind:sort
   />
 {/snippet}
-{#snippet noChanges(_pin: Pin)}{/snippet}
 {#snippet composer()}
   <CommentComposer
     action="Comment"
@@ -618,15 +574,6 @@
     }}
     placeholder={commentWords.composeHint}
   />
-{/snippet}
-
-<!-- The rail beside the page, a floating glass panel (RailFloat). -->
-{#snippet railBeside()}
-  {#if listOpen && !phone.current}
-    <RailFloat>
-      {@render railOf("beside")}
-    </RailFloat>
-  {/if}
 {/snippet}
 
 {#snippet card(one: Pin, pushed = false)}
@@ -679,13 +626,11 @@
     data-bench-panel={asked}
   >
     <SideSurface
-      beside={railBeside}
       items={[
         {
           key: "mode",
           priority: HEAD_PRIORITY.mode,
           bar: modeBar,
-          compact: modeCompact,
           menu: modeMenu,
           group: true,
           place: "centre",
@@ -732,7 +677,6 @@
       placement={phone.current ? "sheet" : "beside"}
       subtitle={shown?.ask}
       subtitleId="bench-line"
-      titleControl={title}
     >
       <!-- The page as a decision page draws itself in the panel: beneath
            the head, its scroller padding its top by the head's room
@@ -808,8 +752,10 @@
         <!-- The page's own foot bar (its Send) stands at the picture's foot,
              scrolled there: 66px, as the overlay reads it (cawco:page-foot). -->
         <ChangesTag
-          above={PAGE_FOOT}
           at={tourAt}
+          onoff={() => {
+            tourAt = null;
+          }}
           onstep={(by) => {
             tourAt =
               tourAt === null

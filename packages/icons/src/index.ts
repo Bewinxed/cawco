@@ -75,6 +75,11 @@ export { default as IconBook } from "~icons/solar/book-bold-duotone";
 /** Keep: the values or the timing he set kept as a version of their own (the design graph's versions). */
 export { default as IconKeep } from "~icons/solar/bookmark-bold-duotone";
 export { default as IconBox } from "~icons/solar/box-bold-duotone";
+/**
+ * The map of a component's states: one state branching into the ones its
+ * moves lead to (the owner's pin 49 on the Working area).
+ */
+export { default as IconBranchingLinear } from "~icons/solar/branching-paths-up-linear";
 /** A release's Fixed section (ReleaseNotes). */
 export { default as IconBug } from "~icons/solar/bug-bold-duotone";
 /** Work set for dates: a Caw starter that plans on the calendar. */
@@ -85,7 +90,16 @@ export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
  * Solar's bare round bubble: its dots and lines cuts draw marks inside the
  * bubble.
  */
-export { default as IconTranscript } from "~icons/solar/chat-round-bold-duotone";
+/**
+ * Comment, the artifact panel's mode: a click there leaves a comment (the
+ * owner's pin 50 on the Working area). The round bubble, where the panel's
+ * Comments list is the square one (`IconChat`).
+ */
+export {
+  default as IconTranscript,
+  default as IconComment,
+} from "~icons/solar/chat-round-bold-duotone";
+export { default as IconCommentLinear } from "~icons/solar/chat-round-linear";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 /*
  * A bar's symbols (the owner's pick on the artifact panel's decision page,
@@ -181,6 +195,8 @@ export { default as IconFolderGit } from "~icons/solar/folder-git-bold-duotone";
 export { default as IconFolderLinear } from "~icons/solar/folder-linear";
 export { default as IconFolderOpen } from "~icons/solar/folder-open-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
+/** Adapt: the stage drawn at the room it has, its corners marked (a bare glass symbol, linear). */
+export { default as IconAdaptLinear } from "~icons/solar/full-screen-linear";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
 /** Files' artifacts as their thumbnails' masonry (FilesList's Thumbnails | List). */
 export { default as IconThumbnails } from "~icons/solar/gallery-wide-bold-duotone";
@@ -260,7 +276,9 @@ export {
   default as IconNeutral,
 } from "~icons/solar/minus-linear";
 export { default as IconMonitor } from "~icons/solar/monitor-bold-duotone";
+export { default as IconMonitorLinear } from "~icons/solar/monitor-linear";
 export { default as IconMoon } from "~icons/solar/moon-bold-duotone";
+export { default as IconMoonLinear } from "~icons/solar/moon-linear";
 export { default as IconMoonSleep } from "~icons/solar/moon-sleep-bold-duotone";
 export { default as IconAudio } from "~icons/solar/music-note-bold-duotone";
 export { default as IconToolNotebook } from "~icons/solar/notebook-bold-duotone";
@@ -285,12 +303,7 @@ export {
   default as IconToolWrite,
 } from "~icons/solar/pen-bold-duotone";
 export { default as IconPenLinear } from "~icons/solar/pen-linear";
-/**
- * Comment, the artifact panel's mode (a click pins a comment), and a pin
- * placed elsewhere (PinCard). Not a bubble: the panel's Comments, beside
- * the mode, is the square bubble (`IconChat`), and two bubbles stood side
- * by side.
- */
+/** A pin placed (PinCard), and a thing pinned to stay (a folder, a rule). */
 export { default as IconPin } from "~icons/solar/pin-bold-duotone";
 export { default as IconPinLinear } from "~icons/solar/pin-linear";
 /** A colour taken from the screen: a colour picker's eyedropper. */
@@ -302,6 +315,7 @@ export {
 export { default as IconPlain } from "~icons/solar/plain-bold-duotone";
 export { default as IconPlanet } from "~icons/solar/planet-bold-duotone";
 export { default as IconPlay } from "~icons/solar/play-bold-duotone";
+export { default as IconPlayLinear } from "~icons/solar/play-linear";
 export {
   default as IconAsk,
   default as IconToolQuestion,
@@ -363,6 +377,8 @@ export {
 export { default as IconReplay } from "~icons/solar/skip-previous-bold-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
+/** The stage's widths as bare glass symbols (linear, as every glass item): a phone, a tablet, a desk, a wide screen. */
+export { default as IconPhoneLinear } from "~icons/solar/smartphone-linear";
 /*
  * Sort: Solar's bare cut of it, the bars and their arrow with no squircle
  * round them (the owner, 10-24: "u need to draw similar style icons that are
@@ -383,8 +399,10 @@ export { default as IconStopLinear } from "~icons/solar/stop-linear";
 export { default as IconStructureSolid } from "~icons/solar/structure-bold";
 export { default as IconStructure } from "~icons/solar/structure-bold-duotone";
 export { default as IconSun } from "~icons/solar/sun-bold-duotone";
+export { default as IconSunLinear } from "~icons/solar/sun-linear";
 /** A tablet: the stage drawn at a tablet's width. */
 export { default as IconTablet } from "~icons/solar/tablet-bold-duotone";
+export { default as IconTabletLinear } from "~icons/solar/tablet-linear";
 export { default as IconLab } from "~icons/solar/test-tube-bold-duotone";
 /** A transfer; a tab moved to another group (its menu's Move to group). */
 export {
@@ -399,6 +417,7 @@ export { default as IconDeleteForGood } from "~icons/solar/trash-bin-trash-bold-
 /** Values to tune: a hook's common fields, a tool's settings, the design graph's Controls. */
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";
 export { default as IconTuningLinear } from "~icons/solar/tuning-2-linear";
+export { default as IconWideLinear } from "~icons/solar/tv-linear";
 export { default as IconReset } from "~icons/solar/undo-left-bold-duotone";
 /** Undo and redo in a bar's glass (a canvas's tools), Solar's linear cut. */
 export { default as IconUndoLinear } from "~icons/solar/undo-left-linear";

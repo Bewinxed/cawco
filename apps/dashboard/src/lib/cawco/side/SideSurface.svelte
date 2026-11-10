@@ -33,7 +33,7 @@
    * scrolled it blurs and fades beneath it, as a transcript does under its
    * pane's bar. A page in a frame that is not CawCo's own document stands
    * under the room instead (PreviewPane): its layout is not ours to push
-   * down. What stands `beside` floats too (RailFloat), the well stopping
+   * down. A card hung beside the well (`besideRoom`) floats too, the well stopping
    * short of it.
    *
    * Expanded over the whole split, the card meets its edges: no corner or
@@ -50,6 +50,7 @@
     BarMenu,
   } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import {
     IconClose,
@@ -59,6 +60,7 @@
     IconMinimizeLinear,
     IconMoreLinear,
   } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
   import { sideExpand } from "./expand";
   import {
     HEAD_PRIORITY,
@@ -73,6 +75,7 @@
     label,
     switcher,
     switcherAt = "start",
+    leading,
     title,
     titleControl,
     subtitle,
@@ -88,7 +91,7 @@
     mode,
     well = $bindable(),
     section = $bindable(),
-    beside,
+    besideRoom = 0,
     children,
   }: {
     /** What the card is, read out. */
@@ -101,6 +104,13 @@
      * `onboarding-design`, card `artifact-open`).
      */
     switcherAt?: "start" | "end";
+    /**
+     * What leads the bar before the title (HIG, Toolbars, Item groupings:
+     * "Elements that let people return to the previous document and show or
+     * hide a sidebar appear at the far leading edge, followed by the view
+     * title"): a design graph's room switch and its steps.
+     */
+    leading?: Snippet;
     /** What is on show, past what the switch says; nothing when it says it all. */
     title?: string;
     /** What is on show as a control (the artifact panel's menu), in the title's place; its words that keep their width marked `data-slot="name-lead"`, what trails them cut inside the name's box. */
@@ -136,11 +146,10 @@
     well?: HTMLDivElement;
     section?: HTMLElement;
     /**
-     * What stands on the card beside the well, at its end, outside its edge
-     * and its mode's seam: the preview's Comments rail. The well gives it
-     * its width.
+     * The room a card hung beside the well takes at the card's end, px (the
+     * preview's Comments): the page narrows to meet it. 0: none.
      */
-    beside?: Snippet;
+    besideRoom?: number;
     /** The well's content. */
     children: Snippet;
   } = $props();
@@ -148,11 +157,10 @@
   const expand = sideExpand();
   const expanded = $derived(!!expand?.expanded);
 
-  /** The pane's controls and Expand, in head order. */
+  /** Expand, then the pane's controls, in head order: Expand leads the glass (the owner's pin on the Working area). */
   const all = $derived<HeadItem[]>(
     items
       ? [
-          ...items,
           ...(expand?.available
             ? [
                 {
@@ -163,6 +171,7 @@
                 },
               ]
             : []),
+          ...items,
         ]
       : []
   );
@@ -185,6 +194,8 @@
         !one.place || (one.place === "centre" && formOf(one.key) === "compact")
     )
   );
+  /** What stands in More whatever the room (an artifact's commands on the whole of it): More last in the glass (HIG, Toolbars: the trailing edge holds "the More menu"). */
+  const inMore = $derived(all.filter((one) => one.place === "more"));
   const prominent = $derived(all.filter((one) => one.place === "prominent"));
   /** What stands with the name, after it (a browser's address): the head's leading group, the controls trailing. */
   const inLead = $derived(all.filter((one) => one.place === "lead"));
@@ -196,7 +207,10 @@
   const widths = new Map<string, number>();
   const stands = (key: string) => shown === null || shown.has(key);
   const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
-  const more = $derived(all.filter((one) => !stands(one.key)));
+  const more = $derived([
+    ...all.filter((one) => one.place !== "more" && !stands(one.key)),
+    ...inMore,
+  ]);
   /** The count a control in More says on it (Comments'), only above 0 (The Earned Count Rule). */
   const moreCount = $derived(
     more.find((one) => one.count && one.count.n > 0)?.count
@@ -427,21 +441,25 @@
         getComputedStyle(head).getPropertyValue("--c-bar-item")
       ) || 0;
     const moreGlyph = widths.get("more") ?? glyph;
+    // More stands whatever the room while it holds what always goes in it.
+    const moreKept = inMore.length > 0 ? [moreGlyph] : [];
     const next = standing(
       room - pads,
       gap,
-      [...kept, keeps + nameMargins(identity)],
+      [...kept, ...moreKept, keeps + nameMargins(identity)],
       { glyph: moreGlyph, counted: widths.get("more:counted") ?? moreGlyph },
-      all.map((one) => ({
-        key: one.key,
-        priority: one.priority,
-        width: widths.get(one.key) ?? 0,
-        counted: !!one.count && one.count.n > 0,
-        words: one.words,
-        ...(one.compact || one.words
-          ? { compact: widths.get(`${one.key}:compact`) ?? glyph }
-          : {}),
-      })),
+      all
+        .filter((one) => one.place !== "more")
+        .map((one) => ({
+          key: one.key,
+          priority: one.priority,
+          width: widths.get(one.key) ?? 0,
+          counted: !!one.count && one.count.n > 0,
+          words: one.words,
+          ...(one.compact || one.words
+            ? { compact: widths.get(`${one.key}:compact`) ?? glyph }
+            : {}),
+        })),
       // The pane's width: the card's, the head's box inside it.
       head.clientWidth >= WORDS_FROM,
       nameWants(identity, keeps),
@@ -585,7 +603,10 @@
   data-side-card={of}
   data-side-surface-expanded={expanded || undefined}
   aria-label={label}
-  class="group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-(--c-float-panel-r) bg-surface-raised shadow-drawer timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:shadow-none in-data-cawco-headed:rounded-none in-data-cawco-headed:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:rounded-none in-data-preview-sheet:bg-transparent in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+  class={cn(
+    floatingSurface(),
+    "group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-0 timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:border-0 data-side-surface-expanded:shadow-none in-data-cawco-headed:rounded-none in-data-cawco-headed:border-0 in-data-cawco-headed:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:rounded-none in-data-preview-sheet:border-0 in-data-preview-sheet:bg-transparent in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+  )}
   style:--side-room="var(--c-head-room)"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
@@ -624,6 +645,7 @@
     {#if switcher && switcherAt === "start"}
       {@render switcher()}
     {/if}
+    {@render leading?.()}
     <!-- The name keeps its own width up to NAME_KEEPS (`--name-keeps`, set
          from its lead as drawn), so the controls never draw over it; what
          it holds is cut at its own box, which reaches a focus ring's width
@@ -729,8 +751,9 @@
          the pressed segment), the edge easing in and out except while the
          split slides, and points a crosshair. -->
     <div
-      class="relative flex min-h-0 flex-1 bg-surface-well has-[>[data-rail-float=beside]]:*:data-side-well:me-c-rail-float-room"
+      class="relative flex min-h-0 flex-1 bg-surface-well *:data-side-well:me-(--beside-room) *:data-side-well:transition-[margin] *:data-side-well:duration-(--dur-panel) *:data-side-well:ease-drawer"
       data-slot="well-row"
+      style:--beside-room="{besideRoom}px"
     >
       <div
         data-side-well
@@ -741,7 +764,6 @@
       >
         {@render children()}
       </div>
-      {@render beside?.()}
     </div>
   {:else}
     {@render children()}

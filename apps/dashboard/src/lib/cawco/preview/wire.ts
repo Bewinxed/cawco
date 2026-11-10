@@ -27,6 +27,7 @@ import {
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_REACHED,
+  STAGE_SCROLLED,
   STAGE_TIME,
 } from "@cawco/core/stage-graph";
 
@@ -481,6 +482,7 @@ const PAGE_MESSAGES = [
   // A component artifact's stage, answering its design graph (core stage-graph.ts; each read by its reader there).
   STAGE_REACHED,
   STAGE_LAID,
+  STAGE_SCROLLED,
   STAGE_FAULT,
   STAGE_DIFFERENCES,
   STAGE_TIME,

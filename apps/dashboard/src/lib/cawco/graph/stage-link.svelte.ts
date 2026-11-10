@@ -58,6 +58,8 @@ export class StageLink {
   fault = $state<StageFault | null>(null);
   /** Each page that said it is ready: a new one holds no drawing, so the graph reaches its state again. */
   loads = $state(0);
+  /** The drawing's page last scrolled down (`cawco:stage-scrolled`): the tools over its foot step aside; a scroll up or a press brings them back. */
+  scrolledDown = $state(false);
   /** Presses the page heard (`cawco:press`): each closes the graph's open layers, a press on the stage being outside them. */
   presses = $state(0);
   /** The state the graph keeps, as the page names it: the inspector's controls follow its story. Null until the graph has a state. */

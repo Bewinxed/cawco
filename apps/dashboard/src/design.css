@@ -654,15 +654,20 @@
   & :is([data-glass-at="trailing"], [data-glass-at="only"]) {
     --r-end: var(--r-inner);
   }
+  /* An item whose card hangs from the glass (the glass `data-joined`, the
+     item `data-open`) is square at its foot, running on into the card. */
+  &[data-joined] [data-glass-at][data-open] {
+    --r-foot: 0px;
+  }
 }
 @utility r-join-* {
   --r-join: --value(--radius-*);
 }
 @utility concentric-at {
   border-start-start-radius: var(--r-start, var(--r-inner));
-  border-end-start-radius: var(--r-start, var(--r-inner));
+  border-end-start-radius: var(--r-foot, var(--r-start, var(--r-inner)));
   border-start-end-radius: var(--r-end, var(--r-inner));
-  border-end-end-radius: var(--r-end, var(--r-inner));
+  border-end-end-radius: var(--r-foot, var(--r-end, var(--r-inner)));
 }
 
 /* One side's border taken away whole, as `border-bottom: 0` takes it: no
@@ -1101,6 +1106,10 @@
    and foot. */
 @utility clip-block-start {
   clip-path: inset(0 -100vw -100vw);
+}
+/* The same at its block-end edge: a card that rises out of its anchor's top. */
+@utility clip-block-end {
+  clip-path: inset(-100vw -100vw 0);
 }
 /* The connection band shut: up behind its fold's top edge by its own height
    and the air over it (`--band-air`, its block-start margin), so it starts

@@ -54,6 +54,12 @@
  * open after that grows at once, and every close ends with it at rest up
  * behind the cut, past its own height by its shadow's reach under it, so
  * nothing it drew is left below the cut (HangCard without `data-shown`).
+ *
+ * A card that rises (`rises`: a menu from a glass standing at the foot of
+ * its surface, BarMenu) is the same card stood on its head: it stands on
+ * its anchor's top, its wrapper cut at the card's foot, and it slides up
+ * out of the anchor's top from behind that cut and back down into it, the
+ * same translate on the same clocks.
  */
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
@@ -181,6 +187,8 @@ export interface Hang {
   onneck: (neck: Neck) => void;
   /** The card starts to stand open (true), or to fold back into its anchor (false). */
   onshown?: (shown: boolean) => void;
+  /** It stands on its anchor's top and rises out of it (HangCard `rises`), rather than hanging from its foot. */
+  rises?: boolean;
 }
 
 /** The card's attachment: on the popover's content, inside its floating wrapper. */
@@ -411,14 +419,18 @@ function slideMotion(node: HTMLElement, options: Hang) {
    * nothing it draws is left under the cut: shut up by its height alone, the
    * shadow under its foot stayed on the page below the glass. A percentage
    * of its own box, so a size tween in flight (motion/morph) is followed to
-   * the end.
+   * the end. A card that rises is shut down behind the cut at its foot, by
+   * the same measure: its height and its shadow's reach past its far edge.
    */
-  const shut = () =>
-    `0px calc(-100% - ${
+  const shut = () => {
+    const reach =
       Number.parseFloat(
         getComputedStyle(node).getPropertyValue("--hang-reach")
-      ) || 0
-    }px)`;
+      ) || 0;
+    return options.rises
+      ? `0px calc(100% + ${reach}px)`
+      : `0px calc(-100% - ${reach}px)`;
+  };
   /** Where the card is drawn now, mid-animation or at rest. */
   const drawn = (fallback: string) =>
     run ? getComputedStyle(node).translate : fallback;

@@ -13,6 +13,7 @@
    * them, or pressed through one, it stays shut.
    */
   import type { Snippet } from "svelte";
+  import type { Glide } from "./glide";
   import Root from "./tooltip.svelte";
   import Content from "./tooltip-content.svelte";
   import Trigger from "./tooltip-trigger.svelte";
@@ -26,6 +27,7 @@
     tap = false,
     anchor,
     ontoggle,
+    glide,
     children,
   }: {
     label: string;
@@ -42,6 +44,8 @@
     anchor?: { getBoundingClientRect: () => DOMRect };
     /** It opened or closed. */
     ontoggle?: (open: boolean) => void;
+    /** Its glass's one tooltip (glide.ts): this tip is a trigger of it, its words its payload, and the tooltip glides here from a neighbour. Not with `anchor`, `tap` or `ontoggle`, which need a tooltip of their own. */
+    glide?: Glide | null;
     children: Snippet<[Record<string, unknown>]>;
   } = $props();
 
@@ -99,22 +103,34 @@
   });
 </script>
 
-<Root disabled={disabled || inside} bind:open>
-  <Trigger>
+{#if glide && !anchor && !tap && !ontoggle}
+  <Trigger
+    disabled={disabled || inside}
+    payload={{ label, title, keys, side }}
+    tether={glide}
+  >
     {#snippet child({ props })}
       {@render children(withTap(props))}
     {/snippet}
   </Trigger>
-  <!-- 8px clear of the viewport's edges: it never touches one. -->
-  <Content collisionPadding={8} customAnchor={anchor ?? null} {side}>
-    <span class="whitespace-pre-line"
-      >{#if title}
-        <strong data-slot="block" class="block font-medium">{title}</strong>
+{:else}
+  <Root disabled={disabled || inside} bind:open>
+    <Trigger>
+      {#snippet child({ props })}
+        {@render children(withTap(props))}
+      {/snippet}
+    </Trigger>
+    <!-- 8px clear of the viewport's edges: it never touches one. -->
+    <Content collisionPadding={8} customAnchor={anchor ?? null} {side}>
+      <span class="whitespace-pre-line"
+        >{#if title}
+          <strong data-slot="block" class="block font-medium">{title}</strong>
+        {/if}
+        {label}</span
+      >
+      {#if keys}
+        <kbd class="font-body opacity-70">{keys}</kbd>
       {/if}
-      {label}</span
-    >
-    {#if keys}
-      <kbd class="font-body opacity-70">{keys}</kbd>
-    {/if}
-  </Content>
-</Root>
+    </Content>
+  </Root>
+{/if}

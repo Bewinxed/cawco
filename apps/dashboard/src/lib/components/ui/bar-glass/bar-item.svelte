@@ -24,7 +24,7 @@
    * under the window's top) the lift stops at that edge, the badge whole.
    */
   const barItemVariants = tv({
-    base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:not-hover:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
+    base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-c-bar-group-pad group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:not-hover:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
     variants: {
       /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */
       form: {
@@ -34,7 +34,7 @@
         /* A word action (Cancel, a count said in words): its words at the
            label's size, an even inset either side, cut at their end. */
         words:
-          "mark-line min-w-0 max-w-full overflow-clip px-space-2 text-ellipsis whitespace-nowrap text-size-label font-medium text-ink-strong num",
+          "mark-line min-w-0 max-w-full px-space-2 text-size-label font-medium text-ink-strong num",
         /* His head in one cell, a circle a symbol's box wide whatever the
            strips' boxes (the beat's reach past it); on the phone's glass his
            ring over his own box, as the sidebar toggle's is, and a finger's
@@ -100,6 +100,7 @@
   import { mergeProps } from "bits-ui";
   import type { Component, Snippet } from "svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import { glideHere } from "#lib/components/ui/tooltip/glide.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
 
   let {
@@ -144,7 +145,7 @@
     pressed?: boolean;
     /** It holds changed values, or is its switch's chosen segment (BarSegments): the selected wash, without being a toggle. */
     marked?: boolean;
-    /** What it opens stands beside the page, a rail or an inspector it shows and hides: the hover's surface at rest and the pressed one under the pointer, a neutral on that never takes the selected wash (the coral it would add beside the view's one action), the panel it opened being what says so. */
+    /** What it opens stands beside the page, a rail or an inspector it shows and hides: the hover's surface at rest and the pressed one under the pointer, a neutral on that never takes the selected wash (the coral it would add beside the view's one action), the panel it opened being what says so. While what it opened hangs from its glass (the glass `data-joined`), its foot is square and its fill runs on through the glass's pad to the card's top (`::after`), one tab with the card it opened. */
     open?: boolean;
     /** What it opens stands (`aria-expanded`). */
     expanded?: boolean;
@@ -163,6 +164,8 @@
     onpointerleave?: (event: PointerEvent) => void;
     onblur?: (event: FocusEvent) => void;
   } = $props();
+  /** Its glass's one tooltip, which its tip joins (glide.ts); none outside a glass. */
+  const glide = glideHere();
 
   /**
    * Its count's lift: half the glass's inset above the item's top edge,
@@ -197,7 +200,13 @@
 </script>
 
 {#snippet body()}
-  {#if children}
+  {#if children && form === "words"}
+    <!-- The words cut at their own box, never the item's: a count's badge
+         stands out past the item's corner. -->
+    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{@render children()}</span
+    >
+  {:else if children}
     {@render children()}
   {:else if Icon}
     <Icon data-slot="bar-symbol" aria-hidden="true" />
@@ -231,7 +240,7 @@
 {#if tip === false}
   {@render item({})}
 {:else}
-  <Tip disabled={tipOff} {keys} label={tip ?? label}>
+  <Tip disabled={tipOff} {glide} {keys} label={tip ?? label}>
     {#snippet children(tipProps)}
       {@render item(tipProps)}
     {/snippet}

@@ -9,7 +9,7 @@
 import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
 
 /** The divider's width (the kit handle's `w-px`): paneforge shares what is left of the group beside it between the panes (as side/Split.svelte reads it). */
-export const DIVIDER = 1;
+const DIVIDER = 1;
 /** The px the two least shares, each rounded up to a hundredth, may add between them on the widest surface: under one. */
 const ROUNDING = 1;
 

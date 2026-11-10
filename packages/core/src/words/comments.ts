@@ -57,8 +57,8 @@ export const commentWords = {
   whichComments: "Which comments",
   /** The rail's Sort menu, read out: the order the rows come in. */
   order: "Order",
-  /** The head's Comments, read out: what waits in To check. */
-  toCheckWaiting: (n: number) => `${n} to check`,
+  /** The head's Comments, read out: the answers he hasn't read. */
+  answersWaiting: (n: number) => `${n} new ${n === 1 ? "answer" : "answers"}`,
   sort: "Sort",
   newestFirst: "Newest first",
   topOfPageFirst: "Top of page first",
@@ -124,8 +124,6 @@ export const commentWords = {
   answered: "answered",
   askAgain: "Ask again",
   askingAgain: "Asking again…",
-  /** The To check row of changes no comment asked for. */
-  unasked: "Changed, no comment asked",
   /** A change line's revision. */
   revision: (n: number) => `rev ${n}`,
   /** A change line's count of revisions that changed it since he looked. */

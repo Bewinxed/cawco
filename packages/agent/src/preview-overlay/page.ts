@@ -56,6 +56,7 @@ import {
   STAGE_REVEAL,
   STAGE_RING,
   STAGE_ROOM,
+  STAGE_SCROLLED,
   STAGE_SEEK,
   STAGE_TIME,
   stageCompareOf,
@@ -3318,13 +3319,25 @@ function shot(
   if (had?.look === look) {
     return had.png;
   }
-  const undrawn = (message: string) => post("cawco:error", { message });
+  // A part left undrawn is said only when no picture came at all, as the
+  // thumbnail's is: a picture short of one part still shows the mark, and
+  // the panel holds what this page says as a failure until it is reloaded.
+  let error: string | undefined;
+  const undrawn = (message: string) => {
+    error ??= message;
+  };
   // A mark on an embed of another origin is drawn there, by its own overlay:
   // this page cannot draw what a frame of another origin shows.
-  const png =
+  const png = (
     el && embeds.read(el)
       ? embeds.picture(el, box, undrawn)
-      : cropPicture(box, undrawn);
+      : cropPicture(box, undrawn)
+  ).then((drawn) => {
+    if (!drawn && error !== undefined) {
+      post("cawco:error", { message: error });
+    }
+    return drawn;
+  });
   shots.set(id, { look, png });
   return png;
 }
@@ -3847,6 +3860,7 @@ window.addEventListener("cawco:sheet", (event) => {
 for (const type of [
   STAGE_REACHED,
   STAGE_LAID,
+  STAGE_SCROLLED,
   STAGE_FAULT,
   STAGE_DIFFERENCES,
   STAGE_TIME,

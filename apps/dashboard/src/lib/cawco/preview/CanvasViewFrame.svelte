@@ -9,15 +9,9 @@
   import CanvasView from "./CanvasView.svelte";
   import type { CanvasViewState } from "./canvas-view.svelte";
 
-  let {
-    view,
-    onverify,
-  }: {
-    view: CanvasViewState;
-    onverify: () => void;
-  } = $props();
+  let { view }: { view: CanvasViewState } = $props();
 </script>
 
 <BarGlass form="group">
-  <CanvasView {onverify} {view} />
+  <CanvasView {view} />
 </BarGlass>

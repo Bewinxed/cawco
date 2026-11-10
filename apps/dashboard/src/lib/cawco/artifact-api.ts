@@ -28,21 +28,6 @@ async function ok(response: Response): Promise<Response> {
   return response;
 }
 
-/** Every artifact a session holds, newest first (Projects spec §5.10): the panel's menu. */
-export async function listArtifacts(
-  instanceId: string
-): Promise<ArtifactSummary[]> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("GET /api/instances/:id/artifacts", {
-          path: { id: instanceId },
-        })
-      )
-    )
-  ).json();
-}
-
 /**
  * A session's artifacts that reached the person, newest first: Files'
  * Artifacts. The hub keeps the rule (artifacts/service.ts `filesOf`): seen
@@ -333,23 +318,6 @@ export async function fetchCanvasMap(
       )
     )
   ).json();
-}
-
-/** The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session. Answers what the hub did, one sentence. */
-export async function verifyArtifact(
-  instanceId: string,
-  id: string
-): Promise<string> {
-  const answer = (await (
-    await ok(
-      await hubFetch(
-        hubRequest("POST /api/instances/:id/artifacts/:artifact/verify", {
-          path: { id: instanceId, artifact: id },
-        })
-      )
-    )
-  ).json()) as { verify: string };
-  return answer.verify;
 }
 
 /** The draft canvas went out with a send: the session holds it now. */

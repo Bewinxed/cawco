@@ -1,7 +1,9 @@
 <script lang="ts">
   /**
    * A comment's thread as a bottom sheet: on a phone and under a finger, in
-   * a preview's well (PreviewPane) and over a conversation (CommentChip).
+   * a preview's well (PreviewPane) and over a conversation (CommentChip);
+   * and under the phone line, what rises over a design graph's drawing (its
+   * map, move and dials: DesignGraph).
    * The kit's drawer (vaul, `hosted` in a host of its own, as SideSheet's
    * preview sheet is), with its grabber and two stops: half its room, where
    * it opens, and the whole room. A finger on the grabber drags it between

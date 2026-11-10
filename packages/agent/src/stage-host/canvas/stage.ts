@@ -97,6 +97,7 @@ import {
   STAGE_REACHED,
   STAGE_REVEAL,
   STAGE_ROOM,
+  STAGE_SCROLLED,
   STAGE_TIME,
   type StageCompare,
   type StageDialsWritten,
@@ -106,6 +107,7 @@ import {
   type StageReach,
   type StageReached,
   type StageReveal,
+  type StageScrolled,
   type StageTime,
   type StateRef,
   shownName,
@@ -838,6 +840,32 @@ export function bootStage(page: Page): Mode {
   /** Tells the panel, through the overlay (preview-overlay page.ts relays each to the pane). */
   const tell = <Message extends object>(type: string, message: Message) =>
     dispatchEvent(new CustomEvent(type, { detail: message }));
+
+  // Which way the page scrolled, said once it turns past a dead zone: the
+  // panel's tools over the drawing's foot leave on the way down and come
+  // back on the way up.
+  {
+    const DEAD = 12;
+    let from = 0;
+    let down = false;
+    addEventListener(
+      "scroll",
+      () => {
+        const top = (document.scrollingElement ?? document.documentElement)
+          .scrollTop;
+        if (Math.abs(top - from) < DEAD) {
+          return;
+        }
+        const now = top > from && top > 0;
+        from = top;
+        if (now !== down) {
+          down = now;
+          tell<StageScrolled>(STAGE_SCROLLED, { down });
+        }
+      },
+      { passive: true }
+    );
+  }
 
   const scheme = (): Column["scheme"] =>
     view.scheme === "both" ? "light" : view.scheme;

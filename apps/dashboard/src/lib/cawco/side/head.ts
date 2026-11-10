@@ -39,9 +39,10 @@ export interface HeadItem {
    * segmented control), after the name in its leading group (`lead`: a
    * browser's address, as a browser's toolbar holds it with the page's
    * title), or after the glass as the one prominent action (Send, Take
-   * over).
+   * over), or in More whatever the room (`more`: an artifact's commands on
+   * the whole of it), More standing last in the glass.
    */
-  place?: "centre" | "lead" | "prominent";
+  place?: "centre" | "lead" | "prominent" | "more";
   /** Its place in {@link HEAD_PRIORITY}: the lower stands while the higher goes to More. */
   priority: number;
   /** `bar` says words its glyph and count stand without (Send): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */

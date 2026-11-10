@@ -54,12 +54,14 @@
     STAGE_FAULT,
     STAGE_LAID,
     STAGE_REACHED,
+    STAGE_SCROLLED,
     STAGE_TIME,
     stageDialsWrittenOf,
     stageDifferencesOf,
     stageFaultOf,
     stageLaidOf,
     stageReachedOf,
+    stageScrolledOf,
     stageTimeOf,
   } from "@cawco/core/stage-graph";
   import { artifactWords } from "@cawco/core/words/artifacts";
@@ -82,7 +84,7 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { BarCard, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -90,11 +92,14 @@
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconAlert,
     IconArchive,
     IconChat,
+    IconComment,
+    IconCommentLinear,
     IconExternal,
     IconExternalLinear,
     IconGlobe,
@@ -103,19 +108,16 @@
     IconLock,
     IconPen,
     IconPenLinear,
-    IconPin,
-    IconPinLinear,
     IconRefresh,
     IconRefreshLinear,
     IconSend,
     IconTrash,
-    IconTuning,
-    IconTuningLinear,
     IconUndock,
     IconUndockLinear,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
   import {
@@ -123,7 +125,6 @@
     keepThumbnail,
     removeArtifact,
     showArtifact,
-    verifyArtifact,
     writeSheet,
   } from "../artifact-api";
   import {
@@ -145,6 +146,7 @@
   import { frameObserver, frameSize } from "../frame-observer";
   import { besideLine, inspectorBesideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
+  import type { GraphHead } from "../graph/graph-head";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
   import { resolveSessionTitle } from "../links";
   import {
@@ -162,14 +164,11 @@
   import { heardInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
-  import RailFloat from "../side/RailFloat.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, unstore, writeJson } from "../storage";
-  import { toast } from "../toasts";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import { floor as visibleFloor } from "../visible-viewport.svelte";
   import { afterPaint, warm } from "../workspace/warm.svelte";
-  import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
     type ArtifactDoc,
     type ArtifactView,
@@ -208,6 +207,7 @@
   import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
+  import PreviewTools from "./PreviewTools.svelte";
   import { artifactAddress } from "./page-source";
   import { paneFleet } from "./pane-fleet";
   import { enterPreviews, turnedAwayWords } from "./pass";
@@ -336,11 +336,15 @@
     again: "reload" | "close" | null;
   } | null>(null);
   /**
-   * An act of the pane's own the hub refused (Verify, a show from the
-   * title's menu): said on the same line, with Try again, kept through a
+   * An act of the pane's own the hub refused (a show from the artifacts'
+   * menu): said on the same line, with Try again, kept through a
    * reload (refusals.svelte.ts), until a try goes.
    */
-  type PaneAct = { act: "verify" } | { act: "show"; id: string; title: string };
+  interface PaneAct {
+    act: "show";
+    id: string;
+    title: string;
+  }
   const actKey = $derived(`pane:${instanceId}`);
   const paneRefused = $derived(refusals.get(actKey));
   /** The refused act's Try again is running. */
@@ -352,10 +356,6 @@
     }
     rerunning = true;
     try {
-      if (asked.act === "verify") {
-        await verify();
-        return;
-      }
       try {
         await showArtifact(instanceId, asked.id);
         refusals.delete(actKey);
@@ -1533,12 +1533,6 @@
    */
   let inspectOpen = $state(false);
   const inspectKey = $derived(`cawco-preview-inspect:${instanceId}`);
-  $effect.pre(() => {
-    const key = inspectKey;
-    untrack(() => {
-      inspectOpen = stored("local", key) === "open";
-    });
-  });
   function showInspector(open: boolean) {
     inspectOpen = open;
     store("local", inspectKey, open ? "open" : "shut");
@@ -1562,9 +1556,14 @@
         )
       : null;
   });
-  const inspecting = $derived(!!inspector && inspectOpen);
   /** A phone's screen (DESIGN.md's phone line). */
   const phone = new MediaQuery("(width < 640px)");
+  /** The rail is the well's foot sheet on a phone; elsewhere a card hung from the head's glass, at every pane width. */
+  const railSheet = $derived(sheet || phone.current);
+  /** The inspector stands: asked for, and no Comments card at the card's end (one card stands there at a time). */
+  const inspecting = $derived(
+    !!inspector && inspectOpen && !(listOpen && !railSheet)
+  );
   /**
    * The inspector: a right panel beside the page where the well holds the
    * stage at its least and the inspector (graph/beside.ts), picked from the
@@ -1678,12 +1677,51 @@
     watch.observe(pane);
     return () => watch.disconnect();
   });
-  /** A pane this wide or wider holds the rail beside its page (the artifact panel's surface brief, The Comments rail: "a pane under 640px" takes it as the foot sheet). */
-  const RAIL_BESIDE_FROM = 640;
-  /** The rail is the well's foot sheet: on a phone, and in a pane under 640px. */
-  const railSheet = $derived(
-    sheet || phone.current || (paneW > 0 && paneW < RAIL_BESIDE_FROM)
-  );
+  /** The hung Comments card: its height, down to the side card's foot, and the room it takes from the page at the card's end, px. */
+  let railReach = $state({ height: 0, room: 0 });
+  /** The hung column measured last: Comments and Tune swap, and the one closing never zeroes the one opening. */
+  let reaching: HTMLElement | null = null;
+  const reachRail = (node: HTMLElement) => {
+    reaching = node;
+    // Read off the glass it hangs from, never its own box: the card comes
+    // down out of the glass, and read mid-way its top stood above its rest.
+    const read = () => {
+      const card = section?.getBoundingClientRect();
+      const glass = section
+        ?.querySelector<HTMLElement>(
+          '[data-slot="side-head"] [data-slot="tools"]'
+        )
+        ?.getBoundingClientRect();
+      if (!(card && glass)) {
+        return;
+      }
+      const railInset = numberOf("--space-2");
+      const reach = {
+        height: Math.max(0, Math.round(card.bottom - glass.bottom - railInset)),
+        room: Math.max(
+          0,
+          Math.round(card.right - (glass.right - node.offsetWidth) + railInset)
+        ),
+      };
+      if (reach.height !== railReach.height || reach.room !== railReach.room) {
+        railReach = reach;
+      }
+    };
+    // Read untracked: the attachment would re-run on what it writes.
+    untrack(read);
+    const watch = frameObserver(read);
+    const card = untrack(() => section);
+    if (card) {
+      watch.observe(card);
+    }
+    return () => {
+      watch.disconnect();
+      if (reaching === node) {
+        reaching = null;
+        railReach = { height: 0, room: 0 };
+      }
+    };
+  };
   /**
    * Where the rail stands is known: on a phone or in the drawer at once,
    * else once the pane's width is read. Until then neither rail is drawn,
@@ -1772,13 +1810,19 @@
   // What this pane holds names itself to the chips that name it: no chip asks the hub for it.
   $effect(() => {
     const shown = artifact;
+    const session = instanceId;
     if (shown) {
-      noteArtifact(shown.id, {
-        instanceId,
-        kind: shown.kind,
-        name: shown.name,
-        title: shown.title,
-      });
+      // Untracked: the note reads what it writes, so two panes naming one
+      // artifact for two sessions (a states file's drawings) re-ran each
+      // other's effect without end.
+      untrack(() =>
+        noteArtifact(shown.id, {
+          instanceId: session,
+          kind: shown.kind,
+          name: shown.name,
+          title: shown.title,
+        })
+      );
     }
   });
 
@@ -2089,6 +2133,8 @@
   let changesTag = $state<HTMLFieldSetElement>();
   /** How tall the page's own foot bar stands over its viewport's foot, px (`cawco:page-foot`): the tag stands above it. */
   let pageFoot = $state(0);
+  /** The page's tools over the well's foot (PreviewTools), px tall: Changed since you looked stands above them. */
+  let toolsHeight = $state(0);
   /** A whole-page comment asked from the rail beside the page: its composer hangs from the rail's glass, not over the page. */
   const pageHung = $derived(
     composingPage && !!composing && listOpen && !railSheet
@@ -2310,10 +2356,13 @@
   });
   /** The stops as the page orders them (`cawco:change-stops`): each change's anchors and the pin standing with it. */
   let pageStops = $state.raw<{ anchors: string[]; pin: string | null }[]>([]);
+  // Ringed on the page only while the tour is on (ChangesTag turned on).
   $effect(() => {
-    const anchors = unseenChanges
-      .filter((item) => item.kind === "element" || item.kind === "card")
-      .map((item) => item.anchor);
+    const anchors = tour
+      ? unseenChanges
+          .filter((item) => item.kind === "element" || item.kind === "card")
+          .map((item) => item.anchor)
+      : [];
     const answered = [...unread];
     if (connected) {
       untrack(() => post({ type: "cawco:changes", anchors, pins: answered }));
@@ -2430,49 +2479,23 @@
       doc?.seeChanges(revision, [anchor]);
     }
   }
-  /*
-   * What to check (the owner's pick, B: change lines in each thread, the
-   * rail as the inbox), from what changed since he looked: the comments an
-   * update answered, then those whose element changed with no answer, then
-   * what changed under no comment. A row leaves as he looks at it: its
-   * thread opened, its spot stepped to, a chip pressed.
+  /**
+   * What changed since he looked under each comment, by its pin: its
+   * thread's lines are seen once he opens it. Shown on the page and in the
+   * thread, never as a list of its own (the owner's pick: "On the page
+   * only").
    */
-  const checking = $derived.by(() => {
+  const changedUnder = $derived.by(() => {
     const held = new Set(pins.map((pin) => pin.id));
     const byPin = new Map<string, ChangedItem[]>();
-    const unasked: ChangedItem[] = [];
     for (const item of unseenChanges) {
       if (item.pin && held.has(item.pin)) {
         byPin.set(item.pin, [...(byPin.get(item.pin) ?? []), item]);
-      } else if (item.kind !== "removed") {
-        unasked.push(item);
       }
     }
-    const number = (id: string) =>
-      pins.find((pin) => pin.id === id)?.number ?? 0;
-    const order = [...byPin.keys()].sort((a, b) => number(a) - number(b));
-    const answers = (id: string) =>
-      (byPin.get(id) ?? []).some((item) => item.answered);
-    return {
-      byPin,
-      unasked,
-      pins: [
-        ...order.filter((id) => answers(id)),
-        ...order.filter((id) => !answers(id)),
-      ],
-    };
+    return byPin;
   });
-  const checkCount = $derived(checking.pins.length + checking.unasked.length);
-  /** A changed thing as a line: what it is, its words then and now, its move, its revision, how often. */
-  const lineOf = (item: ChangedItem): ChangeLine => ({
-    element: item.element ?? item.label,
-    after: item.after ?? item.label,
-    anchor: item.anchor,
-    ...(item.before === undefined ? {} : { before: item.before }),
-    ...(item.moved ? { moved: item.moved } : {}),
-    ...(item.revision === undefined ? {} : { revision: item.revision }),
-    ...(item.times ? { times: item.times } : {}),
-  });
+
   /** A thread's line, as the hub kept it (the doc's `activity`). */
   const lineOfActivity = (line: ActivityLine): ChangeLine => ({
     element: line.element,
@@ -2505,7 +2528,7 @@
     try {
       await askAgain(instanceId, artifact.id, id);
       seeSoon(
-        (checking.byPin.get(id) ?? []).map((item) => item.anchor),
+        (changedUnder.get(id) ?? []).map((item) => item.anchor),
         0
       );
     } catch (error) {
@@ -2569,56 +2592,14 @@
     }
     seeSoon([anchor]);
   }
-  /** A To check row pressed: its thread opens, and its first change is brought out. */
-  function openChecked(id: string, via: "key" | "pointer") {
-    const [first] = checking.byPin.get(id) ?? [];
-    openCard(id, via);
-    if (first && !first.anchor.startsWith("removed:")) {
-      post({
-        type: "cawco:show-element",
-        selector: first.anchor,
-        outline: "chosen",
-      });
-    }
-  }
-  // The open thread is looked at: what changed under it leaves To check once its ring has pinged.
+  // The open thread is looked at: what changed under it is seen once its ring has pinged.
   $effect(() => {
     const pin = cardPin;
-    const mine = pin ? (checking.byPin.get(pin.id) ?? []) : [];
+    const mine = pin ? (changedUnder.get(pin.id) ?? []) : [];
     if (mine.length > 0) {
       untrack(() => seeSoon(mine.map((item) => item.anchor)));
     }
   });
-  /**
-   * Back on a page with something to check, the rail opens itself on To
-   * check beside the page, once per page as it is read; a change that
-   * lands while he is here only counts in its tab. Where the rail is the
-   * well's foot sheet (a phone, a pane under 640px) it would stand over the
-   * page he came to see (the owner, on his iPhone: "the comments pane opens
-   * by default on mobile so I have to dismiss it"): there it opens from
-   * Comments alone.
-   */
-  let checkedFor: string | null = null;
-  $effect(() => {
-    const id = artifactId;
-    if (
-      !id ||
-      listHold !== "ready" ||
-      checkedFor === id ||
-      isCanvas ||
-      !railPlaced
-    ) {
-      return;
-    }
-    checkedFor = id;
-    if (!railSheet && untrack(() => checkCount) > 0) {
-      untrack(() => {
-        listFilter = "check";
-        showList(true);
-      });
-    }
-  });
-
   /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
   const stepping = $derived(
     pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
@@ -2757,7 +2738,8 @@
    */
   function closeCard(swap = false) {
     const id = openPin;
-    if (!swap && id && drawnPin === id) {
+    // The thread joined to the Comments card leaves by its own transition.
+    if (!swap && id && drawnPin === id && !threadHung) {
       closingPin = id;
     }
     openPin = null;
@@ -3577,6 +3559,8 @@
         cancelComposer();
         if (link) {
           link.presses += 1;
+          // A press brings the tools back, as a tap does an iOS toolbar.
+          link.scrolledDown = false;
         }
         break;
       case "cawco:pin-at": {
@@ -3650,6 +3634,14 @@
         const said = stageLaidOf(message);
         if (said && link) {
           link.laid = said;
+        }
+        break;
+      }
+      case STAGE_SCROLLED: {
+        // Which way the drawing's page scrolled: the tools over its foot step aside going down.
+        const said = stageScrolledOf(message);
+        if (said && link) {
+          link.scrolledDown = said.down;
         }
         break;
       }
@@ -3752,6 +3744,16 @@
    * Undock fly that same iframe between the composer and here.
    */
   const isCanvas = $derived(artifact?.kind === "canvas");
+  /**
+   * The open thread stands joined to the hung Comments card, on its leading
+   * side, while that card stands (the owner's pick on pin 51: selecting a
+   * comment shows its thread as a second card, connected), never beside
+   * its pill across the page from the list it was picked in. Its pill is
+   * lit and brought into view as before.
+   */
+  const threadHung = $derived(
+    listOpen && railPlaced && !railSheet && !isCanvas && !floatSheet
+  );
   /** The rail's bottom sheet stands up (ThreadSheet `open`). */
   const railSheetOpen = $derived(
     listOpen && railPlaced && !isCanvas && railSheet && !railAway
@@ -3768,6 +3770,12 @@
   const threadPushed = $derived(
     listOpen && railPlaced && !isCanvas && railSheet && openPin !== null
   );
+  /** The thread standing joined to the Comments card: the open one, at once, its place on the page not waited for. */
+  const hungPin = $derived(
+    threadHung && openPin && !threadPushed
+      ? (pins.find((pin) => pin.id === openPin) ?? null)
+      : null
+  );
   /**
    * The open thread's pin is being placed again (Pin it somewhere else): a
    * sheet holding it drops to its low stop, so the page above it takes the
@@ -3777,8 +3785,6 @@
   /** The list in front holds nothing: the sheet stands low, never half its room empty (ThreadSheet `short`). */
   const railEmpty = $derived.by(() => {
     switch (listFilter) {
-      case "check":
-        return checkCount === 0;
       case "held":
         return !pins.some(pinHeld);
       case "resolved":
@@ -3932,7 +3938,9 @@
       closing = false;
     }
   }
-  /** A component artifact's view in the head (Map, Verify), one for its head button and More's submenu alike. */
+  /** What a component artifact's design graph hands the head: its state's title, its steps, its view, its components (graph-head.ts). */
+  let graphHead = $state<GraphHead | null>(null);
+  /** A component artifact's view in the title's menu (Map, Verify). */
   const canvasView = $derived.by(() => {
     const session = instanceId;
     // Built untracked: the view depends on the session and the kind alone,
@@ -3993,35 +4001,10 @@
     measure();
     return () => watch.disconnect();
   });
-  /** The canvas view's Verify: a design system round on the canvas, its verdict to the session; the hub's sentence says what it did. */
-  let verifying = $state(false);
-  async function verify() {
-    if (!artifact) {
-      return;
-    }
-    verifying = true;
-    const key = actKey;
-    try {
-      toast.info(await verifyArtifact(instanceId, artifact.id));
-      if ((refusals.get(key)?.asked as PaneAct | undefined)?.act === "verify") {
-        refusals.delete(key);
-      }
-    } catch (error) {
-      // Said on the pane's own line, with Try again, never a toast
-      // (DESIGN.md, The Work Outlives Its Surface Rule).
-      refusals.set(key, {
-        reason: `${artifact.title} was not verified: ${failureClause(error)}. The canvas stays as it is.`,
-        asked: { act: "verify" } satisfies PaneAct,
-      });
-    } finally {
-      verifying = false;
-    }
-  }
-
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
     interact: IconInteractLinear,
-    comment: IconPinLinear,
+    comment: IconCommentLinear,
     draw: IconPenLinear,
   } as const satisfies Record<PreviewMode, unknown>;
   const MODE_WORDS: Record<PreviewMode, string> = {
@@ -4039,6 +4022,19 @@
     }
   }
 
+  /**
+   * The page narrows to meet the Comments card where what is left of it
+   * still holds a page (`c-graph-stage-min`); in a narrower pane the card
+   * stands over the page's end, as Caw's card stands over what is under it.
+   * Read off the pane's own width, which the narrowing never changes.
+   */
+  const railBesidePage = $derived(
+    listOpen &&
+      railPlaced &&
+      !isCanvas &&
+      !railSheet &&
+      paneW - railReach.room >= (browser ? numberOf("--c-graph-stage-min") : 0)
+  );
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
@@ -4079,7 +4075,13 @@
         words: true,
       });
     }
-    if (canUndock) {
+    // An artifact's document commands (Reload, Undock, Open in new tab,
+    // Map, Verify) stand in its title's menu (ArtifactMenu `commands`; HIG,
+    // Toolbars: "a document menu that contains standard and app-specific
+    // commands that affect the document as a whole"); a page with no title
+    // menu keeps them in the glass.
+    const documentMenu = !!artifact;
+    if (canUndock && !documentMenu) {
       all.push({
         key: "undock",
         priority: HEAD_PRIORITY.undock,
@@ -4087,44 +4089,10 @@
         menu: undockMenu,
       });
     }
-    if (artifact && !ownTab) {
-      all.push({
-        key: "open",
-        priority: HEAD_PRIORITY.open,
-        bar: openBar,
-        menu: openMenu,
-      });
-    }
-    if (canvasView) {
-      all.push({
-        key: "view",
-        priority: HEAD_PRIORITY.view,
-        bar: viewBar,
-        menu: viewMenu,
-        group: true,
-      });
-    }
-    if (inspector) {
-      all.push({
-        key: "inspect",
-        priority: HEAD_PRIORITY.inspect,
-        bar: inspectBar,
-        menu: inspectMenu,
-      });
-    }
     if (isBrowser) {
       return all;
     }
     if (!isCanvas) {
-      all.push({
-        key: "mode",
-        priority: HEAD_PRIORITY.mode,
-        bar: modeBar,
-        compact: modeCompact,
-        menu: modeMenu,
-        group: true,
-        place: "centre",
-      });
       all.push({
         key: "comments",
         priority: HEAD_PRIORITY.comments,
@@ -4133,12 +4101,34 @@
         count: { glyph: IconChat, n: listOpen ? 0 : openCount, of: "Comments" },
       });
     }
+    // Tune (the map, the move, the dials) beside Comments, its column hung
+    // from its button the same way; only while it has something to show.
+    // What acts on the artifact as a whole, rare: in the head's More, last
+    // in the glass.
+    if (documentMenu) {
+      all.push({
+        key: "actions",
+        priority: HEAD_PRIORITY.reload,
+        bar: documentCommands,
+        menu: documentCommands,
+        group: true,
+        place: "more",
+      });
+    }
     all.push({
       key: "reload",
       priority: HEAD_PRIORITY.reload,
       bar: reloadBar,
       menu: reloadMenu,
     });
+    if (artifact && !ownTab) {
+      all.push({
+        key: "open",
+        priority: HEAD_PRIORITY.open,
+        bar: openBar,
+        menu: openMenu,
+      });
+    }
     return all;
   });
 </script>
@@ -4358,47 +4348,23 @@
   {/if}
 {/snippet}
 
-{#snippet viewBar()}
+<!-- The artifact's document commands, in its title's menu (ArtifactMenu
+     `commands`): what acts on it as a whole. -->
+{#snippet documentCommands()}
+  {#if graphHead?.components}
+    {@render graphHead.components()}
+    <DropdownMenu.Separator />
+  {/if}
+  {#if graphHead}
+    {@render graphHead.more()}
+    <DropdownMenu.Separator />
+  {/if}
+  {#if canUndock}
+    {@render undockMenu()}
+  {/if}
   {#if canvasView}
-    <!-- A component artifact's view: Map and Verify. -->
-    <CanvasView onverify={verify} view={canvasView} {verifying} />
+    <CanvasView as="items" view={canvasView} />
   {/if}
-{/snippet}
-{#snippet viewMenu()}
-  {#if canvasView}
-    <CanvasView as="sub" onverify={verify} view={canvasView} {verifying} />
-  {/if}
-{/snippet}
-
-{#snippet roomInspector()}
-  {#if inspector}
-    <SheetInspector
-      {inspector}
-      layout="room"
-      onclose={() => showInspector(false)}
-    />
-  {/if}
-{/snippet}
-
-{#snippet inspectBar()}
-  <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
-  <BarItem
-    aria-pressed={inspectOpen}
-    icon={IconTuningLinear}
-    label={artifactWords.inspect}
-    onclick={() => showInspector(!inspectOpen)}
-    open={inspectOpen}
-    tip={artifactWords.inspectTitle}
-  />
-{/snippet}
-{#snippet inspectMenu()}
-  <!-- Its glyph as the bar's, so its words start where More's other entries' do. -->
-  <DropdownMenu.CheckboxItem
-    checked={inspectOpen}
-    onCheckedChange={(open) => showInspector(open)}
-    ><IconTuning /><span>{artifactWords.inspect}</span
-    ></DropdownMenu.CheckboxItem
-  >
 {/snippet}
 
 {#snippet modeBar()}
@@ -4417,7 +4383,7 @@
         ></DropdownMenu.RadioItem
       >
       <DropdownMenu.RadioItem value="comment"
-        ><IconPin /><span>Comment</span><DropdownMenu.Shortcut
+        ><IconComment /><span>Comment</span><DropdownMenu.Shortcut
           >C</DropdownMenu.Shortcut
         ></DropdownMenu.RadioItem
       >
@@ -4429,9 +4395,9 @@
     </DropdownMenu.RadioGroup>
   </DropdownMenu.Group>
 {/snippet}
-
-<!-- The mode as one button where the head has no room for its three
-     segments: the chosen mode's glyph, opening the three. -->
+<!-- The mode as one button where the tools have no room for its three
+     segments (a phone, a narrow card): the chosen mode's glyph, opening the
+     three. -->
 {#snippet modeCompact()}
   <ModeButton
     glyph={MODE_GLYPHS[mode]}
@@ -4440,7 +4406,6 @@
     word={MODE_WORDS[mode]}
   />
 {/snippet}
-
 <!-- The comment being written: in its float by its target, or, a whole-page
      comment asked from the rail beside the page, hung from the rail's glass
      (CommentRail `pageComposer`). -->
@@ -4469,17 +4434,121 @@
   {/if}
 {/snippet}
 
+<!-- A pin's thread as its card holds it: the drawn pin's whole, or the
+     rested-on pin's as its peek (`peek`), the same card; `pushed`, opened
+     in the Comments sheet over its list, Back leading. -->
+{#snippet thread(
+  pin: Pin,
+  draft: ComposerDraft,
+  peek: boolean,
+  pushed = false,
+  sheet = false
+)}
+  {#if kit}
+    {@const Card = kit.PinCard}
+    <Card
+      agentName={owner ? ownerName : "The session"}
+      changes={(view?.activity[pin.id]?.length ?? 0) > 0
+        ? threadChanges
+        : undefined}
+      marked={peek || !!pinAt?.mark}
+      session={owner ? instanceId : null}
+      {draft}
+      link={pinLink(pin.number)}
+      live={live.has(pin.id)}
+      name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
+      back={pushed
+        ? { to: commentWords.comments, onback: backToList }
+        : undefined}
+      onclose={pushed ? closeSheet : () => closeCard()}
+      sheet={pushed || sheet}
+      ondelete={deleteOpenPin}
+      ondraft={() => drafts?.changed(pin.id)}
+      onfind={() => focusPin(pin.id, true)}
+      onplace={placeElsewhere}
+      onhold={(text) => reply(text, true)}
+      onreply={(text) => reply(text)}
+      onresolve={(resolved) => resolvePin(resolved)}
+      onretry={() => retryPin(pin.id)}
+      parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
+      {peek}
+      {pin}
+      placing={placing === pin.id}
+      problem={peek ? null : cardError}
+      sending={!peek && replying}
+      retrying={pinsRetrying.has(pin.id)}
+      whyNotSent={notSentWhy(pin)}
+    />
+  {/if}
+{/snippet}
+<!-- The open thread, joined to the comments card's leading edge (BarCard `beside`, `hungPin`). -->
+{#snippet hungThread()}
+  {#if hungPin && drafts}
+    {#key hungPin.id}
+      <div class="flex w-c-comments-w min-h-0 flex-col" data-slot="thread-card">
+        {@render thread(hungPin, drafts.draft(hungPin.id), false)}
+      </div>
+    {/key}
+  {/if}
+{/snippet}
+<!-- Comments: on a phone the toggle of the well's foot sheet; elsewhere
+     the card hangs from the head's glass, one shape with it as Caw's card
+     is with his (the owner's pin on the Working area: "connected to the
+     comments icon just like the top-right caw bar"), down to the card's
+     foot. It stays while he works on the page: only Comments shuts it. -->
 {#snippet commentsBar()}
-  <CommentsButton
-    count={openCount}
-    down={linkDown ? NOT_REACHING : null}
-    label={commentsTitle}
-    onclick={() => showList(!listOpen)}
-    open={railSheet ? railSheetOpen : listOpen}
-    held={heldCount}
-    {pinsShown}
-    toCheck={checkCount}
-  />
+  {#if railSheet || isCanvas}
+    <CommentsButton
+      count={openCount}
+      down={linkDown ? NOT_REACHING : null}
+      label={commentsTitle}
+      onclick={() => showList(!listOpen)}
+      open={railSheet ? railSheetOpen : listOpen}
+      held={heldCount}
+      {pinsShown}
+      answers={unread.size}
+    />
+  {:else}
+    <Popover.Root
+      onOpenChange={(open) => showList(open)}
+      open={listOpen && railPlaced}
+    >
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <CommentsButton
+            count={openCount}
+            down={linkDown ? NOT_REACHING : null}
+            label={commentsTitle}
+            open={listOpen}
+            held={heldCount}
+            {pinsShown}
+            {props}
+            answers={unread.size}
+          />
+        {/snippet}
+      </Popover.Trigger>
+      <BarCard
+        bare
+        beside={hungPin && kit && drafts ? hungThread : null}
+        besideLabel={hungPin ? `Comment ${hungPin.number}` : undefined}
+        escapeKeydownBehavior="ignore"
+        interactOutsideBehavior="ignore"
+        label={commentWords.comments}
+        onCloseAutoFocus={(event: Event) => event.preventDefault()}
+        onOpenAutoFocus={(event: Event) => event.preventDefault()}
+        trapFocus={false}
+      >
+        <div
+          class="flex h-(--rail-h) w-c-comments-w min-h-0 flex-col"
+          data-slot="rail-card"
+          style:--rail-h="{railReach.height}px"
+          {@attach reachRail}
+        >
+          {@render railOf("beside")}
+        </div>
+      </BarCard>
+    </Popover.Root>
+  {/if}
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
@@ -4504,52 +4573,6 @@
   </DropdownMenu.Item>
 {/snippet}
 
-<!-- The card beside the conversation (SideSurface): the switch, the
-     page's name and place (never "Preview" again under the switch that says
-     it), the preview's own controls, Close; the page in the well. -->
-{#snippet artifactTitle()}
-  {#if artifact}
-    <ArtifactMenu
-      {instanceId}
-      held={preview?.artifacts}
-      line={headLine}
-      lineId={`${paneId}-line`}
-      onrefused={(reason, chosen) => {
-        refusals.set(actKey, {
-          reason,
-          asked: {
-            act: "show",
-            id: chosen.id,
-            title: chosen.title,
-          } satisfies PaneAct,
-        });
-      }}
-      shown={artifact}
-    />
-  {/if}
-{/snippet}
-
-<!-- A To check row's change lines: what changed under its comment, and Ask again when the agent didn't answer it. -->
-{#snippet checkChanges(pin: Pin)}
-  <ChangeLines
-    asking={askingAgain.has(pin.id)}
-    inset="rail"
-    lines={(checking.byPin.get(pin.id) ?? []).map(lineOf)}
-    onask={() => askAgainPin(pin.id)}
-    unanswered={!(checking.byPin.get(pin.id) ?? []).some(
-      (item) => item.answered
-    )}
-  />
-{/snippet}
-<!-- The last To check row: what changed under no comment, each line a step to its spot. -->
-{#snippet checkUnasked()}
-  <div class="flex flex-col gap-space-1 px-space-2 py-space-2">
-    <p class="m-0 text-ink-row type-label font-medium">
-      {commentWords.unasked}
-    </p>
-    <ChangeLines lines={checking.unasked.map(lineOf)} step={stepToChange} />
-  </div>
-{/snippet}
 <!-- A thread's change lines, under its replies: every one the hub kept for it. -->
 {#snippet threadChanges(pin: Pin)}
   <ChangeLines
@@ -4579,16 +4602,7 @@
     {live}
     onclose={() => showList(false)}
     onhover={(id) => post({ type: "cawco:hover-pin", id })}
-    onopen={(id, via) =>
-      listFilter === "check" ? openChecked(id, via) : openCard(id, via)}
-    checks={isCanvas
-      ? undefined
-      : {
-          count: checkCount,
-          pins: checking.pins,
-          changes: checkChanges,
-          unasked: checking.unasked.length > 0 ? checkUnasked : null,
-        }}
+    onopen={openCard}
     onpage={() => {
       if (openPin) {
         closeCard();
@@ -4619,13 +4633,6 @@
 <!-- The Comments rail beside the page as a floating glass panel, outside
      the page's mode seam (the artifact panel's surface brief, The Comments
      rail; the owner's pick "Beside the page"). -->
-{#snippet railBeside()}
-  {#if listOpen && railPlaced && !isCanvas && !railSheet}
-    <RailFloat>
-      {@render railOf("beside")}
-    </RailFloat>
-  {/if}
-{/snippet}
 
 {#if inset}
   <!-- Inset: no head and no modes; the page as the panel draws it. -->
@@ -4653,12 +4660,11 @@
     label="Preview"
     onclose={ownTab ? backToSession : close}
     placement={sheet ? "sheet" : "beside"}
-    subtitle={headLine}
+    subtitle={graphHead ? graphHead.line : headLine}
     subtitleId={`${paneId}-line`}
     {switcher}
     {switcherAt}
-    titleControl={artifact ? artifactTitle : undefined}
-    beside={railBeside}
+    besideRoom={railBesidePage ? railReach.room : 0}
     bind:section
     bind:well
   >
@@ -4666,12 +4672,14 @@
   </SideSurface>
 {/if}
 
-<!-- Changed since you looked: a glass over the page at the well's foot (ChangesTag). -->
+<!-- Changed since you looked: a glass among the tools over the drawing's foot (ChangesTag). -->
 {#snippet changesBar()}
   {#if changeStops.length > 0 && !isCanvas}
     <ChangesTag
-      above={pageFoot}
       at={tour ? tourAt : null}
+      onoff={() => {
+        tour = null;
+      }}
       onstep={stepChange}
       total={tour?.length ?? changeStops.length}
       bind:ref={changesTag}
@@ -4831,10 +4839,13 @@
         <!-- The graph runs to the card's top under the floating head and
              takes its room on its own page (DesignGraph). -->
         <DesignGraph
+          bind:head={graphHead}
+          changesTools={changesBar}
+          modeTools={modeBar}
+          {modeCompact}
           ask={artifact.ask ?? ""}
           files={sheetCanvas.files}
           frame={frameTags}
-          inspector={inspectorInRoom ? roomInspector : undefined}
           {link}
           {keptDials}
           memory={`cawco-graph-kept:${artifact.id}`}
@@ -4855,8 +4866,6 @@
               failure = { message: refused, again: null };
             }
           }}
-          onroom={() => showInspector(false)}
-          paneSheet={inspecting && inspectorLayout === "sheet"}
           spec={sheetCanvas.spec}
           stale={linkDown !== null}
         />
@@ -5109,53 +5118,6 @@
   {#if picking}
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
-  <!-- A pin's thread as its card holds it: the drawn pin's whole, or the
-       rested-on pin's as its peek (`peek`), the same card; `pushed`, opened
-       in the Comments sheet over its list, Back leading. -->
-  {#snippet thread(
-    pin: Pin,
-    draft: ComposerDraft,
-    peek: boolean,
-    pushed = false,
-    sheet = false
-  )}
-    {#if kit}
-      {@const Card = kit.PinCard}
-      <Card
-        agentName={owner ? ownerName : "The session"}
-        changes={(view?.activity[pin.id]?.length ?? 0) > 0
-          ? threadChanges
-          : undefined}
-        marked={peek || !!pinAt?.mark}
-        session={owner ? instanceId : null}
-        {draft}
-        link={pinLink(pin.number)}
-        live={live.has(pin.id)}
-        name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
-        back={pushed
-          ? { to: commentWords.comments, onback: backToList }
-          : undefined}
-        onclose={pushed ? closeSheet : () => closeCard()}
-        sheet={pushed || sheet}
-        ondelete={deleteOpenPin}
-        ondraft={() => drafts?.changed(pin.id)}
-        onfind={() => focusPin(pin.id, true)}
-        onplace={placeElsewhere}
-        onhold={(text) => reply(text, true)}
-        onreply={(text) => reply(text)}
-        onresolve={(resolved) => resolvePin(resolved)}
-        onretry={() => retryPin(pin.id)}
-        parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
-        {peek}
-        {pin}
-        placing={placing === pin.id}
-        problem={peek ? null : cardError}
-        sending={!peek && replying}
-        retrying={pinsRetrying.has(pin.id)}
-        whyNotSent={notSentWhy(pin)}
-      />
-    {/if}
-  {/snippet}
   {#if railSheetDrawn}
     <!-- The rail as the well's bottom sheet, on a phone and in a pane under
          640px: the kit's drawer (ThreadSheet's host), its grabber and two
@@ -5233,7 +5195,7 @@
     {/if}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
          another's never moves to it. -->
-    {#if cardPin && kit && replyDraft && !threadPushed}
+    {#if cardPin && kit && replyDraft && !threadPushed && !threadHung}
       {#key cardPin.id}
         {#if floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
@@ -5346,5 +5308,10 @@
       {/if}
     </div>
   {/if}
-  {@render changesBar()}
+  {#if !(isCanvas || isBrowser || inGraph)}
+    <PreviewTools lift={pageFoot} bind:height={toolsHeight}>
+      {@render modeBar()}
+      {@render changesBar()}
+    </PreviewTools>
+  {/if}
 {/snippet}

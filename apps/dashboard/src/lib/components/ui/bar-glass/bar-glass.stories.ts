@@ -6,11 +6,16 @@
  * head's floating group (bar-group-frame), each story a set of controls
  * standing in its glass, so the canvas forces hover, pressed and focus on
  * each item in its place: the corners facing the glass's ends take its
- * radius less the pad, those facing a neighbour the small one. The meta's
- * args are every story's; a story's own args are what it changes.
+ * radius less the pad, those facing a neighbour the small one. Then a
+ * menu opened from a glass's item (bar-menu-frame), drawn at whatever
+ * width the canvas picks: risen out of the top of a glass floating over a
+ * drawing's foot, short and long, and hung from one over its top beside
+ * them. The meta's args are every story's; a story's own args are what it
+ * changes.
  */
 import BarGlassFrame from "./bar-glass-frame.svelte";
 import BarGroupFrame from "./bar-group-frame.svelte";
+import BarMenuFrame from "./bar-menu-frame.svelte";
 
 export default {
   title: "Kit/Bar glass",
@@ -223,4 +228,47 @@ export const Counted4812OnPhone = {
   component: BarGroupFrame,
   args: { width: 390, holds: "counted", count: 4812, pressed: true },
   parameters: { viewport: 390 },
+};
+
+/** The pages of a long design, for the menus that open from a glass. */
+const PAGES = [
+  { words: "Onboarding: welcome and sign-in" },
+  { words: "Onboarding: pick your machines" },
+  { words: "Board: every session across the fleet" },
+  { words: "Board: a project's tasks, grouped by stage" },
+  { words: "Session: the transcript with its tool calls folded" },
+  { words: "Session: a permission waiting on the phone" },
+  { words: "Artifact panel: a drawing with its comments" },
+  { words: "Artifact panel: two versions compared side by side" },
+  { words: "Caw's card: the decisions waiting on you" },
+  { words: "Settings: accounts, harnesses and routing" },
+  { words: "Settings: notifications and the phone's push" },
+  { words: "Empty states: no machines joined yet" },
+];
+
+/** The drawing's tools floating over its foot, their short menu risen out of the glass's top. */
+export const MenuRisesShort = {
+  component: BarMenuFrame,
+  args: {
+    stands: "foot",
+    label: "Mode",
+    width: "compact",
+    rows: [
+      { words: "Interact", keys: "V" },
+      { words: "Comment", keys: "C" },
+      { words: "Draw", keys: "D" },
+    ],
+  },
+};
+
+/** The drawing's tools at its foot with a long list of pages risen out of them, every row readable. */
+export const MenuRisesLong = {
+  component: BarMenuFrame,
+  args: { stands: "foot", label: "Pages", rows: PAGES, width: "wide" },
+};
+
+/** The same long list hung from tools floating over the drawing's top, for comparison. */
+export const MenuHangs = {
+  component: BarMenuFrame,
+  args: { stands: "top", label: "Pages", rows: PAGES, width: "wide" },
 };

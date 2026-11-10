@@ -940,8 +940,17 @@ const leftOut = (el: Element, at: Box) =>
     el.localName === "svg" &&
     (at.w === 0 || at.h === 0));
 
-/** What of the page in `doc` the crop `box` shows, from the body down. */
-function stepsIn(doc: Document, box: Box): Step[] {
+/**
+ * What of the page in `doc` the crop `box` shows, from the body down. A part
+ * drawn whole is at least a pixel each way at the picture's `scale`: the
+ * library sizes a part's canvas `Math.floor(width * scale)` by
+ * `Math.floor(height * scale)` (modern-screenshot's `createStyleElement`
+ * path, dist/index.mjs), and a canvas of width or height 0 is refused by
+ * `drawImage` ("The image argument is a canvas element with a width or
+ * height of 0"). A thinner one is walked into instead: its children,
+ * overflowing it, are drawn as parts of their own.
+ */
+function stepsIn(doc: Document, box: Box, scale: number): Step[] {
   const steps: Step[] = [];
   let wholes = 0;
   const walk = (parent: Element) => {
@@ -958,7 +967,12 @@ function stepsIn(doc: Document, box: Box): Step[] {
         }
         continue;
       }
-      if (wholes < PARTS_MAX && drawnWhole(child, at, box)) {
+      if (
+        wholes < PARTS_MAX &&
+        Math.floor(at.w * scale) > 0 &&
+        Math.floor(at.h * scale) > 0 &&
+        drawnWhole(child, at, box)
+      ) {
         wholes += 1;
         steps.push({ el: child, box: at, whole: true });
         continue;
@@ -1113,7 +1127,7 @@ export async function cropPicture(
   ctx.setTransform(scale, 0, 0, scale, -box.x * scale, -box.y * scale);
   ctx.fillStyle = groundOf(view);
   ctx.fillRect(box.x, box.y, box.w, box.h);
-  const steps = stepsIn(view.document, box);
+  const steps = stepsIn(view.document, box, scale);
   const first = steps.find((step) => step.whole);
   const breathe = breather();
   const web = thumbnail ? webFamilies(view.document) : null;

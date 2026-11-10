@@ -11,7 +11,6 @@ export default {
   component: CanvasViewFrame,
   args: {
     view: new CanvasViewState("probe"),
-    onverify: () => undefined,
   },
 };
 

@@ -23,20 +23,18 @@
    * No bar of its own (DESIGN.md, The Title Bars Follow Liquid Glass
    * Rule): the artifact panel's head floats over the graph, which runs to
    * the surface's top beneath it and clears it by the head's room
-   * (`--side-room`). What a bar of the graph's held stands on the panel it
-   * acts on: the stage's head leads with the components' menu where the ask
-   * names several (the component in front, its menu of the others) and
-   * trails one glass group of bare symbols (Compare, the stage's view, and
-   * Show states only while the room is put away: the room's one close is
-   * its own). The view is a card hung from that glass (HangCard, as the
-   * app's own glass hangs its cards): one settings row each, its name
+   * (`--side-room`), and the graph hands that head what it heads with
+   * (`head`, graph-head.ts), so the panel has one bar: the kept state's
+   * name as the title over what its agent wrote of it; leading, the room's
+   * switch and Previous and Next; in the glass the stage's view, a card
+   * hung from that glass (BarCard): one settings row each, its name
    * leading and its control trailing, the widths as device glyphs with
-   * their figures, the scheme as sun and moon, Reduce motion as a switch.
+   * their figures, the scheme as sun and moon, Reduce motion and Compare as
+   * switches; the components in the title's menu.
    *
-   * One grid under the head: the stage and the room are two panels of one
-   * kind (one corner, one edge, one raised head on one head line), sharing
-   * a top and a foot, standing the head's own inset (`--space-2`) in from
-   * the surface's edges, so they share their edges with the head's glass.
+   * The stage is the content and shows it directly, to the card's edges
+   * with no frame round it (Liquid Glass: the content runs beneath the
+   * floating controls); the room beside it on a desk is an inspector.
    * The stage holds its drawing and no more (the page's `laid`), so the room takes
    * what a form held to its measure leaves. Under the line where the
    * surface holds both whole the room is the kit's bottom drawer, its stops
@@ -46,53 +44,47 @@
   import { type StateRef, storyWords } from "@cawco/core/stage-graph";
   import type { TunedRecord } from "@cawco/core/tuned";
   import { graphWords as words } from "@cawco/core/words/graph";
-  import { mergeProps } from "bits-ui";
   import { onMount, type Snippet, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
-  import {
-    dur,
-    motionOk,
-    numberOf,
-    sheetSlide,
-  } from "#lib/cawco/motion/curves.svelte.js";
+  import { motionOk, rise } from "#lib/cawco/motion/curves.svelte.js";
+  import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { track } from "#lib/cawco/track.js";
   import {
     BarGlass,
     BarItem,
     BarMenu,
+    BarSegments,
   } from "#lib/components/ui/bar-glass/index.js";
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
-  import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  import * as Popover from "#lib/components/ui/popover/index.js";
-  import * as Resizable from "#lib/components/ui/resizable/index.js";
-  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
-  import { Switch } from "#lib/components/ui/switch/index.js";
-  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import {
+    IconAdaptLinear,
+    IconBranchingLinear,
     IconChevronDown,
+    IconChevronLeft,
+    IconChevronRight,
     IconCompareLinear,
     IconEyeLinear,
-    IconListRows,
-    IconMaximize,
-    IconMonitor,
+    IconMaximizeLinear,
+    IconMonitorLinear,
     IconMoon,
-    IconPhone,
-    IconPlay,
-    IconRoomLinear,
-    IconStructure,
-    IconSun,
-    IconTablet,
+    IconMoonLinear,
+    IconPause,
+    IconPhoneLinear,
+    IconPlayLinear,
+    IconSunLinear,
+    IconTabletLinear,
     IconTuning,
+    IconTuningLinear,
+    IconWideLinear,
   } from "#lib/icons.js";
-  import { browser } from "$app/env";
-  import { besideLine, DIVIDER } from "./beside";
+  import PreviewTools from "../preview/PreviewTools.svelte";
+  import ThreadSheet from "../preview/ThreadSheet.svelte";
   import Dials from "./Dials.svelte";
   import type { DialValue, DialValues, GraphDial } from "./dials";
   import { figureOf, pageLang } from "./figures";
-  import Journey from "./Journey.svelte";
+  import type { GraphHead } from "./graph-head";
   import { keepUnder, keptUnder } from "./kept";
   import MoveFace, { type MoveState } from "./MoveFace.svelte";
   import { pathOf, previousOf, type Review, reviewOf } from "./model";
@@ -107,9 +99,7 @@
     withTuned,
     withTuning,
   } from "./motion";
-  import RoomFaces from "./RoomFaces.svelte";
   import StagePane from "./StagePane.svelte";
-  import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
   import WholeSet from "./WholeSet.svelte";
 
@@ -121,15 +111,16 @@
     stale = false,
     lang = pageLang(),
     frame,
-    paneSheet = false,
-    onroom,
-    inspector,
     memory,
     startFace,
     keptDials = {},
     ondials,
     keptTuned = [],
     ontuned,
+    head = $bindable(null),
+    modeTools,
+    changesTools,
+    modeCompact,
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
     link: StageLink;
@@ -146,28 +137,12 @@
     /** The frame that holds the stage page. */
     frame: Snippet;
     /**
-     * A sheet of the pane's own stands at the surface's foot (the
-     * inspector on a phone): the room's drawer is put away under it and
-     * comes back at its stop as it goes, so one sheet stands at a time.
-     */
-    paneSheet?: boolean;
-    /** He brought the room back while the pane's sheet stands: the pane puts its sheet away. */
-    onroom?: () => void;
-    /**
-     * The pane's inspector, while it stands open where the room stands
-     * beside the stage (a desk, beside.ts): drawn in the room under the
-     * states, so the states and the props stand together and the stage
-     * keeps its width. The room's column stays while it does, the states
-     * put away or not.
-     */
-    inspector?: Snippet;
-    /**
      * The browser's key the person's picks are kept under (the artifact's):
      * the component in front and the state kept on each stand again after a
      * reload, for the ask they were kept under (kept.ts).
      */
     memory?: string;
-    /** The room's face the graph opens on (the ask's `face`); the states when it names none or one the room lacks. */
+    /** How the graph opens (the ask's `face`): on the map, with the move risen, or with the dials risen; the drawing when it names none. */
     startFace?: "map" | "move" | "dials";
     /** His dial values as the artifact keeps them (its doc's `dials`), by name: they stand again on open. */
     keptDials?: DialValues;
@@ -177,10 +152,16 @@
     keptTuned?: readonly TunedRecord[];
     /** His tuning changed: the artifact keeps it (its doc's `tuned`, which `artifact_read` answers), every move's at once. */
     ontuned?: (records: TunedRecord[]) => void;
+    /** What the graph hands the panel's head (graph-head.ts): its title, its steps, its components. */
+    head?: GraphHead | null;
+    /** The page's mode (Interact, Comment, Draw), standing with the view over the stage's foot. */
+    /** What changed since he looked, a glass beside the view (PreviewPane's ChangesTag); none while nothing did. */
+    changesTools?: Snippet;
+    modeTools?: Snippet;
+    /** The mode as one button, where the tools have no room for its three segments. */
+    modeCompact?: Snippet;
   } = $props();
 
-  /** The page's own ids, for a label's `for`. */
-  const uid = $props.id();
   /** `n` as a figure in the page's language. */
   const figure = (n: number) => figureOf(n, lang);
   /**
@@ -263,19 +244,6 @@
         )
       : []
   );
-  const FACES = $derived([
-    { value: "states", label: words.statesFace, icon: IconListRows },
-    { value: "map", label: words.wholeSet, icon: IconStructure },
-    { value: "move", label: words.moveFace, icon: IconPlay },
-    ...(dials.length > 0
-      ? [{ value: "dials", label: words.dialsFace, icon: IconTuning }]
-      : []),
-  ] as const);
-  type Face = "states" | "map" | "move" | "dials";
-  /** The room is named by the faces it has, in its switch's order. */
-  const roomName = $derived(words.room(FACES.map((one) => one.label)));
-  /** The face the room shows: the states until he picks another. */
-  let face = $state<Face>(untrack(() => startFace) ?? "states");
   /** His values of the controls, by name, on the face and the drawing; the values Reset all took, while nothing has changed since. */
   let dialValues = $state<DialValues>({});
   let dialsUndo = $state<DialValues | null>(null);
@@ -321,9 +289,33 @@
     });
   });
   /** The face the room shows: his, while the room has it (the dials come once the page has read them); else the states. */
-  const shownFace = $derived<Face>(
-    FACES.some((one) => one.value === face) ? face : "states"
+  /**
+   * How he looks at the component (graph-head.ts): its kept state drawn, or
+   * the map of every state in the drawing's place, and over the drawing's
+   * foot the move into the kept state (its transport and timeline) or the
+   * agent's dials, one at a time.
+   */
+  let rising = $state<"map" | "move" | "dials" | null>(
+    untrack(() => startFace) ?? null
   );
+  /** The tools' height over the drawing's foot, px: what rises stands above them. */
+  let toolsHeight = $state(0);
+  /** Under the phone line, what rises stands as a bottom sheet, drawn until it has slid down. */
+  let sheetDrawn = $state(false);
+  $effect(() => {
+    if (rising && narrow) {
+      sheetDrawn = true;
+    }
+  });
+  /** What rises, read out: the sheet's name. */
+  const RISING_NAMES = {
+    map: words.wholeSet,
+    move: words.moveFace,
+    dials: words.dialsFace,
+  } as const;
+  const risingName = $derived(rising ? RISING_NAMES[rising] : "");
+  /** Where what rises stands: a step clear of the tools' top. */
+  const riseFoot = $derived(`calc(${toolsHeight}px + 2 * var(--space-3))`);
   /** The kept state of each component, by its states file. */
   let keptOf = $state<Record<string, Pick>>({});
   /** The state he kept on the component in front, while its states file still has it; else where the component opens. */
@@ -393,10 +385,22 @@
   $effect(() => {
     link.front = frontFile;
   });
-  let roomOpen = $state(true);
-  /** The phone's drawer stands: the room open, and no sheet of the pane's own over the surface's foot. */
-  const drawerShown = $derived(roomOpen && !paneSheet);
-  let width = $state<number | null>(null);
+  /**
+   * The width he drew the stage at: Adapt (the room the stage has, its
+   * default: the owner, "by default u should pin the size to adapt then the
+   * user can click mobile/tab/desktop/wide"), or a device's.
+   */
+  let widthPick = $state<"adapt" | number>("adapt");
+  /** Under this the drawing is said to stand scaled: a scale a pixel's rounding short of 1:1 is 1:1. */
+  const SCALED_UNDER = 0.995;
+  /** The stage's own width, px: what Adapt draws at. */
+  let stageAcross = $state(0);
+  const width = $derived.by(() => {
+    if (widthPick !== "adapt") {
+      return widthPick;
+    }
+    return stageAcross > 0 ? stageAcross : null;
+  });
   let scheme = $state<"light" | "dark">(
     typeof document !== "undefined" &&
       document.documentElement.classList.contains("dark")
@@ -412,24 +416,6 @@
   const PHONE_LINE = 640;
   /** The pane is a phone's width: the Map face is a list. */
   const narrow = $derived(surface > 0 && surface < PHONE_LINE);
-  /** The room stands beside the stage only where the surface holds both whole (beside.ts); under that the room is the drawer, measured on the panel's own width, so a pane under it gets the drawer on a desk too. */
-  const line = $derived(browser ? besideLine() : 0);
-  const desk = $derived(surface === 0 || surface >= line);
-  /** The room stands where he sees it: beside the stage on a desk, its drawer elsewhere. */
-  const roomShown = $derived(desk ? roomOpen : drawerShown);
-  /**
-   * The page is held from view until the split is laid out for the
-   * drawing (the page's `laid`), so its first paint is its last. Held no
-   * longer than the wait grace, past which the stage page draws its own
-   * skeleton.
-   */
-  let graceOver = $state(false);
-  onMount(() => {
-    const timer = setTimeout(() => {
-      graceOver = true;
-    }, dur("--dur-wait-grace"));
-    return () => clearTimeout(timer);
-  });
 
   /** The state the stage stands at, as the page names it: a variant's own story or record set; at a width he picked that one of its stories is written for (its phone story at 390), that story. */
   const refOf = (on: Review, pick: Pick, atWidth: number | null): StateRef => {
@@ -492,10 +478,10 @@
       chosenFile = on.file;
       keptOf = { ...keptOf, [on.file]: found.pick };
       if (found.width !== undefined) {
-        ({ width } = found);
+        widthPick = found.width ?? "adapt";
       } else if (refOf(on, found.pick, width).story !== wish.story) {
-        // At a width it has a story of its own for, the state as written is that story: back to its own width.
-        width = null;
+        // At a width it has a story of its own for, the state as written is that story: back to Adapt.
+        widthPick = "adapt";
       }
       link.wanted = null;
     });
@@ -860,7 +846,7 @@
   // The ring on the thing a rested row names, on the Animation face alone.
   let ringSaid: string | null = null;
   $effect(() => {
-    const thing = shownFace === "move" && roomShown ? lit : null;
+    const thing = rising === "move" ? lit : null;
     untrack(() => {
       if (thing !== ringSaid) {
         ringSaid = thing;
@@ -919,9 +905,9 @@
         event.isTrusted &&
         !event.defaultPrevented &&
         !field &&
-        roomShown
+        rising
       ) {
-        roomOpen = false;
+        rising = null;
       }
     };
     window.addEventListener("keydown", key);
@@ -942,81 +928,41 @@
   );
   /** The widths the stage is drawn at, each a device's glyph; its own first. */
   const WIDTHS = [
-    { value: 390, icon: IconPhone, name: words.phone },
-    { value: 680, icon: IconTablet, name: words.tablet },
-    { value: 1440, icon: IconMonitor, name: words.desk },
+    { value: 390, icon: IconPhoneLinear, name: words.phone },
+    { value: 768, icon: IconTabletLinear, name: words.tablet },
+    { value: 1440, icon: IconMonitorLinear, name: words.desk },
+    { value: 1920, icon: IconWideLinear, name: words.wide },
   ] as const;
-  const DESK_FORM = 1280;
-  const ownWidth = $derived(
-    keptVariant?.width ?? keptState?.width ?? DESK_FORM
-  );
-  /**
-   * The stage's share of a wide surface before the page has laid the
-   * drawing out: the widest of the component's own widths, so it holds
-   * still from state to state.
-   */
-  const stageWidth = $derived(
-    Math.max(
-      0,
-      ...(review?.order.map((id) => review.states[id]?.width ?? DESK_FORM) ??
-        [])
-    ) || DESK_FORM
-  );
-  /** The head's glass, which the view's card hangs from, and whether it hangs. */
-  let glass = $state<HTMLElement | null>(null);
-  let viewJoined = $state(false);
-  /**
-   * The view card is open. Shut, it is gone: kept mounted (`forceMount`)
-   * as the Shell's glass card is, it rested slid up behind a glass that
-   * here stands 4px under the window's top, its shadow a band across both
-   * panels until a reload.
-   */
-  let viewOpen = $state(false);
-  /** The components' menu is open. */
-  let menuOpen = $state(false);
-  // A press on the stage lands in its frame and never reaches this page:
-  // the page says it (`cawco:press`), and what is open here closes, as a
-  // press outside it does.
-  $effect(() => {
-    if (link.presses > 0) {
-      untrack(() => {
-        viewOpen = false;
-        menuOpen = false;
-      });
+  /** The stepper's name swap: it slides the way the step went (motion/list-swap). */
+  const stepSwap = new ListSwap<never>();
+  /** Keep `next` from the stepper, its name sliding from the side the step went toward. */
+  const stepTo = (next: string) => {
+    if (next === kept?.state) {
+      return;
     }
-  });
-  /** The card just closed, its control holding the focus it handed back: no tooltip until the focus or the pointer leaves. */
-  let viewQuiet = $state(false);
-  let viewWasOpen = false;
-  $effect(() => {
-    const open = viewOpen;
-    if (viewWasOpen && !open) {
-      viewQuiet = true;
-    }
-    viewWasOpen = open;
-  });
-  /** What takes the focus when pressed: a control or a field. */
-  const FOCUSABLE =
-    "button, input, select, textarea, a[href], [contenteditable='true'], [tabindex]:not([tabindex='-1'])";
-  /**
-   * A press on the drawer's own surface (its grabber, its head, the space
-   * between its rows) leaves the focus where it was: the drawer's content
-   * is the dialog's (bits-ui gives it `tabindex="-1"`), and a browser hands
-   * the focus to the focusable box round whatever a mouse press, or a
-   * finger's press as it ends, lands on, so a drag of the drawer moved the
-   * focus into it. A press on a control still focuses that control.
-   */
-  const keepFocusOnPage = (event: MouseEvent) => {
-    if (!(event.target as Element | null)?.closest(FOCUSABLE)) {
-      event.preventDefault();
+    stepSwap.swap([], path.indexOf(next) > at ? 1 : -1);
+    keep(next, null);
+  };
+  /** A step along the component's path from the kept state, held at its ends. */
+  const stepBy = (by: number) => {
+    const next = path[Math.max(0, Math.min(path.length - 1, at + by))];
+    if (next) {
+      stepTo(next);
     }
   };
-  /** The drawer's layer: the box it stands in, as tall as the surface, and the foot of the head's room in it. */
-  let roomLayer = $state<HTMLElement | null>(null);
-  let layerHeight = $state(0);
-  let headFoot = $state(0);
-  /** The drawer's floating head, its faces' row, px: what its face clears at rest. */
-  let drawerRoom = $state(0);
+  // The panel's head draws what the graph hands it (graph-head.ts): the
+  // graph has no bar of its own.
+  $effect(() => {
+    head = {
+      title: review?.name ?? "",
+      line: keptState?.note ?? "",
+      more: moreItems,
+      components: files.length > 1 ? componentsGroup : null,
+    };
+  });
+  $effect(() => () => {
+    head = null;
+  });
   /** The room the stage's floating head takes over the stage page's top, px (StagePane). */
   let stageRoom = $state(0);
   // The page pads its top by it: told as it changes, and again as the page
@@ -1028,139 +974,13 @@
       untrack(() => link.room(px));
     }
   });
-  /** What floats over a face's top, px: the room's head on a desk, the drawer's faces on a phone. */
-  /** The room's floating head beside the stage, px, as drawn. */
-  let roomHeadRoom = $state(0);
-  const faceTop = $derived(desk ? roomHeadRoom : drawerRoom);
-  let drawerNode = $state<HTMLElement | null>(null);
-  /** vaul reads a px snap point with parseInt: every one whole. */
-  const pxOf = (height: number) => `${Math.round(height)}px`;
-  /**
-   * The drawer's stops, as vaul takes them: heights shown over the
-   * surface's foot, measured on the surface the drawer stands in (its
-   * root's `container`), never the window. The surface stands where its
-   * panel puts it: under the panel's head on a desk, in a phone's sheet at
-   * whichever of the sheet's stops; measured on the window, every stop
-   * stood lower by the surface's top, and at 390 the drawer stood wholly
-   * under the screen's foot. Its head (the steps), half the surface, and
-   * whole: up to the foot of the panel head's room, so the head's glass
-   * never stands over the drawer's grabber. A stop no taller than the one under it
-   * goes (a surface too short for three).
-   */
-  const SNAPS = $derived.by(() => {
-    const room = Math.max(0, layerHeight - headFoot);
-    const heights = [
-      Math.min(browser ? numberOf("--c-graph-drawer-head") : 0, room),
-      layerHeight / 2,
-      room,
-    ].map(Math.round);
-    return heights
-      .filter(
-        (height, place) => height > 0 && height > (heights[place - 1] ?? 0)
-      )
-      .map(pxOf);
-  });
-  /** The stop the drawer stands at, by its place among the stops: the head first. */
-  let stopAt = $state(0);
-  // Opened on a face of its own body (the map, the dials), the drawer stands
-  // at its half stop: vaul opens it at its first, so it is stepped there once
-  // it stands. Opened on the Animation face it stands at its head, its
-  // transport and the move on one line over the stage, as a press on that
-  // face's tab leaves it.
-  onMount(() => {
-    if (startFace === "map" || startFace === "dials") {
-      requestAnimationFrame(() => {
-        if (!desk && SNAPS.length > 1) {
-          stopAt = 1;
-        }
-      });
-    }
-  });
-  const snap = $derived(SNAPS[Math.min(stopAt, SNAPS.length - 1)] ?? null);
-  /** The drawer stands at its head stop: the steps, no list. */
-  const atHead = $derived(stopAt === 0);
-  /** How much of the surface the drawer stands over at its stop, px: the stage ends at its top. */
-  const cover = $derived(snap ? Number.parseFloat(snap) : 0);
-  /** The stage's pane, the stage and its head with it. */
-  let stageHold = $state<HTMLElement | null>(null);
-  /**
-   * The drawer stands over the whole stage (its whole stop: up to the foot
-   * of the panel head's room, the stage closed to no height under it): the
-   * stage is inert, so the keyboard and a screen reader reach what the eye
-   * does, never its head's glass clipped away under the drawer. The way
-   * back is the pointer's: the grabber, to the head stop, where the stage
-   * and its room switch stand again.
-   */
-  const stageCovered = $derived(
-    !desk &&
-      drawerShown &&
-      cover > 0 &&
-      cover >= Math.round(layerHeight - headFoot)
-  );
-  // Focus inside the stage as the drawer covers it goes to the drawer's
-  // head (its grabber), before the stage turns inert: an inert focus falls
-  // to the body.
-  $effect.pre(() => {
-    if (!stageCovered) {
-      return;
-    }
-    untrack(() => {
-      const held = document.activeElement;
-      if (stageHold && held && stageHold.contains(held)) {
-        drawerNode
-          ?.querySelector<HTMLElement>('[data-slot="drawer-grabber"]')
-          ?.focus();
-      }
-    });
-  });
-  /** The grabber steps the drawer to its next stop, and from the last back to its head (HIG, Sheets: a tap on the grabber cycles its detents). */
-  const nextStop = () => {
-    stopAt = SNAPS.length > 0 ? (stopAt + 1) % SNAPS.length : 0;
-  };
-  // vaul places the drawer at a stop as the stop changes; the surface
-  // taking another height (a phone's sheet moving between its stops, a
-  // pane resized) moves every stop's offset under it, so the drawer is
-  // placed again at the stop it stands at, at once.
-  let laidHeight = 0;
-  $effect(() => {
-    const height = layerHeight;
-    const shown = cover;
-    const node = drawerNode;
-    untrack(() => {
-      if (!(node && drawerShown && height > 0) || height === laidHeight) {
-        laidHeight = height;
-        return;
-      }
-      laidHeight = height;
-      const ease = node.style.transition;
-      node.style.transition = "none";
-      node.style.transform = `translate3d(0, ${height - shown}px, 0)`;
-      node.getBoundingClientRect();
-      node.style.transition = ease;
-    });
-  });
-  /**
-   * A state picked from the room: kept, and where the drawer stands at its
-   * last stop, over the whole stage, the drawer goes down to its head, so
-   * the state picked is seen (a pick there showed nothing).
-   */
-  const choose = (state: string, variant: string | null) => {
-    keep(state, variant);
-    if (!desk && SNAPS.length > 1 && stopAt === SNAPS.length - 1) {
-      // A task later: the press is also vaul's release of the drawer, and a
-      // stop asked for inside its release is dropped (the kit grabber's way).
-      setTimeout(() => {
-        stopAt = 0;
-      });
-    }
-  };
   /** A press on a state in the room: while comparing, on another state, compare with it; else keep it. */
   const press = (state: string, variant: string | null) => {
     if (comparing && kept && state !== kept.state) {
       compareWith(state);
       return;
     }
-    choose(state, variant);
+    keep(state, variant);
   };
   /**
    * A move chosen by name (the Animation face's title menu, an arrow on the
@@ -1169,7 +989,8 @@
    * move read is that one, whatever state stood before.
    */
   const chooseMove = (fromId: string, toId: string) => {
-    face = "move";
+    // A move chosen on the map: the move's card takes the map's place.
+    rising = "move";
     if (!review) {
       return;
     }
@@ -1179,160 +1000,39 @@
     if (kept?.state === toId && kept.variant === null) {
       reachAgain += 1;
     } else {
-      choose(toId, null);
+      keep(toId, null);
     }
   };
-  /** The stop the drawer stood at as the pane's sheet put it away; null while it stands. */
-  let stopAway: number | null = null;
-  // Put away under the pane's sheet, the drawer comes back at the stop it
-  // stood at: vaul opens it at its first stop, so it is stepped there once
-  // it stands again.
-  $effect(() => {
-    const away = paneSheet && roomOpen;
-    untrack(() => {
-      if (away) {
-        stopAway ??= stopAt;
-        return;
-      }
-      const back = stopAway;
-      stopAway = null;
-      if (back === null || back === 0 || !drawerShown) {
-        return;
-      }
-      stopAt = 0;
-      requestAnimationFrame(() => {
-        stopAt = back;
-      });
-    });
-  });
-  /** The drawer's stop the stage was last brought to; null until the drawer stands at its first. */
-  let stopShown: string | null = null;
-  // At each stop he moves the drawer to, what the last press changed stays
-  // in view above it. The stop the drawer opens at moves nothing (the stage
-  // opens at its drawing's top), and nor does a press: only the stop
-  // changing does.
-  $effect(() => {
-    const standing = snap;
-    if (desk || standing === null) {
-      stopShown = null;
-      return;
-    }
-    untrack(() => {
-      const opening = stopShown === null;
-      if (opening || stopShown === standing) {
-        stopShown = standing;
-        return;
-      }
-      stopShown = standing;
-      requestAnimationFrame(() => link.reveal({ move: true }));
-    });
-  });
-
-  /** His own width, when it is one of the listed widths: that one stands for it, marked his own. */
-  const ownListed = $derived(WIDTHS.some((one) => one.value === ownWidth));
-  /** The view's width choice: his own width (null) is "own", or the listed width it equals. */
-  const widthValue = $derived.by(() => {
-    if (width !== null) {
-      return String(width);
-    }
-    return ownListed ? String(ownWidth) : "own";
-  });
+  /** The view's width choice, as the widths' switch names it. */
+  const widthValue = $derived(String(widthPick));
   const pickWidth = (next: string) => {
-    if (!next) {
-      return;
+    if (next) {
+      widthPick = next === "adapt" ? "adapt" : Number(next);
     }
-    width = next === "own" || Number(next) === ownWidth ? null : Number(next);
   };
-
-  /**
-   * Focus a menu or a card hands back, or takes as it opens, after a
-   * press shows no ring (DESIGN.md, The One Ring Rule: pointer focus on a
-   * control shows nothing): the focus moves as a script's, which would
-   * draw it, so a press's moves it with `focusVisible: false`.
-   */
-  const quietFocus = (event: Event, to: HTMLElement | null | undefined) => {
-    if (lastInput.current !== "pointer") {
-      return;
-    }
-    event.preventDefault();
-    to?.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
-  };
-  let menuTrigger = $state<HTMLElement | null>(null);
-  let viewTrigger = $state<HTMLElement | null>(null);
-  /** The room stands beside the stage on a desk: the states, the inspector, or both. */
-  const beside = $derived(desk && (roomOpen || !!inspector));
-  const laidOut = $derived(!beside || stageNeed > 0 || graceOver);
-
-  /**
-   * The stage and the room beside it are one resizable split (the kit's
-   * Resizable, paneforge, on the app's own split edge, as side/Split.svelte
-   * draws it): the edge between them drags, the stage never under
-   * `c-graph-stage-min` and the room never under `c-graph-room-w`. Its
-   * panes are sized in shares of the split's width, so each least width is
-   * read as a share of the width it stands in now.
-   */
-  let splitWidth = $state(0);
-  /** What the panes share, px. */
-  const panesWidth = $derived(Math.max(0, splitWidth - DIVIDER));
-  /** The room's width the person dragged the edge to, px; null until he has. */
-  let roomDragged: number | null = null;
-  /** The person holds the split's edge: a drag, or its keys while it has the focus. */
-  let edgeHeld = false;
-  let edgeNode = $state<HTMLElement | null>(null);
-  let roomPane = $state<{ resize: (size: number) => void } | null>(null);
-  const splitShare = (px: number) =>
-    panesWidth > 0 ? Math.min(100, (px / panesWidth) * 100) : 0;
-  /** Shares in hundredths, rounded up: a least width read as a share never stands under itself once laid out. */
-  const leastShare = (px: number) => Math.ceil(splitShare(px) * 100) / 100;
-  /** Each pane's least: its surface's least width and the pane's own inset beside the edge (`pe-space-2`, `ms-space-2`). */
-  const stageLeast = $derived(
-    leastShare(
-      browser ? numberOf("--c-graph-stage-min") + numberOf("--space-2") : 0
-    )
-  );
-  const roomLeast = $derived(
-    leastShare(
-      browser ? numberOf("--c-graph-room-w") + numberOf("--space-2") : 0
-    )
-  );
-  /**
-   * The room's share: the width he dragged it to, else what the stage
-   * leaves once it holds its drawing (a form held to its measure asks for
-   * that and no more, so the room takes the rest), each held between the
-   * least widths. paneforge lays the split out again from it whenever a
-   * least width changes with the split's width; the dragged width is read
-   * untracked, so a drag never lays it out anew.
-   */
-  const roomShare: number = $derived(
-    Math.min(
-      100 - stageLeast,
-      Math.max(
-        roomLeast,
-        // One state: the room holds one line, so it keeps its least and
-        // the stage the rest.
-        single
-          ? 0
-          : splitShare(
-              untrack(() => roomDragged) ??
-                splitWidth -
-                  (stageNeed || (width ?? stageWidth)) -
-                  (browser ? 2 * numberOf("--space-2") : 0)
-            )
-      )
-    )
-  );
-  // The room takes its share whenever the share changes (the stage's
-  // drawing measured, the surface resized), until he has moved the edge
-  // himself: paneforge takes `defaultSize` once, as the split first lays
-  // out.
-  $effect(() => {
-    const share = roomShare;
-    const pane = roomPane;
-    if (pane && beside && roomDragged === null) {
-      pane.resize(share);
-    }
-  });
 </script>
+
+<!-- What rises over the drawing: the map, the move, or the dials. -->
+{#snippet risingBody()}
+  {#if review && kept}
+    {#if rising === "map"}
+      {#if !single}
+        <WholeSet
+          against={againstState ? against : null}
+          kept={kept.state}
+          {narrow}
+          onmove={chooseMove}
+          onpress={press}
+          {review}
+        />
+      {/if}
+    {:else if rising === "move"}
+      {@render moveFace(false)}
+    {:else if rising === "dials"}
+      {@render dialsBody()}
+    {/if}
+  {/if}
+{/snippet}
 
 {#snippet dialsBody()}
   <Dials
@@ -1399,6 +1099,7 @@
     onseekend={scrubbed}
     onundo={undoReset}
     {peek}
+    titled={false}
     {playhead}
     {playing}
     {repeat}
@@ -1407,166 +1108,265 @@
   />
 {/snippet}
 
-{#snippet roomFace(stepperHere: boolean)}
-  {#if shownFace === "dials"}
-    {@render dialsBody()}
-  {:else if shownFace === "move" && review && kept}
-    <!-- Its own head and scroller under the room's head's room. -->
-    <div class="flex min-h-0 min-w-0 flex-1 flex-col pt-(--face-top,0px)">
-      {@render moveFace(false)}
-    </div>
-  {:else if review && kept}
-    {#if single}
-      <p
-        class="m-0 max-w-c-measure pt-(--face-top,0px) type-body text-ink-muted text-pretty"
-      >
-        {words.oneState}
-      </p>
-    {:else if shownFace === "map"}
-      <WholeSet
-        against={againstState ? against : null}
-        kept={kept.state}
-        {narrow}
-        onmove={chooseMove}
-        onpress={press}
-        {review}
-        top={faceTop}
-      />
-    {:else}
-      <Journey
-        against={againstState ? against : null}
-        kept={kept.state}
-        keptVariant={kept.variant}
-        {lang}
-        onpress={press}
-        onstep={(next) => choose(next, null)}
-        {review}
-        stepper={stepperHere}
-      />
-    {/if}
-  {/if}
-{/snippet}
-
-{#snippet faces(glyphs: boolean)}
-  <RoomFaces
-    faces={FACES}
-    {glyphs}
-    label={roomName}
-    onchoose={(next) => {
-      face =
-        next === "map" || next === "move" || next === "dials" ? next : "states";
-      // In the drawer at its head stop a face of its own body (the map, the
-      // dials) shows nothing there: picked, it rises to the half stop, the
-      // drawing still above it.
-      if (
-        !desk &&
-        atHead &&
-        face !== "states" &&
-        face !== "move" &&
-        SNAPS.length > 1
-      ) {
-        // A task later: the press is also vaul's release of the drawer (`choose`).
-        setTimeout(() => {
-          stopAt = 1;
-        });
+<!-- The components under review, a group of the panel title's menu
+     (graph-head.ts): every states file from the start; one whose sheet is
+     on its way says so in its own place. Choosing one stops Compare. -->
+{#snippet componentsGroup()}
+  <DropdownMenu.Group>
+    <DropdownMenu.GroupHeading>{words.components}</DropdownMenu.GroupHeading>
+    <DropdownMenu.RadioGroup
+      bind:value={
+        () => frontFile ?? "",
+        (next: string) => {
+          if (next !== frontFile) {
+            setComparing(false);
+          }
+          chosenFile = next;
+        }
       }
-    }}
-    value={shownFace}
-  />
+    >
+      {#each entries as one (one.file)}
+        <DropdownMenu.RadioItem value={one.file}>
+          <span
+            class={[
+              "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
+              !one.review && "text-ink-muted",
+            ]}
+            >{one.review
+              ? one.review.name
+              : words.mounting(loadingName(one.file))}</span
+          >
+        </DropdownMenu.RadioItem>
+      {/each}
+    </DropdownMenu.RadioGroup>
+  </DropdownMenu.Group>
 {/snippet}
 
-{#snippet componentsMenu()}
-  {#if files.length > 1 && frontFile}
-    {@const frontName = review?.name ?? loadingName(frontFile)}
-    <!-- The title: plain text with its menu chevron, no glass at
-         rest; open, its menu hangs from it as one shape (BarGlass
-         `form="title"`, BarMenu), as Caw's card hangs from his glass. -->
-    <!-- Its words on the panels' leading edge, as the h1's: the glass
-         and the item stand out past it by their own padding, so the
-         ground hung open stands out past the edge as a hover does. -->
-    <div
-      class="-ms-(--title-in) flex min-w-0"
-      style:--title-in="calc(var(--c-bar-group-pad) + var(--space-2))"
-    >
-      <BarGlass flare="end" form="title">
-        <DropdownMenu.Root bind:open={menuOpen}>
-          <DropdownMenu.Trigger>
-            {#snippet child({ props })}
-              <!-- Its name is what it shows, the switch said before it
-                   (WCAG 2.5.3, Label in Name); the title says itself,
-                   with no tooltip. -->
-              <BarItem
-                form="title"
-                label={`${words.components}: ${frontName}`}
-                {props}
-                tip={false}
-                bind:ref={menuTrigger}
-              >
-                <span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
-                  >{frontName}</span
-                >
-                <IconChevronDown
-                  aria-hidden="true"
-                  class="size-icon-sm flex-none text-ink-muted"
-                />
-              </BarItem>
-            {/snippet}
-          </DropdownMenu.Trigger>
-          <!-- Hung flush from the title's ground, which stands a padding
-               out past the panels' edge: no collision inset pushes it
-               off the ground at the pane's edge. -->
-          <BarMenu
-            collisionPadding={0}
-            label={words.components}
-            onCloseAutoFocus={(event: Event) => quietFocus(event, menuTrigger)}
-            width="regular"
-          >
-            <DropdownMenu.RadioGroup
-              bind:value={
-                () => frontFile,
-                (next: string) => {
-                  if (next !== frontFile) {
-                    setComparing(false);
-                  }
-                  chosenFile = next;
-                }
-              }
+<!-- Leading the panel's head (graph-head.ts): the state stepper, one
+     glass. Previous and Next along the component's path; between them the
+     kept state's name, a menu of every state with what its agent wrote of
+     it, the kept one ticked, where he sees how many there are. -->
+{#snippet headLead()}
+  {#if review && kept && !single && path.length > 1}
+    <BarGlass form="group">
+      <!-- Map: every state at once, on a card risen over the drawing; a
+           press on one draws it behind the card, which stays. -->
+      <BarItem
+        icon={IconBranchingLinear}
+        label={words.wholeSet}
+        onclick={() => {
+          rising = rising === "map" ? null : "map";
+        }}
+        pressed={rising === "map"}
+      />
+      <BarItem
+        aria-disabled={at <= 0 || undefined}
+        icon={IconChevronLeft}
+        label={words.previous}
+        onclick={() => stepBy(-1)}
+      />
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <BarItem
+              form="title"
+              label={keptState?.name ?? ""}
+              {props}
+              tip={false}
             >
-              <!-- Every states file from the start; one whose sheet is on
-                   its way says so in its own place. -->
-              {#each entries as one (one.file)}
-                <DropdownMenu.RadioItem value={one.file}>
+              <!-- Every state's name in one cell, the kept one shown: the
+                   stepper is as wide as the longest name, so stepping never
+                   moves what stands beside it (the owner's pin). -->
+              <span
+                class="relative grid min-w-0"
+                data-box
+                data-slot="state-name"
+              >
+                {#each path as id (id)}
                   <span
-                    class={[
-                      "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
-                      !one.review && "text-ink-muted",
-                    ]}
-                    >{one.review
-                      ? one.review.name
-                      : words.mounting(loadingName(one.file))}</span
+                    aria-hidden="true"
+                    class="invisible col-start-1 row-start-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-row"
+                    >{review.states[id]?.name ?? ""}</span
                   >
+                {/each}
+                <!-- The name slides the way the step went, as the app swaps a
+                     view (motion/list-swap), in a box as wide as the longest. -->
+                {#key kept.state}
+                  <span
+                    class="col-start-1 row-start-1 min-w-0 animate-(--swap) overflow-clip text-ellipsis whitespace-nowrap text-center text-ink-strong type-row"
+                    style:--swap={stepSwap.rowAnim(0)}
+                    out:stepSwap.leaveView>{keptState?.name ?? ""}</span
+                  >
+                {/key}
+              </span>
+              <IconChevronDown
+                aria-hidden="true"
+                class="size-icon-sm flex-none text-ink-muted"
+              />
+            </BarItem>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <!-- The stepper stands at the drawing's foot, so its list opens
+             upward, over the drawing (HIG, Toolbars: a bottom toolbar's
+             menus open above it). Each state its name, then what its agent
+             wrote of it, one line, quieter. -->
+        <BarMenu label={words.statesFace} rises width="titles">
+          <DropdownMenu.RadioGroup
+            onValueChange={(next: string) => stepTo(next)}
+            value={kept.state}
+          >
+            {#each path as id (id)}
+              {@const one = review.states[id]}
+              {#if one}
+                <DropdownMenu.RadioItem row="artifact" value={id}>
+                  <span class="flex min-w-0 flex-col gap-space-1" data-box>
+                    <span
+                      class="truncate type-label font-medium text-ink-strong"
+                      >{one.name}</span
+                    >
+                    {#if one.note}
+                      <span class="truncate type-meta text-ink-muted"
+                        >{one.note}</span
+                      >
+                    {/if}
+                  </span>
                 </DropdownMenu.RadioItem>
-              {/each}
-            </DropdownMenu.RadioGroup>
-          </BarMenu>
-        </DropdownMenu.Root>
-      </BarGlass>
-    </div>
+              {/if}
+            {/each}
+          </DropdownMenu.RadioGroup>
+        </BarMenu>
+      </DropdownMenu.Root>
+      <BarItem
+        aria-disabled={at >= path.length - 1 || undefined}
+        icon={IconChevronRight}
+        label={words.next}
+        onclick={() => stepBy(1)}
+      />
+      <!-- The move into the state on show: its transport and timeline
+           rise over the drawing's foot. -->
+      <BarItem
+        aria-disabled={move.kind === "none" || undefined}
+        icon={IconPlayLinear}
+        label={move.kind === "none" && keptState
+          ? words.noMove(keptState.name)
+          : words.moveFace}
+        onclick={() => {
+          if (move.kind !== "none" || rising === "move") {
+            rising = rising === "move" ? null : "move";
+          }
+        }}
+        pressed={rising === "move"}
+      />
+    </BarGlass>
   {/if}
 {/snippet}
 
-<!-- The stage's tools, trailing its head (StagePane `tools`): Compare and
-     the view; Show the room only while the room is put away. The room's one
-     close is its own. -->
-{#snippet stageTools()}
-  <div
-    class="flex flex-none"
-    {@attach (node: HTMLElement) => {
-      glass = node.querySelector<HTMLElement>('[data-slot="tools"]');
-    }}
+<!-- The view as one button where the tools have no room for it (a phone,
+     a narrow card): the widths, the appearance and Compare in a menu that
+     opens above it. -->
+{#snippet viewButton()}
+  <BarGlass form="group">
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <BarItem icon={IconEyeLinear} label={words.stageView} {props} />
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <BarMenu label={words.stageView} rises width="regular">
+        <DropdownMenu.Group>
+          <DropdownMenu.GroupHeading>{words.width}</DropdownMenu.GroupHeading>
+          <DropdownMenu.RadioGroup onValueChange={pickWidth} value={widthValue}>
+            <DropdownMenu.RadioItem value="adapt"
+              ><IconAdaptLinear /><span>{words.adapt}</span
+              ></DropdownMenu.RadioItem
+            >
+            {#each WIDTHS as one (one.value)}
+              <DropdownMenu.RadioItem value={String(one.value)}
+                ><one.icon data-box /><span
+                  >{words.widthOf(one.name, figure(one.value))}</span
+                ></DropdownMenu.RadioItem
+              >
+            {/each}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Group>
+        <DropdownMenu.Separator />
+        <DropdownMenu.CheckboxItem
+          checked={scheme === "dark"}
+          onCheckedChange={(on) => {
+            scheme = on ? "dark" : "light";
+          }}><IconMoon /><span>{words.dark}</span></DropdownMenu.CheckboxItem
+        >
+        {#if !single}
+          <DropdownMenu.CheckboxItem
+            bind:checked={() => comparing, setComparing}
+            ><IconCompareLinear /><span>{words.compare(compareName)}</span
+            ></DropdownMenu.CheckboxItem
+          >
+        {/if}
+        {#if dials.length > 0}
+          <DropdownMenu.CheckboxItem
+            checked={rising === "dials"}
+            onCheckedChange={(on) => {
+              rising = on ? "dials" : null;
+            }}
+            ><IconTuning /><span>{words.dialsFace}</span
+            ></DropdownMenu.CheckboxItem
+          >
+        {/if}
+      </BarMenu>
+    </DropdownMenu.Root>
+  </BarGlass>
+{/snippet}
+
+<!-- What the drawing's view keeps out of sight, in the head's More: Reduce
+     motion (the owner's pin: "this isn't a crucial toggle to put up and
+     front"). -->
+{#snippet moreItems()}
+  <DropdownMenu.CheckboxItem bind:checked={reduce}
+    ><IconPause /><span>{words.reduceMotion}</span></DropdownMenu.CheckboxItem
   >
-    <BarGlass form="group" joined={viewJoined}>
+{/snippet}
+
+<!-- The stage's view, every control in sight over the stage's foot
+     (PreviewTools; the owner's pin on the Working area: "all of these need
+     to be directly visible"): the widths as their devices' glyphs, the
+     component's own first where no listed width is it, each saying its
+     figure in its name and tooltip;
+     light or dark; Reduce motion; Compare; Actual size while the drawing
+     stands scaled, or while it is on. -->
+{#snippet viewTools()}
+  <div class="flex flex-wrap items-center justify-end gap-space-2">
+    <BarSegments
+      label={words.width}
+      onValueChange={pickWidth}
+      segments={[
+        { value: "adapt", icon: IconAdaptLinear, label: words.adapt },
+        ...WIDTHS.map((one) => ({
+          value: String(one.value),
+          icon: one.icon,
+          label: words.widthOf(one.name, figure(one.value)),
+        })),
+      ]}
+      value={widthValue}
+    />
+    <BarGlass form="group">
+      <BarItem
+        icon={scheme === "dark" ? IconMoonLinear : IconSunLinear}
+        label={scheme === "dark" ? words.dark : words.light}
+        onclick={() => {
+          scheme = scheme === "dark" ? "light" : "dark";
+        }}
+      />
+      {#if dials.length > 0}
+        <BarItem
+          icon={IconTuningLinear}
+          label={words.dialsFace}
+          onclick={() => {
+            rising = rising === "dials" ? null : "dials";
+          }}
+          pressed={rising === "dials"}
+        />
+      {/if}
       {#if !single}
         <BarItem
           icon={IconCompareLinear}
@@ -1575,197 +1375,18 @@
           pressed={comparing}
         />
       {/if}
-      <Popover.Root bind:open={viewOpen}>
-        <!-- No tooltip over its own open card: shown, it took the
-             card's Escape for itself. Nor as the card hands the focus
-             back on its close; it shows again once the focus or the
-             pointer leaves the control. -->
-        <Popover.Trigger>
-          {#snippet child({ props })}
-            <BarItem
-              icon={IconEyeLinear}
-              label={words.stageView}
-              props={mergeProps(props, {
-                onblur: () => {
-                  viewQuiet = false;
-                },
-                onpointerleave: () => {
-                  viewQuiet = false;
-                },
-              })}
-              tipOff={viewOpen || viewQuiet}
-              bind:ref={viewTrigger}
-            />
-          {/snippet}
-        </Popover.Trigger>
-        <!-- The view, hung from the glass as the app's glass hangs its
-             cards: it comes down out of the glass and goes back up. -->
-        <HangCard
-          align="end"
-          anchor={glass}
-          aria-label={words.stageView}
-          bind:joined={viewJoined}
-          customAnchor={glass}
-          onCloseAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
-          onOpenAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
-          frame="settings"
-          side="bottom"
-          sideOffset={0}
-        >
-          <!-- One pattern for every setting: its name leading, its
-               control trailing, on one grid, so the three read down
-               two columns (Jitter's inspector rows). On a phone the
-               card has no room for both columns: each control stands
-               under its name, at its own width, never past the card's
-               edge. -->
-          <div
-            class="grid min-w-0 grid-cols-(--cols) items-center justify-between gap-x-space-5 gap-y-space-3 p-space-4 max-phone:grid-cols-1 max-phone:gap-y-space-4"
-            style:--cols="auto auto"
-          >
-            <div
-              class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
-            >
-              <span class="type-label text-ink-row">{words.width}</span>
-              <!-- Each width once: the component's own is the listed
-                   width it equals, so named, and stands apart only when
-                   none is; the line under the widths says which it is.
-                   The names are the items' own; no tooltip opens over the
-                   card. -->
-              <ToggleGroup.Root
-                aria-label={words.width}
-                class="justify-self-end max-phone:justify-self-start"
-                onValueChange={pickWidth}
-                type="single"
-                value={widthValue}
-              >
-                {#if !ownListed}
-                  {@render widthItem(
-                    "own",
-                    words.ownWidth(figure(ownWidth)),
-                    ownWidth,
-                    IconMaximize
-                  )}
-                {/if}
-                {#each WIDTHS as one (one.value)}
-                  {@const own = one.value === ownWidth}
-                  {@render widthItem(
-                    String(one.value),
-                    own
-                      ? words.ownListed(one.name, figure(one.value))
-                      : words.widthOf(one.name, figure(one.value)),
-                    one.value,
-                    one.icon
-                  )}
-                {/each}
-              </ToggleGroup.Root>
-              <!-- Which width is the component's own, said in words under
-                   the widths (a mark on its figure said it to no one). -->
-              <span
-                class="col-start-2 -mt-space-2 justify-self-end type-meta text-ink-muted num max-phone:col-start-1 max-phone:mt-0 max-phone:justify-self-start"
-                data-slot="own-width">{words.ownWidth(figure(ownWidth))}</span
-              >
-            </div>
-            <div
-              class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
-            >
-              <span class="type-label text-ink-row">{words.scheme}</span>
-              <ToggleGroup.Root
-                aria-label={words.scheme}
-                class="justify-self-end max-phone:justify-self-start"
-                onValueChange={(next: string) => {
-                  if (next) {
-                    scheme = next === "dark" ? "dark" : "light";
-                  }
-                }}
-                type="single"
-                value={scheme}
-              >
-                <ToggleGroup.Item aria-label={words.light} value="light">
-                  <IconSun aria-hidden="true" class="size-icon-md" />
-                </ToggleGroup.Item>
-                <ToggleGroup.Item aria-label={words.dark} value="dark">
-                  <IconMoon aria-hidden="true" class="size-icon-md" />
-                </ToggleGroup.Item>
-              </ToggleGroup.Root>
-            </div>
-            <div
-              class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
-            >
-              <label class="type-label text-ink-row" for="{uid}-reduce"
-                >{words.reduceMotion}</label
-              >
-              <Switch
-                bind:checked={reduce}
-                class="justify-self-end"
-                id="{uid}-reduce"
-              />
-            </div>
-            <!-- A width wider than the stage is scaled to fit it; this
-                 draws it 1:1 instead, the page scrolling across it. It
-                 stands only while it does something: while the drawing
-                 stands scaled, or while it is on, so it can be turned
-                 off (DESIGN.md Voice: a string a rare state needs
-                 stands in that state). -->
-            {#if actual || (link.laid && link.laid.scale < 1)}
-              <div
-                class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
-              >
-                <label class="type-label text-ink-row" for="{uid}-actual"
-                  >{words.actualSize}</label
-                >
-                <Switch
-                  bind:checked={actual}
-                  class="justify-self-end"
-                  id="{uid}-actual"
-                />
-              </div>
-            {/if}
-          </div>
-        </HangCard>
-      </Popover.Root>
-      <!-- The room's one switch: it opens the room beside the stage (or
-           its drawer) and puts it away again, as a sidebar's toggle does:
-           its name says which, and it says whether the room stands
-           (`aria-expanded`), never a lit symbol held on. -->
-      <BarItem
-        data-slot="room-switch"
-        icon={IconRoomLinear}
-        label={roomShown ? words.closeRoom(roomName) : words.openRoom(roomName)}
-        onclick={() => {
-          if (roomShown) {
-            roomOpen = false;
-            return;
-          }
-          roomOpen = true;
-          stopAt = 0;
-          // The one asked for last stands: the pane's sheet goes as the drawer rises.
-          if (paneSheet) {
-            onroom?.();
-          }
-        }}
-        expanded={roomShown}
-      />
+      {#if actual || (link.laid && link.laid.scale < SCALED_UNDER)}
+        <BarItem
+          icon={IconMaximizeLinear}
+          label={words.actualSize}
+          onclick={() => {
+            actual = !actual;
+          }}
+          pressed={actual}
+        />
+      {/if}
     </BarGlass>
   </div>
-{/snippet}
-
-{#snippet stepper()}
-  <Stepper {at} {lang} onstep={(next) => choose(next, null)} {path} />
-{/snippet}
-
-{#snippet widthItem(
-  value: string,
-  name: string,
-  px: number,
-  Icon: typeof IconPhone
-)}
-  <ToggleGroup.Item aria-label={name} {value}>
-    <!-- The device's glyph, then its figure, on one line inside the item. -->
-    <span class="mark-line flex items-center gap-space-1" data-box>
-      <Icon aria-hidden="true" class="size-icon-md flex-none" data-box />
-      <span class="type-meta num">{figure(px)}</span>
-    </span>
-  </ToggleGroup.Item>
 {/snippet}
 
 <TooltipProvider>
@@ -1781,275 +1402,125 @@
       }
     )}
   >
-    <!-- The page: the stage, and on a desk the room beside it, running to
-         the surface's top under the panel's floating head and clearing it
-         by the head's room (`--side-room`): the graph has no bar of its own.
-         On a phone its foot stands at the drawer's top at each stop, so the
-         stage ends where the drawer begins. -->
+    <!-- The page: the stage, to the surface's edges, the panel's head
+         floating over it and keeping no band (The Title Bars Follow Liquid
+         Glass Rule). -->
     <div
       data-slot="graph-page"
-      class={[
-        !laidOut && "invisible",
-        "flex min-h-0 min-w-0 flex-1 overflow-clip px-space-2 pt-(--side-room,var(--space-2))",
-        !desk && drawerShown ? "pb-(--drawer-cover)" : "pb-space-2",
-      ]}
-      style:--drawer-cover="{cover}px"
-      {@attach frameSize(
-        (node: HTMLElement) => {
-          const style = getComputedStyle(node);
-          return {
-            foot: node.offsetTop + Number.parseFloat(style.paddingTop),
-            split:
-              node.clientWidth -
-              Number.parseFloat(style.paddingInlineStart) -
-              Number.parseFloat(style.paddingInlineEnd),
-          };
-        },
-        (value) => {
-          headFoot = value.foot;
-          splitWidth = value.split;
-        }
-      )}
+      class="flex min-h-0 min-w-0 flex-1 overflow-clip"
     >
-      <!-- The stage, and on a desk the room beside it: one resizable split.
-           The stage's pane stays while the room comes and goes, so the
-           frame in it, and the component on its page, stay the one live
-           instance. -->
-      <Resizable.PaneGroup
-        class="min-w-0 flex-1"
-        direction="horizontal"
-        height="shrink"
-      >
-        <Resizable.Pane
-          defaultSize={beside ? 100 - roomShare : 100}
-          id="stage"
-          look="split"
-          minSize={beside ? stageLeast : 100}
-          order={1}
-        >
-          <!-- The panes clip: the panels inside stand a border's width in
-               from each clipped edge, so their ring draws whole. -->
-          <div
-            class={[
-              "flex min-h-0 min-w-0 flex-1 flex-col py-(--border-width) ps-(--border-width)",
-              beside ? "pe-space-2" : "pe-(--border-width)",
-            ]}
-            bind:this={stageHold}
-            inert={stageCovered}
-          >
-            <StagePane
-              bind:need={stageNeed}
-              compare={againstState
-                ? {
-                    name: againstState.name,
-                    flipped,
-                    read: link.differences,
-                  }
-                : null}
-              {frame}
-              {lang}
-              laid={link.laid}
-              lead={files.length > 1 ? componentsMenu : undefined}
-              tools={stageTools}
-              bind:room={stageRoom}
-              ondifference={showDifference}
-              onflip={() => {
-                flipped = !flipped;
-              }}
-              name={keptState?.name ?? ""}
-              scale={link.laid && link.laid.scale < 1
-                ? words.scaledTo(figure(Math.round(link.laid.scale * 100)))
-                : null}
-              {stale}
-              variant={keptVariant?.name ?? null}
-            />
-          </div>
-        </Resizable.Pane>
-        {#if beside}
-          <Resizable.Handle
-            bind:ref={edgeNode}
-            look="split"
-            onDraggingChange={(on: boolean) => {
-              edgeHeld = on;
-            }}
-          />
-          <Resizable.Pane
-            defaultSize={roomShare}
-            id="room"
-            look="split"
-            minSize={roomLeast}
-            order={2}
-            bind:this={roomPane}
-            onResize={(size) => {
-              const his =
-                edgeHeld ||
-                (edgeNode !== null && document.activeElement === edgeNode);
-              if (his && panesWidth > 0) {
-                roomDragged = (size / 100) * panesWidth;
-              }
-            }}
-          >
-            <!-- The room: one surface, closed by its Close or Esc. It
-                 comes in from its edge and goes back there, as the app's
-                 panels do (the sheet recipe's motion, `sheetSlide`). -->
-            <aside
-              data-slot="graph-room"
-              aria-label={roomOpen ? roomName : undefined}
-              in:sheetSlide|global={{ axis: "X", leaving: false }}
-              out:sheetSlide|global={{ axis: "X", leaving: true }}
-              class="relative my-(--border-width) ms-space-2 me-(--border-width) flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile timeline-scope-transcript-head"
-              style:--face-top="var(--c-head-room)"
-            >
-              {#if roomOpen}
-                <!-- Its head floats over its face as every bar does (DESIGN.md,
-                     The Title Bars Follow Liquid Glass Rule), on the stage's
-                     head line: its faces alone, the room's switch standing
-                     in the stage's glass. What the face lists runs to the
-                     room's top beneath it, clears it at rest by its room
-                     (`--face-top`) and blurs and fades under it as it
-                     scrolls (HeadFade on the face's scroll). -->
-                <HeadFade band="var(--face-top)" tint="bg-surface-raised" />
-                <header
-                  class="absolute inset-x-0 top-0 z-2 flex h-c-head-room min-w-0 items-center ps-space-4 pe-space-2"
-                  data-slot="room-head"
-                  {@attach frameSize(
-                    (node: HTMLElement) => node.offsetHeight,
-                    (value) => {
-                      roomHeadRoom = value;
-                    }
-                  )}
-                >
-                  {@render faces(false)}
-                </header>
-                <!-- The map takes the room's whole body, its own surface to
-                     its edges; the other faces stand at the room's inset. -->
-                <div
-                  class={[
-                    "flex min-h-0 min-w-0 flex-1 flex-col",
-                    shownFace === "map" && !single
-                      ? ""
-                      : "px-space-4 pb-space-4",
-                  ]}
-                  data-slot="room-body"
-                >
-                  {@render roomFace(true)}
-                </div>
-              {/if}
-              {@render inspector?.()}
-            </aside>
-          </Resizable.Pane>
-        {/if}
-      </Resizable.PaneGroup>
-    </div>
-
-    {#if !desk}
-      <!-- Under the beside line: the room is the kit's bottom drawer, its
-         stops head (the steps), half and whole; the page above it stays
-         live and ends at its top. Its grabber steps between the stops; its
-         Close is its own, 44px to a finger. Drawn in place, in a layer as
-         big as the surface (its root's `container`, the kit's `contained`
-         sheet), so its stops are heights over the surface's own foot and
-         it is clipped there, wherever the surface stands. -->
       <div
-        data-slot="room-layer"
-        class="pointer-events-none absolute inset-0 overflow-clip"
-        bind:this={roomLayer}
+        class="relative flex min-h-0 min-w-0 flex-1 flex-col"
         {@attach frameSize(
-          (node: HTMLElement) => node.clientHeight,
+          (node: HTMLElement) => node.clientWidth,
           (value) => {
-            layerHeight = value;
+            stageAcross = value;
           }
         )}
       >
-        <Drawer.Root
-          bind:activeSnapPoint={
-            () => snap,
-            (next: number | string | null) => {
-              const at = SNAPS.indexOf(String(next));
-              if (at >= 0) {
-                stopAt = at;
+        <StagePane
+          bind:need={stageNeed}
+          compare={againstState
+            ? {
+                name: againstState.name,
+                flipped,
+                read: link.differences,
               }
-            }
-          }
-          bind:open={
-            () => drawerShown,
-            (next: boolean) => {
-              // Put away under the pane's sheet, the drawer keeps his choice for when it goes.
-              if (!paneSheet) {
-                roomOpen = next;
-              }
-            }
-          }
-          container={roomLayer}
-          dismissible={false}
-          modal={false}
-          shouldScaleBackground={false}
-          snapPoints={SNAPS}
-        >
-          <Drawer.Content
-            bind:ref={drawerNode}
-            contained
-            grabber={{
-              label: words.nextStop(roomName, stopAt < SNAPS.length - 1),
-              onpress: nextStop,
-            }}
-            modal={false}
-            onOpenAutoFocus={(event: Event) => event.preventDefault()}
-            portalProps={{ disabled: true }}
-            onmousedown={keepFocusOnPage}
-            trapFocus={false}
-            ownHead
-            title={roomName}
+            : null}
+          {frame}
+          {lang}
+          laid={link.laid}
+          bind:room={stageRoom}
+          ondifference={showDifference}
+          onflip={() => {
+            flipped = !flipped;
+          }}
+          name={keptState?.name ?? ""}
+          scale={link.laid && link.laid.scale < SCALED_UNDER
+            ? words.scaledTo(figure(Math.round(link.laid.scale * 100)))
+            : null}
+          {stale}
+          variant={keptVariant?.name ?? null}
+        />
+        <!-- Over the drawing, what acts on it: the mode leading, the
+                 states' stepper in the middle (the state on show is the
+                 drawing's, never a back button: the owner's pin), the view
+                 trailing. -->
+        {#if rising && review && kept && !narrow}
+          <!-- What rises over the drawing's foot, above the tools: the
+                   map of every state (the owner's pick on pin 47: a card
+                   over the drawing, never in its place), the move's
+                   transport and timeline, or the dials. Under the phone
+                   line it is a bottom sheet instead (below). -->
+          <div
+            class={[
+              floatingSurface({ motion: "pop" }),
+              "absolute inset-x-space-3 bottom-(--rise-foot) z-2 mx-auto flex min-h-0 flex-col overflow-hidden",
+              rising === "map"
+                ? "h-1/2 max-w-c-graph-stage-min"
+                : "max-h-1/2 max-w-c-measure p-space-3",
+            ]}
+            data-slot="graph-rising"
+            style:--rise-foot={riseFoot}
+            in:rise={"--dur-panel"}
+            out:rise={"--dur-exit"}
           >
-            <!-- The sheet's one bar, right under the grabber (the kit's
-                 `ownHead`): the faces, floating over the face as the kit's
-                 sheet head floats (no Close of its own: the room's one
-                 switch stands in the stage's glass). What the face lists
-                 runs up beneath it, clears it at rest by its room
-                 (`--face-top`) and blurs and fades under it as it scrolls. -->
+            {@render risingBody()}
+          </div>
+        {/if}
+        {#if narrow && sheetDrawn && review && kept}
+          <!-- Under the phone line what rises is the kit's bottom sheet
+               (the owner's pick: "Open as a sheet on phones"): half the
+               room as it opens, dragged up to the whole, its grabber and
+               its stops ThreadSheet's. -->
+          <ThreadSheet
+            label={risingName}
+            onclose={() => {
+              rising = null;
+            }}
+            onclosed={() => {
+              if (!rising) {
+                sheetDrawn = false;
+              }
+            }}
+            open={rising !== null}
+          >
             <div
-              class="relative flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop) timeline-scope-transcript-head"
-              style:--snap-drop="{Math.max(0, layerHeight - cover)}px"
-              style:--face-top="{drawerRoom}px"
+              class="flex min-h-0 flex-1 flex-col px-space-3 pb-space-3"
+              data-slot="graph-rising-sheet"
             >
-              <HeadFade band="var(--face-top)" tint="bg-surface-raised" />
-              <div
-                class="absolute inset-x-space-4 top-0 z-2 flex min-w-0 items-center pb-space-3"
-                data-slot="drawer-faces"
-                {@attach frameSize(
-                  (node: HTMLElement) => node.offsetHeight,
-                  (value) => {
-                    drawerRoom = value;
-                  }
-                )}
-              >
-                {@render faces(true)}
-              </div>
-              <!-- At the head stop the drawer holds its head alone, the faces
-                   and the States face's steps: a face's body drawn into its
-                   sliver ran past the screen's foot. -->
-              {#if !single && shownFace === "states"}
-                <div class="flex-none pt-(--face-top)">
-                  {@render stepper()}
-                </div>
-                {#if !atHead}
-                  <!-- Under the steps the list clears nothing more. -->
-                  <div class="contents" style:--face-top="initial">
-                    {@render roomFace(false)}
-                  </div>
-                {/if}
-              {:else if shownFace === "move" && atHead && review && kept}
-                <!-- At the head stop the Animation face is its transport, its time and the move, on one line over the stage. -->
-                <div class="flex-none pt-(--face-top)">
-                  {@render moveFace(true)}
-                </div>
-              {:else if single || !atHead}
-                {@render roomFace(false)}
-              {/if}
+              {@render risingBody()}
             </div>
-          </Drawer.Content>
-        </Drawer.Root>
+          </ThreadSheet>
+        {/if}
+        <!-- Under the phone line the row folds to one line: the mode and
+                 the view each one button opening its menu above it, the
+                 states' group as it is. -->
+        <PreviewTools
+          away={narrow && link.scrolledDown && !rising}
+          spread={!narrow}
+          bind:height={toolsHeight}
+        >
+          <div class="flex items-center">
+            {#if narrow}
+              {@render modeCompact?.()}
+            {:else}
+              {@render modeTools?.()}
+            {/if}
+          </div>
+          {@render headLead()}
+          <!-- What changed since he looked, beside the view (the owner's
+                   pick: "On the page only"). -->
+          <div class="flex items-end gap-space-2">
+            {@render changesTools?.()}
+            {#if narrow}
+              {@render viewButton()}
+            {:else}
+              {@render viewTools()}
+            {/if}
+          </div>
+        </PreviewTools>
       </div>
-    {/if}
+    </div>
   </div>
 </TooltipProvider>

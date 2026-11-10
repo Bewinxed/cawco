@@ -67,7 +67,6 @@ export const previewWords = {
   /** A canvas's view menu, its motion choice and its check against the design system. */
   canvasView: "Canvas view",
   reducedMotion: "Reduce motion",
-  verifyDesign: "Verify against the design system",
   /**
    * The page's content process ended a second time for the same page (the
    * first reloads it by itself): the system ended it, most often over its

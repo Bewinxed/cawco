@@ -15,11 +15,10 @@
    * the panel's top beneath the head and pads its top by the head's room
    * (`room`, which the graph tells the page: STAGE_ROOM), drawing its own
    * scroll edge effect under it; no hairline cuts the drawing off. The
-   * head's inset is the page's gutter, so the name and the drawing share
-   * one leading edge. What acts on the stage stands on its head: the
-   * components' menu leading (`lead`, where the ask names several) and
-   * one glass group of bare symbols trailing (`tools`: Compare, the view,
-   * and the room's one switch).
+   * head's inset is the page's gutter. The kept state's name, the steps,
+   * the view and the components' menu stand in the artifact panel's head
+   * (graph-head.ts): this head stands only while it has something of its
+   * own to say (a variant, a scale, a comparison).
    *
    * While comparing, the head names the state compared with: a press that
    * shows it in the kept one's place (the flip), or its name alone where
@@ -53,8 +52,6 @@
     ondifference,
     need = $bindable(0),
     room = $bindable(0),
-    lead,
-    tools,
   }: {
     /** The kept state's name. */
     name: string;
@@ -90,12 +87,8 @@
      * the drawing out.
      */
     need?: number;
-    /** The room the floating head takes over the field's top, px: the page pads its top by it. */
+    /** The room the heads float over at the field's top, px (the panel's, `--side-room`, and this one's own while it says something): the page pads its top by it, as a scroll view's content inset clears a bar at rest, its ground running beneath (The Title Bars Follow Liquid Glass Rule). */
     room?: number;
-    /** What leads the head before the state's name: the components' menu, where the ask names several. */
-    lead?: Snippet;
-    /** What trails the head: the stage's glass of bare symbols. */
-    tools?: Snippet;
   } = $props();
 
   /** The most lines of differences the stage's head names; the rest are counted. */
@@ -126,7 +119,7 @@
 <section
   data-slot="stage"
   aria-label={name}
-  class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-page shadow-tile timeline-scope-transcript-head"
+  class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-surface-page timeline-scope-transcript-head"
 >
   <!-- The field: the frame holding the stage page fills it; the page is
        its own scroller, its own page and gutter round the drawing. -->
@@ -161,7 +154,7 @@
        its parts takes a press from the drawing. -->
   <div
     data-slot="stage-head"
-    class="pointer-events-none absolute inset-x-0 top-0 z-1 flex min-w-0 flex-col px-space-4"
+    class="pointer-events-none absolute inset-x-0 top-0 z-1 flex min-w-0 flex-col px-space-4 pt-(--side-room,0px)"
     {@attach frameSize(
       (node: HTMLElement) => node.offsetHeight,
       (value) => {
@@ -171,53 +164,49 @@
   >
     <!-- Unclipped: the glass's focus ring and the view card's join stand
          out past its box. -->
-    <header
-      class="flex h-c-head-room min-w-0 items-center gap-x-space-3 *:pointer-events-auto"
-      data-slot="stage-bar"
-    >
-      {@render lead?.()}
-      <h2 class="m-0 min-w-0 shrink type-title text-ink-strong">
-        <span class="block truncate">{name}</span>
-      </h2>
-      {#if variant}
-        <span class="min-w-0 truncate type-label text-ink-muted">{variant}</span
-        >
-      {/if}
-      {#if compare && beside}
-        <span
-          class="min-w-0 truncate type-label text-ink-muted"
-          data-slot="stage-against">{words.comparedWith(compare.name)}</span
-        >
-      {:else if compare}
-        <!-- The state it is compared with, a press that shows it in the
-             kept one's place, rings where its gone parts stood, and back. -->
-        <button
-          type="button"
-          aria-pressed={compare.flipped}
-          class="pointer-hit touch-hit min-w-0 truncate rounded-sm px-space-1 type-label text-ink-muted transition-control aria-pressed:bg-selected-bg aria-pressed:text-selected-ink aria-pressed-false:can-hover:hover:bg-surface-hover"
-          data-slot="stage-against"
-          onclick={onflip}
-          title={words.showCompared(compare.name)}
-          >{compare.flipped
-            ? words.showingCompared(compare.name)
-            : words.comparedWith(compare.name)}</button
-        >
-      {/if}
-      {#if scale || tools}
-        <div
-          class="-me-space-2 ms-auto flex flex-none items-center gap-x-space-3"
-        >
-          {#if scale}
-            <!-- Not 1:1: what the person judges is scaled, and says so. -->
-            <span
-              class="flex-none type-meta text-ink-muted num"
-              data-slot="stage-scale">{scale}</span
-            >
-          {/if}
-          {@render tools?.()}
-        </div>
-      {/if}
-    </header>
+    {#if variant || compare || scale}
+      <header
+        class="flex h-c-head-room min-w-0 items-center gap-x-space-3 *:pointer-events-auto"
+        data-slot="stage-bar"
+      >
+        {#if variant}
+          <span class="min-w-0 truncate type-label text-ink-muted"
+            >{variant}</span
+          >
+        {/if}
+        {#if compare && beside}
+          <span
+            class="min-w-0 truncate type-label text-ink-muted"
+            data-slot="stage-against">{words.comparedWith(compare.name)}</span
+          >
+        {:else if compare}
+          <!-- The state it is compared with, a press that shows it in the
+               kept one's place, rings where its gone parts stood, and back. -->
+          <button
+            type="button"
+            aria-pressed={compare.flipped}
+            class="pointer-hit touch-hit min-w-0 truncate rounded-sm px-space-1 type-label text-ink-muted transition-control aria-pressed:bg-selected-bg aria-pressed:text-selected-ink aria-pressed-false:can-hover:hover:bg-surface-hover"
+            data-slot="stage-against"
+            onclick={onflip}
+            title={words.showCompared(compare.name)}
+            >{compare.flipped
+              ? words.showingCompared(compare.name)
+              : words.comparedWith(compare.name)}</button
+          >
+        {/if}
+        {#if scale}
+          <div class="ms-auto flex flex-none items-center gap-x-space-3">
+            {#if scale}
+              <!-- Not 1:1: what the person judges is scaled, and says so. -->
+              <span
+                class="flex-none type-meta text-ink-muted num"
+                data-slot="stage-scale">{scale}</span
+              >
+            {/if}
+          </div>
+        {/if}
+      </header>
+    {/if}
     {#if stale}
       <p
         data-slot="stage-stale"

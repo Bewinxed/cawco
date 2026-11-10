@@ -11,9 +11,9 @@
   import { previewWords } from "@cawco/core/words/preview";
   import { BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import {
+    IconCommentLinear,
     IconInteractLinear,
     IconPenLinear,
-    IconPinLinear,
   } from "#lib/icons.js";
 
   let {
@@ -37,7 +37,7 @@
     {
       value: "comment",
       label: "Comment",
-      icon: IconPinLinear,
+      icon: IconCommentLinear,
       keys: "C",
       tip: "Comment (C): a click pins a comment",
     },

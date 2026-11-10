@@ -9,7 +9,7 @@
    * rows, tab bars, toolbar items, and menus"), taking no room, only above 0
    * (The Earned Count Rule) and only while the rail is shut (the rail's
    * title says its count while it stands), and it says one count in that count's own
-   * look: what waits on him (To check) in the needs-you pair, else what he
+   * look: the answers waiting on him in the needs-you pair, else what he
    * holds to send hollow, as a held pill is, else the open comments in
    * plain ink. Comments not reaching the agent draw the bubble in the fail
    * ink; ⇧C's hidden pins put a closed eye on the bubble's foot corner,
@@ -22,7 +22,7 @@
   let {
     open,
     count,
-    toCheck,
+    answers,
     held = 0,
     pinsShown = true,
     down = null,
@@ -34,8 +34,8 @@
     open: boolean;
     /** Open comments. */
     count: number;
-    /** Comments waiting on him (To check). */
-    toCheck: number;
+    /** Comments with an answer he hasn't read: what waits on him, as the rows' needs-you dots say. */
+    answers: number;
     /** Comments he holds to send together. */
     held?: number;
     /** ⇧C has not hidden the pins. */
@@ -51,14 +51,14 @@
 
   /**
    * The badge: one count in the look that says what it counts, never a
-   * look over another's number. What waits on him first (To check, the
-   * needs-you pair), then what he holds to send (hollow), else the open
+   * look over another's number. What waits on him first (answers unread,
+   * the needs-you pair), then what he holds to send (hollow), else the open
    * comments (plain ink).
    */
   const badge = $derived.by(
     (): { n: number; look: "attn" | "held" | undefined } => {
-      if (toCheck > 0) {
-        return { n: toCheck, look: "attn" };
+      if (answers > 0) {
+        return { n: answers, look: "attn" };
       }
       if (held > 0) {
         return { n: held, look: "held" };
@@ -71,7 +71,7 @@
     [
       commentWords.comments,
       count > 0 ? `${count} open` : null,
-      toCheck > 0 ? commentWords.toCheckWaiting(toCheck) : null,
+      answers > 0 ? commentWords.answersWaiting(answers) : null,
       held > 0 ? commentWords.heldWaiting(held) : null,
       pinsShown ? null : "pins hidden",
       down,

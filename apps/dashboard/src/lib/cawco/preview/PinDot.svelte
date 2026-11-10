@@ -10,28 +10,39 @@
    * (PinMark) and by its joined face on a card's surface alike, so it
    * stands at the same place by its figure in both.
    */
-  let { dot }: { dot: "live" | "unread" | "held" } = $props();
+  let {
+    dot,
+    inline = false,
+  }: {
+    dot: "live" | "unread" | "held";
+    /** Stood in the flow where it is put (a comment row's lead), not on a pin's corner. */
+    inline?: boolean;
+  } = $props();
+  const place = $derived(
+    inline ? "relative" : "absolute -end-space-row -top-space-row"
+  );
 </script>
 
 {#if dot === "live"}
   <!-- The live dot, breathing on the one shared breath as every live dot does (the owner's pick: "One breath everywhere"). -->
-  <LiveDot
-    class="absolute -end-space-row -top-space-row"
-    cut
-    data-dot="live"
-    data-live
-  />
+  <LiveDot class={place} cut data-dot="live" data-live />
 {:else if dot === "held"}
   <!-- Held to send together: a hollow ring, as a held pill is hollow. -->
   <span
     aria-hidden="true"
-    class="absolute -end-space-row -top-space-row size-(--status-dot-size) rounded-pill border border-ink-muted bg-surface-raised ring-(length:--status-dot-cut) ring-surface-raised"
+    class={[
+      place,
+      "size-(--status-dot-size) rounded-pill border border-ink-muted bg-surface-raised ring-(length:--status-dot-cut) ring-surface-raised",
+    ]}
     data-dot="held"
   ></span>
 {:else}
   <span
     aria-hidden="true"
-    class="absolute -end-space-row -top-space-row size-(--status-dot-size) rounded-pill bg-status-attn-glyph ring-(length:--status-dot-cut) ring-surface-raised"
+    class={[
+      place,
+      "size-(--status-dot-size) rounded-pill bg-status-attn-glyph ring-(length:--status-dot-cut) ring-surface-raised",
+    ]}
     data-dot="unread"
     data-unread
   >

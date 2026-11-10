@@ -56,7 +56,7 @@ interface Variant {
   width: number | null;
 }
 
-export interface GraphState {
+interface GraphState {
   failure: boolean;
   /** Its story's `from`, when it plays one. */
   from: string | null;

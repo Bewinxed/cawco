@@ -4,9 +4,8 @@
    * an item of the head's glass whose menu hangs from it (BarMenu, as
    * Inspect's item beside it), so the head keeps its room; or, once the head has no room for
    * it, the same entries as a submenu of the head's More. Map first (the
-   * map over the design graph), Verify last, a design system round whose
-   * verdict goes to the session. The stage's width, scheme and motion are
-   * the design graph's view card.
+   * map over the design graph). The stage's width, scheme and motion are
+   * the design graph's own.
    */
   import { previewWords } from "@cawco/core/words/preview";
   import { BarItem, BarMenu } from "#lib/components/ui/bar-glass/index.js";
@@ -15,16 +14,12 @@
   import type { CanvasViewState } from "./canvas-view.svelte";
 
   interface Props {
-    /** `sub`: More's submenu; the head's own button otherwise. */
-    as?: "button" | "sub";
-    /** Verify: asks the hub for a design system round on the canvas. */
-    onverify: () => void;
-    /** A Verify on its way to the hub. */
-    verifying?: boolean;
+    /** `items`: its entries in the title's document menu; `sub`: More's submenu; the head's own button otherwise. */
+    as?: "button" | "sub" | "items";
     view: CanvasViewState;
   }
 
-  let { as = "button", onverify, verifying = false, view }: Props = $props();
+  let { as = "button", view }: Props = $props();
 </script>
 
 {#snippet entries()}
@@ -32,13 +27,11 @@
     checked={view.map}
     onCheckedChange={(on) => view.showMap(on)}>Map</DropdownMenu.CheckboxItem
   >
-  <DropdownMenu.Separator />
-  <DropdownMenu.Item disabled={verifying} onSelect={onverify}
-    >{previewWords.verifyDesign}</DropdownMenu.Item
-  >
 {/snippet}
 
-{#if as === "sub"}
+{#if as === "items"}
+  {@render entries()}
+{:else if as === "sub"}
   <DropdownMenu.Sub>
     <DropdownMenu.SubTrigger
       ><IconLayers /><span>{previewWords.canvasView}</span

@@ -140,6 +140,7 @@
     onchoose,
     onfocusthing,
     peek = false,
+    titled = true,
     onretry,
     lang,
     still = false,
@@ -182,6 +183,8 @@
     onfocusthing: (thing: string | null) => void;
     /** The phone drawer at its head stop: Play, its time and the move's name, one line. */
     peek?: boolean;
+    /** The move's name heads the face; false where what stands round it names the state already (the panel's stepper). */
+    titled?: boolean;
     /** A move whose play threw, played again from its from state. */
     onretry: () => void;
     /** The page's language, for the figures. */
@@ -996,7 +999,9 @@
         data-slot="move-head"
       >
         <div class="flex min-w-0 flex-1 items-center">
-          {@render title()}
+          {#if titled}
+            {@render title()}
+          {/if}
         </div>
         {#if move.kind === "ready" && changedCount === 0 && undoable}
           <!-- Reset all taken back in place, until anything changes again
