@@ -83,7 +83,7 @@
    * each chip in its serialised form (`@<title> <handle>`), so a send, a
    * queued edit, recall and the drafts store carry it as text.
    */
-  import { flushSync, type Snippet, tick, untrack } from "svelte";
+  import { type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { Button, sendVariants } from "#lib/components/ui/button/index.js";
@@ -108,7 +108,6 @@
   import {
     CURVE,
     dur,
-    ease,
     easeDrawer,
     easeOut,
     motionOk,
@@ -121,7 +120,6 @@
   import { msOf } from "#lib/platform/motion/time.js";
   import { track } from "#lib/platform/track.js";
   import { handBack, stages } from "../canvas/stage.svelte";
-  import { cleanDetail } from "../command-detail";
   import type { ConversationFind } from "../find/conversation-find.svelte";
   import FindLayer from "../find/FindLayer.svelte";
   import FindLine from "../find/FindLine.svelte";
@@ -142,9 +140,12 @@
   import type { ComposerDraft } from "./composer-draft.svelte";
   import type { ComposerFleet } from "./composer-fleet";
   import { stand } from "./composer-presence.svelte";
+  import { landFocusRequests } from "./field-focus.svelte";
+  import { FieldHint } from "./field-hint.svelte";
   import { GrownShape, layoutScale, measureShape } from "./grown";
   import { sentByReader } from "./recall";
   import { opensTurn } from "./rows";
+  import { SlashMenu } from "./slash-menu.svelte";
 
   let {
     draft,
@@ -383,161 +384,21 @@
   /** A phone's @ menu: its rows wrap, and it drags down to go. */
   const phone = new MediaQuery(NARROW_QUERY);
 
-  /** The field's hint in full, and its first part, which fits any field. */
-  const HINT = $derived(
-    typeof placeholder === "string"
-      ? placeholder
-      : (placeholder?.full ??
-          "Message the agent…  /  for commands, @ to mention")
-  );
-  const HINT_SHORT = $derived(
-    typeof placeholder === "string"
-      ? placeholder
-      : (placeholder?.short ?? "Message the agent…")
-  );
-  /** What the field is called, read out: its hint without the trailing ellipsis. */
-  const FIELD_LABEL = $derived(label ?? HINT_SHORT.replace(/…$/u, ""));
-  /**
-   * The hint the field shows: in full wherever the field's own width holds
-   * it on one line, else its first part. The server draws the short one,
-   * so no first paint shows a hint cut off, and the field's measured width
-   * brings in the full one once it is on the page. It is the field that is
-   * measured, not the viewport: a narrow pane on a wide screen is narrow.
-   */
-  let hint = $state(untrack(() => HINT_SHORT));
-  const fitHint = (node: HTMLElement) => {
-    const probe = document.createElement("span");
-    probe.setAttribute("aria-hidden", "true");
-    probe.style.cssText =
-      "position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;inset-block-start:0;inset-inline-start:-9999px";
-    probe.textContent = HINT;
-    node.after(probe);
-    /** The probe dressed as the field's hint is: its face and its tracking. */
-    let dressed = "";
-    const dress = (font: string, tracking: string) => {
-      dressed = `${font}|${tracking}`;
-      probe.style.font = font;
-      probe.style.letterSpacing = tracking;
-    };
-    /** Which hint the field's room holds, read only: the probe dressed already. */
-    const measure = () => {
-      const style = getComputedStyle(node);
-      const room =
-        node.clientWidth -
-        Number.parseFloat(style.paddingInlineStart) -
-        Number.parseFloat(style.paddingInlineEnd);
-      // Laid out, as the room is: a panel rising out of its scale shows the
-      // probe narrower than the hint will stand.
-      return {
-        font: style.font,
-        tracking: style.getPropertyValue("--hint-track"),
-        hint:
-          probe.getBoundingClientRect().width / layoutScale(node) <= room
-            ? HINT
-            : HINT_SHORT,
-      };
-    };
-    const fit = () => {
-      const style = getComputedStyle(node);
-      dress(style.font, style.getPropertyValue("--hint-track"));
-      ({ hint } = measure());
-    };
-    // Fitted now, so the first frame has its hint. A resize is read inside
-    // the delivery, on the layout the frame has just done, and written in
-    // the next frame (frameObserver `read`): read in the next frame's
-    // callbacks instead, every frame of a rail drag laid the page out for
-    // it. A face that changed since the probe was dressed dresses it there,
-    // and is read again in the next delivery.
-    fit();
-    let measured: ReturnType<typeof measure> | null = null;
-    const sizes = frameObserver(
-      () => {
-        if (!measured) {
-          return;
-        }
-        const { font, tracking } = measured;
-        if (`${font}|${tracking}` !== dressed) {
-          dress(font, tracking);
-          sizes.readNext();
-        }
-        ({ hint } = measured);
-        measured = null;
-      },
-      {
-        read: () => {
-          measured = measure();
-        },
-      }
-    );
-    sizes.observe(node);
-    // The body face may land after the first measure, at a new width.
-    let live = true;
-    document.fonts.ready.then(() => {
-      if (live) {
-        fit();
-      }
-    });
-    return () => {
-      live = false;
-      sizes.disconnect();
-      probe.remove();
-    };
-  };
-  /** How many frames a focus request asks again before it lets go. */
-  const FOCUS_TRIES = 10;
+  /** The field's hint: the full words where its own width holds them, else their first part. */
+  const fieldHint = new FieldHint({
+    label: () => label,
+    placeholder: () => placeholder,
+  });
   /** The suggestion row, for Tab and Shift+Tab. */
   let chips = $state<ReturnType<ComposerFleet["SuggestionChips"]>>();
 
-  /** A `/` or `@` token stops being typed as one the moment it holds whitespace. */
-  const TOKEN_WHITESPACE = /\s/u;
-
-  /**
-   * The words put back from outside (Edit on a failed send, a starter) land
-   * with focus and the caret after them, and fade up in the field over
-   * --dur-control rather than replacing what was there in one frame. Their
-   * attachments come back with them, and the row that holds those folds
-   * open above the field. The caret waits for the tick: the field draws the
-   * words in its own effect, and drawing them drops any selection.
-   *
-   * The request holds until the focus has landed: asked before the field is
-   * drawn, it waits for it; refused (the field not yet focusable as its
-   * card comes in), it asks again each frame, a few frames at most.
-   */
-  $effect(() => {
-    const el = field;
-    if (!(draft.focusWanted && el)) {
-      return;
-    }
-    let frame = 0;
-    let tries = 0;
-    const land = () => {
-      // Never scrolled to: a comment's card took the focus as it opened and
-      // the browser scrolled what held the pane, moving the card under the
-      // eye after its first frame (the owner: "it jumps between them before
-      // it settles"). The field stands where its surface puts it.
-      el.focus({ preventScroll: true });
-      if (
-        document.activeElement !== el &&
-        el.isConnected &&
-        tries < FOCUS_TRIES
-      ) {
-        tries += 1;
-        frame = requestAnimationFrame(land);
-        return;
-      }
-      // A field that already held the focus fires no focus event as it is
-      // asked for it again: what it holds is read here, so its fold rule
-      // knows the person is in it.
-      focused = document.activeElement === el;
-      tick().then(() => mentionField?.select(draft.text.length));
-      el.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-control"),
-        easing: ease("--ease-out"),
-      });
-      draft.focusWanted = false;
-    };
-    land();
-    return () => cancelAnimationFrame(frame);
+  landFocusRequests({
+    draft: () => draft,
+    field: () => field,
+    focused: (value) => {
+      focused = value;
+    },
+    mentionField: () => mentionField,
   });
 
   /**
@@ -611,108 +472,12 @@
 
   /* ---- the `/` and `@` menu ------------------------------------------- */
 
-  /** One row of the menu, whichever sigil opened it. */
-  interface Entry {
-    detail?: string;
-    /** Command.Item's value, and what the highlight is tracked by. */
-    id: string;
-    /** What replaces the typed token, sigil included. */
-    insert: string;
-    /** Which `/` family it belongs to — the menu is sectioned by this. */
-    kind?: AvailableCommand["type"];
-    label: string;
-    /** The plugin or MCP server it came from, shown as a quiet origin tag. */
-    source?: string;
-  }
-
-  /** One titled section of the menu. */
-  interface Section {
-    entries: Entry[];
-    heading: string;
-    key: string;
-  }
-
-  /**
-   * Which section a command belongs to. A plugin-heavy session's `/` list is
-   * almost entirely namespaced (`interfaces:better-ui`, `code-foundations:build`)
-   * — grouping by the four coarse families would file them all under one
-   * "Commands" heading, which is the mess. So the section is the command's
-   * SOURCE when it has one: its plugin, or the MCP server that lent it. Skills
-   * and bare built-ins, which carry no namespace, keep their family name.
-   *
-   * `rank` orders the sections: skills first, then plugins (by name), then the
-   * built-ins, then MCP servers (by name).
-   */
-  function sectionMeta(entry: Entry): {
-    key: string;
-    heading: string;
-    rank: number;
-    sub: string;
-  } {
-    if (entry.kind === "skill") {
-      return { key: "skills", heading: "Skills", rank: 0, sub: "" };
-    }
-    if (entry.kind === "mcp") {
-      const server = entry.source ?? "";
-      return {
-        key: `mcp:${server}`,
-        heading: server || "MCP",
-        rank: 3,
-        sub: server,
-      };
-    }
-    if (entry.source) {
-      return {
-        key: `src:${entry.source}`,
-        heading: entry.source,
-        rank: 1,
-        sub: entry.source,
-      };
-    }
-    if (entry.kind === "builtin") {
-      return { key: "builtin", heading: "Built-in", rank: 2, sub: "" };
-    }
-    return { key: "commands", heading: "Commands", rank: 1, sub: "" };
-  }
-
-  /**
-   * The name a row shows. Under a source heading the namespace is redundant, so
-   * `interfaces:better-ui` reads as `/better-ui` beneath "interfaces", and an
-   * MCP prompt drops its `mcp__server__` prefix. The value inserted keeps the
-   * full name — only the label is shortened.
-   */
-  function displayLabel(name: string, source?: string): string {
-    if (name.startsWith("mcp__")) {
-      const rest = name.split("__").slice(2).join("__");
-      return `/${rest || name}`;
-    }
-    if (source && name.startsWith(`${source}:`)) {
-      return `/${name.slice(source.length + 1)}`;
-    }
-    return `/${name}`;
-  }
-
-  /**
-   * The prose a row shows. Plugin descriptions often lead with their own name in
-   * parens — `(code-foundations) Execute…` — which is exactly the section heading
-   * above the row, so it is stripped here rather than printed twice.
-   */
-  /** Where the caret is, so the token under it can be found on every keystroke. */
-  let caret = $state(0);
-  /** Dismissed with Escape: the token is still there, the menu is not. */
-  let dismissed = $state(false);
-  let highlight = $state("");
-
-  /**
-   * A composer handed another conversation's draft starts that draft with
-   * its menu closed: the caret this one last noted was in the other text.
-   */
-  $effect.pre(() => {
-    track(draft);
-    untrack(() => {
-      dismissed = true;
-      caret = draft.text.length;
-    });
+  const menu = new SlashMenu({
+    commands: () => commands,
+    draft: () => draft,
+    field: () => field,
+    mentionField: () => mentionField,
+    onmenu: () => onmenu?.(),
   });
 
   /**
@@ -1122,152 +887,8 @@
 
   $effect(() => () => cancelAnimationFrame(flightFrame));
 
-  /**
-   * The `/…` the caret sits in the middle of, or null. (`@` is the field's
-   * own: MentionField opens the @ menu.)
-   *
-   * A sigil only opens a menu at the start of a word — mid-token it is a path
-   * separator, which the reader is entitled to type without a menu landing
-   * on top of it.
-   */
-  const token = $derived.by((): { query: string; from: number } | null => {
-    const at = Math.min(caret, draft.text.length);
-    const before = draft.text.slice(0, at);
-    const start =
-      Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n")) + 1;
-    const word = before.slice(start);
-    // A skill already drawn as its chip is no longer being typed.
-    if (!word.startsWith("/") || mentionField?.chipAt(start)) {
-      return null;
-    }
-    const query = word.slice(1);
-    // A token with whitespace in it is no longer being typed as one.
-    if (TOKEN_WHITESPACE.test(query)) {
-      return null;
-    }
-    return { query, from: start };
-  });
-
-  let slashMenuOpen = false;
-  $effect(() => {
-    const open = token !== null;
-    const rising = open && !slashMenuOpen;
-    slashMenuOpen = open;
-    if (rising) {
-      untrack(() => onmenu?.());
-    }
-  });
-
-  const entries = $derived.by((): Entry[] => {
-    const active = token;
-    if (!active) {
-      return [];
-    }
-    const needle = active.query.toLowerCase();
-    const rows: Entry[] = commands.map((command) => ({
-      id: `/${command.name}`,
-      insert: `/${command.name}`,
-      // The source is the section heading now, so the row shows the short
-      // name, then its prose or argument shape — never the word "builtin"
-      // as a stand-in description.
-      label: displayLabel(command.name, command.source),
-      detail: cleanDetail(
-        command.description,
-        command.argumentHint,
-        command.source
-      ),
-      kind: command.type,
-      source: command.source,
-    }));
-    return (
-      rows
-        .filter(
-          (row) =>
-            !needle ||
-            row.id.toLowerCase().includes(needle) ||
-            row.label.toLowerCase().includes(needle)
-        )
-        // Grouped and scrollable, so the cap only guards a pathological list; a
-        // real session's commands all fit inside it and read under their source.
-        .slice(0, 100)
-    );
-  });
-
-  /**
-   * The entries cut into titled sections, by source — one heading per plugin
-   * and per MCP server, with skills and built-ins under their family name —
-   * ordered skills, plugins (by name), built-ins, MCP servers. A section with
-   * no rows is never emitted.
-   */
-  const sections = $derived.by((): Section[] => {
-    if (entries.length === 0) {
-      return [];
-    }
-    const groups = new Map<
-      string,
-      { heading: string; rank: number; sub: string; entries: Entry[] }
-    >();
-    for (const entry of entries) {
-      const meta = sectionMeta(entry);
-      const bucket = groups.get(meta.key);
-      if (bucket) {
-        bucket.entries.push(entry);
-      } else {
-        groups.set(meta.key, {
-          heading: meta.heading,
-          rank: meta.rank,
-          sub: meta.sub,
-          entries: [entry],
-        });
-      }
-    }
-    return [...groups.values()]
-      .sort(
-        (a, b) =>
-          a.rank - b.rank ||
-          a.sub.localeCompare(b.sub) ||
-          a.heading.localeCompare(b.heading)
-      )
-      .map((group) => ({
-        key: `${group.rank}:${group.heading}`,
-        heading: group.heading,
-        entries: group.entries,
-      }));
-  });
-
-  const menuOpen = $derived(!dismissed && entries.length > 0);
-
-  /**
-   * A DOM id per visible row, so the field can point `aria-activedescendant`
-   * at the highlighted one. A screen reader on a combobox reads the active
-   * descendant, not the input's value — without this the menu is invisible to
-   * it, however well the arrow keys work. Keyed by position in the filtered
-   * list, which is unique where the entry's own id (`/foo`, `@bar`) is not a
-   * safe id token.
-   */
-  const domIds = $derived(
-    new Map(
-      entries.map((entry, index) => [entry.id, `composer-entry-${index}`])
-    )
-  );
-  const activeDescendant = $derived(
-    menuOpen ? domIds.get(highlight) : undefined
-  );
-
-  // The highlight follows the list: a query that filters the selected row away
-  // must not leave Enter pointing at something that is no longer on screen.
-  $effect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    if (!entries.some((entry) => entry.id === highlight)) {
-      highlight = entries[0].id;
-    }
-  });
-
   function noteCaret(event: Event): void {
-    caret = mentionField?.selection()[0] ?? 0;
-    dismissed = false;
+    menu.noteCaret();
     if (event.type === "input") {
       sendBlock = "";
       if (room) {
@@ -1276,34 +897,6 @@
       draft.notice = "";
       draftNote = "";
     }
-  }
-
-  /** Puts the chosen row where the token was, with a space after it. */
-  function choose(entry: Entry): void {
-    const active = token;
-    if (!active) {
-      return;
-    }
-    const end = Math.min(caret, draft.text.length);
-    draft.text = `${draft.text.slice(0, active.from)}${entry.insert} ${draft.text.slice(end)}`;
-    const next = active.from + entry.insert.length + 1;
-    dismissed = true;
-    // The field draws the new text now, and the caret is set in it before
-    // the next key: set a tick later, a key typed straight after the pick
-    // landed at the field's start.
-    flushSync();
-    field?.focus();
-    mentionField?.select(next);
-    caret = next;
-  }
-
-  function step(by: number): void {
-    if (entries.length === 0) {
-      return;
-    }
-    const at = entries.findIndex((entry) => entry.id === highlight);
-    const next = (at + by + entries.length) % entries.length;
-    highlight = entries[next].id;
   }
 
   /** This session's row, while its start failed. */
@@ -1443,7 +1036,7 @@
     const { text, extras } = draft.take();
     const id = newId();
     departBox(`sent:${id}`, field as HTMLDivElement);
-    dismissed = true;
+    menu.dismissed = true;
     deliver(text, extras, id, cuts);
   }
 
@@ -1506,7 +1099,7 @@
       departBox(`sent:${id}`, chip, false);
     }
     const { text, extras } = draft.take();
-    dismissed = true;
+    menu.dismissed = true;
     extras.attachments = [
       ...(extras.attachments ?? []),
       ...(extra.attachments ?? []),
@@ -1516,33 +1109,6 @@
     if (canvas) {
       room?.sent(canvas.id);
     }
-  }
-
-  /**
-   * The `/` and `@` menu owns these keys while it is up — Enter picks a
-   * command rather than sending the half-typed name of one. True when the key
-   * was the menu's.
-   */
-  function menuKey(event: KeyboardEvent): boolean {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      step(event.key === "ArrowDown" ? 1 : -1);
-      return true;
-    }
-    if (event.key === "Enter" || event.key === "Tab") {
-      const picked = entries.find((entry) => entry.id === highlight);
-      if (picked) {
-        event.preventDefault();
-        choose(picked);
-        return true;
-      }
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      dismissed = true;
-      return true;
-    }
-    return false;
   }
 
   /**
@@ -1583,7 +1149,7 @@
       submit(true);
       return;
     }
-    if (menuOpen ? menuKey(event) : chipKey(event)) {
+    if (menu.open ? menu.key(event) : chipKey(event)) {
       return;
     }
     if (event.key === "Escape" && canvasUp) {
@@ -1612,7 +1178,7 @@
    * True when the key was recall's.
    */
   function recallKey(event: KeyboardEvent): boolean {
-    if (menuOpen) {
+    if (menu.open) {
       return false;
     }
     if (draft.lifted) {
@@ -2088,7 +1654,7 @@
       measured,
     };
     wheeling = true;
-    dismissed = true;
+    menu.dismissed = true;
     // Keys reach the wheel from the field.
     if (keys) {
       field.focus();
@@ -3817,7 +3383,7 @@
         aria-keyshortcuts={recallOf
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
-        aria-label={FIELD_LABEL}
+        aria-label={fieldHint.label}
         class={dockShellVariants({
           class:
             "group/cin relative z-2 data-places:rounded-t-none py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none not-focus-within:touch-none not-focus-within:touch-callout-none",
@@ -3831,7 +3397,7 @@
         style:--cin-pad="var(--c-composer-inset)"
         style:--cin-ctl="var(--c-composer-field)"
       >
-        {#if menuOpen}
+        {#if menu.open}
           <!-- Above the input, not over it: the sentence being written stays legible
            while its next word is being chosen. -->
           <!-- Focus never leaves the field: the menu swallows the mousedown that
@@ -3862,14 +3428,14 @@
             out:popOut={{ side: "top" }}
             style:--menu-foot="calc(100% + var(--space-2))"
           >
-            <Command.Root loop shouldFilter={false} bind:value={highlight}>
+            <Command.Root loop shouldFilter={false} bind:value={menu.highlight}>
               <Command.List>
-                {#each sections as section (section.key)}
+                {#each menu.sections as section (section.key)}
                   <Command.Group heading={section.heading}>
                     {#each section.entries as entry (entry.id)}
                       <Command.Item
-                        id={domIds.get(entry.id)}
-                        onSelect={() => choose(entry)}
+                        id={menu.domIds.get(entry.id)}
+                        onSelect={() => menu.choose(entry)}
                         value={entry.id}
                       >
                         <!-- A command, in the code face. -->
@@ -3994,21 +3560,23 @@
                fly in over it, or an ask's card stands over it, it draws none
                of its own text or caret; while the wheel is up, no caret. -->
           <MentionField
-            aria-activedescendant={recall ? recallActive : activeDescendant}
+            aria-activedescendant={recall
+              ? recallActive
+              : menu.activeDescendant}
             aria-controls={recall ? recallId : "composer-menu"}
             aria-describedby={recallOf ? `${recallId}-way` : undefined}
-            aria-expanded={menuOpen || !!recall}
+            aria-expanded={menu.open || !!recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
             class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:data-folding:duration-(--dur-morph) motion-safe:group-data-settling/cin:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--dur-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
             data-cue-bottom={(cueBottom && !folded) || undefined}
             data-cue-top={(cueTop && !folded) || undefined}
             data-flying={flight !== null || !wordsLanded || undefined}
             here={mentionsFrom}
-            label={FIELD_LABEL}
+            label={fieldHint.label}
             menuHost={pill}
             names={mentionsFrom !== null}
             onblur={() => {
-              dismissed = true;
+              menu.dismissed = true;
               focused = false;
             }}
             onclick={noteCaret}
@@ -4022,7 +3590,7 @@
             onkeyup={noteCaret}
             {onpaste}
             phone={phone.current}
-            placeholder={hint}
+            placeholder={fieldHint.hint}
             {skills}
             tabindex={0}
             bind:this={mentionField}
@@ -4036,7 +3604,7 @@
                 onFit?.(whole);
               },
             })}
-            {@attach fitHint}
+            {@attach fieldHint.fit}
             {@attach scrollCue}
           />
           {#if flight}
