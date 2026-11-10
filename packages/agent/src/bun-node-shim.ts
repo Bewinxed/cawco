@@ -89,7 +89,9 @@ const linked = async (link: string, bun: string): Promise<void> => {
   } catch (error) {
     // The host's own bun made it in between: kept when it names the same bun.
     const raced =
-      (error as NodeJS.ErrnoException).code === "EEXIST" &&
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "EEXIST" &&
       (await readlink(link).catch(() => undefined)) === bun;
     if (!raced) {
       throw error;
@@ -134,7 +136,9 @@ export const bunNodeShim = async (): Promise<string | undefined> => {
     await linked(join(dir, "node"), bun);
     await linked(join(dir, "bun"), bun);
   } catch (error) {
-    return unmade(`${dir} could not be made: ${(error as Error).message}`);
+    return unmade(
+      `${dir} could not be made: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
   said = undefined;
   return dir;

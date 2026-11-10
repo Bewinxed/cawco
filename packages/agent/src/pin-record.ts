@@ -18,21 +18,27 @@ import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
+import { z } from "zod";
 import { type PinMove, pinMoveWords, putOnPins } from "./tools";
 
-interface PinRecord {
+const PinRecord = z.object({
   /** The build whose pins went on. */
-  build: string;
+  build: z.string(),
   /** Each moved tool's version before, by tool id: what goes back on. */
-  tools: Record<string, string>;
-}
+  tools: z.record(z.string(), z.string()),
+});
+type PinRecord = z.infer<typeof PinRecord>;
 
 const recordPath = (): string => join(binaryRoot(), "pins-before.json");
 
-const readPinRecord = async (): Promise<PinRecord | undefined> =>
-  (await Bun.file(recordPath())
-    .json()
-    .catch(() => undefined)) as PinRecord | undefined;
+const readPinRecord = async (): Promise<PinRecord | undefined> => {
+  const record = PinRecord.safeParse(
+    await Bun.file(recordPath())
+      .json()
+      .catch(() => undefined)
+  );
+  return record.success ? record.data : undefined;
+};
 
 /**
  * One move for `build`, recorded as it lands. The first version recorded for

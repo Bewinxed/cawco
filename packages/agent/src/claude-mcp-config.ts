@@ -126,7 +126,7 @@ const removeWrittenBefore = (
   try {
     names = readdirSync(dir);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return;
     }
     throw error;

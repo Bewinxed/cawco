@@ -28,6 +28,12 @@ export type MachineControl =
 export const imageLane: ControlLane = (control) =>
   control.requestId ? `image:${control.requestId}` : undefined;
 
+/** What `value` holds under `key`, when it is an object that has one. */
+const fieldOf = (value: unknown, key: string): unknown =>
+  typeof value === "object" && value !== null && key in value
+    ? Reflect.get(value, key)
+    : undefined;
+
 /**
  * A command the hub runs (a check, a landing gate step, up to an hour):
  * commands in one directory run one after another, and nothing else waits
@@ -42,7 +48,7 @@ export const commandLane: ControlLane = (control) =>
  * a hub asking again for a step in flight waits on that one run.
  */
 export const moveLane: ControlLane = (control) =>
-  `move:${(control.args?.[0] as { jobId?: string } | undefined)?.jobId}`;
+  `move:${fieldOf(control.args?.[0], "jobId")}`;
 
 /** A late create must finish before its discard; different workspace ids do not queue together. */
 export const workspaceCreateLane: ControlLane = (control) =>
@@ -50,4 +56,4 @@ export const workspaceCreateLane: ControlLane = (control) =>
 
 /** A workspace's other controls, in its create's lane, by the workspace its first argument names. */
 export const workspaceLane: ControlLane = (control) =>
-  `workspace:${(control.args?.[0] as { id?: string } | undefined)?.id}`;
+  `workspace:${fieldOf(control.args?.[0], "id")}`;

@@ -1,6 +1,7 @@
 import type { SessionPulse } from "@cawco/core/protocol";
 import type { NeutralMessage } from "@cawco/core/session-messages";
 import { getToolGlance } from "@cawco/core/transcript-rules";
+import { z } from "zod";
 import type { FrameSink } from "./frame-sink";
 import type { Harness, HarnessSession } from "./harness";
 import { gaugeTables } from "./memory";
@@ -48,6 +49,9 @@ export type Drop =
 
 /** At most one pulse per instance per this long, unless busy/blocked moves. */
 const PULSE_THROTTLE_MS = 1000;
+
+/** A tool call's input, when it is an object. */
+const ToolInput = z.record(z.string(), z.unknown());
 
 export class LiveSessions {
   readonly #host: LiveHost;
@@ -272,7 +276,7 @@ export class LiveSessions {
         }
         this.#pulseTool.set(instanceId, {
           name: block.name,
-          glance: getToolGlance(block.input as Record<string, unknown>),
+          glance: getToolGlance(ToolInput.safeParse(block.input).data),
           toolId: block.id,
         });
         this.emitPulse(instanceId, false);

@@ -153,7 +153,7 @@ const check = async (
 };
 
 const namesIn = (dir: string): Promise<string[]> =>
-  readdir(dir).catch(() => [] as string[]);
+  readdir(dir).catch((): string[] => []);
 
 /**
  * Removes what a write cut short left in `dir`, and answers the names of

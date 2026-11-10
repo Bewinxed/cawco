@@ -29,12 +29,15 @@ import { removeTree } from "./remove-tree";
 const WORKSPACE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
+/** What `value` holds under `key`, when it is an object that has one. */
+const fieldOf = (value: unknown, key: string): unknown =>
+  typeof value === "object" && value !== null
+    ? Reflect.get(value, key)
+    : undefined;
+
 /** The host workspace id `asked` names, as a control's `{ id }` or a spawn's string; refused for anything else. */
 const hostId = (asked: unknown): string => {
-  const id =
-    typeof asked === "string"
-      ? asked
-      : (asked as { id?: unknown } | null | undefined)?.id;
+  const id = typeof asked === "string" ? asked : fieldOf(asked, "id");
   if (typeof id !== "string" || !WORKSPACE_ID.test(id)) {
     throw new Error(workWords.hostScratchUnnamed);
   }
@@ -125,7 +128,7 @@ export const hostOutputs = async (
   asked: unknown
 ): Promise<WorkspaceOutputs | { listed: HostOutputListed[] }> => {
   const id = hostId(asked);
-  return (asked as { read?: unknown }).read === true
+  return fieldOf(asked, "read") === true
     ? await outputsOf(id)
     : { listed: await outputsListed(id) };
 };

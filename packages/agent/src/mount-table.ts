@@ -45,7 +45,7 @@ export const mountPointsOf = (pid: number | string): Set<string> | undefined =>
  */
 export const mountedAnywhere = (path: string): boolean => {
   const spaces = new Set<string>();
-  for (const pid of readOr(() => readdirSync("/proc"), [] as string[])) {
+  for (const pid of readOr((): string[] => readdirSync("/proc"), [])) {
     if (!PID.test(pid)) {
       continue;
     }
