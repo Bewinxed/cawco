@@ -388,6 +388,8 @@ export default {
         "src/standalone-setup.ts",
         // The canvas host page's Bun.build entrypoint: packages/hub/src/canvas-host.ts.
         "src/canvas-host/host.tsx",
+        // CawCo's OpenCode plugin, a Bun.build entrypoint (src/harnesses/opencode-plugin.ts, scripts/build-binary.ts) that OpenCode loads from a directory.
+        "src/harnesses/opencode-plugin-module.ts",
       ],
     },
     "packages/preview": {

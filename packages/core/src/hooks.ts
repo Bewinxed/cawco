@@ -427,7 +427,7 @@ export type HookHarness = Exclude<HarnessKind, "claude">;
  * other event is unsupported on that harness, and said so on the machine's
  * row ({@link hookUnsupported}).
  */
-export const HOOK_EVENTS_ON = {
+const HOOK_EVENTS_ON = {
   opencode: ["PreToolUse", "PostToolUse", "PostToolUseFailure"],
   pi: [
     "PreToolUse",
@@ -440,7 +440,7 @@ export const HOOK_EVENTS_ON = {
 } as const satisfies Record<HookHarness, readonly HookEvent[]>;
 
 /** One harness tool in Claude Code's words: its name, and its input's keys renamed to Claude Code's. */
-export interface HookToolName {
+interface HookToolName {
   input?: Readonly<Record<string, string>>;
   name: string;
 }
@@ -456,7 +456,7 @@ export interface HookToolName {
  * `edits` kept as they are), `ls`, `find` and `grep`. A tool not named here
  * (an MCP tool, a plugin's or an extension's) is matched by its own name.
  */
-export const HOOK_TOOL_NAMES = {
+const HOOK_TOOL_NAMES = {
   opencode: {
     shell: { name: "Bash" },
     read: { name: "Read", input: { path: "file_path" } },
