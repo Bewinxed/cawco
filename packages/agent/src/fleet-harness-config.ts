@@ -23,7 +23,7 @@ import {
 import { fleetPlacedDir } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { z } from "zod";
-import type { SetHarnessConfig } from "./fleet-harness-set";
+import type { SetHarnessConfig } from "./fleet-set-rows";
 import { resolveBin, toolEnv } from "./tools";
 
 /** How long one package's `npm install` gets: a first install of a package with its dependencies, as an MCP server's (mcp-install.ts). */

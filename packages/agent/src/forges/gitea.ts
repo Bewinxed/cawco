@@ -22,7 +22,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { hostProgram } from "../host-gh";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
-import type { ForgeAdapter, ForgeSignIn } from "./forge";
+import type { ForgeAdapter, ForgeSignIn } from "./forge-adapter";
 
 /** The gitea-mcp tools the adapter calls, and no others are listed to it. */
 const TOOLS = "get_me,issue_write,pull_request_write,pull_request_read";
