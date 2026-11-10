@@ -38,10 +38,11 @@ import {
   sql,
 } from "drizzle-orm";
 import type { DbCore } from "./core";
-import { foldMovedColumns } from "./owned-rows";
+import type { FoldMoved } from "./owned-rows";
 import { projectHoldingOf } from "./projects";
 import {
   accounts,
+  artifacts,
   delegateEvents,
   instanceAliases,
   instanceConversations,
@@ -352,7 +353,7 @@ export interface InstancesDb {
    * them is in (the group reports once, to one parent); its queued delegates
    * and queued task starts; the asks of the moved delegates still
    * waiting on an answer; and its artifacts, as the session that holds them
-   * and as their maker (the columns a fold moves, owned-rows.ts `foldMovedColumns`), so every
+   * and as their maker (the columns a fold moves, owned-rows.ts `FoldMoved`), so every
    * comment, pick and wake on one reaches `to`. What `from` delegated and is
    * over stays its own.
    */
@@ -1940,13 +1941,30 @@ export const instancesDb = (core: DbCore): InstancesDb => {
             .where(pendingAsks)
             .run();
         }
-        const carriedArtifacts = new Set(
-          foldMovedColumns("artifacts").flatMap((column) =>
+        // The columns a fold moves of an artifact (owned-rows.ts), those and
+        // no others: the keys are held to them by the type.
+        const carriedByColumn = {
+          instance_id: () =>
             tx
-              .all<{ id: string }>(
-                sql`UPDATE artifacts SET ${sql.identifier(column)} = ${to} WHERE ${sql.identifier(column)} = ${from} RETURNING id`
-              )
-              .map((row) => row.id)
+              .update(artifacts)
+              .set({ instanceId: to })
+              .where(eq(artifacts.instanceId, from))
+              .returning({ id: artifacts.id })
+              .all(),
+          made_by: () =>
+            tx
+              .update(artifacts)
+              .set({ madeBy: to })
+              .where(eq(artifacts.madeBy, from))
+              .returning({ id: artifacts.id })
+              .all(),
+        } satisfies Record<
+          FoldMoved<typeof artifacts>["_"]["name"],
+          () => { id: string }[]
+        >;
+        const carriedArtifacts = new Set(
+          Object.values(carriedByColumn).flatMap((carry) =>
+            carry().map((row) => row.id)
           )
         ).size;
         if (carriedArtifacts > 0) {
