@@ -38,7 +38,7 @@
   bind:value={
     () => (value === null ? [] : [value]),
     (next) => {
-      value = (next[0] ?? null) as T | null;
+      value = options.find((option) => option.id === next[0])?.id ?? null;
     }
   }
   {disabled}

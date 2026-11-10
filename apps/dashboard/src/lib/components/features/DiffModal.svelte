@@ -7,11 +7,7 @@
    * into its own layer, so switching cross-fades the new one in over the
    * old over --dur-control instead of redrawing in place.
    */
-  import {
-    type FileContents,
-    type FileDiffMetadata,
-    parseDiffFromFile,
-  } from "@pierre/diffs";
+  import { type FileDiffMetadata, parseDiffFromFile } from "@pierre/diffs";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
@@ -36,7 +32,7 @@
 
   /** Draws the diff into a layer in `style`, and clears it when the layer goes. */
   const drawn = (style: "unified" | "split") => (layer: HTMLElement) => {
-    const lang = languageOf(filePath) as FileContents["lang"];
+    const lang = languageOf(filePath);
     const name = fileName(filePath);
     const diff = houseDiff({
       disableFileHeader: true,
@@ -107,8 +103,8 @@
       <ToggleGroup.Root
         aria-label="Diff layout"
         onValueChange={(next) => {
-          if (next) {
-            diffStyle = next as "unified" | "split";
+          if (next === "unified" || next === "split") {
+            diffStyle = next;
           }
         }}
         type="single"

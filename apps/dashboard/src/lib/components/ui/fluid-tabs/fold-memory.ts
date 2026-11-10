@@ -34,7 +34,17 @@ const STORED_LENGTH = 9;
  */
 const SEND_AFTER = 120;
 
-type Stored = number[];
+type Stored = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+];
 
 const isStored = (value: unknown): value is Stored =>
   Array.isArray(value) &&
@@ -52,42 +62,33 @@ const measureOf = (stored: Stored): FoldMeasure => {
     stroke,
     taper,
     ease,
-  ] = stored as [
-    number,
-    number,
-    number,
-    number,
-    number,
-    number,
-    number,
-    number,
-    number,
-  ];
+  ] = stored;
   return {
     box: { width, height, flare, radius, slopeStart, slopeEnd },
     ink: { stroke, taper, ease },
   };
 };
 
-const storedOf = ({ box, ink }: FoldMeasure): Stored =>
-  [
-    box.width,
-    box.height,
-    box.flare,
-    box.radius,
-    box.slopeStart,
-    box.slopeEnd,
-    ink.stroke,
-    ink.taper,
-    ink.ease,
-  ].map((n) => Math.round(n * 100) / 100);
+const hundredth = (n: number): number => Math.round(n * 100) / 100;
+
+const storedOf = ({ box, ink }: FoldMeasure): Stored => [
+  hundredth(box.width),
+  hundredth(box.height),
+  hundredth(box.flare),
+  hundredth(box.radius),
+  hundredth(box.slopeStart),
+  hundredth(box.slopeEnd),
+  hundredth(ink.stroke),
+  hundredth(ink.taper),
+  hundredth(ink.ease),
+];
 
 const entriesOf = (raw: string | null | undefined): [string, Stored][] => {
   if (!raw) {
     return [];
   }
   try {
-    const parsed = JSON.parse(raw) as unknown;
+    const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object"
       ? Object.entries(parsed).filter((entry): entry is [string, Stored] =>
           isStored(entry[1])

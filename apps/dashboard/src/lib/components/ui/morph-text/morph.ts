@@ -59,10 +59,12 @@ function make(segment: Segment): HTMLElement {
 }
 
 /** What rolls in a digit's slot: the face inside it; any other letter is itself. */
-const face = (el: HTMLElement): HTMLElement =>
-  el.dataset.roll === undefined
-    ? el
-    : ((el.firstElementChild as HTMLElement | null) ?? el);
+const face = (el: HTMLElement): HTMLElement => {
+  const inner = el.firstElementChild;
+  return el.dataset.roll !== undefined && inner instanceof HTMLElement
+    ? inner
+    : el;
+};
 
 /**
  * A letter arriving fades up from 0.95; a digit rolls in from below. With

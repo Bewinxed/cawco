@@ -401,9 +401,8 @@
     class="contents"
     onpointerdown={(event) => {
       if (
-        (event.target as HTMLElement).closest(
-          "input, textarea, select, [contenteditable]"
-        )
+        event.target instanceof Element &&
+        event.target.closest("input, textarea, select, [contenteditable]")
       ) {
         event.stopPropagation();
       }
