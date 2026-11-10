@@ -735,7 +735,9 @@ function applyReset(
  * retro-declare it failed fifteen seconds after it had actually landed. The
  * record knows where its own finish line is; ask it.
  */
-const isSettled = (record: CommandRecord): boolean =>
+const isSettled = (
+  record: CommandRecord
+): record is CommandRecord & { stage: SettleStage | "failed" } =>
   record.stage === "failed" ||
   record.stage === "applied" ||
   (record.stage === "accepted" && record.settlesAt === "accepted");
@@ -786,7 +788,7 @@ function advanceStage(
   if (record.effects && isSettled(record)) {
     const { settled } = record.effects;
     record.effects = undefined;
-    settled?.(stage as SettleStage | "failed", record.reason);
+    settled?.(record.stage, record.reason);
   }
   // Fired after the stage is written so the reporter reads a settled record,
   // and only on the transition, so a record failed once is announced once.
@@ -891,10 +893,14 @@ export function submitCommand(
 /** Replays retained sends under their original ids, oldest first. */
 export function resumePendingSends(state: StreamState, host: StreamHost): void {
   const pending = Object.values(state.commands)
-    .filter((record) => record.envelope && !isSettled(record))
-    .sort((a, b) => a.at - b.at);
-  for (const record of pending) {
-    const refusal = dispatch(host, record.envelope as CommandEnvelope);
+    .flatMap((record) =>
+      record.envelope && !isSettled(record)
+        ? [{ record, envelope: record.envelope }]
+        : []
+    )
+    .sort((a, b) => a.record.at - b.record.at);
+  for (const { record, envelope } of pending) {
+    const refusal = dispatch(host, envelope);
     record.waiting = refusal !== null;
     if (refusal !== null) {
       break;
