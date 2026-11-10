@@ -44,7 +44,7 @@ import {
   taskResultWords,
   todoWrittenWords,
 } from "./presenters/tasks";
-import type { Refused } from "./refusal";
+import { type Refused, refusal } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
 import {
@@ -131,7 +131,8 @@ export interface TaskToolContext {
 
 /**
  * One artifact as `task_result` takes it, read as the kind it names: a file
- * or a post its `path`, a link its `url`, a page artifact its `artifactId`.
+ * or a post its `path`, a link its `url`, a page artifact its `artifactId`;
+ * refused when it names none.
  */
 const resultArtifact = (
   written: {
@@ -143,35 +144,61 @@ const resultArtifact = (
     primary?: boolean;
   },
   artifactNamed: (asked: string) => string
-): ResultArtifact => {
+) => {
   const shown = {
     ...(written.name ? { name: written.name } : {}),
     ...(written.primary ? { primary: true } : {}),
   };
-  const need = (value: string | undefined, field: string): string => {
-    if (!value?.trim()) {
-      throw new Error(`A ${written.kind} artifact names its ${field}.`);
+  const need = (value: string | undefined, field: string) =>
+    value?.trim()
+      ? value.trim()
+      : refusal(
+          400,
+          "task-result-artifact-unnamed",
+          `A ${written.kind} artifact names its ${field}.`
+        );
+  if (written.kind === "link") {
+    const url = need(written.url, "url");
+    if (url instanceof ElysiaStatus) {
+      return url;
     }
-    return value.trim();
-  };
-  switch (written.kind) {
-    case "link":
-      return { kind: "link", url: need(written.url, "url"), ...shown };
-    case "artifact":
-      return {
-        kind: "artifact",
-        artifactId: artifactNamed(need(written.artifactId, "artifactId")),
-        ...shown,
-      };
-    case "file":
-    case "post":
-      break;
+    const link: ResultArtifact = { kind: "link", url, ...shown };
+    return link;
   }
-  return {
-    kind: written.kind,
-    path: need(written.path, "path"),
-    ...shown,
-  };
+  if (written.kind === "artifact") {
+    const named = need(written.artifactId, "artifactId");
+    if (named instanceof ElysiaStatus) {
+      return named;
+    }
+    const page: ResultArtifact = {
+      kind: "artifact",
+      artifactId: artifactNamed(named),
+      ...shown,
+    };
+    return page;
+  }
+  const path = need(written.path, "path");
+  if (path instanceof ElysiaStatus) {
+    return path;
+  }
+  const file: ResultArtifact = { kind: written.kind, path, ...shown };
+  return file;
+};
+
+/** A result's artifacts as `task_result` takes them ({@link resultArtifact}); the first refusal when one names nothing. */
+const resultArtifacts = (
+  written: Parameters<typeof resultArtifact>[0][],
+  artifactNamed: (asked: string) => string
+) => {
+  const artifacts: ResultArtifact[] = [];
+  for (const one of written) {
+    const artifact = resultArtifact(one, artifactNamed);
+    if (artifact instanceof ElysiaStatus) {
+      return artifact;
+    }
+    artifacts.push(artifact);
+  }
+  return artifacts;
 };
 
 const taskRef = () =>
@@ -241,7 +268,8 @@ const stepParameter = () =>
 
 /**
  * Steps as written, nested by depth: each one at most one deeper than the
- * one before, and each without an id given its position (`2`, `2.1`).
+ * one before, and each without an id given its position (`2`, `2.1`); the
+ * refusal of a wait that names nothing, or of a step too deep.
  */
 const stepsOf = async (
   written: z.infer<ReturnType<typeof stepParameter>>[],
@@ -260,24 +288,28 @@ const stepsOf = async (
     }
     waits.push(wait);
   }
-  return written.map((step, index): WrittenStep => {
+  const steps: WrittenStep[] = [];
+  for (const [index, step] of written.entries()) {
     const depth = step.depth ?? 0;
     if (depth > counts.length) {
-      throw new Error(
+      return refusal(
+        400,
+        "todo-step-too-deep",
         `Step ${index + 1} (“${step.content}”) is at depth ${depth}, deeper than one past the step before it.`
       );
     }
     counts.length = depth + 1;
     counts[depth] = (counts[depth] ?? 0) + 1;
-    return {
+    steps.push({
       id: step.id ?? counts.join("."),
       content: step.content,
       status: step.status,
       depth,
       ...(step.priority ? { priority: step.priority } : {}),
       ...(waits[index] ? { waitsOn: waits[index] } : {}),
-    };
-  });
+    });
+  }
+  return steps;
 };
 
 /** What a work item may spend before the hub stops it: `delegate`'s and the task tools' one shape. */
@@ -316,13 +348,20 @@ export const groupParameter = () =>
  * definitions for discovery, whose handlers refuse.
  */
 export function taskTools(context: TaskToolContext | undefined) {
+  /** The refusal of a call in discovery, where the tools are listed with nothing to act through. */
+  const discovery = () =>
+    refusal(409, "task-tools-discovery", "Discovery cannot execute tools");
+
+  /** The calling session's project, its tasks and how it acts on them; refused in discovery, and for a session in no project. */
   const scope = () => {
     if (!context) {
-      throw new Error("Discovery cannot execute tools");
+      return discovery();
     }
     const { projectId } = context.actor;
     if (!projectId) {
-      throw new Error(
+      return refusal(
+        409,
+        "task-session-no-project",
         "This session belongs to no project, so it has no tasks. Start the session in one of a project's places."
       );
     }
@@ -371,26 +410,32 @@ export function taskTools(context: TaskToolContext | undefined) {
   const ownTask = (
     name: "todo_write" | "task_comment",
     asked: string | undefined
-  ): string => {
+  ) => {
     const own = context?.workItemTask ?? null;
     if (context?.anyTask) {
       const named = asked ?? own;
-      if (!named) {
-        throw new Error(`Name the task: ${name}({ task: "tsk-12", … }).`);
-      }
-      return named;
+      return named
+        ? named
+        : refusal(
+            400,
+            "task-tool-unnamed",
+            `Name the task: ${name}({ task: "tsk-12", … }).`
+          );
     }
     if (!own) {
-      throw new Error(
+      return refusal(
+        409,
+        "task-tool-no-own-task",
         `${name} works on your work item's task, and your work item has none. Say what you did in finish_item instead.`
       );
     }
-    if (asked !== undefined && normaliseTaskRef(asked) !== own) {
-      throw new Error(
-        `You can use ${name} only on ${own}, your work item's task.`
-      );
-    }
-    return own;
+    return asked !== undefined && normaliseTaskRef(asked) !== own
+      ? refusal(
+          403,
+          "task-tool-not-own",
+          `You can use ${name} only on ${own}, your work item's task.`
+        )
+      : own;
   };
 
   /** todo_write's session scope: the session's steps (each wait read as a task's is) or its spec, written. */
@@ -399,7 +444,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     spec: string | undefined
   ) => {
     if (!context?.writePlan) {
-      throw new Error("Discovery cannot execute tools");
+      return discovery();
     }
     const written = steps
       ? await stepsOf(
@@ -451,7 +496,11 @@ export function taskTools(context: TaskToolContext | undefined) {
       },
       async ({ id, history, part_of, ...rest }, format) => {
         const filter = { ...rest, partOf: part_of };
-        const { projectId, tasks } = scope();
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId, tasks } = scoped;
         if (id) {
           const read = await tasks.get(projectId, id);
           if (read instanceof ElysiaStatus) {
@@ -467,7 +516,9 @@ export function taskTools(context: TaskToolContext | undefined) {
             : { ...task, history: changes.events };
         }
         if (history) {
-          throw new Error(
+          return refusal(
+            400,
+            "task-history-unnamed",
             'Name the task whose history you want: task_read({ id: "tsk-12", history: true }).'
           );
         }
@@ -517,7 +568,11 @@ export function taskTools(context: TaskToolContext | undefined) {
         fields: fieldsParameter(),
       },
       async ({ waits_on, part_of, runs_on, ...draft }, format) => {
-        const { projectId, tasks, actor } = scope();
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId, tasks, actor } = scoped;
         // The design system's build carries the hub's words, never the filer's.
         if (draft.title.trim() === BUILD_TITLE && context?.designBuild) {
           return await context.designBuild(projectId, actor, draft.stage);
@@ -589,9 +644,15 @@ export function taskTools(context: TaskToolContext | undefined) {
       },
       async ({ id, stage, reason, runs_on, ...rest }, format) => {
         const patch = { ...rest, runsOn: runs_on };
-        const { projectId, tasks, actor } = scope();
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId, tasks, actor } = scoped;
         if (reason !== undefined && stage === undefined) {
-          throw new Error(
+          return refusal(
+            400,
+            "task-reason-without-stage",
             "A reason goes with a stage move: give `stage` too, or leave `reason` out."
           );
         }
@@ -643,7 +704,11 @@ export function taskTools(context: TaskToolContext | undefined) {
           .describe("Take the named links out instead."),
       },
       async ({ task, waits_on, part_of, duplicate_of, remove }, format) => {
-        const { projectId, tasks, actor } = scope();
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId, tasks, actor } = scoped;
         const linked = await tasks.link(
           projectId,
           task,
@@ -666,9 +731,17 @@ export function taskTools(context: TaskToolContext | undefined) {
       "Start an attempt at a task: a delegate in a new workspace on a machine its runs_on names, briefed from the task file, reporting to you; the task moves to its active stage. Refused while one is live or it is done.",
       { id: taskRef() },
       async ({ id }) => {
-        const { projectId } = scope();
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId } = scoped;
         if (!context?.startAttempt) {
-          throw new Error("Attempts cannot be started on this hub.");
+          return refusal(
+            503,
+            "task-attempts-off",
+            "Attempts cannot be started on this hub."
+          );
         }
         return await context.startAttempt(projectId, id, context.actor);
       },
@@ -679,9 +752,17 @@ export function taskTools(context: TaskToolContext | undefined) {
       "Retry a task whose last attempt failed or was stopped: a fresh session in that attempt's workspace, briefed with the failure, reporting to you.",
       { id: taskRef() },
       async ({ id }) => {
-        const { projectId } = scope();
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId } = scoped;
         if (!context?.retryAttempt) {
-          throw new Error("Attempts cannot be retried on this hub.");
+          return refusal(
+            503,
+            "task-retries-off",
+            "Attempts cannot be retried on this hub."
+          );
         }
         return await context.retryAttempt(projectId, id, context.actor);
       },
@@ -714,19 +795,24 @@ export function taskTools(context: TaskToolContext | undefined) {
             task !== undefined ||
             Object.values(changes).some((value) => value !== undefined)
           ) {
-            throw new Error(
+            return refusal(
+              400,
+              "todo-write-mixed",
               "Write your own plan (steps, spec) and a task's to-dos in separate calls."
             );
           }
           return await ownPlan(steps, spec);
         }
-        const { projectId, tasks, actor } = scope();
-        const done = await tasks.todos(
-          projectId,
-          ownTask("todo_write", task),
-          changes,
-          actor
-        );
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId, tasks, actor } = scoped;
+        const ref = ownTask("todo_write", task);
+        if (ref instanceof ElysiaStatus) {
+          return ref;
+        }
+        const done = await tasks.todos(projectId, ref, changes, actor);
         return done instanceof ElysiaStatus
           ? done
           : { id: done.id, title: done.title, todos: done.todos };
@@ -738,13 +824,16 @@ export function taskTools(context: TaskToolContext | undefined) {
       "Comment on your work item's task (an orchestrator names any): an entry with your name and the time, never changed.",
       { task: z.string().optional(), text: z.string() },
       async ({ task, text }) => {
-        const { projectId, tasks, actor } = scope();
-        const done = await tasks.comment(
-          projectId,
-          ownTask("task_comment", task),
-          text,
-          actor
-        );
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId, tasks, actor } = scoped;
+        const ref = ownTask("task_comment", task);
+        if (ref instanceof ElysiaStatus) {
+          return ref;
+        }
+        const done = await tasks.comment(projectId, ref, text, actor);
         return done instanceof ElysiaStatus
           ? done
           : { id: done.id, title: done.title, comments: done.comments };
@@ -789,20 +878,31 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional(),
       },
       async ({ summary, check, artifacts }) => {
-        const { projectId, tasks } = scope();
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId, tasks } = scoped;
         const workItemId = context?.actor.workItemId;
         const own = context?.workItemTask ?? null;
         if (!(workItemId && own)) {
-          throw new Error(
+          return refusal(
+            409,
+            "task-result-no-attempt",
             "task_result hands in an attempt at a task, and this session works none. Say what you did in finish_item instead."
           );
+        }
+        const handed =
+          artifacts === undefined
+            ? undefined
+            : resultArtifacts(artifacts, context?.artifactNamed ?? same);
+        if (handed instanceof ElysiaStatus) {
+          return handed;
         }
         return await tasks.result(projectId, own, workItemId, {
           summary,
           check,
-          artifacts: artifacts?.map((one) =>
-            resultArtifact(one, context?.artifactNamed ?? same)
-          ),
+          artifacts: handed,
         });
       },
       taskResultWords
@@ -812,7 +912,11 @@ export function taskTools(context: TaskToolContext | undefined) {
       "Archive a task: off the board and lists, done for tasks that wait on it, kept with its history; not while an attempt is live. `archived: false` brings it back.",
       { id: taskRef(), archived: z.boolean().optional() },
       async ({ id, archived }) => {
-        const { projectId, tasks, actor } = scope();
+        const scoped = scope();
+        if (scoped instanceof ElysiaStatus) {
+          return scoped;
+        }
+        const { projectId, tasks, actor } = scoped;
         const done = await tasks.archive(
           projectId,
           id,
