@@ -4725,7 +4725,7 @@ export const createServer = (
       );
     },
     previewAddress: (instanceId) =>
-      onPreviewPort(() => previewListeners.address(instanceId)),
+      onPreviewPort(previewListeners.address(instanceId)),
     // Its parent's, or its project's conversation's, as stop_delegate decides.
     delegatesIn: (instance, workspaceId) =>
       db
@@ -4775,12 +4775,16 @@ export const createServer = (
       }
       // A canvas is always its session's: only a project's page outlives one.
       const owner = artifact.instanceId as string;
+      const local = previewListeners.local(owner);
+      if (local instanceof ElysiaStatus) {
+        throw new ArtifactRefusal(local.status, local.response.detail);
+      }
       const token = crypto.randomUUID();
       const open = {
         canvas: { id: artifact.id, name: artifact.name, sync },
         token,
         url: previewEnterUrl(
-          previewListeners.local(owner),
+          local,
           mintSessionTicket(owner, [owner]).ticket,
           `/__cawco/canvas/${artifact.id}/`
         ),

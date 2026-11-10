@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { passDomainRefusal } from "./pass-domain";
-import { StatusRefusal } from "./refusal";
-
-/** The fleet's preview mode could not be taken: why, in one sentence. */
-export class PreviewRefusal extends StatusRefusal<409 | 422 | 503> {}
+import { refusal } from "./refusal";
 
 /**
  * `https://` (how the proxy in front of the names serves them, never how a
@@ -58,41 +55,37 @@ export const labelOf = (key: string): string =>
     : `o-${createHash("sha256").update(key).digest("hex").slice(0, 40)}`;
 
 /**
- * `pattern` parsed, or refused in one sentence: one whose names stand under
+ * `pattern` parsed, or its refusal in one sentence: one whose names stand under
  * a public suffix (`ts.net`, `pages.dev`, a bare `localhost`), or under an
  * ending the Public Suffix List doesn't know (`.localhost`, `.test`,
  * `.lan`), is refused, since no browser's frames would carry their pass
  * (hub pass-domain.ts).
  */
-export const parsePattern = (pattern: string): HostPattern => {
+export const parsePattern = (pattern: string) => {
   const parts = pattern.match(PATTERN_SHAPE);
   if (!parts) {
-    throw new PreviewRefusal(422, PATTERN_REFUSAL);
+    return refusal(422, "preview-pattern-unfit", PATTERN_REFUSAL);
   }
-  const [, before, key, name, domain, port = ""] = parts as [
-    string,
-    string,
-    HostPattern["key"],
-    string,
-    string,
-    string?,
-  ];
-  const refusal = passDomainRefusal(domain);
-  if (refusal?.kind === "public") {
-    throw new PreviewRefusal(
+  const [, before = "", placeholder, name = "", domain = "", port = ""] = parts;
+  const key: HostPattern["key"] = placeholder === "port" ? "port" : "session";
+  const unpassed = passDomainRefusal(domain);
+  if (unpassed?.kind === "public") {
+    return refusal(
       422,
+      "preview-pattern-public-suffix",
       `The pattern's names stand under ${domain}, a public suffix, where no browser keeps a cookie, so the hub can't give them a pass. Use names under a domain of your own, like https://p-{port}.previews.example.com, then save again.`
     );
   }
-  if (refusal) {
-    throw new PreviewRefusal(
+  if (unpassed) {
+    return refusal(
       422,
-      `The pattern's names stand under ${domain}, whose ending .${refusal.suffix} no public registry holds, so a browser takes each name for a site of its own and no frame of the dashboard carries their pass. Use names under a domain registered on the internet, like https://p-{port}.previews.example.com, then save again.`
+      "preview-pattern-unregistered",
+      `The pattern's names stand under ${domain}, whose ending .${unpassed.suffix} no public registry holds, so a browser takes each name for a site of its own and no frame of the dashboard carries their pass. Use names under a domain registered on the internet, like https://p-{port}.previews.example.com, then save again.`
     );
   }
   const after = `${name}${port}`;
   // The Host header names the port only when it is not the scheme's own.
-  return {
+  const parsed: HostPattern = {
     before,
     key,
     after,
@@ -102,6 +95,7 @@ export const parsePattern = (pattern: string): HostPattern => {
       "iu"
     ),
   };
+  return parsed;
 };
 
 /** The host name `pattern` gives a session whose placeholder value is `value` (`name[:port]`). */
