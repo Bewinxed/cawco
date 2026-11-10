@@ -114,7 +114,9 @@ export const LANDING_HOLD_MS = 1500;
 const FILLED_HOLD_MS = 500;
 export interface KeptPlaceHost {
   readonly findHere: ConversationFind;
-  readonly jumping: boolean;
+  readonly jumper: {
+    readonly jumping: boolean;
+  };
   readonly landed: boolean;
   readonly mounted: {
     readonly buffer: number;
@@ -495,7 +497,7 @@ export class KeptPlace {
     if (
       !(place && this.#host.landed && this.#host.shown) ||
       this.#host.pin.atBottom ||
-      this.#host.jumping ||
+      this.#host.jumper.jumping ||
       this.#host.seek.seeking !== null ||
       (this.resume !== null && !this.resume.tail)
     ) {

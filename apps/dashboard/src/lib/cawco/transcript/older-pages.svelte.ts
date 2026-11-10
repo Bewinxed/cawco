@@ -17,7 +17,9 @@ import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
 import { readOlderPage } from "../stores/transcript-reads.svelte";
 
 export interface OlderPagesHost {
-  readonly jumping: boolean;
+  readonly jumper: {
+    readonly jumping: boolean;
+  };
   readonly landed: boolean;
   readonly pin: {
     readonly atBottom: boolean;
@@ -161,7 +163,7 @@ export class OlderPages {
       flushSync();
       if (
         !(this.#host.landed && this.#host.pin.scroller) ||
-        this.#host.jumping
+        this.#host.jumper.jumping
       ) {
         return;
       }

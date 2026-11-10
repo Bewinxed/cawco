@@ -19,12 +19,7 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChat } from "#lib/icons.js";
-  import {
-    crossIn,
-    motionOk,
-    rise,
-  } from "#lib/platform/motion/curves.svelte.js";
-  import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
+  import { crossIn, rise } from "#lib/platform/motion/curves.svelte.js";
   import { track } from "#lib/platform/track.js";
   import { stopWords } from "../accounts/switch.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
@@ -51,6 +46,7 @@
   import { connectReveal } from "./connect-sign-ins.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
+  import { JumpToLatest } from "./jump-to-latest.svelte";
   import { KeptPlace } from "./kept-place.svelte";
   import Latest from "./Latest.svelte";
   import LiveRow from "./LiveRow.svelte";
@@ -206,12 +202,6 @@
     get isFocused() {
       return isFocused;
     },
-    get jumping() {
-      return jumping;
-    },
-    get jumpScrolled() {
-      return jumpScrolled;
-    },
     get landed() {
       return landed;
     },
@@ -268,6 +258,9 @@
     },
     get landing(): ListLanding {
       return landing;
+    },
+    get jumper(): JumpToLatest {
+      return jumper;
     },
   };
 
@@ -346,124 +339,7 @@
       return arrivals.watched;
     },
   });
-
-  /** Within this many screens of the tail the jump scrolls there smoothly;
-      past it, it lands at once. Our own call, no source sets it. */
-  const JUMP_SMOOTH_SCREENS = 3;
-  /**
-   * The jump's scroll is under way. Its scroll events are not the reader's,
-   * and `atBottom` stays false until it ends so that no follow or landing
-   * writes over it: a `scrollTop` write stops a smooth scroll where it is.
-   */
-  let jumping = false;
-  /** Where the jump's smooth scroll was sent. */
-  let jumpTarget: number | null = null;
-
-  /**
-   * Back to the newest row, from wherever the reader is: one smooth scroll
-   * to the tail when it is within `JUMP_SMOOTH_SCREENS`, otherwise — or
-   * under reduced motion — an instant landing there. Arriving pins the true
-   * tail (`jumpScrolled`). The reader's own input takes the scroll back.
-   */
-  function jump(): void {
-    arrivals.tickets.clear();
-    pin.farFromLatest = false;
-    const node = pin.scroller;
-    if (!(
-      node &&
-      motionOk.current &&
-      pin.tailTop(node) - node.scrollTop <=
-        JUMP_SMOOTH_SCREENS * node.clientHeight
-    )) {
-      // Landed in the click itself, not in `land`'s next frame: a re-armed
-      // `land` (the rows effect) can push that frame back one more.
-      pin.atBottom = true;
-      landing.landInFrame();
-      return;
-    }
-    pin.stopFollow();
-    pin.restsAtTail = null;
-    pin.tailMark = null;
-    jumping = true;
-    node.addEventListener("wheel", yieldJump, { passive: true });
-    node.addEventListener("touchstart", yieldJump, { passive: true });
-    node.addEventListener("pointerdown", yieldJump);
-    node.addEventListener("keydown", yieldKey);
-    glide();
-  }
-
-  /** One smooth scroll to the bottom as it stands now. */
-  function glide(): void {
-    const node = pin.scroller;
-    if (!(jumping && node)) {
-      return;
-    }
-    const bottom = pin.tailTop(node);
-    if (bottom - node.scrollTop <= 1) {
-      arrive();
-      return;
-    }
-    jumpTarget = bottom;
-    node.scrollTo({ top: bottom, behavior: scrollMotion(true) });
-  }
-
-  /**
-   * A scroll event of the jump's: arrived once it reaches the target it was
-   * sent to, or the bottom when the rows shrank under it. Rows that grew the
-   * bottom past the target while it scrolled get one more smooth scroll.
-   */
-  function jumpScrolled(node: HTMLElement): void {
-    if (jumpTarget === null) {
-      return;
-    }
-    const bottom = pin.tailTop(node);
-    const top = node.scrollTop;
-    if (Math.abs(top - jumpTarget) > 1 && top < bottom - 1) {
-      return;
-    }
-    if (bottom - top > 1) {
-      glide();
-      return;
-    }
-    arrive();
-  }
-
-  /** The jump is over: at the latest row, pinned there. */
-  function arrive(): void {
-    endJump();
-    pin.atBottom = true;
-    pin.farFromLatest = false;
-    pin.pinBottom();
-  }
-
-  function endJump(): void {
-    jumping = false;
-    jumpTarget = null;
-    pin.scroller?.removeEventListener("wheel", yieldJump);
-    pin.scroller?.removeEventListener("touchstart", yieldJump);
-    pin.scroller?.removeEventListener("pointerdown", yieldJump);
-    pin.scroller?.removeEventListener("keydown", yieldKey);
-  }
-
-  /**
-   * The reader's own input during a jump: the jump lets go where the view
-   * is, and the reader's next scroll decides `atBottom` and the button.
-   * The write stops a smooth scroll a click would not; it is untagged, so
-   * its event is read as the reader's.
-   */
-  function yieldJump(): void {
-    endJump();
-    pin.scroller?.scrollTo({
-      top: pin.scroller.scrollTop,
-      behavior: "instant",
-    });
-  }
-
-  function yieldKey(event: KeyboardEvent): void {
-    if (SCROLL_KEYS.has(event.key)) {
-      yieldJump();
-    }
-  }
+  const jumper = new JumpToLatest(host);
 
   // ── Find in this conversation ───────────────────────────────────────────
   // (find/conversation-find): the words marked where they are drawn, the
@@ -486,7 +362,7 @@
   $effect(() => {
     // The live turn's place is the conversation's tail, being written.
     if (findHere.stepped > 0 && untrack(() => findHere.current?.live)) {
-      untrack(jump);
+      untrack(jumper.jump);
     }
   });
 
@@ -610,7 +486,7 @@
   /** Back where you were: to the record read as find opened, or the tail. */
   function backWhereYouWere(): void {
     if (findHere.back().tail) {
-      jump();
+      jumper.jump();
     }
   }
 
@@ -1250,7 +1126,7 @@
         {#if showBack}
           <Latest back onjump={backWhereYouWere} />
         {:else if showLatest}
-          <Latest onjump={jump} />
+          <Latest onjump={jumper.jump} />
         {/if}
       </div>
     {/if}
