@@ -8928,14 +8928,8 @@ export const createServer = (
   // and every person's Continue carries (open-items.ts).
   const openItems = createOpenItems({
     db,
-    inbox: async (projectId) => {
-      const notes = await inboxNotes(projectId);
-      if (notes instanceof ElysiaStatus) {
-        throw projectRefusalOf(notes);
-      }
-      return notes;
-    },
-    plan: (instanceId) => plans.read(instanceId),
+    inbox: inboxNotes,
+    plan: plans.read,
     questions: (instanceId) => artifacts.questions(instanceId),
     tasks,
   });
@@ -8985,6 +8979,14 @@ export const createServer = (
       };
     }
   };
+  /** `opening` and `row`'s records (open-items.ts), the session going on from it reads first; a refused read thrown on in its words, as plan-changes reads a failure. */
+  const goOnOpening = async (row: InstanceRow, opening: string) => {
+    const open = await openItems.read(row.id);
+    if (open instanceof ElysiaStatus) {
+      throw new Error(open.response.detail);
+    }
+    return `${opening}\n\n${open}`;
+  };
   /**
    * The session that goes on from one that cannot (plan-changes.ts): in its
    * project, on its machine, in its folder (its project's checkout there
@@ -9029,10 +9031,7 @@ export const createServer = (
       row.permissionMode ?? undefined
     );
     plans.copySteps(row.id, instanceId);
-    const told = tellPlan(
-      instanceId,
-      `${opening}\n\n${await openItems.read(row.id)}`
-    );
+    const told = tellPlan(instanceId, await goOnOpening(row, opening));
     if (told.kind !== "taken") {
       throw new Error(told.reason);
     }
