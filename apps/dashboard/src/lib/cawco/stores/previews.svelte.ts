@@ -11,8 +11,8 @@ import { closedHere, closeHere } from "../preview/closed-here";
 import { boardState } from "./board.svelte";
 import { equal } from "./same";
 
-export const previewsState = $state({
-  previews: {} as Record<
+export const previewsState = $state<{
+  previews: Record<
     string,
     Extract<FramePayload, { kind: "preview" }> & {
       title?: string;
@@ -24,13 +24,18 @@ export const previewsState = $state({
       /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */
       thumbnailWanted?: boolean;
     }
-  >,
-  previewRequests: {} as Record<string, number>,
+  >;
+  previewRequests: Record<string, number>;
+
   /**
    * The fleet's preview mode, from the board: a switch moves every preview
    * origin, so a page loaded on its own (decisions PageFrame) loads again.
    */
-  previewSettings: null as PreviewSettings | null,
+  previewSettings: PreviewSettings | null;
+}>({
+  previews: {},
+  previewRequests: {},
+  previewSettings: null,
 });
 
 export function takePreview(frame: FrameOf<"preview">): void {
