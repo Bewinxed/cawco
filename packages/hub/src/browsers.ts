@@ -686,39 +686,41 @@ export const browserRoutes = (browsers: Browsers) =>
           viewer: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
         }),
       },
-      ({ params, body }) => {
+      async ({ params, body }) => {
         const key = keyOf(params.key);
-        return key instanceof ElysiaStatus ? key : browsers.takeover(key, body);
+        return key instanceof ElysiaStatus
+          ? key
+          : await browsers.takeover(key, body);
       }
     )
     .post(
       "/api/browsers/:key/handback",
       { body: machineBody },
-      ({ params, body }) => {
+      async ({ params, body }) => {
         const key = keyOf(params.key);
         return key instanceof ElysiaStatus
           ? key
-          : browsers.handback(key, body.machineId);
+          : await browsers.handback(key, body.machineId);
       }
     )
     .post(
       "/api/browsers/:key/start",
       { body: machineBody },
-      ({ params, body }) => {
+      async ({ params, body }) => {
         const key = keyOf(params.key);
         return key instanceof ElysiaStatus
           ? key
-          : browsers.start(key, body.machineId);
+          : await browsers.start(key, body.machineId);
       }
     )
     .post(
       "/api/browsers/:key/stop",
       { body: machineBody },
-      ({ params, body }) => {
+      async ({ params, body }) => {
         const key = keyOf(params.key);
         return key instanceof ElysiaStatus
           ? key
-          : browsers.stop(key, body.machineId);
+          : await browsers.stop(key, body.machineId);
       }
     )
     .post(

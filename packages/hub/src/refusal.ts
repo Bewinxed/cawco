@@ -17,6 +17,29 @@ export const refusal = <const Status extends number, const Code extends string>(
 ) => problem(answering, { code, detail });
 
 /**
+ * The type of `refusal(status, code, …)`: what a dependency answers where
+ * its implementation is no function to read the type off (a lambda of the
+ * server's wiring), or lies across an import cycle, where the wiring says
+ * it again with its status and code read as a number and a string.
+ */
+export type RefusalOf<
+  Status extends number = number,
+  Code extends string = string,
+> = ReturnType<typeof refusal<Status, Code>>;
+
+/**
+ * `refused` said again as {@link RefusalOf} a number and a string: its
+ * status, code and words as they were, where its type cannot be read (a
+ * dependency across an import cycle).
+ */
+export const resaid = (refused: Refused) =>
+  refusal<number, string>(
+    refused.status,
+    refused.response.code,
+    refused.response.detail
+  );
+
+/**
  * Any refusal, as code that passes one on without answering it as a route
  * reads it (an approved write's run, a tool's dependency): Elysia's status
  * mark and the problem it carries. A route answers the {@link refusal}

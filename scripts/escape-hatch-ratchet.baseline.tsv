@@ -429,7 +429,6 @@ catch-drops-reason	block	packages/agent/src/harnesses/opencode-session.ts	1
 catch-drops-reason	block	packages/agent/src/keepers.ts	1
 catch-drops-reason	block	packages/agent/src/place-push.ts	2
 catch-drops-reason	block	packages/agent/src/stage-host/host.ts	2
-catch-drops-reason	block	packages/hub/src/artifacts/kinds/canvas.ts	1
 catch-drops-reason	block	packages/hub/src/fleet-mcp-relay.ts	2
 catch-drops-reason	block	packages/hub/src/ssh-tunnels.ts	1
 catch-drops-reason	block	scripts/probe-kit/launch-agent.ts	1
@@ -842,7 +841,6 @@ suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/work
 suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte	1
 suppression	biome-ignore lint/style/useAtIndex	apps/dashboard/src/lib/platform/motion/spring.ts	4
 suppression	biome-ignore lint/style/useErrorCause	packages/core/src/state-file.ts	1
-suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/artifacts/access.ts	1
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/connections.ts	5
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/fleet-mcp.ts	2
 suppression	biome-ignore lint/style/useFilenamingConvention	apps/dashboard/src/lib/cawco/spawnPrefs.svelte.ts	1

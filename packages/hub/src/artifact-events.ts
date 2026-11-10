@@ -30,7 +30,6 @@ import { workWords } from "@cawco/core/words/work";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
-import { ArtifactRefusal } from "./artifacts/refusals";
 import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
 import { artifactTaker } from "./artifacts/taker";
 import type { Caw } from "./caw";
@@ -42,6 +41,7 @@ import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
 import { externalizeImages } from "./media";
 import { handle as idHandle } from "./presenters/words";
+import { refusal } from "./refusal";
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
 import { isLive, WorkItemRefusal } from "./work-item-state";
@@ -638,24 +638,22 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
    * own, or the one a sheet was made in), with the workspace and `arg`: its
    * answer, or a refusal saying why the stage can't be reached or said no.
    */
-  const onStage = async (
-    at: StageAt,
-    method: string,
-    arg: unknown
-  ): Promise<{ machineId: string; result: unknown; workspace: string }> => {
+  const onStage = async (at: StageAt, method: string, arg: unknown) => {
     const where = stageWhere(at);
     if (!where) {
       // Only a sheet's names one that can be gone: a session always has a place.
       const named = "workspace" in at ? at.workspace : "";
-      throw new ArtifactRefusal(
+      return refusal(
         409,
+        "stage-workspace-gone",
         `The sheet's workspace ${named.slice(0, 8)} is gone, so its stage can't run.`
       );
     }
     const { workspace, machineId } = where;
     if (machineId === undefined) {
-      throw new ArtifactRefusal(
+      return refusal(
         409,
+        "stage-workspace-unplaced",
         `The sheet's workspace ${workspace.id.slice(0, 8)} is on no machine the hub knows, so its stage can't run.`
       );
     }
@@ -673,13 +671,15 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        throw asked.reason === "dead"
-          ? new ArtifactRefusal(
+        return asked.reason === "dead"
+          ? refusal(
               503,
+              "stage-machine-away",
               "The workspace's machine isn't connected to the hub, so its stage can't be reached."
             )
-          : new ArtifactRefusal(
+          : refusal(
               504,
+              "stage-machine-late",
               `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the stage's state is unknown.`
             );
       case "answered":
@@ -689,9 +689,18 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     }
     const answer = asked.value;
     if (!answer.ok) {
-      throw new ArtifactRefusal(422, answer.error ?? "The stage said no.");
+      return refusal(
+        422,
+        "stage-said-no",
+        answer.error ?? "The stage said no."
+      );
     }
-    return { machineId, workspace: workspace.id, result: answer.result };
+    const staged: { machineId: string; result: unknown; workspace: string } = {
+      machineId,
+      workspace: workspace.id,
+      result: answer.result,
+    };
+    return staged;
   };
   /**
    * Whether a session can no longer act, ever: no one can give it a turn

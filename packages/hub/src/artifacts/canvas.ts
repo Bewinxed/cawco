@@ -32,8 +32,8 @@ import { injectOverlay } from "@cawco/preview/proxy";
 import { problemResponse } from "elysia/error";
 import { Map as YMap } from "yjs";
 import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
+import { refusal } from "../refusal";
 import { type ArtifactDocs, elementsOf } from "./docs";
-import { ArtifactRefusal } from "./refusals";
 
 /**
  * A canvas's host page, served by the hub as a page is: the page with the
@@ -183,9 +183,9 @@ export const convertOnScreen = async (
   artifactId: string,
   kind: CanvasRequestKind,
   payload: CanvasRequestPayload
-): Promise<string[]> => {
+) => {
   if (docs.screens(artifactId) === 0) {
-    throw new ArtifactRefusal(503, NO_SCREEN);
+    return refusal(503, "artifact-canvas-no-screen", NO_SCREEN);
   }
   const id = crypto.randomUUID();
   const doc = docs.doc(artifactId);
@@ -222,16 +222,18 @@ export const convertOnScreen = async (
         result = drawn.value;
         break;
       case "unanswered":
-        throw new ArtifactRefusal(
+        return refusal(
           504,
+          "artifact-canvas-undrawn",
           `The canvas wasn't changed: no screen drew it within ${secondsOf(drawn.after)} s. Try again.`
         );
       default:
         unhandled("read", drawn);
     }
     if ("error" in result) {
-      throw new ArtifactRefusal(
+      return refusal(
         422,
+        "artifact-canvas-unconverted",
         `The canvas wasn't changed: ${result.error} Fix it, then try again.`
       );
     }

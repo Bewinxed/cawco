@@ -20,6 +20,7 @@ import { ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
+import type { Artifacts } from "./artifacts/service";
 import { ASK_TOOLS, type Asks } from "./asks";
 import { BROWSER_TOOLS, type BrowserAsks } from "./browser-tools";
 import { createCallCuts, type Started, whenCut } from "./call-cuts";
@@ -63,6 +64,7 @@ import {
   projectFromSessionTool,
 } from "./project-offers";
 import type { ProjectSettings } from "./project-settings";
+import { resaid } from "./refusal";
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
@@ -314,8 +316,8 @@ export function createDelegationMcp(options: {
   projectFromSession?: (
     actor: InstanceRow
   ) => ReturnType<ProjectOffers["accept"]>;
-  /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`). */
-  artifactNamed?: (instanceId: string, asked: string) => string;
+  /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`), or its refusal. */
+  artifactNamed?: Artifacts["named"];
   /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
   writePlan?: TaskToolContext["writePlan"];
   /** `delegate_list`: the calling session's own delegation tree (delegation-tree.ts). */
@@ -734,8 +736,12 @@ export function createDelegationMcp(options: {
         duplicates: options.duplicates,
         projectRunsOn: options.projectRunsOn,
         startAttempt: attemptCut(options.startAttempt, started),
+        // Said again across the import cycle task-tools.ts is in.
         artifactNamed: options.artifactNamed
-          ? (asked) => options.artifactNamed?.(actor.id, asked) ?? asked
+          ? (asked) => {
+              const named = options.artifactNamed?.(actor.id, asked) ?? asked;
+              return named instanceof ElysiaStatus ? resaid(named) : named;
+            }
           : undefined,
         retryAttempt: attemptCut(options.retryAttempt, started),
         tasks: options.tasks,
