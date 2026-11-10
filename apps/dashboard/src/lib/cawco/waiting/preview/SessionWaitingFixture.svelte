@@ -36,11 +36,10 @@
   import pageDesk from "#lib/cawco/preview/fixtures/title-bars-close-desk.webp";
   import pagePhone from "#lib/cawco/preview/fixtures/title-bars-close-phone.webp";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
-  import Composer, {
-    type ComposerAsk,
-  } from "#lib/cawco/transcript/Composer.svelte";
+  import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
+  import type { ComposerAsk } from "#lib/cawco/transcript/grown-ask.svelte.js";
   import {
     BarFloat,
     BarGlass,
