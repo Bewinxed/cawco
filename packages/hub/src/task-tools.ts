@@ -25,9 +25,10 @@ import {
 } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { AttemptStart } from "@cawco/core/task-views";
+import { ElysiaStatus } from "elysia";
 import { z } from "zod";
 import { BUILD_TITLE } from "./design-offers";
-import type { DuplicateOutcome } from "./jev-tasks";
+import type { JevTasks } from "./jev-tasks";
 import { tool } from "./mcp-tool";
 import type { WrittenStep } from "./plans";
 import {
@@ -47,7 +48,6 @@ import type { Refused } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
 import {
-  type Closing,
   sessionActor,
   type TaskActor,
   type Tasks,
@@ -89,7 +89,10 @@ export interface TaskToolContext {
    * Duplicates (§5.9) for a task this session just filed (jev-tasks.ts
    * `filed`): Jev's verdict, or the candidates the session compares.
    */
-  duplicates?: (projectId: string, task: TaskView) => Promise<DuplicateOutcome>;
+  duplicates?: (
+    projectId: string,
+    task: TaskView
+  ) => ReturnType<JevTasks["filed"]>;
   /**
    * Where a task this session files was found, as the hub reads it (tasks.ts
    * `found_in`): its work item's task, else the pin thread its ask came
@@ -103,15 +106,15 @@ export interface TaskToolContext {
     projectId: string,
     ref: string,
     parent: InstanceRow
-  ) => Promise<AttemptStart>;
+  ) => Promise<AttemptStart | Refused>;
   /** Starts an attempt at a task, reporting to `parent` (dispatch.ts); without it task_start refuses. */
   startAttempt?: (
     projectId: string,
     ref: string,
     parent: InstanceRow
-  ) => Promise<AttemptStart>;
+  ) => Promise<AttemptStart | Refused>;
   /** A plan step's wait as this session writes it, read as a task's wait is (task-waits.ts `readWait`) and kept as a file keeps it. */
-  stepWait?: (written: string) => Promise<string>;
+  stepWait?: (written: string) => ReturnType<Tasks["keptWait"]>;
   tasks: Tasks;
   /** The task the session's work item is an attempt at, if it has one. */
   workItemTask: string | null;
@@ -242,15 +245,22 @@ const stepParameter = () =>
  */
 const stepsOf = async (
   written: z.infer<ReturnType<typeof stepParameter>>[],
-  stepWait: (written: string) => Promise<string>
-): Promise<WrittenStep[]> => {
+  stepWait: (written: string) => ReturnType<Tasks["keptWait"]>
+) => {
   const counts: number[] = [];
-  const waits = await Promise.all(
+  const read = await Promise.all(
     written.map((step) =>
       step.waitsOn?.trim() ? stepWait(step.waitsOn) : undefined
     )
   );
-  return written.map((step, index) => {
+  const waits: (string | undefined)[] = [];
+  for (const wait of read) {
+    if (wait instanceof ElysiaStatus) {
+      return wait;
+    }
+    waits.push(wait);
+  }
+  return written.map((step, index): WrittenStep => {
     const depth = step.depth ?? 0;
     if (depth > counts.length) {
       throw new Error(
@@ -338,15 +348,19 @@ export function taskTools(context: TaskToolContext | undefined) {
     task: T,
     format: "concise" | "detailed",
     namesOthers = false
-  ): Promise<T & Pick<TaskAnswer, "titles">> => {
+  ) => {
+    const plain: T & Pick<TaskAnswer, "titles"> = task;
     if (
       format === "detailed" ||
       !context ||
       !(namesOthers || namesTasks(task))
     ) {
-      return task;
+      return plain;
     }
     const board = await context.tasks.list(projectId, {});
+    if (board instanceof ElysiaStatus) {
+      return board;
+    }
     return {
       ...task,
       titles: Object.fromEntries(board.tasks.map((one) => [one.id, one.title])),
@@ -377,6 +391,29 @@ export function taskTools(context: TaskToolContext | undefined) {
       );
     }
     return own;
+  };
+
+  /** todo_write's session scope: the session's steps (each wait read as a task's is) or its spec, written. */
+  const ownPlan = async (
+    steps: z.infer<ReturnType<typeof stepParameter>>[] | undefined,
+    spec: string | undefined
+  ) => {
+    if (!context?.writePlan) {
+      throw new Error("Discovery cannot execute tools");
+    }
+    const written = steps
+      ? await stepsOf(
+          steps,
+          context.stepWait ?? ((step) => Promise.resolve(step))
+        )
+      : undefined;
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
+    return await context.writePlan(context.actor, {
+      ...(written ? { steps: written } : {}),
+      ...(spec === undefined ? {} : { spec }),
+    });
   };
 
   return [
@@ -416,17 +453,18 @@ export function taskTools(context: TaskToolContext | undefined) {
         const filter = { ...rest, partOf: part_of };
         const { projectId, tasks } = scope();
         if (id) {
-          const task = await titled(
-            projectId,
-            await tasks.get(projectId, id),
-            format
-          );
-          return history
-            ? {
-                ...task,
-                history: (await tasks.history(projectId, id)).events,
-              }
-            : task;
+          const read = await tasks.get(projectId, id);
+          if (read instanceof ElysiaStatus) {
+            return read;
+          }
+          const task = await titled(projectId, read, format);
+          if (task instanceof ElysiaStatus || !history) {
+            return task;
+          }
+          const changes = await tasks.history(projectId, id);
+          return changes instanceof ElysiaStatus
+            ? changes
+            : { ...task, history: changes.events };
         }
         if (history) {
           throw new Error(
@@ -437,7 +475,10 @@ export function taskTools(context: TaskToolContext | undefined) {
           tasks.list(projectId, filter),
           tasks.stages(projectId),
         ]);
-        return { list, stages };
+        if (list instanceof ElysiaStatus) {
+          return list;
+        }
+        return stages instanceof ElysiaStatus ? stages : { list, stages };
       },
       (said) => taskReadWords(said, linkScope())
     ),
@@ -492,6 +533,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           },
           actor
         );
+        if (task instanceof ElysiaStatus) {
+          return task;
+        }
         const duplicates = await context?.duplicates?.(projectId, task);
         // Suggested, never set: the session decides.
         const suggest =
@@ -508,8 +552,12 @@ export function taskTools(context: TaskToolContext | undefined) {
           duplicates !== undefined &&
           "duplicateOf" in duplicates &&
           duplicates.duplicateOf !== null;
+        const answer = await titled(projectId, task, format, named);
+        if (answer instanceof ElysiaStatus) {
+          return answer;
+        }
         return {
-          ...(await titled(projectId, task, format, named)),
+          ...answer,
           ...(duplicates ? { duplicates } : {}),
           ...(suggest ? { suggest } : {}),
         };
@@ -550,17 +598,28 @@ export function taskTools(context: TaskToolContext | undefined) {
         const fields = Object.values(patch).some(
           (value) => value !== undefined
         );
-        let task: (TaskView & { closing?: Closing }) | undefined = fields
+        const updated = fields
           ? await tasks.update(projectId, id, patch, actor)
           : undefined;
-        if (stage !== undefined) {
-          task = await tasks.move(projectId, id, stage, actor, reason);
+        if (updated instanceof ElysiaStatus) {
+          return updated;
+        }
+        const moved =
+          stage === undefined
+            ? undefined
+            : await tasks.move(projectId, id, stage, actor, reason);
+        if (moved instanceof ElysiaStatus) {
+          return moved;
+        }
+        const task = moved ?? updated ?? (await tasks.get(projectId, id));
+        if (task instanceof ElysiaStatus) {
+          return task;
         }
         return await titled(
           projectId,
-          task ?? (await tasks.get(projectId, id)),
+          task,
           format,
-          task?.closing !== undefined
+          moved !== undefined && "closing" in moved
         );
       },
       (said) => taskChangedWords(said, linkScope())
@@ -585,22 +644,20 @@ export function taskTools(context: TaskToolContext | undefined) {
       },
       async ({ task, waits_on, part_of, duplicate_of, remove }, format) => {
         const { projectId, tasks, actor } = scope();
-        return await titled(
+        const linked = await tasks.link(
           projectId,
-          await tasks.link(
-            projectId,
-            task,
-            {
-              ...(waits_on ? { waitsOn: waits_on } : {}),
-              ...(part_of ? { partOf: part_of } : {}),
-              ...(duplicate_of ? { duplicateOf: duplicate_of } : {}),
-              ...(remove ? { remove } : {}),
-            },
-            actor
-          ),
-          format,
-          true
+          task,
+          {
+            ...(waits_on ? { waitsOn: waits_on } : {}),
+            ...(part_of ? { partOf: part_of } : {}),
+            ...(duplicate_of ? { duplicateOf: duplicate_of } : {}),
+            ...(remove ? { remove } : {}),
+          },
+          actor
         );
+        return linked instanceof ElysiaStatus
+          ? linked
+          : await titled(projectId, linked, format, true);
       },
       (said) => taskLinkedWords(said, linkScope())
     ),
@@ -661,20 +718,7 @@ export function taskTools(context: TaskToolContext | undefined) {
               "Write your own plan (steps, spec) and a task's to-dos in separate calls."
             );
           }
-          if (!context?.writePlan) {
-            throw new Error("Discovery cannot execute tools");
-          }
-          return await context.writePlan(context.actor, {
-            ...(steps
-              ? {
-                  steps: await stepsOf(
-                    steps,
-                    context.stepWait ?? ((written) => Promise.resolve(written))
-                  ),
-                }
-              : {}),
-            ...(spec === undefined ? {} : { spec }),
-          });
+          return await ownPlan(steps, spec);
         }
         const { projectId, tasks, actor } = scope();
         const done = await tasks.todos(
@@ -683,7 +727,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           changes,
           actor
         );
-        return { id: done.id, title: done.title, todos: done.todos };
+        return done instanceof ElysiaStatus
+          ? done
+          : { id: done.id, title: done.title, todos: done.todos };
       },
       (said) => todoWrittenWords(said, linkScope())
     ),
@@ -699,7 +745,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           text,
           actor
         );
-        return { id: done.id, title: done.title, comments: done.comments };
+        return done instanceof ElysiaStatus
+          ? done
+          : { id: done.id, title: done.title, comments: done.comments };
       },
       (said) => taskCommentedWords(said, linkScope())
     ),
@@ -771,12 +819,14 @@ export function taskTools(context: TaskToolContext | undefined) {
           actor,
           archived ?? true
         );
-        return {
-          id: done.id,
-          title: done.title,
-          path: done.path,
-          archivedAt: done.archivedAt,
-        };
+        return done instanceof ElysiaStatus
+          ? done
+          : {
+              id: done.id,
+              title: done.title,
+              path: done.path,
+              archivedAt: done.archivedAt,
+            };
       },
       (said) => taskArchivedWords(said, linkScope())
     ),

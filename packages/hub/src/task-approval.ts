@@ -30,8 +30,10 @@ import { detach } from "@cawco/core/detach";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { taskLink } from "@cawco/core/references";
 import { noticeWords } from "@cawco/core/words/notices";
+import { ElysiaStatus } from "elysia";
 import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
+import { projectRefusalOf } from "./project-refusal";
 import type { TaskEvent, Tasks } from "./tasks";
 
 export interface TaskApprovalDeps {
@@ -74,6 +76,9 @@ export const createTaskApproval = ({
   const approved = async (approval: Approval): Promise<void> => {
     const { projectId, id } = approval;
     const task = await tasks.get(projectId, id);
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
     const by = task.createdBy;
     if (by?.mover !== "session") {
       return;
