@@ -16,6 +16,7 @@
  */
 import { networkInterfaces } from "node:os";
 import type Docker from "dockerode";
+import { statusOf } from "./docker-status";
 
 /** The media network's name on every runtime. */
 export const MEDIA_NETWORK = "cawco-media";
@@ -106,16 +107,15 @@ const overlaps = (a: string, b: string): boolean => {
 export const interfacePrefixes = (): string[] =>
   Object.values(networkInterfaces())
     .flatMap((addresses) => addresses ?? [])
-    .filter((one) => one.family === "IPv4" && !one.internal && one.cidr)
-    .map((one) => one.cidr as string);
+    .flatMap((one) =>
+      one.family === "IPv4" && !one.internal && one.cidr ? [one.cidr] : []
+    );
 
 /** The runtime's not-found answer. */
-const notFound = (error: unknown): boolean =>
-  (error as { statusCode?: number }).statusCode === 404;
+const notFound = (error: unknown): boolean => statusOf(error) === 404;
 
 /** The runtime's answer to a network made twice at once. */
-const conflict = (error: unknown): boolean =>
-  (error as { statusCode?: number }).statusCode === 409;
+const conflict = (error: unknown): boolean => statusOf(error) === 409;
 
 /** The IPv4 subnet `name` stands on, or undefined while no such network stands. */
 const standing = async (
@@ -134,9 +134,7 @@ const standing = async (
   if (!inspected) {
     return;
   }
-  const config = (
-    inspected as { IPAM?: { Config?: { Subnet?: string }[] } | null }
-  ).IPAM?.Config;
+  const config = inspected.IPAM?.Config;
   const subnet = config
     ?.map((one) => one.Subnet ?? "")
     .find((one) => rangeOf(one)?.size === OCTETS);
@@ -153,10 +151,7 @@ const freeSubnet = async (docker: Docker): Promise<string> => {
   const networks = await docker.listNetworks();
   const taken = [
     ...networks.flatMap(
-      (one) =>
-        (
-          one as { IPAM?: { Config?: { Subnet?: string }[] } | null }
-        ).IPAM?.Config?.map((config) => config.Subnet ?? "") ?? []
+      (one) => one.IPAM?.Config?.map((config) => config.Subnet ?? "") ?? []
     ),
     ...interfacePrefixes(),
   ].filter((one) => rangeOf(one));

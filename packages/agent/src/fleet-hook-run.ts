@@ -54,10 +54,10 @@ const runCommand = (
 ): Promise<Ran> =>
   new Promise((resolve) => {
     const line = commandLineOf(handler);
-    const [file, ...args] = place.boundary
-      ? [place.boundary.prefix, line]
-      : ["bash", "-c", line];
-    const child = spawn(file as string, args, {
+    const [file, args]: [string, string[]] = place.boundary
+      ? [place.boundary.prefix, [line]]
+      : ["bash", ["-c", line]];
+    const child = spawn(file, args, {
       cwd: place.cwd,
       env: {
         ...sessionEnvironment(process.env),
@@ -139,7 +139,10 @@ export const runFleetHooks = async (
   const finished: HookVerdict[] = [];
   await Promise.all(
     due.map(async (hook): Promise<void> => {
-      const handler = hook.handler as HookCommandHandler;
+      const { handler } = hook;
+      if (handler.type !== "command") {
+        return;
+      }
       const running = runCommand(handler, stdin, place);
       if (handler.async) {
         running.catch(() => undefined);

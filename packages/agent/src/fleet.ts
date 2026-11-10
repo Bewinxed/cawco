@@ -78,6 +78,7 @@ import {
   fleetPlacesDir,
 } from "@cawco/core/paths/fleet";
 import { writeStateFile } from "@cawco/core/state-file";
+import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { versionSaid } from "@cawco/core/version-said";
 import { z } from "zod";
@@ -360,7 +361,19 @@ const readSidecar = async (): Promise<Sidecar> => {
   };
 };
 
-type ClaudeJson = Record<string, unknown>;
+/** `~/.claude.json`, as far as the fleet reads it: the user scope's servers and each folder's; every other key stays as it is. */
+const ClaudeJsonSchema = z.looseObject({
+  mcpServers: z.record(z.string(), z.unknown()).optional(),
+  projects: z
+    .record(
+      z.string(),
+      z.looseObject({
+        mcpServers: z.record(z.string(), z.unknown()).optional(),
+      })
+    )
+    .optional(),
+});
+type ClaudeJson = z.infer<typeof ClaudeJsonSchema>;
 
 /** Why a write did not converge: its cause, named here, and its words. */
 interface Problem {
@@ -377,7 +390,7 @@ const readClaudeJson = async (
     return { ok: true, root: {} };
   }
   try {
-    return { ok: true, root: (await file.json()) as ClaudeJson };
+    return { ok: true, root: ClaudeJsonSchema.parse(await file.json()) };
   } catch (error) {
     return {
       ok: false,
@@ -388,7 +401,7 @@ const readClaudeJson = async (
 };
 
 const mcpServersOf = (root: ClaudeJson): Record<string, unknown> => ({
-  ...((root.mcpServers as Record<string, unknown> | undefined) ?? {}),
+  ...root.mcpServers,
 });
 
 /** A placed copy's key in the sidecar and the report: `<name>@<place id>`. */
@@ -451,17 +464,13 @@ const dropWrittenMcpFrom = async (
     return false;
   }
   const servers = mcpServersOf(file.root);
-  const projects = {
-    ...((file.root.projects as
-      Record<string, Record<string, unknown>> | undefined) ?? {}),
-  };
+  const projects = { ...file.root.projects };
   const gone = [...names].filter((name) => name in servers);
   for (const name of gone) {
     delete servers[name];
   }
   for (const { cwd, name } of placed) {
-    const map = projects[cwd]?.mcpServers as
-      Record<string, unknown> | undefined;
+    const map = projects[cwd]?.mcpServers;
     if (map && name in map) {
       const { [name]: _gone, ...rest } = map;
       projects[cwd] = { ...projects[cwd], mcpServers: rest };
@@ -506,7 +515,10 @@ const readFleetMcpRuntime = async (
     ...(await readSettledOnce(
       "claude",
       Object.fromEntries(
-        read.map((name) => [name, servers[name] as FleetMcpConfig])
+        read.flatMap((name) => {
+          const config = servers[name];
+          return config ? [[name, config]] : [];
+        })
       ),
       readMcpRuntime
     )),
@@ -1250,7 +1262,7 @@ const writeVendoredMarketplace = async (
   // What the fleet no longer carries goes, whether or not its bytes arrived.
   const wanted = new Set(plugins.map(({ name }) => name));
   const present = await readdir(join(into, "plugins")).catch(
-    () => [] as string[]
+    (): string[] => []
   );
   // Each removal is its own folder: all at once.
   await Promise.all(
@@ -1327,7 +1339,7 @@ const writeVendoredMarketplaces = async (
     await writeVendoredMarketplace(marketplace, group);
   }
   // Each removal is its own folder: all at once.
-  const present = await readdir(VENDOR_ROOT).catch(() => [] as string[]);
+  const present = await readdir(VENDOR_ROOT).catch((): string[] => []);
   await Promise.all(
     present
       .filter((name) => !groups.has(name))
@@ -1483,10 +1495,10 @@ export const skillDrift = (
 const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   const held: Record<string, string> = {};
   for (const marketplace of await readdir(VENDOR_ROOT).catch(
-    () => [] as string[]
+    (): string[] => []
   )) {
     const root = join(vendorDir(marketplace), "plugins");
-    for (const name of await readdir(root).catch(() => [] as string[])) {
+    for (const name of await readdir(root).catch((): string[] => [])) {
       const hash = await heldHash(join(root, name));
       if (hash) {
         held[`${name}@${marketplace}`] = hash;
@@ -1731,7 +1743,7 @@ const syncVendoredPlugins = async (
   const written: Record<string, string> = {};
   const byId = new Map(payloads.map((plugin) => [payloadId(plugin), plugin]));
   const groups = byMarketplace(payloads);
-  const present = await readdir(VENDOR_ROOT).catch(() => [] as string[]);
+  const present = await readdir(VENDOR_ROOT).catch((): string[] => []);
 
   // Every payload the agent holds carries its bytes (fleet-desired.ts); only
   // a plugin this disk does not hold at that hash is written, so a converge
@@ -2088,11 +2100,11 @@ const takeBackPlaced = async (
  */
 const placeSkill = async (
   skill: FleetSkillPayload,
+  cwd: string,
   recorded: string | undefined,
   report: Record<string, FleetItemState>
 ): Promise<string | undefined> => {
   const key = placedKey(skill);
-  const cwd = skill.cwd as string;
   const refused = await unplaceable(cwd);
   if (refused) {
     report[key] = refused;
@@ -2168,11 +2180,15 @@ const syncPlacedSkills = async (
   report: Record<string, FleetItemState>
 ): Promise<Sidecar["placedSkills"]> => {
   const placed: Sidecar["placedSkills"] = {};
-  for (const skill of desired.filter((each) => each.cwd && each.placeId)) {
+  for (const skill of desired) {
+    const { cwd } = skill;
+    if (!(cwd && skill.placeId)) {
+      continue;
+    }
     const key = placedKey(skill);
-    const hash = await placeSkill(skill, managed[key]?.hash, report);
+    const hash = await placeSkill(skill, cwd, managed[key]?.hash, report);
     if (hash !== undefined) {
-      placed[key] = { cwd: skill.cwd as string, name: skill.name, hash };
+      placed[key] = { cwd, name: skill.name, hash };
     }
   }
   const placedDirs = new Set(
@@ -2568,11 +2584,11 @@ const pruneEmptyPlaced = async (cwd: string, path: string): Promise<void> => {
  */
 const placeMemoryDoc = async (
   doc: FleetPlacedMemoryDoc,
+  cwd: string,
   recorded: string | undefined,
   report: Record<string, FleetItemState>
 ): Promise<string | undefined> => {
   const key = placedKey({ name: doc.path, placeId: doc.placeId });
-  const cwd = doc.cwd as string;
   const problem = memoryDocProblem(doc.path);
   if (problem) {
     report[key] = { state: "failed", cause: "unknown", detail: problem };
@@ -2634,11 +2650,15 @@ const syncPlacedMemory = async (
   report: Record<string, FleetItemState>
 ): Promise<Sidecar["placedMemory"]> => {
   const placed: Sidecar["placedMemory"] = {};
-  for (const doc of desired.filter((each) => each.cwd && each.placeId)) {
+  for (const doc of desired) {
+    const { cwd } = doc;
+    if (!(cwd && doc.placeId)) {
+      continue;
+    }
     const key = placedKey({ name: doc.path, placeId: doc.placeId });
-    const hash = await placeMemoryDoc(doc, managed[key]?.hash, report);
+    const hash = await placeMemoryDoc(doc, cwd, managed[key]?.hash, report);
     if (hash !== undefined) {
-      placed[key] = { cwd: doc.cwd as string, name: doc.path, hash };
+      placed[key] = { cwd, name: doc.path, hash };
     }
   }
   const placedFiles = new Set(
@@ -2676,11 +2696,12 @@ const syncPlacedMemory = async (
 /** One entry of a hook, as `~/.claude/settings.json` writes them — a command
  * handler carries `command`; the other four handler types do not, so an entry
  * without one is matched on its own JSON instead (see {@link withoutHooks}). */
-interface HookCommand {
-  args?: string[];
-  command?: string;
-  type?: string;
-}
+const HookCommandSchema = z.looseObject({
+  args: z.array(z.string()).optional(),
+  command: z.string().optional(),
+  type: z.string().optional(),
+});
+type HookCommand = z.infer<typeof HookCommandSchema>;
 
 /**
  * What one registered handler is known by: a shell-form command's line, an
@@ -2688,7 +2709,11 @@ interface HookCommand {
  * <guard> --http <url>`, so the program alone names none of them apart), and
  * any other handler's own JSON.
  */
-const entryKey = (hook: HookCommand): string => {
+const entryKey = (hook: {
+  args?: string[];
+  command?: string;
+  type?: string;
+}): string => {
   if (hook.command === undefined) {
     return JSON.stringify(hook);
   }
@@ -2698,10 +2723,23 @@ const entryKey = (hook: HookCommand): string => {
 };
 
 /** One matcher's worth of hooks; an absent `matcher` is every session start. */
-interface HookMatcher {
-  hooks?: HookCommand[];
-  matcher?: string;
-}
+const HookMatcherSchema = z.looseObject({
+  hooks: z.array(HookCommandSchema).optional(),
+  matcher: z.string().optional(),
+});
+type HookMatcher = z.infer<typeof HookMatcherSchema>;
+
+/** `settings.json`, as far as the fleet reads it: the hooks it registered; every other key stays as it is. */
+const SettingsJsonSchema = z.looseObject({
+  hooks: z.record(z.string(), z.array(HookMatcherSchema)).optional(),
+});
+type SettingsJson = z.infer<typeof SettingsJsonSchema>;
+
+/** The settings file at `path`; undefined when there is none, it does not parse, or it is not a settings file. */
+const readSettingsJson = async (
+  path: string
+): Promise<SettingsJson | undefined> =>
+  SettingsJsonSchema.safeParse(await readJson<unknown>(path)).data;
 
 /**
  * The same list without cawco's own entries. A matcher entry that held
@@ -2830,17 +2868,15 @@ const dropCheckoutHooks = async (
     }
   }
   for (const [file, records] of byFile) {
-    const stored = await readJson<Record<string, unknown>>(file);
+    const stored = await readSettingsJson(file);
     if (!stored) {
       continue;
     }
     const commands = records.map((record) => record.command);
     const hooks = Object.fromEntries(
-      Object.entries(
-        (stored.hooks as Record<string, HookMatcher[]> | undefined) ?? {}
-      )
+      Object.entries(stored.hooks ?? {})
         .map(([event, entries]) => [event, withoutHooks(entries, commands)])
-        .filter(([, entries]) => (entries as HookMatcher[]).length > 0)
+        .filter(([, entries]) => entries.length > 0)
     );
     const { hooks: _hooks, ...rest } = stored;
     const next = Object.keys(hooks).length > 0 ? { ...rest, hooks } : rest;
@@ -2872,8 +2908,7 @@ const handlerFor = (
 
 /** What {@link withoutHooks} removes this handler by, and what the sidecar
  * remembers registering it as ({@link entryKey}). */
-const identityOf = (handler: HookHandler): string =>
-  entryKey(handler as HookCommand);
+const identityOf = (handler: HookHandler): string => entryKey(handler);
 
 /** What {@link syncHooks} answers: what cawco now manages, the fleet's hooks for the harness set, and each place's for its file, by its folder. */
 interface SyncedHooks {
@@ -3046,6 +3081,7 @@ const setHookOf = (hook: FleetHook, handler: HookHandler): SetHook => ({
  */
 const placedHookOf = (
   hook: FleetHook,
+  cwd: string,
   settled: Pick<SettledHooks, "hashes" | "scriptPaths">,
   report: Record<string, FleetItemState>
 ): { entry: SetHook; record: ManagedHook } => {
@@ -3062,7 +3098,7 @@ const placedHookOf = (
       command: identityOf(handler),
       event: hook.event,
       scope: hook.scope ?? "project",
-      cwd: hook.cwd as string,
+      cwd,
       placed: true,
       ...(script ? { script } : {}),
       ...(note ? { note } : {}),
@@ -3115,7 +3151,8 @@ const syncHooks = async (
   const placed: SyncedHooks["placed"] = {};
   const fleetWide: FleetHook[] = [];
   for (const hook of settled) {
-    if (!placedHook(hook)) {
+    const { cwd } = hook;
+    if (!(placedHook(hook) && cwd)) {
       set.hooks[hook.id] = setHookOf(
         hook,
         handlerFor(hook, scriptPaths.get(hook.id))
@@ -3123,9 +3160,9 @@ const syncHooks = async (
       fleetWide.push(hook);
       continue;
     }
-    const { entry, record } = placedHookOf(hook, settledHooks, report);
-    placed[record.cwd as string] = {
-      ...placed[record.cwd as string],
+    const { entry, record } = placedHookOf(hook, cwd, settledHooks, report);
+    placed[cwd] = {
+      ...placed[cwd],
       [hook.id]: entry,
     };
     written[hook.id] = record;
@@ -3133,7 +3170,7 @@ const syncHooks = async (
 
   // Registration in the user settings — a hook whose row was disabled or
   // deleted still gets its old entry taken out of it.
-  const stored = await readJson<Record<string, unknown>>(SETTINGS_PATH);
+  const stored = await readSettingsJson(SETTINGS_PATH);
   // Nothing is written over a file that cannot be read: the rest of it is the
   // user's own permissions and plugins, and a rewrite from an empty root
   // would take them with it.
@@ -3145,9 +3182,7 @@ const syncHooks = async (
     }
   } else {
     const root = stored ?? {};
-    const settingsHooks = {
-      ...((root.hooks as Record<string, unknown> | undefined) ?? {}),
-    };
+    const settingsHooks = { ...root.hooks };
 
     // Everything cawco registered out of this file last time, whatever event
     // it ran on — a hook that moved to a different event still needs its old
@@ -3156,17 +3191,17 @@ const syncHooks = async (
       .filter((record) => !record.cwd)
       .map((record) => record.command);
 
-    const byEvent = new Map<HookEvent, FleetHook[]>();
+    const byEvent = new Map<string, FleetHook[]>();
     for (const hook of fleetWide) {
       byEvent.set(hook.event, [...(byEvent.get(hook.event) ?? []), hook]);
     }
 
-    const events = new Set<HookEvent>([
+    const events = new Set<string>([
       ...byEvent.keys(),
-      ...(Object.keys(settingsHooks) as HookEvent[]),
+      ...Object.keys(settingsHooks),
     ]);
     for (const event of events) {
-      const current = (settingsHooks[event] as HookMatcher[] | undefined) ?? [];
+      const current = settingsHooks[event] ?? [];
       const additions = (byEvent.get(event) ?? []).map((hook): HookMatcher => {
         // Through the guard, which drops an input rewrite in a workspace
         // session (fleet-hook-guard.ts).
@@ -3184,8 +3219,8 @@ const syncHooks = async (
           ...(note ? { note } : {}),
         };
         return hook.matcher
-          ? { matcher: hook.matcher, hooks: [handler] }
-          : { hooks: [handler] };
+          ? { matcher: hook.matcher, hooks: [{ ...handler }] }
+          : { hooks: [{ ...handler }] };
       });
       const next = [...withoutHooks(current, registeredHere), ...additions];
       if (next.length > 0) {
@@ -3312,24 +3347,26 @@ export const placeFolder = (
 ): Promise<FleetSyncReport> =>
   inFleetQueue(async () => {
     const managed = await readSidecar();
+    const skillStates: Record<string, FleetItemState> = {};
+    const docStates: Record<string, FleetItemState> = {};
+    const hookStates: Record<string, FleetItemState> = {};
+    const harnessStates: Record<string, FleetItemState> = {};
     const report: FleetSyncReport = {
       mcp: {},
       marketplaces: {},
       plugins: {},
-      skills: {},
-      memoryDocs: {},
-      hooks: {},
-      harnessConfig: {},
+      skills: skillStates,
+      memoryDocs: docStates,
+      hooks: hookStates,
+      harnessConfig: harnessStates,
       at: Date.now(),
     };
-    const skillStates = report.skills as Record<string, FleetItemState>;
-    const docStates = report.memoryDocs as Record<string, FleetItemState>;
-    const hookStates = report.hooks as Record<string, FleetItemState>;
     const placedSkills: Sidecar["placedSkills"] = {};
     for (const skill of copies.skills) {
       const key = placedKey(skill);
       const hash = await placeSkill(
         skill,
+        cwd,
         managed.placedSkills[key]?.hash,
         skillStates
       );
@@ -3342,6 +3379,7 @@ export const placeFolder = (
       const key = placedKey({ name: doc.path, placeId: doc.placeId });
       const hash = await placeMemoryDoc(
         doc,
+        cwd,
         managed.placedMemory[key]?.hash,
         docStates
       );
@@ -3353,14 +3391,10 @@ export const placeFolder = (
     const placedHooks: Record<string, SetHook> = {};
     const records: Record<string, ManagedHook> = { ...settled.kept };
     for (const hook of settled.settled) {
-      const { entry, record } = placedHookOf(hook, settled, hookStates);
+      const { entry, record } = placedHookOf(hook, cwd, settled, hookStates);
       placedHooks[hook.id] = entry;
       records[hook.id] = record;
     }
-    const harnessStates = report.harnessConfig as Record<
-      string,
-      FleetItemState
-    >;
     const ready = await readyHarnessRows(copies.harnessConfig, harnessStates);
     await keepPlaceSet(cwd, {
       hooks: placedHooks,
@@ -3696,7 +3730,7 @@ export const probeToolchain = (): Promise<FleetToolchain> =>
 const hookState = async (
   id: string,
   record: ManagedHook,
-  settings: () => Promise<Record<string, unknown> | undefined>
+  settings: () => Promise<SettingsJson | undefined>
 ): Promise<FleetItemState> => {
   const scriptPath = scriptPathOf(record);
   if (scriptPath?.startsWith(HOOKS_DIR)) {
@@ -3731,10 +3765,7 @@ const hookState = async (
         };
   }
   const stored = await settings();
-  const entries =
-    (stored?.hooks as Record<string, HookMatcher[]> | undefined)?.[
-      record.event
-    ] ?? [];
+  const entries = stored?.hooks?.[record.event] ?? [];
   const present = entries.some((entry) =>
     (entry.hooks ?? []).some((one) => entryKey(one) === record.command)
   );
@@ -3897,9 +3928,9 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     ),
   };
   // Read once, at the first fleet hook that asks.
-  let readSettings: Promise<Record<string, unknown> | undefined> | undefined;
-  const settings = (): Promise<Record<string, unknown> | undefined> => {
-    readSettings ??= readJson<Record<string, unknown>>(SETTINGS_PATH);
+  let readSettings: Promise<SettingsJson | undefined> | undefined;
+  const settings = (): Promise<SettingsJson | undefined> => {
+    readSettings ??= readSettingsJson(SETTINGS_PATH);
     return readSettings;
   };
   const hookStates = await Promise.all(
@@ -3991,10 +4022,14 @@ function mergeMcp(
       const nearer = scopes
         .slice(0, index)
         .find((other) => other.servers[name] !== undefined);
+      const parsed = FleetMcpConfigSchema.safeParse(config);
+      if (!parsed.success) {
+        continue;
+      }
       found.push({
         name,
         scope,
-        config: config as FleetMcpConfig,
+        config: parsed.data,
         // CawCo wrote only the user scope, and only before sessions took the
         // fleet's servers through the SDK: what its cleanup has yet to take out.
         managed: scope === "user" && managed.includes(name),
@@ -4130,10 +4165,7 @@ export const inspectConfig = async (
   const file = await readClaudeJson();
   const root = file.ok ? file.root : {};
 
-  const projects =
-    (root.projects as
-      Record<string, { mcpServers?: Record<string, unknown> }> | undefined) ??
-    {};
+  const projects = root.projects ?? {};
   const local = cwd ? (projects[cwd]?.mcpServers ?? {}) : {};
   const project = cwd
     ? ((

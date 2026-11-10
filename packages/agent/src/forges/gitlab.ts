@@ -10,6 +10,7 @@
  */
 import { join } from "node:path";
 import { Gitlab } from "@gitbeaker/rest";
+import { z } from "zod";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
 import type { ForgeAdapter, ForgeSignIn } from "./forge-adapter";
 
@@ -18,14 +19,19 @@ const glabConfigDir = (): string =>
   process.env.GLAB_CONFIG_DIR || join(configHome(), "glab-cli");
 
 /** One host's entry in glab's config. */
-interface GlabHost {
-  api_host?: unknown;
-  api_protocol?: unknown;
-  gitlab_token?: unknown;
-  oauth_token?: unknown;
-  token?: unknown;
-  use_keyring?: unknown;
-}
+const GlabHost = z.object({
+  api_host: z.unknown().optional(),
+  api_protocol: z.unknown().optional(),
+  gitlab_token: z.unknown().optional(),
+  oauth_token: z.unknown().optional(),
+  token: z.unknown().optional(),
+  use_keyring: z.unknown().optional(),
+});
+
+/** glab's config: its hosts by name; a host listed with nothing under it is null. */
+const GlabConfig = z.object({
+  hosts: z.record(z.string(), GlabHost.nullable()).optional(),
+});
 
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -34,9 +40,10 @@ export const gitlabForge: ForgeAdapter = {
   forge: "gitlab",
 
   async signIn(asked) {
-    const config = (await readYamlConfig(
-      join(glabConfigDir(), "config.yml")
-    )) as { hosts?: Record<string, GlabHost> } | undefined;
+    const config = await readYamlConfig(
+      join(glabConfigDir(), "config.yml"),
+      GlabConfig
+    );
     const host = Object.keys(config?.hosts ?? {}).find((each) =>
       sameHost(each, asked)
     );
