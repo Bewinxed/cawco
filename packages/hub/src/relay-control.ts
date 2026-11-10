@@ -57,6 +57,7 @@ import type { ControlResult } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
 import type { AnswerFrom } from "./pending";
 import { answerPermission } from "./pending";
+import type { AnyProblem } from "./refusal";
 import { unreachable } from "./unreachable";
 import type { HubSocket } from "./wire-socket";
 
@@ -123,14 +124,6 @@ const peekControlArg = (
   const id = Array.isArray(args) ? args[0] : undefined;
   return typeof id === "string" ? id : undefined;
 };
-
-/** A `control` asking a machine to install a tool, and the tool it names. */
-const peekInstall = (payload: unknown): string | undefined =>
-  peekControlArg(payload, "installTool");
-
-/** A `control` asking a machine to delete a transcript, and the session it names. */
-const peekTranscriptDelete = (payload: unknown): string | undefined =>
-  peekControlArg(payload, "deleteSession");
 
 /** A `control` answering a permission, and the ask it answers with what it says. */
 export const peekAnswer = (
@@ -237,7 +230,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     answer: PermissionResult,
     from: AnswerFrom
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, hub-raised answers, delivery receipts and concurrent process death before reporting success.
-  ): Promise<void> => {
+  ): Promise<AnyProblem | undefined> => {
     // An ask the hub owns (asks.ts), named by its id alone: taken once
     // from its row, which runs what it asked as it was shown; a second
     // answer is refused there, saying who gave the first and when. One told
@@ -274,7 +267,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       if (ctx.projectMemory.owns(requestId)) {
         const refused = await ctx.projectMemory.answer(requestId, answer);
         if (refused) {
-          throw new Error(refused.response.detail);
+          return refused;
         }
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
@@ -286,7 +279,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       if (ctx.designSystem.owns(requestId)) {
         const failed = await ctx.designSystem.answer(requestId, result);
         if (failed) {
-          throw new Error(failed.response.detail);
+          return failed;
         }
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
@@ -445,20 +438,16 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       answer?.result as PermissionResult,
       ctx.answeredFrom(dashboard)
     ).then(
-      () =>
-        reply({ kind: "control_result", requestId: correlationId, ok: true }),
-      (error: unknown) => {
-        const reason = error instanceof Error ? error.message : String(error);
-        console.error(
-          `[hub] dashboard permission.answer ${answer?.requestId ?? "(no request)"} failed: ${reason}`
-        );
-        reply({
-          kind: "control_result",
-          requestId: correlationId,
-          ok: false,
-          error: reason,
-        });
-      }
+      (refused) =>
+        refused
+          ? failed(refused.response.detail)
+          : reply({
+              kind: "control_result",
+              requestId: correlationId,
+              ok: true,
+            }),
+      (error: unknown) =>
+        failed(error instanceof Error ? error.message : String(error))
     );
     const correlationId = message.requestId ?? message.payload.requestId;
     const reply = (frame: ControlResult): void => {
@@ -471,6 +460,17 @@ export const createRelayControl = (ctx: RelayControlContext) => {
       } else {
         ctx.streams.settleCommand(correlationId, frame);
       }
+    };
+    const failed = (reason: string): void => {
+      console.error(
+        `[hub] dashboard permission.answer ${answer?.requestId ?? "(no request)"} failed: ${reason}`
+      );
+      reply({
+        kind: "control_result",
+        requestId: correlationId,
+        ok: false,
+        error: reason,
+      });
     };
     return true;
   };
@@ -633,7 +633,8 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     if (relayPermissionAnswer(message, dashboard, replyAsFrame)) {
       return true;
     }
-    const deleted = peekTranscriptDelete(message.payload);
+    // A `control` asking a machine to delete a transcript names its session.
+    const deleted = peekControlArg(message.payload, "deleteSession");
     if (deleted && ctx.registry.agent(message.machineId)) {
       const rows = ctx.db
         .sessionOwnership(message.machineId)
@@ -682,7 +683,7 @@ export const createRelayControl = (ctx: RelayControlContext) => {
     // fleet's pin as the hub holds it, whatever the pressing surface had,
     // else the release to reach, so a copy its updater leaves older answers
     // why and keeps its Retry. A press is no automatic update.
-    const toolId = peekInstall(message.payload);
+    const toolId = peekControlArg(message.payload, "installTool");
     const ask = toolId ? ctx.installAsk(toolId) : {};
     const { newest } = ask;
     const correlated = {

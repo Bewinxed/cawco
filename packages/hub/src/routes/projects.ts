@@ -7,7 +7,6 @@ import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { projectOrigin } from "../db/previews";
 import type { HubContext } from "../hub-context";
-import { PlaceRefusal } from "../place-refusal";
 import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
 import { schemaRefusal } from "../refusal";
@@ -368,19 +367,8 @@ export const projectRoutes = ({
     .post(
       "/api/projects/:id/places",
       { body: t.Object({ machineId: t.String(), path: t.String() }) },
-      async ({ params, body }) => {
-        try {
-          return await addProjectPlace(params.id, body.machineId, body.path);
-        } catch (error) {
-          if (error instanceof PlaceRefusal) {
-            return problem(error.status, {
-              code: "place-refused",
-              detail: error.message,
-            });
-          }
-          throw error;
-        }
-      }
+      ({ params, body }) =>
+        addProjectPlace(params.id, body.machineId, body.path)
     )
     // The accounts the project's sessions may run on; null: every account.
     .put(

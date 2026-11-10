@@ -77,6 +77,8 @@ import type { ArtifactRow } from "./db/artifacts";
 import type { FolderProblem } from "./decision-page";
 import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
+import type { changeFolderFiles, folderFileNames } from "./project-folder";
+import type { Tasks } from "./tasks";
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
@@ -339,6 +341,16 @@ interface DecidedTask {
   title: string;
 }
 
+/** The problems a folder or task call answers: its result without its value. */
+type Problems<R> = Extract<R, { readonly "~status": true }>;
+
+/** Every problem a decisions dep answers: a folder file's read, a commit, a listing or the tasks' list. */
+type DecisionProblem =
+  | FolderProblem
+  | Problems<Awaited<ReturnType<typeof changeFolderFiles>>>
+  | Problems<Awaited<ReturnType<typeof folderFileNames>>>
+  | Problems<Awaited<ReturnType<Tasks["list"]>>>;
+
 export interface DecisionsDeps {
   /** The page artifacts of a project, newest first. */
   artifacts: (projectId: string) => ArtifactRow[];
@@ -352,9 +364,16 @@ export interface DecisionsDeps {
       writes: { content: string; path: string }[];
     },
     message: string
-  ) => Promise<void>;
-  /** The names of the entries in one folder of the project's. */
-  folderNames: (projectId: string, path: string) => Promise<string[]>;
+  ) => Promise<
+    Problems<Awaited<ReturnType<typeof changeFolderFiles>>> | undefined
+  >;
+  /** The names of the entries in one folder of the project's; the folder's problem when it does not list. */
+  folderNames: (
+    projectId: string,
+    path: string
+  ) => Promise<
+    string[] | Problems<Awaited<ReturnType<typeof folderFileNames>>>
+  >;
   /** A project's folder file, undefined when it is not there, the folder's problem when it does not read. */
   folderText: (
     projectId: string,
@@ -389,7 +408,9 @@ export interface DecisionsDeps {
   /** A Send's carried writes (core `SendBody.writes`) applied to the artifact's doc (artifacts/sync.ts `takeSentWrites`): why not, or null. */
   takeWrites: (artifactId: string, writes: string) => string | null;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
-  tasks: (projectId: string) => Promise<DecidedTask[]>;
+  tasks: (
+    projectId: string
+  ) => Promise<DecidedTask[] | Problems<Awaited<ReturnType<Tasks["list"]>>>>;
   /** The person's words or act to a session ({@link PersonsSend}), through the one send path, as the send `uuid`. */
   tell: (instance: InstanceRow, said: PersonsSend, uuid: string) => void;
   /** The person's words or act to the project's conversation (caw.ts `tellYours`): its session, and the send's uuid. */
@@ -604,11 +625,32 @@ export const createDecisions = (deps: DecisionsDeps) => {
           detail: `The hub keeps no project ${projectId}.`,
         });
 
+  /** The names among `folders` that hold a program or a built page and are not `known`. */
+  const keptNames = async (
+    projectId: string,
+    folders: string[],
+    known: ReadonlyMap<string, unknown>
+  ): Promise<string[] | DecisionProblem> => {
+    const names: string[] = [];
+    for (const name of folders) {
+      if (NAME.test(name) && !known.has(name)) {
+        const kept = await keptIn(deps.folderText, projectId, name);
+        if (kept instanceof ElysiaStatus) {
+          return kept;
+        }
+        if (kept !== undefined) {
+          names.push(name);
+        }
+      }
+    }
+    return names;
+  };
+
   /** Each page name with its newest artifact, and the folder's built pages beside them. */
   const pageNames = async (
     projectId: string
   ): Promise<
-    { artifact: ArtifactRow | null; name: string }[] | FolderProblem
+    { artifact: ArtifactRow | null; name: string }[] | DecisionProblem
   > => {
     const byName = new Map<string, ArtifactRow | null>();
     for (const row of deps.artifacts(projectId)) {
@@ -616,16 +658,16 @@ export const createDecisions = (deps: DecisionsDeps) => {
         byName.set(row.name, row);
       }
     }
-    for (const name of await deps.folderNames(projectId, "decisions")) {
-      if (NAME.test(name) && !byName.has(name)) {
-        const kept = await keptIn(deps.folderText, projectId, name);
-        if (kept instanceof ElysiaStatus) {
-          return kept;
-        }
-        if (kept !== undefined) {
-          byName.set(name, null);
-        }
-      }
+    const folders = await deps.folderNames(projectId, "decisions");
+    if (folders instanceof ElysiaStatus) {
+      return folders;
+    }
+    const kept = await keptNames(projectId, folders, byName);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
+    for (const name of kept) {
+      byName.set(name, null);
     }
     return [...byName].map(([name, artifact]) => ({ name, artifact }));
   };
@@ -633,7 +675,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
   const readRecord = async (
     projectId: string,
     name: string
-  ): Promise<StoredRecord | null | FolderProblem> => {
+  ): Promise<StoredRecord | null | DecisionProblem> => {
     const text = await deps.folderText(projectId, recordPath(name));
     if (text === undefined) {
       return null;
@@ -731,7 +773,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
   const pageOf = async (
     projectId: string,
     name: string
-  ): Promise<ReadPage | FolderProblem> => {
+  ): Promise<ReadPage | DecisionProblem> => {
     const program = await deps.folderText(projectId, programPath(name));
     if (program instanceof ElysiaStatus) {
       return program;
@@ -752,7 +794,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     name: string,
     artifact: ArtifactRow | null,
     tasks: DecidedTask[]
-  ): Promise<{ read: DecisionPageRead; page: ReadPage } | FolderProblem> => {
+  ): Promise<{ read: DecisionPageRead; page: ReadPage } | DecisionProblem> => {
     const page = await pageOf(projectId, name);
     if (page instanceof ElysiaStatus) {
       return page;
@@ -833,14 +875,14 @@ export const createDecisions = (deps: DecisionsDeps) => {
       return names;
     }
     const found = names.find((page) => page.name === name);
-    const one = found
-      ? await readOne(
-          projectId,
-          name,
-          found.artifact,
-          await deps.tasks(projectId)
-        )
-      : undefined;
+    const tasks = found ? await deps.tasks(projectId) : undefined;
+    if (tasks instanceof ElysiaStatus) {
+      return tasks;
+    }
+    const one =
+      found && tasks
+        ? await readOne(projectId, name, found.artifact, tasks)
+        : undefined;
     if (one instanceof ElysiaStatus) {
       return one;
     }
@@ -903,7 +945,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     artifactId: string | null,
     prior: StoredRecord | null,
     tasks: DecidedTask[]
-  ): Promise<StoredRecord | null | FolderProblem> => {
+  ): Promise<StoredRecord | null | DecisionProblem> => {
     const own = tasks.filter((task) => task.page === name);
     const page = await pageOf(projectId, name);
     if (page instanceof ElysiaStatus) {
@@ -936,6 +978,27 @@ export const createDecisions = (deps: DecisionsDeps) => {
     };
   };
 
+  /** Page `name`'s record as it stands now with its tasks and the record before it ({@link recordNow} over what the folder holds). */
+  const recordFor = async (
+    projectId: string,
+    name: string,
+    artifactId: string | null
+  ) => {
+    const tasks = await deps.tasks(projectId);
+    if (tasks instanceof ElysiaStatus) {
+      return tasks;
+    }
+    const prior = await readRecord(projectId, name);
+    if (prior instanceof ElysiaStatus) {
+      return prior;
+    }
+    const next = await recordNow(projectId, name, artifactId, prior, tasks);
+    if (next instanceof ElysiaStatus) {
+      return next;
+    }
+    return { tasks, prior, next };
+  };
+
   /** Each page name's newest artifact, by name. */
   const artifactsByName = (projectId: string): Map<string, string> => {
     const byName = new Map<string, string>();
@@ -953,7 +1016,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     name: string,
     artifactId: string | null,
     tasks: DecidedTask[]
-  ): Promise<{ content: string; path: string }[] | FolderProblem> => {
+  ): Promise<{ content: string; path: string }[] | DecisionProblem> => {
     const prior = await readRecord(projectId, name);
     if (prior instanceof ElysiaStatus || !prior) {
       return prior ?? [];
@@ -974,13 +1037,19 @@ export const createDecisions = (deps: DecisionsDeps) => {
   const followRecords = async (
     projectId: string,
     only?: string
-  ): Promise<FolderProblem | undefined> => {
+  ): Promise<DecisionProblem | undefined> => {
     const tasks = await deps.tasks(projectId);
+    if (tasks instanceof ElysiaStatus) {
+      return tasks;
+    }
     const artifacts = artifactsByName(projectId);
     const writes: { content: string; path: string }[] = [];
     const names = only
       ? [only]
       : await deps.folderNames(projectId, "decisions");
+    if (names instanceof ElysiaStatus) {
+      return names;
+    }
     for (const name of names) {
       if (!NAME.test(name)) {
         continue;
@@ -997,11 +1066,14 @@ export const createDecisions = (deps: DecisionsDeps) => {
       writes.push(...files);
     }
     if (writes.length > 0) {
-      await deps.commit(
+      const committed = await deps.commit(
         projectId,
         { writes, deletes: [] },
         "decisions: the record follows its picks and tasks"
       );
+      if (committed) {
+        return committed;
+      }
       deps.changed(projectId);
     }
   };
@@ -1009,7 +1081,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
   /** A record write that failed, said in the journal: nothing waits on it. */
   const followed = (
     projectId: string,
-    run: Promise<FolderProblem | undefined>
+    run: Promise<DecisionProblem | undefined>
   ): void => {
     run.then(
       (unread) => {
@@ -1047,7 +1119,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
         return { why: told.response.detail };
       }
       const { send } = told;
-      await deps.commit(
+      const committed = await deps.commit(
         projectId,
         {
           writes: [
@@ -1060,7 +1132,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
         },
         `decisions: ${record.name} asked of Caw`
       );
-      return null;
+      return committed ? { why: committed.response.detail } : null;
     } catch (error) {
       return { why: error instanceof Error ? error.message : String(error) };
     }
@@ -1075,30 +1147,29 @@ export const createDecisions = (deps: DecisionsDeps) => {
     projectId: string,
     name: string,
     artifactId: string
-  ): Promise<FolderProblem | undefined> =>
+  ): Promise<DecisionProblem | undefined> =>
     serially(async () => {
       if (artifactsByName(projectId).get(name) !== artifactId) {
         return;
       }
-      const tasks = await deps.tasks(projectId);
-      const prior = await readRecord(projectId, name);
-      if (prior instanceof ElysiaStatus) {
-        return prior;
+      const record = await recordFor(projectId, name, artifactId);
+      if (record instanceof ElysiaStatus) {
+        return record;
       }
-      const next = await recordNow(projectId, name, artifactId, prior, tasks);
-      if (next instanceof ElysiaStatus) {
-        return next;
-      }
+      const { tasks, prior, next } = record;
       if (!next || (prior && recordText(next) === recordText(prior))) {
         return;
       }
-      await deps.commit(
+      const committed = await deps.commit(
         projectId,
         { writes: recordFiles(next, titlesOf(tasks)), deletes: [] },
         prior
           ? `decisions: ${name}'s picks moved`
           : `decisions: ${name} decided`
       );
+      if (committed) {
+        return committed;
+      }
       deps.changed(projectId);
     });
 
@@ -1107,7 +1178,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     projectId: string,
     name: string,
     cards: DecisionCard[]
-  ): Promise<{ cards: DecisionCard[]; name: string }[] | FolderProblem> => {
+  ): Promise<{ cards: DecisionCard[]; name: string }[] | DecisionProblem> => {
     const pages: { cards: DecisionCard[]; name: string }[] = [{ name, cards }];
     const names = await pageNames(projectId);
     if (names instanceof ElysiaStatus) {
@@ -1130,7 +1201,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     projectId: string,
     name: string,
     cards: DecisionCard[]
-  ): Promise<AfterLinks | FolderProblem> => {
+  ): Promise<AfterLinks | DecisionProblem> => {
     const pages = await withOthers(projectId, name, cards);
     if (pages instanceof ElysiaStatus) {
       return pages;
@@ -1187,6 +1258,35 @@ export const createDecisions = (deps: DecisionsDeps) => {
     return undefined;
   };
 
+  /** Each page read whole, the decision pages among them; what did not read, said by page. */
+  const readEach = async (
+    projectId: string,
+    names: { artifact: ArtifactRow | null; name: string }[],
+    tasks: DecidedTask[]
+  ) => {
+    const problems: string[] = [];
+    const read: { cards: DecisionCard[]; facts: DecisionPageRead }[] = [];
+    for (const { name, artifact } of names) {
+      try {
+        const one = await readOne(projectId, name, artifact, tasks);
+        if (one instanceof ElysiaStatus) {
+          problems.push(
+            `decisions/${name}/ did not read: ${one.response.detail}`
+          );
+          continue;
+        }
+        if (decisionPage(one.read, one.page)) {
+          read.push({ facts: one.read, cards: one.page.cards });
+        }
+      } catch (error) {
+        problems.push(
+          `decisions/${name}/ did not read: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+    return { read, problems };
+  };
+
   /** The person's note on page `name`: said to the session that hears it, as their own words, or to Caw. */
   const noted = async (
     projectId: string,
@@ -1237,26 +1337,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
       if (names instanceof ElysiaStatus) {
         return names;
       }
-      const problems: string[] = [];
-      const read: { cards: DecisionCard[]; facts: DecisionPageRead }[] = [];
-      for (const { name, artifact } of names) {
-        try {
-          const one = await readOne(projectId, name, artifact, tasks);
-          if (one instanceof ElysiaStatus) {
-            problems.push(
-              `decisions/${name}/ did not read: ${one.response.detail}`
-            );
-            continue;
-          }
-          if (decisionPage(one.read, one.page)) {
-            read.push({ facts: one.read, cards: one.page.cards });
-          }
-        } catch (error) {
-          problems.push(
-            `decisions/${name}/ did not read: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
+      if (tasks instanceof ElysiaStatus) {
+        return tasks;
       }
+      const { read, problems } = await readEach(projectId, names, tasks);
       const links = linksAmong(
         read.map(({ facts, cards }) => ({
           name: facts.name,
@@ -1398,16 +1482,12 @@ export const createDecisions = (deps: DecisionsDeps) => {
           ? { askedOf: to.instance.id, askedSend: crypto.randomUUID() }
           : { askedOf: null };
       const unasked = await serially(async () => {
-        const tasks = await deps.tasks(projectId);
+        const recorded = await recordFor(projectId, name, artifactId);
+        if (recorded instanceof ElysiaStatus) {
+          return recorded;
+        }
+        const { tasks, prior, next: now } = recorded;
         const titles = titlesOf(tasks);
-        const prior = await readRecord(projectId, name);
-        if (prior instanceof ElysiaStatus) {
-          return prior;
-        }
-        const now = await recordNow(projectId, name, artifactId, prior, tasks);
-        if (now instanceof ElysiaStatus) {
-          return now;
-        }
         if (!now) {
           return problem(404, {
             code: "decision-page-missing",
@@ -1416,20 +1496,26 @@ export const createDecisions = (deps: DecisionsDeps) => {
         }
         const { askedSend: _askedSendBefore, ...picks } = now;
         const record: StoredRecord = { ...picks, ...asked };
-        await deps.commit(
+        const written = await deps.commit(
           projectId,
           { writes: recordFiles(record, titles), deletes: [] },
           `decisions: ${name}'s tasks asked for`
         );
+        if (written) {
+          return written;
+        }
         const refused = await askTasks(projectId, record, to, ask);
         if (refused) {
-          await deps.commit(
+          const restored = await deps.commit(
             projectId,
             prior
               ? { writes: recordFiles(prior, titles), deletes: [] }
               : { writes: [], deletes: [recordPath(name), logPath(name)] },
             `decisions: ${name}'s tasks were not asked for`
           );
+          if (restored) {
+            return restored;
+          }
           return problem(503, {
             code: "decision-tasks-unasked",
             detail: `Couldn't make tasks: ${refused.why}`,
@@ -1466,6 +1552,12 @@ export const createDecisions = (deps: DecisionsDeps) => {
      */
     async decideSent(projectId: string): Promise<void> {
       const tasks = await deps.tasks(projectId);
+      if (tasks instanceof ElysiaStatus) {
+        console.warn(
+          `[decisions] ${projectId}: no page was decided: ${tasks.response.detail}`
+        );
+        return;
+      }
       const names = await pageNames(projectId);
       if (names instanceof ElysiaStatus) {
         console.warn(
