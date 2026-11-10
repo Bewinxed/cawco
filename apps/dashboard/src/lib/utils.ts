@@ -141,6 +141,7 @@ const twMergeConfig = {
       "clip-path": [
         { "clip-path": arbitrary },
         "clip-block-start",
+        "clip-block-end",
         "clip-tab-foot",
       ],
       "grid-areas": [{ "grid-areas": arbitrary }],

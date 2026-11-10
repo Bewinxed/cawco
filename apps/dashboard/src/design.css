@@ -1108,6 +1108,10 @@
 @utility clip-block-start {
   clip-path: inset(0 -100vw -100vw);
 }
+/* The same at its block-end edge: a card that rises out of its anchor's top. */
+@utility clip-block-end {
+  clip-path: inset(-100vw -100vw 0);
+}
 /* The connection band shut: up behind its fold's top edge by its own height
    and the air over it (`--band-air`, its block-start margin), so it starts
    wholly behind the clip and its foot stays on the fold's foot, the page's

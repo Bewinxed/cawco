@@ -115,9 +115,13 @@
      overlay shadow past the others. It never moves, so the card's slide is
      all the compositor has to play. In CSS, not the wrapper's own style,
      which bits-ui writes whole on every placement; HangCard marks the
-     wrapper it draws (`data-hang`). */
+     wrapper it draws (`data-hang`). A card that rises out of its anchor's
+     top (`data-hang="rises"`) is cut at its foot instead. */
   [data-bits-floating-content-wrapper][data-hang] {
     @apply clip-block-start;
+  }
+  [data-bits-floating-content-wrapper][data-hang="rises"] {
+    @apply clip-block-end;
   }
 
   /* vaul's own slide out (slideToBottom and its siblings) sets no fill

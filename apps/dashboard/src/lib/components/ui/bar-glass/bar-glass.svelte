@@ -4,11 +4,13 @@
   /**
    * The glass a menu or popover opened from one of its items hangs from
    * (BarMenu): the group's element, the side its foot flares to, and the
-   * card's word that it stands drawn out of the glass or has gone back.
+   * card's word that it stands drawn out of the glass or has gone back, and
+   * whether it hangs from the glass's foot or rises out of its top
+   * (`rises`, a glass standing at the foot of its surface).
    */
   export interface GlassHold {
     readonly flare: "start" | "end";
-    hung: (shown: boolean) => void;
+    hung: (shown: boolean, rises: boolean) => void;
     readonly node: HTMLElement | null;
   }
 
@@ -98,6 +100,8 @@
   let node = $state<HTMLElement | null>(null);
   /** How many of its menus stand drawn out of it (BarMenu): one at a time, counted so a swap never drops the join between them. */
   let hanging = $state(0);
+  /** The last card drawn out of it rises out of its top: its join is drawn upside down. Kept as it goes back, so the join fades out the way it stood. */
+  let risen = $state(false);
   setGlassHold({
     get node() {
       return node;
@@ -105,14 +109,19 @@
     get flare() {
       return flare;
     },
-    hung(shown) {
+    hung(shown, rises) {
       // Told from a card's own effect: counted without that effect reading the count back.
       untrack(() => {
         hanging = Math.max(0, hanging + (shown ? 1 : -1));
+        if (shown) {
+          risen = rises;
+        }
       });
     },
   });
   const drawnOut = $derived(joined || hanging > 0);
+  /** The join stands on its head: a card from one of its menus rises out of its top (the `joined` card, Caw's, hangs). */
+  const joinRises = $derived(!joined && risen);
 </script>
 
 <!-- What stands in the glass takes its contour by where it stands
@@ -163,15 +172,21 @@
        1px inside it (`clip-join`), so the edge runs up the flare, both
        flanks and over the top. Its top corners are the pill's end (`--r`).
        A head's group draws it too, for the card it hangs (a design graph's
-       view); only the bar's takes the phone's tab form. -->
+       view); only the bar's takes the phone's tab form. Under a card that
+       rises out of the glass's top the same layer is turned upside down,
+       1px over its top instead: over its foot, up its flanks and down a
+       flare at its top into the card's foot. -->
   <span
     data-slot="join"
     aria-hidden="true"
     class={[
-      "absolute inset-bs-0 -inset-be-px pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
+      "absolute pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--r-outer)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
       flare === "start"
         ? "-start-(--f) end-0"
         : "start-0 -end-(--f) -scale-x-100",
+      joinRises
+        ? "-inset-bs-px inset-be-0 -scale-y-100"
+        : "inset-bs-0 -inset-be-px",
       form === "bar" &&
         "@max-desk/shell:-inset-be-(--caw-neck) @max-desk/shell:[--r:var(--tools-round)] @max-desk/shell:clip-path-(--join-edge-phone) @max-desk/shell:before:clip-join-phone",
     ]}

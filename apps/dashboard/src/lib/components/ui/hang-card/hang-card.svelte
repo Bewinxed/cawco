@@ -20,7 +20,9 @@
    * one stroke. A clip, not a mask: a mask drew the whole card's edge
    * through a buffer of its own on every paint. Its overlay shadow is cut at
    * its top edge (room for the whole shadow past the other three), so none
-   * falls on the anchor.
+   * falls on the anchor. A card that `rises` wears all of this on its foot
+   * instead: the cut, the square flush corner and the clip of its shadow,
+   * and shut it stands down past its own height.
    *
    * `tab`: one silhouette with its folder tab (motion/hang-shape): no edge,
    * cut or shadow of its own (the outline layer, hang-outline, draws them),
@@ -42,12 +44,23 @@
    * out unseen.
    */
   const hangCardVariants = tv({
-    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--surface-raised)] [clip-path:inset(0_calc(-1*var(--c-hang-shadow-room))_calc(-1*var(--c-hang-shadow-room))_round_0_0_var(--radius-lg)_var(--radius-lg))] before:pointer-events-none before:absolute before:top-0 before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
+    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--surface-raised)] before:pointer-events-none before:absolute before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
     variants: {
+      /**
+       * Which edge meets the anchor: its top (it hangs) or its foot (it
+       * rises), where the cut, the square flush corner and the clip of its
+       * shadow stand. Risen, the cut is the top's drawn upside down, so its
+       * flares curve down into the anchor's top as they curve up into its
+       * foot.
+       */
+      rises: {
+        false:
+          "[clip-path:inset(0_calc(-1*var(--c-hang-shadow-room))_calc(-1*var(--c-hang-shadow-room))_round_0_0_var(--radius-lg)_var(--radius-lg))] before:top-0 data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none",
+        true: "[clip-path:inset(calc(-1*var(--c-hang-shadow-room))_calc(-1*var(--c-hang-shadow-room))_0_round_var(--radius-lg)_var(--radius-lg)_0_0)] before:bottom-0 before:-scale-y-100 data-[flush=start]:rounded-es-none data-[flush=end]:rounded-ee-none",
+      },
       tab: {
         true: "translate-none shadow-none will-change-auto [clip-path:path('M_0_0_Z')] before:hidden after:hidden",
-        false:
-          "motion-safe:will-change-[translate] motion-safe:not-data-[shown]:[translate:0_calc(-100%-var(--hang-reach,0px))]",
+        false: "motion-safe:will-change-[translate]",
       },
       glass: {
         true: "shadow-none",
@@ -55,7 +68,22 @@
       /** The tab's menu hangs on the tab's own surface, as the session card's head is. */
       surface: { recess: "[--hang-surface:var(--surface-recess)]" },
     },
-    defaultVariants: { tab: false },
+    /** Shut, it stands behind the cut past its own height and its shadow's reach (motion/hang). */
+    compoundVariants: [
+      {
+        tab: false,
+        rises: false,
+        class:
+          "motion-safe:not-data-[shown]:[translate:0_calc(-100%-var(--hang-reach,0px))]",
+      },
+      {
+        tab: false,
+        rises: true,
+        class:
+          "motion-safe:not-data-[shown]:[translate:0_calc(100%+var(--hang-reach,0px))]",
+      },
+    ],
+    defaultVariants: { tab: false, rises: false },
   });
 </script>
 
@@ -75,6 +103,12 @@
    * with. It opens and closes on `hang` (motion/hang): a slide down out of
    * the foot from behind a cut that never moves, translate alone,
    * interruptible, a fade under Reduce Motion.
+   *
+   * A card that rises (`rises`: a menu from a glass standing at the foot
+   * of its surface, BarMenu) is the same card upside down: the site gives
+   * the primitive side `top` at offset 0, its foot is cut across the
+   * anchor's span and flared top, square on a flush side, and it slides up
+   * out of the anchor's top and back down into it.
    *
    * The neck is measured here, from where the primitive places the card:
    * the anchor's span in the card's coordinates, and on each side the
@@ -217,6 +251,12 @@
      * hang-outline).
      */
     tab?: boolean;
+    /**
+     * It stands on its anchor's top and rises out of it (the site places it
+     * side `top`): its foot meets the anchor, as a hanging card's top does.
+     * Not with `tab` or `glass`, which only hang.
+     */
+    rises?: boolean;
     /** It stands drawn out of its anchor: the anchor draws its foot. */
     joined?: boolean;
     /** The neck where the card stands, on every placement. */
@@ -240,6 +280,7 @@
     frame,
     surface,
     tab = false,
+    rises = false,
     joined = $bindable(false),
     ref = $bindable(null),
     onneck,
@@ -497,6 +538,7 @@
       held: () => held?.() ?? false,
       folded: () => folded?.() ?? false,
       grow: layer ? grow : undefined,
+      rises,
     })(node);
     return () => {
       sized.disconnect();
@@ -535,7 +577,8 @@
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so,
      unless the site keeps it drawn (`forceMount`): the page has its pointer
      back at the dismissal (floating-presence). Its wrapper is marked a
-     hanging card's (`data-hang`), the cut app.css draws on it. A kit
+     hanging card's (`data-hang`, `rises` for one that rises), the cut
+     app.css draws on it, at the card's top or its foot. A kit
      surface is told it hangs, so it keeps only the fade of its own motion.
      The wrapper is fixed, so it is the stacking context the card's own
      z-index is held inside: it stands on the floating layer itself
@@ -548,7 +591,7 @@
   {...rest}
   class={cn(
     floatingSurface({ motion: "hang", edge: "drawn" }),
-    hangCardVariants({ tab, glass, surface }),
+    hangCardVariants({ tab, rises, glass, surface }),
     frame && FRAMES[frame],
     className
   )}
@@ -560,7 +603,7 @@
       <div
         {...wrapperProps}
         class="z-(--layer-float)"
-        data-hang
+        data-hang={rises ? "rises" : ""}
         style:pointer-events={pressable(open)}
       >
         <div
