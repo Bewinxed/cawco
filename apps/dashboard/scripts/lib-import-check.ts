@@ -14,6 +14,9 @@ import { readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { repoFiles } from "../../../scripts/lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/"];
+
 const DASHBOARD = join(dirname(new URL(import.meta.url).pathname), "..");
 const LIB = join(DASHBOARD, "src/lib");
 /** An import, export or dynamic import of a `#lib` specifier. */

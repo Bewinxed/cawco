@@ -44,6 +44,9 @@ import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/"];
+
 const SOURCES = ["apps/dashboard/src"];
 /**
  * The Tailwind variants generated from the components' own attribute

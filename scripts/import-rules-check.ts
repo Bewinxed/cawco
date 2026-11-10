@@ -25,6 +25,9 @@ import { type Found, holdRatchet } from "./lib/ratchet";
 import { ROOT, repoFiles } from "./lib/repo-files";
 import { packageOf } from "./lib/workspace-imports";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/", "packages/", "scripts/", "site/"];
+
 const RULES = {
   cycle:
     "no import cycle, value or type: move what both files need below them both",

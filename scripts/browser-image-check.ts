@@ -24,6 +24,9 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/agent/browser/"];
+
 const ROOT = resolve(import.meta.dir, "..");
 const DIR = "packages/agent/browser";
 const CONF = `${DIR}/chromium.conf`;

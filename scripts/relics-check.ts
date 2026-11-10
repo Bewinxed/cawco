@@ -29,6 +29,9 @@ import { readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/"];
+
 const SOURCE = "apps/dashboard/src";
 const KINDS = [
   "literal",

@@ -11,6 +11,9 @@
  */
 import { resolve } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/"];
+
 const ROOT = resolve(import.meta.dir, "..");
 const MADE = String.raw`new\s+(Docker|Dockerode|Modem)\s*\(`;
 const HOME = "packages/agent/src/browser/runtime.ts";

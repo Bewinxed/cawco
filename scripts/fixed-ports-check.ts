@@ -20,6 +20,9 @@
 import { join } from "node:path";
 import ts from "typescript";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/"];
+
 const ROOT = join(import.meta.dir, "..");
 const EPHEMERAL = { first: 32_768, last: 60_999 } as const;
 const STAGE = { file: "packages/agent/src/stage.ts", name: "STAGE_PORTS" };

@@ -13,6 +13,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["DESIGN.md"];
+
 const ROOT = join(import.meta.dir, "..");
 const MAX_WORDS = 8000;
 const MAX_PARAGRAPH = 800;

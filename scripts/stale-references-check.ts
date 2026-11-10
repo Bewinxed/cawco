@@ -37,6 +37,20 @@ import { commentsOf, parsed } from "./lib/parse-source";
 import { ROOT, repoFiles } from "./lib/repo-files";
 import { fileAt, packages, targetOf } from "./lib/workspace-imports";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/",
+  "apps/cawrier/",
+  "packages/",
+  "scripts/",
+  "site/",
+  "biome.jsonc",
+  "knip.ts",
+  "golar.config.ts",
+  "ARCHITECTURE.md",
+  "README.md",
+];
+
 const files = repoFiles();
 const present = new Set(files);
 

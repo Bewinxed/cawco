@@ -7,6 +7,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["DESIGN.md", "design/RULES.md"];
+
 const ROOT = join(import.meta.dir, "..");
 const SOURCE = join(ROOT, "DESIGN.md");
 const TARGET = join(ROOT, "design", "RULES.md");

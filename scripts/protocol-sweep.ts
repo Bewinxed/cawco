@@ -43,6 +43,9 @@ import {
   step,
 } from "../packages/core/src/handover";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/core/src/"];
+
 /** The longest schedule swept, past the start-up the world begins in. */
 const MAX_EVENTS = 8;
 const MACHINE = "m";

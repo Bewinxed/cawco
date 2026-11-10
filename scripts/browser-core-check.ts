@@ -8,8 +8,12 @@
  * through core's own value imports, and one that reaches a builtin is refused
  * with the path that got there. A type-only import loads nothing.
  */
+
 import { importGraph } from "./lib/import-graph";
 import { repoFiles } from "./lib/repo-files";
+
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/", "packages/core/src/"];
 
 const DASHBOARD = "apps/dashboard/src/";
 const CORE = "packages/core/src/";

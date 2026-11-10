@@ -45,6 +45,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/"];
+
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const SOURCE = join(DASHBOARD, "src");
 /** The dashboard's own Svelte, the compiler its components are built with (it is not hoisted to the root). */

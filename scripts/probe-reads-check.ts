@@ -23,6 +23,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["scripts/probe-kit/"];
+
 const ROOT = join(import.meta.dir, "..");
 /** A wait for the notice: its tag's name, however the probe matches it. */
 const WAITS = /artifact-responses/u;

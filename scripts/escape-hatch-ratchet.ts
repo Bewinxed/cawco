@@ -39,6 +39,16 @@ import { commentsOf, parsed } from "./lib/parse-source";
 import { type Found, holdRatchet } from "./lib/ratchet";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/",
+  "apps/cawrier/",
+  "packages/",
+  "scripts/",
+  "site/",
+  "biome.jsonc",
+];
+
 const KINDS = {
   "catch-drops-reason":
     "a rejection handler reads its reason: handle it, or let it fail",

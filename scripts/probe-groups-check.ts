@@ -15,6 +15,9 @@ import { basename, join, relative } from "node:path";
 import ts from "typescript";
 import { CUT_GROUPS, KEPT_GROUPS } from "./probe-kit/groups";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["scripts/probe-kit/", "scripts/*"];
+
 const ROOT = join(import.meta.dir, "..");
 const SPECS = join(ROOT, "scripts/probe-kit/specs");
 const JOURNEYS = join(ROOT, "scripts/probe-kit/journeys");

@@ -32,6 +32,9 @@ import ts from "typescript";
 import { KIND_SEED } from "../packages/core/src/decides";
 import { buildProgram } from "../packages/hub/src/decision-program";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["scripts/probe-kit/", "scripts/scratch-fleet.ts"];
+
 const ROOT = join(import.meta.dir, "..");
 const PROGRAM = /^\s*root\s*=\s*Decisions\(/u;
 /** What a quoted substitution reads as: one word, a valid id and file name. */

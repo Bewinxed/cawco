@@ -42,6 +42,13 @@ import {
 } from "../packages/core/src/house-faces";
 import { formatText, formattedAlike } from "./fmt";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "packages/core/",
+  "assets/",
+  "apps/dashboard/src/house-faces/",
+];
+
 const OUT = new URL("../packages/core/src/house-faces.json", import.meta.url)
   .pathname;
 

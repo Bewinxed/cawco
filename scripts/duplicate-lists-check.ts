@@ -40,6 +40,14 @@ import {
 import { parseSync } from "oxc-parser";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "packages/",
+  "apps/dashboard/",
+  "apps/cawrier/",
+  "scripts/",
+];
+
 /** Where the code this reads lives. */
 const ROOTS = ["packages/", "apps/dashboard/", "apps/cawrier/", "scripts/"];
 const SOURCE = /\.(?:ts|tsx|mts|svelte)$/u;

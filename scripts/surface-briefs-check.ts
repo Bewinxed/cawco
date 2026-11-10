@@ -18,6 +18,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { z } from "zod";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/.impeccable/surfaces/"];
+
 const ROOT = join(import.meta.dir, "..");
 const PROJECT = "apps/dashboard";
 const SURFACES = join(PROJECT, ".impeccable/surfaces");

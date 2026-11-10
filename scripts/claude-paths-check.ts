@@ -16,6 +16,17 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { CODE_ROOTS, ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/*/src/",
+  "packages/*/src/",
+  "apps/*/bench/",
+  "packages/*/bench/",
+  "apps/*/scripts/",
+  "packages/*/scripts/",
+  "scripts/",
+];
+
 /** Files that may name a Claude Code dir, each with why. */
 const ALLOWED: Record<string, string> = {
   "packages/core/src/claude-dirs.ts":

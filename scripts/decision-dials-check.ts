@@ -30,6 +30,14 @@ import {
   DECISION_ASSETS,
 } from "../packages/hub/src/decision-program";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/",
+  "design/",
+  "DESIGN.md",
+  "packages/",
+];
+
 const ROOT = join(import.meta.dir, "..");
 const KIT_PAGE = join(ROOT, "packages/hub/skills/decision-page/kit/page.html");
 /** The kit's line that loads the dials, with its comment. */
