@@ -42,7 +42,7 @@ import { artifactToolWords } from "../../../packages/core/src/words/artifact-too
 import { sessionReadOf } from "../../../packages/hub/src/hub-auth";
 import { toolCall, toolRecord } from "../../lib/tool-call";
 import { type Reply, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROUTES = new URL(
   "../../../packages/core/src/hub-routes.gen.ts",

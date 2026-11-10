@@ -81,8 +81,9 @@ import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { caw } from "../caw-head";
 import { doorOf, liveBrowser, servedSite } from "../gated-pages";
 import { payloadOf } from "../hub";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { open } from "../kit";
 import { oauthProvider } from "../oauth-provider";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 

@@ -28,15 +28,9 @@ import { downOf } from "../../../packages/preview/src/proxy";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import {
-  delegateStarted,
-  type Kit,
-  type KitFleet,
-  open,
-  pressIn,
-  type Spec,
-} from "../kit";
+import { delegateStarted, open, pressIn } from "../kit";
 import { passedFetch } from "../preview-pass";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** How long the fleet's stages run unused before they sleep (agent stage.ts `CAWCO_STAGE_IDLE_MS`). */
 const IDLE_MS = 45_000;

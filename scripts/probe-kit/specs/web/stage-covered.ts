@@ -26,7 +26,8 @@
  */
 import type { Page } from "playwright-core";
 import { graphWords } from "../../../../packages/core/src/words/graph";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { open, settle } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 import { exactly, shaped } from "../../words";
 
 const BENCH = "/dev/graph-dials";

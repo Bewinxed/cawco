@@ -25,7 +25,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserKey } from "../../../packages/core/src/browser";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** This probe's process has no hub link: the registry tells nothing. */
 const NO_HUB = { browsers: (): void => undefined, machineId: "probe-machine" };

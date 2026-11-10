@@ -54,7 +54,7 @@ import { decidesWords } from "../../../packages/core/src/words/decides";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { CardSettlingRow } from "../../../packages/hub/src/db/decides";
 import { type HubAsk, handled, said } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-picked-machine";
 const PRESENCE = "probe-presence-7c1e";
@@ -498,10 +498,12 @@ const stuckOnce = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Previews, pages and comments",
   name: "picked-cards-leave",
   ownProcess:
     "it builds a hub in this process on a scratch database: config.ts reads CAWCO_DB_PATH and HOME once, as the hub's modules load",
   run,
-} satisfies Spec;
+};
+
+export default spec;

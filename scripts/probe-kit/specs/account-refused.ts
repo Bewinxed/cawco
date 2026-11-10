@@ -77,8 +77,8 @@ import {
   type Said,
   said,
 } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** `request` as the in-process hub reads it (`hub.handle`). */
 

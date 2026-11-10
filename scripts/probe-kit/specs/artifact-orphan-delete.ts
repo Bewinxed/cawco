@@ -33,8 +33,8 @@ import { artifactToolWords } from "../../../packages/core/src/words/artifact-too
 import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 import { shaped } from "../words";
 
 const CHILD = "PROBE-ORPHAN-CHILD";

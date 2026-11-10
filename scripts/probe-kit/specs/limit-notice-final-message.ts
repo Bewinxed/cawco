@@ -34,7 +34,7 @@
 import { NO_REPLY_TOOL } from "../../../packages/core/src/no-reply";
 import type { NeutralAssistantBlock } from "../../../packages/core/src/session-messages";
 import { turnState } from "../../../packages/hub/src/turn-state";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** Claude Code's text in its `rate_limit` assistant frame. */
 const NOTICE = "You've hit your limit · resets 3pm (UTC)";

@@ -118,7 +118,8 @@ import {
   stateDirOf,
 } from "../copy";
 import { answerText, type HubAsk, hubAt } from "../hub";
-import { delegateStarted, type Kit, ROOT, type Spec } from "../kit";
+import { delegateStarted, ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** One request given `ms` to answer: its status and text; one not answered in time throws saying so. */
 const requestWithin = async (

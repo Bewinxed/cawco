@@ -41,7 +41,7 @@ import {
   STAGE_START_MS,
   startDecisionStage,
 } from "../decision-embeds";
-import type { Engine, Kit, Spec } from "../kit";
+import type { Engine, Kit, Spec } from "../spec";
 
 /** Chromium's cap on one renderer's requests in flight (services/network/network_context.h `kMaxOutstandingRequestsPerProcess`). */
 const CHROMIUM_CAP = 2700;

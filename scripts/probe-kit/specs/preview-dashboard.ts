@@ -34,7 +34,8 @@
 import type { FrameLocator, Page } from "playwright-core";
 import { OVERLAY_PATH } from "../../../packages/core/src/preview/routes";
 import { type Reply, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, type View } from "../kit";
+import { open } from "../kit";
+import type { Kit, Spec, View } from "../spec";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
 const FRAME = 'iframe[title="Preview"]';

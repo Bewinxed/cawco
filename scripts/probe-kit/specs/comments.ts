@@ -298,16 +298,9 @@ import { ToolCalls } from "../../tool-calls";
 import { type BreathRead, readBreath } from "../breath";
 import { type MainTask, traceMain } from "../frames";
 import { pageHub } from "../hub";
-import {
-  COMPOSER,
-  type Kit,
-  open,
-  pressAt as pressFramePoint,
-  type Spec,
-  settle,
-  VIEWS,
-} from "../kit";
+import { COMPOSER, open, pressAt as pressFramePoint, settle } from "../kit";
 import { writePagePins } from "../pins";
+import { type Kit, type Spec, VIEWS } from "../spec";
 import {
   docOf,
   dragFromIcon,

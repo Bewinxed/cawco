@@ -34,8 +34,9 @@
  *
  *   bun scripts/probe-kit/run.ts web glyph-place
  */
-import type { Spec } from "../../kit";
+
 import { type CheckName, RenderedChecks, RULES } from "../../rendered-checks";
+import type { Spec } from "../../spec";
 
 const READ: CheckName = "glyph-place";
 

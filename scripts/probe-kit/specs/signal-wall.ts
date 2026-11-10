@@ -23,7 +23,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { processGroup } from "../../../packages/core/src/process-identity";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CHILD = join(import.meta.dir, "..", "signal-wall-child.ts");
 

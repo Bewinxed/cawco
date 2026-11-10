@@ -1,6 +1,6 @@
 /**
  * Part of `bun run check`: every probe-kit spec names the group it stands
- * in (kit.ts `Spec.group`), and none stands in a group the owner cut
+ * in (spec.ts `Spec.group`), and none stands in a group the owner cut
  * (scripts/probe-kit/groups.ts `CUT_GROUPS`, with when and where he cut
  * each). A spec named `ios-…` is the app's, a group he cut, whatever it
  * names. A journey (scripts/probe-kit/journeys/j<n>-….ts, `Journey.group`)
@@ -14,6 +14,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import ts from "typescript";
 import { CUT_GROUPS, KEPT_GROUPS } from "./probe-kit/groups";
+import type { Spec } from "./probe-kit/spec";
+
+/** The `Spec` field this check reads (probe-kit/spec.ts); a rename there stops this file compiling. */
+const GROUP_FIELD = "group" satisfies keyof Spec;
 
 // Read at run time beyond its imports; check.ts keys the check on them.
 export const checkReads = ["scripts/probe-kit/", "scripts/*"];
@@ -80,7 +84,7 @@ const groupOf = (spec: ts.ObjectLiteralExpression): string | undefined => {
   for (const property of spec.properties) {
     if (
       ts.isPropertyAssignment(property) &&
-      property.name.getText() === "group" &&
+      property.name.getText() === GROUP_FIELD &&
       ts.isStringLiteralLike(property.initializer)
     ) {
       return property.initializer.text;

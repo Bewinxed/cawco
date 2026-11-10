@@ -43,7 +43,7 @@ import {
 import { accountCredentialPath } from "../../../packages/core/src/paths/claude";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** This probe's machine has no hub: a borrowed sign-in's ask goes nowhere. */
 const NO_HUB = { borrowAsk: (): void => undefined };
@@ -86,7 +86,7 @@ const interaction = (fields: Record<string, unknown>) => ({
 const apiError = (status: number, code: string, message: string) =>
   Response.json({ error: { code, message } }, { status });
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "image-gemini-api",
   ownHome:
@@ -383,4 +383,6 @@ export default {
       delete process.env.CAWCO_GEMINI_BASE_URL;
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

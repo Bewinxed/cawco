@@ -41,7 +41,7 @@ import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import type { TranscriptAnswer } from "../../../packages/core/src/find";
 import { LATE_MS } from "../../../packages/core/src/loop-watch";
 import { delay, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** Stored Claude transcripts on the machine. */
 const TRANSCRIPTS = 120;
@@ -122,7 +122,7 @@ const transcript = (sessionId: string, cwd: string, mb: number): string => {
   return `${lines.join("\n")}\n`;
 };
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "agent-loop",
   run: async (kit: Kit) => {
@@ -156,7 +156,9 @@ export default {
     await readWave(kit, fleet, ids, cwd);
     await reattaches(kit, fleet);
   },
-} satisfies Spec;
+};
+
+export default spec;
 
 /** (a) Coming up into the backlog, its index empty. */
 const comingUp = async (kit: Kit, fleet: KitFleet, ids: string[]) => {

@@ -3,7 +3,7 @@
  * scratch fleet (real hub, two machines' agents and sessionds on this
  * computer, the second reaching the hub through the kit's relay; Claude
  * Code against the mock model). Where this runs inside a workspace, each
- * delegate's create stops at its boundary (kit.ts `BOUNDARY_INSIDE`), after
+ * delegate's create stops at its boundary (spec.ts `BOUNDARY_INSIDE`), after
  * the source repository was readied, which is what leg 1 reads.
  *
  * 1. Many workspaces at once from one repository, on both machines, whose
@@ -55,9 +55,9 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
 import { type Relay, relay } from "../relay";
+import type { Kit, Spec } from "../spec";
 
 /** The second machine, which reaches the hub through the relay. */
 const OTHER = "source-burst-other";

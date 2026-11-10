@@ -26,7 +26,8 @@
  */
 import type { Frame, Page } from "playwright-core";
 import { type Reply, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { open, settle } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const PAGE =
   '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Frame escape</title></head><body style="margin:0;font:18px/1.6 system-ui"><main style="padding:24px"><h1>Frame escape</h1><p><button id="control" type="button">Create routine</button></p><p><input id="field" aria-label="Name"></p><p><input id="own" aria-label="Search, its own Esc"></p></main><script>document.getElementById("own").addEventListener("keydown",function(e){if(e.key==="Escape"){e.preventDefault();}});</script></body></html>';

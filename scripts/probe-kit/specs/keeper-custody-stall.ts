@@ -72,7 +72,8 @@ import { readRing } from "../../../packages/agent/src/sessiond-custody";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** Past the two seconds the reading gave a keeper before, short of the watchdog's ten. */
 const STALL_MS = 2500;

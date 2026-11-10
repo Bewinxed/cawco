@@ -36,7 +36,7 @@ import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { answerText, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";

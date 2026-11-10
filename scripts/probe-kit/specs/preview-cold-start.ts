@@ -48,7 +48,8 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { MACHINE, type Reply } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
 const FRAME = 'iframe[title="Preview"]';

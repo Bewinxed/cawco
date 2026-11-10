@@ -52,8 +52,8 @@ import {
 } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyGone, gitInCopy } from "../copy";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const TAG = /PROBE-HELD-([ASXTUVPQRHZ])/u;
 type Tag = "A" | "S" | "X" | "T" | "U" | "V" | "P" | "Q" | "R" | "H" | "Z";

@@ -36,7 +36,7 @@ import {
   HEAVY_SLOT_ENV,
   machineSlots,
 } from "../../../packages/core/src/heavy-slots";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CHILD = join(import.meta.dir, "..", "slot-child.ts");
 const POLL_MS = 200;

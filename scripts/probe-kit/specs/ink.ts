@@ -60,18 +60,10 @@ import { PIN_MAPS } from "../../../packages/core/src/doc-maps";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { type MainTask, traceMain } from "../frames";
-import {
-  COMPOSER,
-  type Kit,
-  type KitFleet,
-  open,
-  pressAt,
-  pressIn,
-  type Spec,
-  settle,
-} from "../kit";
+import { COMPOSER, open, pressAt, pressIn, settle } from "../kit";
 import { emulateMotion } from "../motion";
 import { pinsOf } from "../pins";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The owner's test-map page, as he marked it (2026-10-16). */
 export const TEST_MAP = readFileSync(

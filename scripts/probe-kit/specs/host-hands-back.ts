@@ -27,8 +27,8 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const TAG = "PROBE-HOST-HANDS-BACK";
 const BEGIN = "HANDSBACK-BEGIN";

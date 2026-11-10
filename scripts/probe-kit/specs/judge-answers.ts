@@ -42,7 +42,7 @@ import {
 import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 

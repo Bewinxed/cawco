@@ -41,8 +41,8 @@ import type { DamagedHubRecord } from "../../../packages/core/src/protocol";
 import { clientLine } from "../../../packages/core/src/wire";
 import { MACHINE, MODEL, type Reply, until } from "../../scratch-fleet";
 import { answerText, type HubAsk, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 interface Board {

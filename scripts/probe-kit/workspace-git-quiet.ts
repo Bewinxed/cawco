@@ -13,7 +13,7 @@
  */
 import { join } from "node:path";
 import { processesWithin } from "../../packages/core/src/live-processes";
-import type { Kit } from "./kit";
+import type { Kit } from "./spec";
 import { standExecutor } from "./workspace-executor";
 
 /** A git that does upkeep, as a process's command line or git's trace of a command it ran names it. */

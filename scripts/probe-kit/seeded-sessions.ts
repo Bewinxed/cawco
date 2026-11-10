@@ -8,7 +8,7 @@ import { Database } from "bun:sqlite";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { until } from "../scratch-fleet";
-import type { KitFleet } from "./kit";
+import type { KitFleet } from "./spec";
 
 /** Asks `id` to sleep (again every 15 s: a machine refuses one not at rest) until its row reads sleeping. */
 export const asleep = (fleet: KitFleet, id: string) => {

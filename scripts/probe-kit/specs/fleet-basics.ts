@@ -33,7 +33,8 @@ import { unhandled } from "../../../packages/core/src/unhandled";
 import { noAccountRefusal } from "../../../packages/hub/src/placement";
 import { MACHINE, until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import { open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Spec } from "../spec";
 import { literal } from "../words";
 
 /** The npx row whose npm never reaches its registry. */

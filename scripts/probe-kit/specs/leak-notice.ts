@@ -40,7 +40,7 @@ import {
 import { leakWords } from "../../../packages/core/src/words/leaks";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { SUBREAPER_ENV } from "../../scratch-fleet-leash";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The agent's leak threshold for this spec, in GiB. */
 const THRESHOLD_GIB = 0.25;

@@ -49,7 +49,8 @@ import {
   until,
 } from "../../scratch-fleet";
 import { hubAt, said as saidOf } from "../hub";
-import { delegateStarted, type Kit, type KitFleet, type Spec } from "../kit";
+import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /**
  * The skill a delegate type loads, in each harness's own skills folder. Its

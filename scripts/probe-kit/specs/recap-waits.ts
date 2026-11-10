@@ -78,7 +78,7 @@ import {
 } from "../../../packages/hub/src/artifacts/questions";
 import type { ArtifactRow } from "../../../packages/hub/src/db/artifacts";
 import { createPlans, type PlansDeps } from "../../../packages/hub/src/plans";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const SESSION = "9f997798-0000-4000-8000-000000000001";
 const OTHER = "9f997798-0000-4000-8000-000000000002";

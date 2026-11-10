@@ -53,14 +53,8 @@ import { leasePortRange, until } from "../../scratch-fleet";
 import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
 import { hubAt, pageHub } from "../hub";
-import {
-  type Kit,
-  type KitFleet,
-  open,
-  pagesOf,
-  type Spec,
-  settle,
-} from "../kit";
+import { open, pagesOf, settle } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 export const NAME = "probe-box.tail0000.ts.net";
 /** A preview origin's address, or the listeners' refusal thrown. */
@@ -997,8 +991,10 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "tailnet-https",
   run,
-} satisfies Spec;
+};
+
+export default spec;

@@ -37,8 +37,8 @@ import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { delay, MACHINE, until } from "../../scratch-fleet";
 import { answerText, type HubAsk, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { relay } from "../relay";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const OTHER = "held-requests-other";
 /** What the hub says as it sends held requests again (machine-calls.ts `resendHeld`). */

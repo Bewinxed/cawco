@@ -42,7 +42,8 @@ import { artifactToolWords } from "../../../packages/core/src/words/artifact-too
 import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 import { shaped } from "../words";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });

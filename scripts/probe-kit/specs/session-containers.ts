@@ -57,7 +57,7 @@ import {
 } from "../../../packages/agent/src/session-containers";
 import { containerWords } from "../../../packages/core/src/words/containers";
 import { type Fleet, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** How long an ending has: the stop, the 10 s stop timeout, the removal, and room. */
 const END_WAIT_MS = 90_000;

@@ -47,14 +47,8 @@ import {
   workspaceNeeds,
 } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
-import {
-  delegateStarted,
-  type Kit,
-  type KitFleet,
-  open,
-  type Spec,
-  settle,
-} from "../kit";
+import { delegateStarted, open, settle } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -433,8 +427,10 @@ const run = async (kit: Kit) => {
   await legD(kit, fleet, needs);
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "workspace-needs",
   run,
-} satisfies Spec;
+};
+
+export default spec;

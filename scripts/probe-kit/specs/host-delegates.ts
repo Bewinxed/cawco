@@ -64,8 +64,8 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** What a host delegate's command prints between its marks. */
 const BEGIN = "HOSTPROBE-BEGIN";

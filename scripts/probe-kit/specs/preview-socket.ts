@@ -58,9 +58,10 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import { hubAt } from "../hub";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
 import { PASS_DOMAIN, PASS_HOSTS, storeHostMode } from "../pass-legs";
 import { passedFetch, passInto, previewPass } from "../preview-pass";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;

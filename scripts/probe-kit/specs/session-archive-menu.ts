@@ -29,7 +29,8 @@ import type { FrameLocator, Page } from "playwright-core";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import { type Kit, open, type Spec, type View } from "../kit";
+import { open } from "../kit";
+import type { Kit, Spec, View } from "../spec";
 import { shaped } from "../words";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */

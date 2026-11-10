@@ -71,8 +71,8 @@ import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MODEL, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { declareGate, JS_GATE } from "../gate";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 /** The log the stand-in writes, in the fleet HOME's workspaces' cache (core paths/workspace.ts `workspaceCacheDir`). */
@@ -594,9 +594,11 @@ const run = async (kit: Kit) => {
   await rm(STAND_IN_SHIM, { recursive: true, force: true });
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "user-bun",
   host: "it delegates and starts stages, so its fleet cuts workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

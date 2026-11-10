@@ -33,7 +33,8 @@ import {
   watch,
   watched,
 } from "../../frames";
-import { open, type Spec } from "../../kit";
+import { open } from "../../kit";
+import type { Spec } from "../../spec";
 
 const CALLS = 250;
 const LANDINGS = 3;

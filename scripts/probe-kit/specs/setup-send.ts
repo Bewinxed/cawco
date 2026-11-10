@@ -71,7 +71,8 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, toolReply } from "../../tool-calls";
 import { payloadOf } from "../hub";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const WRITE = "mcp__cawco__folder_write";
 /** Caw's write of AGENTS.md in the turn the handed page starts, and its answer once it came (at once or from the background). */

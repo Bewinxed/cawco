@@ -49,7 +49,7 @@ import {
   type PlacementInput,
   place,
 } from "../../../packages/hub/src/placement";
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "../../..");
 const AGENT = join(ROOT, "packages/agent/src");

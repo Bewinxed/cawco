@@ -58,8 +58,9 @@ import type { BrowserKey } from "../../../packages/core/src/browser";
 import { browserWords } from "../../../packages/core/src/words/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import { type Kit, kitsOwnMessage, open, type Spec, settle } from "../kit";
+import { kitsOwnMessage, open, settle } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "scratch-fleet";
 const VIEW = '[data-slot="browser-view"]';

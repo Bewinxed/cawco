@@ -69,16 +69,9 @@ import {
 } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { hubAt } from "../hub";
-import {
-  type Kit,
-  type KitFleet,
-  open,
-  pressIn,
-  ROOT,
-  type Spec,
-  settle,
-} from "../kit";
+import { open, pressIn, ROOT, settle } from "../kit";
 import { publishBuild } from "../socket-served";
+import type { Kit, KitFleet, Spec } from "../spec";
 import { shaped, startsWith } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";

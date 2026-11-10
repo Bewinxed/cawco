@@ -17,7 +17,8 @@
  *
  *   bun scripts/probe-kit/run.ts web state-pick-steady
  */
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { open, settle } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 const BENCH = "/dev/graph-dials";
 const DRAWING = "[data-cawco-story]";

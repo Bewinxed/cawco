@@ -14,7 +14,7 @@
  */
 
 import { until } from "../../scratch-fleet";
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 
 interface Frame {
   machineId?: string;

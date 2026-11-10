@@ -51,7 +51,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import { hubAt, payloadOf } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const TAG = crypto.randomUUID().slice(0, 8);
 /** The person's words that make the mock call {@link ASKED_COMMAND} (e). */

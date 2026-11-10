@@ -31,7 +31,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hubPath } from "../../../packages/agent/src/hub-client";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-door-machine";
 const CREDENTIAL = "probe-door-session-credential-0123456789abcdefghij";
@@ -62,7 +62,7 @@ interface Arrived {
   status: number;
 }
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "door-callers",
   ownProcess:
@@ -193,4 +193,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

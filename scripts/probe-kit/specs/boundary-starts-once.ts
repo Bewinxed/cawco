@@ -42,8 +42,8 @@ import {
   until,
 } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const tagOf = (harness: HarnessKind) => `PROBE-ONCE-${harness.toUpperCase()}:`;
 const TAG = /PROBE-ONCE-([A-Z]+):/u;

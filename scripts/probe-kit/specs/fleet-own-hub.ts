@@ -24,7 +24,7 @@ import { join } from "node:path";
 import { dataOf } from "../../../packages/agent/src/hub-client";
 import { PortPool } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 import { respond } from "./hub-loopback";
 
 /** Runs of whitespace, as the kernel lays its two numbers out. */

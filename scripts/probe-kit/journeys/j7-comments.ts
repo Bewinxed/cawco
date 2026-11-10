@@ -13,7 +13,8 @@
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import type { Seen } from "../../scratch-fleet";
-import { type KitFleet, pressAt } from "../kit";
+import { pressAt } from "../kit";
+import type { KitFleet } from "../spec";
 import { say } from "./mock";
 import {
   eventually,

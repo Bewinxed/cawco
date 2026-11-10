@@ -69,7 +69,8 @@ import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { answerText, type HubAsk, pageHub, payloadOf } from "../hub";
-import { delegateStarted, type Kit, open, ROOT, type Spec } from "../kit";
+import { delegateStarted, open, ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const TAG = /PROBE-AUTH-([A-Z])/u;
 const FINISH = "mcp__cawco__finish_item";

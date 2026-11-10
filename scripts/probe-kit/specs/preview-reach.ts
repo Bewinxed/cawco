@@ -63,8 +63,9 @@ import {
   previewUnreachedWords,
 } from "../../../packages/core/src/words/preview-reach";
 import { MACHINE, until } from "../../scratch-fleet";
-import { type Engine, type Kit, kitsOwnMessage, open, type Spec } from "../kit";
+import { kitsOwnMessage, open } from "../kit";
 import { passedFetch } from "../preview-pass";
+import type { Engine, Kit, Spec } from "../spec";
 
 /** The pane probes again 2 s after a failure (PreviewPane `PROBE_FIRST_MS`); slack for the probe and the frame's load. */
 const FIRST_BACK_MS = 6000;

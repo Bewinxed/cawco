@@ -35,9 +35,10 @@ import { previewEnterUrl } from "../../../packages/core/src/preview/routes";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { hubAt } from "../hub";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
 import { passInto, previewPass } from "../preview-pass";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;

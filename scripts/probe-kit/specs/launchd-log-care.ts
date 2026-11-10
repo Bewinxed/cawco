@@ -26,8 +26,8 @@ import {
   sweepLaunchdLogs,
 } from "../../../packages/core/src/launchd";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
-import { type Kit, OWN_HOME_ENV, type Spec } from "../kit";
 import { checkRotation, pastCap, WRITER } from "../log-writer";
+import { type Kit, OWN_HOME_ENV, type Spec } from "../spec";
 
 const spec: Spec = {
   group: "The hub and machines",

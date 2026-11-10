@@ -25,7 +25,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PNG } from "pngjs";
 import { MACHINE } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const OTHER = "picture-machines-other";
 /** A picture's file in a change's link: `files/<n>-<name>`. */

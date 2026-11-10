@@ -46,7 +46,8 @@ import { Database } from "bun:sqlite";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { loopWords } from "../../../packages/core/src/words/loop";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const args = process.argv.slice(2);
 const option = (name: string): string | undefined => {
@@ -212,7 +213,7 @@ const holdsIn = (lines: string[]): number[] => {
     .map((line) => Number(line.slice(said.length).split(" ")[0]));
 };
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "store-reads-loop",
   run: async (kit: Kit) => {
@@ -380,4 +381,6 @@ export default {
       await rm(join(kit.out, "load.bin"), { force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

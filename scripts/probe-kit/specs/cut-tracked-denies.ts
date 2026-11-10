@@ -83,8 +83,8 @@ import {
 } from "../../../packages/core/src/safe-git";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The parent's message that names the held workspace to cut `from`. */
 const ASK = "PROBE-TRACKED-ASK";

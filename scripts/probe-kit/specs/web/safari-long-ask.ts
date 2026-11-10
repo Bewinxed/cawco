@@ -33,14 +33,8 @@
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
-import {
-  buttonNames,
-  COMPOSER,
-  type Kit,
-  type KitFleet,
-  open,
-  type Spec,
-} from "../../kit";
+import { buttonNames, COMPOSER, open } from "../../kit";
+import type { Kit, KitFleet, Spec } from "../../spec";
 
 const ASK = "PROBE-LONG-ASK";
 const DESCRIPTION = "Slim the exports to text and file lists";

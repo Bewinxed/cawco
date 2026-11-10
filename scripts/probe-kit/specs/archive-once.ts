@@ -23,7 +23,7 @@ import { dataOf } from "../../../packages/agent/src/hub-client";
 import { delay } from "../../scratch-fleet";
 import { heldProxy } from "../held-proxy";
 import { type HubAsk, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** How long the release host's answer is held: every ask is in flight before any is answered. */
 const HOLD_MS = 5000;
@@ -117,8 +117,10 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default {
+const spec: Spec = {
   group: "Release checks",
   name: "archive-once",
   run,
-} satisfies Spec;
+};
+
+export default spec;

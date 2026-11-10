@@ -29,7 +29,7 @@ import { SessiondClient } from "../../../packages/agent/src/sessiond-client";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The id the keeper is started under: what systemd's would look like, 32 hex. */
 const UNIT_ID = "c0ffee00c0ffee00c0ffee00c0ffee00";

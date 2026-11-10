@@ -54,8 +54,8 @@ import {
   systemProgram,
 } from "../../../packages/core/src/workspace-needs";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { open, settle } from "../kit";
+import type { Kit, Spec } from "../spec";
 import { startsWith } from "../words";
 
 const MACHINES_BUTTON = /^\d+ machines?/u;

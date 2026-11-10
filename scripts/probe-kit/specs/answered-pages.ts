@@ -147,7 +147,7 @@ import {
 import type { HubLifetimeShape } from "../../../packages/hub/src/lifetime";
 import { openItemsSection } from "../../../packages/hub/src/open-items";
 import { artifactReadWords } from "../../../packages/hub/src/presenters/artifacts";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const PAGE = "109f7c53-44db-47c7-bc7f-7805647dd14a";
 const CANVAS = "2b8c2520-5f58-4d8c-a9b1-ec8042304dc6";

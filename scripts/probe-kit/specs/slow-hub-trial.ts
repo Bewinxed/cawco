@@ -37,7 +37,7 @@ import { hubPath } from "../../../packages/agent/src/hub-client";
 import type { TrialMarker } from "../../../packages/core/src/binary-installation";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE } from "../../scratch-fleet";
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const CHILD = join(ROOT, "scripts", "probe-kit", "trial-verify-child.ts");

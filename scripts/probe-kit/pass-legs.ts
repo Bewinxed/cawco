@@ -18,7 +18,7 @@
  */
 import type { Frame, Page } from "playwright-core";
 import { cloudflareTo, scratchCertificate } from "./cloudflare-front";
-import type { KitFleet } from "./kit";
+import type { KitFleet } from "./spec";
 
 /** The names' domain: localtest.me and every name under it are 127.0.0.1. */
 export const PASS_DOMAIN = "localtest.me";

@@ -33,7 +33,8 @@
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { COMPOSER, type Kit, open, pressAt, type Spec, settle } from "../kit";
+import { COMPOSER, open, pressAt, settle } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const FRAME = '[data-preview-sheet] iframe[title="Preview"]';

@@ -42,7 +42,7 @@ import { join } from "node:path";
 import { sweepRecords } from "../../../packages/agent/src/damaged-records";
 import { sessionWakeupsDir } from "../../../packages/core/src/paths/cawco";
 import { workspacesDir } from "../../../packages/core/src/paths/workspace";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** A process's entry in `/proc`. */
 const PID = /^\d+$/u;

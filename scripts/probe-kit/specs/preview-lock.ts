@@ -41,8 +41,9 @@ import { refusalWords } from "../../../packages/core/src/hub-refusal";
 import { previewEnterUrl } from "../../../packages/core/src/preview/routes";
 import { type Reply, until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import { type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
 import { PASS_DOMAIN } from "../pass-legs";
+import type { Kit, Spec } from "../spec";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 

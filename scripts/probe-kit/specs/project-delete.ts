@@ -54,7 +54,7 @@ import { projectTrashWords } from "../../../packages/core/src/words/project-tras
 import type { RemoveFolder } from "../../../packages/core/src/workspace/controls";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import { answerText, type HubAsk, handled, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const B = "probe-delete-b";
 const AWAY = "probe-delete-away";
@@ -567,7 +567,7 @@ const floorLeg = (rig: Rig): void => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "project-delete",
   ownProcess:
@@ -692,4 +692,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

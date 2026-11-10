@@ -229,15 +229,9 @@ import { storyReadWords } from "../../../packages/core/src/words/story-read";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { answerText, type HubAsk, hubAt, pageHub } from "../hub";
-import {
-  buttonNames,
-  type Kit,
-  type KitFleet,
-  open,
-  ROOT,
-  type Spec,
-} from "../kit";
+import { buttonNames, open, ROOT } from "../kit";
 import { passInto } from "../preview-pass";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const STORY = "src/Card.stories.js";
 /** Legs 5b and 5c: a states file a canvas is made on, then taken away and written again. */

@@ -14,7 +14,8 @@
  *
  *   bun scripts/probe-kit/run.ts web rail-title
  */
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { open, settle } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 const BENCH = "/dev/artifact-panel";
 const RAIL = '[data-slot="comment-rail"]';

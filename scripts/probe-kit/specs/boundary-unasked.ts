@@ -43,8 +43,8 @@ import {
 import { readRecord } from "../../../packages/core/src/state-file";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = "PROBE-UNASKED";
@@ -343,9 +343,11 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "boundary-unasked",
   host: "it delegates, so its fleet cuts workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

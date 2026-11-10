@@ -105,15 +105,9 @@ import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import { hubAt } from "../hub";
-import {
-  handOn,
-  type Kit,
-  type KitFleet,
-  open,
-  type Spec,
-  type Theme,
-} from "../kit";
+import { handOn, open } from "../kit";
 import { type Phone, standInPhone } from "../phone";
+import type { Kit, KitFleet, Spec, Theme } from "../spec";
 import {
   HELD,
   keyAccepted,
@@ -2483,8 +2477,10 @@ async function tabsFit(
   );
 }
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "connect-machine",
   run,
-} satisfies Spec;
+};
+
+export default spec;

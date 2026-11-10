@@ -41,7 +41,7 @@ import {
   drawsHeld,
   renderSaid,
 } from "../../../packages/hub/src/artifacts/component";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FILE = "src/Card.stories.js";
 const OTHER = "src/Other.stories.js";

@@ -15,7 +15,7 @@
  *
  *   bun scripts/probe-kit/run.ts browser-keyboard-container
  */
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 import { typeIntoTakeover } from "./browser-keyboard";
 
 const spec: Spec = {

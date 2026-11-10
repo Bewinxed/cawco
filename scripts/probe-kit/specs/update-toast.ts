@@ -61,15 +61,8 @@ import { updatesWords } from "../../../packages/core/src/words/updates";
 import { MACHINE, until } from "../../scratch-fleet";
 import { caw } from "../caw-head";
 import { answerText, hubAt } from "../hub";
-import {
-  type Engine,
-  type Kit,
-  type KitFleet,
-  kitsOwnMessage,
-  open,
-  type Spec,
-  type View,
-} from "../kit";
+import { kitsOwnMessage, open } from "../kit";
+import type { Engine, Kit, KitFleet, Spec, View } from "../spec";
 
 const TOAST = '[data-sonner-toast]:not([data-removed="true"])';
 const READY = '[data-slot="toast-layer"]';

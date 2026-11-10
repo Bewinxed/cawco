@@ -46,7 +46,7 @@ import type { TranscriptBlock } from "../../../packages/core/src/transcript-type
 import { placesHeard } from "../../../packages/hub/src/find-places";
 import { TranscriptBuilder } from "../../../packages/hub/src/transcript";
 import { TranscriptIndex } from "../../../packages/jsonl-parser/src/fts5";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const SESSION = "5e551011-2222-3333-4444-555555555555";
 const at = (minutes: number) =>

@@ -24,9 +24,9 @@ import type { HubClient } from "../../../packages/agent/src/hub-client";
 import { effectiveImageChoice } from "../../../packages/core/src/image-generation";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import { answerText, type HubAsk, handled } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "image-settings",
   ownProcess:
@@ -140,4 +140,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

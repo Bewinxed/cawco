@@ -29,7 +29,7 @@ import { machinePath } from "../../../packages/core/src/machine-path";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
 import { type HubAsk, handled, type Said, said as saidOf } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-start-moves-machine";
 
@@ -233,7 +233,7 @@ const run = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "session-start-moves",
   ownProcess:
@@ -253,4 +253,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

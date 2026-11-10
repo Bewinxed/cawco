@@ -38,7 +38,7 @@ import { NO_REPLY_TOOL } from "../../../packages/core/src/no-reply";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
 import { type HubAsk, handled, type Said, said } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-filed-machine";
 const PRESENCE = "probe-presence-f11e";
@@ -294,7 +294,7 @@ const run = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "filed-not-started",
   ownProcess:
@@ -314,4 +314,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

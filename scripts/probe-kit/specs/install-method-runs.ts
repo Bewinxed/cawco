@@ -54,7 +54,7 @@ import {
 import { OPENCODE_VERSION, toolSpec } from "../../../packages/core/src/tools";
 import { toolWords } from "../../../packages/core/src/words/tools";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 

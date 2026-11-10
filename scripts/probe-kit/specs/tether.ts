@@ -50,7 +50,7 @@ import {
 } from "../../../packages/core/src/tether";
 import { tetherWords } from "../../../packages/core/src/words/tether";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
-import { BOUNDARY_INSIDE, type Kit, type Spec } from "../kit";
+import { BOUNDARY_INSIDE, type Kit, type Spec } from "../spec";
 
 const CHILD = join(import.meta.dir, "..", "tether-child.ts");
 /** How long the tether's processes have to be gone: sleep-listener's bar. */

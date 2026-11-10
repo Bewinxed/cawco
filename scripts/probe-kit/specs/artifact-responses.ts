@@ -41,7 +41,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, ToolCalls, toolReply } from "../../tool-calls";
-import { type Kit, open, pressIn, ROOT, type Spec, settle } from "../kit";
+import { open, pressIn, ROOT, settle } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const READ = "mcp__cawco__artifact_read";

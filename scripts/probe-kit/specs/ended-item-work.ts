@@ -65,9 +65,9 @@ import { noticeLine } from "../../../packages/core/src/words/notices";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
 import { passedFetch } from "../preview-pass";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const THRESHOLD_GIB = 0.25;
 const FINISH = "mcp__cawco__finish_item";

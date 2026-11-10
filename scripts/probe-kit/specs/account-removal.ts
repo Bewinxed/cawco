@@ -51,7 +51,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const A = ACCOUNT;
 const B = "acct-removal-b";

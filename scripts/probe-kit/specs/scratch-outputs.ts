@@ -32,8 +32,8 @@ import { workWords } from "../../../packages/core/src/words/work";
 import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const TAG = "PROBE-SCRATCH-OUTPUTS";
 const STOPPED_TAG = "PROBE-SCRATCH-OUTPUTS-STOPPED";

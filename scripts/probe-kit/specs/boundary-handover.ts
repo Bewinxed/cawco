@@ -85,8 +85,8 @@ import {
 import { decisionsOf, startedSince } from "../agent-records";
 import { type CopyRef, copyText, inCopyExists } from "../copy";
 import { answerText, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const WAIT = "mcp__cawco__wait_item";
 /** How long a round 0 foreground command runs: past an agent restart and its start-up pass. */

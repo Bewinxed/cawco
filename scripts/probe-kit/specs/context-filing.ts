@@ -101,7 +101,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import { toolReply } from "../../tool-calls";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const ROOM = DEFAULT_COMPACTION.fileRoom;
 const READING = /\[\[reading (\d+)\]\]/u;
@@ -1205,8 +1205,10 @@ const run = async (kit: Kit) => {
   await configured(kit, fleet);
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "context-filing",
   run,
-} satisfies Spec;
+};
+
+export default spec;

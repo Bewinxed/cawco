@@ -50,7 +50,7 @@ import { signalGroup, spawnedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { createBinaryUpdates } from "../../../packages/hub/src/binary-updates";
 import { answerText, type HubAsk, handled } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** In the order they are installed; by name, `0.9.0` sorts last. */
 const BUILDS = ["0.9.0", "0.10.0", "0.11.0", "0.12.0", "0.13.0", "0.14.0"];

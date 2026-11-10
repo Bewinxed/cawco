@@ -89,18 +89,20 @@ import { answerText, type HubAsk, pageHub } from "../../hub";
 import { scan } from "../../journeys/scan";
 import {
   COMPOSER,
-  type Engine,
-  type Kit,
   kitsOwnMessage,
   type MotionRun,
   open,
   readMotion,
-  type Spec,
   stillWithin,
+} from "../../kit";
+import {
+  type Engine,
+  type Kit,
+  type Spec,
   THEMES,
   type Theme,
   type View,
-} from "../../kit";
+} from "../../spec";
 
 const MANY = 42;
 const LONG_NAME =

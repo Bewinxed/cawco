@@ -51,7 +51,7 @@ import {
   OVERLAY_KEY,
   overlayResponse,
 } from "../../../../packages/preview/src/proxy";
-import type { Kit, Spec } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 const ID = "5f0c2a8e-7d41-4f3b-9a6e-2c1d8b4e7f90";
 const REVISION = 3;

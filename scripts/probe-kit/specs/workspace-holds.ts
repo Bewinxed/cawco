@@ -76,8 +76,8 @@ import { welcomed } from "../../lib/keeper-dial";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyArgv, copyGone, gitInCopy, inCopy, isView } from "../copy";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const TAG = /PROBE-HOLDS-([NLXSRDUOPT])\b/u;
 type Tag = "N" | "L" | "X" | "S" | "R" | "D" | "U" | "O" | "P" | "T";

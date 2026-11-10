@@ -42,7 +42,7 @@ import {
   nightlyMirror,
   until,
 } from "../binary-install";
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 
 const spec: Spec = {
   group: "Release checks",

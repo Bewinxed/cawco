@@ -24,7 +24,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { generateImage } from "../../../packages/agent/src/image-generation";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** This probe's machine has no hub: a borrowed sign-in's ask goes nowhere. */
 const NO_HUB = { borrowAsk: (): void => undefined };
@@ -99,7 +99,7 @@ const transcriptOf = async (
   return { calls, subagent };
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "agy-image-live",
   host: "it runs the machine's own agy, signed in to Google in the person's keyring, which no workspace boundary reaches, and spends one image of that plan's quota",
@@ -207,4 +207,6 @@ export default {
       JSON.stringify(paths)
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

@@ -44,8 +44,8 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const FAR = "machine-no-place";
 const TAG = "PROBE-CUT-NO-PLACE";

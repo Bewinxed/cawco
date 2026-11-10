@@ -21,8 +21,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { passedFetch } from "../preview-pass";
+import type { Kit, Spec } from "../spec";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,

@@ -31,8 +31,8 @@ import { hubPath } from "../../../packages/agent/src/hub-client";
 import { gateWords } from "../../../packages/core/src/words/gate";
 import type { Reply } from "../../scratch-fleet";
 import { scratchCertificate } from "../cloudflare-front";
-import type { Engine, Kit, Spec } from "../kit";
 import { freePort, publishBuild, serveUnder } from "../socket-served";
+import type { Engine, Kit, Spec } from "../spec";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 

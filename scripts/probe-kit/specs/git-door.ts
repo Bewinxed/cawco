@@ -79,7 +79,7 @@ import { dirname, join } from "node:path";
 import { gitDoorWords } from "../../../packages/core/src/words/git-door";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { serveGitHttp } from "../git-http";
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 import { workspaceGhLeg } from "../workspace-gh";
 import { workspaceGitQuietLeg } from "../workspace-git-quiet";
 

@@ -29,8 +29,9 @@
  *
  *   bun scripts/probe-kit/run.ts web button-baseline
  */
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { open, settle } from "../../kit";
 import { type CheckName, RenderedChecks, RULES } from "../../rendered-checks";
+import type { Kit, Spec } from "../../spec";
 
 const READ: CheckName = "baseline";
 const BENCH = "/dev/artifact-panel";

@@ -39,8 +39,8 @@ import {
   until,
 } from "../../scratch-fleet";
 import { declareGate } from "../gate";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-STOP-([AB])/u;
@@ -391,8 +391,10 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "landing-stop",
   run,
-} satisfies Spec;
+};
+
+export default spec;

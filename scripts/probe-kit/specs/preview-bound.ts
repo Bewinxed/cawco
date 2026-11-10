@@ -103,7 +103,8 @@ import type { Browser, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { traceMain } from "../frames";
-import { type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The dashboard's longest task a preview's load and thumbnail may cost it. Our call: two frames at 60 Hz plus slack, not the 1.8 s a whole-page capture took. */
 const TASK_MS = 200;

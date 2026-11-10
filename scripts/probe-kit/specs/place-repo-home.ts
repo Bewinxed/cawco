@@ -32,8 +32,8 @@ import { existsSync } from "node:fs";
 import { mkdir, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The blob's size on obelisk, as the Backlot session reported it. */
 const BLOB_BYTES = 8_463_330_762;
@@ -294,8 +294,10 @@ const run = async (kit: Kit) => {
   await legD(kit, fleet, join(fleet.sandbox, "plain-large"));
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "place-repo-home",
   run,
-} satisfies Spec;
+};
+
+export default spec;

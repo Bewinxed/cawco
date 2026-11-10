@@ -31,8 +31,9 @@
  */
 import type { Page } from "playwright-core";
 import { scan } from "../../journeys/scan";
-import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
+import { open, settle } from "../../kit";
 import { RenderedChecks } from "../../rendered-checks";
+import type { Engine, Kit, Spec } from "../../spec";
 
 const ENGINES: Engine[] = ["chromium", "webkit"];
 const WIDTHS = [390, 320] as const;

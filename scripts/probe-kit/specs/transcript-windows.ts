@@ -51,7 +51,7 @@ import type {
 } from "../../../packages/core/src/transcript-types";
 import { TranscriptBuilder } from "../../../packages/hub/src/transcript";
 import { writeClaudeTranscript } from "../claude-transcripts";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The window the hub asks for (server.ts `HISTORY_WINDOW`). */
 const WINDOW = 300;
@@ -373,7 +373,7 @@ const deletedReadsAsNone = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "transcript-windows",
   run: async (kit: Kit) => {
@@ -491,4 +491,6 @@ export default {
       await rm(dir, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

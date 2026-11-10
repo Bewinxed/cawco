@@ -67,17 +67,9 @@ import { previewRoute } from "../../../packages/core/src/preview/routes";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import {
-  COMPOSER,
-  type Kit,
-  type KitFleet,
-  open,
-  pressAt,
-  pressIn,
-  type Spec,
-  settle,
-} from "../kit";
+import { COMPOSER, open, pressAt, pressIn, settle } from "../kit";
 import { emulateMotion } from "../motion";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";

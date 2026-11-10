@@ -49,7 +49,7 @@ import type { DispatchView } from "../../../packages/hub/src/dispatch";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
 import { type HubAsk, handled, hubAt, said as saidOf } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const B = "probe-unmet-machine";
 const PRESENCE = "probe-presence-9c21";
@@ -485,7 +485,7 @@ const legs = async (rig: Rig): Promise<void> => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "unmet-back-to-todo",
   ownProcess:
@@ -572,4 +572,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

@@ -52,9 +52,9 @@ import {
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
 import { passedFetch } from "../preview-pass";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const STORY = "src/Card.stories.js";
@@ -426,9 +426,11 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Previews, pages and comments",
   name: "stage-carried",
   host: "it starts stages in boundaries: a place's stage clone's and a delegate's workspace's",
   run,
-} satisfies Spec;
+};
+
+export default spec;

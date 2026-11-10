@@ -25,7 +25,7 @@
  *   bun scripts/probe-kit/run.ts title-long-whitespace
  */
 import { deriveTitleFromFirstMessage } from "../../../packages/core/src/title";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The longest a derivation of the 100k-space messages may take: a linear pass is well under a millisecond. */
 const BOUND_MS = 50;
@@ -75,7 +75,7 @@ const SAME: [string, string][] = [
   ["<command-message>  </command-message>rest", ""],
 ];
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "title-long-whitespace",
   // Nothing here waits: the derivation is the one synchronous call it times.
@@ -117,4 +117,6 @@ export default {
     );
     return Promise.resolve();
   },
-} satisfies Spec;
+};
+
+export default spec;

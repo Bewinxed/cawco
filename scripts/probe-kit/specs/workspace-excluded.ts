@@ -49,8 +49,8 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyGone, copyWritePath, inCopyExists } from "../copy";
 import { answerText, type HubAsk, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** One request given `ms` to answer: its status and text. */
 const requestWithin = async (

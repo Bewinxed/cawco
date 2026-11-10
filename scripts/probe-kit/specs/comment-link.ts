@@ -67,17 +67,10 @@ import type { Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { hiddenTabs } from "../hidden-tab";
 import { idleProxy } from "../idle-proxy";
-import {
-  type Engine,
-  type Kit,
-  type KitFleet,
-  open,
-  pressAt,
-  type Spec,
-  settle,
-} from "../kit";
+import { open, pressAt, settle } from "../kit";
 import { pagePins } from "../pins";
 import { freePort, publishBuild, serveUnder } from "../socket-served";
+import type { Engine, Kit, KitFleet, Spec } from "../spec";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;

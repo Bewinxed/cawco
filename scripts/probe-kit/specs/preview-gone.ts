@@ -28,8 +28,9 @@ import { commonWords } from "../../../packages/core/src/words/common";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { downOf } from "../../../packages/preview/src/proxy";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { open } from "../kit";
 import { passedFetch } from "../preview-pass";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
 const FRAME = 'iframe[title="Preview"]';

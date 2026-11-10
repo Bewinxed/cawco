@@ -27,7 +27,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** What the agent puts in place of a credential (agent redaction.ts `REDACTED`). */
 const REDACTED = "[cawco credential]";
@@ -197,8 +197,10 @@ const run = async (kit: Kit): Promise<void> => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "credential-revoke",
   run,
-} satisfies Spec;
+};
+
+export default spec;

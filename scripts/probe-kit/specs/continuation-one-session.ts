@@ -34,7 +34,7 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import type { InstanceStatus } from "../../../packages/core/src/protocol";
 import { MODEL, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The words the trigger refuses the fold in. */
 const REFUSED = "probe: the fold fails";
@@ -124,7 +124,7 @@ const continued = async (fleet: KitFleet, source: string) => {
   return { target: job?.targetInstanceId, ended };
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "continuation-one-session",
   run: async (kit: Kit) => {
@@ -199,4 +199,6 @@ export default {
       `first ${JSON.stringify(once)}; second ${JSON.stringify(twice)}; conversations ${JSON.stringify(held)}; rows ${JSON.stringify(sessions.map((id) => stored(fleet, id) ?? null))}`
     );
   },
-} satisfies Spec;
+};
+
+export default spec;
