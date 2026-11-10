@@ -91,11 +91,14 @@ const STAGE_ROWS = 6;
 /** How many views of rows from the end a far landing stages: its view, and the screen above it the buffer mounts. */
 const ABOVE_LANDING = 2;
 export interface MountedRowsHost {
-  readonly atBottom: boolean;
-  readonly landingAway: ReturnType<typeof setTimeout> | undefined;
-  readonly list: VirtualizerHandle | undefined;
-  readonly listing: HTMLElement | undefined;
-  readonly pinBottom: () => void;
+  readonly pin: {
+    readonly atBottom: boolean;
+    readonly landingAway: ReturnType<typeof setTimeout> | undefined;
+    readonly list: VirtualizerHandle | undefined;
+    readonly listing: HTMLElement | undefined;
+    readonly pinBottom: () => void;
+    readonly viewHeight: number;
+  };
   readonly rowBuild: {
     readonly fronted: number;
   };
@@ -108,7 +111,6 @@ export interface MountedRowsHost {
   };
   readonly session: SessionState;
   readonly shown: boolean;
-  readonly viewHeight: number;
   readonly visible: boolean;
 }
 
@@ -207,14 +209,14 @@ export class MountedRows {
    * page's layout.
    */
   rowsAside(): ReadonlyMap<string, number> {
-    const container = this.#host.listing?.firstElementChild;
-    if (!(container && this.#host.list)) {
+    const container = this.#host.pin.listing?.firstElementChild;
+    if (!(container && this.#host.pin.list)) {
       return new Map();
     }
-    const top = this.#host.list.getScrollOffset();
-    const first = this.#host.list.findItemIndex(top);
-    const last = this.#host.list.findItemIndex(
-      top + this.#host.list.getViewportSize()
+    const top = this.#host.pin.list.getScrollOffset();
+    const first = this.#host.pin.list.findItemIndex(top);
+    const last = this.#host.pin.list.findItemIndex(
+      top + this.#host.pin.list.getViewportSize()
     );
     const at = new Map(
       this.#host.rowDraw.renderedRows.map((row, index) => [row.key, index])
@@ -234,7 +236,7 @@ export class MountedRows {
       }
       out.push({
         key,
-        px: this.#host.list.getItemSize(index),
+        px: this.#host.pin.list.getItemSize(index),
         far: index < first ? first - index : index - last,
       });
     }
@@ -244,15 +246,15 @@ export class MountedRows {
 
   /** The rows skipped aside that the view from `top` shows are styled from here on (a scroll's, `onListScroll`). */
   liftInView(top: number): void {
-    if (!this.#host.list) {
+    if (!this.#host.pin.list) {
       return;
     }
-    const last = this.#host.list.findItemIndex(
-      top + this.#host.list.getViewportSize()
+    const last = this.#host.pin.list.findItemIndex(
+      top + this.#host.pin.list.getViewportSize()
     );
     const inView: string[] = [];
     for (
-      let index = this.#host.list.findItemIndex(top);
+      let index = this.#host.pin.list.findItemIndex(top);
       index <= last;
       index += 1
     ) {
@@ -313,8 +315,8 @@ export class MountedRows {
   parkings = 0;
 
   parkRows = (): void => {
-    const container = this.#host.listing?.firstElementChild;
-    if (!(container && this.#host.list)) {
+    const container = this.#host.pin.listing?.firstElementChild;
+    if (!(container && this.#host.pin.list)) {
       return;
     }
     // Attributes alone: nothing here reads the page's layout. A row skipped
@@ -349,7 +351,7 @@ export class MountedRows {
     for (const key of holding) {
       const index = at.get(key);
       if (index !== undefined && !rewritten(key)) {
-        skips.set(key, this.#host.list.getItemSize(index));
+        skips.set(key, this.#host.pin.list.getItemSize(index));
       }
     }
     // The rows virtua never measured stage first: their first measurement
@@ -376,7 +378,8 @@ export class MountedRows {
   /** How long each mounted row's text is, by key. */
   textOfRows(): Map<string, number> {
     const lengths = new Map<string, number>();
-    for (const item of this.#host.listing?.firstElementChild?.children ?? []) {
+    for (const item of this.#host.pin.listing?.firstElementChild?.children ??
+      []) {
       const row = item.querySelector<HTMLElement>(":scope > [data-row]");
       if (row?.dataset.row) {
         lengths.set(row.dataset.row, row.textContent?.length ?? 0);
@@ -391,7 +394,11 @@ export class MountedRows {
     // task (`landFar`, `catchUpRest`): the held rows wait, still skipped,
     // and go unstyled; let go here as well, their removal landed in the
     // frame of the landing's own step (tab-return 1b: 14.2ms).
-    if (this.staging || this.narrow || this.#host.landingAway !== undefined) {
+    if (
+      this.staging ||
+      this.narrow ||
+      this.#host.pin.landingAway !== undefined
+    ) {
       return true;
     }
     // Nor in the frame the away landing's scroll comes in: its `onscroll`
@@ -415,7 +422,8 @@ export class MountedRows {
   /** The keys of the rows virtua has mounted, read off their attributes. */
   onList = (): Set<string> => {
     const keys = new Set<string>();
-    for (const item of this.#host.listing?.firstElementChild?.children ?? []) {
+    for (const item of this.#host.pin.listing?.firstElementChild?.children ??
+      []) {
       const key = item.querySelector<HTMLElement>(":scope > [data-row]")
         ?.dataset.row;
       if (key) {
@@ -547,7 +555,7 @@ export class MountedRows {
   landFar(was: number): void {
     // Before the reveal nothing is painted: the first landing has no screen to keep.
     if (!(
-      this.#host.list &&
+      this.#host.pin.list &&
       this.#host.shown &&
       this.#host.rowDraw.renderedRows.length > 0
     )) {
@@ -558,9 +566,11 @@ export class MountedRows {
     // the rows a pane put away kept (`away`), let go with them. Read wider,
     // the rows virtua never mounted were mounted here, three screens of them
     // in the landing's frame (65ms, tab-return's 3 min).
-    const from = this.#host.list.findItemIndex(Math.max(0, was - this.buffer));
-    const to = this.#host.list.findItemIndex(
-      was + this.#host.viewHeight + this.buffer
+    const from = this.#host.pin.list.findItemIndex(
+      Math.max(0, was - this.buffer)
+    );
+    const to = this.#host.pin.list.findItemIndex(
+      was + this.#host.pin.viewHeight + this.buffer
     );
     const behind = new Set(
       Array.from({ length: to - from + 1 }, (_, i) => from + i)
@@ -646,7 +656,11 @@ export class MountedRows {
     const step = () =>
       requestAnimationFrame(() =>
         setTimeout(() => {
-          if (!(this.staging && this.#host.list && this.#host.atBottom)) {
+          if (!(
+            this.staging &&
+            this.#host.pin.list &&
+            this.#host.pin.atBottom
+          )) {
             this.staging = false;
             this.staged = 0;
             return;
@@ -655,15 +669,15 @@ export class MountedRows {
           // (`ABOVE_LANDING`), by virtua's sizes: each step's rows measured by
           // now, the rest at `ROW_ESTIMATE`.
           const count = this.#host.rowDraw.renderedRows.length;
-          const fill = this.#host.viewHeight * ABOVE_LANDING;
+          const fill = this.#host.pin.viewHeight * ABOVE_LANDING;
           let need = 0;
           for (let height = 0; need < count && height < fill; need += 1) {
-            height += this.#host.list.getItemSize(count - 1 - need);
+            height += this.#host.pin.list.getItemSize(count - 1 - need);
           }
           if (this.staged >= need) {
             this.staging = false;
             this.stagedReady = true;
-            this.#host.pinBottom();
+            this.#host.pin.pinBottom();
             this.stagedReady = false;
             return;
           }
@@ -713,7 +727,7 @@ export class MountedRows {
     });
 
     $effect(() => {
-      const full = this.#host.viewHeight * BUFFER_SCREENS;
+      const full = this.#host.pin.viewHeight * BUFFER_SCREENS;
       track(this.#host.rowBuild.fronted);
       if (this.narrow || this.unseen) {
         this.buffer = 0;
@@ -766,7 +780,7 @@ export class MountedRows {
             if (!(
               this.staging ||
               this.narrow ||
-              this.#host.landingAway !== undefined
+              this.#host.pin.landingAway !== undefined
             )) {
               const mounted = this.onList();
               this.aside = new Map(
@@ -796,7 +810,7 @@ export class MountedRows {
       const warmed = warm.panes();
       const hidden = !this.#host.visible;
       // PaneLeaf's slot: a side split's own panes (paneforge) carry an empty `data-pane`.
-      const pane = this.#host.listing?.closest<HTMLElement>(
+      const pane = this.#host.pin.listing?.closest<HTMLElement>(
         '[data-slot="pane"][data-pane]'
       )?.dataset.pane;
       const now =

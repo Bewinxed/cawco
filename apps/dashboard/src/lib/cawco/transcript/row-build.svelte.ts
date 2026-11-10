@@ -129,10 +129,8 @@ export interface RowBuildHost {
   readonly arrivals: {
     readonly ledger: (fold: Fold) => void;
   };
-  readonly atBottom: boolean;
   readonly isFocused: boolean;
   readonly landed: boolean;
-  lastWrite: number | null;
   readonly mounted: {
     buffer: number;
     frontHeld: string[];
@@ -141,7 +139,11 @@ export interface RowBuildHost {
   readonly older: {
     olderRoom: number;
   };
-  readonly scroller: HTMLElement | undefined;
+  readonly pin: {
+    readonly atBottom: boolean;
+    lastWrite: number | null;
+    readonly scroller: HTMLElement | undefined;
+  };
   readonly session: SessionState;
   readonly slides: {
     readonly beforeMove: Map<string, Box> | null;
@@ -497,12 +499,12 @@ export class RowBuild {
       steps.front &&
       this.frozenBefore &&
       this.#host.session.cursor === null &&
-      !this.#host.atBottom
+      !this.#host.pin.atBottom
         ? this.#host.older.olderRoom
         : 0;
     this.fronted += 1;
-    if (strip > 0 && this.#host.scroller) {
-      this.stripGone(this.#host.scroller, strip);
+    if (strip > 0 && this.#host.pin.scroller) {
+      this.stripGone(this.#host.pin.scroller, strip);
     }
   }
 
@@ -519,7 +521,7 @@ export class RowBuild {
     flushSync();
     this.#host.older.olderRoom = 0;
     node.scrollTop -= strip;
-    this.#host.lastWrite = node.scrollTop;
+    this.#host.pin.lastWrite = node.scrollTop;
   }
 
   build(): Built {

@@ -97,7 +97,9 @@ export interface RowPresentationHost {
     readonly watched: boolean;
   };
   readonly landed: boolean;
-  readonly listing: HTMLElement | undefined;
+  readonly pin: {
+    readonly listing: HTMLElement | undefined;
+  };
   readonly rowBuild: {
     readonly built: Built;
   };
@@ -321,7 +323,7 @@ export class RowPresentation {
 
   /** The row `key` as it is drawn now, before the update lands. */
   readonly drawnRow = (key: string): HTMLElement | null | undefined =>
-    this.#host.listing?.querySelector<HTMLElement>(
+    this.#host.pin.listing?.querySelector<HTMLElement>(
       `[data-row="${CSS.escape(key)}"]`
     );
 

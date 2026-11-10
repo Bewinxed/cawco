@@ -53,8 +53,10 @@ export interface SendSlidesHost {
     readonly watched: boolean;
   };
   readonly landed: boolean;
-  readonly list: VirtualizerHandle | undefined;
-  readonly listing: HTMLElement | undefined;
+  readonly pin: {
+    readonly list: VirtualizerHandle | undefined;
+    readonly listing: HTMLElement | undefined;
+  };
   readonly rowBuild: {
     readonly frozenSettled: Row[];
   };
@@ -83,11 +85,11 @@ export class SendSlides {
   /** Every mounted row's box in the list, by key. */
   measure(): Map<string, Box> {
     const boxes = new Map<string, Box>();
-    if (!this.#host.listing) {
+    if (!this.#host.pin.listing) {
       return boxes;
     }
-    const origin = this.#host.listing.getBoundingClientRect().top;
-    for (const node of this.#host.listing.querySelectorAll<HTMLElement>(
+    const origin = this.#host.pin.listing.getBoundingClientRect().top;
+    for (const node of this.#host.pin.listing.querySelectorAll<HTMLElement>(
       "[data-row]"
     )) {
       const item = node.parentElement;
@@ -199,10 +201,10 @@ export class SendSlides {
     this.foldMove = false;
     const drawn = this.#host.rowDraw.renderedRows;
     const start = drawn.findIndex((row) => after.has(row.key));
-    if (!(boxes && this.#host.listing) || start < 0) {
+    if (!(boxes && this.#host.pin.listing) || start < 0) {
       return;
     }
-    const origin = this.#host.listing.getBoundingClientRect().top;
+    const origin = this.#host.pin.listing.getBoundingClientRect().top;
     // A row put in above that opens its own place from nothing (its arrival,
     // Row's `arrive`) moves every row under it as it opens: they slide by
     // whatever else moved them, never by its place too. Slid by it as well,
@@ -214,7 +216,7 @@ export class SendSlides {
     let arrivedAt: number | null = null;
     for (const row of drawn.slice(start + 1)) {
       const box = boxes.get(settled.get(row.key) ?? row.key);
-      const node = this.#host.listing.querySelector<HTMLElement>(
+      const node = this.#host.pin.listing.querySelector<HTMLElement>(
         `[data-row="${CSS.escape(row.key)}"]`
       );
       const item = node?.parentElement;
@@ -265,9 +267,9 @@ export class SendSlides {
     const index = this.#host.rowDraw.renderedRows.findIndex(
       (row) => row.key === key
     );
-    return index < 0 || !this.#host.list
+    return index < 0 || !this.#host.pin.list
       ? null
-      : this.#host.list.getItemOffset(index);
+      : this.#host.pin.list.getItemOffset(index);
   }
 
   /**
@@ -360,11 +362,11 @@ export class SendSlides {
    * own scrolling is not carried: it moves the list, slides and all.
    */
   carrySlides(scrolled: number): void {
-    if (this.sliding === 0 || !this.#host.listing) {
+    if (this.sliding === 0 || !this.#host.pin.listing) {
       return;
     }
-    const origin = this.#host.listing.getBoundingClientRect().top;
-    for (const node of this.#host.listing.querySelectorAll<HTMLElement>(
+    const origin = this.#host.pin.listing.getBoundingClientRect().top;
+    for (const node of this.#host.pin.listing.querySelectorAll<HTMLElement>(
       "[data-row]"
     )) {
       const was = this.slidFrom.get(node);
