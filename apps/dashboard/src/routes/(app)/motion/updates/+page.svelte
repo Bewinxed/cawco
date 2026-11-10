@@ -213,7 +213,7 @@
       binaryUpdate: update({
         phase: "none",
         installedVersion: "1.4.2",
-        sessiondKept: [CONMON[0] as KeptProcess, SLEEP],
+        sessiondKept: [CONMON[0], SLEEP],
       }),
     }),
     machine("r14", "Omars-MacBook-Pro", "darwin", {
@@ -317,7 +317,7 @@
       {},
       {},
     ])
-  ) as Notice;
+  );
   const UPDATED_PLAIN = updatedNotice(
     trio([
       {
@@ -328,7 +328,7 @@
       {},
       {},
     ])
-  ) as Notice;
+  );
 
   const noop = () => undefined;
 </script>
@@ -394,12 +394,14 @@
     data-states="notice-plain"
   >
     <div class={panel} data-notice="plain" data-specimen>
-      <UpdateCard
-        alone
-        notice={UPDATED_PLAIN}
-        onaction={noop}
-        ondismiss={noop}
-      />
+      {#if UPDATED_PLAIN}
+        <UpdateCard
+          alone
+          notice={UPDATED_PLAIN}
+          onaction={noop}
+          ondismiss={noop}
+        />
+      {/if}
     </div>
   </div>
 
@@ -409,7 +411,9 @@
     data-states="update-card"
   >
     <div class={panel} data-specimen>
-      <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
+      {#if UPDATED}
+        <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
+      {/if}
     </div>
   </div>
 </main>

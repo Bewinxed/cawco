@@ -78,7 +78,8 @@
     }
   });
 
-  type Range = "window" | "today" | "7d" | "30d";
+  const RANGES = ["window", "today", "7d", "30d"] as const;
+  type Range = (typeof RANGES)[number];
   let range = $state<Range>("window");
 
   /**
@@ -214,7 +215,7 @@
         >
           <Tabs
             onValueChange={(next) => {
-              range = next as Range;
+              range = RANGES.find((one) => one === next) ?? range;
             }}
             value={range}
           >

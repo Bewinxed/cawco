@@ -133,6 +133,7 @@ export const load: LayoutServerLoad = async ({
   // Each open tab's name as the hub gave it, or why the hub could not: a tab
   // whose name read failed says so in the strip until the fleet names it.
   const names: Record<string, HubRead<string>> = {};
+  const unresolved: string[] = [];
   /** Each open tab's pulse as the hub held it for this request. */
   const pulses: Record<string, SessionPulse> = {};
   if (!workspace) {
@@ -141,7 +142,7 @@ export const load: LayoutServerLoad = async ({
       narrow,
       workspace,
       names,
-      resolved: [] as string[],
+      resolved: unresolved,
       pulses,
       foldBoxes,
       auth,
@@ -176,7 +177,7 @@ export const load: LayoutServerLoad = async ({
       narrow,
       workspace,
       names,
-      resolved: [] as string[],
+      resolved: unresolved,
       pulses,
       foldBoxes,
       auth,

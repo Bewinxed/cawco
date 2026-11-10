@@ -7,11 +7,7 @@
    */
   import { onMount } from "svelte";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
-  import {
-    LAST_KEY,
-    SECTIONS,
-    type SectionSlug,
-  } from "#lib/cawco/config/sections.js";
+  import { LAST_KEY, SECTIONS } from "#lib/cawco/config/sections.js";
   import {
     ConfigStore,
     provideConfig,
@@ -61,7 +57,7 @@
 
   const slug = $derived(
     SECTIONS.find((section) => section.slug === page.url.pathname.split("/")[2])
-      ?.slug as SectionSlug | undefined
+      ?.slug
   );
 
   $effect(() => {
