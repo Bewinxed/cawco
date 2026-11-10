@@ -25,7 +25,9 @@ export interface RecordSeekHost {
   readonly arrivals: {
     readonly tickets: Map<string, Ticket>;
   };
-  readonly findHere: ConversationFind;
+  readonly finder: {
+    readonly findHere: ConversationFind;
+  };
   readonly keeper: {
     readonly anchorIndex: () => number;
     holdUntil: number;
@@ -142,12 +144,12 @@ export class RecordSeek {
     }
     // Find's own seek marks the words, not the row, and its place is said
     // by its count (find/FindLine).
-    const found = this.#host.findHere.sought?.docId === docId;
+    const found = this.#host.finder.findHere.sought?.docId === docId;
     if (found) {
-      const { back } = this.#host.findHere.sought ?? { back: false };
-      this.#host.findHere.sought = null;
+      const { back } = this.#host.finder.findHere.sought ?? { back: false };
+      this.#host.finder.findHere.sought = null;
       if (!back) {
-        this.#host.findHere.arrived();
+        this.#host.finder.findHere.arrived();
       }
     }
     this.marked = found
