@@ -682,7 +682,12 @@
       itemClass="touch-hit press-tint grid size-c-btn-h-xs place-items-center"
       items={VIEWS}
       label={filesWords.artifactsView}
-      onpick={(id) => artifactsView.set(id as ArtifactsView)}
+      onpick={(id) => {
+        const picked = VIEWS.find((one) => one.id === id);
+        if (picked) {
+          artifactsView.set(picked.id);
+        }
+      }}
       value={view}
     >
       {#snippet item(way)}

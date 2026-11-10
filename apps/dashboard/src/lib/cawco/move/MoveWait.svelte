@@ -90,7 +90,7 @@
     if (job.stage === "cancelled") {
       return job.stoppedAt;
     }
-    return WORKING.has(job.stage) ? (job.stage as MoveStep) : undefined;
+    return MOVE_JOB_STEPS.find((step) => step === job.stage);
   });
   const asking = $derived(job.stage === "approval" && Boolean(job.askId));
 
@@ -189,7 +189,7 @@
 
   const GLYPHS: Record<Phase, Component | "dot"> = {
     done: IconSuccess,
-    active: Spinner as Component,
+    active: Spinner,
     ahead: "dot",
     failed: IconError,
     stopped: IconStop,

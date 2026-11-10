@@ -90,8 +90,12 @@
       pending = null;
     }
   }
-  const act = (kind: Extract<RelayAct, { act: string }>["act"]) =>
-    run({ act: kind } as RelayAct);
+  const act = (
+    kind: Exclude<
+      RelayAct,
+      { token: string } | { machineId: string } | { name: string }
+    >["act"]
+  ) => run({ act: kind });
 
   const nameStep = $derived(
     steps.find(

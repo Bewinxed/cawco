@@ -59,25 +59,11 @@ const LEAST_THRESHOLD_MS = 60_000;
 /** An input after this long without one is said at once, not on the next beat: the person came back. */
 const QUIET_MS = 60_000;
 
-/** Chromium's Idle Detection (wicg.github.io/idle-detection), not in TypeScript's DOM yet. */
-interface IdleDetectorLike extends EventTarget {
-  readonly screenState: "locked" | "unlocked" | null;
-  readonly start: (options: {
-    signal: AbortSignal;
-    threshold: number;
-  }) => Promise<void>;
-  readonly userState: "active" | "idle" | null;
-}
-interface IdleDetectorClass {
-  readonly requestPermission: () => Promise<PermissionState>;
-  new (): IdleDetectorLike;
-}
-
 /** The browser's IdleDetector, where it has one and the page is a secure context. */
 const idleDetectorClass = (): IdleDetectorClass | undefined =>
   typeof window === "undefined" || !window.isSecureContext
     ? undefined
-    : (window as unknown as { IdleDetector?: IdleDetectorClass }).IdleDetector;
+    : window.IdleDetector;
 
 /** The workspace's focused chat, and every chat it draws. */
 let front: string | null = null;
@@ -309,9 +295,7 @@ export interface DeskPermissions {
  * answer is no without a prompt, and there is no setting to change.
  */
 const isBrave = async (): Promise<boolean> => {
-  const { brave } = navigator as Navigator & {
-    brave?: { isBrave?: () => Promise<boolean> };
-  };
+  const { brave } = navigator;
   try {
     return (await brave?.isBrave?.()) === true;
   } catch {

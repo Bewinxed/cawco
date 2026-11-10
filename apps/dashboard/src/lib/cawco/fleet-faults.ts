@@ -31,7 +31,7 @@ import {
   type FleetSkillMeta,
   type FleetSyncReport,
 } from "@cawco/core/fleet";
-import type { HarnessKind } from "@cawco/core/harness/kinds";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness/kinds";
 import { isHarnessConfigKind } from "@cawco/core/harness-config";
 import { fleetFaultWords } from "@cawco/core/words/fleet-faults";
 
@@ -325,12 +325,15 @@ export function machineFaults(
           : [];
       case "mcp":
         return fleet.mcpByHarness
-          ? Object.entries(fleet.mcpByHarness).flatMap(([harness, rows]) =>
-              scan(section, machineId, rows).map((fault) => ({
-                ...fault,
-                harness: harness as HarnessKind,
-              }))
-            )
+          ? Object.entries(fleet.mcpByHarness).flatMap(([name, rows]) => {
+              const harness = harnessNamed(name);
+              return harness
+                ? scan(section, machineId, rows).map((fault) => ({
+                    ...fault,
+                    harness,
+                  }))
+                : [];
+            })
           : scan(section, machineId, fleet.mcp);
       case "marketplaces":
       case "plugins":

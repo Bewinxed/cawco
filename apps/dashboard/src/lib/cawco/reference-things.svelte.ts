@@ -46,21 +46,35 @@ export interface Thing {
   state: string | null;
 }
 
+/** A routine as the hub answers it. */
+const readRoutine = (id: string) =>
+  hubData(hub.api.routines({ id }).get(), statusOf);
+type Routine = Awaited<ReturnType<typeof readRoutine>>;
+
 /** Each answer the hub gave, by `<kind>:<id>`, or null when it holds none by it. */
-const answered = new SvelteMap<string, unknown>();
+const answeredTasks = new SvelteMap<string, TaskView | null>();
+const answeredPlans = new SvelteMap<string, SessionPlan | null>();
+const answeredRoutines = new SvelteMap<string, Routine | null>();
 const asking = new Set<string>();
 
-/** Asks `url` once and keeps the answer under `key`; a refusal keeps null, an unreached hub is asked again next time. */
-function askOnce<T>(key: string, read: () => Promise<T>): T | null | undefined {
+/** Asks once and keeps the answer in `answered` under `key`; a refusal keeps null, an unreached hub is asked again next time. */
+function askOnce<T>(
+  answered: SvelteMap<string, T | null>,
+  key: string,
+  read: () => Promise<T>
+): T | null | undefined {
   if (answered.has(key)) {
-    return answered.get(key) as T | null;
+    return answered.get(key);
   }
   if (!asking.has(key)) {
     asking.add(key);
     read()
       .then((value) => answered.set(key, value))
       .catch((error: unknown) => {
-        const status = (error as { status?: unknown } | null)?.status;
+        const status =
+          typeof error === "object" && error !== null && "status" in error
+            ? error.status
+            : undefined;
         if (typeof status === "number" && status >= 400 && status < 500) {
           answered.set(key, null);
         }
@@ -73,7 +87,7 @@ function askOnce<T>(key: string, read: () => Promise<T>): T | null | undefined {
 /** A task as the hub answered it, read again whenever its project's tasks moved. */
 const taskOf = (project: string, task: string): TaskView | null | undefined => {
   const moved = tickersStore.taskChangedOf(project, task);
-  return askOnce(`task:${project}/${task}@${moved}`, () =>
+  return askOnce(answeredTasks, `task:${project}/${task}@${moved}`, () =>
     readTask(project, task)
   );
 };
@@ -81,7 +95,7 @@ const taskOf = (project: string, task: string): TaskView | null | undefined => {
 /** A session's plan: the store's, else the hub's answer. */
 const planOf = (session: string): SessionPlan | null | undefined =>
   plansStore.planOf(session) ??
-  askOnce(`plan:${session}`, () =>
+  askOnce(answeredPlans, `plan:${session}`, () =>
     hubData(hub.api.instances({ id: session }).plan.get(), statusOf)
   );
 
@@ -220,8 +234,8 @@ const READS: Record<ThingKind, (id: string) => Thing | null | undefined> = {
       : null;
   },
   routine: (id) => {
-    const routine = askOnce(`routine:${id}`, () =>
-      hubData(hub.api.routines({ id }).get(), statusOf)
+    const routine = askOnce(answeredRoutines, `routine:${id}`, () =>
+      readRoutine(id)
     );
     if (!routine) {
       return routine;

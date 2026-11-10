@@ -164,7 +164,10 @@
 {#snippet switcher()}
   <Tabs
     onValueChange={(next) => {
-      tab = next as Shown;
+      const picked = opened.find((one) => one === next);
+      if (picked) {
+        tab = picked;
+      }
     }}
     size="compact"
     value={shown}

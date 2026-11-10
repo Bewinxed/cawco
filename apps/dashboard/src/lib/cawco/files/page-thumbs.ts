@@ -89,7 +89,7 @@ async function drawPage(
         ) {
           return;
         }
-        const data = event.data as { type?: unknown } | null;
+        const { data } = event;
         if (data?.type === PREVIEW_LOCKED_MESSAGE) {
           if (entered) {
             finish(null);
@@ -108,9 +108,7 @@ async function drawPage(
           clearTimeout(settle);
           settle = setTimeout(() => post({ type: "cawco:capture" }), SETTLE_MS);
         } else if (data?.type === "cawco:captured") {
-          finish(
-            previewThumbnail(data as Parameters<typeof previewThumbnail>[0])
-          );
+          finish(previewThumbnail(data));
         }
       };
       const bound = setTimeout(() => finish(null), PAGE_MS);

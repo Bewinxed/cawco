@@ -29,7 +29,7 @@ import {
 import { newestRead } from "#lib/platform/newest-read.js";
 
 export const isBlockPage = (value: string): value is ShownBlockPage =>
-  (SHOWN_BLOCK_PAGES as readonly string[]).includes(value);
+  SHOWN_BLOCK_PAGES.some((page) => page === value);
 
 export class ProjectBlocks {
   readonly #projectId: () => string;

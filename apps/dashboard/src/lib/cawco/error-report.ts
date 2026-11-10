@@ -83,15 +83,14 @@ function thrownWords(error: unknown): string {
   if (typeof error !== "object" || error === null) {
     return String(error);
   }
-  const named = (Object.getPrototypeOf(error) as object | null)?.constructor
-    ?.name;
+  const named = Object.getPrototypeOf(error)?.constructor?.name;
   const prefix = named && named !== "Object" ? `${named} ` : "";
   let words = jsonOf(error);
   if (words === undefined || words === "{}") {
     const fields = Object.getOwnPropertyNames(error).map((key) => {
       let field: unknown;
       try {
-        field = (error as Record<string, unknown>)[key];
+        field = Reflect.get(error, key);
       } catch {
         field = "[unreadable]";
       }

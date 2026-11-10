@@ -305,7 +305,7 @@
         for (
           let at: HTMLElement | null = one;
           at && at !== node;
-          at = at.offsetParent as HTMLElement | null
+          at = at.offsetParent instanceof HTMLElement ? at.offsetParent : null
         ) {
           top += at.offsetTop;
         }

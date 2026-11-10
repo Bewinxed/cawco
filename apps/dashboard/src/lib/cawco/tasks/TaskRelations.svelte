@@ -189,7 +189,7 @@
           <Choice
             label="Edge"
             onchange={(next) => {
-              kind = next as LinkKind;
+              kind = next;
             }}
             options={KINDS}
             value={kind}

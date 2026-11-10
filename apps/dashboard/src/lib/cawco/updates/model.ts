@@ -397,11 +397,10 @@ export function attention(
 }
 
 /** The machines with an update to install now (row 11). */
-export const installable = (
-  machines: UpdateMachine[],
+export const installable = <T extends UpdateMachine>(
+  machines: T[],
   policy: BinaryUpdatePolicy
-): UpdateMachine[] =>
-  machines.filter((machine) => cellFor(machine, policy).row === 11);
+): T[] => machines.filter((machine) => cellFor(machine, policy).row === 11);
 
 // ── the notice ───────────────────────────────────────────────────────────
 
@@ -494,15 +493,20 @@ const doneOn = (u: BinaryUpdateState): boolean =>
 const byName = (a: UpdateMachine, b: UpdateMachine): number =>
   a.hostname.localeCompare(b.hostname);
 
+/** A machine that reports an update. */
+interface ReportingMachine extends UpdateMachine {
+  binaryUpdate: BinaryUpdateState;
+}
+
 /** What every notice builder reads: the machines that report an update, and how to name one. */
 interface Ctx {
   input: NoticeInput;
-  machines: UpdateMachine[];
+  machines: ReportingMachine[];
   name: (machine: UpdateMachine) => string;
 }
 
-const stateOf = (machine: UpdateMachine): BinaryUpdateState =>
-  machine.binaryUpdate as BinaryUpdateState;
+const stateOf = (machine: ReportingMachine): BinaryUpdateState =>
+  machine.binaryUpdate;
 
 const shownVersion = (version: string | undefined): string =>
   displayVersion(version ?? "");
@@ -637,7 +641,7 @@ const COMMANDED_PHASES: readonly BinaryUpdatePhase[] = [
 ];
 
 /** One machine's line in the installing notice. */
-function installLine(machine: UpdateMachine, name: string): NoticeLine {
+function installLine(machine: ReportingMachine, name: string): NoticeLine {
   const state = stateOf(machine);
   if (doneOn(state)) {
     return { state: "done", text: `✓ ${name}` };
@@ -724,10 +728,11 @@ function installing({ input, machines, name }: Ctx): Notice | null {
 /** 3. Everything this tab asked for has landed. */
 function landedAll({ input, machines }: Ctx): Notice | null {
   const asked = machines.filter((m) => input.commanded.has(m.machineId));
-  if (asked.length === 0 || !asked.every((m) => doneOn(stateOf(m)))) {
+  const [first] = asked;
+  if (!(first && asked.every((m) => doneOn(stateOf(m))))) {
     return null;
   }
-  const v = shownVersion(stateOf(asked[0] as UpdateMachine).availableVersion);
+  const v = shownVersion(stateOf(first).availableVersion);
   return {
     // This install of this build on these machines, never the landings: it
     // shows no notes, so each landing stays notice 6, notes and all, until
@@ -855,7 +860,8 @@ export function noticeFor(
   const ctx: Ctx = {
     input,
     machines: machines.filter(
-      (machine) => isOnline(machine) && machine.binaryUpdate
+      (machine): machine is typeof machine & ReportingMachine =>
+        isOnline(machine) && machine.binaryUpdate !== undefined
     ),
     name: (machine) => label(machine.hostname),
   };

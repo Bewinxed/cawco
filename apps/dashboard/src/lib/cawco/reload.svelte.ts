@@ -48,11 +48,10 @@ const TEXT_INPUTS = new Set([
 type Field = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
 
 const typed = (element: Element | null): element is Field =>
-  element !== null &&
-  ((element as HTMLElement).isContentEditable ||
+  element instanceof HTMLElement &&
+  (element.isContentEditable ||
     element.tagName === "TEXTAREA" ||
-    (element.tagName === "INPUT" &&
-      TEXT_INPUTS.has((element as HTMLInputElement).type)));
+    (element instanceof HTMLInputElement && TEXT_INPUTS.has(element.type)));
 
 const textOf = (field: Field): string =>
   "value" in field && typeof field.value === "string"
@@ -110,7 +109,7 @@ if (typeof window !== "undefined") {
   window.addEventListener(
     "focusin",
     (event) => {
-      const field = event.target as Element | null;
+      const field = event.target instanceof Element ? event.target : null;
       if (typed(field) && !started.has(field)) {
         started.set(field, textOf(field));
       }

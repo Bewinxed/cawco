@@ -236,7 +236,7 @@
   });
   const pieces = $derived(
     only === "comments"
-      ? said.map((line) => ({ kind: "one", line }) as Piece)
+      ? said.map((line): Piece => ({ kind: "one", line }))
       : piecesOf(stream)
   );
   const ago = (at: number) => formatDistanceToNow(new Date(at));
@@ -324,7 +324,7 @@
     <Choice
       label="Show"
       onchange={(next) => {
-        only = next as "all" | "comments";
+        only = next;
       }}
       options={[
         { value: "all", label: "All" },

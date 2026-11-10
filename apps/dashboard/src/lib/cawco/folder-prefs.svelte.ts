@@ -37,12 +37,11 @@ const save = (): void => {
 
 /** Merges one field in, and drops the record once it says nothing at all. */
 function edit(cwd: string, patch: FolderPref): void {
-  const next: FolderPref = { ...prefs[cwd], ...patch };
-  for (const [field, value] of Object.entries(next)) {
-    if (value === undefined) {
-      delete next[field as keyof FolderPref];
-    }
-  }
+  const next: FolderPref = Object.fromEntries(
+    Object.entries({ ...prefs[cwd], ...patch }).filter(
+      ([, value]) => value !== undefined
+    )
+  );
   if (Object.keys(next).length === 0) {
     delete prefs[cwd];
   } else {

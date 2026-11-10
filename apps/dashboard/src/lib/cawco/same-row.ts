@@ -29,9 +29,9 @@ export function sameRow(a: BoardRow, b: BoardRow): boolean {
   if (a === b) {
     return true;
   }
-  const keys = Object.keys(a) as (keyof BoardRow)[];
+  const fields = Object.entries(a);
   return (
-    keys.length === Object.keys(b).length &&
-    keys.every((key) => sameField(a[key], b[key]))
+    fields.length === Object.keys(b).length &&
+    fields.every(([key, field]) => sameField(field, Reflect.get(b, key)))
   );
 }

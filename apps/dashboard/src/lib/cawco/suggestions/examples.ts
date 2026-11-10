@@ -7,17 +7,21 @@
 import type { Suggestion } from "./Suggestions.svelte";
 
 /** a project's first conversation on the club's site: the project page preview's three, with the hub's reasons. */
+const LEFT: Suggestion = {
+  glyph: "rocket",
+  text: "What’s left before the site goes live?",
+  reason: "Three tasks are open and the domain landed four days ago.",
+};
+
+const LANDED: Suggestion = {
+  glyph: "search",
+  text: "Review what landed this week",
+  reason: "Two tasks landed on main since Monday.",
+};
+
 export const THREE: readonly Suggestion[] = [
-  {
-    glyph: "rocket",
-    text: "What’s left before the site goes live?",
-    reason: "Three tasks are open and the domain landed four days ago.",
-  },
-  {
-    glyph: "search",
-    text: "Review what landed this week",
-    reason: "Two tasks landed on main since Monday.",
-  },
+  LEFT,
+  LANDED,
   {
     glyph: "tasks",
     text: "Plan the next three tasks",
@@ -26,7 +30,7 @@ export const THREE: readonly Suggestion[] = [
 ];
 
 /** One starter: the hub had one thing worth saying. */
-export const ONE: readonly Suggestion[] = [THREE[0] as Suggestion];
+export const ONE: readonly Suggestion[] = [LEFT];
 
 /** Seven: more than the hub writes today, so the look is seen holding more. */
 export const MANY: readonly Suggestion[] = [
@@ -70,7 +74,7 @@ export const LONG: readonly Suggestion[] = [
     reason:
       "The rota page lists different dates for the July course than the booking page shows to parents right now.",
   },
-  THREE[1] as Suggestion,
+  LANDED,
 ];
 
 /** The empty Decisions tab's starters: choices Caw would lay out as a decision page. */

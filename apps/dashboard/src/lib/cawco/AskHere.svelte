@@ -52,9 +52,10 @@
   } = $props();
 
   const id = $props.id();
-  const asked = $derived(
-    asker.pending?.at === at ? (asker.pending as AskHereRequest) : null
-  );
+  const asked = $derived.by(() => {
+    const { pending } = asker;
+    return pending?.at === at ? pending : null;
+  });
   const paragraphs = $derived(
     typeof asked?.body === "string" ? [asked.body] : (asked?.body ?? [])
   );

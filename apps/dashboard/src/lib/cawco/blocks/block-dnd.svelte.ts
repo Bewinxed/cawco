@@ -92,7 +92,10 @@ export function dragHead(
               };
             },
             render: ({ container }) => {
-              const face = head.cloneNode(true) as HTMLElement;
+              const face = head.cloneNode(true);
+              if (!(face instanceof HTMLElement)) {
+                return;
+              }
               for (const tool of face.querySelectorAll("[data-block-tools]")) {
                 tool.remove();
               }

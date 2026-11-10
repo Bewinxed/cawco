@@ -12,6 +12,7 @@
    */
   import type { ArtifactSummary } from "@cawco/core/protocol";
   import { untrack } from "svelte";
+  import { z } from "zod";
   import { failureClause } from "#lib/platform/hub-read.js";
   import { showArtifact } from "../artifact-api";
   import { barGlass } from "../bar-glass.svelte";
@@ -47,8 +48,10 @@
     if (!said) {
       return null;
     }
-    const asked = said.asked as Pick<ArtifactSummary, "id" | "title">;
-    return { reason: said.reason, again: () => pick(asked) };
+    const asked = PickedArtifact.safeParse(said.asked);
+    return asked.success
+      ? { reason: said.reason, again: () => pick(asked.data) }
+      : null;
   });
 
   /**
@@ -82,6 +85,9 @@
       untrack(shown);
     }
   });
+
+  /** What a refused pick asked for, kept as data for Try again. */
+  const PickedArtifact = z.object({ id: z.string(), title: z.string() });
 
   async function pick(artifact: Pick<ArtifactSummary, "id" | "title">) {
     const id = instanceId;

@@ -94,9 +94,9 @@
       if (event.pointerType === "touch" || !fine()) {
         return;
       }
-      const row = (event.target as Element).closest<HTMLElement>(
-        "[data-hover-session]"
-      );
+      const row = (
+        event.target instanceof Element ? event.target : null
+      )?.closest<HTMLElement>("[data-hover-session]");
       const id = row?.dataset.hoverSession;
       if (!(row && id)) {
         if (openId) {

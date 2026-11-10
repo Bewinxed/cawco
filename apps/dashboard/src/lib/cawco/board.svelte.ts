@@ -177,7 +177,10 @@ const datesOf = new WeakMap<object, Map<string, number>>();
  * sorting a thousand rows by a date read through `new Date` in the
  * comparator parsed it twenty thousand times.
  */
-export function epochOf<R extends object>(row: R, field: keyof R): number {
+export function epochOf<
+  K extends string,
+  R extends Partial<Record<K, string | number | Date | null>>,
+>(row: R, field: K): number {
   let dates = datesOf.get(row);
   if (!dates) {
     dates = new Map();
@@ -188,7 +191,7 @@ export function epochOf<R extends object>(row: R, field: keyof R): number {
   if (held !== undefined) {
     return held;
   }
-  const ms = epochOfValue(row[field] as string | number | Date | null);
+  const ms = epochOfValue(row[field]);
   dates.set(name, ms);
   return ms;
 }

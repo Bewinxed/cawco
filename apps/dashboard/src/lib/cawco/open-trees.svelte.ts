@@ -20,33 +20,34 @@ export type TreeList =
   | "home-finished"
   | "home-recent";
 
-const LISTS: readonly TreeList[] = [
-  "projects",
-  "rail-working",
-  "rail-finished",
-  "home-working",
-  "home-finished",
-  "home-recent",
-];
-
 const keyOf = (list: TreeList): string => `cawco-open-trees:${list}`;
 
 function storedIds(list: TreeList): string[] {
   return readJson(keyOf(list), z.array(z.string()), []);
 }
 
-const open = Object.fromEntries(
-  LISTS.map((list) => [list, new SvelteSet<string>(storedIds(list))])
-) as Record<TreeList, SvelteSet<string>>;
+const open: Record<TreeList, SvelteSet<string>> = {
+  projects: new SvelteSet(storedIds("projects")),
+  "rail-working": new SvelteSet(storedIds("rail-working")),
+  "rail-finished": new SvelteSet(storedIds("rail-finished")),
+  "home-working": new SvelteSet(storedIds("home-working")),
+  "home-finished": new SvelteSet(storedIds("home-finished")),
+  "home-recent": new SvelteSet(storedIds("home-recent")),
+};
 
 /**
  * Parents whose older rows are out (older.ts, OlderRows), in each list on its
  * own: a project's older sessions, a session's older delegates. In memory, so
  * a reload shuts them.
  */
-export const olderOpen = Object.fromEntries(
-  LISTS.map((list) => [list, new SvelteSet<string>()])
-) as Record<TreeList, SvelteSet<string>>;
+export const olderOpen: Record<TreeList, SvelteSet<string>> = {
+  projects: new SvelteSet(),
+  "rail-working": new SvelteSet(),
+  "rail-finished": new SvelteSet(),
+  "home-working": new SvelteSet(),
+  "home-finished": new SvelteSet(),
+  "home-recent": new SvelteSet(),
+};
 
 export const openTrees = {
   has(id: string, list: TreeList): boolean {
