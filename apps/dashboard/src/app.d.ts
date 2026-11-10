@@ -32,6 +32,10 @@ declare global {
     workItemsState: typeof import("#lib/cawco/stores/work-items.svelte.js").workItemsState;
     [note: string]: unknown;
   }
+  interface RequestInit {
+    /** A streamed request body (undici, Node's fetch): the DOM lib does not name it yet. */
+    duplex?: "half";
+  }
   interface FocusOptions {
     /** Whether the focus ring draws on the element focused by script (Chrome 144, Safari 18.4; the DOM lib does not name it yet). */
     focusVisible?: boolean;

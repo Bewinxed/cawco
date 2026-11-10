@@ -177,8 +177,8 @@ async function proxyToHub(
       // page (hub connections.ts `appCreated`), where only their browser is
       // signed in.
       redirect: "manual",
-      ...(hasBody && { duplex: "half" }),
-    } as RequestInit);
+      ...(hasBody && { duplex: "half" as const }),
+    });
 
     // Forward the response. Node's fetch (undici) cancels a body once the
     // Response that owns it is garbage-collected (nodejs/undici#3199), and
