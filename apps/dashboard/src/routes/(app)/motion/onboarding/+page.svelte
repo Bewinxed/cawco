@@ -16,7 +16,7 @@
    * ONBOARDING BENCH (dev only): a project's page in its first minutes and
    * the fleet board's first run, drawn by the real parts with the person's
    * own test case, the personal PR team (setup.fixtures.ts), and no hub.
-   * Only the client's state is seeded (dev's `__cawcoDebug`): the project's
+   * Only the stores' state is seeded (dev's `__cawcoDebug`): the project's
    * conversation, its messages and the calls Caw makes, his questions as the
    * hub parks them. The page lays out as the project page does: the head with
    * his seat, the board's place, his panel docked beside it (CawFloat), its

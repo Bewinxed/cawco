@@ -7,7 +7,7 @@
    * the permission rows, the side panel's pressed head button, the kit
    * Toggle itself (one pressed, one not), the plan ring, the Comments rail's open row, the model list (its catalogue
    * is what the machines report, models.svelte.ts: the bench has no hub, so
-   * it stands one machine in the client's own state reporting two Claude
+   * it stands one machine in the stores' own state reporting two Claude
    * models, the first chosen),
    * a live Crepe editor, for its slash menu, and a Caw reply's file chips
    * (`?control=files` stands the page on that project's file, shallowly, as
