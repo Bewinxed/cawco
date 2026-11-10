@@ -28,11 +28,10 @@ import {
   servedByMachine,
   shownArtifact,
 } from "./preview";
-import { PreviewRefusal } from "./preview-hosts";
 import { embedKey } from "./preview-origin";
 import { changeFolderFiles, readFolderFile } from "./project-folder";
 import { ProjectRefusal, projectRefusalOf } from "./project-refusal";
-import type { Refused } from "./refusal";
+import { type Refused, refusal } from "./refusal";
 import { unreachable } from "./unreachable";
 
 /**
@@ -148,16 +147,10 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
    * taken, which the open that showed it already said.
    */
   const frameAddress = (instanceId: string, target: PreviewTarget) => {
-    try {
-      return frameOrigin(instanceId, target);
-    } catch (error) {
-      if (error instanceof PreviewRefusal) {
-        return null;
-      }
-      throw error;
-    }
+    const address = frameOrigin(instanceId, target);
+    return address instanceof ElysiaStatus ? null : address;
   };
-  /** {@link frameAddress}, or the listeners' refusal thrown. */
+  /** {@link frameAddress}, or the listeners' refusal. */
   const frameOrigin = (instanceId: string, target: PreviewTarget) => {
     if (hubShows(target)) {
       const project = pageProject(target.artifact.id);
@@ -167,8 +160,9 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     }
     const key = embedKeyOf(target.artifact.id);
     if (key === undefined) {
-      throw new PreviewRefusal(
+      return refusal(
         409,
+        "preview-artifact-gone",
         `${target.artifact.name} is gone, so no origin serves it.`
       );
     }
@@ -377,13 +371,9 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     // Its origin first (a machine's preview its artifact's own, a project's
     // page its project's): with every port of the range taken it is not
     // shown.
-    try {
-      frameOrigin(instanceId, target);
-    } catch (error) {
-      if (error instanceof PreviewRefusal) {
-        return { ok: false, code: 503, error: error.message };
-      }
-      throw error;
+    const origin = frameOrigin(instanceId, target);
+    if (origin instanceof ElysiaStatus) {
+      return { ok: false, code: 503, error: origin.response.detail };
     }
     if (servedByMachine(row)) {
       const reached = await timedShowStep("reach", artifact, instanceId, () =>
