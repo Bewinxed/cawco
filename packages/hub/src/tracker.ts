@@ -81,7 +81,7 @@ import {
   type TrackerView,
 } from "@cawco/core/trackers";
 import { connectionsWords } from "@cawco/core/words/connections";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { TrackerCursor, TrackerSynced } from "./db/stored-types";
 import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
@@ -94,7 +94,7 @@ import type {
 import type { ExternalItems } from "./external-items";
 import type { HubLifetimeShape } from "./lifetime";
 import { turnTaker } from "./project-folder";
-import { refusal } from "./refusal";
+
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
 import {
   externalStateOf,
@@ -187,38 +187,31 @@ const askedOf = (input: BindInput & { tracker: IssueTracker }) => {
   const where = input.tracker === "github" ? "repository" : "team";
   const connection = input.connection?.trim();
   if (!connection) {
-    return refusal(
-      400,
-      "tracker-connection-missing",
-      `${name} needs a connection: pick the one that reaches its ${where}.`
-    );
+    return problem(400, {
+      code: "tracker-connection-missing",
+      detail: `${name} needs a connection: pick the one that reaches its ${where}.`,
+    });
   }
   const target = input.target?.trim();
   if (!target) {
-    return refusal(
-      400,
-      "tracker-target-missing",
-      `${name} needs its ${where}: pick one ${connection} reaches.`
-    );
+    return problem(400, {
+      code: "tracker-target-missing",
+      detail: `${name} needs its ${where}: pick one ${connection} reaches.`,
+    });
   }
   return { connection, target, tracker: input.tracker };
 };
 
 /** A project the hub does not keep, refused as the tracker's routes refuse (tracker-project-unknown). */
 const projectUnknown = (projectId: string) =>
-  refusal(
-    400,
-    "tracker-project-unknown",
-    `The hub keeps no project ${projectId}.`
-  );
-
-/** A connection of another service than the one asked, in `words` (tracker-connection-kind). */
-const otherKind = (words: string) =>
-  refusal(400, "tracker-connection-kind", words);
+  problem(400, {
+    code: "tracker-project-unknown",
+    detail: `The hub keeps no project ${projectId}.`,
+  });
 
 /** What the tracker or the connection threw, in its words (tracker-refused). */
 const trackerRefused = (error: unknown) =>
-  refusal(400, "tracker-refused", wordsOf(error));
+  problem(400, { code: "tracker-refused", detail: wordsOf(error) });
 
 /** The fields the sync compares, as a task file holds them. */
 type Fields = Pick<TrackerSynced, "description" | "labels" | "title">;
@@ -333,8 +326,8 @@ const itemOf = (binding: TrackerBindingRow, key: string): ItemKey =>
 const wordsOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-const problemWords = (problem: Problem): string =>
-  typeof problem === "string" ? problem : problem.message;
+const problemWords = (misfit: Problem): string =>
+  typeof misfit === "string" ? misfit : misfit.message;
 
 /** A failure as a task's problem: the tracker's refusal, or the error's words. */
 const problemOf = (error: unknown): Problem =>
@@ -346,11 +339,11 @@ const stopsSync = (error: unknown): error is TrackerRefusal =>
   (error.kind === "rate" || error.kind === "sign-in");
 
 /** Keeps a task's problem for the binding's word; answers its words. */
-const fail = (sync: Sync, taskId: string, problem: Problem): string => {
+const fail = (sync: Sync, taskId: string, misfit: Problem): string => {
   if (!sync.problems.has(taskId)) {
-    sync.problems.set(taskId, problem);
+    sync.problems.set(taskId, misfit);
   }
-  return problemWords(problem);
+  return problemWords(misfit);
 };
 
 const stageOf = (sync: Sync, name: string): Stage | undefined =>
@@ -636,9 +629,9 @@ const applyPush = async (round: Round): Promise<void> => {
 const outcomeOf = (sync: Sync): Pick<TrackerBindingRow, "reason" | "state"> => {
   const problems = [...sync.problems.values()];
   const refused = problems.find(
-    (problem): problem is TrackerRefusal =>
-      problem instanceof TrackerRefusal &&
-      (problem.kind === "scope" || problem.kind === "sign-in")
+    (misfit): misfit is TrackerRefusal =>
+      misfit instanceof TrackerRefusal &&
+      (misfit.kind === "scope" || misfit.kind === "sign-in")
   );
   if (refused) {
     return { state: "refused", reason: refused.message };
@@ -1696,7 +1689,10 @@ export const createTrackers = (deps: TrackersDeps) => {
     try {
       return deps.connections.get(name);
     } catch (error) {
-      return refusal(400, "tracker-connection-unknown", wordsOf(error));
+      return problem(400, {
+        code: "tracker-connection-unknown",
+        detail: wordsOf(error),
+      });
     }
   };
 
@@ -1728,16 +1724,20 @@ export const createTrackers = (deps: TrackersDeps) => {
       return staged;
     }
     if (!holdOf(staged.stages)) {
-      return refusal(400, "tracker-no-hold", noHoldWords(asked.tracker));
+      return problem(400, {
+        code: "tracker-no-hold",
+        detail: noHoldWords(asked.tracker),
+      });
     }
     const connection = connectionNamed(asked.connection);
     if (connection instanceof ElysiaStatus) {
       return connection;
     }
     if (appServiceOf(connection.service) !== asked.tracker) {
-      return otherKind(
-        `${asked.connection} is a ${connection.service} connection; ${TRACKER_NAMES[asked.tracker]} needs a ${asked.tracker} one.`
-      );
+      return problem(400, {
+        code: "tracker-connection-kind",
+        detail: `${asked.connection} is a ${connection.service} connection; ${TRACKER_NAMES[asked.tracker]} needs a ${asked.tracker} one.`,
+      });
     }
     const now = new Date();
     const draft: TrackerBindingRow = {
@@ -1810,11 +1810,10 @@ export const createTrackers = (deps: TrackersDeps) => {
         const { permissions, slug } =
           await deps.connections.githubAppPermissions(draft.connection);
         if (permissions.issues !== "write") {
-          return refusal(
-            400,
-            "tracker-app-reads-only",
-            connectionsWords.appReadsIssuesOnly(slug)
-          );
+          return problem(400, {
+            code: "tracker-app-reads-only",
+            detail: connectionsWords.appReadsIssuesOnly(slug),
+          });
         }
       }
       const target: TrackerTarget = await (await adapterOf(draft)).describe();
@@ -1856,11 +1855,10 @@ export const createTrackers = (deps: TrackersDeps) => {
       ? listed.projects.find((each) => each.id === asked.id)
       : listed.projects.find((each) => each.linked);
     if (asked && !chosen) {
-      return refusal(
-        400,
-        "tracker-github-project-unknown",
-        `${connection} reaches no open GitHub Project ${asked.id} for ${repo}: pick one it lists.`
-      );
+      return problem(400, {
+        code: "tracker-github-project-unknown",
+        detail: `${connection} reaches no open GitHub Project ${asked.id} for ${repo}: pick one it lists.`,
+      });
     }
     const onProject: Pick<
       TrackerBindingRow,
@@ -1889,9 +1887,10 @@ export const createTrackers = (deps: TrackersDeps) => {
       return connection;
     }
     if (appServiceOf(connection.service) !== "github") {
-      return otherKind(
-        `${name} is a ${connection.service} connection: GitHub Projects need a GitHub one.`
-      );
+      return problem(400, {
+        code: "tracker-connection-kind",
+        detail: `${name} is a ${connection.service} connection: GitHub Projects need a GitHub one.`,
+      });
     }
     try {
       const reachable: GithubProjectsView = await githubProjects(
@@ -1912,9 +1911,10 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
     const service = appServiceOf(connection.service);
     if (!service) {
-      return otherKind(
-        `${name} is a ${connection.service} connection: a tracker is GitHub Issues or Linear.`
-      );
+      return problem(400, {
+        code: "tracker-connection-kind",
+        detail: `${name} is a ${connection.service} connection: a tracker is GitHub Issues or Linear.`,
+      });
     }
     try {
       const reached: TrackerTarget[] =

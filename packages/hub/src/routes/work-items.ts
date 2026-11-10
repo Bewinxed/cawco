@@ -2,11 +2,11 @@
  * Work items and the landing gate: starting, waiting on, finishing and reading them.
  */
 
-import { Elysia, t, ValidationError } from "elysia";
+import { Elysia, problem, t, ValidationError } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 import { ProjectRefusal } from "../project-refusal";
-import { refusal } from "../refusal";
+
 import { BUDGET, LANDS } from "../tasks";
 import { firstValidationIssue } from "../validation-issue";
 import { workItemCalls } from "../work-item-calls";
@@ -14,6 +14,7 @@ import {
   WAIT_ITEM_LIMIT,
   WAIT_ITEM_MAX_MINUTES,
   WorkItemRefusal,
+  workItemProblem,
 } from "../work-item-state";
 import { SESSION_TITLE_DESCRIPTION } from "../work-items";
 import { workItemOut } from "../work-out";
@@ -77,23 +78,25 @@ export const workItemRoutes = (
         ({ params, body }) => {
           const why = "reason" in body ? { reason: body.reason.trim() } : body;
           if ("reason" in why && !why.reason) {
-            return refusal(
-              400,
-              "say-why-no-longer",
-              "Say why it is no longer owed."
-            );
+            return problem(400, {
+              code: "say-why-no-longer",
+              detail: "Say why it is no longer owed.",
+            });
           }
           try {
             const item = workItems.dismiss(params.id, why);
             return (
-              item ?? refusal(404, "no-work-item", `no work item ${params.id}`)
+              item ??
+              problem(404, {
+                code: "no-work-item",
+                detail: `no work item ${params.id}`,
+              })
             );
           } catch (error) {
-            return refusal(
-              409,
-              "work-item-not-dismissed",
-              error instanceof Error ? error.message : String(error)
-            );
+            return problem(409, {
+              code: "work-item-not-dismissed",
+              detail: error instanceof Error ? error.message : String(error),
+            });
           }
         }
       )
@@ -104,13 +107,16 @@ export const workItemRoutes = (
       .post("/api/work-items/:id/retry", async ({ params }) => {
         const item = workItems.item(params.id);
         if (!item) {
-          return refusal(404, "no-work-item", `no work item ${params.id}`);
+          return problem(404, {
+            code: "no-work-item",
+            detail: `no work item ${params.id}`,
+          });
         }
         const refused = await retryFromTray(item);
         return refused
-          ? refusal(409, "work-item-not-retried", refused)
+          ? problem(409, { code: "work-item-not-retried", detail: refused })
           : (workItems.summary(item.id) ??
-              refusal(404, "no-work-item", "gone"));
+              problem(404, { code: "no-work-item", detail: "gone" }));
       })
       // Delegation: one work item, in a new workspace or as the follow-up in
       // an existing one. The hub validates, files and spawns it all here —
@@ -157,13 +163,13 @@ export const workItemRoutes = (
                 first?.params?.requiredProperties?.[0] ??
                 first?.path.slice(1) ??
                 "";
-              return refusal(
-                400,
-                "title-required",
-                field === "title"
-                  ? `title is required: ${SESSION_TITLE_DESCRIPTION}`
-                  : `${field || "body"}: ${first?.message ?? error.message}`
-              );
+              return problem(400, {
+                code: "title-required",
+                detail:
+                  field === "title"
+                    ? `title is required: ${SESSION_TITLE_DESCRIPTION}`
+                    : `${field || "body"}: ${first?.message ?? error.message}`,
+              });
             }
           },
         },
@@ -185,13 +191,12 @@ export const workItemRoutes = (
               error instanceof Error ? error.message : String(error);
             // Anything that is not the hub's own refusal is the machine's:
             // offline, or git turning the checkout down.
-            return refusal(
+            return problem(
               error instanceof WorkItemRefusal ||
                 error instanceof ProjectRefusal
                 ? error.status
                 : 502,
-              "work-item-refused",
-              message
+              { code: "work-item-refused", detail: message }
             );
           }
         }
@@ -213,7 +218,10 @@ export const workItemRoutes = (
           ),
           error({ error }) {
             if (error instanceof ValidationError) {
-              return refusal(400, "wait-item-limit", WAIT_ITEM_LIMIT);
+              return problem(400, {
+                code: "wait-item-limit",
+                detail: WAIT_ITEM_LIMIT,
+              });
             }
           },
         },
@@ -236,11 +244,7 @@ export const workItemRoutes = (
               ),
             };
           } catch (error) {
-            return refusal(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              "work-item-refused",
-              error instanceof Error ? error.message : String(error)
-            );
+            return workItemProblem(error);
           }
         }
       )
@@ -279,13 +283,7 @@ export const workItemRoutes = (
           try {
             return { text: await workItems.finishItem(instanceId, finished) };
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return refusal(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              "work-item-refused",
-              message
-            );
+            return workItemProblem(error);
           }
         }
       )
@@ -316,7 +314,10 @@ export const workItemRoutes = (
             return calls.stop(body.from, body.instanceId);
           } catch (error) {
             if (error instanceof WorkItemRefusal) {
-              return refusal(error.status, "work-item-refused", error.message);
+              return problem(error.status, {
+                code: "work-item-refused",
+                detail: error.message,
+              });
             }
             throw error;
           }
@@ -346,20 +347,13 @@ export const workItemRoutes = (
           try {
             const text = workItems.withdrawQueued(body.from, body.target);
             return text === undefined
-              ? refusal(
-                  404,
-                  "no-queued-delegate",
-                  `no queued delegate ${body.target}`
-                )
+              ? problem(404, {
+                  code: "no-queued-delegate",
+                  detail: `no queued delegate ${body.target}`,
+                })
               : { text };
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return refusal(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              "work-item-refused",
-              message
-            );
+            return workItemProblem(error);
           }
         }
       )
@@ -367,7 +361,10 @@ export const workItemRoutes = (
         const item = workItems.item(params.id);
         return item
           ? workItemOut(item)
-          : refusal(404, "no-work-item", `no work item ${params.id}`);
+          : problem(404, {
+              code: "no-work-item",
+              detail: `no work item ${params.id}`,
+            });
       })
       // What the item's workspace holds on no remote now (workspaces.ts
       // `unlandedOf`), or why it could not be read: what `stop_delegate`
@@ -375,7 +372,11 @@ export const workItemRoutes = (
       .get("/api/work-items/:id/unlanded", hidden, async ({ params }) => {
         const read = await calls.unlandedOf(params.id);
         return (
-          read ?? refusal(404, "no-work-item", `no work item ${params.id}`)
+          read ??
+          problem(404, {
+            code: "no-work-item",
+            detail: `no work item ${params.id}`,
+          })
         );
       })
   );

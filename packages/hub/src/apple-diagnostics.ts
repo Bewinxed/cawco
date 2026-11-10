@@ -2,11 +2,10 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { DB_PATH } from "./config";
 import { hidden } from "./hidden";
-import { refusal } from "./refusal";
 
 /**
  * What the Apple app's MetricKit hands over: its diagnostic payloads (hangs,
@@ -228,11 +227,17 @@ export const appleDiagnosticsRoutes = () =>
       { ...hidden, query: t.Object({ format: t.Optional(t.Literal("text")) }) },
       async ({ params, query }) => {
         if (!ID.test(params.id)) {
-          return refusal(404, "no-such-diagnostic", "No such diagnostic.");
+          return problem(404, {
+            code: "no-such-diagnostic",
+            detail: "No such diagnostic.",
+          });
         }
         const file = Bun.file(join(DIR, `${params.id}.json`));
         if (!(await file.exists())) {
-          return refusal(404, "no-such-diagnostic", "No such diagnostic.");
+          return problem(404, {
+            code: "no-such-diagnostic",
+            detail: "No such diagnostic.",
+          });
         }
         const record = (await file.json()) as Stored;
         const stack = stackText(record.diagnostic);

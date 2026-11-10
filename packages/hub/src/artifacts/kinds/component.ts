@@ -18,9 +18,9 @@ import {
   type StoryOp,
 } from "@cawco/core/stage";
 import { pageHash } from "@cawco/preview/proxy";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
-import { refusal } from "../../refusal";
+
 import {
   COMPONENT_EXAMPLE,
   canvasProblem,
@@ -319,11 +319,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   ) => {
     const sheet = sheetOf(row);
     if (!sheet) {
-      return refusal(
-        409,
-        "artifact-sheet-not-sheet",
-        `${row.name} is a ${row.kind}: args and story are for a sheet.`
-      );
+      return problem(409, {
+        code: "artifact-sheet-not-sheet",
+        detail: `${row.name} is a ${row.kind}: args and story are for a sheet.`,
+      });
     }
     const file = join(sheet.dir, sheet.file);
     const edit = await deps.stageWrite(
@@ -467,15 +466,14 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
   const sheetAsked = (input: ArtifactInput) => {
     const asked = input.file === undefined ? [] : [input.file].flat();
     if (asked.length === 0) {
-      return refusal(
-        400,
-        "artifact-sheet-file-none",
-        `A component canvas takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`
-      );
+      return problem(400, {
+        code: "artifact-sheet-file-none",
+        detail: `A component canvas takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`,
+      });
     }
-    const problem = canvasProblem(input);
-    if (problem) {
-      return refusal(400, "artifact-sheet-unfit", problem);
+    const misfit = canvasProblem(input);
+    if (misfit) {
+      return problem(400, { code: "artifact-sheet-unfit", detail: misfit });
     }
     const said = ctx.askedOf(input);
     return said instanceof ElysiaStatus ? said : { asked, said };
@@ -544,7 +542,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const shown = await handOver(making, before, row);
     if (!(shown.started || before)) {
       discard(row);
-      return refusal(503, "artifact-sheet-unshown", shown.why);
+      return problem(503, {
+        code: "artifact-sheet-unshown",
+        detail: shown.why,
+      });
     }
     const owned = sheetOf(row);
     const drawn = await drawnReport(
@@ -667,11 +668,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
       ? sheetNow?.stories.find((one) => one.name === ask.story)
       : undefined;
     if (ask.story && !story) {
-      return refusal(
-        404,
-        "artifact-sheet-story-unknown",
-        `${row.name} has no story ${ask.story}; its stories are ${sheetNow?.stories.map((one) => one.name).join(", ") || "none"}.`
-      );
+      return problem(404, {
+        code: "artifact-sheet-story-unknown",
+        detail: `${row.name} has no story ${ask.story}; its stories are ${sheetNow?.stories.map((one) => one.name).join(", ") || "none"}.`,
+      });
     }
     return {
       ...base,
@@ -709,11 +709,10 @@ export const createComponentKind = (ctx: ComponentKindContext) => {
     const sheet = sheetOf(row);
     if (!sheet) {
       return Promise.resolve(
-        refusal(
-          409,
-          "artifact-verify-not-sheet",
-          `${row.name} is a ${row.kind}: verify is a component canvas's.`
-        )
+        problem(409, {
+          code: "artifact-verify-not-sheet",
+          detail: `${row.name} is a ${row.kind}: verify is a component canvas's.`,
+        })
       );
     }
     return deps.verify(requester, {

@@ -1,8 +1,7 @@
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import { CONTINUATION_CANCELLED } from "../continuations";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
 
 export const instancePreviewRoutes = ({
   closePreview,
@@ -26,22 +25,21 @@ export const instancePreviewRoutes = ({
         server?.timeout(request, 0);
         const row = await settledContinuation(params.id);
         if (!row) {
-          return refusal(
-            404,
-            "continuation-not-running",
-            "That continuation is not running."
-          );
+          return problem(404, {
+            code: "continuation-not-running",
+            detail: "That continuation is not running.",
+          });
         }
         if (row.stage === "started") {
           return outcomeOf(row);
         }
-        return refusal(
-          422,
-          "continuation-cancelled",
-          row.stage === "cancelled"
-            ? CONTINUATION_CANCELLED
-            : (row.error ?? "the continuation failed")
-        );
+        return problem(422, {
+          code: "continuation-cancelled",
+          detail:
+            row.stage === "cancelled"
+              ? CONTINUATION_CANCELLED
+              : (row.error ?? "the continuation failed"),
+        });
       }
     )
     // A session's Open items section, built now from its records

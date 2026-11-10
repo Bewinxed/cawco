@@ -25,7 +25,7 @@ import {
 } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import type { AttemptStart } from "@cawco/core/task-views";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import { BUILD_TITLE, type DesignOffers } from "./design-offers";
 import type { JevTasks } from "./jev-tasks";
@@ -44,7 +44,7 @@ import {
   taskResultWords,
   todoWrittenWords,
 } from "./presenters/tasks";
-import { type RefusalOf, type Refused, refusal } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
 import { sessionActor, type Tasks, type TaskView } from "./tasks";
@@ -74,7 +74,11 @@ export interface TaskToolContext {
    * id (artifacts/service.ts `named`), or its refusal, said again across
    * the import cycle (this file and the artifacts' deps).
    */
-  artifactNamed?: (asked: string) => string | RefusalOf;
+  artifactNamed?: (
+    asked: string
+  ) =>
+    | string
+    | ReturnType<typeof problem<number, { code: string; detail: string }>>;
   /**
    * Files "Build the design system" in the hub's words (design-offers.ts
    * `fileBuild`): a `task_create` with that title gives only its stage.
@@ -101,13 +105,13 @@ export interface TaskToolContext {
     projectId: string,
     ref: string,
     parent: InstanceRow
-  ) => Promise<AttemptStart | Refused>;
+  ) => Promise<AttemptStart | AnyProblem>;
   /** Starts an attempt at a task, reporting to `parent` (dispatch.ts); without it task_start refuses. */
   startAttempt?: (
     projectId: string,
     ref: string,
     parent: InstanceRow
-  ) => Promise<AttemptStart | Refused>;
+  ) => Promise<AttemptStart | AnyProblem>;
   /** A plan step's wait as this session writes it, read as a task's wait is (task-waits.ts `readWait`) and kept as a file keeps it. */
   stepWait?: (written: string) => ReturnType<Tasks["keptWait"]>;
   tasks: Tasks;
@@ -121,7 +125,7 @@ export interface TaskToolContext {
   writePlan?: (
     row: InstanceRow,
     written: { steps?: WrittenStep[]; spec?: string }
-  ) => Promise<(SessionPlan & { personChanged?: string }) | Refused>;
+  ) => Promise<(SessionPlan & { personChanged?: string }) | AnyProblem>;
 }
 
 /**
@@ -138,7 +142,11 @@ const resultArtifact = (
     name?: string;
     primary?: boolean;
   },
-  artifactNamed: (asked: string) => string | RefusalOf
+  artifactNamed: (
+    asked: string
+  ) =>
+    | string
+    | ReturnType<typeof problem<number, { code: string; detail: string }>>
 ) => {
   const shown = {
     ...(written.name ? { name: written.name } : {}),
@@ -147,11 +155,10 @@ const resultArtifact = (
   const need = (value: string | undefined, field: string) =>
     value?.trim()
       ? value.trim()
-      : refusal(
-          400,
-          "task-result-artifact-unnamed",
-          `A ${written.kind} artifact names its ${field}.`
-        );
+      : problem(400, {
+          code: "task-result-artifact-unnamed",
+          detail: `A ${written.kind} artifact names its ${field}.`,
+        });
   if (written.kind === "link") {
     const url = need(written.url, "url");
     if (url instanceof ElysiaStatus) {
@@ -183,7 +190,11 @@ const resultArtifact = (
 /** A result's artifacts as `task_result` takes them ({@link resultArtifact}); the first refusal when one names nothing. */
 const resultArtifacts = (
   written: Parameters<typeof resultArtifact>[0][],
-  artifactNamed: (asked: string) => string | RefusalOf
+  artifactNamed: (
+    asked: string
+  ) =>
+    | string
+    | ReturnType<typeof problem<number, { code: string; detail: string }>>
 ) => {
   const artifacts: ResultArtifact[] = [];
   for (const one of written) {
@@ -287,11 +298,10 @@ const stepsOf = async (
   for (const [index, step] of written.entries()) {
     const depth = step.depth ?? 0;
     if (depth > counts.length) {
-      return refusal(
-        400,
-        "todo-step-too-deep",
-        `Step ${index + 1} (“${step.content}”) is at depth ${depth}, deeper than one past the step before it.`
-      );
+      return problem(400, {
+        code: "todo-step-too-deep",
+        detail: `Step ${index + 1} (“${step.content}”) is at depth ${depth}, deeper than one past the step before it.`,
+      });
     }
     counts.length = depth + 1;
     counts[depth] = (counts[depth] ?? 0) + 1;
@@ -343,22 +353,21 @@ export const groupParameter = () =>
  * definitions for discovery, whose handlers refuse.
  */
 export function taskTools(context: TaskToolContext | undefined) {
-  /** The refusal of a call in discovery, where the tools are listed with nothing to act through. */
-  const discovery = () =>
-    refusal(409, "task-tools-discovery", "Discovery cannot execute tools");
-
   /** The calling session's project, its tasks and how it acts on them; refused in discovery, and for a session in no project. */
   const scope = () => {
     if (!context) {
-      return discovery();
+      return problem(409, {
+        code: "task-tools-discovery",
+        detail: "Discovery cannot execute tools",
+      });
     }
     const { projectId } = context.actor;
     if (!projectId) {
-      return refusal(
-        409,
-        "task-session-no-project",
-        "This session belongs to no project, so it has no tasks. Start the session in one of a project's places."
-      );
+      return problem(409, {
+        code: "task-session-no-project",
+        detail:
+          "This session belongs to no project, so it has no tasks. Start the session in one of a project's places.",
+      });
     }
     return {
       projectId,
@@ -411,25 +420,22 @@ export function taskTools(context: TaskToolContext | undefined) {
       const named = asked ?? own;
       return named
         ? named
-        : refusal(
-            400,
-            "task-tool-unnamed",
-            `Name the task: ${name}({ task: "tsk-12", … }).`
-          );
+        : problem(400, {
+            code: "task-tool-unnamed",
+            detail: `Name the task: ${name}({ task: "tsk-12", … }).`,
+          });
     }
     if (!own) {
-      return refusal(
-        409,
-        "task-tool-no-own-task",
-        `${name} works on your work item's task, and your work item has none. Say what you did in finish_item instead.`
-      );
+      return problem(409, {
+        code: "task-tool-no-own-task",
+        detail: `${name} works on your work item's task, and your work item has none. Say what you did in finish_item instead.`,
+      });
     }
     return asked !== undefined && normaliseTaskRef(asked) !== own
-      ? refusal(
-          403,
-          "task-tool-not-own",
-          `You can use ${name} only on ${own}, your work item's task.`
-        )
+      ? problem(403, {
+          code: "task-tool-not-own",
+          detail: `You can use ${name} only on ${own}, your work item's task.`,
+        })
       : own;
   };
 
@@ -439,7 +445,10 @@ export function taskTools(context: TaskToolContext | undefined) {
     spec: string | undefined
   ) => {
     if (!context?.writePlan) {
-      return discovery();
+      return problem(409, {
+        code: "task-tools-discovery",
+        detail: "Discovery cannot execute tools",
+      });
     }
     const written = steps
       ? await stepsOf(
@@ -511,11 +520,11 @@ export function taskTools(context: TaskToolContext | undefined) {
             : { ...task, history: changes.events };
         }
         if (history) {
-          return refusal(
-            400,
-            "task-history-unnamed",
-            'Name the task whose history you want: task_read({ id: "tsk-12", history: true }).'
-          );
+          return problem(400, {
+            code: "task-history-unnamed",
+            detail:
+              'Name the task whose history you want: task_read({ id: "tsk-12", history: true }).',
+          });
         }
         const [list, stages] = await Promise.all([
           tasks.list(projectId, filter),
@@ -645,11 +654,11 @@ export function taskTools(context: TaskToolContext | undefined) {
         }
         const { projectId, tasks, actor } = scoped;
         if (reason !== undefined && stage === undefined) {
-          return refusal(
-            400,
-            "task-reason-without-stage",
-            "A reason goes with a stage move: give `stage` too, or leave `reason` out."
-          );
+          return problem(400, {
+            code: "task-reason-without-stage",
+            detail:
+              "A reason goes with a stage move: give `stage` too, or leave `reason` out.",
+          });
         }
         const fields = Object.values(patch).some(
           (value) => value !== undefined
@@ -732,11 +741,10 @@ export function taskTools(context: TaskToolContext | undefined) {
         }
         const { projectId } = scoped;
         if (!context?.startAttempt) {
-          return refusal(
-            503,
-            "task-attempts-off",
-            "Attempts cannot be started on this hub."
-          );
+          return problem(503, {
+            code: "task-attempts-off",
+            detail: "Attempts cannot be started on this hub.",
+          });
         }
         return await context.startAttempt(projectId, id, context.actor);
       },
@@ -753,11 +761,10 @@ export function taskTools(context: TaskToolContext | undefined) {
         }
         const { projectId } = scoped;
         if (!context?.retryAttempt) {
-          return refusal(
-            503,
-            "task-retries-off",
-            "Attempts cannot be retried on this hub."
-          );
+          return problem(503, {
+            code: "task-retries-off",
+            detail: "Attempts cannot be retried on this hub.",
+          });
         }
         return await context.retryAttempt(projectId, id, context.actor);
       },
@@ -790,11 +797,11 @@ export function taskTools(context: TaskToolContext | undefined) {
             task !== undefined ||
             Object.values(changes).some((value) => value !== undefined)
           ) {
-            return refusal(
-              400,
-              "todo-write-mixed",
-              "Write your own plan (steps, spec) and a task's to-dos in separate calls."
-            );
+            return problem(400, {
+              code: "todo-write-mixed",
+              detail:
+                "Write your own plan (steps, spec) and a task's to-dos in separate calls.",
+            });
           }
           return await ownPlan(steps, spec);
         }
@@ -881,11 +888,11 @@ export function taskTools(context: TaskToolContext | undefined) {
         const workItemId = context?.actor.workItemId;
         const own = context?.workItemTask ?? null;
         if (!(workItemId && own)) {
-          return refusal(
-            409,
-            "task-result-no-attempt",
-            "task_result hands in an attempt at a task, and this session works none. Say what you did in finish_item instead."
-          );
+          return problem(409, {
+            code: "task-result-no-attempt",
+            detail:
+              "task_result hands in an attempt at a task, and this session works none. Say what you did in finish_item instead.",
+          });
         }
         const handed =
           artifacts === undefined

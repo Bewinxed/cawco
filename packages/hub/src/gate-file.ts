@@ -69,9 +69,9 @@ import type {
   ProjectGate,
   RunsOnCapability,
 } from "@cawco/core/project-gate";
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import { readFolderFile } from "./project-folder";
-import { refusal } from "./refusal";
+
 import { capabilitiesOf, RUNS_ON_CAPABILITIES, runsOnWords } from "./runs-on";
 
 /** The file in the project's folder that declares its gate. */
@@ -271,9 +271,9 @@ const indentedLine = (read: BlockRead, text: string): void => {
   if (read.inCawEdits) {
     return;
   }
-  const problem = optionLine(text, read.steps.at(-1), read.seen);
-  if (problem) {
-    read.problems.push(problem);
+  const misfit = optionLine(text, read.steps.at(-1), read.seen);
+  if (misfit) {
+    read.problems.push(misfit);
   }
 };
 
@@ -394,11 +394,10 @@ export const projectShip = async (projectId: string) => {
 export const gateRoutes = (projectExists: (id: string) => boolean) =>
   new Elysia().get("/api/projects/:id/gate", async ({ params }) => {
     if (!projectExists(params.id)) {
-      return refusal(
-        404,
-        "gate-project-unknown",
-        `The hub keeps no project ${params.id}.`
-      );
+      return problem(404, {
+        code: "gate-project-unknown",
+        detail: `The hub keeps no project ${params.id}.`,
+      });
     }
     const gate = await projectGate(params.id);
     if (gate instanceof ElysiaStatus) {
