@@ -6539,7 +6539,7 @@ export const createServer = (
         ws.close(4000, "admitted: connect again with this machine's key");
       },
       close: (reason) => ws.close(4403, reason),
-      refuse: (reason) => refuseSocket(ws, message.machineId, reason),
+      turnAway: (reason) => refuseSocket(ws, message.machineId, reason),
     });
     sendFrame(ws, {
       verb: "admission",
