@@ -20984,31 +20984,35 @@ export const createServer = (
   });
 
   /**
-   * What an artifact's own tab shows: its artifact, whatever its session's
-   * panel shows. The panel's own target while the panel shows it (so a new
-   * open there reloads the tab too); else the artifact as it stands, at a
-   * revision of its own that moves with each of its revisions and with the
-   * fleet's preview mode, whose switch moves every origin: a decision page's
-   * embeds are named in the page as it was served, so the tab loads it again
-   * (the panel's own target moves then too, `republish`). Null once it is
-   * gone.
+   * What an artifact's own tab shows: its artifact as it stands, whatever
+   * its session's panel shows, opens, shows again or closes. A tab outlives
+   * the page it was opened from (the owner, 2026-11-10: "if i open a session
+   * in an external tab, then close the sheet in the original page, the
+   * external page stops working"): it once took the panel's own target
+   * while the panel showed its artifact, so the panel's Close moved the
+   * tab's revision and its frame loaded again, dropping whatever the person
+   * had done there. Its revision moves only with what its frame loads: the
+   * fleet's preview mode, whose switch moves every origin (a decision
+   * page's embeds are named in the page as it was served, so the tab loads
+   * it again; the panel's own target moves then too, `republish`), and a
+   * machine's artifact's own revision, which moves with its source (made
+   * again on another server or folder). What the hub serves (a page, a
+   * canvas, a browser) follows its doc in place: new HTML morphs into every
+   * open view of it (artifacts service `pageChanged`), so it never reloads
+   * the tab. Null once it is gone.
    */
-  const tabTarget = (
-    instanceId: string,
-    artifactId: string
-  ): PreviewTarget | null => {
-    const shown = previewTargets.get(instanceId);
-    if (shown?.artifact.id === artifactId) {
-      return shown;
-    }
+  const tabTarget = (artifactId: string): PreviewTarget | null => {
     const row = db.artifacts.get(artifactId);
-    const mode = previewListeners.settings();
-    return row
-      ? {
-          artifact: shownArtifact(row),
-          revision: `${row.id}:${row.revision}:${mode.mode === "host" ? mode.pattern : mode.mode}`,
-        }
-      : null;
+    if (!row) {
+      return null;
+    }
+    const settings = previewListeners.settings();
+    const mode = settings.mode === "host" ? settings.pattern : settings.mode;
+    const served = "page" in row.source ? "" : `:${row.revision}`;
+    return {
+      artifact: shownArtifact(row),
+      revision: `${row.id}${served}:${mode}`,
+    };
   };
 
   /**
@@ -21019,7 +21023,7 @@ export const createServer = (
    */
   const artifactSessions = createArtifactSessions(
     (instanceId, artifactId): ArtifactSessionFrame => {
-      const target = tabTarget(instanceId, artifactId);
+      const target = tabTarget(artifactId);
       const [row] = db.listedBoardInstancesByIds([instanceId]);
       const key = target ? browserKeyOf(target) : null;
       // The session's open browser ask for that browser: by its artifact or its key.
