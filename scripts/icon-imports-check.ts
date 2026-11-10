@@ -14,6 +14,9 @@
  */
 import { resolve } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["./"];
+
 const ROOT = resolve(import.meta.dir, "..");
 const SPECIFIER = "['\"](~icons|virtual:icons)/";
 

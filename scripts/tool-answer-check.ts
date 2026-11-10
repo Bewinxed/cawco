@@ -23,6 +23,9 @@
  */
 import { Glob } from "bun";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/", "packages/", "scripts/"];
+
 const ROOT = new URL("..", import.meta.url).pathname;
 
 /** Where the door may be named: the two clients, the pi bridge that hands the model the answer as given, the workspace's door that forwards it, the hub's route, and the route table's types (core hub-routes.gen.ts), which key it by its path. */

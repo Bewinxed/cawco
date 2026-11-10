@@ -26,6 +26,9 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/agent/src/", "packages/core/src/"];
+
 const HUB = "ws://hub.probe.test/ws";
 const HUB_GIT = "http://hub.probe.test/git/";
 const OUTSIDE = "https://forge.probe.test/o'brien/re!po.git";

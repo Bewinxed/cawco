@@ -23,6 +23,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["./"];
+
 /** The wall itself (its sending half, which signal.ts re-exports), and this check, which names what it looks for. */
 const OWN = new Set([
   "packages/core/src/signal-wall.ts",

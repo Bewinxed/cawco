@@ -13,6 +13,7 @@
  * Run by `bun run check` (scripts/check.ts); it fails on any landing that
  * differs.
  */
+
 /** The rows the check asks of, in the shape `rowAt` reads (dashboard transcript/rows.ts `Row`). */
 interface Stored {
   id: string;
@@ -22,6 +23,12 @@ type Row =
   | { kind: "single"; key: string; message: Stored; grouped: false }
   | { kind: "tools"; key: string; messages: Stored[] }
   | { kind: "live"; key: string };
+
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/src/lib/cawco/transcript/open-at.svelte.ts",
+  "apps/dashboard/src/lib/cawco/transcript/rows.ts",
+];
 
 // The module's one SvelteKit import, stood in for: these rows are read off
 // the server, as `browser` false says. It is imported by its path at run

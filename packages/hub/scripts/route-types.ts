@@ -22,6 +22,9 @@ import { join, relative, resolve } from "node:path";
 import type { SchemaObject } from "openapi-typescript";
 import { hubInProcess } from "./hub-in-process";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/", "tsconfig.base.json"];
+
 const check = process.argv.includes("--check");
 const ROOT = resolve(import.meta.dir, "../../..");
 const OUT = join(ROOT, "packages/core/src/hub-routes.gen.ts");

@@ -96,7 +96,7 @@ const specifiersOf = (source: ts.SourceFile): Import[] => {
 };
 
 /** The imports of `file` (its text `text`), each resolved within `present`. */
-const importsOf = (
+export const importsOf = (
   file: string,
   text: string,
   present: ReadonlySet<string>

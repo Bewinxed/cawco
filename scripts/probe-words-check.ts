@@ -47,6 +47,14 @@ import { join, relative } from "node:path";
 import ts from "typescript";
 import { PRODUCT_SOURCES, ROOT } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/*/src/",
+  "packages/*/src/",
+  "scripts/probe-kit/",
+  "scripts/probe-words.baseline.json",
+];
+
 const WORDS = join(ROOT, "packages/core/src/words");
 const KIT = join(ROOT, "scripts/probe-kit");
 const DASHBOARD = join(ROOT, "apps/dashboard");

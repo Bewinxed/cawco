@@ -7,8 +7,12 @@
  * table lacks a refusal. `--tools <role>` lists that
  * role's tools by their own tokens too, largest first: where a cut pays.
  */
+
 import { measureRoles, unroutedTools } from "../src/role-budgets";
 import { missingRefusals, REFUSALS } from "../src/skill-refusals";
+
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["packages/"];
 
 const asked = process.argv.indexOf("--tools");
 const listed = asked === -1 ? undefined : process.argv[asked + 1];

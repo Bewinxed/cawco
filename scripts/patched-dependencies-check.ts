@@ -20,6 +20,9 @@
 import { readdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["package.json", "bun.lock", "patches/"];
+
 const ROOT = join(import.meta.dir, "..");
 const manifest = (await import(join(ROOT, "package.json"))) as {
   default: { patchedDependencies?: Record<string, string> };

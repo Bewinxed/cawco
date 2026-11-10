@@ -23,6 +23,13 @@
  */
 import { resolve } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/src/",
+  "packages/agent/src/canvas-host/",
+  "packages/hub/skills/decision-page/kit/",
+];
+
 const ROOT = resolve(import.meta.dir, "..");
 const TOKENS = "apps/dashboard/src/lib/tokens/tokens.css";
 /** Where the house draws: the dashboard, the canvas page, the decision-page kit. */

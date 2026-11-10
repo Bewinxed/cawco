@@ -9,9 +9,18 @@
  * `--guard <pid>`: the guard it starts, in a session of its own, which puts
  * the link back once `pid` has gone.
  */
+
 import { listedPid } from "../packages/core/src/signal";
 import { guardModules, withRealModules } from "./lib/real-modules";
 import { runTied } from "./lib/tied-child";
+
+// What Biome reads that no import reaches: its config and plugins, and the
+// stylesheet its CSS rules resolve tokens against.
+export const checkReads = [
+  "biome.jsonc",
+  "scripts/lint/**/*.grit",
+  "apps/dashboard/src/app.css",
+];
 
 const args = process.argv.slice(2);
 

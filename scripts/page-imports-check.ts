@@ -15,8 +15,12 @@
  * Prints each forbidden file the page reaches with the chain that reaches
  * it; exits 1 on any.
  */
+
 import { importGraph } from "./lib/import-graph";
 import { repoFiles } from "./lib/repo-files";
+
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["apps/dashboard/src/"];
 
 const SRC = "apps/dashboard/src/";
 const CODE = /\.(?:svelte|ts|js|mjs)$/u;

@@ -40,6 +40,9 @@ import { join } from "node:path";
 import { hubInProcess } from "../packages/hub/scripts/hub-in-process";
 import { ROOT, repoFiles } from "./lib/repo-files";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["**/*.sh", "packages/", "mocks/"];
+
 /** An expansion's stand-in in a word's text. */
 const SUB = "\u0000";
 

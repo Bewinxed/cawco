@@ -63,6 +63,13 @@ import {
   withoutBridge,
 } from "./wire-compat";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "packages/",
+  "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/",
+  "tsconfig.base.json",
+];
+
 const check = process.argv.includes("--check");
 // Before the hub and the program are built: a check whose inputs are the
 // ones it last passed with has nothing new to find (openapi-inputs.ts).

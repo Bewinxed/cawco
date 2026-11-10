@@ -49,6 +49,12 @@ import { dirname, join, relative, resolve } from "node:path";
 import { parse } from "svelte/compiler";
 import { runSvelteCheck } from "./svelte-sources";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/src/",
+  "apps/dashboard/scripts/fixtures/teardown-callback/",
+];
+
 const DERIVED = /^\$derived(?:\.by)?$/u;
 const RUNES_MODULE = /\.svelte(?:\.[jt]s)?$/u;
 /** The markup's blocks: each pauses and goes on its own, the component standing. */
