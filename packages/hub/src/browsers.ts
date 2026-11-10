@@ -65,11 +65,11 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { SHIELD_WORDS } from "@cawco/core/words/browser";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
-import { refusal, StatusRefusal } from "./refusal";
+import { refusal } from "./refusal";
 import type { RelayCall } from "./stream-relay";
 
 /** How a take-over came to end, as the hub's log says it. */
@@ -93,11 +93,6 @@ const RELAY_TTL_MS = 7 * DAY_MS;
 
 /** What a machine says of a browser now, kept from its latest frame (core `BrowserRow`). */
 export type LiveBrowserFacts = Pick<BrowserRow, "why" | "progress" | "origin">;
-
-/** A refusal the routes answer with its status and the sentence. */
-export class BrowserRefusal extends StatusRefusal<
-  400 | 403 | 404 | 409 | 503
-> {}
 
 export interface BrowsersDeps {
   /** The browser asks waiting on the person (browser-tools.ts), made after this. */
@@ -136,18 +131,24 @@ export const answered = <T>(
   read: Awaited<ReturnType<RelayCall>>,
   machine: string,
   what: string
-): T => {
+) => {
   if (read.kind === "unanswered") {
-    throw new BrowserRefusal(
-      503,
-      read.reason === "dead"
-        ? `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`
-        : `${machine}'s browser did not ${what} in time; it may still be at it there.`
-    );
+    return read.reason === "dead"
+      ? refusal(
+          503,
+          "browser-machine-away",
+          `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`
+        )
+      : refusal(
+          503,
+          "browser-machine-late",
+          `${machine}'s browser did not ${what} in time; it may still be at it there.`
+        );
   }
   if (!read.value.ok) {
-    throw new BrowserRefusal(
+    return refusal(
       409,
+      "browser-machine-refused",
       read.value.error ?? `${machine}'s browser did not ${what}.`
     );
   }
@@ -224,7 +225,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
   };
 
   /** The machine a route means: the one named, else the only one with `key`. */
-  const machineOf = (key: BrowserKey, named: string | undefined): string => {
+  const machineOf = (key: BrowserKey, named: string | undefined) => {
     if (named) {
       return named;
     }
@@ -233,12 +234,17 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     if (rows.length === 1 && only) {
       return only.machineId;
     }
-    throw new BrowserRefusal(
-      rows.length === 0 ? 404 : 409,
-      rows.length === 0
-        ? `No machine has reported the browser ${key}: name its machine.`
-        : `The browser ${key} runs on ${rows.length} machines: name one.`
-    );
+    return rows.length === 0
+      ? refusal(
+          404,
+          "browser-unreported",
+          `No machine has reported the browser ${key}: name its machine.`
+        )
+      : refusal(
+          409,
+          "browser-machine-unnamed",
+          `The browser ${key} runs on ${rows.length} machines: name one.`
+        );
   };
 
   /** Every dashboard told the fleet's browsers as they stand now: after each change of any. */
@@ -251,15 +257,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     told();
   };
 
-  const shield = async (
-    machineId: string,
-    args: BrowserShieldArgs
-  ): Promise<BrowserRow> => {
+  const shield = async (machineId: string, args: BrowserShieldArgs) => {
     const row = answered<BrowserRow>(
       await deps.call(machineId, BROWSER_SHIELD, [args], BROWSER_CALL_MS),
       deps.machineName(machineId),
       "be taken over"
     );
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     keep(machineId, row);
     return row;
   };
@@ -271,11 +277,16 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     }
     const ask = deps.asks().get(requestId);
     if (!ask) {
-      throw new BrowserRefusal(404, "That browser ask is no longer open.");
+      return refusal(
+        404,
+        "browser-ask-closed",
+        "That browser ask is no longer open."
+      );
     }
     if (ask.key !== key) {
-      throw new BrowserRefusal(
+      return refusal(
         400,
+        "browser-ask-other",
         `That browser ask is about ${ask.key}, not ${key}.`
       );
     }
@@ -330,6 +341,51 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       told();
     }
     deps.asks().handedBack(machineId, key, origin, requestId);
+  };
+
+  /** Where a take-over of `key` happens: the ask it answers, its session and its machine; refused as {@link askOf} and {@link machineOf} refuse. */
+  const takeoverAt = (
+    key: BrowserKey,
+    asked: { instanceId?: string; machineId?: string; requestId?: string }
+  ) => {
+    const ask = askOf(key, asked.requestId);
+    if (ask instanceof ElysiaStatus) {
+      return ask;
+    }
+    const session = deps.instance(ask?.instanceId ?? asked.instanceId ?? "");
+    const machineId =
+      ask?.machineId ?? machineOf(key, asked.machineId ?? session?.machineId);
+    if (machineId instanceof ElysiaStatus) {
+      return machineId;
+    }
+    return { ask, machineId, session };
+  };
+
+  /** Browser `row` of a project being forgotten handed back when held and stopped; the forget's refusal when it isn't. */
+  const stopKept = async (key: BrowserKey, row: StoredBrowser) => {
+    const unstopped = (status: number, why: string) =>
+      refusal(
+        status,
+        "browser-not-stopped",
+        `Its browser on ${deps.machineName(row.machineId)} wasn't stopped: ${why} The project is kept; Forget tries again.`
+      );
+    try {
+      const back = row.takeover
+        ? await browsers.handback(key, row.machineId)
+        : undefined;
+      const stopped =
+        back instanceof ElysiaStatus
+          ? back
+          : await browsers.stop(key, row.machineId);
+      if (stopped instanceof ElysiaStatus) {
+        return unstopped(stopped.status, stopped.response.detail);
+      }
+    } catch (error) {
+      return unstopped(
+        503,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
   };
 
   const browsers = {
@@ -406,12 +462,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
      * row (and every take-over) is what the machine holds now, not what the
      * hub kept while it was away.
      */
-    async connected(machineId: string): Promise<void> {
+    async connected(machineId: string) {
       const frame = answered<BrowserFrame>(
         await deps.call(machineId, BROWSER_ROWS, [], BROWSER_CALL_MS),
         deps.machineName(machineId),
         "say what it runs"
       );
+      if (frame instanceof ElysiaStatus) {
+        return frame;
+      }
       browsers.heard(machineId, frame);
     },
 
@@ -429,11 +488,12 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         /** The person's neko session, once their view has one: control is given to it. */
         viewer?: string;
       }
-    ): Promise<{ artifactId: string | null; row: BrowserRow }> {
-      const ask = askOf(key, asked.requestId);
-      const session = deps.instance(ask?.instanceId ?? asked.instanceId ?? "");
-      const machineId =
-        ask?.machineId ?? machineOf(key, asked.machineId ?? session?.machineId);
+    ) {
+      const at = takeoverAt(key, asked);
+      if (at instanceof ElysiaStatus) {
+        return at;
+      }
+      const { ask, machineId, session } = at;
       const workspaceId = session ? deps.workspaceOf(session) : undefined;
       // Sent again (a viewer's neko session now known): the peers were told.
       const held = !!db.browsers.get(machineId, key)?.takeover;
@@ -449,6 +509,9 @@ export const createBrowsers = (deps: BrowsersDeps) => {
           : {}),
         ...(asked.viewer ? { viewer: asked.viewer } : {}),
       });
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       if (asked.requestId) {
         deps.asks().taken(asked.requestId);
       }
@@ -463,11 +526,11 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     },
 
     /** The person hands `key` back: the ask's call answers with the page's origin. */
-    async handback(
-      key: BrowserKey,
-      named: string | undefined
-    ): Promise<BrowserHandback> {
+    async handback(key: BrowserKey, named: string | undefined) {
       const machineId = machineOf(key, named);
+      if (machineId instanceof ElysiaStatus) {
+        return machineId;
+      }
       const back = answered<BrowserHandback>(
         await deps.call(
           machineId,
@@ -478,15 +541,18 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         deps.machineName(machineId),
         "be handed back"
       );
+      if (back instanceof ElysiaStatus) {
+        return back;
+      }
       ended(machineId, key, back.origin, back.requestId);
       return back;
     },
 
-    async start(
-      key: BrowserKey,
-      named: string | undefined
-    ): Promise<BrowserRow> {
+    async start(key: BrowserKey, named: string | undefined) {
       const machineId = machineOf(key, named);
+      if (machineId instanceof ElysiaStatus) {
+        return machineId;
+      }
       const relay = deps.mint(`browser:${key}`, RELAY_TTL_MS);
       const row = answered<BrowserRow>(
         await deps.call(
@@ -498,24 +564,33 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         deps.machineName(machineId),
         "start"
       );
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       keep(machineId, row);
       return row;
     },
 
     /** Stops `key`, handed back first when the person holds it. */
-    async stop(
-      key: BrowserKey,
-      named: string | undefined
-    ): Promise<BrowserRow | null> {
+    async stop(key: BrowserKey, named: string | undefined) {
       const machineId = machineOf(key, named);
+      if (machineId instanceof ElysiaStatus) {
+        return machineId;
+      }
       if (db.browsers.get(machineId, key)?.takeover) {
-        await browsers.handback(key, machineId);
+        const back = await browsers.handback(key, machineId);
+        if (back instanceof ElysiaStatus) {
+          return back;
+        }
       }
       const row = answered<BrowserRow | null>(
         await deps.call(machineId, BROWSER_STOP, [{ key }], BROWSER_CALL_MS),
         deps.machineName(machineId),
         "stop"
       );
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       if (row) {
         keep(machineId, row);
       }
@@ -526,19 +601,26 @@ export const createBrowsers = (deps: BrowsersDeps) => {
      * Removes `key` on its machine: stopped, its profile (its sign-ins)
      * deleted, its row gone. Refused while the person holds it.
      */
-    async remove(key: BrowserKey, named: string | undefined): Promise<void> {
+    async remove(key: BrowserKey, named: string | undefined) {
       const machineId = machineOf(key, named);
+      if (machineId instanceof ElysiaStatus) {
+        return machineId;
+      }
       if (db.browsers.get(machineId, key)?.takeover) {
-        throw new BrowserRefusal(
+        return refusal(
           409,
+          "browser-held",
           "You have control of this browser now. Hand it back first, then forget its sign-ins."
         );
       }
-      answered<unknown>(
+      const removed = answered<null>(
         await deps.call(machineId, BROWSER_REMOVE, [{ key }], BROWSER_CALL_MS),
         deps.machineName(machineId),
         "be removed"
       );
+      if (removed instanceof ElysiaStatus) {
+        return removed;
+      }
       db.browsers.remove(machineId, key);
       live.delete(liveKey(machineId, key));
       told();
@@ -552,24 +634,15 @@ export const createBrowsers = (deps: BrowsersDeps) => {
      * stop. The first that can't be stopped is the forget's refusal, the
      * project kept.
      */
-    async forgetProject(projectId: string): Promise<void> {
+    async forgetProject(projectId: string) {
       const key: BrowserKey = `project:${projectId}`;
       for (const row of db.browsers.list()) {
         if (row.key !== key || RESTING.has(row.state)) {
           continue;
         }
-        try {
-          if (row.takeover) {
-            await browsers.handback(key, row.machineId);
-          }
-          await browsers.stop(key, row.machineId);
-        } catch (error) {
-          // biome-ignore lint/style/useErrorCause: the cause rides the refusal's options, its third argument.
-          throw new BrowserRefusal(
-            error instanceof BrowserRefusal ? error.status : 503,
-            `Its browser on ${deps.machineName(row.machineId)} wasn't stopped: ${error instanceof Error ? error.message : String(error)} The project is kept; Forget tries again.`,
-            { cause: error }
-          );
+        const stopped = await stopKept(key, row);
+        if (stopped) {
+          return stopped;
         }
       }
     },
@@ -588,23 +661,11 @@ export const createBrowsers = (deps: BrowsersDeps) => {
 
 export type Browsers = ReturnType<typeof createBrowsers>;
 
-const keyOf = (raw: string): BrowserKey => {
+const keyOf = (raw: string) => {
   const key = decodeURIComponent(raw);
-  if (!isBrowserKey(key)) {
-    throw new BrowserRefusal(400, `${key} is no browser key.`);
-  }
-  return key;
-};
-
-const run = async <T>(work: () => Promise<T> | T) => {
-  try {
-    return await work();
-  } catch (error) {
-    if (error instanceof BrowserRefusal) {
-      return refusal(error.status, "browser-refused", error.message);
-    }
-    throw error;
-  }
+  return isBrowserKey(key)
+    ? key
+    : refusal(400, "browser-key-unfit", `${key} is no browser key.`);
 };
 
 const machineBody = t.Object({
@@ -625,33 +686,50 @@ export const browserRoutes = (browsers: Browsers) =>
           viewer: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
         }),
       },
-      ({ params, body }) =>
-        run(() => browsers.takeover(keyOf(params.key), body))
+      ({ params, body }) => {
+        const key = keyOf(params.key);
+        return key instanceof ElysiaStatus ? key : browsers.takeover(key, body);
+      }
     )
     .post(
       "/api/browsers/:key/handback",
       { body: machineBody },
-      ({ params, body }) =>
-        run(() => browsers.handback(keyOf(params.key), body.machineId))
+      ({ params, body }) => {
+        const key = keyOf(params.key);
+        return key instanceof ElysiaStatus
+          ? key
+          : browsers.handback(key, body.machineId);
+      }
     )
     .post(
       "/api/browsers/:key/start",
       { body: machineBody },
-      ({ params, body }) =>
-        run(() => browsers.start(keyOf(params.key), body.machineId))
+      ({ params, body }) => {
+        const key = keyOf(params.key);
+        return key instanceof ElysiaStatus
+          ? key
+          : browsers.start(key, body.machineId);
+      }
     )
     .post(
       "/api/browsers/:key/stop",
       { body: machineBody },
-      ({ params, body }) =>
-        run(() => browsers.stop(keyOf(params.key), body.machineId))
+      ({ params, body }) => {
+        const key = keyOf(params.key);
+        return key instanceof ElysiaStatus
+          ? key
+          : browsers.stop(key, body.machineId);
+      }
     )
     .post(
       "/api/browsers/:key/remove",
       { body: machineBody },
-      ({ params, body }) =>
-        run(async () => {
-          await browsers.remove(keyOf(params.key), body.machineId);
-          return { ok: true as const };
-        })
+      async ({ params, body }) => {
+        const key = keyOf(params.key);
+        if (key instanceof ElysiaStatus) {
+          return key;
+        }
+        const removed: { ok: true } = { ok: true };
+        return (await browsers.remove(key, body.machineId)) ?? removed;
+      }
     );
