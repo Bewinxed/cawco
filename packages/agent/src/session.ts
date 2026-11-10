@@ -679,7 +679,6 @@ export class SessionSupervisor {
       failures: this.#failures,
       generations: this.#generations,
       placed: this.#placed,
-      keepAlive: this.#keepAlive,
     });
     // Each live session's own tables, summed by name across sessions.
     gaugeGroup("session", () => {
@@ -743,7 +742,6 @@ export class SessionSupervisor {
   /** The sessions this agent carries now, and their pulse (live-sessions.ts). */
   readonly #live = new LiveSessions({
     adopting: (instanceId) => this.#adopting.has(instanceId),
-    keptAlive: (instanceId) => this.#keepAlive.has(instanceId),
     sink: (frame) => this.sink(frame),
     forget: (instanceId) => this.#forgetProcess(instanceId),
   });
@@ -882,7 +880,6 @@ export class SessionSupervisor {
   readonly #turnPending = new Set<string>();
   /** The spin-offs running here, their worktrees and their transcripts (spin-offs.ts). */
   readonly #spinOffs = new SpinOffs({
-    generationOf: (instanceId) => this.#generations.get(instanceId),
     sink: (frame) => this.sink(frame),
     transcriptDeleted: (sessionId) => this.#transcriptDeleted(sessionId),
   });
@@ -921,7 +918,6 @@ export class SessionSupervisor {
   readonly #failOpen = new Set<string>();
   /** Claude processes that ran a manual `/compact`, until the relaunch that replaces them ({@link COMPACT_RELAUNCH}). */
   readonly #compactedHere = new WeakSet<HarnessSession>();
-  readonly #keepAlive = new Map<string, string>();
   /**
    * Each session's run of identical failed turns since its last send: the
    * failure's words and how many times in a row ({@link #watchFailure}).
@@ -2114,7 +2110,6 @@ export class SessionSupervisor {
    */
   #forgetProcess(instanceId: string): void {
     this.#cacheCold.delete(instanceId);
-    this.#keepAlive.delete(instanceId);
     this.#failureRun.delete(instanceId);
     this.#line.delete(instanceId);
     this.#streams.forget(instanceId);
@@ -2572,7 +2567,8 @@ export class SessionSupervisor {
       } else if (scratch?.worktree) {
         workdir = await this.#spinOffs.addWorktree(
           instanceId,
-          scratch.baseCwd ?? cwd
+          scratch.baseCwd ?? cwd,
+          this.#generations.get(instanceId)
         );
       }
 
@@ -3038,16 +3034,16 @@ export class SessionSupervisor {
         this.#noteFailOpen(instanceId, message);
         this.#noteCompact(adapter.kind, holder.session, message);
         this.#noteRead(instanceId, message);
-        const ping = this.#keepAlive.get(instanceId);
+        const ping = this.#live.keepAlivePing(instanceId);
         if (
           ping &&
           message.type === "system" &&
           message.subtype === MESSAGES_READ &&
           message.read?.some((id) => id !== ping)
         ) {
-          this.#keepAlive.delete(instanceId);
+          this.#live.keepAliveEnded(instanceId);
         }
-        const keepAlive = this.#keepAlive.has(instanceId);
+        const keepAlive = this.#live.keepAlivePing(instanceId) !== undefined;
         this.#observeCacheFrame(instanceId, adapter.kind, message, keepAlive);
         if (keepAlive) {
           message.keepAlive = true;
@@ -3083,7 +3079,7 @@ export class SessionSupervisor {
           ...launchOf(message),
         });
         if (message.type === "result") {
-          this.#keepAlive.delete(instanceId);
+          this.#live.keepAliveEnded(instanceId);
           if (!keepAlive) {
             this.#watchFailure(instanceId, adapter.kind, message, holder);
             this.#askCompactRelaunch(instanceId, holder.session).catch(
@@ -3120,7 +3116,7 @@ export class SessionSupervisor {
         }
         // A keep-alive ping is the hub's maintenance, not the session doing
         // anything: its rest is still counted from its own last turn.
-        if (!this.#keepAlive.has(instanceId)) {
+        if (this.#live.keepAlivePing(instanceId) === undefined) {
           this.#live.touch(instanceId);
         }
         this.#live.emitPulse(instanceId, true);
@@ -3637,7 +3633,7 @@ export class SessionSupervisor {
       throw new Error(`${kind} keeps no children on sessiond to take back`);
     }
     if (spec.keepAliveTurn) {
-      this.#keepAlive.set(spec.instanceId, spec.keepAliveTurn);
+      this.#live.keepAliveStarted(spec.instanceId, spec.keepAliveTurn);
     }
     if (this.#live.sessions.has(spec.instanceId)) {
       return "attached";
@@ -4356,7 +4352,7 @@ export class SessionSupervisor {
       ) {
         throw new Error(harnessWords.keepAliveNotIdle(session.harness));
       }
-      this.#keepAlive.set(instanceId, message.uuid);
+      this.#live.keepAliveStarted(instanceId, message.uuid);
     } else {
       this.#live.touch(instanceId);
       // A send is the reader trying again: whatever failed before it is not

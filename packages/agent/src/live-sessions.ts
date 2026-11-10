@@ -12,8 +12,6 @@ export interface LiveHost {
   adopting: (instanceId: string) => boolean;
   /** What the supervisor holds of a process that is gone, forgotten as the session is dropped. */
   forget: (instanceId: string) => void;
-  /** Whether the hub's keep-alive is pinging the session now: its pings are no pulse. */
-  keptAlive: (instanceId: string) => boolean;
   /** A frame to the hub. */
   sink: FrameSink;
 }
@@ -62,6 +60,7 @@ export class LiveSessions {
       sessions: this.#table,
       activeAt: this.#activeAt,
       pulseAt: this.#pulseAt,
+      keepAlive: this.#keepAlive,
     });
   }
 
@@ -109,6 +108,27 @@ export class LiveSessions {
   /** Whether this daemon is ending `session`'s process itself ({@link stopsHere}). */
   stoppedHere(session: HarnessSession): boolean {
     return this.#ending.has(session);
+  }
+  /**
+   * The hub's keep-alive ping in flight for each session, by its message
+   * uuid: while one is, the session is pinged, not doing anything, and its
+   * pings are no pulse.
+   */
+  readonly #keepAlive = new Map<string, string>();
+
+  /** The uuid of the keep-alive ping `instanceId` has in flight; none when it is not being pinged. */
+  keepAlivePing(instanceId: string): string | undefined {
+    return this.#keepAlive.get(instanceId);
+  }
+
+  /** The hub is pinging `instanceId` with the message `uuid`. */
+  keepAliveStarted(instanceId: string, uuid: string): void {
+    this.#keepAlive.set(instanceId, uuid);
+  }
+
+  /** `instanceId`'s ping is over (it was read by someone else, its turn ended, its process is gone). */
+  keepAliveEnded(instanceId: string): void {
+    this.#keepAlive.delete(instanceId);
   }
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
@@ -208,7 +228,7 @@ export class LiveSessions {
    * else waits for the trailing edge of the window.
    */
   emitPulse(instanceId: string, important: boolean): void {
-    if (!this.#speaksFor(instanceId) || this.#host.keptAlive(instanceId)) {
+    if (!this.#speaksFor(instanceId) || this.#keepAlive.has(instanceId)) {
       return;
     }
     const now = Date.now();
@@ -350,6 +370,7 @@ export class LiveSessions {
   /** Every trace of a session's pulse, and what the supervisor held of its process. */
   #forget(instanceId: string): void {
     this.#busy.delete(instanceId);
+    this.#keepAlive.delete(instanceId);
     this.#activeAt.delete(instanceId);
     this.#pulseTool.delete(instanceId);
     this.#pulseBlocked.delete(instanceId);
