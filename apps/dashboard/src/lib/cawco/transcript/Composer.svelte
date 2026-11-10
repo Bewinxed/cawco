@@ -117,7 +117,6 @@
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
   import { handOver, reflow } from "#lib/platform/motion/rows.svelte.js";
   import { track } from "#lib/platform/track.js";
-  import { handBack, stages } from "../canvas/stage.svelte";
   import type { ConversationFind } from "../find/conversation-find.svelte";
   import FindLayer from "../find/FindLayer.svelte";
   import FindLine from "../find/FindLine.svelte";
@@ -134,6 +133,7 @@
   import type { Message } from "../types";
   import AttachButton from "./AttachButton.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
+  import { CanvasLink } from "./canvas-link.svelte";
   import type { ComposerDraft } from "./composer-draft.svelte";
   import type { ComposerFleet } from "./composer-fleet";
   import { stand } from "./composer-presence.svelte";
@@ -493,8 +493,8 @@
     menu.noteCaret();
     if (event.type === "input") {
       sender.sendBlock = "";
-      if (room) {
-        room.error = "";
+      if (canvas.room) {
+        canvas.room.error = "";
       }
       draft.notice = "";
       sender.draftNote = "";
@@ -510,7 +510,7 @@
   /** The words sent, and what is said over the field about it. */
   const sender = new ComposerSend({
     busy: () => busy,
-    canvasChip: () => canvasChip,
+    canvasChip: () => canvas.canvasChip,
     dismissMenu: () => {
       menu.dismissed = true;
     },
@@ -521,7 +521,7 @@
     heldWhy: () => heldWhy,
     onstop,
     onsubmit,
-    room: () => room,
+    room: () => canvas.room,
     sendError: () => sendError,
     sending: () => sending,
   });
@@ -548,7 +548,7 @@
     // While the wheel is up its keys are its own; what it leaves (a key
     // typed into a draft of your own, any key once it is folding away)
     // reaches the field as usual.
-    if (canvasKey(event)) {
+    if (canvas.key(event)) {
       return;
     }
     if ((recall && wheel?.key(event)) || recallKey(event)) {
@@ -567,9 +567,9 @@
     if (menu.open ? menu.key(event) : chipKey(event)) {
       return;
     }
-    if (event.key === "Escape" && canvasUp) {
+    if (event.key === "Escape" && canvas.up) {
       event.preventDefault();
-      room?.fold();
+      canvas.room?.fold();
       return;
     }
     // Escape in the message closes find too, the caret staying where it is.
@@ -667,129 +667,19 @@
 
   /* ---- the canvas: the draft's drawing, standing over the field -------- */
 
-  /** The composer's box (chips, notice, pill), whose top the canvas stands on. */
-  let column = $state<HTMLElement>();
-  /** The canvas's box over the field, while it stands there. */
-  let canvasSlot = $state<HTMLElement>();
-  /** The canvas's chip, while it is folded. */
-  let canvasChip = $state<HTMLElement>();
-  /** The canvas's room: a conversation's composer has one (`chat`); a comment's reply draws none. */
-  const Room = untrack(() => fleet?.CanvasRoom);
-  const room = Room
-    ? new Room({
-        column: () => column,
-        dock: () => dockEl,
-        draft: () => draft,
-        field: () => field ?? undefined,
-        chip: () => canvasChip,
-        pill: () => pill,
-        session: () => recallOf,
-        shell: () => shell,
-        slot: () => canvasSlot,
-      })
-    : null;
-  /** The canvas stands over the field, or is on its way up or down: the grown shape is the composer. */
-  const canvasUp = $derived(room?.up ?? false);
-  /** Its box over the field is laid out while the draft's canvas stands there. */
-  const canvasStands = $derived(
-    canvasUp && !!draft.canvas && !draft.canvas.folded
-  );
-
-  // The composer handed another conversation's draft: this one's canvas goes,
-  // the new one's stands if it was standing.
-  let canvasDraft: ComposerDraft | undefined;
-  $effect(() => {
-    if (!room) {
-      return;
-    }
-    const next = draft;
-    untrack(() => {
-      if (canvasDraft !== undefined && canvasDraft !== next) {
-        room.rebind();
-      } else if (
-        canvasDraft === undefined &&
-        next.canvas &&
-        !next.canvas.folded
-      ) {
-        room.rebind();
-      }
-      canvasDraft = next;
-    });
+  const canvas = new CanvasLink({
+    askOpen: () => askOpen,
+    dock: () => dockEl,
+    draft: () => draft,
+    field: () => field,
+    fleet: () => fleet,
+    paneVisible: () => paneVisible,
+    pill: () => pill,
+    recalling: () => !!recall,
+    recallOf: () => recallOf,
+    shell: () => shell,
+    wheelBack: () => wheel?.back(),
   });
-  // The panel gives a canvas back (Undock, or Done while docked).
-  $effect(() => {
-    const asked = handBack.ask;
-    if (!(room && asked) || asked.instanceId !== recallOf) {
-      return;
-    }
-    untrack(() => {
-      handBack.ask = null;
-      room.takeBack(asked);
-    });
-  });
-  // The panel shows the canvas standing here (picked from its list): it is the panel's.
-  $effect(() => {
-    const id = draft.canvas?.id;
-    const stage = id ? stages.get(id) : undefined;
-    if (room && stage?.at === "panel" && !draft.canvas?.folded) {
-      untrack(() => room.yielded());
-    }
-  });
-  $effect(() => {
-    if (!room) {
-      return;
-    }
-    const refit = () => room.refit();
-    window.addEventListener("resize", refit);
-    return () => {
-      window.removeEventListener("resize", refit);
-      room.destroy();
-    };
-  });
-
-  /** ⌘⇧D (Ctrl+Shift+D): the canvas opens, or folds when it stands. */
-  const isCanvasKey = (event: KeyboardEvent) =>
-    event.shiftKey &&
-    (event.metaKey || event.ctrlKey) &&
-    !event.altKey &&
-    event.key.toLowerCase() === "d";
-
-  function canvasKey(event: KeyboardEvent): boolean {
-    if (!(room && recallOf && isCanvasKey(event)) || askOpen) {
-      return false;
-    }
-    event.preventDefault();
-    if (recall) {
-      wheel?.back();
-    }
-    room.toggle();
-    return true;
-  }
-
-  /**
-   * The key reaches the composer from anywhere in its group: the field,
-   * its chips, the page around it. Escape folds a standing canvas.
-   */
-  function windowKey(event: KeyboardEvent): void {
-    if (event.defaultPrevented || !paneVisible || !dockEl) {
-      return;
-    }
-    const at = document.activeElement;
-    const ours =
-      !at ||
-      at === document.body ||
-      !!dockEl.closest('[data-slot="leaf"]')?.contains(at);
-    if (!ours || at === field) {
-      return;
-    }
-    if (canvasKey(event)) {
-      return;
-    }
-    if (event.key === "Escape" && canvasUp && !recall) {
-      event.preventDefault();
-      room?.fold();
-    }
-  }
   const recalled = $derived(
     fleet && recallOf ? fleet.sessionsStore.session(recallOf) : null
   );
@@ -838,7 +728,13 @@
    * start, so in a draft it still moves the caret, as a shell's does.
    */
   function startsRecall(): boolean {
-    if (!(recallOf && field) || recall || draft.lifted || askOpen || canvasUp) {
+    if (
+      !(recallOf && field) ||
+      recall ||
+      draft.lifted ||
+      askOpen ||
+      canvas.up
+    ) {
       return false;
     }
     const [from, to] = mentionField?.selection() ?? [0, 0];
@@ -1046,7 +942,7 @@
       recall ||
       draft.lifted ||
       askOpen ||
-      canvasUp
+      canvas.up
     ) {
       return;
     }
@@ -1277,7 +1173,7 @@
     if (dy < -SLOP && -dy > Math.abs(dx)) {
       pen = null;
       event.preventDefault();
-      room?.open();
+      canvas.room?.open();
     } else if (Math.hypot(dx, dy) > SLOP) {
       pen = null;
     }
@@ -1288,7 +1184,7 @@
     if (event.pointerType === "pen") {
       pen =
         recallOf &&
-        !(recall || draft.lifted || askOpen || canvasUp) &&
+        !(recall || draft.lifted || askOpen || canvas.up) &&
         !(event.target as Element).closest("button, a, input")
           ? { id: event.pointerId, x: event.clientX, y: event.clientY }
           : null;
@@ -1491,7 +1387,7 @@
       draft.lifted ||
       recall ||
       askOpen ||
-      canvasUp
+      canvas.up
     ) {
       return;
     }
@@ -1958,7 +1854,7 @@
     if (draft.lifted) {
       returnEdit();
     }
-    room?.stepAside();
+    canvas.room?.stepAside();
     if (document.activeElement === field) {
       askRefocus = true;
       field.blur();
@@ -2294,7 +2190,7 @@
      longer deliver ("ResizeObserver loop completed with undelivered
      notifications", every frame the field grew), and it stood a frame
      behind the panel. -->
-<svelte:window onkeydown={windowKey} />
+<svelte:window onkeydown={canvas.windowKey} />
 
 <!-- What steps aside while an ask holds the composer comes back at once and
      fades in (transition-fade-show). While the composer is grown into an
@@ -2317,7 +2213,7 @@
   data-slot="dock"
   data-find-view={find?.viewId}
   data-asking={askRaised || undefined}
-  data-drawing={canvasUp || undefined}
+  data-drawing={canvas.up || undefined}
   data-minimized={minimized || undefined}
   data-flush={flush || undefined}
   class="group/dock not-data-flush:absolute not-data-flush:inset-x-0 not-data-flush:top-0 not-data-flush:bottom-(--dock-foot) data-flush:relative z-(--layer-dock) flex flex-col justify-end items-center pointer-events-none"
@@ -2538,12 +2434,12 @@
   <div
     data-slot="composer"
     class="relative flex-none w-c-composer-w not-group-data-flush/dock:desk:ms-c-composer-nudge flex flex-col gap-space-3 pointer-events-none not-group-data-flush/dock:max-desk:self-stretch not-group-data-flush/dock:max-desk:mx-space-3 not-group-data-flush/dock:max-desk:w-auto"
-    bind:this={column}
+    bind:this={canvas.column}
     {@attach measurePanel}
     in:rise
     out:fade
   >
-    {#if canvasStands}
+    {#if canvas.stands}
       <!-- The canvas's box over the field: its stage (canvas/) stands on
            it, the grown shape round it and the field. On the composer's top,
            a pixel inside the grown shape's edge; the room writes its height,
@@ -2553,17 +2449,17 @@
         data-slot="canvas-slot"
         aria-hidden="true"
         class="absolute left-px right-px bottom-full pointer-events-none"
-        bind:this={canvasSlot}
+        bind:this={canvas.canvasSlot}
       ></div>
     {/if}
     <!-- The row of attachments is one block above the field, the canvas's
          chip leading it. -->
     <AttachmentChips
-      canvasHidden={room?.chipHidden}
+      canvasHidden={canvas.room?.chipHidden}
       {draft}
-      onopencanvas={() => room?.open()}
-      onremovecanvas={() => room?.remove()}
-      bind:canvasChip
+      onopencanvas={() => canvas.room?.open()}
+      onremovecanvas={() => canvas.room?.remove()}
+      bind:canvasChip={canvas.canvasChip}
     />
 
     <!-- A send that failed says so right over the field it left; the way
@@ -2780,7 +2676,7 @@
       <form
         data-slot="cin"
         data-asking={askOpen || undefined}
-        data-grown={!!edit || askOpen || canvasUp || undefined}
+        data-grown={!!edit || askOpen || canvas.up || undefined}
         data-hint-back={!!hintBack || undefined}
         data-lead={!!lead || !!also || finding || undefined}
         data-places={(finding && find?.listOpen) || undefined}
@@ -3108,7 +3004,9 @@
             <AttachButton
               {draft}
               ghost={!!action}
-              ondraw={room && recallOf ? () => room.open() : undefined}
+              ondraw={canvas.room && recallOf
+                ? () => canvas.room?.open()
+                : undefined}
               onfind={find ? () => find.show() : undefined}
             />
           {/if}
