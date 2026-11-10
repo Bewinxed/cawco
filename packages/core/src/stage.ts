@@ -390,6 +390,17 @@ export type Scheme = "light" | "dark";
 /** The width presets a frame takes when its story names no viewport of its own. Ours, DESIGN.md's breakpoints. */
 export const FORMS = { phone: 390, tablet: 768, desk: 1280 } as const;
 export type FormName = keyof typeof FORMS;
+const FORM_NAMES = [
+  "phone",
+  "tablet",
+  "desk",
+] as const satisfies readonly FormName[];
+/** `value` as one of the {@link FORMS}' names, or undefined when it is none. */
+export const formNameOf = (value: unknown): FormName | undefined =>
+  FORM_NAMES.find((one) => one === value);
+/** The {@link FORMS} name of a width that is one's, or undefined. */
+export const formNamed = (width: number): FormName | undefined =>
+  FORM_NAMES.find((one) => FORMS[one] === width);
 
 /** A screen's height over its width: an upright iPhone's 390×844, an upright iPad's 768×1024, a desk window's 16:10. Ours. */
 const SCREEN_SHAPE = {

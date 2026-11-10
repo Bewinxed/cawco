@@ -31,7 +31,6 @@ import {
   type PropMeta,
   TOKEN_TYPES,
   type TokenKind,
-  type TokenType,
 } from "@cawco/core/stage";
 import type TS from "typescript";
 
@@ -71,9 +70,7 @@ function tokenKindOf(text: string): TokenKind | undefined {
     .map((one) => one.trim())
     .filter((one) => one !== "undefined" && one !== "null");
   const name = members.length === 1 ? members[0]?.replace(QUALIFIED, "") : "";
-  return name && Object.hasOwn(TOKEN_TYPES, name)
-    ? TOKEN_TYPES[name as TokenType]
-    : undefined;
+  return Object.entries(TOKEN_TYPES).find(([type]) => type === name)?.[1];
 }
 const QUALIFIED = /^(?:import\(["'][^"']*["']\)|[A-Za-z_$][\w$]*)\./u;
 
@@ -267,14 +264,13 @@ function svelteKind(
   if (members.every((one) => one.flags & ts.TypeFlags.BooleanLike)) {
     return { kind: "boolean", raw: "boolean" };
   }
-  if (members.every((one) => one.isStringLiteral() || one.isNumberLiteral())) {
+  const literalValues = members.flatMap((one) =>
+    one.isStringLiteral() || one.isNumberLiteral() ? [one.value] : []
+  );
+  if (literalValues.length === members.length) {
     // The type as declared (`TokenColor | undefined`): TypeScript keeps an
     // alias's name in a union it is part of.
-    return enumOf(
-      checker.typeToString(type),
-      raw,
-      members.map((one) => (one as TS.LiteralType).value as string | number)
-    );
+    return enumOf(checker.typeToString(type), raw, literalValues);
   }
   if (members.some((one) => one.getCallSignatures().length > 0)) {
     return { kind: "function", raw };
@@ -419,16 +415,26 @@ const vueCheckers = new Map<string, Checker>();
 
 /** An enum schema's literal members (vue-component-meta's `PropertyMetaSchema`), `undefined` left out; null when it is no enum of literals. */
 function vueEnum(schema: unknown): (string | number)[] | null {
-  const read = schema as { kind?: string; schema?: unknown[] } | undefined;
-  if (!(read && read.kind === "enum" && Array.isArray(read.schema))) {
+  if (!(
+    typeof schema === "object" &&
+    schema !== null &&
+    "kind" in schema &&
+    schema.kind === "enum" &&
+    "schema" in schema &&
+    Array.isArray(schema.schema)
+  )) {
     return null;
   }
   return literals(
-    read.schema
+    schema.schema
       .map((one) =>
         typeof one === "string"
           ? one
-          : String((one as { value?: unknown }).value ?? "\0")
+          : String(
+              (typeof one === "object" && one !== null && "value" in one
+                ? one.value
+                : undefined) ?? "\0"
+            )
       )
       .filter((one) => one !== "undefined" && one !== "null")
   );
@@ -458,7 +464,10 @@ function vueKind(
   if (options) {
     return { kind: "enum", raw, options };
   }
-  const kind = (schema as { kind?: string } | string | undefined) ?? "";
+  const shape =
+    typeof schema === "object" && schema !== null && "kind" in schema
+      ? schema.kind
+      : undefined;
   // An alias prints as its name; its members are the schema's.
   const named = vueEnum(schema);
   if (named && tokenKindOf(raw)) {
@@ -467,13 +476,13 @@ function vueKind(
   if (members.every((one) => one === "string" || one === "number")) {
     return { kind: members.includes("string") ? "string" : "number", raw };
   }
-  if (typeof kind === "object" && kind.kind === "event") {
+  if (shape === "event") {
     return { kind: "function", raw };
   }
-  if (typeof kind === "object" && kind.kind === "array") {
+  if (shape === "array") {
     return { kind: "array", raw };
   }
-  if (typeof kind === "object" && kind.kind === "object") {
+  if (shape === "object") {
     return { kind: "object", raw };
   }
   return { kind: raw.includes("=>") ? "function" : "other", raw };
@@ -487,8 +496,7 @@ async function vueDoc(
   if (!ts) {
     return { props: [], types: "unknown", note: NO_TS };
   }
-  const meta =
-    (await import("vue-component-meta")) as typeof import("vue-component-meta");
+  const meta = await import("vue-component-meta");
   const config = ts.findConfigFile(dirname(file), ts.sys.fileExists);
   const key = config ?? root;
   let checker = vueCheckers.get(key);
@@ -530,10 +538,12 @@ interface DocgenType {
   elements?: DocgenType[];
   name: string;
   raw?: string;
+  /** A signature's own kind (`function`), where react-docgen says it. */
+  type?: string;
   value?: unknown;
 }
 interface DocgenProp {
-  defaultValue?: { value: string };
+  defaultValue?: { value?: unknown };
   description?: string;
   flowType?: DocgenType;
   required?: boolean;
@@ -594,8 +604,7 @@ function reactKind(type: DocgenType): {
   const raw = type.raw ?? type.name;
   const members =
     type.name === "union" || type.name === "enum"
-      ? (type.elements ??
-        (Array.isArray(type.value) ? (type.value as DocgenType[]) : []))
+      ? (type.elements ?? (Array.isArray(type.value) ? type.value : []))
       : [type];
   const real = members.filter(
     (one) => !(one.name === "undefined" || one.name === "null")
@@ -639,9 +648,8 @@ const STRUCTURAL: Record<string, PropKind> = {
 
 /** A type that is no scalar, enum or slot: a function (a signature of one, or an arrow), an array, an object, or other. */
 const structuralKind = (type: DocgenType, raw: string): PropKind => {
-  const signature = (type as { type?: string }).type;
   if (
-    (type.name === "signature" && signature === "function") ||
+    (type.name === "signature" && type.type === "function") ||
     raw.includes("=>")
   ) {
     return "function";
@@ -667,22 +675,20 @@ async function reactDoc(
   text: string,
   name: string
 ): Promise<Omit<ComponentDoc, "file" | "name">> {
-  const docgen =
-    (await import("react-docgen")) as typeof import("react-docgen");
+  const docgen = await import("react-docgen");
   let docs: DocgenDoc[] = [];
   try {
     docs = docgen.parse(text, {
       filename: file,
       babelOptions: { babelrc: false, configFile: false, root },
-    }) as DocgenDoc[];
+    });
   } catch {
     docs = [];
   }
   const doc = pick(docs, name);
   const ts = typescript();
   if (ts && (!doc || unfollowed(doc))) {
-    const typed =
-      (await import("react-docgen-typescript")) as typeof import("react-docgen-typescript");
+    const typed = await import("react-docgen-typescript");
     const config = ts.findConfigFile(dirname(file), ts.sys.fileExists);
     const parser = config
       ? typed.withCustomConfig(config, TYPED_OPTIONS)
@@ -729,7 +735,10 @@ async function reactDoc(
       const { kind, raw, options } = reactKind(type);
       return prop(key, kind, raw, {
         required: one.required ?? false,
-        defaultValue: one.defaultValue?.value ?? null,
+        defaultValue:
+          typeof one.defaultValue?.value === "string"
+            ? one.defaultValue.value
+            : null,
         description: one.description ?? null,
         ...(options ? { options } : {}),
       });

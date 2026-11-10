@@ -288,6 +288,7 @@ export type PageHeard = Extract<
       | typeof CANVAS_EMBED_FETCHED
       | typeof CANVAS_EMBED_GRAPH
       | typeof CANVAS_EMBED_SIZE
+      | typeof PREVIEW_LOCKED_MESSAGE
       | (typeof RAIL_SAYS)[number]
       | "cawco:down"
       | "cawco:drawn"
@@ -321,6 +322,8 @@ export function pageSaid(value: unknown): PageHeard | null {
             rest: value.rest === true,
           }
         : null;
+    case PREVIEW_LOCKED_MESSAGE:
+      return { type: PREVIEW_LOCKED_MESSAGE };
     case "cawco:down": {
       const down = PREVIEW_DOWNS.find((hop) => hop === value.down);
       return down
