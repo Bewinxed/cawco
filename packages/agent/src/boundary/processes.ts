@@ -334,7 +334,7 @@ export const commandsIn = async (
   gen: string
 ): Promise<number[]> => {
   const dir = commandsOf(id, gen);
-  const names = await readdir(dir).catch(() => [] as string[]);
+  const names = await readdir(dir).catch(() => []);
   const live = new Set(executors(seen, id));
   const marked: number[] = [];
   await Promise.all(
@@ -358,7 +358,7 @@ export const commandsIn = async (
  * counts these (awake.ts).
  */
 export const workspacesWithCommands = async (): Promise<string[]> => {
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(() => []);
   const found = await Promise.all(
     ids.map(async (id) => {
       const generations = [
@@ -366,9 +366,7 @@ export const workspacesWithCommands = async (): Promise<string[]> => {
         ...(await readRetiring(id)),
       ].flatMap((held) => (held ? [held.gen] : []));
       for (const gen of generations) {
-        const marks = await readdir(commandsOf(id, gen)).catch(
-          () => [] as string[]
-        );
+        const marks = await readdir(commandsOf(id, gen)).catch(() => []);
         const seen = await Promise.all(
           marks.map(async (name) => ({
             pid: Number(name),

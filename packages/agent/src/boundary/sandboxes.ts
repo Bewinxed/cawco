@@ -91,9 +91,9 @@ export const sandboxes = async (id: string): Promise<RunningSandbox[]> => {
   const named = new Set<string>();
   // During a handover the older one is both the record and retiring.
   const records = [
-    ...(held ? [{ boundary: held as Held, current: true }] : []),
+    ...(held ? [{ boundary: held, current: true }] : []),
     ...(await readRetiring(id)).map((boundary) => ({
-      boundary: boundary as Held,
+      boundary,
       current: false,
     })),
   ].filter(({ boundary }) => {

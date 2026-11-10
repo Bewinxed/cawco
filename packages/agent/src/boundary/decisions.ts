@@ -190,7 +190,7 @@ export const viewOfBoundary = async (
     spec.command,
     ...spec.args,
   ]);
-  return { ...spec, command: command as string, args };
+  return { ...spec, command, args };
 };
 
 /** The file in a workspace's state dir that holds its {@link BoundaryDecision}s. */
@@ -200,33 +200,49 @@ export const DECISIONS_FILE = "boundary-decisions.json";
 const DECISIONS_KEPT = 32;
 
 /** A boundary generation as a decision names it. */
-interface DecidedBoundary {
+const DecidedBoundary = z.object({
   /** Its form (plan.ts `formOf`); null when it has none. */
-  readonly form: string | null;
-  readonly gen: string;
+  form: z.string().nullable(),
+  gen: z.string(),
   /** Its srt host (Linux) or runner (macOS). */
-  readonly pid: number;
-}
+  pid: z.number(),
+});
+
+type DecidedBoundary = z.infer<typeof DecidedBoundary>;
 
 /** Why an update decision ({@link BoundaryDecision}) went as it did: each names what held then, the rest none. */
-interface UpdateReasons {
-  /** Its work's commands running, by executor pid (processes.ts `commandsIn`). */
-  readonly commands: readonly number[];
-  /** Why its grant cannot be compared with this build's policy (narrowing.ts `unknownGrant`); null when it can. */
-  readonly grant: string | null;
-  /** Kept until this build's session keeper is the machine's ({@link ownKeeperOwed}). */
-  readonly keeperOwed: boolean;
-  /** It holds an srt mount point where a dir stands in (staleness.ts `stubbed`): replaced whole once nothing runs in it. */
-  readonly leftDirs: boolean;
-  /** The ports its work listens on (narrowing.ts `workPorts`). */
-  readonly listening: readonly number[];
-  /** Every process of its work, by pid (processes.ts `workProcesses`). */
-  readonly processes: readonly number[];
-}
+const UpdateReasons = z
+  .object({
+    /** Its work's commands running, by executor pid (processes.ts `commandsIn`). */
+    commands: z.array(z.number()).readonly(),
+    /** Why its grant cannot be compared with this build's policy (narrowing.ts `unknownGrant`); null when it can. */
+    grant: z.string().nullable(),
+    /** Kept until this build's session keeper is the machine's ({@link ownKeeperOwed}). */
+    keeperOwed: z.boolean(),
+    /** It holds an srt mount point where a dir stands in (staleness.ts `stubbed`): replaced whole once nothing runs in it. */
+    leftDirs: z.boolean(),
+    /** The ports its work listens on (narrowing.ts `workPorts`). */
+    listening: z.array(z.number()).readonly(),
+    /** Every process of its work, by pid (processes.ts `workProcesses`). */
+    processes: z.array(z.number()).readonly(),
+  })
+  .readonly();
+
+type UpdateReasons = z.infer<typeof UpdateReasons>;
 
 /** Why the agent looked for a narrowed access (looks.ts `recheckNarrowed`), or `use`: a use of the boundary (ensure.ts `ensure`). */
-export type NarrowCause =
-  "accounts" | "folder-moved" | "look" | "project" | "use";
+const NarrowCause = z.enum([
+  "accounts",
+  "folder-moved",
+  "look",
+  "project",
+  "use",
+]);
+
+export type NarrowCause = z.infer<typeof NarrowCause>;
+
+/** The deciding agent's pid (`agent`) and when, in ms since the epoch (`at`), which every decision carries. */
+const Decided = { agent: z.number(), at: z.number() };
 
 /**
  * What the agent decided of one of a workspace's boundaries, as it says the
@@ -255,71 +271,72 @@ export type NarrowCause =
  * - `left-down`: it ended unasked again within ensure.ts `UNASKED_RESTART_MS`
  *   of being started again, and is left down.
  */
-export type BoundaryDecision =
-  | (DecidedBoundary & {
-      readonly agent: number;
-      readonly at: number;
-      readonly decision: "kept" | "handed-over" | "replaced";
-      readonly reasons: UpdateReasons;
-      /** The boundary that took its place; null while it is kept. */
-      readonly to: DecidedBoundary | null;
-    })
-  | (DecidedBoundary & {
-      readonly agent: number;
-      readonly at: number;
-      readonly decision: "older-closed";
-      /** The ports a newer generation took over, when `superseded`. */
-      readonly ports: readonly number[];
-      readonly why: "gone" | "idle" | "superseded";
-    })
-  | {
-      readonly agent: number;
-      readonly at: number;
-      readonly cause: NarrowCause;
-      readonly decision: "narrowed-stopped";
+const BoundaryDecisionSchema = z.discriminatedUnion("decision", [
+  DecidedBoundary.extend({
+    ...Decided,
+    decision: z.enum(["kept", "handed-over", "replaced"]),
+    reasons: UpdateReasons,
+    /** The boundary that took its place; null while it is kept. */
+    to: DecidedBoundary.nullable(),
+  }).readonly(),
+  DecidedBoundary.extend({
+    ...Decided,
+    decision: z.literal("older-closed"),
+    /** The ports a newer generation took over, when `superseded`. */
+    ports: z.array(z.number()).readonly(),
+    why: z.enum(["gone", "idle", "superseded"]),
+  }).readonly(),
+  z
+    .object({
+      ...Decided,
+      cause: NarrowCause,
+      decision: z.literal("narrowed-stopped"),
       /** What its access lost (narrowing.ts `narrowedBy`). */
-      readonly narrowed: readonly string[];
+      narrowed: z.array(z.string()).readonly(),
       /** The boundary that runs after: a new one when the current was stopped, else the current one. */
-      readonly runs: DecidedBoundary;
-      readonly stopped: readonly DecidedBoundary[];
+      runs: DecidedBoundary,
+      stopped: z.array(DecidedBoundary).readonly(),
       /** The processes of their work that were stopped with them, by pid. */
-      readonly work: readonly number[];
-    }
-  | {
-      readonly agent: number;
-      readonly at: number;
-      readonly closed: readonly DecidedBoundary[];
-      readonly decision: "quiet-closed";
-      readonly judges: number;
+      work: z.array(z.number()).readonly(),
+    })
+    .readonly(),
+  z
+    .object({
+      ...Decided,
+      closed: z.array(DecidedBoundary).readonly(),
+      decision: z.literal("quiet-closed"),
+      judges: z.number(),
       /** Why it closed now, in the log's words. */
-      readonly why: string;
-    }
-  | {
-      readonly agent: number;
-      readonly at: number;
-      readonly closed: readonly DecidedBoundary[];
-      readonly decision: "closed-for-good";
-    }
-  | (DecidedBoundary & {
-      readonly agent: number;
-      readonly at: number;
-      readonly decision: "host-restarted";
-      /** When the host restarted it, by its own clock (ms since the epoch): what tells one restart from another. */
-      readonly hostAt: number;
-      readonly inner: number | null;
-      readonly path: string;
+      why: z.string(),
     })
-  | (DecidedBoundary & {
-      readonly agent: number;
-      readonly at: number;
-      readonly decision: "restarted-unasked";
-      readonly to: DecidedBoundary;
+    .readonly(),
+  z
+    .object({
+      ...Decided,
+      closed: z.array(DecidedBoundary).readonly(),
+      decision: z.literal("closed-for-good"),
     })
-  | (DecidedBoundary & {
-      readonly agent: number;
-      readonly at: number;
-      readonly decision: "left-down";
-    });
+    .readonly(),
+  DecidedBoundary.extend({
+    ...Decided,
+    decision: z.literal("host-restarted"),
+    /** When the host restarted it, by its own clock (ms since the epoch): what tells one restart from another. */
+    hostAt: z.number(),
+    inner: z.number().nullable(),
+    path: z.string(),
+  }).readonly(),
+  DecidedBoundary.extend({
+    ...Decided,
+    decision: z.literal("restarted-unasked"),
+    to: DecidedBoundary,
+  }).readonly(),
+  DecidedBoundary.extend({
+    ...Decided,
+    decision: z.literal("left-down"),
+  }).readonly(),
+]);
+
+export type BoundaryDecision = z.infer<typeof BoundaryDecisionSchema>;
 
 /** A {@link BoundaryDecision} as its decider writes it: the agent and the time are added. */
 type Deciding = BoundaryDecision extends infer One
@@ -383,7 +400,12 @@ export const readDecisions = async (
   );
   try {
     const read: unknown = JSON.parse(text);
-    return Array.isArray(read) ? (read as BoundaryDecision[]) : [];
+    return Array.isArray(read)
+      ? read.flatMap((entry) => {
+          const decision = BoundaryDecisionSchema.safeParse(entry);
+          return decision.success ? [decision.data] : [];
+        })
+      : [];
   } catch {
     return [];
   }
