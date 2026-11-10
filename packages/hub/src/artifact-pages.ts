@@ -400,17 +400,8 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     const read: { source: string; sources: PageSources } = {
       source,
       sources: {
-        mockup: async (id) => {
-          const mockup = await folderText(
-            origin.projectId,
-            `${origin.folder}/mockups/${id}.html`
-          );
-          // The page's build throws what it cannot read (decision-page.ts).
-          if (mockup instanceof ElysiaStatus) {
-            throw new Error(mockup.response.detail);
-          }
-          return mockup;
-        },
+        mockup: (id) =>
+          folderText(origin.projectId, `${origin.folder}/mockups/${id}.html`),
         // The folder takes text only: its pages show the kit's stills.
         image: () => Promise.resolve(undefined),
       },
@@ -823,6 +814,9 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       return read;
     }
     const built = await buildDecisionPage(read.source, read.sources);
+    if (built instanceof ElysiaStatus) {
+      return built;
+    }
     if ("problem" in built) {
       return problem(422, { code: "page-unbuilt", detail: built.problem });
     }

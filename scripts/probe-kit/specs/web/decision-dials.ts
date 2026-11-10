@@ -76,7 +76,7 @@ const built = async (dials: boolean, rootless = false): Promise<string> => {
     mockup: async () => undefined,
   });
   if (!("html" in page)) {
-    throw new Error(page.problem);
+    throw new Error("problem" in page ? page.problem : page.response.detail);
   }
   return page.html;
 };

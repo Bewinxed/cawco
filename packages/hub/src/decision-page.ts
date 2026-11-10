@@ -23,6 +23,7 @@
  *
  * A built page stops at {@link PAGE_LIMIT}.
  */
+import { ElysiaStatus } from "elysia";
 import { bundledSkills } from "./bundled-skills";
 import {
   DECISION_ASSETS,
@@ -30,6 +31,7 @@ import {
   PAGE_DIALS,
   PAGE_ICON,
 } from "./decision-program";
+import type { readFolderFile } from "./project-folder";
 
 /** The largest page the hub publishes. */
 export const PAGE_LIMIT = 512 * 1024;
@@ -98,9 +100,15 @@ export interface PageSources {
   image: (
     path: string
   ) => Promise<{ bytes: Uint8Array; mediaType: string } | undefined>;
-  /** `mockups/<id>.html` beside page.html; undefined when it is not there. */
-  mockup: (id: string) => Promise<string | undefined>;
+  /** `mockups/<id>.html` beside page.html; undefined when it is not there, the folder's problem when it does not read. */
+  mockup: (id: string) => Promise<string | undefined | FolderProblem>;
 }
+
+/** What a project folder's file read answers instead of the file ({@link readFolderFile}). */
+export type FolderProblem = Exclude<
+  Awaited<ReturnType<typeof readFolderFile>>,
+  { content: string }
+>;
 
 /** The built page, or why it could not be built, in a sentence the session reads. */
 export type BuiltPage = { html: string } | { problem: string };
@@ -112,7 +120,7 @@ const dataUri = (bytes: Uint8Array, mediaType: string): string =>
 export const buildDecisionPage = async (
   source: string,
   sources: PageSources
-): Promise<BuiltPage> => {
+): Promise<BuiltPage | FolderProblem> => {
   const unknown = [...source.matchAll(PLACEHOLDER)]
     .map((match) => match[1])
     .filter((name) => !(KNOWN.has(name) || MOCKUP_NAME.test(name)));
@@ -131,12 +139,21 @@ export const buildDecisionPage = async (
     .replaceAll("{{DIALS}}", () => PAGE_DIALS);
 
   const ids = [...new Set([...page.matchAll(MOCKUP)].map((match) => match[1]))];
-  const mockups = new Map(
-    await Promise.all(
-      ids.map(async (id) => [id, await sources.mockup(id)] as const)
-    )
+  const mockupsRead = await Promise.all(
+    ids.map(async (id) => [id, await sources.mockup(id)] as const)
   );
-  const missing = ids.filter((id) => mockups.get(id) === undefined);
+  const mockups = new Map<string, string>();
+  const missing: string[] = [];
+  for (const [id, mockup] of mockupsRead) {
+    if (mockup instanceof ElysiaStatus) {
+      return mockup;
+    }
+    if (mockup === undefined) {
+      missing.push(id);
+    } else {
+      mockups.set(id, mockup);
+    }
+  }
   if (missing.length > 0) {
     return {
       problem: `page.html places mockups that are not beside it: ${missing.map((id) => `mockups/${id}.html`).join(", ")}.`,
