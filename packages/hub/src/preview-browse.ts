@@ -10,6 +10,7 @@ import { secondsOf } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import type { WorkspaceSaved } from "@cawco/core/workspace/controls";
 import { CONTROL_WORKSPACE_SAVE } from "@cawco/core/workspace/controls";
+import { ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
 import { ArtifactRefusal } from "./artifacts/refusals";
 import type { Browsed } from "./artifacts/shapes";
@@ -18,8 +19,8 @@ import type { ArtifactRow } from "./db/artifacts";
 import type { HubContext } from "./hub-context";
 import { servedByMachine } from "./preview";
 import { mintSessionTicket } from "./preview-access";
-import { PreviewRefusal } from "./preview-hosts";
 import { embedKey } from "./preview-origin";
+import type { Refused } from "./refusal";
 import { unreachable } from "./unreachable";
 
 const NOT_NAME = /[^a-z0-9]+/gu;
@@ -121,21 +122,16 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
   };
 
   /**
-   * What `open` answers of a preview origin, its listener started when it
-   * has none; every port taken is the artifact's refusal, in the listeners'
-   * words.
+   * A preview origin's address, its listener started when it has none;
+   * every port taken is the artifact's refusal, in the listeners' words.
    */
-  const onPreviewPort = <T>(open: () => T): T => {
-    let refusal: PreviewRefusal;
-    try {
-      return open();
-    } catch (error) {
-      if (!(error instanceof PreviewRefusal)) {
-        throw error;
-      }
-      refusal = error;
+  const onPreviewPort = (
+    opened: ReturnType<HubContext["previewListeners"]["address"]>
+  ): PreviewAddress => {
+    if (opened instanceof ElysiaStatus) {
+      throw new ArtifactRefusal(503, opened.response.detail);
     }
-    throw new ArtifactRefusal(503, refusal.message, { cause: refusal });
+    return opened;
   };
 
   /**
@@ -155,7 +151,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     if (row.kind === "page" || row.kind === "canvas") {
       return {
         key: owner,
-        address: onPreviewPort(() => ctx.previewListeners.address(owner)),
+        address: onPreviewPort(ctx.previewListeners.address(owner)),
         path: `/__cawco/${row.kind}/${row.id}/`,
       };
     }
@@ -168,7 +164,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     }
     return {
       key,
-      address: onPreviewPort(() => ctx.previewListeners.embed(key, owner)),
+      address: onPreviewPort(ctx.previewListeners.embed(key, owner)),
       path: row.source.path ?? "/",
     };
   };
@@ -367,18 +363,19 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       return {};
     }
     const key = embedKey(row.origin);
-    let at: ReturnType<typeof ctx.previewListeners.embed>;
-    let ownPort: number;
-    try {
-      at = ctx.previewListeners.embed(key, owner, reachedAt);
-      ownPort = ctx.previewListeners.address(owner).port;
-    } catch (error) {
-      if (error instanceof PreviewRefusal) {
-        console.warn(`[preview] ${error.message}`);
-        return { unopened: error.message };
-      }
-      throw error;
+    const unopened = ({ response }: Refused) => {
+      console.warn(`[preview] ${response.detail}`);
+      return { unopened: response.detail };
+    };
+    const at = ctx.previewListeners.embed(key, owner, reachedAt);
+    if (at instanceof ElysiaStatus) {
+      return unopened(at);
     }
+    const own = ctx.previewListeners.address(owner);
+    if (own instanceof ElysiaStatus) {
+      return unopened(own);
+    }
+    const ownPort = own.port;
     const path = row.source.path ?? "/";
     if (reachedAt.port === String(ownPort) || !at.origin) {
       return {
