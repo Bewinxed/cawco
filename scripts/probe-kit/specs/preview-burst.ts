@@ -623,11 +623,12 @@ async function chain(
 }> {
   const { startPreview, stopPreview } =
     await import("../../../packages/agent/src/preview");
-  const { embedKey } = await import("../../../packages/hub/src/preview-origin");
+  const { artifactOrigin } =
+    await import("../../../packages/hub/src/db/previews");
   const { sourceKeyOf } =
     await import("../../../packages/core/src/preview/upstream");
   // The canvas's own origin's key, which the machine keys its listener by.
-  const instanceId = embedKey(crypto.randomUUID());
+  const instanceId = artifactOrigin(crypto.randomUUID());
   const workspace = crypto.randomUUID();
   const token = crypto.randomUUID();
   const agent = await startPreview({
@@ -949,7 +950,7 @@ async function realJoin(kit: Kit): Promise<void> {
     .catch(() => false);
   await page.close();
   // The bridge is the preview's, named by the hub's key for the artifact's
-  // own origin (artifact-pages.ts `frameOrigin`: `embedKey` of `artifacts.origin`),
+  // own origin (artifact-pages.ts `frameOrigin`: `artifactOrigin` of `artifacts.origin`),
   // never by the session: a sheet has been served on its artifact's own
   // origin since f536f2675, and that origin is the row's own since 9e9a255cf.
   const { artifactOrigin } =
