@@ -46,6 +46,7 @@ import { join } from "node:path";
 import { connect } from "node:tls";
 import { chromium, type Page } from "playwright-core";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
+import type { PreviewAddress } from "../../../packages/core/src/preview/routes";
 import { tailnetWords } from "../../../packages/core/src/words/tailnet";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { leasePortRange, until } from "../../scratch-fleet";
@@ -61,6 +62,15 @@ import {
 } from "../kit";
 
 export const NAME = "probe-box.tail0000.ts.net";
+/** A preview origin's address, or the listeners' refusal thrown. */
+const opened = (
+  address: PreviewAddress | { response: { detail: string } }
+): PreviewAddress => {
+  if ("response" in address) {
+    throw new Error(address.response.detail);
+  }
+  return address;
+};
 /** How long a state takes to be read: the hub reads Tailscale every 5 s while a step stands, else every 30 s. */
 const READ_MS = 45_000;
 /** An environment variable that names a proxy. */
@@ -956,7 +966,7 @@ const run = async (kit: Kit) => {
   );
   const session = "00000000-0000-4000-8000-00000000a011";
   try {
-    const address = listeners.address(session);
+    const address = opened(listeners.address(session));
     const secured = await fetch(`https://[::1]:${address.port}/`, { tls });
     const beside = await fetch(`http://127.0.0.1:${address.port}/`);
     kit.check(
