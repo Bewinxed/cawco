@@ -164,7 +164,7 @@ const rootToken = (name: string): string => {
   for (const token of tokens.size === 0 ? [...TOKENS, name] : [name]) {
     tokens.set(token, style.getPropertyValue(token).trim());
   }
-  return tokens.get(name) as string;
+  return style.getPropertyValue(name).trim();
 };
 /** A `--dur-*` token on the root, in ms. @browser */
 export const dur = (name: `--duration-${string}`): number =>
