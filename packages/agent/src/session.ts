@@ -642,7 +642,10 @@ export const resumableSessions = async (
  * Owns every live session on this machine and pumps their messages at the hub.
  */
 /** What the supervisor sends through, or hands to the work it starts: a command's queue, a preview's stage and browser. */
-type SupervisorPorts = Pick<AgentPorts, "borrowAsk" | "commandQueue">;
+type SupervisorPorts = Pick<
+  AgentPorts,
+  "borrowAsk" | "commandQueue" | "stage" | "stageClone"
+>;
 
 export class SessionSupervisor {
   #stopSequence = 0;
@@ -981,7 +984,10 @@ export class SessionSupervisor {
     },
     [PREVIEW_START]: {
       call: (options) =>
-        startPreview(options as Parameters<typeof startPreview>[0]),
+        startPreview(
+          options as Parameters<typeof startPreview>[0],
+          this.#ports
+        ),
     },
     [PREVIEW_STOP]: {
       call: (options) =>

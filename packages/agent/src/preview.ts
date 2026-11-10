@@ -41,6 +41,7 @@ import {
 } from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
+import type { AgentPorts } from "./agent-ports";
 import { wakeBrowser } from "./browser/browsers";
 import { cdpView } from "./browser/shield";
 import { type BrowserRecord, portsOf, readBrowser } from "./browser/state";
@@ -721,25 +722,28 @@ export async function previewWeight(
   );
 }
 
-export function startPreview(options: {
-  instanceId: string;
-  port?: number;
-  dir?: string;
-  /** A sheet's: the workspace's stage serves the port (core `PreviewSource`); each request wakes it. */
-  stage?: { dir: string; file: string };
-  /** A workspace preview's: the server the workspace's stage runs on the port (core `ServeSpec`); each request wakes it. */
-  serve?: { command: string; cwd: string };
-  /** The workspace whose network the port is in; none, the host's. */
-  workspace?: string;
-  /**
-   * The hub's name for this start, which a stop of it alone names, and the
-   * one credential the listener answers (core `RELAY_HEADER`).
-   */
-  token: string;
-  /** The source key the hub started it for (core `SourceKey`), which the register reports back. */
-  for: SourceKey;
-}): Promise<{ port: number }> {
-  return inTurn(options.instanceId, () => start(options));
+export function startPreview(
+  options: {
+    instanceId: string;
+    port?: number;
+    dir?: string;
+    /** A sheet's: the workspace's stage serves the port (core `PreviewSource`); each request wakes it. */
+    stage?: { dir: string; file: string };
+    /** A workspace preview's: the server the workspace's stage runs on the port (core `ServeSpec`); each request wakes it. */
+    serve?: { command: string; cwd: string };
+    /** The workspace whose network the port is in; none, the host's. */
+    workspace?: string;
+    /**
+     * The hub's name for this start, which a stop of it alone names, and the
+     * one credential the listener answers (core `RELAY_HEADER`).
+     */
+    token: string;
+    /** The source key the hub started it for (core `SourceKey`), which the register reports back. */
+    for: SourceKey;
+  },
+  ports: Pick<AgentPorts, "stage" | "stageClone">
+): Promise<{ port: number }> {
+  return inTurn(options.instanceId, () => start(options, ports));
 }
 
 /**
@@ -782,7 +786,8 @@ const servesNow = (held: number): Response =>
   });
 
 async function start(
-  options: Parameters<typeof startPreview>[0]
+  options: Parameters<typeof startPreview>[0],
+  ports: Pick<AgentPorts, "stage" | "stageClone">
 ): Promise<{ port: number }> {
   const { instanceId, port, dir, workspace, token, stage, serve } = options;
   if ((port === undefined) === (dir === undefined)) {
@@ -841,6 +846,7 @@ async function start(
     }
     try {
       await wakeSource(
+        ports,
         source,
         request.headers.get("sec-fetch-mode") === "navigate"
       );

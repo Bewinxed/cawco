@@ -78,6 +78,12 @@ import { hubAt } from "../hub";
 import { BOUNDARY_INSIDE, type Kit, ROOT, type Spec } from "../kit";
 import { passedFetch, passInto } from "../preview-pass";
 
+/** This probe starts no stage: its listener sends no stage frame. */
+const NO_STAGES = {
+  stage: (): void => undefined,
+  stageClone: (): void => undefined,
+};
+
 const OPENS = 20;
 /**
  * The preview ports this process's hub listeners take: a block of its own,
@@ -631,16 +637,19 @@ async function chain(
   const instanceId = artifactOrigin(crypto.randomUUID());
   const workspace = crypto.randomUUID();
   const token = crypto.randomUUID();
-  const agent = await startPreview({
-    instanceId,
-    port: stagePort,
-    workspace,
-    token,
-    for: sourceKeyOf({
-      machineId: "probe-machine",
-      source: { port: stagePort, workspace },
-    }),
-  });
+  const agent = await startPreview(
+    {
+      instanceId,
+      port: stagePort,
+      workspace,
+      token,
+      for: sourceKeyOf({
+        machineId: "probe-machine",
+        source: { port: stagePort, workspace },
+      }),
+    },
+    NO_STAGES
+  );
   const hub = await hubListener(
     instanceId,
     { port: stagePort, workspace },

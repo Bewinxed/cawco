@@ -63,6 +63,12 @@ import { join } from "node:path";
 import type { Socket } from "bun";
 import type { Kit, Spec } from "../kit";
 
+/** This probe starts no stage: its listener sends no stage frame. */
+const NO_STAGES = {
+  stage: (): void => undefined,
+  stageClone: (): void => undefined,
+};
+
 /** Host mode's listener: the first of the preview ports this spec gives its hub. Our pick, clear of a hub's default range. */
 const HOST_PORT = 47_460;
 const FORMS = [
@@ -368,12 +374,15 @@ const run = async (kit: Kit) => {
   const source = { port: server.port };
   const startedFor = sourceKeyOf({ machineId: "probe", source });
   // The machine's listener, keyed by the artifact's origin.
-  const { port: agentPort } = await startPreview({
-    instanceId: ORIGIN,
-    port: server.port,
-    token: TOKEN,
-    for: startedFor,
-  });
+  const { port: agentPort } = await startPreview(
+    {
+      instanceId: ORIGIN,
+      port: server.port,
+      token: TOKEN,
+      for: startedFor,
+    },
+    NO_STAGES
+  );
   // What the hub reads off the origin's row on every request.
   const shown = {
     id: ARTIFACT,
