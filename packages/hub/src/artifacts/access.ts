@@ -32,16 +32,17 @@ const artifactByHandle = (
 ): string => byHandle(asked, rows, ARTIFACT_KEYS, "artifact").id;
 
 /**
- * The id of the one artifact among `rows` that `asked` names
+ * The id of the one artifact among `rows` (read here) that `asked` names
  * ({@link artifactByHandle}); refused in its words when it names none or
- * several: a refusal of the call, never the hub's own fault.
+ * several, or the read fails: a refusal of the call, never the hub's own
+ * fault.
  */
 export const artifactNamed = (
   asked: string,
-  rows: readonly { id: string; kind: string; name: string }[]
+  rows: () => readonly { id: string; kind: string; name: string }[]
 ) => {
   try {
-    return artifactByHandle(asked, rows);
+    return artifactByHandle(asked, rows());
   } catch (error) {
     return refusal(
       404,
@@ -190,8 +191,7 @@ export const createAccess = (ctx: AccessContext) => {
       return asked;
     }
     const near = nameable(instance);
-    return artifactNamed(
-      asked,
+    return artifactNamed(asked, () =>
       namesAny(asked, near, ARTIFACT_KEYS)
         ? near
         : [...near, ...leftInProject(instance)]
