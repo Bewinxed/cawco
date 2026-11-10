@@ -67,22 +67,22 @@ import {
   buildTokens,
 } from "@cawco/design-tokens/design-tokens";
 import { tokensIn } from "@cawco/design-tokens/dtcg-resolver";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
-import type { DesignProposalFile } from "./db/stored-types";
 import { boardTitle } from "./labels";
 import { machineName } from "./machine-name";
 import {
   FOLDER_FILE_LIMIT,
   folderContent,
+  projectRoot,
   readFolderBytes,
   writeFolderFiles,
   YOU,
 } from "./project-folder";
-import { projectRefusalOf, projectRootOf } from "./project-refusal";
 import { appliesNow } from "./proposal-base";
+import type { AnyProblem } from "./refusal";
 import { isLive } from "./work-item-state";
 import { isHostFolder } from "./workspaces";
 
@@ -230,29 +230,93 @@ const manifestOf = (
   };
 };
 
+/** The statuses a project folder's read, and its write, answer problems with (project-folder.ts), read off its functions. */
+type FolderReadStatus = Extract<
+  Awaited<ReturnType<typeof readFolderBytes>>,
+  { readonly "~status": true }
+>["status"];
+type FolderWriteStatus = Extract<
+  Awaited<ReturnType<typeof writeFolderFiles>>,
+  { readonly "~status": true }
+>["status"];
+
 /** Where a system is written: the files it holds now, and how to write more. */
 export interface DesignStore {
   /** Commits design/ as it stands, with `message`; answers the commit (the one there when nothing changed). */
-  commit: (message: string) => Promise<string>;
+  commit: (
+    message: string
+  ) => Promise<
+    | string
+    | ReturnType<
+        typeof problem<502, { code: "design-not-committed"; detail: string }>
+      >
+  >;
   /** Each path's bytes now (relative to `design/`), or null when there is none. */
-  read: (paths: string[]) => Promise<Map<string, Uint8Array | null>>;
+  read: (
+    paths: string[]
+  ) => Promise<
+    | Map<string, Uint8Array | null>
+    | ReturnType<
+        typeof problem<502, { code: "design-not-read"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<
+          FolderReadStatus,
+          { code: "design-folder-unread"; detail: string }
+        >
+      >
+  >;
   /**
    * A file's bytes from anywhere in the place the session works (its
    * repository, or the project's folder), by a path from that root or an
    * absolute one inside it: a `design_write` file's `from`.
    */
-  source: (path: string) => Promise<Uint8Array>;
+  source: (
+    path: string
+  ) => Promise<
+    | Uint8Array
+    | ReturnType<
+        typeof problem<400, { code: "design-source-outside"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<400, { code: "design-source-unread"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<
+          FolderReadStatus,
+          { code: "design-source-unread"; detail: string }
+        >
+      >
+  >;
   /**
    * Whether a system here is the project's, not one the writing session is
    * building: its manifest on the repository's base commit, or first
    * committed to the folder by anyone but that session. A change to it is a
    * proposal.
    */
-  theirs: () => Promise<boolean>;
+  theirs: () => Promise<
+    | boolean
+    | ReturnType<
+        typeof problem<502, { code: "design-history-unread"; detail: string }>
+      >
+  >;
   /** Said to the session: the repository root, or the project's folder. */
   where: string;
   /** Writes every file, or none. */
-  write: (files: { path: string; bytes: Uint8Array }[]) => Promise<void>;
+  write: (
+    files: { path: string; bytes: Uint8Array }[]
+  ) => Promise<
+    | undefined
+    | ReturnType<
+        typeof problem<502, { code: "design-not-written"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<
+          FolderWriteStatus,
+          { code: "design-folder-unwritten"; detail: string }
+        >
+      >
+  >;
 }
 
 export interface DesignFile {
@@ -294,12 +358,9 @@ const insideRoot = (root: string, raw: string): string | undefined => {
 /**
  * The call's files with each `from` read where the session works, as base64
  * content: what is planned, what a proposal keeps and what Approve writes.
- * Refused whole, every problem named, when one does not hold.
+ * Answers a problem whole, every one named, when one does not hold.
  */
-const withSources = async (
-  store: DesignStore,
-  files: DesignFileIn[]
-): Promise<DesignFile[]> => {
+const withSources = async (store: DesignStore, files: DesignFileIn[]) => {
   const problems: string[] = [];
   const out: DesignFile[] = [];
   for (const file of files) {
@@ -311,21 +372,22 @@ const withSources = async (
       out.push({ ...file, content: file.content });
       continue;
     }
-    try {
-      const bytes = await store.source(file.from ?? "");
-      out.push({
-        path: file.path,
-        content: Buffer.from(bytes).toString("base64"),
-        encoding: "base64",
-      });
-    } catch (error) {
-      problems.push(
-        `${file.path}: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const bytes = await store.source(file.from ?? "");
+    if (bytes instanceof ElysiaStatus) {
+      problems.push(`${file.path}: ${bytes.response.detail}`);
+      continue;
     }
+    out.push({
+      path: file.path,
+      content: Buffer.from(bytes).toString("base64"),
+      encoding: "base64",
+    });
   }
   if (problems.length > 0) {
-    throw new Error(`Nothing was written. ${problems.join(" ")}`);
+    return problem(400, {
+      code: "design-source-unfit",
+      detail: `Nothing was written. ${problems.join(" ")}`,
+    });
   }
   return out;
 };
@@ -341,8 +403,8 @@ export interface DesignWritten {
 const KEPT_WHY =
   "The person changed it since CawCo wrote it (or CawCo never wrote it), so it stays as they have it. Say in your hand-in what you would change in it.";
 
-/** The call's files by their path in `design/`; refused whole, every problem named, when one does not hold. */
-const incomingFiles = (files: DesignFile[]): Map<string, Uint8Array> => {
+/** The call's files by their path in `design/`; a problem whole, every one named, when one does not hold. */
+const incomingFiles = (files: DesignFile[]) => {
   const problems: string[] = [];
   const incoming = new Map<string, Uint8Array>();
   for (const file of files) {
@@ -362,24 +424,40 @@ const incomingFiles = (files: DesignFile[]): Map<string, Uint8Array> => {
     );
   }
   if (problems.length > 0) {
-    throw new Error(`Nothing was written. ${problems.join(" ")}`);
+    return problem(400, {
+      code: "design-path-unfit",
+      detail: `Nothing was written. ${problems.join(" ")}`,
+    });
   }
   return incoming;
 };
 
+/** A store's read that failed: the machine's, or the folder's. */
+type Unread = Exclude<
+  Awaited<ReturnType<DesignStore["read"]>>,
+  Map<string, Uint8Array | null>
+>;
+
 /**
  * The token system built from what the files will hold (the call's writes
  * over what is there), once every token has its source; the problems said
- * otherwise.
+ * otherwise. A file the store could not read is that problem, answered as it
+ * is: the token builder reads through a callback that can only reject, so
+ * the rejection carries the store's problem out and this answers it.
  */
 const systemOf = async (
-  file: (path: string) => Promise<Uint8Array | null>,
+  file: (path: string) => Promise<Uint8Array | null | Unread>,
   manifest: DesignManifest,
   problems: string[]
-): Promise<BuiltTokens | undefined> => {
+) => {
+  const unread: Unread[] = [];
   try {
     const built = await buildDesignTokens(async (path) => {
       const bytes = await file(path);
+      if (bytes instanceof ElysiaStatus) {
+        unread.push(bytes);
+        throw new Error(bytes.response.detail);
+      }
       if (!bytes) {
         throw new Error(
           `${path} is named by ${RESOLVER} but is not in design/`
@@ -399,6 +477,10 @@ const systemOf = async (
     }
     return built;
   } catch (error) {
+    const [first] = unread;
+    if (first) {
+      return first;
+    }
     problems.push(
       `The tokens do not build: ${error instanceof Error ? error.message : String(error)}`
     );
@@ -406,22 +488,21 @@ const systemOf = async (
 };
 
 /**
- * The token system the files will hold, built, when there is one: refused
- * (in `problems`) when token files come without the resolver, or before
- * any manifest.
+ * The token system the files will hold, built, when there is one: the
+ * problem said (in `problems`) when token files come without the resolver,
+ * or before any manifest.
  */
 const tokensOf = async (at: {
-  contentOf: (path: string) => Promise<Uint8Array | null>;
+  contentOf: (path: string) => Promise<Uint8Array | null | Unread>;
+  /** Whether `path` is in `paths`' files as the write leaves them. */
+  there: (path: string) => boolean;
   hasManifest: boolean;
   manifest: DesignManifest | undefined;
   paths: string[];
   problems: string[];
-}): Promise<BuiltTokens | undefined> => {
-  const there = async (path: string) => (await at.contentOf(path)) !== null;
-  const tokenFiles = at.paths.filter(isTokenFile);
-  const present = await Promise.all(tokenFiles.map(there));
-  const hasTokens = present.some(Boolean);
-  const resolverThere = await there(RESOLVER);
+}) => {
+  const hasTokens = at.paths.filter(isTokenFile).some(at.there);
+  const resolverThere = at.there(RESOLVER);
   if (hasTokens && !resolverThere) {
     at.problems.push(
       `Write ${RESOLVER} with the token files: it names the base set and each theme's file.`
@@ -446,21 +527,110 @@ interface DesignPlan {
 }
 
 /**
+ * What a build settled and generated, put among the writes: settled token
+ * values go into the files the call wrote and into CawCo's own files it
+ * left, never into the person's; each generated file is written when it
+ * changed and kept when the person's.
+ */
+const settle = (
+  built: BuiltTokens | undefined,
+  at: {
+    kept: Set<string>;
+    now: (path: string) => Uint8Array | null;
+    theirs: (path: string) => boolean;
+    writes: Map<string, Uint8Array>;
+  }
+): void => {
+  for (const [path, json] of built?.changed ?? []) {
+    if (!(at.kept.has(path) || at.theirs(path))) {
+      at.writes.set(path, encoder.encode(`${JSON.stringify(json, null, 2)}\n`));
+    }
+  }
+  const generated: [string, string][] = built
+    ? [
+        [STYLESHEET, built.css],
+        [TYPES, built.types],
+      ]
+    : [];
+  for (const [path, text] of generated) {
+    const bytes = encoder.encode(text);
+    const before = at.now(path);
+    if (at.theirs(path)) {
+      at.kept.add(path);
+    } else if (!(before && Buffer.from(before).equals(bytes))) {
+      at.writes.set(path, bytes);
+    }
+  }
+};
+
+/** The files a write puts down: each of `writes`, then the hub's ledger (manifest.json), the fingerprint of every file CawCo wrote as of this write. */
+const withLedger = (
+  writes: Map<string, Uint8Array>,
+  recorded: DesignManifest,
+  sources: DesignManifest["sources"]
+) => {
+  const fingerprints = { ...recorded.files };
+  for (const [path, bytes] of writes) {
+    fingerprints[path] = fingerprint(bytes);
+  }
+  const ledger: DesignManifest = {
+    sources,
+    files: Object.fromEntries(
+      Object.entries(fingerprints).sort(([a], [b]) => a.localeCompare(b))
+    ),
+  };
+  return [
+    ...[...writes].map(([path, bytes]) => ({ path, bytes })),
+    {
+      path: MANIFEST,
+      bytes: encoder.encode(`${JSON.stringify(ledger, null, 2)}\n`),
+    },
+  ];
+};
+
+/**
+ * A file's bytes as the write leaves it: the call's, else what design/ held
+ * when the write was read, else the store's own reading of it (a theme file
+ * the resolver names that neither had).
+ */
+const contentAfter = async (
+  store: DesignStore,
+  files: {
+    current: Map<string, Uint8Array | null>;
+    writes: Map<string, Uint8Array>;
+  },
+  path: string
+) => {
+  const written = files.writes.get(path);
+  if (written) {
+    return written;
+  }
+  if (files.current.has(path)) {
+    return files.current.get(path) ?? null;
+  }
+  const read = await store.read([path]);
+  return read instanceof ElysiaStatus ? read : (read.get(path) ?? null);
+};
+
+/**
  * What writing `files` into a system would write: the person's files kept,
  * tokens.json checked against the manifest (every token has a source),
  * tokens.css generated from it, the manifest's fingerprints recorded.
- * Refused whole, with every problem, when a path, the manifest or the
- * tokens do not hold.
+ * A problem whole, with every one, when a path, the manifest or the tokens
+ * do not hold.
  */
-const planDesign = async (
-  store: DesignStore,
-  files: DesignFile[]
-): Promise<DesignPlan> => {
+const planDesign = async (store: DesignStore, files: DesignFile[]) => {
   const incoming = incomingFiles(files);
+  if (incoming instanceof ElysiaStatus) {
+    return incoming;
+  }
   const problems: string[] = [];
   const current = await store.read([
     ...new Set([...DESIGN_PARTS, ...incoming.keys()]),
   ]);
+  if (current instanceof ElysiaStatus) {
+    return current;
+  }
   const now = (path: string) => current.get(path) ?? null;
   const recordedBytes = now(MANIFEST);
   const recorded = recordedBytes
@@ -482,77 +652,44 @@ const planDesign = async (
 
   const given = incoming.get(MANIFEST);
   const manifest = given ? manifestOf(given, problems) : recorded;
-  const contentOf = async (path: string): Promise<Uint8Array | null> =>
-    writes.get(path) ??
-    (current.has(path)
-      ? now(path)
-      : ((await store.read([path])).get(path) ?? null));
   const built = await tokensOf({
-    contentOf,
+    contentOf: (path) => contentAfter(store, { writes, current }, path),
+    there: (path) => writes.has(path) || now(path) !== null,
     hasManifest: Boolean(given || recordedBytes),
     manifest,
     paths: [...writes.keys(), ...current.keys()],
     problems,
   });
+  if (built instanceof ElysiaStatus) {
+    return built;
+  }
   if (problems.length > 0) {
-    throw new Error(`Nothing was written. ${problems.join(" ")}`);
+    return problem(422, {
+      code: "design-system-unfit",
+      detail: `Nothing was written. ${problems.join(" ")}`,
+    });
   }
-  // Settled values go into the files the call wrote, and into CawCo's own
-  // files it left; never into the person's.
-  for (const [path, json] of built?.changed ?? []) {
-    if (!(kept.has(path) || theirs(path))) {
-      writes.set(path, encoder.encode(`${JSON.stringify(json, null, 2)}\n`));
-    }
-  }
-  // The generated files: each written when it changed, kept when the person's.
-  const generated: [string, string][] = built
-    ? [
-        [STYLESHEET, built.css],
-        [TYPES, built.types],
-      ]
-    : [];
-  for (const [path, text] of generated) {
-    const bytes = encoder.encode(text);
-    const before = now(path);
-    if (theirs(path)) {
-      kept.add(path);
-    } else if (!(before && Buffer.from(before).equals(bytes))) {
-      writes.set(path, bytes);
-    }
-  }
-
-  const fingerprints = { ...recorded.files };
-  for (const [path, bytes] of writes) {
-    fingerprints[path] = fingerprint(bytes);
-  }
-  const ledger: DesignManifest = {
-    sources: (manifest ?? recorded).sources,
-    files: Object.fromEntries(
-      Object.entries(fingerprints).sort(([a], [b]) => a.localeCompare(b))
-    ),
-  };
-  const out = [
-    ...[...writes].map(([path, bytes]) => ({ path, bytes })),
-    {
-      path: MANIFEST,
-      bytes: encoder.encode(`${JSON.stringify(ledger, null, 2)}\n`),
-    },
-  ];
+  settle(built, { kept, writes, now, theirs });
+  const out = withLedger(writes, recorded, (manifest ?? recorded).sources);
   return {
     out,
     kept,
     there: (path) =>
       out.some((file) => file.path === path) || now(path) !== null,
-  };
+  } satisfies DesignPlan;
 };
 
 /** Writes `files` into a system ({@link planDesign}), and says what it wrote and kept. */
-const writeDesign = async (
-  store: DesignStore,
-  files: DesignFile[]
-): Promise<DesignWritten> => {
-  const { out, kept, there } = await planDesign(store, files);
-  await store.write(out);
+const writeDesign = async (store: DesignStore, files: DesignFile[]) => {
+  const plan = await planDesign(store, files);
+  if (plan instanceof ElysiaStatus) {
+    return plan;
+  }
+  const { out, kept, there } = plan;
+  const written = await store.write(out);
+  if (written instanceof ElysiaStatus) {
+    return written;
+  }
   return {
     where: store.where,
     written: out.map((file) => `${DESIGN_DIR}/${file.path}`),
@@ -563,7 +700,7 @@ const writeDesign = async (
     missing: DESIGN_PARTS.filter((path) => !there(path)).map(
       (path) => `${DESIGN_DIR}/${path}`
     ),
-  };
+  } satisfies DesignWritten;
 };
 
 /** The longest a file's text is drawn on a proposal's card. */
@@ -613,11 +750,11 @@ const carried = (
 };
 
 /** Each file with what design/ holds of it now, the base it is proposed against. */
-const basedOn = async (
-  store: DesignStore,
-  files: DesignFile[]
-): Promise<DesignFile[]> => {
+const basedOn = async (store: DesignStore, files: DesignFile[]) => {
   const now = await store.read(files.map((file) => inDesign(file.path)));
+  if (now instanceof ElysiaStatus) {
+    return now;
+  }
   return files.map((file) => ({
     ...file,
     before: carried(now.get(inDesign(file.path)), file.encoding),
@@ -630,26 +767,27 @@ const basedOn = async (
  * the file as it is now, or the first path it no longer applies to.
  * Undefined for a proposal kept without its bases.
  */
-const appliesAt = async (
-  store: DesignStore,
-  files: DesignFile[]
-): Promise<{ files: DesignFile[] } | { stale: string } | undefined> => {
+const appliesAt = async (store: DesignStore, files: DesignFile[]) => {
   if (files.some((file) => file.before === undefined)) {
     return;
   }
   const encodings = new Map(
     files.map((file) => [inDesign(file.path), file.encoding] as const)
   );
-  const applies = await appliesNow<never>(
+  const applies = await appliesNow(
     files.map((file) => ({
       path: inDesign(file.path),
       before: file.before ?? "",
       content: file.content,
     })),
-    async (path) =>
-      carried((await store.read([path])).get(path), encodings.get(path))
+    async (path) => {
+      const read = await store.read([path]);
+      return read instanceof ElysiaStatus
+        ? read
+        : carried(read.get(path), encodings.get(path));
+    }
   );
-  if ("stale" in applies) {
+  if (applies instanceof ElysiaStatus || "stale" in applies) {
     return applies;
   }
   const merged = new Map(
@@ -666,14 +804,18 @@ const appliesAt = async (
 /**
  * What writing `files` would change, drawn for the person: each file it
  * writes, before and after, the hub's ledger (manifest.json) left out when
- * only its fingerprints change. Refused as the write would be.
+ * only its fingerprints change. A problem as the write would answer it.
  */
-const previewDesign = async (
-  store: DesignStore,
-  files: DesignFile[]
-): Promise<DesignProposalFile[]> => {
-  const { out } = await planDesign(store, files);
+const previewDesign = async (store: DesignStore, files: DesignFile[]) => {
+  const plan = await planDesign(store, files);
+  if (plan instanceof ElysiaStatus) {
+    return plan;
+  }
+  const { out } = plan;
   const before = await store.read(out.map((file) => file.path));
+  if (before instanceof ElysiaStatus) {
+    return before;
+  }
   const sourcesOf = (bytes: Uint8Array | null | undefined): string =>
     JSON.stringify(bytes ? (manifestOf(bytes, [])?.sources ?? null) : null);
   return out
@@ -728,17 +870,16 @@ const COMMAND_MS = 60_000;
 /** Base64 per command, well under one shell argument's 128 KiB. */
 const CHUNK = 64 * 1024;
 
-const failed = (what: string, result: CommandResult): Error =>
-  new Error(
-    `${what}: ${(result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`).split("\n").slice(-4).join(" ")}`
-  );
+/** What a failed command said: `what` could not be done, then the last lines it answered. */
+const failedWords = (what: string, result: CommandResult): string =>
+  `${what}: ${(result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`).split("\n").slice(-4).join(" ")}`;
 
 /** One file's bytes at `<target>.cawco-<index>`, in base64 chunks one shell command each. */
 const writeTemporary = async (
   sh: ReturnType<typeof runIn>,
   file: { path: string; bytes: Uint8Array },
   index: number
-): Promise<void> => {
+) => {
   const target = `${DESIGN_DIR}/${file.path}`;
   const text = Buffer.from(file.bytes).toString("base64");
   const count = Math.max(1, Math.ceil(text.length / CHUNK));
@@ -750,7 +891,10 @@ const writeTemporary = async (
       `${head}printf %s '${chunk}' | base64 -d ${part === 0 ? ">" : ">>"} ${shellQuote(`${target}.cawco-${index}`)}`
     );
     if (result.exitCode !== 0) {
-      throw failed(`${target} could not be written`, result);
+      return problem(502, {
+        code: "design-not-written",
+        detail: failedWords(`${target} could not be written`, result),
+      });
     }
   }
 };
@@ -824,7 +968,10 @@ const repositoryStore = (
         `${SAFE_GIT_SHELL}git rev-parse --verify -q ${shellQuote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${shellQuote(`${base}:${manifest}`)} 2>/dev/null; then add=$(git log -1 --diff-filter=A --format=%H ${shellQuote(base)} -- ${shellQuote(manifest)}); if [ -n "$add" ] && { ${ownTest(own)}; }; then echo own; else echo yes; fi; else echo no; fi`
       );
       if (result.exitCode !== 0) {
-        throw failed("design/'s history could not be read", result);
+        return problem(502, {
+          code: "design-history-unread",
+          detail: failedWords("design/'s history could not be read", result),
+        });
       }
       return result.stdout.trim() === "yes";
     },
@@ -833,7 +980,10 @@ const repositoryStore = (
         `${SAFE_GIT_SHELL}git add -A -- ${DESIGN_DIR} && { git diff --cached --quiet -- ${DESIGN_DIR} || git commit -q -m ${shellQuote(message)} -- ${DESIGN_DIR}; } && git rev-parse HEAD`
       );
       if (result.exitCode !== 0) {
-        throw failed("design/ could not be committed", result);
+        return problem(502, {
+          code: "design-not-committed",
+          detail: failedWords("design/ could not be committed", result),
+        });
       }
       return result.stdout.trim().split("\n").at(-1) ?? "";
     },
@@ -846,7 +996,10 @@ const repositoryStore = (
           `p=${shellQuote(`${DESIGN_DIR}/${path}`)}; if [ -f "$p" ]; then echo F; base64 < "$p" | tr -d '\\n'; fi`
         );
         if (result.exitCode !== 0) {
-          throw failed("design/ could not be read", result);
+          return problem(502, {
+            code: "design-not-read",
+            detail: failedWords("design/ could not be read", result),
+          });
         }
         const [mark, body] = result.stdout.split("\n");
         found.set(
@@ -861,22 +1014,29 @@ const repositoryStore = (
     source: async (raw) => {
       const path = insideRoot(at.root, raw);
       if (!path) {
-        throw new Error(
-          `from ${raw} is not inside ${at.root}: name a file in the repository you work in.`
-        );
+        return problem(400, {
+          code: "design-source-outside",
+          detail: `from ${raw} is not inside ${at.root}: name a file in the repository you work in.`,
+        });
       }
       const result = await sh(
         `f=${shellQuote(path)}; [ -f "$f" ] || { echo "from $f: there is no such file in ${at.root}" >&2; exit 2; }; n=$(wc -c < "$f"); [ "$n" -le ${FOLDER_FILE_LIMIT} ] || { echo "from $f: it is $n bytes, past the ${FOLDER_FILE_LIMIT} one design file may weigh" >&2; exit 2; }; base64 < "$f" | tr -d '\\n'`
       );
       if (result.exitCode !== 0) {
-        throw failed("it could not be read", result);
+        return problem(400, {
+          code: "design-source-unread",
+          detail: failedWords("it could not be read", result),
+        });
       }
       return new Uint8Array(Buffer.from(result.stdout.trim(), "base64"));
     },
     write: async (files) => {
       // Each file to a temporary name first, then all moved into place.
       for (const [index, file] of files.entries()) {
-        await writeTemporary(sh, file, index);
+        const temporary = await writeTemporary(sh, file, index);
+        if (temporary) {
+          return temporary;
+        }
       }
       const moved = await sh(
         files
@@ -887,7 +1047,10 @@ const repositoryStore = (
           .join(" && ")
       );
       if (moved.exitCode !== 0) {
-        throw failed("design/ could not be written", moved);
+        return problem(502, {
+          code: "design-not-written",
+          detail: failedWords("design/ could not be written", moved),
+        });
       }
     },
   };
@@ -908,99 +1071,119 @@ const folderStore = (
   changed: (projectId: string) => void,
   session: string,
   message = "design: write the design system"
-): DesignStore => ({
-  where: `${projectRootOf(projectId)}/${DESIGN_DIR}`,
-  theirs: () => {
-    const read = Bun.spawnSync(
-      [
-        "git",
-        "log",
-        "--diff-filter=A",
-        "--reverse",
-        `--format=%(trailers:key=${SESSION_TRAILER},valueonly)%x00`,
-        "--",
-        `${DESIGN_DIR}/${MANIFEST}`,
-      ],
-      { cwd: projectRootOf(projectId), env: { ...process.env, ...GIT_LOCALE } }
-    );
-    if (read.exitCode !== 0) {
-      // A folder git has no history for yet holds no system.
-      return Promise.resolve(false);
-    }
-    // A record a commit (`%x00` ends each), the oldest first; none: no system.
-    const out = read.stdout.toString();
-    if (!out.includes("\0")) {
-      return Promise.resolve(false);
-    }
-    // Committed by another session, by the person, or before trailers: the project's.
-    return Promise.resolve(out.split("\0")[0]?.trim() !== session);
-  },
-  // Every folder write is its own commit already.
-  commit: () =>
-    Promise.resolve(
-      Bun.spawnSync(
-        ["git", "-C", projectRootOf(projectId), "rev-parse", "HEAD"],
-        {
+) => {
+  const root = projectRoot(projectId);
+  if (root instanceof ElysiaStatus) {
+    return problem(root.status, {
+      code: "design-folder-unplaced",
+      detail: root.response.detail,
+    });
+  }
+  return {
+    where: `${root}/${DESIGN_DIR}`,
+    theirs: () => {
+      const read = Bun.spawnSync(
+        [
+          "git",
+          "log",
+          "--diff-filter=A",
+          "--reverse",
+          `--format=%(trailers:key=${SESSION_TRAILER},valueonly)%x00`,
+          "--",
+          `${DESIGN_DIR}/${MANIFEST}`,
+        ],
+        { cwd: root, env: { ...process.env, ...GIT_LOCALE } }
+      );
+      if (read.exitCode !== 0) {
+        // A folder git has no history for yet holds no system.
+        return Promise.resolve(false);
+      }
+      // A record a commit (`%x00` ends each), the oldest first; none: no system.
+      const out = read.stdout.toString();
+      if (!out.includes("\0")) {
+        return Promise.resolve(false);
+      }
+      // Committed by another session, by the person, or before trailers: the project's.
+      return Promise.resolve(out.split("\0")[0]?.trim() !== session);
+    },
+    // Every folder write is its own commit already.
+    commit: () =>
+      Promise.resolve(
+        Bun.spawnSync(["git", "-C", root, "rev-parse", "HEAD"], {
           env: { ...process.env, ...GIT_LOCALE },
-        }
-      )
-        .stdout.toString()
-        .trim()
-    ),
-  read: async (paths) =>
-    new Map(
-      await Promise.all(
-        paths.map(async (path): Promise<[string, Uint8Array | null]> => {
-          const file = await readFolderBytes(
+        })
+          .stdout.toString()
+          .trim()
+      ),
+    read: async (paths) => {
+      const read = await Promise.all(
+        paths.map(async (path) => ({
+          path,
+          file: await readFolderBytes(
             projectId,
             `${DESIGN_DIR}/${path}`,
             FOLDER_FILE_LIMIT
-          );
-          if (file instanceof ElysiaStatus) {
-            if (file.status === 404) {
-              return [path, null];
-            }
-            throw projectRefusalOf(file);
-          }
-          return [path, file.bytes];
-        })
-      )
-    ),
-  source: async (raw) => {
-    const path = insideRoot(projectRootOf(projectId), raw);
-    if (!path) {
-      throw new Error(
-        `from ${raw} is not inside the project's folder: name a file in it.`
+          ),
+        }))
       );
-    }
-    const file = await readFolderBytes(projectId, path, FOLDER_FILE_LIMIT);
-    if (file instanceof ElysiaStatus) {
-      throw projectRefusalOf(file);
-    }
-    return file.bytes;
-  },
-  write: async (files) => {
-    const written = await writeFolderFiles(
-      projectId,
-      files.map((file) => ({
-        path: `${DESIGN_DIR}/${file.path}`,
-        content: file.bytes,
-      })),
-      {
-        author: { name: author },
-        message: `${message}\n\n${SESSION_TRAILER}: ${session}`,
+      const found = new Map<string, Uint8Array | null>();
+      for (const { path, file } of read) {
+        if (!(file instanceof ElysiaStatus)) {
+          found.set(path, file.bytes);
+        } else if (file.status === 404) {
+          found.set(path, null);
+        } else {
+          return problem(file.status, {
+            code: "design-folder-unread",
+            detail: file.response.detail,
+          });
+        }
       }
-    );
-    if (written instanceof ElysiaStatus) {
-      throw projectRefusalOf(written);
-    }
-    changed(projectId);
-  },
-});
+      return found;
+    },
+    source: async (raw) => {
+      const path = insideRoot(root, raw);
+      if (!path) {
+        return problem(400, {
+          code: "design-source-outside",
+          detail: `from ${raw} is not inside the project's folder: name a file in it.`,
+        });
+      }
+      const file = await readFolderBytes(projectId, path, FOLDER_FILE_LIMIT);
+      if (file instanceof ElysiaStatus) {
+        return problem(file.status, {
+          code: "design-source-unread",
+          detail: file.response.detail,
+        });
+      }
+      return file.bytes;
+    },
+    write: async (files) => {
+      const written = await writeFolderFiles(
+        projectId,
+        files.map((file) => ({
+          path: `${DESIGN_DIR}/${file.path}`,
+          content: file.bytes,
+        })),
+        {
+          author: { name: author },
+          message: `${message}\n\n${SESSION_TRAILER}: ${session}`,
+        }
+      );
+      if (written instanceof ElysiaStatus) {
+        return problem(written.status, {
+          code: "design-folder-unwritten",
+          detail: written.response.detail,
+        });
+      }
+      changed(projectId);
+    },
+  } satisfies DesignStore;
+};
 
 /** What `git status` says of design/ that is not committed, a path a line. */
 const UNCOMMITTED = `git status --porcelain --untracked-files=all -- ${DESIGN_DIR}`;
-/** How many uncommitted paths a refusal names. */
+/** How many uncommitted paths a hold names. */
 const NAMED = 5;
 
 const uncommittedLine = (
@@ -1019,6 +1202,27 @@ const uncommittedLine = (
   return `design/ isn't committed in ${where}: ${named}${more}. Send it back so the builder commits it, then approve.`;
 };
 
+/** What the project's folder on the hub holds of design/ that no commit has, said as the hold on an approval; nothing when it all is. */
+const folderHold = (folder: string): string | undefined => {
+  if (!existsSync(join(folder, DESIGN_DIR))) {
+    return;
+  }
+  const read = Bun.spawnSync(
+    [
+      "git",
+      "-C",
+      folder,
+      "status",
+      "--porcelain",
+      "--untracked-files=all",
+      "--",
+      DESIGN_DIR,
+    ],
+    { env: { ...process.env, ...GIT_LOCALE } }
+  );
+  return uncommittedLine("the project's folder", read.stdout.toString());
+};
+
 /** The ref a workspace's base branch is on origin as: what the project has, apart from the workspace's own commits. */
 const baseRef = (base: string): string => `refs/remotes/origin/${base}`;
 
@@ -1033,7 +1237,7 @@ export const designOnBase = (
   run: Run,
   workspace: { base: string; id: string; machineId: string; path: string },
   own: OwnLanding[]
-): Promise<boolean> =>
+) =>
   repositoryStore(
     run,
     {
@@ -1082,12 +1286,13 @@ const readFirst = (has: Set<string>): string => {
  * read inside its boundary as every command in a live clone is. Its usage
  * guide (design/SKILL.md) whole, then what to read first, naming only the
  * files that are there. Empty when design/ holds no guide (neither SKILL.md
- * nor DESIGN.md): a design/ of tokens alone is no system to brief.
+ * nor DESIGN.md): a design/ of tokens alone is no system to brief. A clone
+ * the machine could not read is a problem.
  */
 export const designSection = async (
   run: Run,
   clone: { id: string; machineId: string; path: string }
-): Promise<string> => {
+) => {
   const files = [...GUIDES, STYLESHEET, ...ON_DEMAND];
   const read = await runIn(run, {
     machineId: clone.machineId,
@@ -1097,7 +1302,13 @@ export const designSection = async (
     `for f in ${files.join(" ")}; do if [ -f ${DESIGN_DIR}/$f ]; then echo "$f"; fi; done; echo ${GUIDE_MARK}; if [ -f ${DESIGN_DIR}/SKILL.md ]; then cat ${DESIGN_DIR}/SKILL.md; fi`
   );
   if (read.exitCode !== 0) {
-    throw failed("design/ could not be read in the attempt's clone", read);
+    return problem(502, {
+      code: "design-clone-unread",
+      detail: failedWords(
+        "design/ could not be read in the attempt's clone",
+        read
+      ),
+    });
   }
   const lines = read.stdout.split("\n");
   const mark = lines.indexOf(GUIDE_MARK);
@@ -1153,10 +1364,16 @@ export const createDesignSystem = (deps: {
     | "workspacesNamed"
   >;
   online: (machineId: string) => boolean;
-  /** Whether a task is design work (design-offers.ts `designShaped`, or the build itself). */
-  designTask: (projectId: string, taskId: string) => Promise<boolean>;
-  /** Whether a task is open: neither done nor dropped. */
-  taskOpen: (projectId: string, taskId: string) => Promise<boolean>;
+  /** Whether a task is design work (design-offers.ts `designShaped`, or the build itself); the problem of a task that cannot be read. */
+  designTask: (
+    projectId: string,
+    taskId: string
+  ) => Promise<boolean | AnyProblem>;
+  /** Whether a task is open: neither done nor dropped; the problem of a task that cannot be read. */
+  taskOpen: (
+    projectId: string,
+    taskId: string
+  ) => Promise<boolean | AnyProblem>;
   /**
    * The boundary a command in workspace `workspaceId` runs inside, as every
    * hub-run command's (work-items.ts `workspaceRef`): its own, or none for a
@@ -1187,38 +1404,32 @@ export const createDesignSystem = (deps: {
    * Why your approval of a design task waits: its newest attempt's
    * workspace, while it stands, or the project's folder on the hub holds
    * design/ changes no commit has. A workspace retired after landing has
-   * none (landing refuses uncommitted work).
+   * none (landing refuses uncommitted work). The problem of a task or a
+   * folder that cannot be read.
    */
-  const approvalRefusal = async (
+  const approvalHold = async (
     projectId: string,
     taskId: string
-  ): Promise<string | undefined> => {
-    if (!(await deps.designTask(projectId, taskId))) {
+  ): Promise<string | undefined | AnyProblem> => {
+    const designed = await deps.designTask(projectId, taskId);
+    if (typeof designed !== "boolean") {
+      return designed;
+    }
+    if (!designed) {
       return;
     }
-    const folder = projectRootOf(projectId);
-    if (existsSync(join(folder, DESIGN_DIR))) {
-      const read = Bun.spawnSync(
-        [
-          "git",
-          "-C",
-          folder,
-          "status",
-          "--porcelain",
-          "--untracked-files=all",
-          "--",
-          DESIGN_DIR,
-        ],
-        { env: { ...process.env, ...GIT_LOCALE } }
-      );
-      const line = uncommittedLine(
-        "the project's folder",
-        read.stdout.toString()
-      );
-      if (line) {
-        return line;
-      }
+    const folder = projectRoot(projectId);
+    if (folder instanceof ElysiaStatus) {
+      return problem(folder.status, {
+        code: "design-folder-unplaced",
+        detail: folder.response.detail,
+      });
     }
+    return folderHold(folder) ?? (await workspaceHold(projectId, taskId));
+  };
+
+  /** What the builder's workspace holds of design/ that no commit has, said as the hold on an approval; nothing when it all is, or there is no workspace to read. */
+  const workspaceHold = async (projectId: string, taskId: string) => {
     const [attempt] = deps.db
       .projectAttempts(projectId)
       .filter((item) => item.taskId === taskId);
@@ -1248,19 +1459,32 @@ export const createDesignSystem = (deps: {
   };
 
   /** Where a session's design/ is: its project's folder, or the root of the repository it works in. */
-  const placeOf = async (actor: InstanceRow): Promise<ProposalPlace> => {
+  const placeOf = async (actor: InstanceRow) => {
     if (!actor.projectId) {
-      throw new Error(
-        "A design system belongs to a project; this session is in none."
-      );
+      return problem(409, {
+        code: "design-no-project",
+        detail:
+          "A design system belongs to a project; this session is in none.",
+      });
     }
-    const folder = projectRootOf(actor.projectId);
+    const folder = projectRoot(actor.projectId);
+    if (folder instanceof ElysiaStatus) {
+      return problem(folder.status, {
+        code: "design-folder-unplaced",
+        detail: folder.response.detail,
+      });
+    }
     if (
       actor.machineId === (await deps.ownMachineId) &&
       (actor.cwd === folder || actor.cwd.startsWith(`${folder}/`))
     ) {
-      return { repo: null };
+      return { repo: null } satisfies ProposalPlace;
     }
+    return await repositoryOf(actor, actor.projectId);
+  };
+
+  /** The repository a session works in, with the commit its system must be on to be the project's when it is its workspace's clone. */
+  const repositoryOf = async (actor: InstanceRow, projectId: string) => {
     // A work item's session works in its workspace's clone, read inside its
     // boundary; the project's system there is what its base branch holds on
     // origin, never its own commits.
@@ -1280,11 +1504,16 @@ export const createDesignSystem = (deps: {
     );
     const root = top.stdout.trim();
     if (top.exitCode !== 0 || !root) {
-      throw new Error(
-        `${actor.cwd} is not inside a repository, so design/ has no root to go at. Work from the project's repository or its folder.`
-      );
+      return problem(409, {
+        code: "design-no-repository",
+        detail: `${actor.cwd} is not inside a repository, so design/ has no root to go at. Work from the project's repository or its folder.`,
+      });
     }
     const inClone = workspace?.path === root ? workspace : undefined;
+    const own = inClone && mine ? await ownOf(projectId, mine.item) : undefined;
+    if (own && !Array.isArray(own)) {
+      return own;
+    }
     return {
       repo: {
         machineId: actor.machineId,
@@ -1293,27 +1522,23 @@ export const createDesignSystem = (deps: {
           ? { workspace: { id: inClone.id, path: inClone.path } }
           : {}),
       },
-      ...(inClone && mine
-        ? {
-            base: baseRef(inClone.base),
-            own: await ownOf(actor.projectId, mine.item),
-          }
-        : {}),
-    };
+      ...(inClone && own ? { base: baseRef(inClone.base), own } : {}),
+    } satisfies ProposalPlace;
   };
 
   /** What `item`'s own task landed while it is open ({@link ownLandings}). */
   const ownOf = async (
     projectId: string,
     item: WorkItemRow
-  ): Promise<OwnLanding[]> =>
-    item.taskId
-      ? ownLandings(
-          deps.db.projectAttempts(projectId),
-          item,
-          await deps.taskOpen(projectId, item.taskId)
-        )
-      : [];
+  ): Promise<OwnLanding[] | AnyProblem> => {
+    if (!item.taskId) {
+      return [];
+    }
+    const taskOpen = await deps.taskOpen(projectId, item.taskId);
+    return typeof taskOpen === "boolean"
+      ? ownLandings(deps.db.projectAttempts(projectId), item, taskOpen)
+      : taskOpen;
+  };
 
   /**
    * The workspace a session's work item runs in, while that item is live:
@@ -1332,7 +1557,8 @@ export const createDesignSystem = (deps: {
 
   /**
    * The store at a place, written for `session`: the folder's writes
-   * committed by `author` with `message`.
+   * committed by `author` with `message`; the problem of a project folder
+   * that has no place.
    */
   const storeAt = (
     projectId: string,
@@ -1340,7 +1566,7 @@ export const createDesignSystem = (deps: {
     session: string,
     author: string,
     message?: string
-  ): DesignStore =>
+  ) =>
     place.repo
       ? repositoryStore(deps.run, place.repo, place.base, place.own)
       : folderStore(projectId, author, deps.folderChanged, session, message);
@@ -1391,21 +1617,35 @@ export const createDesignSystem = (deps: {
   ) => {
     const why = rawWhy?.trim() ?? "";
     if (!why) {
-      throw new Error(
-        "Nothing was written. This changes the project's design system, which goes to the person as a proposal: say why, in one line (why)."
-      );
+      return problem(400, {
+        code: "design-why-missing",
+        detail:
+          "Nothing was written. This changes the project's design system, which goes to the person as a proposal: say why, in one line (why).",
+      });
     }
     if (why.length > WHY_LIMIT) {
-      throw new Error(
-        `Nothing was written. why is ${why.length} characters long; say it in one line, under ${WHY_LIMIT}.`
-      );
+      return problem(400, {
+        code: "design-why-long",
+        detail: `Nothing was written. why is ${why.length} characters long; say it in one line, under ${WHY_LIMIT}.`,
+      });
     }
     const store = storeAt(projectId, place, actor.id, boardTitle(actor));
+    if (store instanceof ElysiaStatus) {
+      return store;
+    }
     const preview = await previewDesign(store, files);
+    if (preview instanceof ElysiaStatus) {
+      return preview;
+    }
     if (preview.length === 0) {
-      throw new Error(
-        "Nothing was written: design/ already holds exactly that."
-      );
+      return problem(409, {
+        code: "design-unchanged",
+        detail: "Nothing was written: design/ already holds exactly that.",
+      });
+    }
+    const based = await basedOn(store, files);
+    if (based instanceof ElysiaStatus) {
+      return based;
     }
     const row: DesignProposalRow = {
       id: `dp-${crypto.randomUUID()}`,
@@ -1414,7 +1654,7 @@ export const createDesignSystem = (deps: {
       machineId: place.repo?.machineId ?? null,
       root: place.repo?.root ?? null,
       why,
-      files: await basedOn(store, files),
+      files: based,
       preview,
       toolUseId: toolUseId ?? null,
       createdAt: new Date(),
@@ -1435,18 +1675,19 @@ export const createDesignSystem = (deps: {
   /**
    * Where an approved proposal is written: its repository, inside its
    * proposing session's workspace's boundary when that clone is the
-   * repository, or the project's folder. Refused, saying so, when that
+   * repository, or the project's folder. A problem, saying so, when that
    * session's work item has ended (nothing would land a commit in its clone
    * any more) or its machine is offline.
    */
-  const placeOfProposal = (row: DesignProposalRow): ProposalPlace => {
+  const placeOfProposal = (row: DesignProposalRow) => {
     if (!(row.machineId && row.root)) {
-      return { repo: null };
+      return { repo: null } satisfies ProposalPlace;
     }
     if (!deps.online(row.machineId)) {
-      throw new Error(
-        `The proposal's repository is on ${machineName(deps.db, row.machineId)}, which is offline. Approve once it is back.`
-      );
+      return problem(503, {
+        code: "design-proposal-machine-away",
+        detail: `The proposal's repository is on ${machineName(deps.db, row.machineId)}, which is offline. Approve once it is back.`,
+      });
     }
     const own = workspaceOfSession(row.instanceId);
     const boundary =
@@ -1459,7 +1700,7 @@ export const createDesignSystem = (deps: {
         root: row.root,
         ...(boundary ? { workspace: boundary } : {}),
       },
-    };
+    } satisfies ProposalPlace;
   };
 
   /** Why a proposal no longer applies: the reason kept, what its session reads, its transcript's line. */
@@ -1550,22 +1791,26 @@ export const createDesignSystem = (deps: {
         closeStale(row, gone);
         continue;
       }
-      let applies: Awaited<ReturnType<typeof appliesAt>>;
-      try {
-        applies = await appliesAt(
-          storeAt(
-            row.projectId,
-            placeOfProposal(row),
-            row.instanceId,
-            YOU.name
-          ),
-          row.files
-        );
-      } catch {
+      // Read where the proposal was made; one whose place or files cannot be
+      // read now is read at its Approve.
+      const place = placeOfProposal(row);
+      if (place instanceof ElysiaStatus) {
+        continue;
+      }
+      const store = storeAt(row.projectId, place, row.instanceId, YOU.name);
+      if (store instanceof ElysiaStatus) {
+        continue;
+      }
+      // The hub's command runner throws when a machine does not answer.
+      const applies = await appliesAt(store, row.files).catch(
+        (): "unanswered" => "unanswered"
+      );
+      if (applies === "unanswered") {
         continue;
       }
       if (
         applies &&
+        !(applies instanceof ElysiaStatus) &&
         "stale" in applies &&
         open.has(row.id) &&
         !answering.has(row.id)
@@ -1590,7 +1835,7 @@ export const createDesignSystem = (deps: {
     row: DesignProposalRow,
     place: ProposalPlace,
     files: DesignFile[]
-  ): Promise<string> => {
+  ) => {
     const message = `design: ${row.why}\n\nProposal: ${row.id}`;
     const store = storeAt(
       row.projectId,
@@ -1599,8 +1844,27 @@ export const createDesignSystem = (deps: {
       YOU.name,
       message
     );
-    await writeDesign(store, files);
+    if (store instanceof ElysiaStatus) {
+      return store;
+    }
+    const written = await writeDesign(store, files);
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
     return await store.commit(message);
+  };
+
+  /** A proposal an Approve found no longer applying, closed ({@link closeStale}): `closed`, and that its proposer was told when they were. */
+  const closedWords = (
+    row: DesignProposalRow,
+    closing: Closing,
+    closed: string
+  ): string => {
+    const told = closeStale(row, closing);
+    const [proposer] = deps.db.getInstancesByIds([row.instanceId]);
+    return told && proposer
+      ? `${closed} ${askWords.proposerTold(boardTitle(proposer))}`
+      : closed;
   };
 
   /**
@@ -1608,33 +1872,49 @@ export const createDesignSystem = (deps: {
    * as it is now (the one rule); still applying, it is written there, its
    * changes merged into the files; no longer applying (a change no commit
    * carried, or one landing with the press), it closes then and the answer
-   * is refused saying so.
+   * is a problem saying so.
    */
-  const approve = async (row: DesignProposalRow): Promise<string> => {
+  const approve = async (row: DesignProposalRow) => {
     const gone = itemGone(row);
     if (gone && row.root) {
       closeStale(row, gone);
-      throw new Error(askWords.proposalItemEndedOnAnswer(row.root));
+      return problem(409, {
+        code: "design-proposal-item-ended",
+        detail: askWords.proposalItemEndedOnAnswer(row.root),
+      });
     }
     const place = placeOfProposal(row);
-    const applies = await appliesAt(
-      storeAt(row.projectId, place, row.instanceId, YOU.name),
-      row.files
-    );
-    if (!applies || "stale" in applies) {
-      const path = applies?.stale;
-      const told = closeStale(row, path ? staleAt(row, path) : unbased(row));
-      const closed = path
-        ? askWords.proposalClosedOnAnswer(`${DESIGN_DIR}/${path}`)
-        : `${askWords.proposalUnbased}.`;
-      const [proposer] = deps.db.getInstancesByIds([row.instanceId]);
-      throw new Error(
-        told && proposer
-          ? `${closed} ${askWords.proposerTold(boardTitle(proposer))}`
-          : closed
-      );
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
+    const store = storeAt(row.projectId, place, row.instanceId, YOU.name);
+    if (store instanceof ElysiaStatus) {
+      return store;
+    }
+    const applies = await appliesAt(store, row.files);
+    if (applies instanceof ElysiaStatus) {
+      return applies;
+    }
+    if (!applies) {
+      return problem(409, {
+        code: "design-proposal-unbased",
+        detail: closedWords(row, unbased(row), `${askWords.proposalUnbased}.`),
+      });
+    }
+    if ("stale" in applies) {
+      return problem(409, {
+        code: "design-proposal-stale",
+        detail: closedWords(
+          row,
+          staleAt(row, applies.stale),
+          askWords.proposalClosedOnAnswer(`${DESIGN_DIR}/${applies.stale}`)
+        ),
+      });
     }
     const sha = await apply(row, place, applies.files);
+    if (sha instanceof ElysiaStatus) {
+      return sha;
+    }
     await recheckAt(place);
     return sha;
   };
@@ -1665,7 +1945,7 @@ export const createDesignSystem = (deps: {
   };
 
   return {
-    approvalRefusal,
+    approvalHold,
 
     /**
      * `design_write`: a system the session is building itself is written at
@@ -1677,15 +1957,32 @@ export const createDesignSystem = (deps: {
       given: DesignFileIn[],
       why: string | undefined,
       toolUseId: string | undefined
-    ): Promise<DesignWritten | Awaited<ReturnType<typeof propose>>> => {
+    ) => {
       const place = await placeOf(actor);
+      // A problem has no `repo`: the task read's, across the dep, is Any.
+      if (!("repo" in place)) {
+        return place;
+      }
       const projectId = actor.projectId as string;
       const store = storeAt(projectId, place, actor.id, actor.title ?? "CawCo");
+      if (store instanceof ElysiaStatus) {
+        return store;
+      }
       const files = await withSources(store, given);
-      if (await store.theirs()) {
+      if (files instanceof ElysiaStatus) {
+        return files;
+      }
+      const theirs = await store.theirs();
+      if (theirs instanceof ElysiaStatus) {
+        return theirs;
+      }
+      if (theirs) {
         return propose(actor, projectId, place, files, why, toolUseId);
       }
       const written = await writeDesign(store, files);
+      if (written instanceof ElysiaStatus) {
+        return written;
+      }
       await recheckAt(place);
       return written;
     },
@@ -1733,25 +2030,30 @@ export const createDesignSystem = (deps: {
      * The person's answer: approved, it is written and committed where it
      * was proposed, if it still applies ({@link approve}); denied, design/
      * stays as it was. Either way its session is told and the ask leaves
-     * the ledger; a write that fails throws, and its ask stays.
+     * the ledger; a write that fails is answered as its problem, and its ask
+     * stays.
      */
-    async answer(requestId: string, result: PermissionResult): Promise<void> {
+    async answer(requestId: string, result: PermissionResult) {
       const row = deps.db.designChecks.proposal(requestId);
       if (row) {
         if (answering.has(row.id)) {
-          throw new Error("That proposal is being answered already.");
+          return problem(409, {
+            code: "design-proposal-answering",
+            detail: "That proposal is being answered already.",
+          });
         }
         answering.add(row.id);
         try {
           if (result.behavior === "allow") {
             // A write that fails leaves the ask parked; its reason is said
             // here and to the person's answer.
-            const sha = await approve(row).catch((error: unknown) => {
+            const sha = await approve(row);
+            if (sha instanceof ElysiaStatus) {
               console.warn(
-                `[design] ${row.projectId}: ${row.id} was approved and not written: ${error instanceof Error ? error.message : String(error)}`
+                `[design] ${row.projectId}: ${row.id} was approved and not written: ${sha.response.detail}`
               );
-              throw error;
-            });
+              return sha;
+            }
             answered(row, null, sha);
           } else {
             answered(row, result, "");
