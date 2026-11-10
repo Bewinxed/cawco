@@ -75,6 +75,7 @@ import {
   type FrameRender,
   holdersOf,
   type Interaction,
+  interactionOf,
   type PageError,
   type Story,
   type SweepStep,
@@ -116,10 +117,18 @@ import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { differences } from "./diff";
 import { tellHolder } from "./embed";
-import { drew, firstWords, lookOf, partsOf, readAnimation } from "./measure";
+import {
+  drew,
+  firstWords,
+  keyframeEffectOf,
+  lookOf,
+  partsOf,
+  readAnimation,
+} from "./measure";
 import { nameOf, thingOf } from "./names";
 import {
   type Column,
+  canvasOf,
   detailsOf,
   FAILED_LINE,
   FORCED,
@@ -127,6 +136,7 @@ import {
   type Mode,
   type Mounted,
   type Page,
+  type PlayFn,
   type Section,
   type SectionFailure,
 } from "./page";
@@ -230,9 +240,6 @@ interface Taken {
   target: Element | null;
 }
 
-/** A story's `play`, as the stage runs it (core stage-play.ts's context). */
-type PlayFn = (context: object) => Promise<void> | void;
-
 /** A section's stories as the rig read them, for the report. */
 type Reads = Map<Section, FrameRender[]>;
 
@@ -250,7 +257,7 @@ function takenOf(
   first: number,
   t0: number
 ): Taken | null {
-  const effect = animation.effect as KeyframeEffect | null;
+  const effect = keyframeEffectOf(animation);
   if (!((Number(effect?.getComputedTiming().duration) || 0) > 0)) {
     return null;
   }
@@ -315,7 +322,7 @@ function propertyOf(animation: Animation): string {
   ) {
     return animation.animationName;
   }
-  const effect = animation.effect as KeyframeEffect | null;
+  const effect = keyframeEffectOf(animation);
   const keys = new Set<string>();
   for (const frame of effect?.getKeyframes() ?? []) {
     for (const key of Object.keys(frame)) {
@@ -613,10 +620,10 @@ function drawingRender(
  * project's preview file decorates every story). Read as the wrapper, the
  * drawing measured 0 wide and the design graph's stage stood a sliver.
  */
-function ownRoot(body: HTMLElement): HTMLElement | null {
-  let el = body.firstElementChild as HTMLElement | null;
+function ownRoot(body: HTMLElement): Element | null {
+  let el = body.firstElementChild;
   while (el?.firstElementChild && getComputedStyle(el).display === "contents") {
-    el = el.firstElementChild as HTMLElement;
+    el = el.firstElementChild;
   }
   return el;
 }
@@ -766,7 +773,7 @@ export function bootStage(page: Page): Mode {
       scrollY > 0
     );
   addEventListener("scroll", edge, { passive: true });
-  const canvas = document.getElementById("cawco-canvas") as HTMLElement;
+  const canvas = canvasOf();
   canvas.classList.add("cawco-stage");
   /** The one drawing: the live instance of the state the panel keeps. */
   const stage = newDrawing();
@@ -1116,7 +1123,10 @@ export function bootStage(page: Page): Mode {
     ) {
       had.focus({ preventScroll: true });
     } else {
-      (document.activeElement as HTMLElement | null)?.blur();
+      const active = document.activeElement;
+      if (active instanceof HTMLElement || active instanceof SVGElement) {
+        active.blur();
+      }
     }
   }
 
@@ -1346,11 +1356,7 @@ export function bootStage(page: Page): Mode {
   /** The play that moves the drawing into `target`, when the panel asked for the move and its story has one. */
   function playOf(asking: StageReach, target: Target): PlayFn | null {
     const csf = page.csfOf(target.section.mod?.module ?? {}, target.ref.story);
-    return asking.play &&
-      asking.from !== null &&
-      typeof csf?.play === "function"
-      ? (csf.play as PlayFn)
-      : null;
+    return asking.play && asking.from !== null ? (csf?.play ?? null) : null;
   }
 
   /** Whether the live instance stands at `ref` of `section`, mounted and unfaulted. */
@@ -2334,8 +2340,11 @@ export function bootStage(page: Page): Mode {
     const storyName = cut > 0 ? name.slice(cut + 1) : name;
     // Found by the plans the stage wrote into the page: no other section is loaded, so none is drawn for it.
     const holders = holdersOf(page.files, page.plans, name);
+    const [only] = holders;
     const section =
-      holders.length === 1 ? page.sectionOf(holders[0] as string) : undefined;
+      holders.length === 1 && only !== undefined
+        ? page.sectionOf(only)
+        : undefined;
     if (holders.length === 0) {
       return {
         refused: `No states file of this canvas has a story ${name}: ${page.files.map((file) => `${file} has ${page.plans[file]?.stories.map((each) => each.name).join(", ") || "none"}`).join("; ")}.`,
@@ -2376,11 +2385,11 @@ export function bootStage(page: Page): Mode {
 
   /** The stage posed at `key` for its picture: mounted afresh at its story, at rest, its interaction forced on the drawing. */
   async function pose(key: string): Promise<{ h: number; w: number } | null> {
-    const [file, story, interaction] = key.split("|") as [
-      string,
-      string,
-      Interaction,
-    ];
+    const [file, story, picked] = key.split("|");
+    const interaction = interactionOf(picked);
+    if (file === undefined || story === undefined || !interaction) {
+      return null;
+    }
     if (posed?.key !== key) {
       const target = resolved({ file, story });
       if ("refused" in target) {
@@ -2608,7 +2617,7 @@ function bootColumn(page: Page): Mode {
     "cawco-column-page",
     embed ? "cawco-embed" : "cawco-map"
   );
-  const canvas = document.getElementById("cawco-canvas") as HTMLElement;
+  const canvas = canvasOf();
   const column = document.createElement("div");
   column.className = "cawco-column";
   const waiting = waitingFor(sections[0]?.name ?? "the component");
@@ -2621,8 +2630,14 @@ function bootColumn(page: Page): Mode {
     column.append(el);
     return { section, el, drawings: new Map(), failedCard: null };
   });
-  const partOf = (section: Section) =>
-    parts.find((one) => one.section === section) as ColumnPart;
+  const columnParts = new Map(parts.map((one) => [one.section, one]));
+  const partOf = (section: Section): ColumnPart => {
+    const part = columnParts.get(section);
+    if (!part) {
+      throw new Error(`[cawco] ${section.file} has no part of the column`);
+    }
+    return part;
+  };
   const drawn = () => parts.flatMap((one) => [...one.drawings.values()]);
 
   /** The stories of `all` the page draws: a Preview's the ones it names, in its order; a card's every one, in its file's. */

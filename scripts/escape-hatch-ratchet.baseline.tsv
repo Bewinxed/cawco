@@ -353,7 +353,6 @@ as-unknown-as	Record<string, unknown[]>	scripts/probe-kit/specs/graph-stage.ts	1
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
-as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	Record<string, unknown>	scripts/probe-kit/frames.ts	1
 as-unknown-as	Redraw	scripts/probe-kit/specs/comments.ts	3
@@ -373,7 +372,6 @@ as-unknown-as	Shift[]	scripts/probe-kit/specs/live-perf.ts	1
 as-unknown-as	Slot["holder"]	packages/hub/scripts/openapi.ts	2
 as-unknown-as	StateCard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
 as-unknown-as	StoredPiEntry | undefined	packages/agent/src/harnesses/pi-services.ts	1
-as-unknown-as	string[]	packages/agent/src/stage-host/canvas/measure.ts	1
 as-unknown-as	string[]	scripts/probe-kit/specs/preview-socket.ts	2
 as-unknown-as	ToolDefinition	packages/agent/src/harnesses/pi-runtime.ts	2
 as-unknown-as	TraceEvent[]	scripts/probe-kit/frames.ts	1

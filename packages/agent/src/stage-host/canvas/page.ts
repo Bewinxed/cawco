@@ -53,6 +53,66 @@ interface Adapter {
   ) => Mounted;
 }
 
+/** A story's play function, called with the page's context for it. */
+export type PlayFn = (context: object) => Promise<void> | void;
+
+/** A story's or a meta's CSF object as the page reads it (Storybook's CSF 3): each field kept as the page can use it, any other dropped. */
+export interface Csf {
+  args?: object;
+  component?: unknown;
+  decorators?: unknown[];
+  from?: unknown;
+  name?: string;
+  parameters?: object;
+  play?: PlayFn;
+  render?: unknown;
+  title?: string;
+}
+
+/** `value` as an object, or undefined where it is none. */
+export const objectOf = (value: unknown): object | undefined =>
+  typeof value === "object" && value !== null ? value : undefined;
+
+/**
+ * What a states file exports for a story or its meta, read as CSF: an
+ * object, or a function story (its `render`, beside any field written on
+ * it); null for any other export. A field of the wrong kind is left out.
+ */
+export function readCsf(value: unknown): Csf | null {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return null;
+  }
+  const fields: Record<string, unknown> = {
+    ...(typeof value === "function" ? { render: value } : {}),
+    ...Object.fromEntries(Object.entries(value)),
+  };
+  const { decorators, name, play, title } = fields;
+  return {
+    args: objectOf(fields.args),
+    component: fields.component,
+    decorators: Array.isArray(decorators) ? decorators : undefined,
+    from: fields.from,
+    name: typeof name === "string" ? name : undefined,
+    parameters: objectOf(fields.parameters),
+    // The project's function, called on the export it is written on.
+    play:
+      typeof play === "function"
+        ? (context) => Reflect.apply(play, value, [context])
+        : undefined,
+    render: fields.render,
+    title: typeof title === "string" ? title : undefined,
+  };
+}
+
+/** The page's one element the canvas draws in (the stage's page carries it). */
+export function canvasOf(): HTMLElement {
+  const canvas = document.getElementById("cawco-canvas");
+  if (!canvas) {
+    throw new Error("[cawco] the page has no #cawco-canvas");
+  }
+  return canvas;
+}
+
 /** A states file's module as the stage serves it (`cawco:sheet/<file>.js`). */
 export interface SectionModule {
   module: Record<string, unknown>;
@@ -318,10 +378,7 @@ export interface Page {
   readonly base: string;
   readonly by: PageBy;
   /** A story's CSF object (a function story is its `render`). */
-  csfOf: (
-    mod: Record<string, unknown>,
-    name: string
-  ) => Record<string, unknown> | null;
+  csfOf: (mod: Record<string, unknown>, name: string) => Csf | null;
   /** A body dressed as a story drawn in `column` is: its scheme, width, forced state and the dials' variables. */
   dressBody: (
     body: HTMLElement,

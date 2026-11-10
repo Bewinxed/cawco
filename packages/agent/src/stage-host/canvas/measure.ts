@@ -27,7 +27,12 @@ interface SvelteCall {
   parent?: SvelteCall | null;
   type: string;
 }
-type DevElement = Element & { __svelte_meta?: SvelteMeta };
+declare global {
+  interface Element {
+    /** Svelte's dev stack, stamped on an element by a dev compile. */
+    __svelte_meta?: SvelteMeta;
+  }
+}
 
 /** A stamped element's place (`data-insp-path="<file>:<line>:<column>:<tag>"`, stage-host `stamp`). */
 const STAMPED = /^(.*):(\d+):(\d+):([\w.$-]+)$/u;
@@ -58,14 +63,15 @@ function describe(el: Element | null): string {
 
 /** Where an element is written, `file:line:column`, when the dev build marks it. */
 function sourceOf(el: Element, root: string): string | null {
-  const meta = (el as DevElement).__svelte_meta?.loc;
+  const meta = el.__svelte_meta?.loc;
   if (meta) {
     return `${fromRoot(meta.file, root)}:${meta.line}:${meta.column + 1}`;
   }
-  const stamp = el.getAttribute("data-insp-path")?.match(STAMPED);
-  return stamp
-    ? `${fromRoot(stamp[1] as string, root)}:${stamp[2]}:${stamp[3]}`
-    : null;
+  const [, file, line, column] =
+    el.getAttribute("data-insp-path")?.match(STAMPED) ?? [];
+  return file === undefined
+    ? null
+    : `${fromRoot(file, root)}:${line}:${column}`;
 }
 
 /** The elements of a frame's body a reading walks: at most this many. Ours: a screen's first screenful. */
@@ -89,7 +95,7 @@ export function partsOf(body: Element, root: string): PartUse[] {
     }
   };
   for (const el of elementsOf(body)) {
-    const meta = (el as DevElement).__svelte_meta;
+    const meta = el.__svelte_meta;
     if (meta?.loc) {
       // Files up the stack: the element's own, then each call's.
       let { file } = meta.loc;
@@ -108,16 +114,12 @@ export function partsOf(body: Element, root: string): PartUse[] {
       continue;
     }
     const stamp = el.getAttribute("data-insp-path")?.match(STAMPED);
-    if (stamp) {
-      const [, file, line, column, tag] = stamp as unknown as string[];
-      if (CAPITALISED.test(tag as string)) {
-        add(
-          file as string,
-          tag as string,
-          `${fromRoot(file as string, root)}:${line}:${column}`
-        );
+    const [, file, line, column, tag] = stamp ?? [];
+    if (file !== undefined && tag !== undefined) {
+      if (CAPITALISED.test(tag)) {
+        add(file, tag, `${fromRoot(file, root)}:${line}:${column}`);
       } else {
-        add(file as string, nameOfFile(file as string), null);
+        add(file, nameOfFile(file), null);
       }
     }
   }
@@ -334,8 +336,10 @@ export function deltaOf(
     }
     const changed: Record<string, [string, string]> = {};
     WATCHED.forEach((name, at) => {
-      if (was[at] !== now[at]) {
-        changed[name] = [was[at] as string, now[at] as string];
+      const from = was[at];
+      const to = now[at];
+      if (from !== to && from !== undefined && to !== undefined) {
+        changed[name] = [from, to];
       }
     });
     if (Object.keys(changed).length > 0) {
@@ -377,7 +381,7 @@ const msOf = (time: string): number =>
 
 /** The `at`th entry of a CSS list, repeated as the list repeats to the names' length (CSS Animations, Transitions). */
 const nth = (list: string[], at: number): string =>
-  list.length === 0 ? "" : (list[at % list.length] as string);
+  list[at % list.length] ?? "";
 
 /** An element's motion as its computed style declares it: the properties it transitions and the keyframes it runs, each with its timing. */
 interface ElementMotion {
@@ -504,9 +508,15 @@ export function firedBetween(
   return fired;
 }
 
+/** The keyframe effect an animation runs; null where it runs another kind of effect (or none). */
+export const keyframeEffectOf = (
+  animation: Animation
+): KeyframeEffect | null =>
+  animation.effect instanceof KeyframeEffect ? animation.effect : null;
+
 /** One animation as the report says it: its kind, property, timing, element and when it began after `t0`. */
 export function readAnimation(animation: Animation, t0: number): AnimationRead {
-  const effect = animation.effect as KeyframeEffect | null;
+  const effect = keyframeEffectOf(animation);
   const timing = effect?.getComputedTiming();
   let kind: AnimationRead["kind"] = "web";
   let property = "";
@@ -556,14 +566,15 @@ export function pageError(
 ): PageError {
   // Its first line: a framework's own trail ("in <unknown>") is not the message.
   // A module it names at the stage's key, or with Vite's stamp ("The requested module '/@cawco/m/<key>/src/x.ts?t=…' does not provide …"), is named by its own address.
-  const message = (
-    error instanceof Error ? error.message : String(error ?? "error")
-  )
-    .split("\n")[0]
-    ?.replace(KEYED_PREFIX, "")
+  const first =
+    (error instanceof Error ? error.message : String(error ?? "error")).split(
+      "\n"
+    )[0] ?? "";
+  const message = first
+    .replace(KEYED_PREFIX, "")
     .replace(VITE_STAMP, "")
     .trim()
-    .slice(0, 300) as string;
+    .slice(0, 300);
   const stack = error instanceof Error ? (error.stack ?? "") : "";
   for (const line of stack.split("\n")) {
     const at = line.match(STACK_PLACE);
@@ -573,7 +584,7 @@ export function pageError(
     let path: string;
     try {
       // A module the stage keyed at its generation is named by its own address.
-      path = unkeyedPath(new URL(at[1] as string).pathname);
+      path = unkeyedPath(new URL(at[1] ?? "").pathname);
     } catch {
       continue;
     }

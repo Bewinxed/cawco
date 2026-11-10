@@ -97,27 +97,24 @@ export function frameCurveOf(
   if (!(first && last) || keyframes.length < 2) {
     return null;
   }
-  const key = ownKeys(first).find((one) => {
-    const from = figureIn(first, one);
-    const to = figureIn(last, one);
-    return (
-      from !== null &&
-      to !== null &&
-      from !== to &&
-      keyframes.every((frame) => figureIn(frame, one) !== null)
-    );
-  });
-  if (!key) {
-    return null;
+  for (const key of ownKeys(first)) {
+    const from = figureIn(first, key);
+    const to = figureIn(last, key);
+    if (from === null || to === null || from === to) {
+      continue;
+    }
+    const figures = keyframes.flatMap((frame) => figureIn(frame, key) ?? []);
+    if (figures.length !== keyframes.length) {
+      continue;
+    }
+    return keyframes.map((frame, at) => [
+      typeof frame.computedOffset === "number"
+        ? frame.computedOffset
+        : at / (keyframes.length - 1),
+      ((figures[at] ?? from) - from) / (to - from),
+    ]);
   }
-  const from = figureIn(first, key) as number;
-  const to = figureIn(last, key) as number;
-  return keyframes.map((frame, at) => [
-    typeof frame.computedOffset === "number"
-      ? frame.computedOffset
-      : at / (keyframes.length - 1),
-    ((figureIn(frame, key) as number) - from) / (to - from),
-  ]);
+  return null;
 }
 
 /** What a clip animates between, per property: its first frame's value and its last's. */
@@ -240,9 +237,7 @@ function framesOf(held: Held, tuning: Tuning | undefined): Keyframe[] {
     }
   }
   return frames.map((frame) => {
-    const { computedOffset: _drop, ...rest } = frame as Keyframe & {
-      computedOffset?: number;
-    };
+    const { computedOffset: _drop, ...rest } = frame;
     return rest;
   });
 }
@@ -288,7 +283,7 @@ const timingOf = (held: Held, tuning: Tuning | undefined) => {
         ? "linear"
         : (tuning?.easing ?? read.easing),
     ...runsOf(read, tuning?.repeat ?? "once"),
-    fill: "both" as FillMode,
+    fill: "both" as const,
   };
 };
 
