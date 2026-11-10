@@ -1,17 +1,12 @@
 <script lang="ts">
   import {
     type ActivityLine,
-    keepAside,
     newAnswer,
     type Pin,
     type PreviewMode,
     pinHeld,
     pinUnsent,
     previewMode,
-    type RefusedReplies,
-    type RefusedWrites,
-    type ThreadEntry,
-    withKeptReplies,
     writeAgain,
   } from "@cawco/core/comments/model";
   import { pinProblem } from "@cawco/core/comments/validate";
@@ -53,10 +48,7 @@
   import { shellWords } from "@cawco/core/words/shell";
   import { type Snippet, untrack } from "svelte";
   import { z } from "zod";
-  import {
-    ComposeTargetSchema,
-    ThreadEntrySchema,
-  } from "#lib/cawco/stored-shapes.js";
+  import { ComposeTargetSchema } from "#lib/cawco/stored-shapes.js";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -90,7 +82,6 @@
     IconUndockLinear,
   } from "#lib/icons.js";
   import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
-  import { graceWhile } from "#lib/platform/grace-while.svelte.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import {
     appear,
@@ -100,25 +91,13 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { landKey } from "#lib/platform/motion/keyed.svelte.js";
   import { closeInto } from "#lib/platform/motion/share.svelte.js";
-  import {
-    readJson,
-    store,
-    stored,
-    unstore,
-    writeJson,
-  } from "#lib/platform/storage.js";
+  import { readJson, store, stored, writeJson } from "#lib/platform/storage.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
   import { keepThumbnail, removeArtifact, writeSheet } from "../artifact-api";
-  import {
-    holdArtifact,
-    noteArtifact,
-    openAsked,
-    releaseArtifact,
-    takeOpen,
-  } from "../artifact-names.svelte";
+  import { openAsked, takeOpen } from "../artifact-names.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { besideLine } from "../graph/beside";
@@ -140,13 +119,7 @@
   import { afterPaint } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
-    type ArtifactDoc,
-    type ArtifactView,
     askAgain,
-    type DocSync,
-    joinArtifact,
-    LINK_DOWN_MS,
-    type ListHold,
     NOT_REACHING,
     retryComment,
     sendArtifact,
@@ -175,10 +148,10 @@
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { PaneCanvas } from "./pane-canvas.svelte";
+  import { lostWhy, PaneDoc, pageRepliesOf } from "./pane-doc.svelte";
   import { PaneLayout } from "./pane-layout.svelte";
   import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
-  import { enterPreviews } from "./pass";
   import { frameError, PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
@@ -282,6 +255,14 @@
     previewReach,
     paneCanvas,
   });
+  const paneDoc = new PaneDoc({
+    instanceId: () => instanceId,
+    paneSubject,
+    paneNotice,
+    previewReach,
+    previewFrame,
+    writeLooks: () => writeLooks(),
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /**
@@ -343,24 +324,15 @@
     }
     return previewWords.machineNotAnswering(paneSubject.ownerMachine);
   });
-  /*
-   * The page keeps its own state (Projects spec §5.10): the overlay joins
-   * the artifact's live document itself, on the path `cawco:hello` names.
-   * The pane joins the same doc too (artifact-doc.ts): the pins' threads,
-   * which the rail and the thread read and the person writes. The person's
-   * comments, replies, resolves, ink and picks go to the session on their
-   * Send (the hub's artifacts/service.ts `send`).
-   */
-  let view = $state.raw<ArtifactView | null>(null);
   /** His dial values as the artifact's doc keeps them (`dials`), by name: the design graph stands them again on open. */
   const keptDials = $derived.by(() => {
-    const kept = view?.choices.dials?.value;
+    const kept = paneDoc.view?.choices.dials?.value;
     return kept && typeof kept === "object" && !Array.isArray(kept)
       ? (kept as Record<string, number | string | boolean>)
       : {};
   });
   /** His tuning of every move as the artifact's doc keeps it (its `tuned` map): the design graph puts it back on each move's first read. */
-  const keptTuned = $derived(view?.tuned ?? []);
+  const keptTuned = $derived(paneDoc.view?.tuned ?? []);
   /** The design graph's room face the address names (`?face=move`, `map` or `dials`), opened on: the states when it names none. */
   const GRAPH_FACES = ["map", "move", "dials"] as const;
   const startFace =
@@ -369,135 +341,6 @@
       : GRAPH_FACES.find(
           (one) => one === new URL(location.href).searchParams.get("face")
         );
-  let doc: ArtifactDoc | null = null;
-  /**
-   * Pins the page's doc holds that the pane's doesn't yet, as the page last
-   * said them (`cawco:pin-open`'s pin, a write's result): one made while the
-   * page's link to the hub is down reaches the pane's doc only through the
-   * hub. The card and the list read them beside the pane's own, and their
-   * words, resolve and delete go through the page ({@link onlyOnPage}).
-   */
-  let pagePins = $state.raw<Record<string, Pin>>({});
-  /**
-   * The person's writes on a pin the hub refused (artifact-doc.ts
-   * `refusedBy`, core `lostWrites`), by pin: each reply as written, a
-   * resolve or reopen, a delete, and the hub's reason. Kept on the device
-   * apart from the doc, as the page keeps its refused comments (overlay
-   * artifact.ts `keepRefused`), and said on the pin where it was made, not
-   * sent, with the reason and Try again ({@link retryPin}), its replies in
-   * their thread where they stood. A reload keeps them.
-   */
-  let refusedReplies = $state.raw<RefusedReplies>({});
-  const refusedKey = (id: string) => `cawco-refused-replies:${id}`;
-  /** `next` as the pane keeps it, on the device too. */
-  function keepReplies(id: string, next: RefusedReplies) {
-    refusedReplies = next;
-    if (Object.keys(next).length > 0) {
-      writeJson(refusedKey(id), next);
-    } else {
-      unstore("local", refusedKey(id));
-    }
-  }
-  /**
-   * Send all the hub refused: the note it went with and the hub's reason,
-   * said in the rail's note where it was pressed (CommentRail `sendRefused`),
-   * the held comments still held and the note as written, ready to send
-   * again. Kept on the device; a reload keeps it.
-   */
-  let sendRefused = $state.raw<{ note: string; why: string } | null>(null);
-  const sendRefusedKey = (id: string) => `cawco-refused-send:${id}`;
-  /** `next` as the pane keeps it, on the device too. */
-  function keepSendRefused(
-    id: string,
-    next: { note: string; why: string } | null
-  ) {
-    sendRefused = next;
-    if (next) {
-      writeJson(sendRefusedKey(id), next);
-    } else {
-      unstore("local", sendRefusedKey(id));
-    }
-  }
-  /** A refusal's writes the hub doesn't hold, each kept aside with its reason where it was made. */
-  function keepRefused(id: string, why: string, lost: RefusedWrites) {
-    const next = keepAside(refusedReplies, lost, why);
-    keepReplies(id, next);
-    if (lost.sendHeld) {
-      keepSendRefused(id, { note: lost.sendHeld.note, why });
-    }
-  }
-  /**
-   * The person's writes on a pin the hub refused that the page keeps (its
-   * replies, resolve or reopen and delete, written through the page, as the
-   * app writes them: overlay artifact.ts `refusedReplies`), by pin, as the
-   * page last said them
-   * (`cawco:page-pins`). Drawn in their thread beside the pane's own, with
-   * the reason and Try again, which the page writes again
-   * (`cawco:resend-pin`).
-   */
-  let pageReplies = $state.raw<RefusedReplies>({});
-  /** `said` as the page's refused replies, each part checked: what isn't one is left out. */
-  function pageRepliesOf(said: unknown): RefusedReplies {
-    if (!said || typeof said !== "object" || Array.isArray(said)) {
-      return {};
-    }
-    const kept: RefusedReplies = {};
-    for (const [pin, one] of Object.entries(said)) {
-      const { entries, why, resolved, deleted } = (one ?? {}) as {
-        deleted?: unknown;
-        entries?: unknown;
-        resolved?: unknown;
-        why?: unknown;
-      };
-      if (typeof why !== "string" || !Array.isArray(entries)) {
-        continue;
-      }
-      const valid = entries.filter(
-        (entry): entry is ThreadEntry =>
-          !!entry &&
-          typeof entry === "object" &&
-          typeof (entry as ThreadEntry).id === "string" &&
-          typeof (entry as ThreadEntry).text === "string" &&
-          (entry as ThreadEntry).by === "person"
-      );
-      // Its delete, or its resolve or reopen, the hub refused, beside its replies.
-      const act = {
-        ...(typeof resolved === "boolean" ? { resolved } : {}),
-        ...(deleted === true ? { deleted: true as const } : {}),
-      };
-      if (valid.length > 0 || Object.keys(act).length > 0) {
-        kept[pin] = { entries: valid, why, ...act };
-      }
-    }
-    return kept;
-  }
-  const pins = $derived.by(() => {
-    const held = (view?.pins ?? []).map((pin) => {
-      const thread = withKeptReplies(pin.thread, [
-        ...(refusedReplies[pin.id]?.entries ?? []),
-        ...(pageReplies[pin.id]?.entries ?? []),
-      ]);
-      return thread === pin.thread ? pin : { ...pin, thread };
-    });
-    const known = new Set(held.map((pin) => pin.id));
-    const more = Object.values(pagePins).filter((pin) => !known.has(pin.id));
-    return more.length > 0
-      ? [...held, ...more].sort((a, b) => a.number - b.number)
-      : held;
-  });
-  /** Whether pin `id` stands only in the page's doc yet: written through the page's own messages, as the app's are. */
-  const onlyOnPage = (id: string) =>
-    id in pagePins && !view?.pins.some((pin) => pin.id === id);
-  /** Pin `id` as the page says it now (a valid pin), or gone from it (null). */
-  function pageSays(id: string, now: unknown) {
-    const { [id]: _was, ...rest } = pagePins;
-    pagePins =
-      now !== null && pinProblem(now) === null && (now as Pin).id === id
-        ? { ...rest, [id]: now as Pin }
-        : rest;
-  }
-  /** Words sent through the page, kept until it says they were written: a refusal puts them back in the field. */
-  const pageWords = new Map<string, string>();
   /**
    * The page's answer to a write the pane sent it: the pin as the page now
    * holds it, drawn again; a refusal under the open card, a reply's words
@@ -505,15 +348,16 @@
    */
   function heardPageWrite(type: string, message: Record<string, unknown>) {
     const id = typeof message.pin === "string" ? message.pin : null;
-    if (!(id && (id in pagePins || pageWords.has(id)))) {
+    if (!(id && (id in paneDoc.pagePins || paneDoc.pageWords.has(id)))) {
       return;
     }
-    if ("now" in message && !view?.pins.some((one) => one.id === id)) {
-      pageSays(id, message.now);
+    if ("now" in message && !paneDoc.view?.pins.some((one) => one.id === id)) {
+      paneDoc.pageSays(id, message.now);
     }
-    const words = type === "cawco:reply-result" ? pageWords.get(id) : undefined;
+    const words =
+      type === "cawco:reply-result" ? paneDoc.pageWords.get(id) : undefined;
     if (type === "cawco:reply-result") {
-      pageWords.delete(id);
+      paneDoc.pageWords.delete(id);
       replying = false;
     }
     if (message.ok === true) {
@@ -534,118 +378,18 @@
           : "The page didn't keep that, so nothing changed. Try again.";
     }
   }
-  /** Whether the pane holds the doc yet: until it does, no count or list reads as none. */
-  let docSync = $state<DocSync>({ state: "reading" });
-  /** The first sync has outlasted `--dur-wait-grace`: the list's skeleton stands in (The Real Wait Rule). */
-  const readingLong = graceWhile(() => docSync.state === "reading");
-  /** What the Comments list stands on: quiet inside the grace, then reading, the pins once held, or why they weren't. */
-  const listHold = $derived.by<ListHold>(() => {
-    switch (docSync.state) {
-      case "synced":
-      case "lost":
-        return "ready";
-      case "failed":
-        return { failed: docSync.why };
-      case "reading":
-        break;
-    }
-    return readingLong.current ? "reading" : "quiet";
-  });
-  /** The page's doc's link to the hub, as the page says it (`cawco:sync`): what closed it, while it stands lost. */
-  let pageLost = $state<string | null>(null);
-  const pageIsLost = $derived(pageLost !== null);
-  /** The page's link was lost to silence (overlay artifact.ts `Link.silent`): its silence was the grace. */
-  let pageSilent = $state(false);
-  /** The page's link has stood lost {@link LINK_DOWN_MS} from its first close, whatever each close said, or was lost to silence. */
-  let pageDown = $state(false);
-  $effect(() => {
-    if (!pageIsLost) {
-      pageDown = false;
-      return;
-    }
-    if (pageSilent) {
-      pageDown = true;
-      return;
-    }
-    const said = setTimeout(() => {
-      pageDown = true;
-    }, LINK_DOWN_MS);
-    return () => clearTimeout(said);
-  });
-  /**
-   * The comments aren't reaching the agent: the page's link or the pane's
-   * has stood lost {@link LINK_DOWN_MS} (the pane's own is graced in
-   * artifact-doc.ts), or fell silent (core doc-link.ts `SILENT_MS`), so a
-   * drop y-websocket reopens says nothing; what
-   * closed it, word for word. What the person marks meanwhile is kept on
-   * the device (artifact-doc.ts, overlay artifact.ts).
-   */
-  const linkDown = $derived(
-    (pageDown ? pageLost : null) ??
-      (docSync.state === "lost" ? docSync.why : null)
-  );
-  /** What closed the page's link, as the page said it (artifact.ts `closedBecause`). */
-  const lostWhy = (error: unknown): string =>
-    typeof error === "string" ? error : "The page's link to the hub closed.";
   /** The Comments control's title: why the comments aren't reaching the agent, else what ⇧C does. */
   const commentsTitle = $derived.by(() => {
-    if (linkDown) {
+    if (paneDoc.linkDown) {
       return `${NOT_REACHING}. Open them to try again.`;
     }
     return pinsShown
       ? "Comments (⇧C hides the pins)"
       : "Comments (⇧C shows the pins)";
   });
-  /**
-   * The page's socket opened again through the entry a frame's load takes
-   * (preview/pass.ts): the lock refuses a socket whose pass ended or was
-   * replaced since the page loaded (hub preview.ts `atTheLock`, a 401 the
-   * browser says only as code 1006), and only a new entry gives the browser
-   * a pass its next open carries, with no reload. `said`: the person asked
-   * (Try again), so an entry the hub won't give is the failure band.
-   */
-  async function enterAgain(said: boolean) {
-    const origin = previewReach.paneOrigin;
-    if (!origin) {
-      return;
-    }
-    const refused = await enterPreviews(origin, performance.now());
-    if (refused && said) {
-      paneNotice.say({
-        message: `The hub didn't give this preview a pass: ${refused}`,
-        again: null,
-      });
-    }
-    previewFrame.post({ type: "cawco:reconnect" });
-  }
-  /** Try again on the comments' links: the pane's socket opened again now, and the page's through a new entry. */
-  function relink() {
-    doc?.retry();
-    enterAgain(true);
-  }
-  // The page's link stood down: its socket's own backoff goes on, carrying a
-  // pass entered once in the spell, whatever ended the one it loaded with.
-  $effect(() => {
-    if (pageDown) {
-      untrack(() => enterAgain(false));
-    }
-  });
-  /**
-   * The head's line under the name (the artifact panel's surface brief, Artifact panel): the ask the
-   * session gave it, carried by the panel's frame, so it stands from the
-   * first frame in every state from on its way to failed; once the person's
-   * Send is in and the session has not changed the artifact or its ask since
-   * (the doc's `sentAt` past its `revisedAt`), "Sent to <session>", so
-   * nothing reads as asked of them.
-   */
-  const headLine = $derived(
-    view?.sentAt && (!view.revisedAt || view.sentAt > view.revisedAt)
-      ? artifactWords.sentTo(paneSubject.ownerName)
-      : (paneSubject.artifact?.ask ?? "")
-  );
   const staged = $derived(
     paneSubject.artifact?.kind === "component" || paneSubject.served
-      ? (view?.stage ?? null)
+      ? (paneDoc.view?.stage ?? null)
       : null
   );
   /**
@@ -670,8 +414,8 @@
     staged &&
       !previewFrame.connected &&
       previewFrame.silentKey === previewFrame.frameKey &&
-      view?.unreached
-      ? view.unreached
+      paneDoc.view?.unreached
+      ? paneDoc.view.unreached
       : null
   );
   const shownDown = $derived(previewFrame.down ?? docDown?.down ?? null);
@@ -838,44 +582,6 @@
     }
   };
   /**
-   * The head's Comments count: the rail's Open tab, every pin not resolved,
-   * a moved one too, as the hub counts them. Drawn only above 0 (The Earned
-   * Count Rule), only while the rail is shut (its Open tab says it while it
-   * stands), and 0 until the doc is held, so a count not read yet is never
-   * drawn.
-   */
-  const openCount = $derived(
-    docSync.state === "synced"
-      ? pins.filter((pin) => !pin.resolvedAt).length
-      : 0
-  );
-  /** The comments the person holds to send together (core `pinHeld`): Send all's count. */
-  const heldCount = $derived(pins.filter(pinHeld).length);
-  /** Send all: every held comment and reply let go in one write with the note; the hub's next delivery carries them (core `sendHeld`). */
-  const sendHeldNow = (note: string): string | null => {
-    if (!doc) {
-      return "The pane lost the page's document, so nothing was sent. Reload, then send again.";
-    }
-    const refused = doc.sendHeld(note);
-    // Gone to the hub: a refusal of it comes back (`keepRefused`).
-    if (refused === null && paneSubject.artifactId) {
-      keepSendRefused(paneSubject.artifactId, null);
-    }
-    return refused;
-  };
-  /**
-   * What Send sends (the artifact panel's surface brief, How comments reach the session): each pick
-   * since the last Send. The person's comments go by themselves. Drawn only
-   * above 0.
-   */
-  const unsentCount = $derived(
-    view
-      ? Object.values(view.choices).filter(
-          (entry) => !view?.sentAt || entry.at > view.sentAt
-        ).length
-      : 0
-  );
-  /**
    * The inspector stands in the design graph's room, under its states,
    * where the room stands beside the stage (a desk's wide pane): the states
    * and the props stand together, and the stage keeps its width. Elsewhere
@@ -895,85 +601,6 @@
    */
   let sayCovered: (() => void) | null = null;
   let sending = $state(false);
-  $effect(() => {
-    const id = paneSubject.artifactId;
-    const session = instanceId;
-    // A browser keeps nothing in a doc: no pins, no ink, no picks (§5.11, "Private").
-    if (!id || paneSubject.isBrowser) {
-      return;
-    }
-    docSync = { state: "reading" };
-    pageLost = null;
-    pageSilent = false;
-    pagePins = {};
-    pageReplies = {};
-    pageWords.clear();
-    refusedReplies = readJson(
-      refusedKey(id),
-      z.record(
-        z.string(),
-        z.object({
-          entries: z.array(ThreadEntrySchema),
-          why: z.string(),
-          resolved: z.boolean().optional(),
-          deleted: z.literal(true).optional(),
-        })
-      ),
-      {}
-    );
-    sendRefused = readJson(
-      sendRefusedKey(id),
-      z.object({ note: z.string(), why: z.string() }).nullable(),
-      null
-    );
-    const joined = joinArtifact(
-      session,
-      id,
-      (next) => {
-        view = next;
-        // A chip naming this artifact, a pin or a card of it reads it live from here.
-        holdArtifact(id, { pins: next.pins, choices: next.choices });
-        // A pin the pane's doc holds now is its own from here on: the page's
-        // copy goes, so a later delete or take-back there never brings it back.
-        const held = new Set(next.pins.map((pin) => pin.id));
-        if (Object.keys(pagePins).some((pinId) => held.has(pinId))) {
-          pagePins = Object.fromEntries(
-            Object.entries(pagePins).filter(([pinId]) => !held.has(pinId))
-          );
-        }
-      },
-      (sync) => {
-        docSync = sync;
-      },
-      // The hub didn't keep a write of the pane's: said where the page's own
-      // refusals are, and the person's words in it kept aside in their thread.
-      (why, lost) => {
-        paneNotice.say({ message: why, again: null });
-        keepRefused(id, why, lost);
-      }
-    );
-    doc = joined;
-    view = null;
-    return () => {
-      // A look waiting on its ping is written before its doc goes (the pane laid out again, closed, another artifact).
-      writeLooks();
-      joined.destroy();
-      releaseArtifact(id);
-      doc = null;
-    };
-  });
-  // What this pane holds names itself to the chips that name it: no chip asks the hub for it.
-  $effect(() => {
-    const shown = paneSubject.artifact;
-    if (shown) {
-      noteArtifact(shown.id, {
-        instanceId,
-        kind: shown.kind,
-        name: shown.name,
-        title: shown.title,
-      });
-    }
-  });
   /*
    * The setup page is done once the person sends it from the page (its own
    * `cawco.send`, which stamps the doc's `sentAt`): on a phone its sheet
@@ -1011,7 +638,7 @@
    * refused is kept (core `keepAside`): that act hasn't reached the hub.
    */
   const notSentWhy = (pin: Pin): string | null => {
-    const kept = refusedReplies[pin.id] ?? pageReplies[pin.id];
+    const kept = paneDoc.refusedReplies[pin.id] ?? paneDoc.pageReplies[pin.id];
     if (kept && (kept.resolved !== undefined || kept.deleted)) {
       return kept.why;
     }
@@ -1021,7 +648,9 @@
     return (
       kept?.why ??
       pin.notSent?.why ??
-      (onlyOnPage(pin.id) && linkDown ? commentWords.hubUnreached : null)
+      (paneDoc.onlyOnPage(pin.id) && paneDoc.linkDown
+        ? commentWords.hubUnreached
+        : null)
     );
   };
   /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
@@ -1031,7 +660,7 @@
     new Promise<void>((resolve, reject) => {
       const started = Date.now();
       const look = setInterval(() => {
-        if (view?.pins.some((pin) => pin.id === id)) {
+        if (paneDoc.view?.pins.some((pin) => pin.id === id)) {
           clearInterval(look);
           resolve();
         } else if (Date.now() - started > REACH_HUB_MS) {
@@ -1053,18 +682,18 @@
     }
     pinsRetrying = new Set([...pinsRetrying, id]);
     try {
-      if (refusedReplies[id] || pageReplies[id]) {
+      if (paneDoc.refusedReplies[id] || paneDoc.pageReplies[id]) {
         // The page's are written into its doc again, which tells what it still keeps; the pane's into the pane's.
-        if (pageReplies[id]) {
+        if (paneDoc.pageReplies[id]) {
           previewFrame.post({ type: "cawco:resend-pin", id });
         }
-        if (refusedReplies[id]) {
+        if (paneDoc.refusedReplies[id]) {
           retryRefused(paneSubject.artifact.id, id);
         }
-      } else if (onlyOnPage(id)) {
+      } else if (paneDoc.onlyOnPage(id)) {
         // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
         previewFrame.post({ type: "cawco:resend-pin", id });
-        relink();
+        paneDoc.relink();
         await reachedHub(id);
       } else {
         await retryComment(instanceId, paneSubject.artifact.id, id);
@@ -1082,14 +711,14 @@
    * written; one still refused stays with why.
    */
   function retryRefused(artifactKey: string, id: string) {
-    const kept = refusedReplies[id];
-    if (!(kept && doc)) {
+    const kept = paneDoc.refusedReplies[id];
+    if (!(kept && paneDoc.doc)) {
       throw new Error(
         "The pane lost the page's document, so it wasn't written again. Reload, then try again."
       );
     }
-    const { left, why } = writeAgain(refusedReplies, id, doc);
-    keepReplies(artifactKey, left);
+    const { left, why } = writeAgain(paneDoc.refusedReplies, id, paneDoc.doc);
+    paneDoc.keepReplies(artifactKey, left);
     if (why) {
       throw new Error(why);
     }
@@ -1182,7 +811,9 @@
     }
     return lastDrawn;
   });
-  const cardPin = $derived(pins.find((pin) => pin.id === drawnPin) ?? null);
+  const cardPin = $derived(
+    paneDoc.pins.find((pin) => pin.id === drawnPin) ?? null
+  );
   /** The open thread's element's nearest parent, as the page names its chain (`cawco:pin-chain`). */
   let cardParent = $state<{ id: string; name: string | null } | null>(null);
   /**
@@ -1329,7 +960,7 @@
   });
   /** Pins the agent is working on: the last delivery carried them and its turn runs. */
   const live = $derived.by(() => {
-    const stamps = pins.flatMap((pin) => [
+    const stamps = paneDoc.pins.flatMap((pin) => [
       pin.sentAt ?? "",
       ...pin.thread.map((entry) => entry.sentAt ?? ""),
     ]);
@@ -1338,7 +969,7 @@
       return new Set<string>();
     }
     return new Set(
-      pins
+      paneDoc.pins
         .filter(
           (pin) =>
             !pin.resolvedAt &&
@@ -1356,7 +987,7 @@
    */
   const unread = $derived(
     new Set(
-      pins
+      paneDoc.pins
         .filter((pin) => pin.id !== openPin && newAnswer(pin))
         .map((pin) => pin.id)
     )
@@ -1364,10 +995,10 @@
   // The open thread is looked at: what the agent answered there is seen, on every device.
   $effect(() => {
     const pin = cardPin;
-    if (!(pin && doc && newAnswer(pin)) || onlyOnPage(pin.id)) {
+    if (!(pin && paneDoc.doc && newAnswer(pin)) || paneDoc.onlyOnPage(pin.id)) {
       return;
     }
-    untrack(() => doc?.see(pin.id));
+    untrack(() => paneDoc.doc?.see(pin.id));
   });
   // Each pill's dot on the page: the agent at work on it, or an answer unread.
   $effect(() => {
@@ -1394,8 +1025,8 @@
    * once its ping has played, and all of them on his Send (the hub's).
    */
   const unseenChanges = $derived.by((): ChangedItem[] => {
-    const changes = view?.changes;
-    const seen = view?.seen;
+    const changes = paneDoc.view?.changes;
+    const seen = paneDoc.view?.seen;
     return changes && seen
       ? changes.items.filter((item) => !seen.has(item.anchor))
       : [];
@@ -1429,7 +1060,7 @@
       unseenChanges.map((item) => [item.anchor, item.label])
     );
     const pinLabel = (id: string) => {
-      const pin = pins.find((one) => one.id === id);
+      const pin = paneDoc.pins.find((one) => one.id === id);
       return pin ? `Pin ${pin.number} · ${pinName(pin)}` : "";
     };
     const told = new Set<string>();
@@ -1527,9 +1158,9 @@
   }
   /** The person pressed a ringed element in Interact mode: he has looked at it. */
   function changePressed(anchor: unknown) {
-    const revision = view?.changes?.revision;
+    const revision = paneDoc.view?.changes?.revision;
     if (typeof anchor === "string" && revision !== undefined) {
-      doc?.seeChanges(revision, [anchor]);
+      paneDoc.doc?.seeChanges(revision, [anchor]);
     }
   }
   /*
@@ -1540,7 +1171,7 @@
    * thread opened, its spot stepped to, a chip pressed.
    */
   const checking = $derived.by(() => {
-    const held = new Set(pins.map((pin) => pin.id));
+    const held = new Set(paneDoc.pins.map((pin) => pin.id));
     const byPin = new Map<string, ChangedItem[]>();
     const unasked: ChangedItem[] = [];
     for (const item of unseenChanges) {
@@ -1551,7 +1182,7 @@
       }
     }
     const number = (id: string) =>
-      pins.find((pin) => pin.id === id)?.number ?? 0;
+      paneDoc.pins.find((pin) => pin.id === id)?.number ?? 0;
     const order = [...byPin.keys()].sort((a, b) => number(a) - number(b));
     const answers = (id: string) =>
       (byPin.get(id) ?? []).some((item) => item.answered);
@@ -1590,7 +1221,7 @@
    * of the agent's in its thread since.
    */
   const changedNoAnswer = (pin: Pin): boolean => {
-    const lines = view?.activity[pin.id] ?? [];
+    const lines = paneDoc.view?.activity[pin.id] ?? [];
     const replied = pin.thread.findLast((entry) => entry.by === "agent")?.at;
     return lines.some(
       (line) => !line.answered && (!replied || replied < line.at)
@@ -1622,7 +1253,7 @@
    * looked at fades off, so the look is written after the ping, not over it.
    */
   function seeSoon(anchors: string[], after = dur("--dur-loop")) {
-    const revision = view?.changes?.revision;
+    const revision = paneDoc.view?.changes?.revision;
     if (revision === undefined || anchors.length === 0) {
       return;
     }
@@ -1633,7 +1264,7 @@
     };
     look.timer = setTimeout(() => {
       looks.delete(look);
-      doc?.seeChanges(revision, anchors);
+      paneDoc.doc?.seeChanges(revision, anchors);
     }, after);
     looks.add(look);
   }
@@ -1647,7 +1278,7 @@
   function writeLooks() {
     for (const look of looks) {
       clearTimeout(look.timer);
-      doc?.seeChanges(look.revision, look.anchors);
+      paneDoc.doc?.seeChanges(look.revision, look.anchors);
     }
     looks.clear();
   }
@@ -1657,13 +1288,15 @@
    * answers one: a To check row, a change chip, the thread's own lines.
    */
   function stepToChange(anchor: string) {
-    const item = view?.changes?.items.find((one) => one.anchor === anchor);
+    const item = paneDoc.view?.changes?.items.find(
+      (one) => one.anchor === anchor
+    );
     const its =
       item?.pin ??
-      Object.entries(view?.activity ?? {}).find(([, lines]) =>
+      Object.entries(paneDoc.view?.activity ?? {}).find(([, lines]) =>
         lines.some((line) => line.anchor === anchor)
       )?.[0];
-    if (its && pins.some((pin) => pin.id === its)) {
+    if (its && paneDoc.pins.some((pin) => pin.id === its)) {
       openCard(its, "pointer");
     }
     if (!anchor.startsWith("removed:")) {
@@ -1709,7 +1342,7 @@
     const id = paneSubject.artifactId;
     if (
       !id ||
-      listHold !== "ready" ||
+      paneDoc.listHold !== "ready" ||
       checkedFor === id ||
       paneSubject.isCanvas ||
       !paneLayout.railPlaced
@@ -1726,7 +1359,7 @@
   });
   /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
   const stepping = $derived(
-    pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
+    paneDoc.pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
   );
   /**
    * The comment kit: the composer, the thread and their drafts, loaded once
@@ -1974,8 +1607,11 @@
     if (message.ok === true) {
       const { pin } = message;
       const written = !!pin && pinProblem(pin) === null;
-      if (written && !view?.pins.some((one) => one.id === (pin as Pin).id)) {
-        pageSays((pin as Pin).id, pin);
+      if (
+        written &&
+        !paneDoc.view?.pins.some((one) => one.id === (pin as Pin).id)
+      ) {
+        paneDoc.pageSays((pin as Pin).id, pin);
       }
       composing = null;
       keepDraftAt(null);
@@ -2067,14 +1703,14 @@
     }
   }
   $effect(() => {
-    if (previewFrame.connected && view) {
+    if (previewFrame.connected && paneDoc.view) {
       untrack(openLinkedPin);
     }
   });
   /** Pin `number`'s thread opened, when the page holds it; whether it did. */
   function openPinNumbered(number: number): boolean {
     const pin = Number.isInteger(number)
-      ? pins.find((one) => one.number === number)
+      ? paneDoc.pins.find((one) => one.number === number)
       : undefined;
     if (!pin) {
       return false;
@@ -2103,7 +1739,7 @@
   $effect(() => {
     const id = paneSubject.artifactId;
     const at = id ? openAsked(id) : null;
-    if (!(id && at && previewFrame.connected && view)) {
+    if (!(id && at && previewFrame.connected && paneDoc.view)) {
       return;
     }
     untrack(() => {
@@ -2143,11 +1779,11 @@
     }
     const said = { ...saidIn(draft, text), held };
     const reopens = !!cardPin?.resolvedAt;
-    if (onlyOnPage(openPin)) {
+    if (paneDoc.onlyOnPage(openPin)) {
       // The page holds the pin and keeps the words on its device until the
       // hub has them; its answer (`cawco:reply-result`) draws them, or puts
       // them back in the field with why.
-      pageWords.set(openPin, text);
+      paneDoc.pageWords.set(openPin, text);
       replying = true;
       previewFrame.post({ type: "cawco:reply", pin: openPin, ...said });
       if (reopens) {
@@ -2160,11 +1796,11 @@
       cardError = null;
       return;
     }
-    cardError = doc
-      ? doc.reply(openPin, said)
+    cardError = paneDoc.doc
+      ? paneDoc.doc.reply(openPin, said)
       : "The pane lost the page's document, so the reply wasn't kept. Reload, then reply again.";
-    if (cardError === null && reopens && doc) {
-      cardError = doc.resolve(openPin, false);
+    if (cardError === null && reopens && paneDoc.doc) {
+      cardError = paneDoc.doc.resolve(openPin, false);
     }
     if (cardError === null) {
       // Said: the words are in the thread, so no draft is left to keep.
@@ -2180,13 +1816,13 @@
       return;
     }
     focusPast(id, resolved);
-    if (onlyOnPage(id)) {
+    if (paneDoc.onlyOnPage(id)) {
       cardError = null;
       previewFrame.post({ type: "cawco:resolve", pin: id, resolved });
       return;
     }
-    const refused = doc
-      ? doc.resolve(id, resolved)
+    const refused = paneDoc.doc
+      ? paneDoc.doc.resolve(id, resolved)
       : `The pane lost the page's document, so the comment wasn't ${resolved ? "resolved" : "reopened"}. Reload, then try again.`;
     if (id === openPin) {
       cardError = refused;
@@ -2233,13 +1869,13 @@
       return Promise.resolve();
     }
     let refused: string | null = null;
-    if (onlyOnPage(id)) {
+    if (paneDoc.onlyOnPage(id)) {
       // The page holds it alone: deleted there, its answer saying any refusal.
       previewFrame.post({ type: "cawco:delete", pin: id });
-      pageSays(id, null);
+      paneDoc.pageSays(id, null);
     } else {
-      refused = doc
-        ? doc.delete(id)
+      refused = paneDoc.doc
+        ? paneDoc.doc.delete(id)
         : "The pane lost the page's document, so the comment wasn't deleted. Reload, then try again.";
     }
     if (refused) {
@@ -2310,7 +1946,7 @@
   /** No peek while a thread or a composer stands: the card is what the person reads then. */
   const peekPin = $derived(
     peekAt && !openPin && !composing
-      ? (pins.find((pin) => pin.id === peekAt?.id) ?? null)
+      ? (paneDoc.pins.find((pin) => pin.id === peekAt?.id) ?? null)
       : null
   );
   /** What holds the focus as a control: a key it takes is its own. */
@@ -2339,7 +1975,7 @@
     } else if (
       name === "Enter" &&
       focusedPin &&
-      pins.some((pin) => pin.id === focusedPin)
+      paneDoc.pins.some((pin) => pin.id === focusedPin)
     ) {
       // Only a pin of this page: one J and K stood on elsewhere opens nothing.
       openCard(focusedPin, "key");
@@ -2575,9 +2211,9 @@
         // The pin as the page holds it: the card draws from it while the pane's doc doesn't hold it yet.
         if (
           message.pin !== undefined &&
-          !view?.pins.some((one) => one.id === id)
+          !paneDoc.view?.pins.some((one) => one.id === id)
         ) {
-          pageSays(id, message.pin);
+          paneDoc.pageSays(id, message.pin);
         }
         openCard(id, message.via === "key" ? "key" : "pointer");
         break;
@@ -2654,14 +2290,14 @@
         break;
       case "cawco:page-pins":
         // The replies the hub refused that the page keeps, every one each time: they stand in their threads.
-        pageReplies = pageRepliesOf(message.replies);
+        paneDoc.pageReplies = pageRepliesOf(message.replies);
         // The pins the page holds while its link isn't synced (a reload's, given back by the device among them): those the pane's doc lacks stand as the page's.
         for (const pin of Array.isArray(message.pins) ? message.pins : []) {
           const one = pin as Partial<Pin> | null;
           const id = one?.id;
           if (
             !(typeof id === "string" && one) ||
-            view?.pins.some((held) => held.id === id)
+            paneDoc.view?.pins.some((held) => held.id === id)
           ) {
             continue;
           }
@@ -2671,16 +2307,18 @@
             typeof one.number === "number" &&
             Array.isArray(one.thread)
           ) {
-            pagePins = { ...pagePins, [id]: one as Pin };
+            paneDoc.pagePins = { ...paneDoc.pagePins, [id]: one as Pin };
           } else {
-            pageSays(id, pin);
+            paneDoc.pageSays(id, pin);
           }
         }
         break;
       case "cawco:sync":
         // The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood, or at once when lost to silence.
-        pageLost = message.state === "lost" ? lostWhy(message.error) : null;
-        pageSilent = message.state === "lost" && message.silent === true;
+        paneDoc.pageLost =
+          message.state === "lost" ? lostWhy(message.error) : null;
+        paneDoc.pageSilent =
+          message.state === "lost" && message.silent === true;
         break;
       case "cawco:press":
         // A press on the page, outside the composer: the outside-press rule,
@@ -2892,11 +2530,11 @@
       case "check":
         return checkCount === 0;
       case "held":
-        return !pins.some(pinHeld);
+        return !paneDoc.pins.some(pinHeld);
       case "resolved":
-        return !pins.some((pin) => !!pin.resolvedAt);
+        return !paneDoc.pins.some((pin) => !!pin.resolvedAt);
       case "open":
-        return !pins.some((pin) => !pin.resolvedAt);
+        return !paneDoc.pins.some((pin) => !pin.resolvedAt);
     }
   });
   /** The Comments sheet holds a line or two, or its thread is being placed again (ThreadSheet `short`). */
@@ -3056,7 +2694,11 @@
     }
     // A decision page's one Send is its own, at its foot (its doc's
     // `ownSend`): the head stands none for it.
-    if (paneSubject.artifact && unsentCount > 0 && !view?.ownSend) {
+    if (
+      paneSubject.artifact &&
+      paneDoc.unsentCount > 0 &&
+      !paneDoc.view?.ownSend
+    ) {
       all.push({
         key: "send",
         priority: HEAD_PRIORITY.send,
@@ -3117,7 +2759,11 @@
         priority: HEAD_PRIORITY.comments,
         bar: commentsBar,
         menu: commentsMenu,
-        count: { glyph: IconChat, n: listOpen ? 0 : openCount, of: "Comments" },
+        count: {
+          glyph: IconChat,
+          n: listOpen ? 0 : paneDoc.openCount,
+          of: "Comments",
+        },
       });
     }
     all.push({
@@ -3236,7 +2882,7 @@
   <!-- What of the page the session hasn't heard, picks and comments alike: one press sends it all. -->
   <Button
     data-slot="send"
-    aria-label={`${commentWords.send}, ${unsentCount} unsent`}
+    aria-label={`${commentWords.send}, ${paneDoc.unsentCount} unsent`}
     onclick={() => sendAll("panel-head")}
     pending={sending}
     shape="capsule"
@@ -3245,7 +2891,7 @@
     <PendingContent icon={IconSend} pending={sending} />
     <span data-slot="send-label" class="in-form-compact:hidden"
       >{commentWords.send}</span
-    ><span data-slot="send-count" class="num">{unsentCount}</span>
+    ><span data-slot="send-count" class="num">{paneDoc.unsentCount}</span>
   </Button>
 {/snippet}
 {#snippet sendMenu()}
@@ -3256,7 +2902,7 @@
       () => sendAll("panel-more")
     )}
   >
-    <IconSend /><span>{commentWords.sendCount(unsentCount)}</span>
+    <IconSend /><span>{commentWords.sendCount(paneDoc.unsentCount)}</span>
   </DropdownMenu.Item>
 {/snippet}
 
@@ -3474,21 +3120,21 @@
 
 {#snippet commentsBar()}
   <CommentsButton
-    count={openCount}
-    down={linkDown ? NOT_REACHING : null}
+    count={paneDoc.openCount}
+    down={paneDoc.linkDown ? NOT_REACHING : null}
     label={commentsTitle}
     onclick={() => showList(!listOpen)}
     open={paneLayout.railSheet ? railSheetOpen : listOpen}
-    held={heldCount}
+    held={paneDoc.heldCount}
     {pinsShown}
     toCheck={checkCount}
   />
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
-    <IconChat /><span>Comments</span>{#if openCount > 0}<span
+    <IconChat /><span>Comments</span>{#if paneDoc.openCount > 0}<span
         class="ms-auto text-ink-muted num"
-        data-slot="count">{openCount}</span
+        data-slot="count">{paneDoc.openCount}</span
       >{/if}
   </DropdownMenu.Item>
 {/snippet}
@@ -3515,7 +3161,7 @@
     <ArtifactMenu
       {instanceId}
       held={paneSubject.preview?.artifacts}
-      line={headLine}
+      line={paneDoc.headLine}
       lineId={`${paneId}-line`}
       onrefused={(reason, chosen) => {
         refusals.set(paneNotice.actKey, {
@@ -3557,7 +3203,7 @@
 {#snippet threadChanges(pin: Pin)}
   <ChangeLines
     asking={askingAgain.has(pin.id)}
-    lines={(view?.activity[pin.id] ?? []).map(lineOfActivity)}
+    lines={(paneDoc.view?.activity[pin.id] ?? []).map(lineOfActivity)}
     onask={() => askAgainPin(pin.id)}
     step={stepToChange}
     unanswered={changedNoAnswer(pin)}
@@ -3567,17 +3213,17 @@
 {#snippet railOf(layout: "beside" | "sheet")}
   <CommentRail
     bind:this={rail}
-    down={linkDown}
-    held={heldCount}
-    onsendheld={sendHeldNow}
+    down={paneDoc.linkDown}
+    held={paneDoc.heldCount}
+    onsendheld={paneDoc.sendHeldNow}
     onsendrefusedclosed={() => {
       if (paneSubject.artifactId) {
-        keepSendRefused(paneSubject.artifactId, null);
+        paneDoc.keepSendRefused(paneSubject.artifactId, null);
       }
     }}
-    {sendRefused}
+    sendRefused={paneDoc.sendRefused}
     focused={focusedPin}
-    hold={listHold}
+    hold={paneDoc.listHold}
     {layout}
     {live}
     onclose={() => showList(false)}
@@ -3603,14 +3249,14 @@
     pageComposer={composerBody}
     pageOpen={pageHung}
     onresolve={(id, resolved) => resolvePin(resolved, id)}
-    onretry={relink}
+    onretry={paneDoc.relink}
     onretrypin={retryPin}
     onshown={(ids) => {
       railOrder = ids;
     }}
     open={openPin}
     whyNotSent={notSentWhy}
-    {pins}
+    pins={paneDoc.pins}
     retrying={pinsRetrying}
     {unread}
     bind:filter={listFilter}
@@ -3656,7 +3302,7 @@
     label="Preview"
     onclose={ownTab ? backToSession : close}
     placement={sheet ? "sheet" : "beside"}
-    subtitle={headLine}
+    subtitle={paneDoc.headLine}
     subtitleId={`${paneId}-line`}
     {switcher}
     {switcherAt}
@@ -3846,14 +3492,14 @@
           ondials={(values) => {
             // His dial values are the artifact's: its doc's `dials`, which
             // the panel's Send counts and artifact_read answers.
-            const refused = doc?.keep("dials", values);
+            const refused = paneDoc.doc?.keep("dials", values);
             if (refused) {
               paneNotice.say({ message: refused, again: null });
             }
           }}
           ontuned={(records) => {
             // His tuning of every move is the artifact's: its doc's `tuned` map, which artifact_read answers.
-            const refused = doc?.keepTuned(records);
+            const refused = paneDoc.doc?.keepTuned(records);
             if (refused) {
               paneNotice.say({ message: refused, again: null });
             }
@@ -3861,7 +3507,7 @@
           onroom={() => showInspector(false)}
           paneSheet={inspecting && paneLayout.inspectorLayout === "sheet"}
           spec={sheetCanvas.spec}
-          stale={linkDown !== null}
+          stale={paneDoc.linkDown !== null}
         />
       </div>
     {:else}
@@ -4136,7 +3782,7 @@
       {@const Card = kit.PinCard}
       <Card
         agentName={paneSubject.owner ? paneSubject.ownerName : "The session"}
-        changes={(view?.activity[pin.id]?.length ?? 0) > 0
+        changes={(paneDoc.view?.activity[pin.id]?.length ?? 0) > 0
           ? threadChanges
           : undefined}
         marked={peek || !!pinAt?.mark}
