@@ -20,44 +20,15 @@ import type { FleetItemState } from "@cawco/core/fleet";
 import type { HarnessConfigKind } from "@cawco/core/harness-config";
 import {
   type FleetHook,
-  type HookEvent,
-  type HookHandler,
   type HookHarness,
-  type HookMatchTest,
   hookUnsupported,
   hookWorkspaceNote,
 } from "@cawco/core/hooks";
 import { fleetHarnessSetFile } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { FleetPlaceSet } from "./fleet-place-set";
+import type { SetHarnessConfig, SetHook } from "./fleet-set-rows";
 import { FleetHarnessSetShape } from "./stored-shapes";
-
-/** One hook as a session runs it: a command hook's `command` is its script's path on this machine. */
-export interface SetHook {
-  event: HookEvent;
-  handler: HookHandler;
-  /** The fleet row's id; a placed copy's is `<id>@<place id>`. */
-  id: string;
-  matcher?: string;
-  name: string;
-  /** Its matcher as Claude Code reads it (core `hookMatchTest`), for the harnesses that run it themselves. */
-  test: HookMatchTest;
-}
-
-/**
- * One Claude Code settings row, OpenCode plugin or pi extension as a
- * session loads it (core harness-config.ts, agent fleet-harness-config.ts).
- */
-export interface SetHarnessConfig {
-  /** The folder of a project's copy (in its place's file, fleet-place-set.ts); none for the fleet's own. */
-  cwd?: string;
-  /** An OpenCode plugin's module file; a pi extension's file or package dir. */
-  entry?: string;
-  kind: HarnessConfigKind;
-  name: string;
-  /** Claude Code settings. */
-  settings?: Record<string, unknown>;
-}
 
 export interface FleetHarnessSet {
   /** The fleet's own Claude Code settings, OpenCode plugins and pi extensions, by `<kind>:<name>`. */

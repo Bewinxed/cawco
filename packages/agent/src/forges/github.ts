@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { Octokit } from "@octokit/rest";
 import { ghSays, hostGh } from "../host-gh";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
-import type { ForgeAdapter, ForgeSignIn } from "./forge";
+import type { ForgeAdapter, ForgeSignIn } from "./forge-adapter";
 
 const HTTPS = /^https:/u;
 

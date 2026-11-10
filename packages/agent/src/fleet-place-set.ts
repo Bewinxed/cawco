@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import { type FleetMcpConfig, placeKeyOf } from "@cawco/core/fleet";
 import { fleetPlacesDir } from "@cawco/core/paths/fleet";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import type { SetHarnessConfig, SetHook } from "./fleet-harness-set";
+import type { SetHarnessConfig, SetHook } from "./fleet-set-rows";
 import { FleetPlaceSetShape } from "./stored-shapes";
 
 /** What CawCo's sessions in one place take of its project's rows. */
