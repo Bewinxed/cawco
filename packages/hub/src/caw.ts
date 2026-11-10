@@ -117,7 +117,6 @@ import {
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
-import { ProjectRefusal } from "./project-refusal";
 import {
   type Refused,
   refusal,
@@ -440,18 +439,6 @@ const saidOf = (
 const STAGES_FILE = "stages.md";
 /** A project's delegate types: a write there is a proposal the person approves (memory.ts `proposeType`). */
 const DELEGATES_DIR = "delegates/";
-
-/** A call into the tasks, which still throw their refusals, a refusal as the sentence Caw reads. */
-const tasksCall = async <T>(call: () => T | Promise<T>): Promise<T> => {
-  try {
-    return await call();
-  } catch (error) {
-    if (error instanceof ProjectRefusal) {
-      throw new Error(error.message, { cause: error });
-    }
-    throw error;
-  }
-};
 
 /** stages.md as Caw writes it, refused with what does not read. */
 const stagesRead = (body: string | Uint8Array): void => {
@@ -1296,7 +1283,10 @@ export const createCaw = ({
     change: readonly SetupPart[]
   ): Promise<SetupFacts> => {
     const project = projectOf(projectId);
-    const stages = await tasksCall(() => stagesFileOf(projectId));
+    const stages = await stagesFileOf(projectId);
+    if (stages instanceof ElysiaStatus) {
+      throw new Error(stages.response.detail);
+    }
     const tasks: Record<string, string[]> = {};
     for (const indexed of db.taskIndex(projectId)) {
       tasks[indexed.stage] = [
@@ -1923,9 +1913,7 @@ export const createCaw = ({
           },
           async ({ tool: name, args }) => {
             const projectId = ours();
-            return await tasksCall(() =>
-              views.query(projectId, name, args ?? {})
-            );
+            return await views.query(projectId, name, args ?? {});
           },
           viewQueryWords
         ),
