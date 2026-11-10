@@ -45,6 +45,10 @@ declare global {
     workItemsState: typeof import("#lib/cawco/stores/work-items.svelte.js").workItemsState;
     [note: string]: unknown;
   }
+  interface FocusOptions {
+    /** Whether the focus ring draws on the element focused by script (Chrome 144, Safari 18.4; the DOM lib does not name it yet). */
+    focusVisible?: boolean;
+  }
   interface Window {
     /** The /motion/button-pending bench's work: `start`, then `stop` ends it well. */
     __buttonBench: { start: () => void; stop: () => void };

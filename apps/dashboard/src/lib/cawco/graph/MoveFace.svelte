@@ -8,6 +8,10 @@
 </script>
 
 <script lang="ts">
+  import type { ClipKind } from "@cawco/core/stage-graph";
+  import { graphWords as words } from "@cawco/core/words/graph";
+  import { Slider } from "bits-ui";
+  import type { PointerEventHandler } from "svelte/elements";
   /**
    * The animation into the kept state (spec, The move), drawn from what the
    * person comes to do with it (the task model's T3, T9, T18; the run
@@ -78,9 +82,7 @@
    *   and **repeats** in the settings (ClipSettings).
    * - Escape closes the open row first; the room's own Escape is next.
    */
-  import type { ClipKind } from "@cawco/core/stage-graph";
-  import { graphWords as words } from "@cawco/core/words/graph";
-  import { Slider } from "bits-ui";
+  import { on } from "svelte/events";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
@@ -244,7 +246,7 @@
     let found = FINEST;
     while (Number.isFinite(across) && Math.ceil(across / found) > most) {
       at += 1;
-      found = (ladder[at % 3] as number) * 10 ** Math.floor(at / 3);
+      found = ladder[at % 3] * 10 ** Math.floor(at / 3);
     }
     return found;
   };
@@ -317,12 +319,10 @@
     return mark >= viewTo ? "100%" : "50%";
   };
   /** A pointer's moment on a lane, ms, from where it stands across `box`. */
-  const momentAt = (event: PointerEvent, box: DOMRect) => {
+  const momentAt = (event: PointerEvent, box: DOMRect, under: Element) => {
     const across = (event.clientX - box.left) / Math.max(1, box.width);
     const share =
-      getComputedStyle(event.currentTarget as Element).direction === "rtl"
-        ? 1 - across
-        : across;
+      getComputedStyle(under).direction === "rtl" ? 1 - across : across;
     return Math.min(length, Math.max(0, viewFrom + share * viewSpan));
   };
   /** The lanes zoomed by `by` round `at` ms, held between whole and the most. */
@@ -346,10 +346,8 @@
    * or a Ctrl- or ⌘-wheel zooms round the pointer; a sideways wheel or a
    * Shift-wheel pans. A plain wheel scrolls the rows as it did.
    */
-  const wheel = (event: WheelEvent) => {
-    const box = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(
-      "[data-slot=ruler-lane]"
-    );
+  const wheel = (event: WheelEvent & { currentTarget: HTMLElement }) => {
+    const box = event.currentTarget.querySelector("[data-slot=ruler-lane]");
     if (!box) {
       return;
     }
@@ -537,24 +535,27 @@
    * the move is held where it is let go, an end within half a mark landing
    * on that end's state.
    */
-  const laneScrub = (event: PointerEvent) => {
-    const onBar = (event.target as Element | null)?.closest(
-      "[data-slot=run-bar], [data-run-end], [data-slot=leg-end]"
-    );
+  const laneScrub: PointerEventHandler<HTMLElement> = (event) => {
+    const onBar =
+      event.target instanceof Element
+        ? event.target.closest(
+            "[data-slot=run-bar], [data-run-end], [data-slot=leg-end]"
+          )
+        : null;
     if (event.button !== 0 || (onBar && !event.shiftKey)) {
       return;
     }
     // Ahead of the bar's own drag (interact.js listens on the bar).
     event.stopPropagation();
     event.preventDefault();
-    const node = event.currentTarget as HTMLElement;
+    const node = event.currentTarget;
     const box = node.getBoundingClientRect();
     node.setPointerCapture(event.pointerId);
     scrubbing = true;
-    let at = momentAt(event, box);
+    let at = momentAt(event, box, node);
     onseek(at);
     const follow = (next: PointerEvent) => {
-      at = momentAt(next, box);
+      at = momentAt(next, box, node);
       onseek(at);
     };
     const up = () => {
@@ -570,18 +571,21 @@
 
   /** A drag along `node` (the overview strip, the repeat's mark): `to` with each moment, from where the pointer stands across the lanes. */
   const dragAlong =
-    (to: (t: number) => void, across: () => HTMLElement | null) =>
-    (event: PointerEvent) => {
+    (
+      to: (t: number) => void,
+      across: () => HTMLElement | null
+    ): PointerEventHandler<HTMLElement> =>
+    (event) => {
       const box = across()?.getBoundingClientRect();
       if (event.button !== 0 || !box) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
-      const node = event.currentTarget as HTMLElement;
+      const node = event.currentTarget;
       node.setPointerCapture(event.pointerId);
-      to(momentAt(event, box));
-      const follow = (next: PointerEvent) => to(momentAt(next, box));
+      to(momentAt(event, box, node));
+      const follow = (next: PointerEvent) => to(momentAt(next, box, node));
       const up = () => {
         node.removeEventListener("pointermove", follow);
         node.removeEventListener("pointerup", up);
@@ -626,13 +630,13 @@
   };
   let overview = $state<HTMLElement | null>(null);
   /** The overview's own moment: across the strip, the whole lane. */
-  const overviewDrag = (event: PointerEvent) => {
+  const overviewDrag: PointerEventHandler<HTMLElement> = (event) => {
     const box = overview?.getBoundingClientRect();
     if (event.button !== 0 || !box) {
       return;
     }
     event.preventDefault();
-    const node = event.currentTarget as HTMLElement;
+    const node = event.currentTarget;
     node.setPointerCapture(event.pointerId);
     const at = (next: PointerEvent) =>
       overviewTo(
@@ -654,9 +658,12 @@
       selected !== null &&
       !event.defaultPrevented
     ) {
-      const field = (event.target as HTMLElement | null)?.closest(
-        "input, textarea, select, [contenteditable='true']"
-      );
+      const field =
+        event.target instanceof Element
+          ? event.target.closest(
+              "input, textarea, select, [contenteditable='true']"
+            )
+          : null;
       if (!field) {
         event.preventDefault();
         selected = null;
@@ -1070,8 +1077,7 @@
             style:--cols="minmax(var(--c-graph-move-name-w), 38%) minmax(0, 1fr)"
             {@attach (node: HTMLElement) => {
               // Not passive: a pinch or a Ctrl-wheel zooms the lanes, never the page.
-              node.addEventListener("wheel", wheel, { passive: false });
-              return () => node.removeEventListener("wheel", wheel);
+              return on(node, "wheel", wheel, { passive: false });
             }}
           >
             <div

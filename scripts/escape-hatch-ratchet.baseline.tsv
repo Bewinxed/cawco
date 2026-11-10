@@ -347,14 +347,12 @@ as-unknown-as	Record<Phase, { own: number; pane: number }[]>	scripts/probe-kit/s
 as-unknown-as	Record<string, { prototype?: object } | undefined>	scripts/probe-kit/frames.ts	1
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
 as-unknown-as	Record<string, unknown[]>	scripts/probe-kit/specs/graph-stage.ts	1
-as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
 as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runtime.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	Record<string, unknown>	scripts/probe-kit/frames.ts	1
 as-unknown-as	Redraw	scripts/probe-kit/specs/comments.ts	3
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
-as-unknown-as	RouteData	apps/dashboard/src/lib/cawco/graph/RouteEdge.svelte	1
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	SendPayload	packages/hub/src/stream.ts	1
@@ -367,7 +365,6 @@ as-unknown-as	SessionStoreEntry	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Shift[]	scripts/probe-kit/specs/live-perf.ts	1
 as-unknown-as	Skeleton[]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Slot["holder"]	packages/hub/scripts/openapi.ts	2
-as-unknown-as	StateCard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
 as-unknown-as	StoredPiEntry | undefined	packages/agent/src/harnesses/pi-services.ts	1
 as-unknown-as	string[]	packages/agent/src/stage-host/canvas/measure.ts	1
 as-unknown-as	string[]	scripts/probe-kit/specs/preview-socket.ts	2

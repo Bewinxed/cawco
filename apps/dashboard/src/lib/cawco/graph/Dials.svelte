@@ -329,11 +329,8 @@
                     {:else}
                       <Input
                         {id}
-                        onchange={(event: Event) =>
-                          onchange(
-                            dial.name,
-                            (event.currentTarget as HTMLInputElement).value
-                          )}
+                        onchange={(event) =>
+                          onchange(dial.name, event.currentTarget.value)}
                         value={String(value ?? "")}
                       />
                     {/if}
@@ -404,8 +401,7 @@
                 <div
                   class="col-span-full min-w-0 scroll-mb-space-5"
                   data-vaul-no-drag
-                  onintroend={(event) =>
-                    bringIntoView(event.currentTarget as HTMLElement)}
+                  onintroend={(event) => bringIntoView(event.currentTarget)}
                   transition:unfold
                 >
                   <ColourPicker
