@@ -332,6 +332,10 @@ const guarded = (rel: string, bytes: Uint8Array) => {
     : undefined;
 };
 
+/** The folder on disk of a project the hub keeps, whether or not it has been made: its id was checked when the project was made, so no id is refused here ({@link projectRoot}). */
+export const storedProjectRoot = (project: { id: string }) =>
+  join(PROJECTS_DIR, project.id);
+
 /** The project's folder on disk, whether or not it has been made; refuses anything that is not a project id. */
 export const projectRoot = (projectId: string) => {
   if (projectId.startsWith(AREA_KEY)) {

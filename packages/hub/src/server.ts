@@ -4636,13 +4636,7 @@ export const createServer = (
       notifications.clear([artifactCollapseId(id)], "look");
     },
     steps: (instanceId) => plans.steps(instanceId),
-    setUp: (projectId) => {
-      const setUp = isSetUp(projectId, db.project(projectId));
-      if (setUp instanceof ElysiaStatus) {
-        throw projectRefusalOf(setUp);
-      }
-      return setUp;
-    },
+    setUp: (projectId) => isSetUp(db.project(projectId)),
     askedAt: (instanceId, artifactId) => plans.askedAt(instanceId, artifactId),
     stranded,
     itemEnded,
@@ -4734,7 +4728,14 @@ export const createServer = (
       }
       // His Send of a project's decision page decides it: its record and log are written from these picks.
       if (isDecisionPage(artifact) && artifact.projectId) {
-        await decisions.decide(artifact.projectId, artifact.name, artifact.id);
+        const decided = await decisions.decide(
+          artifact.projectId,
+          artifact.name,
+          artifact.id
+        );
+        if (decided) {
+          return decided;
+        }
       }
       // A project's setup page: its name, shape and account applied before
       // whoever hears it reads the picks. The setup throws a place's
@@ -8903,14 +8904,8 @@ export const createServer = (
         throw projectRefusalOf(changed);
       }
     },
-    // The decisions throw a folder's refusal on as the ProjectRefusal they took.
-    folderText: async (projectId, path) => {
-      const text = await folderText(projectId, path);
-      if (text instanceof ElysiaStatus) {
-        throw projectRefusalOf(text);
-      }
-      return text;
-    },
+    folderText,
+    // The commit and the names still throw a folder's refusal on as the ProjectRefusal they took.
     folderNames: async (projectId, path) => {
       const names = await folderFileNames(projectId, path);
       if (names instanceof ElysiaStatus) {
