@@ -220,6 +220,7 @@ import {
 } from "@cawco/core/stored-shapes";
 import type { CommandAck } from "@cawco/core/stream";
 import { type StreamHeartbeat, WIRE_PROTOCOL } from "@cawco/core/stream";
+import type { AttemptStart } from "@cawco/core/task-views";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import type { ToolStatus } from "@cawco/core/tools";
@@ -2348,7 +2349,13 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
     lifetime,
     notifications,
-    task: (projectId, id) => tasks.get(projectId, id),
+    task: async (projectId, id) => {
+      const task = await tasks.get(projectId, id);
+      if (task instanceof ElysiaStatus) {
+        throw projectRefusalOf(task);
+      }
+      return task;
+    },
   });
   /**
    * Its parent knows while a delegate waits on an ask, whatever door the ask
@@ -4572,7 +4579,13 @@ export const createServer = (
       notifications.clear([artifactCollapseId(id)], "look");
     },
     steps: (instanceId) => plans.steps(instanceId),
-    setUp: (projectId) => isSetUp(projectId, db.project(projectId)),
+    setUp: (projectId) => {
+      const setUp = isSetUp(projectId, db.project(projectId));
+      if (setUp instanceof ElysiaStatus) {
+        throw projectRefusalOf(setUp);
+      }
+      return setUp;
+    },
     askedAt: (instanceId, artifactId) => plans.askedAt(instanceId, artifactId),
     stranded,
     itemEnded,
@@ -4646,7 +4659,14 @@ export const createServer = (
           }
         },
         shape: async (projectId, template) => {
-          await tasks.applyTemplate(projectId, template, YOU_ACTOR);
+          const shaped = await tasks.applyTemplate(
+            projectId,
+            template,
+            YOU_ACTOR
+          );
+          if (shaped instanceof ElysiaStatus) {
+            throw projectRefusalOf(shaped);
+          }
         },
       });
     },
@@ -7824,10 +7844,25 @@ export const createServer = (
       deliverSend(envelope) ?? { reason: null, state: "pending" },
     // The plan ↔ to-do link: the task's to-dos, ticked and proposed as the hub.
     todos: {
-      read: async (projectId, taskId) =>
-        (await tasks.get(projectId, taskId)).todos,
-      write: (projectId, taskId, changes, reason) =>
-        tasks.todos(projectId, taskId, changes, hubActor(reason)),
+      read: async (projectId, taskId) => {
+        const task = await tasks.get(projectId, taskId);
+        if (task instanceof ElysiaStatus) {
+          throw projectRefusalOf(task);
+        }
+        return task.todos;
+      },
+      write: async (projectId, taskId, changes, reason) => {
+        const task = await tasks.todos(
+          projectId,
+          taskId,
+          changes,
+          hubActor(reason)
+        );
+        if (task instanceof ElysiaStatus) {
+          throw projectRefusalOf(task);
+        }
+        return task;
+      },
     },
     call: callMachine,
     // A handoff to a delegate whose workspace retired waited at the hub
@@ -8038,7 +8073,16 @@ export const createServer = (
     tasks,
     // A link's state moved: a wait on its pull request may settle, and the board redraws it.
     linksMoved: (projectId) => {
-      detach(tasks.waitsMoved(projectId), "task links moved");
+      detach(
+        tasks.waitsMoved(projectId).then((refused) => {
+          if (refused) {
+            console.warn(
+              `[task links moved] failed: ${refused.response.detail}`
+            );
+          }
+        }),
+        "task links moved"
+      );
     },
   });
   // A project made from a template before the hub recorded which one is
@@ -8050,7 +8094,9 @@ export const createServer = (
       if (project.template) {
         continue;
       }
-      const view = await tasks.stages(project.id).catch(() => undefined);
+      const read = await tasks.stages(project.id).catch(() => undefined);
+      // Stages that do not read off the folder are skipped, as a failed read is.
+      const view = read instanceof ElysiaStatus ? undefined : read;
       if (!(view?.source === "file" && view.problems.length === 0)) {
         continue;
       }
@@ -8387,7 +8433,13 @@ export const createServer = (
     // Its row goes once its machine confirms the end (session-lifecycle.ts).
     discard: (instanceId) =>
       endSession(instanceId, "delete", { kind: "session", name: "Caw" }),
-    task: (projectId, id) => tasks.get(projectId, id),
+    task: async (projectId, id) => {
+      const task = await tasks.get(projectId, id);
+      if (task instanceof ElysiaStatus) {
+        throw projectRefusalOf(task);
+      }
+      return task;
+    },
     // The routines are made further down; a turn ends only once the hub is up.
     turnEnded: (instanceId, why, gone) =>
       routines.turnEnded(instanceId, why, gone),
@@ -8403,18 +8455,25 @@ export const createServer = (
     online: (machineId) => registry.agent(machineId) !== undefined,
     needsYou: waitingNow,
     artifactNeeds: () => artifactLane.now(),
-    stageKinds: async (projectId) =>
-      new Map(
-        (await tasks.stages(projectId)).stages.map((stage) => [
-          stage.name,
-          stage.kind,
-        ])
-      ),
+    stageKinds: async (projectId) => {
+      const view = await tasks.stages(projectId);
+      if (view instanceof ElysiaStatus) {
+        throw projectRefusalOf(view);
+      }
+      return new Map(view.stages.map((stage) => [stage.name, stage.kind]));
+    },
     tasksWaiting: async () => {
       const read = await Promise.all(
         db.listProjects().map(async (project) => {
+          const unread = (why: string) => ({
+            missing: [`${project.name}'s tasks could not be read: ${why}`],
+            tasks: [],
+          });
           try {
             const list = await tasks.list(project.id);
+            if (list instanceof ElysiaStatus) {
+              return unread(list.response.detail);
+            }
             return {
               missing: [],
               tasks: list.tasks
@@ -8428,12 +8487,9 @@ export const createServer = (
                 })),
             };
           } catch (error) {
-            return {
-              missing: [
-                `${project.name}'s tasks could not be read: ${error instanceof Error ? error.message : String(error)}`,
-              ],
-              tasks: [],
-            };
+            return unread(
+              error instanceof Error ? error.message : String(error)
+            );
           }
         })
       );
@@ -8683,8 +8739,13 @@ export const createServer = (
     },
     takeWrites: (artifactId, writes) =>
       takeSentWrites(artifactDocs, artifactId, writes),
-    tasks: async (projectId) =>
-      decidedTasks((await tasks.list(projectId)).tasks),
+    tasks: async (projectId) => {
+      const list = await tasks.list(projectId);
+      if (list instanceof ElysiaStatus) {
+        throw projectRefusalOf(list);
+      }
+      return decidedTasks(list.tasks);
+    },
     // The person's note, their words alone with the page beside them for
     // the agent; or their act, CawCo's notice of it.
     tell: (instance, said, uuid) => {
@@ -9324,14 +9385,24 @@ export const createServer = (
       parent,
       { asked }
     );
+    if (started instanceof ElysiaStatus) {
+      throw projectRefusalOf(started);
+    }
+    return delegatedResult(parent.projectId, asked.title.trim(), started);
+  };
+  /** What `delegate` naming a task answers of its attempt: started, or queued for owned files with no session yet. */
+  const delegatedResult = (
+    projectId: string,
+    title: string,
+    started: AttemptStart
+  ): DelegateResult => {
     const { instanceId, workItemId, workspaceId } = started;
-    // An attempt with no session yet waits for owned files.
     if (!(instanceId && workItemId && workspaceId)) {
       return {
         state: "queued-task",
-        projectId: parent.projectId,
+        projectId,
         task: started.task,
-        title: asked.title.trim(),
+        title,
         text: started.text,
       };
     }
@@ -9340,7 +9411,7 @@ export const createServer = (
       instanceId,
       workItemId,
       workspaceId,
-      title: asked.title.trim(),
+      title,
       text: started.text,
     };
   };
@@ -9595,7 +9666,16 @@ export const createServer = (
     tell: (projectId, event) => caw.tell(projectId, event),
     // A pull request or run a task waits on moved: its project looks again.
     waitsMoved: (projectId) => {
-      detach(tasks.waitsMoved(projectId), "task waits moved");
+      detach(
+        tasks.waitsMoved(projectId).then((refused) => {
+          if (refused) {
+            console.warn(
+              `[task waits moved] failed: ${refused.response.detail}`
+            );
+          }
+        }),
+        "task waits moved"
+      );
     },
   });
   githubWaitsPort.fill(ingress);
@@ -9697,9 +9777,15 @@ export const createServer = (
     change: Parameters<typeof projectEdits.edit>[1]
   ): Promise<void> => {
     const edited = await projectEdits.edit(projectId, change);
-    if (edited instanceof ElysiaStatus) {
-      throw new PlaceRefusal(edited.status, edited.response.detail);
+    if (!(edited instanceof ElysiaStatus)) {
+      return;
     }
+    // The folder's failure behind a landing's dispatch read is no place's
+    // refusal: it goes on as the ProjectRefusal it was thrown as.
+    const { status, response } = edited;
+    throw status === 415 || status === 500
+      ? projectRefusalOf(edited)
+      : new PlaceRefusal(status, response.detail);
   };
 
   // Caw's own project settings, applied through the settings' own paths, or
@@ -9788,14 +9874,20 @@ export const createServer = (
     online: (machineId) => Boolean(registry.agent(machineId)),
     designTask: async (projectId, taskId) => {
       const task = await tasks.get(projectId, taskId);
+      if (task instanceof ElysiaStatus) {
+        throw projectRefusalOf(task);
+      }
       return (
         task.title === BUILD_TITLE ||
         designShaped(db.project(projectId)?.template ?? null, task)
       );
     },
     taskOpen: async (projectId, taskId) => {
-      const { kind } = await tasks.get(projectId, taskId);
-      return kind !== "done" && kind !== "dropped";
+      const task = await tasks.get(projectId, taskId);
+      if (task instanceof ElysiaStatus) {
+        throw projectRefusalOf(task);
+      }
+      return task.kind !== "done" && task.kind !== "dropped";
     },
     // An agent's change to a system its project had is the person's ask,
     // as a memory proposal is, answered below with the rest.
@@ -11341,7 +11433,15 @@ export const createServer = (
           // its oldest (project-merge.ts), then a folder edited while the hub was
           // down is re-read once.
           detach(
-            mergeSameRemote(merging).then(() => tasks.syncAll()),
+            mergeSameRemote(merging)
+              .then(() => tasks.syncAll())
+              .then((refused) => {
+                if (refused) {
+                  console.warn(
+                    `[project merge and task catch-up] failed: ${refused.response.detail}`
+                  );
+                }
+              }),
             "project merge and task catch-up"
           );
         },
