@@ -231,10 +231,15 @@ export function propDials(
     .filter((dial) => dial !== null);
 }
 
-/** A default as docgen writes it, read as the value it is: a boolean, a number, or words without their quotes. */
+/** A default as docgen writes it, read as the value it is: a boolean, a number, or words without their quotes; none for `null` or `undefined`, which the prop's row shows as empty. */
 const defaultOf = (prop: PropMeta): DialValue | undefined => {
   const raw = prop.defaultValue?.trim();
-  if (raw === undefined || raw === "") {
+  if (
+    raw === undefined ||
+    raw === "" ||
+    raw === "null" ||
+    raw === "undefined"
+  ) {
     return;
   }
   if (raw === "true" || raw === "false") {

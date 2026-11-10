@@ -10,8 +10,18 @@
    * setting each dial on it (a `cssVar` on the drawing's root, an `arg`
    * on the form) as the stage page does from `cawco:stage-dials`. Each
    * dial's value as written is read off the drawing, as the page reads it.
+   * With `props`, the sheet names the form's props as docgen reads them and
+   * the real SheetInspector feeds the Dials card: a changed prop mounts the
+   * form with it (`cawco:story-args`), and Save and Save as new state write
+   * the bench's copy of the states file, each write logged as
+   * `[bench] states file`.
    */
-  import type { CanvasSpec, SheetOnPage, Story } from "@cawco/core/stage";
+  import type {
+    CanvasSpec,
+    PropMeta,
+    SheetOnPage,
+    Story,
+  } from "@cawco/core/stage";
   import {
     type DifferenceRead,
     STAGE_COMPARE,
@@ -33,6 +43,8 @@
   import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
+  import type { SheetChange } from "../../artifact-api";
+  import { SheetInspector } from "../../preview/sheet-inspector.svelte";
   import DesignGraph from "../DesignGraph.svelte";
   import {
     cssValueOf,
@@ -41,7 +53,7 @@
     figureFrom,
     type GraphDial,
   } from "../dials";
-  import { StageLink } from "../stage-link.svelte";
+  import { inspectKept, StageLink } from "../stage-link.svelte";
   import { moveInto } from "./moves";
 
   let {
@@ -49,6 +61,7 @@
     turned = {},
     face,
     also = [],
+    props = false,
   }: {
     /** The agent's dials, as its canvas spec writes them. */
     dials?: GraphDial[];
@@ -58,6 +71,8 @@
     face?: "dials";
     /** More states files under the ask, their sheets on their way: the title is the components' menu. */
     also?: string[];
+    /** The form's props on the Dials card, through the real SheetInspector. */
+    props?: boolean;
   } = $props();
 
   /** Under 640px the panel is a phone's sheet: Close leads its head. */
@@ -134,12 +149,121 @@
       records: null,
       tags: one.tags ?? [],
     }));
-  const sheet: SheetOnPage = {
+  const COMPONENT = "apps/dashboard/src/lib/cawco/routines/RoutineForm.svelte";
+  const flag = (name: string, description: string): PropMeta => ({
+    name,
+    type: { name: "boolean", raw: "boolean" },
+    required: false,
+    defaultValue: "false",
+    description,
+  });
+  /** The form's props as the stage's docgen reads them. */
+  const FORM_PROPS: PropMeta[] = [
+    {
+      name: "projectId",
+      type: { name: "string", raw: "string" },
+      required: true,
+      defaultValue: null,
+      description: null,
+    },
+    {
+      name: "draft",
+      type: { name: "object", raw: "Partial<RoutineDraft>" },
+      required: false,
+      defaultValue: "{}",
+      description: null,
+    },
+    flag("saving", "Create was pressed and the hub is making it."),
+    {
+      name: "failure",
+      type: { name: "string", raw: "string | null" },
+      required: false,
+      defaultValue: "null",
+      description: "Why the hub refused the routine.",
+    },
+    flag(
+      "attempted",
+      "Create was pressed: every blank field says what it needs."
+    ),
+    flag("focus", "The name field takes focus as the form opens."),
+  ];
+  /** Whether the form's props stand on the Dials card: read once, as the bench opens. */
+  const withProps = untrack(() => props);
+  /** The states file as the bench's copy of it is written: Save and Save as new state rewrite it. */
+  let file = $state.raw<SheetOnPage>({
     file: FILE,
-    components: [],
-    meta: { args: meta.args, code: {}, component: null, title: meta.title },
+    components: withProps
+      ? [
+          {
+            file: COMPONENT,
+            name: "RoutineForm",
+            props: FORM_PROPS,
+            types: "checked",
+          },
+        ]
+      : [],
+    meta: {
+      args: { ...meta.args, projectId: "northwind" },
+      code: { hub: "hub" },
+      component: withProps ? COMPONENT : null,
+      title: meta.title,
+    },
     stories,
+  });
+  /** The args each story mounts with over its file's, as the inspector posts them (`cawco:story-args`). */
+  let over = $state<Record<string, Record<string, unknown>>>({});
+  /** A write to the states file, as the stage host makes it: a story's args, or a story added. */
+  const writeFile = (change: SheetChange): Promise<unknown> => {
+    const now = file;
+    let next = now.stories;
+    if ("args" in change) {
+      const { story: name, values } = change.args;
+      next = next.map((one) =>
+        one.name === name ? { ...one, args: { ...one.args, ...values } } : one
+      );
+    } else if ("add" in change.story) {
+      const { add, args = {} } = change.story;
+      const last = next.at(-1);
+      next = [
+        ...next,
+        {
+          ...(last as Story),
+          name: add,
+          display: null,
+          label: null,
+          from: null,
+          play: false,
+          tags: [],
+          line: (last?.line ?? 0) + 8,
+          args,
+        },
+      ];
+    }
+    file = { ...now, stories: next };
+    console.info(`[bench] states file ${JSON.stringify(change)}`);
+    // The file's edit runs the sheet again, as the stage host's does.
+    setTimeout(() => link.heardSheet(file), 0);
+    return Promise.resolve({});
   };
+  const inspector = withProps
+    ? new SheetInspector(
+        (message) => {
+          if (message.type === "cawco:story-args") {
+            const { [message.story]: _gone, ...rest } = over;
+            over = message.args
+              ? { ...rest, [message.story]: message.args }
+              : rest;
+          }
+        },
+        writeFile,
+        (at, added) => link.want(at, added),
+        (why) => console.warn(`[bench] refused: ${why}`)
+      )
+    : null;
+  inspectKept(
+    () => link,
+    () => inspector
+  );
   const spec = $derived<CanvasSpec>({
     dials: dials as CanvasSpec["dials"],
   });
@@ -203,7 +327,7 @@
   };
   /** A story's values the form shows, by part: its draft's own, one level down. */
   const valuesOf = (name: string): Map<string, string> => {
-    const args = stories.find((each) => each.name === name)?.args ?? {};
+    const args = file.stories.find((each) => each.name === name)?.args ?? {};
     const draft = (args.draft ?? {}) as Record<string, unknown>;
     return new Map(
       Object.entries(PARTS).map(([key, part]) => {
@@ -281,7 +405,7 @@
 
   /** The story drawn: the kept one, or the one compared with while Compare's flip shows it in its place. */
   const story = $derived(
-    stories.find(
+    file.stories.find(
       (one) =>
         one.name ===
         (compared?.show === "compared" && compared.against
@@ -355,7 +479,7 @@
   const writtenOn = (root: HTMLElement, dial: GraphDial): DialValue => {
     if ("arg" in dial.target) {
       const arg =
-        story?.args[dial.target.arg] ?? sheet.meta.args[dial.target.arg];
+        story?.args[dial.target.arg] ?? file.meta.args[dial.target.arg];
       if (dial.kind === "toggle") {
         return arg === true;
       }
@@ -371,7 +495,7 @@
   };
 
   onMount(() => {
-    link.heardSheet(sheet);
+    link.heardSheet(file);
     link.loaded();
     // Each dial's value as written, read off the drawing as the page reads it.
     requestAnimationFrame(() => {
@@ -441,6 +565,7 @@
         <RoutineForm
           {...meta.args}
           {...story?.args}
+          {...story ? over[story.name] : {}}
           {...argsSet}
           projectId="northwind"
           oncreated={() => undefined}
@@ -471,6 +596,7 @@
           ask="Judge the routine form's dials"
           files={[FILE, ...also]}
           {frame}
+          {inspector}
           {link}
           keptDials={turned}
           {spec}
