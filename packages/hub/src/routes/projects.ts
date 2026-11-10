@@ -8,7 +8,6 @@ import { Elysia, ElysiaStatus, t } from "elysia";
 import { projectOrigin } from "../db/previews";
 import type { HubContext } from "../hub-context";
 import { PlaceRefusal } from "../place-refusal";
-import { DeleteRefusal } from "../project-delete";
 import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
 import { ProjectRefusal } from "../project-refusal";
@@ -299,39 +298,29 @@ export const projectRoutes = ({
         const head = `${projectTrashWords.deleteLine(params.id)} ${askerOf(request)} fromDisk=${fromDisk}`;
         const machines =
           db.project(params.id)?.places.map((place) => place.machineId) ?? [];
-        try {
-          const deleted = await deletedProjects.delete(params.id, {
-            fromDisk,
-          });
+        const deleted = await deletedProjects.delete(params.id, { fromDisk });
+        if (deleted instanceof ElysiaStatus) {
           console.log(
-            `${head} outcome=deleted name=${JSON.stringify(deleted.name)} hub=rows:${deleted.hub.rows},folder:${deleted.hub.folder},trash:${deleted.hub.trash}${Object.entries(
-              deleted.machines
-            )
-              .map(
-                ([machine, counts]) =>
-                  ` ${JSON.stringify(machine)}=${Object.entries(counts)
-                    .map(([what, n]) => `${what}:${n}`)
-                    .join(",")}`
-              )
-              .join("")}`
+            `${head} outcome=refused status=${deleted.status}: ${deleted.response.detail}`
           );
-          // Its pages' origin goes with it, as a forget's does.
-          previewListeners.release(projectOrigin(params.id));
-          projectMoved(params.id, machines, deleted.hub.folder);
           return deleted;
-        } catch (error) {
-          if (error instanceof DeleteRefusal) {
-            console.log(
-              `${head} outcome=refused status=${error.status}: ${error.message}`
-            );
-            return refusal(
-              error.status,
-              "project-delete-refused",
-              error.message
-            );
-          }
-          throw error;
         }
+        console.log(
+          `${head} outcome=deleted name=${JSON.stringify(deleted.name)} hub=rows:${deleted.hub.rows},folder:${deleted.hub.folder},trash:${deleted.hub.trash}${Object.entries(
+            deleted.machines
+          )
+            .map(
+              ([machine, counts]) =>
+                ` ${JSON.stringify(machine)}=${Object.entries(counts)
+                  .map(([what, n]) => `${what}:${n}`)
+                  .join(",")}`
+            )
+            .join("")}`
+        );
+        // Its pages' origin goes with it, as a forget's does.
+        previewListeners.release(projectOrigin(params.id));
+        projectMoved(params.id, machines, deleted.hub.folder);
+        return deleted;
       }
     )
     // A forgotten project brought back from the trash, as it was when it
