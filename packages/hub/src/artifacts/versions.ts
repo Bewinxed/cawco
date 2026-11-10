@@ -4,6 +4,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactLink } from "@cawco/core/references";
 import type { SheetRead, StageState } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
+import { ElysiaStatus } from "elysia";
 import type { ArtifactRow } from "../db/artifacts";
 import { readKept } from "../decision-program";
 import { boardOf } from "./access";
@@ -13,7 +14,6 @@ import { servedOf } from "./kinds/preview";
 import { unheardKeys } from "./needs";
 import { answersKept } from "./overwrite";
 import type { createPageStore } from "./page-store";
-import { ArtifactRefusal } from "./refusals";
 import type { Making } from "./shapes";
 
 /** What createVersions reads of the artifact service: its deps, and the service's parts it calls, each read when called. */
@@ -150,33 +150,53 @@ export const createVersions = (ctx: VersionsContext) => {
     { lands, owner, maker }: Making,
     kind: ArtifactRow["kind"],
     name: string
-  ): Promise<void> => {
+  ) => {
     const found =
       lands ??
       (owner.id === maker.id ? namedFor(owner, kind, name) : undefined);
     const next = found ? db.heldOf(found.id) : undefined;
     if (found && next) {
-      await promote(found, next);
+      const promoted = await promote(found, next);
+      return promoted instanceof ElysiaStatus ? promoted : undefined;
+    }
+  };
+  /**
+   * `ready` run, its refusal answered; `undo`, what undoes what began it,
+   * run first when it refuses or throws, the throw thrown on.
+   */
+  const readied = async <Unready>(
+    ready: (() => Promise<Unready | undefined>) | undefined,
+    undo: () => void
+  ) => {
+    try {
+      const unready = await ready?.();
+      if (unready !== undefined) {
+        undo();
+      }
+      return unready;
+    } catch (error) {
+      undo();
+      throw error;
     }
   };
   /**
    * A change held as `held.next`, made by `ready`: the parent hears of it
-   * once, when this change began the hold; a fresh one whose change threw
-   * is let go, so nothing of it reaches them.
+   * once, when this change began the hold; a fresh one whose change
+   * refused or threw is let go, so nothing of it reaches them.
    */
-  const heldOver = async (
+  const heldOver = async <Unready>(
     { maker, owner }: Making,
     row: ArtifactRow,
     holding: { fresh: boolean; next: ArtifactRow },
-    ready: (() => Promise<void>) | undefined
-  ): Promise<void> => {
-    try {
-      await ready?.();
-    } catch (error) {
+    ready: (() => Promise<Unready | undefined>) | undefined
+  ) => {
+    const unready = await readied(ready, () => {
       if (holding.fresh) {
         ctx.discard(holding.next);
       }
-      throw error;
+    });
+    if (unready !== undefined) {
+      return unready;
     }
     if (holding.fresh) {
       ctx.versionMoved(row);
@@ -201,11 +221,30 @@ export const createVersions = (ctx: VersionsContext) => {
     if (!(holding && owner)) {
       return await change(newestVersion(row));
     }
-    let result: T | undefined;
-    await heldOver({ maker: instance, owner }, row, holding, async () => {
-      result = await change(holding.next);
-    });
-    return result as T;
+    // A fresh one whose change refuses or throws is let go ({@link heldOver}).
+    const unchanged = () => {
+      if (holding.fresh) {
+        ctx.discard(holding.next);
+      }
+    };
+    const changeHeld = async () => {
+      try {
+        return await change(holding.next);
+      } catch (error) {
+        unchanged();
+        throw error;
+      }
+    };
+    const changed = await changeHeld();
+    if (changed instanceof ElysiaStatus) {
+      unchanged();
+      return changed;
+    }
+    if (holding.fresh) {
+      ctx.versionMoved(row);
+      await deps.handedUp(owner, instance, row, holding.next);
+    }
+    return changed;
   };
   /** What an answer names of `row`: its artifact's id, and for a held next version its own as `held`. */
   const heldId = (row: ArtifactRow): { held?: string; id: string } =>
@@ -221,37 +260,35 @@ export const createVersions = (ctx: VersionsContext) => {
    * the parent nothing and leaves its mark as it was. A re-create of one the
    * parent's panel shows is held (`held`, {@link heldOver}).
    */
-  const handOver = async (
+  const handOver = async <Unready = never>(
     making: Making,
     before: ArtifactRow | undefined,
     row: ArtifactRow,
-    ready?: () => Promise<void>,
+    ready?: () => Promise<Unready | undefined>,
     holding?: { fresh: boolean; next: ArtifactRow } | null
-  ): ReturnType<typeof ctx.show> => {
+  ): Promise<Awaited<ReturnType<typeof ctx.show>> | Unready> => {
     if (!handing(making)) {
       const shown = await ctx.show(row);
-      await ready?.();
-      return shown;
+      const unready = await ready?.();
+      return unready === undefined ? shown : unready;
     }
     if (holding && before) {
-      await heldOver(making, before, holding, ready);
-      return {
-        opened: false,
-        started: true,
-        why: artifactToolWords.heldAsNext,
-      };
+      const unready = await heldOver(making, before, holding, ready);
+      return unready === undefined
+        ? { opened: false, started: true, why: artifactToolWords.heldAsNext }
+        : unready;
     }
     const was = isHanded(row);
     const waiting = was && before?.madeBy === making.maker.id;
     const meta = docMeta(docs.doc(row.id));
     docs.transact(row.id, "hub", () => meta.set("handed", true));
-    try {
-      await ready?.();
-    } catch (error) {
+    const unready = await readied(ready, () => {
       if (!was) {
         docs.transact(row.id, "hub", () => meta.delete("handed"));
       }
-      throw error;
+    });
+    if (unready !== undefined) {
+      return unready;
     }
     if (!waiting) {
       await deps.handedUp(making.owner, making.maker, row);
@@ -297,10 +334,7 @@ export const createVersions = (ctx: VersionsContext) => {
    * files, its source and revision), then let go. The views on `row` hear
    * it as they hear any change.
    */
-  const promote = async (
-    row: ArtifactRow,
-    next: ArtifactRow
-  ): Promise<ArtifactRow> => {
+  const promote = async (row: ArtifactRow, next: ArtifactRow) => {
     const maker = next.madeBy ? deps.instance(next.madeBy) : undefined;
     if (row.kind === "page" && maker && store.hasHtml(next.id)) {
       // Its project's folder takes it now, as a build that isn't held does; one it refuses opens nothing.
@@ -311,7 +345,7 @@ export const createVersions = (ctx: VersionsContext) => {
         ...(program === undefined ? {} : { program }),
       });
       if (refused) {
-        throw new ArtifactRefusal(refused.status, refused.refused);
+        return refused;
       }
     }
     ctx.letGoHeadless(next.id);

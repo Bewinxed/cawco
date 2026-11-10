@@ -1,5 +1,4 @@
 import { ARTIFACT_PICTURE, PICTURE_LIMITS } from "@cawco/core/artifact-picture";
-import type { PreviewAddress } from "@cawco/core/preview/routes";
 import {
   placeAtLink,
   previewEnterUrl,
@@ -12,7 +11,6 @@ import type { WorkspaceSaved } from "@cawco/core/workspace/controls";
 import { CONTROL_WORKSPACE_SAVE } from "@cawco/core/workspace/controls";
 import { ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
-import { ArtifactRefusal } from "./artifacts/refusals";
 import type { Browsed } from "./artifacts/shapes";
 import { dashboardUrl } from "./dashboard-url";
 import type { ArtifactRow } from "./db/artifacts";
@@ -20,7 +18,7 @@ import type { HubContext } from "./hub-context";
 import { servedByMachine } from "./preview";
 import { mintSessionTicket } from "./preview-access";
 import { embedKey } from "./preview-origin";
-import type { Refused } from "./refusal";
+import { type Refused, refusal } from "./refusal";
 import { unreachable } from "./unreachable";
 
 const NOT_NAME = /[^a-z0-9]+/gu;
@@ -99,39 +97,22 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       .replaceAll(NAME_ENDS, "")
       .slice(0, 63)
       .replace(NAME_TAIL, "");
-    try {
-      const made = await ctx.artifacts.create(instanceId, {
-        kind: "canvas",
-        name,
-        does: "draw",
-        ask: "Draw over the diagram",
-        title: artifactWords.diagramTitle(page.title),
-        mermaid: body.mermaid,
+    const made = await ctx.artifacts.create(instanceId, {
+      kind: "canvas",
+      name,
+      does: "draw",
+      ask: "Draw over the diagram",
+      title: artifactWords.diagramTitle(page.title),
+      mermaid: body.mermaid,
+    });
+    if (made instanceof ElysiaStatus) {
+      return problemResponse({
+        status: made.status,
+        code: made.response.code,
+        detail: made.response.detail,
       });
-      return Response.json({ id: made.id, name: made.name }, { status: 201 });
-    } catch (error) {
-      if (error instanceof ArtifactRefusal) {
-        return problemResponse({
-          status: error.status,
-          code: "message",
-          detail: error.message,
-        });
-      }
-      throw error;
     }
-  };
-
-  /**
-   * A preview origin's address, its listener started when it has none;
-   * every port taken is the artifact's refusal, in the listeners' words.
-   */
-  const onPreviewPort = (
-    opened: ReturnType<HubContext["previewListeners"]["address"]>
-  ): PreviewAddress => {
-    if (opened instanceof ElysiaStatus) {
-      throw new ArtifactRefusal(503, opened.response.detail);
-    }
-    return opened;
+    return Response.json({ id: made.id, name: made.name }, { status: 201 });
   };
 
   /**
@@ -141,32 +122,29 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
    * preview on its embed origin ({@link embedKeyOf}). Refused when no
    * session or machine holds it, or every preview port is taken.
    */
-  const browsedOrigin = (
-    row: ArtifactRow
-  ): { address: PreviewAddress; key: string; path: string } => {
+  const browsedOrigin = (row: ArtifactRow) => {
     const owner = ctx.originKeyOf(row.id);
     if (!owner) {
-      throw new ArtifactRefusal(404, `No session holds ${row.name} now.`);
+      return refusal(404, "browse-unheld", `No session holds ${row.name} now.`);
     }
     if (row.kind === "page" || row.kind === "canvas") {
-      return {
-        key: owner,
-        address: onPreviewPort(ctx.previewListeners.address(owner)),
-        path: `/__cawco/${row.kind}/${row.id}/`,
-      };
+      const address = ctx.previewListeners.address(owner);
+      return address instanceof ElysiaStatus
+        ? address
+        : { key: owner, address, path: `/__cawco/${row.kind}/${row.id}/` };
     }
     const key = ctx.embedKeyOf(row.id);
     if (!servedByMachine(row) || key === undefined) {
-      throw new ArtifactRefusal(
+      return refusal(
         409,
+        "browse-unserved",
         `${row.name} is served by no machine now, so it has no address to open.`
       );
     }
-    return {
-      key,
-      address: onPreviewPort(ctx.previewListeners.embed(key, owner)),
-      path: row.source.path ?? "/",
-    };
+    const address = ctx.previewListeners.embed(key, owner);
+    return address instanceof ElysiaStatus
+      ? address
+      : { key, address, path: row.source.path ?? "/" };
   };
 
   /**
@@ -178,7 +156,11 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
    * (embedAt); its Canvas and Preview of a page stand on the page's own.
    */
   const enteredAt = (instance: InstanceRow, row: ArtifactRow) => {
-    const { key, address, path } = browsedOrigin(row);
+    const origin = browsedOrigin(row);
+    if (origin instanceof ElysiaStatus) {
+      return origin;
+    }
+    const { key, address, path } = origin;
     const embeds = Object.entries(
       ctx.artifacts.programServed(row.id)?.media ?? {}
     ).flatMap(([, held]) => {
@@ -206,21 +188,27 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
    * the pass it sets follows the artifact's page there (preview.ts
    * `movedOn`), as the person's tab goes to the artifact's own tab.
    */
-  const browseAt = (instance: InstanceRow, row: ArtifactRow): Browsed => {
-    const { address, path, entry } = enteredAt(instance, row);
+  const browseAt = (instance: InstanceRow, row: ArtifactRow) => {
+    const entered = enteredAt(instance, row);
+    if (entered instanceof ElysiaStatus) {
+      return entered;
+    }
+    const { address, path, entry } = entered;
     const origin =
       address.origin ??
       previewRoute(address, new URL(dashboardUrl(ctx.registry)))?.origin;
     if (!origin) {
-      throw new ArtifactRefusal(
+      return refusal(
         503,
+        "browse-unnamed",
         `${row.name}'s preview origin has no address this hub can name.`
       );
     }
-    return {
+    const browsed: Browsed = {
       url: previewEnterUrl(origin, entry.ticket, path),
       expiresAt: new Date(entry.expiresAt).toISOString(),
     };
+    return browsed;
   };
 
   /**
@@ -237,15 +225,20 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     instance: InstanceRow,
     row: ArtifactRow,
     { link, width }: { link?: string; width: number }
-  ): Promise<string> => {
+  ) => {
     const machineId = await ctx.ownMachineId;
     if (!ctx.registry.agent(machineId)) {
-      throw new ArtifactRefusal(
+      return refusal(
         503,
+        "picture-no-daemon",
         `${row.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
       );
     }
-    const { address, path, entry } = enteredAt(instance, row);
+    const entered = enteredAt(instance, row);
+    if (entered instanceof ElysiaStatus) {
+      return entered;
+    }
+    const { address, path, entry } = entered;
     const asked = await ctx.callAgent(
       machineId,
       ARTIFACT_PICTURE,
@@ -265,8 +258,9 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        throw new ArtifactRefusal(
+        return refusal(
           503,
+          "picture-undrawn",
           `${row.name} wasn't drawn: the hub's machine didn't draw it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`
         );
       case "answered":
@@ -276,8 +270,9 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     }
     const png = (asked.value.result as { png?: unknown } | undefined)?.png;
     if (!asked.value.ok || typeof png !== "string") {
-      throw new ArtifactRefusal(
+      return refusal(
         503,
+        "picture-none",
         asked.value.error ??
           `${row.name} wasn't drawn: the hub's machine answered no picture.`
       );
@@ -296,11 +291,12 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     instance: InstanceRow,
     path: string,
     png: string
-  ): Promise<string> => {
+  ) => {
     const workspace = ctx.sessionWorkspace(instance);
     if (!workspace) {
-      throw new ArtifactRefusal(
+      return refusal(
         409,
+        "picture-save-no-workspace",
         "save keeps a picture in your workspace, and this session runs in none; read it without save."
       );
     }
@@ -312,8 +308,9 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        throw new ArtifactRefusal(
+        return refusal(
           503,
+          "picture-save-unanswered",
           `The picture wasn't saved: ${ctx.machineName(instance.machineId)} ${asked.reason === "dead" ? "isn't connected" : `didn't answer within ${secondsOf(asked.after)} s`}.`
         );
       case "answered":
@@ -323,13 +320,14 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     }
     const saved = asked.value.result as WorkspaceSaved | undefined;
     if (!(asked.value.ok && saved)) {
-      throw new ArtifactRefusal(
+      return refusal(
         503,
+        "picture-save-failed",
         `The picture wasn't saved: ${asked.value.error ?? "its machine answered nothing"}.`
       );
     }
     if ("refused" in saved) {
-      throw new ArtifactRefusal(400, saved.refused);
+      return refusal(400, "picture-save-refused", saved.refused);
     }
     return saved.path;
   };
@@ -387,7 +385,6 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
 
   return {
     openDiagramAsCanvas,
-    onPreviewPort,
     browseAt,
     pictureOf,
     keepPicture,
