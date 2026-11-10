@@ -24,6 +24,7 @@
  */
 import { readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { errnoCode } from "@cawco/core/absent";
 import { browserGatePort } from "@cawco/core/browser";
 import { machineId } from "@cawco/core/machine-id";
 import {
@@ -141,7 +142,7 @@ export const forgetBrowserDoor = async (
     console.info(`[browser] ${instanceId}'s door is gone with its session`);
     return true;
   } catch (error) {
-    const { code } = error as NodeJS.ErrnoException;
+    const code = errnoCode(error);
     if (code !== "ENOENT" && code !== "ENOTEMPTY") {
       console.warn(
         `[browser] ${instanceId}'s door was not let go: ${String(error)}`
@@ -161,7 +162,10 @@ export const forgetBrowserDoor = async (
  * and stays. A welcome naming no list is a wire error: nothing is swept.
  */
 export const sweepBrowserDoors = (welcome: unknown): void => {
-  const named = (welcome as { instances?: unknown } | undefined)?.instances;
+  const named =
+    typeof welcome === "object" && welcome !== null && "instances" in welcome
+      ? welcome.instances
+      : undefined;
   if (!(Array.isArray(named) && named.every((id) => typeof id === "string"))) {
     console.warn(
       "[browser] the hub's welcome names no instances, a wire error: it is refused, and no browser door is swept"

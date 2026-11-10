@@ -23,6 +23,7 @@ import { mkdir, readFile, stat } from "node:fs/promises";
 import { connect } from "node:net";
 import { homedir, networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
+import { errnoCode, isGone } from "@cawco/core/absent";
 import { readWithin } from "@cawco/core/bounded";
 import type { MediaPath } from "@cawco/core/capabilities";
 import { reachableLinks } from "@cawco/core/reachable-links";
@@ -34,10 +35,16 @@ import {
 } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { parse } from "yaml";
+import { z } from "zod";
 import { MediaMeasurementSchema } from "../stored-shapes";
 import { type ColimaProfile, colimaProfileOf } from "./colima";
 import type { Runtime } from "./runtime";
 import { browsersDir } from "./state";
+
+/** A running Colima's saved settings (colima.yaml), as far as its port forwarder is read; an empty file parses to null. */
+const ColimaState = z
+  .object({ portForwarder: z.unknown().optional() })
+  .nullable();
 
 /** What the runtime forwards to a browser's media port, and when that is short of both, what to tell the person. */
 export interface MediaForwarding {
@@ -122,13 +129,11 @@ const colimaForwarding = async (
   };
   let forwarder: unknown;
   try {
-    const settings = parse(await readFile(state, "utf8")) as {
-      portForwarder?: unknown;
-    } | null;
+    const settings = ColimaState.parse(parse(await readFile(state, "utf8")));
     forwarder = settings?.portForwarder || "ssh";
   } catch (error) {
     const why =
-      (error as NodeJS.ErrnoException).code ??
+      errnoCode(error) ??
       (error instanceof Error ? error.message : String(error));
     return {
       ...known,
@@ -297,7 +302,7 @@ const procBinds = async (proto: "udp" | "tcp", port: number) => {
     [proto, `${proto}6`].map((name) =>
       readFile(join("/proc/net", name), "utf8").catch((error: unknown) => {
         // No IPv6 in this kernel: no tcp6/udp6 table.
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        if (isGone(error)) {
           return "";
         }
         throw error;

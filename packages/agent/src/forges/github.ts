@@ -11,6 +11,7 @@
  */
 import { join } from "node:path";
 import { Octokit } from "@octokit/rest";
+import { z } from "zod";
 import { ghSays, hostGh } from "../host-gh";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
 import type { ForgeAdapter, ForgeSignIn } from "./forge-adapter";
@@ -23,8 +24,10 @@ const ghConfigDir = (): string =>
 
 /** The `http_unix_socket` gh's config names, when it names one. */
 const ghSocket = async (): Promise<string | undefined> => {
-  const config = (await readYamlConfig(join(ghConfigDir(), "config.yml"))) as
-    { http_unix_socket?: unknown } | undefined;
+  const config = await readYamlConfig(
+    join(ghConfigDir(), "config.yml"),
+    z.object({ http_unix_socket: z.unknown().optional() })
+  );
   const socket = config?.http_unix_socket;
   return typeof socket === "string" && socket ? socket : undefined;
 };
@@ -44,8 +47,10 @@ export const githubForge: ForgeAdapter = {
     }
     // gh lists every host it signs in to in hosts.yml, its token there or
     // in the keyring: the one for this host, its port included.
-    const hosts = (await readYamlConfig(join(ghConfigDir(), "hosts.yml"))) as
-      Record<string, unknown> | undefined;
+    const hosts = await readYamlConfig(
+      join(ghConfigDir(), "hosts.yml"),
+      z.record(z.string(), z.unknown())
+    );
     const host =
       Object.keys(hosts ?? {}).find((each) => sameHost(each, asked)) ?? asked;
     const token = (await ghSays(["auth", "token", "--hostname", host]))?.trim();

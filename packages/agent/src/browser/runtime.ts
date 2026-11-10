@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { errnoCode } from "@cawco/core/absent";
 import Docker from "dockerode";
 import { z } from "zod";
 import { colimaHome, colimaProfileOf } from "./colima";
@@ -187,13 +188,20 @@ const dockerAt = (socketPath: string, timeout?: number): Docker => {
   }
 };
 
+/** The engine's `/info` answer, as far as the runtime is told apart by it. */
+const EngineInfo = z.object({
+  OperatingSystem: z.string().optional(),
+  Rootless: z.boolean().optional(),
+  SecurityOptions: z.array(z.string()).optional(),
+});
+
 /** Asks the runtime at `socketPath` who it is: `/_ping`, `/version`, `/info`. */
 const probeEndpoint = async (socketPath: string): Promise<EndpointAnswer> => {
   const docker = dockerAt(socketPath, PING_MS);
   try {
     await docker.ping();
   } catch (error) {
-    const { code } = error as NodeJS.ErrnoException;
+    const code = errnoCode(error);
     if (code === "ENOENT") {
       return { absent: true };
     }
@@ -201,23 +209,24 @@ const probeEndpoint = async (socketPath: string): Promise<EndpointAnswer> => {
       refused: code ?? (error instanceof Error ? error.message : String(error)),
     };
   }
-  const [version, info, colima] = await Promise.all([
+  const [version, answered, colima] = await Promise.all([
     docker.version(),
     docker.info(),
     colimaProfileOf(socketPath),
   ]);
+  const info = EngineInfo.catch({}).parse(answered);
   const podman = version.Components?.some((one) =>
     one.Name.toLowerCase().includes("podman")
   );
   const rootless = podman
-    ? (info as { Rootless?: boolean }).Rootless === true
-    : ((info as { SecurityOptions?: string[] }).SecurityOptions ?? []).some(
-        (option) => option.includes("name=rootless")
+    ? info.Rootless === true
+    : (info.SecurityOptions ?? []).some((option) =>
+        option.includes("name=rootless")
       );
   const ownNetwork =
     platform() === "linux" &&
     !colima &&
-    (info as { OperatingSystem?: string }).OperatingSystem !== "Docker Desktop";
+    info.OperatingSystem !== "Docker Desktop";
   return {
     runtime: {
       docker: dockerAt(socketPath),

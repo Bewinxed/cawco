@@ -18,7 +18,10 @@ import { join } from "node:path";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  type CallToolResult,
+  CallToolResultSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { hostProgram } from "../host-gh";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
@@ -29,11 +32,14 @@ const TOOLS = "get_me,issue_write,pull_request_write,pull_request_read";
 
 const TRAILING_SLASHES = /\/+$/u;
 
-/** One login in tea's config. */
-interface TeaLogin {
-  token?: unknown;
-  url?: unknown;
-}
+/** The logins of tea's config. */
+const TeaConfig = z.object({
+  logins: z
+    .array(
+      z.object({ token: z.unknown().optional(), url: z.unknown().optional() })
+    )
+    .optional(),
+});
 
 /** A tea login's URL, read; none when it does not read as one. */
 const urlOf = (value: unknown): URL | undefined => {
@@ -109,10 +115,9 @@ const callTool = async (
     })
   );
   try {
-    return (await client.callTool({
-      name: tool,
-      arguments: args,
-    })) as CallToolResult;
+    return CallToolResultSchema.parse(
+      await client.callTool({ name: tool, arguments: args })
+    );
   } finally {
     await client.close();
   }
@@ -122,9 +127,10 @@ export const giteaForge: ForgeAdapter = {
   forge: "gitea",
 
   async signIn(asked) {
-    const config = (await readYamlConfig(
-      join(configHome(), "tea", "config.yml")
-    )) as { logins?: TeaLogin[] } | undefined;
+    const config = await readYamlConfig(
+      join(configHome(), "tea", "config.yml"),
+      TeaConfig
+    );
     const login = (config?.logins ?? []).find((each) => {
       const at = urlOf(each.url);
       return at !== undefined && sameHost(at.host, asked);

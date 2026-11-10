@@ -5,10 +5,11 @@
  * sections of the parts that ran laid over it, every other section as the
  * converge before it left it.
  */
-import type {
-  FleetReportSection,
-  FleetSyncReport,
-  PlacedSection,
+import {
+  type FleetReportSection,
+  type FleetSyncReport,
+  PLACED_SECTIONS,
+  type PlacedSection,
 } from "@cawco/core/fleet";
 import type { FleetPart } from "./fleet-parts";
 
@@ -78,11 +79,13 @@ export const laidOver = (
   if (fresh.toolchain) {
     out.toolchain = fresh.toolchain;
   }
-  const kept = Object.fromEntries(
-    Object.entries(placed).filter(
-      ([, rows]) => Object.keys(rows as Record<string, unknown>).length > 0
-    )
-  ) as NonNullable<FleetSyncReport["placed"]>;
+  const kept: NonNullable<FleetSyncReport["placed"]> = {};
+  for (const section of PLACED_SECTIONS) {
+    const rows = placed[section];
+    if (rows && Object.keys(rows).length > 0) {
+      kept[section] = rows;
+    }
+  }
   return {
     ...out,
     ...(memory ? { memory } : {}),

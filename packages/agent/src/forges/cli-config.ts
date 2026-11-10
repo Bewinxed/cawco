@@ -6,15 +6,17 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
+import type { z } from "zod";
 
 /** The config dir gh, glab and tea keep their files under: `$XDG_CONFIG_HOME`, else `$HOME/.config`, as each CLI reads it. */
 export const configHome = (): string =>
   process.env.XDG_CONFIG_HOME || join(process.env.HOME || homedir(), ".config");
 
-/** A CLI's YAML config file, parsed; undefined when there is none or it does not read. */
-export const readYamlConfig = async (
-  file: string
-): Promise<unknown | undefined> => {
+/** A CLI's YAML config file, parsed through `shape`; undefined when there is none or it does not read as `shape`. */
+export const readYamlConfig = async <S extends z.ZodType>(
+  file: string,
+  shape: S
+): Promise<z.output<S> | undefined> => {
   const text = await Bun.file(file)
     .text()
     .catch(() => undefined);
@@ -22,7 +24,8 @@ export const readYamlConfig = async (
     return;
   }
   try {
-    return parseYaml(text) as unknown;
+    const read = shape.safeParse(parseYaml(text));
+    return read.success ? read.data : undefined;
   } catch {
     // A config the CLI could not read either: no sign-in from it.
   }
