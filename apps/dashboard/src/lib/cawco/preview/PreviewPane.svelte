@@ -8,7 +8,6 @@
     previewMode,
   } from "@cawco/core/comments/model";
   import { pinProblem } from "@cawco/core/comments/validate";
-  import { detach } from "@cawco/core/detach";
   import type { ChangedItem } from "@cawco/core/doc-meta";
   import { pinName } from "@cawco/core/pin-name";
   import {
@@ -16,12 +15,7 @@
     PREVIEW_LOCKED_MESSAGE,
   } from "@cawco/core/preview/routes";
   import type { PaneKey } from "@cawco/core/shell-shortcuts";
-  import {
-    canvasOf,
-    STAGE_CLONE_MS,
-    STAGE_READY_MS,
-    type StageErrorKind,
-  } from "@cawco/core/stage";
+  import { canvasOf, STAGE_READY_MS } from "@cawco/core/stage";
   import {
     STAGE_DIALS_WRITTEN,
     STAGE_DIFFERENCES,
@@ -93,9 +87,8 @@
   import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
-  import { keepThumbnail, removeArtifact, writeSheet } from "../artifact-api";
+  import { keepThumbnail, writeSheet } from "../artifact-api";
   import { openAsked, takeOpen } from "../artifact-names.svelte";
-  import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { besideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
@@ -125,7 +118,7 @@
   import ChangesTag from "./ChangesTag.svelte";
   import CommentRail from "./CommentRail.svelte";
   import CommentsButton from "./CommentsButton.svelte";
-  import CoverState, { type CoverWaiting } from "./CoverState.svelte";
+  import CoverState from "./CoverState.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
   import type { CommentDrafts } from "./comment-drafts.svelte";
   import {
@@ -149,6 +142,7 @@
   import { PreviewReach } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
+  import { errorPlace, errorTitle, StageCover } from "./stage-cover.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
   import {
     type ComposeTarget,
@@ -263,6 +257,13 @@
     previewFrame,
     paneDoc,
   });
+  const stageCover = new StageCover({
+    instanceId: () => instanceId,
+    paneId: () => paneId,
+    paneSubject,
+    previewFrame,
+    paneDoc,
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /**
@@ -302,28 +303,6 @@
   let pinsShown = $state(true);
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
-  const downTitle = $derived.by(() => {
-    switch (shownDown) {
-      case "server":
-        return "The page's server stopped answering";
-      case "workspace":
-        return "That workspace isn't running";
-      case "reach":
-        return `${paneSubject.ownerMachine} couldn't reach the page's server`;
-      case "closed":
-        return "This preview is closed";
-      case "gone":
-        return previewWords.goneTitle;
-      case "error":
-        return previewWords.errorTitle;
-      case "crashed":
-        return previewWords.crashedTitle;
-      case "machine":
-      case null:
-        break;
-    }
-    return previewWords.machineNotAnswering(paneSubject.ownerMachine);
-  });
   /** His dial values as the artifact's doc keeps them (`dials`), by name: the design graph stands them again on open. */
   const keptDials = $derived.by(() => {
     const kept = paneDoc.view?.choices.dials?.value;
@@ -387,149 +366,6 @@
       ? "Comments (⇧C hides the pins)"
       : "Comments (⇧C shows the pins)";
   });
-  const staged = $derived(
-    paneSubject.artifact?.kind === "component" || paneSubject.served
-      ? (paneDoc.view?.stage ?? null)
-      : null
-  );
-  /**
-   * The stage the cover waits on: none once this load's page answered
-   * (`connected`, its overlay's `cawco:ready`), whatever the doc last said of
-   * the stage. The doc's word is the agent's last frame, which can trail the
-   * stage (a frame missed, a version opened over another's); a page that
-   * answered is the stage serving. One that answered and then went silent is
-   * the proxy's `down` and the doc's `docDown`, never a wait again.
-   */
-  const awaited = $derived(previewFrame.connected ? null : staged);
-  /**
-   * The hub's last read couldn't reach the stage (the doc's `meta.unreached`,
-   * which the agent's read says too): said as the proxy's own down is, with
-   * its why and since when, once this pane's own load has had its say and
-   * the page did not answer (`silentKey`, PAGE_SILENT_MS after it loaded).
-   * While a load is on its way, an earlier read is no word on it: the cover
-   * stands, and a page its stage answers through the hub's relay clears the
-   * doc's word (hub artifacts `stageAnswered`).
-   */
-  const docDown = $derived(
-    staged &&
-      !previewFrame.connected &&
-      previewFrame.silentKey === previewFrame.frameKey &&
-      paneDoc.view?.unreached
-      ? paneDoc.view.unreached
-      : null
-  );
-  const shownDown = $derived(previewFrame.down ?? docDown?.down ?? null);
-  const shownWhy = $derived(
-    previewFrame.down ? previewFrame.downWhy : (docDown?.why ?? null)
-  );
-  /** A down stage's own words stand unfolded (Show details). */
-  let stageDetails = $state(false);
-  const stageDetailsId = `${paneId}-stage-details`;
-  /**
-   * What the cover says while the page is on its way; null when nothing is,
-   * or once it has stood past its time ({@link neverDrawn}). A sheet's stage
-   * starting names its folder, which CoverState holds on one row.
-   */
-  const stageWaiting = $derived.by((): CoverWaiting | null => {
-    if (neverDrawn) {
-      return null;
-    }
-    switch (awaited?.status) {
-      case "starting":
-        return paneSubject.served
-          ? { line: sheetWords.serverStarting }
-          : { dir: awaited.dir };
-      case "waking":
-      case "asleep":
-        return { line: sheetWords.waking };
-      case "live":
-        return compiling ? { line: sheetWords.compiling } : null;
-      case "error":
-      case undefined:
-        break;
-    }
-    return null;
-  });
-  const compileErrors = $derived(
-    staged?.status === "live" ? staged.errors : []
-  );
-  /** A sheet's page still compiling: its stage serves, the page hasn't said it is ready, and no compile error has ended the compile. */
-  const compiling = $derived(
-    awaited?.status === "live" &&
-      !paneSubject.served &&
-      compileErrors.length === 0
-  );
-  /**
-   * How long the cover may stand: the time the daemon gives a stage to serve
-   * once started (core `STAGE_READY_MS`), and a place's stage its clone and
-   * install first (`STAGE_CLONE_MS`), counted on this pane's clock from when
-   * it began waiting; none once the page answered ({@link awaited}). A page
-   * still on its way past it was never drawn: the stage's word stopped
-   * coming, or the page never compiled, and the pane says so with the ways
-   * out, never an endless cover.
-   */
-  const waitingFor = $derived.by(() => {
-    // A failure the proxy named says its own words (`down`).
-    if (previewFrame.down) {
-      return null;
-    }
-    switch (awaited?.status) {
-      case "starting":
-        return STAGE_CLONE_MS + STAGE_READY_MS;
-      case "waking":
-      case "asleep":
-        return STAGE_READY_MS;
-      case "live":
-        return compiling ? STAGE_READY_MS : null;
-      case "error":
-      case undefined:
-        return null;
-    }
-  });
-  let neverDrawn = $state(false);
-  $effect(() => {
-    const budget = waitingFor;
-    // Read so that a Try again (`reload`) or another artifact starts the wait over.
-    if (
-      budget === null ||
-      previewFrame.reload < 0 ||
-      paneSubject.artifactId === undefined
-    ) {
-      neverDrawn = false;
-      return;
-    }
-    const timer = setTimeout(() => {
-      neverDrawn = true;
-    }, budget);
-    return () => {
-      clearTimeout(timer);
-      neverDrawn = false;
-    };
-  });
-  /** What the stage last said of a page never drawn: its own message, else the first compile error's line. */
-  const stageSaid = $derived(
-    staged?.message ?? compileErrors[0]?.message.split("\n")[0] ?? null
-  );
-  /** The never-drawn canvas's Remove: destructive, so asked in place under it (AskHere, The Open Page Rule), as the inspector's Remove is. */
-  const removeAsks = new Asker<AskHereRequest>();
-  function removeShown() {
-    const shown = paneSubject.artifact;
-    if (!shown) {
-      return;
-    }
-    detach(
-      removeAsks.ask({
-        at: "never-drawn-remove",
-        title: sheetWords.removeTitle(shown.title),
-        body: sheetWords.removeBody,
-        confirmLabel: sheetWords.removeConfirm,
-        pendingLabel: sheetWords.removing,
-        destructive: true,
-        run: () => removeArtifact(instanceId, shown.id),
-      }),
-      "ask"
-    );
-  }
   /*
    * A sheet's inspector (live components spec §5): the chosen story's props
    * as controls, from the sheet its page says (`cawco:sheet`). Opened from
@@ -562,25 +398,6 @@
       : null;
   });
   const inspecting = $derived(!!inspector && inspectOpen);
-  /** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
-  const errorPlace = (error: {
-    column: number | null;
-    file: string;
-    line: number | null;
-  }) =>
-    `${error.file}${error.line ? `:${error.line}` : ""}${error.column ? `:${error.column}` : ""}`;
-  /** The error card's title by its kind (core `StageError`): a missing states file is no compile error. */
-  const errorTitle = (kind: StageErrorKind | undefined) => {
-    switch (kind) {
-      case "missing":
-        return sheetWords.missingTitle;
-      case "page":
-        return sheetWords.pageTitle;
-      case "compile":
-      case undefined:
-        return sheetWords.errorTitle;
-    }
-  };
   /**
    * The inspector stands in the design graph's room, under its states,
    * where the room stands beside the stage (a desk's wide pane): the states
@@ -2725,20 +2542,22 @@
 {#snippet stageDetailsToggle()}
   <Button
     data-details
-    aria-controls={stageDetailsId}
-    aria-expanded={stageDetails}
-    label={stageDetails ? shellWords.hideDetails : shellWords.showDetails}
+    aria-controls={stageCover.stageDetailsId}
+    aria-expanded={stageCover.stageDetails}
+    label={stageCover.stageDetails
+      ? shellWords.hideDetails
+      : shellWords.showDetails}
     onclick={() => {
-      stageDetails = !stageDetails;
+      stageCover.stageDetails = !stageCover.stageDetails;
     }}
     size="sm"
     variant="ghost"
   />
 {/snippet}
 {#snippet stageDetailsText(said: string | null | undefined)}
-  {#if said && stageDetails}
+  {#if said && stageCover.stageDetails}
     <p
-      id={stageDetailsId}
+      id={stageCover.stageDetailsId}
       data-slot="details"
       class="mt-space-2 text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere"
     >
@@ -3388,18 +3207,18 @@
     {/if}
     <div
       data-ready={((previewFrame.loaded || previewFrame.standing !== null) &&
-        !stageWaiting) ||
+        !stageCover.stageWaiting) ||
         undefined}
       data-slot="cover"
-      aria-hidden={stageWaiting ? undefined : "true"}
+      aria-hidden={stageCover.stageWaiting ? undefined : "true"}
       class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
-      role={stageWaiting ? "status" : undefined}
+      role={stageCover.stageWaiting ? "status" : undefined}
       {@attach (node) => {
         // Ready, the cover and its skeleton go in the skeleton's reveal and
         // the frame comes out of its blur on the same clock (motion/curves).
         if (!(
           (previewFrame.loaded || previewFrame.standing !== null) &&
-          !stageWaiting
+          !stageCover.stageWaiting
         )) {
           coverStood = true;
         } else if (coverStood) {
@@ -3426,8 +3245,8 @@
           radius="text"
         />
       </div>
-      {#if stageWaiting}
-        <CoverState waiting={stageWaiting} />
+      {#if stageCover.stageWaiting}
+        <CoverState waiting={stageCover.stageWaiting} />
       {/if}
     </div>
     {#if canvasView?.map && paneSubject.artifact && paneSubject.isSheet}
@@ -3445,8 +3264,8 @@
         revision={paneSubject.preview?.revision ?? ""}
       />
     {/if}
-    {#if compileErrors.length > 0}
-      {@const first = compileErrors[0]}
+    {#if stageCover.compileErrors.length > 0}
+      {@const first = stageCover.compileErrors[0]}
       <!-- The last good render stays under it, dimmed; the session is told of it on its own. -->
       <div
         aria-hidden="true"
@@ -3472,13 +3291,14 @@
         {/if}
         <p class="m-0 text-ink-muted type-meta">
           {first.kind === "missing"
-            ? sheetWords.missingNext(compileErrors.length - 1)
-            : sheetWords.errorNext(compileErrors.length - 1)}
+            ? sheetWords.missingNext(stageCover.compileErrors.length - 1)
+            : sheetWords.errorNext(stageCover.compileErrors.length - 1)}
         </p>
       </div>
     {/if}
   {/if}
-  {#if staged?.status === "error"}
+  {#if stageCover.staged?.status === "error"}
+    {@const staged = stageCover.staged}
     <!-- The stage or the server didn't start, or failed its restarts: where the page would be. -->
     <div
       data-slot="down"
@@ -3510,7 +3330,7 @@
       </EmptyState>
     </div>
   {/if}
-  {#if neverDrawn && staged?.status !== "error"}
+  {#if stageCover.neverDrawn && stageCover.staged?.status !== "error"}
     <!-- On its way past the time its stage is given: never an endless cover. -->
     <div
       data-slot="down"
@@ -3522,7 +3342,7 @@
       <EmptyState icon={IconAlert} title={sheetWords.neverDrawnTitle}>
         {#snippet line()}
           {sheetWords.neverDrawnLine(
-            Math.round((waitingFor ?? STAGE_READY_MS) / 1000)
+            Math.round((stageCover.waitingFor ?? STAGE_READY_MS) / 1000)
           )}
         {/snippet}
         {#snippet action()}
@@ -3531,43 +3351,43 @@
             <Button
               icon={IconTrash}
               label={sheetWords.remove}
-              onclick={removeShown}
+              onclick={stageCover.removeShown}
               size="sm"
               variant="ghost"
             />
-            {#if stageSaid}
+            {#if stageCover.stageSaid}
               <!-- The stage's own last words, folded as the down stage's are. -->
               {@render stageDetailsToggle()}
             {/if}
           </div>
-          {@render stageDetailsText(stageSaid)}
-          <AskHere asker={removeAsks} at="never-drawn-remove" />
+          {@render stageDetailsText(stageCover.stageSaid)}
+          <AskHere asker={stageCover.removeAsks} at="never-drawn-remove" />
         {/snippet}
       </EmptyState>
     </div>
   {/if}
-  {#if shownDown && staged?.status !== "error" && !neverDrawn}
+  {#if stageCover.shownDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
     <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
     <div
       data-slot="down"
-      data-down={shownDown}
+      data-down={stageCover.shownDown}
       class="absolute inset-0 overflow-auto px-space-6 pt-(--side-room,0px) bg-surface-well"
       role="alert"
       transition:appear
     >
       <!-- A version whose workspace is gone is no fault that may pass: it is archived, and says so. -->
       <EmptyState
-        icon={shownDown === "gone" ? IconArchive : IconAlert}
-        title={downTitle}
-        action={shownDown === "gone" ? goneAsk : frameRetry}
+        icon={stageCover.shownDown === "gone" ? IconArchive : IconAlert}
+        title={stageCover.downTitle}
+        action={stageCover.shownDown === "gone" ? goneAsk : frameRetry}
       >
         {#snippet line()}
-          {#if shownDown === "gone"}
+          {#if stageCover.shownDown === "gone"}
             {previewWords.goneLine}
-          {:else if shownDown === "workspace"}
+          {:else if stageCover.shownDown === "workspace"}
             Its server can't be reached until the workspace runs again. Once a
             session there is back, try again.
-          {:else if shownDown === "server"}
+          {:else if stageCover.shownDown === "server"}
             {paneSubject.downPort
               ? `${previewWords.nothingOnPort(paneSubject.downPort)} on ${paneSubject.ownerMachine}, so the page can't load.`
               : `The page's server on ${paneSubject.ownerMachine} isn't running, so the page can't load.`}
@@ -3578,30 +3398,31 @@
             {:else}
               Start it again, then try again.
             {/if}
-          {:else if shownDown === "reach"}
-            The way to the page's server on {paneSubject.ownerMachine} didn't open{shownWhy
-              ? `: ${shownWhy}`
+          {:else if stageCover.shownDown === "reach"}
+            The way to the page's server on {paneSubject.ownerMachine} didn't open{stageCover.shownWhy
+              ? `: ${stageCover.shownWhy}`
               : "."}
             Try again; if it fails again, start the server again from its session.
-          {:else if shownDown === "closed"}
+          {:else if stageCover.shownDown === "closed"}
             Its session shows something else now, or has ended, so there is no
             page here. Open its session to show it again.
-          {:else if shownDown === "error"}
-            {previewWords.errorLine(shownWhy ?? "with an error")}
-          {:else if shownDown === "crashed"}
-            {previewWords.crashedLine(shownWhy ?? "no message")}
+          {:else if stageCover.shownDown === "error"}
+            {previewWords.errorLine(stageCover.shownWhy ?? "with an error")}
+          {:else if stageCover.shownDown === "crashed"}
+            {previewWords.crashedLine(stageCover.shownWhy ?? "no message")}
           {:else}
             The preview comes from {paneSubject.ownerMachine}, which isn't
-            answering the hub{shownWhy ? `: ${shownWhy}` : "."} Once it answers, try
-            again.
+            answering the hub{stageCover.shownWhy
+              ? `: ${stageCover.shownWhy}`
+              : "."} Once it answers, try again.
           {/if}
-          {#if !previewFrame.down && docDown}
+          {#if !previewFrame.down && stageCover.docDown}
             <span
               class="block mt-space-2 text-ink-muted type-meta"
               data-slot="unreached"
               >{sheetWords.unreachedSince(
-                formatTimestamp(new Date(docDown.since)),
-                docDown.why
+                formatTimestamp(new Date(stageCover.docDown.since)),
+                stageCover.docDown.why
               )}</span
             >
           {/if}
@@ -3609,7 +3430,7 @@
       </EmptyState>
     </div>
   {/if}
-  {#if previewFrame.notLoaded && !shownDown && staged?.status !== "error" && !neverDrawn}
+  {#if previewFrame.notLoaded && !stageCover.shownDown && stageCover.staged?.status !== "error" && !stageCover.neverDrawn}
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
     <div
       data-slot="down"
