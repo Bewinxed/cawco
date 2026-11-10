@@ -266,7 +266,6 @@
    * `__cawcoDebug`); the app never mounts this.
    */
   import type { PreviewMode } from "@cawco/core/comments/model";
-  import type { PulseFrame } from "@cawco/core/frames";
   import type { InstanceRow, WorkItemSummary } from "@cawco/core/protocol";
   import { canvasPath } from "@cawco/core/stage";
   import { untrack } from "svelte";
@@ -357,7 +356,7 @@
   const debug = (
     globalThis as unknown as {
       __cawcoDebug: {
-        frame: (frame: PulseFrame) => void;
+        frame: CawcoDebug["frame"];
         sessionsState: {
           sessions: Record<string, ReturnType<typeof blankSession>>;
         };

@@ -54,10 +54,8 @@
   } from "#lib/cawco/project/setup.fixtures.js";
   import { setupProgressOf } from "#lib/cawco/project/setup-progress.js";
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
-  import {
-    type ProjectRow,
-    projectsStore,
-  } from "#lib/cawco/stores/projects.svelte.js";
+  import type { ProjectRow } from "#lib/cawco/projects.js";
+  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
   import {
     blankSession,
     sessionsStore,
