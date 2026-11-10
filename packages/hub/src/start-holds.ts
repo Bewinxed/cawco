@@ -1,4 +1,5 @@
 import type { Envelope, SpawnPayload } from "@cawco/core/protocol";
+import { ElysiaStatus } from "elysia";
 import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
 
@@ -109,7 +110,7 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
     envelope: Envelope<SpawnPayload>,
     /** The hub's own launch (a restore, a relaunch): it goes in its turn ({@link paceSpawn}). */
     paced = false
-  ): Envelope | undefined => {
+  ) => {
     if (holdingStarts(machineId) && envelope.instanceId) {
       ctx.db.oweSpawn(envelope.instanceId, envelope, Date.now());
       return;
@@ -123,7 +124,11 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
       queueStart(machineId, envelope.instanceId);
       return;
     }
-    const frame = { ...envelope, payload: ctx.bounded(envelope.payload) };
+    const bound = ctx.bounded(envelope.payload);
+    if (bound instanceof ElysiaStatus) {
+      return bound;
+    }
+    const frame = { ...envelope, payload: bound };
     ctx.sendFrame(agent, frame);
     // What waited for this start goes right behind it, in the order taken.
     if (envelope.instanceId) {
@@ -265,6 +270,11 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
     instanceId: string,
     asked: SpawnPayload
   ): SpawnPayload | undefined => {
+    /** The start does not go: its row fails once, with the reason. */
+    const notStarted = (reason: string): undefined => {
+      console.warn(`[hub] not starting ${instanceId}: ${reason}`);
+      ctx.processFailed(machineId, instanceId, reason);
+    };
     try {
       // Its account may have been signed out there while the machine updated.
       const [stored] = ctx.db.getInstancesByIds([instanceId]);
@@ -272,16 +282,15 @@ export const createStartHolds = (ctx: StartHoldsContext) => {
         stored &&
         ctx.accountStartRefusal(machineId, stored, ctx.sessionName(stored));
       if (refused) {
-        throw new Error(refused);
+        return notStarted(refused);
       }
       // In flight from here (`launchGoes`).
-      return ctx.bounded(asked);
-    } catch (problem) {
-      const reason =
-        problem instanceof Error ? problem.message : String(problem);
-      console.warn(`[hub] not starting ${instanceId}: ${reason}`);
-      ctx.processFailed(machineId, instanceId, reason);
-      return undefined;
+      const bound = ctx.bounded(asked);
+      return bound instanceof ElysiaStatus
+        ? notStarted(bound.response.detail)
+        : bound;
+    } catch (error) {
+      return notStarted(error instanceof Error ? error.message : String(error));
     }
   };
 
