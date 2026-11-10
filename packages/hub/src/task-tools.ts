@@ -27,7 +27,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import type { AttemptStart } from "@cawco/core/task-views";
 import { ElysiaStatus } from "elysia";
 import { z } from "zod";
-import { BUILD_TITLE } from "./design-offers";
+import { BUILD_TITLE, type DesignOffers } from "./design-offers";
 import type { JevTasks } from "./jev-tasks";
 import { tool } from "./mcp-tool";
 import type { WrittenStep } from "./plans";
@@ -47,12 +47,7 @@ import {
 import { type Refused, refusal } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
-import {
-  sessionActor,
-  type TaskActor,
-  type Tasks,
-  type TaskView,
-} from "./tasks";
+import { sessionActor, type Tasks, type TaskView } from "./tasks";
 
 /** Every task tool, by name. */
 const TASK_TOOL_NAMES = [
@@ -80,11 +75,7 @@ export interface TaskToolContext {
    * Files "Build the design system" in the hub's words (design-offers.ts
    * `fileBuild`): a `task_create` with that title gives only its stage.
    */
-  designBuild?: (
-    projectId: string,
-    actor: TaskActor,
-    stage: string | undefined
-  ) => Promise<TaskView>;
+  designBuild?: DesignOffers["fileBuild"];
   /**
    * Duplicates (§5.9) for a task this session just filed (jev-tasks.ts
    * `filed`): Jev's verdict, or the candidates the session compares.
