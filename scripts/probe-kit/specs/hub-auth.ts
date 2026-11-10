@@ -51,7 +51,11 @@
 
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { hubClient, hubPath } from "../../../packages/agent/src/hub-client";
+import {
+  type HubAnswer,
+  hubClient,
+  hubPath,
+} from "../../../packages/agent/src/hub-client";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import {
   type AskRecord,
@@ -68,7 +72,7 @@ import { askRecordedWords } from "../../../packages/core/src/words/ask-lines";
 import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { answerText, type HubAsk, pageHub, payloadOf } from "../hub";
+import { type HubAsk, pageHub, payloadOf, type Said, said } from "../hub";
 import { delegateStarted, open, ROOT } from "../kit";
 import type { Kit, Spec } from "../spec";
 
@@ -145,11 +149,11 @@ const credentialOf = async (fleet: Fleet, instanceId: string) =>
   await fleet.sessionCredential(instanceId);
 
 /** One request: its status, its text and its headers. */
-const ask = async (
+const ask = async <A extends HubAnswer>(
   base: string,
-  request: HubAsk,
+  request: HubAsk<A>,
   init: RequestInit | ((url: string) => RequestInit) = {}
-): Promise<{ headers: Headers; status: number; text: string }> => {
+): Promise<Said<A> & { headers: Headers }> => {
   let url = base;
   const read = await readWithin(60_000, async (signal) => {
     const answer = await request(
@@ -164,11 +168,7 @@ const ask = async (
         });
       })
     );
-    return {
-      status: answer.status,
-      text: answerText(answer),
-      headers: answer.response.headers,
-    };
+    return { ...said(answer), headers: answer.response.headers };
   });
   switch (read.kind) {
     case "answered":
@@ -374,11 +374,11 @@ const spec: Spec = {
     const forged = await ask(fleet.base, (hub) => hub.api.agents.get(), {
       headers: { authorization: `Bearer ${"x".repeat(43)}` },
     });
-    const mode = JSON.parse(
-      (await ask(fleet.base, (hub) => hub.api.auth.get())).text
-    ) as {
-      mode: string;
-    };
+    const authed = await ask(fleet.base, (hub) => hub.api.auth.get());
+    if (authed.refused) {
+      throw new Error(`auth (${authed.status}): ${authed.text}`);
+    }
+    const mode = authed.json;
     check(
       "(t2) trusted: a session's credential is refused on owner routes (403), and turned nothing on",
       asSession.status === 403 &&
@@ -405,11 +405,11 @@ const spec: Spec = {
     );
 
     // (t3) The agent records the hub it joined; rediscovery takes that hub alone.
-    const { hubId } = JSON.parse(
-      (await ask(fleet.base, (hub) => hub.health.get())).text
-    ) as {
-      hubId: string;
-    };
+    const healthy = await ask(fleet.base, (hub) => hub.health.get());
+    if (healthy.refused) {
+      throw new Error(`health (${healthy.status}): ${healthy.text}`);
+    }
+    const { hubId } = healthy.json;
     const config = await until(
       "the agent recording the hub it joined",
       async () =>
@@ -641,7 +641,7 @@ const spec: Spec = {
         join(machine.home, ".config", "cawco", "machine-key")
       ).text()
     ).trim();
-    const asMachine = (request: HubAsk) =>
+    const asMachine = <A extends HubAnswer>(request: HubAsk<A>) =>
       ask(fleet.base, request, (url) => ({
         headers: proofOf(
           "probe-new",
@@ -656,7 +656,7 @@ const spec: Spec = {
       asMachine((hub) => hub.api.agents({ machineId: "probe-new" }).get()),
       asMachine((hub) => hub.api.agents({ machineId: MACHINE }).get()),
     ]);
-    const own = ownRow.status === 200 ? JSON.parse(ownRow.text) : undefined;
+    const own = ownRow.refused ? undefined : ownRow.json;
     check(
       "(p3b) the admitted machine is refused the fleet's list and another machine's row (403), and reads its own row: online",
       fleetList.status === 403 &&
@@ -689,15 +689,15 @@ const spec: Spec = {
     );
 
     // (p4) A session can't approve its own ask.
-    const started = JSON.parse(
-      (
-        await ask(
-          fleet.base,
-          (hub) => hub.api.pair.post({ kind: "cli", name: "a session" }),
-          { headers: bearer }
-        )
-      ).text
-    ) as { userCode: string };
+    const startedAsk = await ask(
+      fleet.base,
+      (hub) => hub.api.pair.post({ kind: "cli", name: "a session" }),
+      { headers: bearer }
+    );
+    if (startedAsk.refused) {
+      throw new Error(`pair (${startedAsk.status}): ${startedAsk.text}`);
+    }
+    const started = startedAsk.json;
     const selfApprove = await ask(
       fleet.base,
       (hub) =>
@@ -837,13 +837,13 @@ const spec: Spec = {
     // `localhost` is another site than `127.0.0.1`. (p5c) A form on that
     // site posting to an owner route is refused, at the dashboard and at
     // the hub, before any cookie is read.
-    const ask2 = JSON.parse(
-      (
-        await ask(fleet.base, (hub) =>
-          hub.api.pair.post({ kind: "cli", name: "a cross-site test" })
-        )
-      ).text
-    ) as { userCode: string };
+    const ask2Asked = await ask(fleet.base, (hub) =>
+      hub.api.pair.post({ kind: "cli", name: "a cross-site test" })
+    );
+    if (ask2Asked.refused) {
+      throw new Error(`pair (${ask2Asked.status}): ${ask2Asked.text}`);
+    }
+    const ask2 = ask2Asked.json;
     const approving = hubPath.api.pair.requests({ userCode: ask2.userCode })
       .approve["~path"];
     const elsewhere = Bun.serve({

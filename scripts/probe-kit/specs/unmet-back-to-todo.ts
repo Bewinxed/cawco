@@ -39,16 +39,16 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import { CAWCO_ENV } from "../../../packages/core/src/cawco-env";
 import { machinePath } from "../../../packages/core/src/machine-path";
 import { judgedWords } from "../../../packages/core/src/words/judged";
 import { CONTROL_HOST_OUTPUTS } from "../../../packages/core/src/workspace/controls";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
-import type { DispatchView } from "../../../packages/hub/src/dispatch";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
-import { type HubAsk, handled, hubAt, said as saidOf } from "../hub";
+import { type HubAsk, handled, hubAt, type Said, said as saidOf } from "../hub";
 import type { Kit, Spec } from "../spec";
 
 const B = "probe-unmet-machine";
@@ -64,15 +64,9 @@ const ACCEPTANCE = [
 
 type HubDb = Awaited<ReturnType<typeof inProcess>>["db"];
 
-interface Answer {
-  json: unknown;
-  status: number;
-  text: string;
-}
-
 interface Rig {
   base: string;
-  board: (request: HubAsk) => Promise<Answer>;
+  board: <A extends HubAnswer>(request: HubAsk<A>) => Promise<Said<A>>;
   checkout: ReturnType<typeof machinePath>;
   db: HubDb;
   identities: { mint: (instanceId: string) => string };
@@ -240,12 +234,15 @@ const attempt = (rig: Rig, taskId: string, title: string): ToolSession => {
   };
 };
 
-const read = async (rig: Rig, id: string): Promise<TaskView> =>
-  (
-    await rig.board((client) =>
-      client.api.projects({ id: rig.projectId }).tasks({ taskId: id }).get()
-    )
-  ).json as TaskView;
+const read = async (rig: Rig, id: string): Promise<TaskView> => {
+  const answer = await rig.board((client) =>
+    client.api.projects({ id: rig.projectId }).tasks({ taskId: id }).get()
+  );
+  if (answer.refused) {
+    throw new Error(`${id} was not read (${answer.status}): ${answer.text}`);
+  }
+  return answer.json;
+};
 
 /** Until the task has left `from` or holds more than `comments` comments, up to 20 s: the task then. */
 const settled = async (
@@ -282,7 +279,10 @@ const built = async (
       acceptance: ACCEPTANCE.map((line) => `- ${line}`).join("\n"),
     })
   );
-  const { id } = made.json as { id: string };
+  if (made.refused) {
+    throw new Error(`${title} was not filed (${made.status}): ${made.text}`);
+  }
+  const { id } = made.json;
   const builder = attempt(rig, id, title);
   const moved = await rig.board((client) =>
     client.api
@@ -336,11 +336,13 @@ const legs = async (rig: Rig): Promise<void> => {
   );
 
   // (b) It counts as a failed attempt: off the frontier.
-  const view = (
-    await rig.board((client) =>
-      client.api.projects({ id: rig.projectId }).dispatch.get()
-    )
-  ).json as DispatchView;
+  const viewed = await rig.board((client) =>
+    client.api.projects({ id: rig.projectId }).dispatch.get()
+  );
+  if (viewed.refused) {
+    throw new Error(`dispatch was not read (${viewed.status}): ${viewed.text}`);
+  }
+  const view = viewed.json;
   kit.check(
     "b: the task reads its last attempt failed, saying Jev did not show its criteria met",
     a.lastAttemptFailed &&
@@ -403,11 +405,15 @@ const legs = async (rig: Rig): Promise<void> => {
   });
   await Bun.sleep(500);
   const dBack = await read(rig, d.id);
-  const dView = (
-    await rig.board((client) =>
-      client.api.projects({ id: rig.projectId }).dispatch.get()
-    )
-  ).json as DispatchView;
+  const dViewed = await rig.board((client) =>
+    client.api.projects({ id: rig.projectId }).dispatch.get()
+  );
+  if (dViewed.refused) {
+    throw new Error(
+      `dispatch was not read (${dViewed.status}): ${dViewed.text}`
+    );
+  }
+  const dView = dViewed.json;
   kit.check(
     "d: the lead's move back to ready counts the attempt failed, and the task stands off the frontier",
     !back.refused &&
@@ -465,9 +471,15 @@ const legs = async (rig: Rig): Promise<void> => {
     waitReader: () => ({}) as never,
   });
   await engine.catchUp(old);
-  const oldStages = (
-    await rig.board((client) => client.api.projects({ id: old }).stages.get())
-  ).json as { moves: { from: string; to: string }[]; source: string };
+  const oldRead = await rig.board((client) =>
+    client.api.projects({ id: old }).stages.get()
+  );
+  if (oldRead.refused) {
+    throw new Error(
+      `stages were not read (${oldRead.status}): ${oldRead.text}`
+    );
+  }
+  const oldStages = oldRead.json;
   kit.check(
     "e: a stages.md written from the code template before working → ready reads as the code template, and the project then reads today's, working → ready in it",
     before !== today &&
@@ -547,7 +559,9 @@ const spec: Spec = {
       });
       // The code template, its Review before done off: review is off.
       db.setProjectTemplate(projectId, "code");
-      const board = async (request: HubAsk): Promise<Answer> => {
+      const board = async <A extends HubAnswer>(
+        request: HubAsk<A>
+      ): Promise<Said<A>> => {
         const answer = await request(
           handled((r) => hub.handle(r), {
             headers: { [PRESENCE_HEADER]: PRESENCE },

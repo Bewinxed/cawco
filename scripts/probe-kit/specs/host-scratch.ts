@@ -35,10 +35,6 @@ import {
 } from "../../../packages/agent/src/host-scratch";
 import { withHostLine } from "../../../packages/core/src/injected";
 import { workWords } from "../../../packages/core/src/words/work";
-import type {
-  HostOutputListed,
-  WorkspaceOutputs,
-} from "../../../packages/core/src/workspace/controls";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
 import type { Kit, Spec } from "../spec";
 
@@ -76,9 +72,12 @@ const spec: Spec = {
     const outside = join(homedir(), "secret.txt");
     await writeFile(outside, "not to be read");
     await symlink(outside, join(outputs, "link.txt"));
-    const listed = (await hostOutputs({ id, read: false })) as {
-      listed: HostOutputListed[];
-    };
+    const listed = await hostOutputs({ id, read: false });
+    if (!("listed" in listed)) {
+      throw new Error(
+        `s2: read false answered files: ${JSON.stringify(listed)}`
+      );
+    }
     check(
       "s2: listed, outputs/ gives each file with its size and a link as a link, in path order",
       JSON.stringify(listed.listed) ===
@@ -89,7 +88,12 @@ const spec: Spec = {
         ]),
       JSON.stringify(listed)
     );
-    const read = (await hostOutputs({ id, read: true })) as WorkspaceOutputs;
+    const read = await hostOutputs({ id, read: true });
+    if (!("files" in read)) {
+      throw new Error(
+        `s2: read true answered a listing: ${JSON.stringify(read)}`
+      );
+    }
     const bytes = Object.fromEntries(
       read.files.map((one) => [
         one.path,
@@ -119,9 +123,12 @@ const spec: Spec = {
 
     await removeHostScratch({ id });
     const gone = await lstat(scratch).catch(() => undefined);
-    const after = (await hostOutputs({ id, read: false })) as {
-      listed: HostOutputListed[];
-    };
+    const after = await hostOutputs({ id, read: false });
+    if (!("listed" in after)) {
+      throw new Error(
+        `s4: read false answered files: ${JSON.stringify(after)}`
+      );
+    }
     const kept = await lstat(outside).catch(() => undefined);
     check(
       "s4: removed, the dir is gone and lists nothing, and what a link in it named stays",

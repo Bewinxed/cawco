@@ -39,7 +39,10 @@ import { Database } from "bun:sqlite";
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hubPath } from "../../../packages/agent/src/hub-client";
+import {
+  type HubAnswer,
+  hubPath,
+} from "../../../packages/agent/src/hub-client";
 import {
   type MachineFloor,
   removalRefusal,
@@ -53,7 +56,7 @@ import {
 import { projectTrashWords } from "../../../packages/core/src/words/project-trash";
 import type { RemoveFolder } from "../../../packages/core/src/workspace/controls";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
-import { answerText, type HubAsk, handled, hubAt } from "../hub";
+import { type HubAsk, handled, hubAt, type Said, said } from "../hub";
 import type { Kit, Spec } from "../spec";
 
 const B = "probe-delete-b";
@@ -69,7 +72,7 @@ type HubDb = Awaited<ReturnType<typeof inProcess>>["db"];
 
 /** The in-process hub, its second machine's stand-in, and the disk that stand-in holds. */
 interface Rig {
-  call: (request: HubAsk) => Promise<Answer>;
+  call: <A extends HubAnswer>(request: HubAsk<A>) => Promise<Said<A>>;
   /** Every call the stand-in was asked, method first. */
   calls: string[];
   db: HubDb;
@@ -423,12 +426,9 @@ const nestedLeg = async (rig: Rig): Promise<void> => {
   const wideId = project(rig, "Probe delete wide", at(wide));
   const narrowId = project(rig, "Probe delete narrow", at(narrow));
   const listed = await rig.call((hub) => hub.api.projects.get());
-  const narrowRow = (
-    JSON.parse(listed.text) as {
-      id: string;
-      places: { kind: string; within: { id: string; name: string }[] }[];
-    }[]
-  ).find((one) => one.id === narrowId);
+  const narrowRow = (listed.refused ? [] : listed.json).find(
+    (one) => one.id === narrowId
+  );
   check(
     rig,
     "c. a live project's place inside another's names the wider project",
@@ -438,14 +438,12 @@ const nestedLeg = async (rig: Rig): Promise<void> => {
     JSON.stringify(narrowRow?.places)
   );
   await rig.call((hub) => hub.api.projects({ id: narrowId }).delete());
-  const forgotten = (
-    JSON.parse(
-      (await rig.call((hub) => hub.api.projects.forgotten.get())).text
-    ) as {
-      id: string;
-      places: { kind: string; within: { id: string; name: string }[] }[];
-    }[]
-  ).find((one) => one.id === narrowId);
+  const forgottenList = await rig.call((hub) =>
+    hub.api.projects.forgotten.get()
+  );
+  const forgotten = (forgottenList.refused ? [] : forgottenList.json).find(
+    (one) => one.id === narrowId
+  );
   check(
     rig,
     "c. the forgotten list names the wider project beside its place",
@@ -641,14 +639,7 @@ const spec: Spec = {
               }
             )
           );
-          const text = await response.text();
-          let json: unknown;
-          try {
-            json = JSON.parse(text);
-          } catch {
-            // Words, not JSON: a refusal.
-          }
-          return { status: response.status, text, json };
+          return { status: response.status, text: await response.text() };
         },
         call: async (request) => {
           const answer = await request(
@@ -656,7 +647,7 @@ const spec: Spec = {
               headers: { [PRESENCE_HEADER]: PRESENCE },
             })
           );
-          return { status: answer.status, text: answerText(answer) };
+          return said(answer);
         },
         calls: [],
         db,

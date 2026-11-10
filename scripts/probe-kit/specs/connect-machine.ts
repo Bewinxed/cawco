@@ -96,6 +96,7 @@ import {
 import { join } from "node:path";
 import type { Page, Request } from "playwright-core";
 import type { AuthContext } from "ssh2";
+import { dataOf } from "../../../packages/agent/src/hub-client";
 import type { InstallSignIn } from "../../../packages/core/src/install";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { commonWords } from "../../../packages/core/src/words/common";
@@ -104,7 +105,7 @@ import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
-import { hubAt } from "../hub";
+import { hubAt, pageHub } from "../hub";
 import { handOn, open } from "../kit";
 import { type Phone, standInPhone } from "../phone";
 import type { Kit, KitFleet, Spec, Theme } from "../spec";
@@ -880,12 +881,8 @@ async function walk(
   // workspace's machine lists none), and the second is chosen.
   const local = fleet.base.replace("127.0.0.1", "localhost");
   await page.route(isJoinRead, async (route) => {
-    const response = await route.fetch();
-    const joinInfo = (await response.json()) as {
-      addresses: { label: string; url: string }[];
-    };
+    const joinInfo = dataOf(await pageHub(page).api.join.get());
     await route.fulfill({
-      response,
       json: {
         ...joinInfo,
         addresses: [
@@ -1595,12 +1592,8 @@ async function walk(
    */
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.route(isJoinRead, async (route) => {
-    const response = await route.fetch();
-    const joinInfo = (await response.json()) as {
-      addresses: { label: string; url: string }[];
-    };
+    const joinInfo = dataOf(await pageHub(page).api.join.get());
     await route.fulfill({
-      response,
       json: {
         ...joinInfo,
         addresses: [
@@ -2397,10 +2390,8 @@ async function tabsFit(
     for (const view of ["phone", "narrowDesk", "desk"] as const) {
       const page = await kit.page(view, { engine, theme: "dark" });
       await page.route(isJoinRead, async (route) => {
-        const response = await route.fetch();
-        const joinInfo = (await response.json()) as Record<string, unknown>;
+        const joinInfo = dataOf(await pageHub(page).api.join.get());
         await route.fulfill({
-          response,
           json: {
             ...joinInfo,
             addresses: [

@@ -639,8 +639,6 @@ empty-catch		scripts/probe-kit/specs/connect-machine.ts	1
 empty-catch		scripts/probe-kit/specs/hub-local-name.ts	1
 empty-catch		scripts/probe-kit/specs/hub-loopback.ts	1
 empty-catch		scripts/probe-kit/specs/preview-bound.ts	1
-empty-catch		scripts/probe-kit/specs/project-delete.ts	1
-empty-catch		scripts/probe-kit/specs/project-restore.ts	1
 empty-catch		scripts/probe-kit/specs/release-stop.ts	1
 empty-catch		scripts/probe-kit/specs/session-containers.ts	2
 empty-catch		scripts/probe-kit/specs/ssh-forward-download.ts	1

@@ -46,6 +46,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
+import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
 import type { DecisionCard } from "../../../packages/core/src/decisions";
@@ -53,7 +54,7 @@ import { machinePath } from "../../../packages/core/src/machine-path";
 import { decidesWords } from "../../../packages/core/src/words/decides";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import type { CardSettlingRow } from "../../../packages/hub/src/db/decides";
-import { type HubAsk, handled, said } from "../hub";
+import { type HubAsk, handled, type Said, said } from "../hub";
 import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-picked-machine";
@@ -82,12 +83,6 @@ sb = Option("b", "On the agent's report", "The report moves it.", false, [], "Le
 order = Decision("order", "Which stage comes first?", [oa, ob], "Two orders.", [], [], false, null, "approach")
 oa = Option("a", "Inbox first", "Everything lands there.", true, [], "One more column.")
 ob = Option("b", "Doing first", "Work in hand leads.", false, [], "No inbox.")`;
-
-interface Answer {
-  json: unknown;
-  status: number;
-  text: string;
-}
 
 interface Record {
   decided: number;
@@ -141,7 +136,9 @@ const run = async (kit: Kit): Promise<void> => {
     );
     const { writeFolderFile } =
       await import("../../../packages/hub/src/project-folder");
-    const call = async (request: HubAsk): Promise<Answer> => {
+    const call = async <A extends HubAnswer>(
+      request: HubAsk<A>
+    ): Promise<Said<A>> => {
       const answer = await request(
         handled((r) => hub.handle(r), {
           headers: { [PRESENCE_HEADER]: PRESENCE },
@@ -150,13 +147,13 @@ const run = async (kit: Kit): Promise<void> => {
       return said(answer);
     };
     const recordOf = async (member: string): Promise<Record> => {
-      const { json, text } = await call((client) =>
+      const answer = await call((client) =>
         client.api.decides.members({ id: member }).record.get({ query: {} })
       );
-      if (!json) {
-        throw new Error(`record of ${member}: ${text}`);
+      if (answer.refused) {
+        throw new Error(`record of ${member}: ${answer.text}`);
       }
-      return json as Record;
+      return answer.json;
     };
     const shown = (record: Record) =>
       `waiting ${record.waiting}, decided ${record.decided}, taken back ${record.takenBack}`;
@@ -172,7 +169,7 @@ const run = async (kit: Kit): Promise<void> => {
         program: PROGRAM,
       })
     );
-    const pageId = (made.json as { id?: string } | undefined)?.id;
+    const pageId = made.refused ? undefined : made.json.id;
     if (!pageId) {
       throw new Error(`the page was not made (${made.status}): ${made.text}`);
     }
@@ -290,19 +287,13 @@ const run = async (kit: Kit): Promise<void> => {
     );
 
     // (f) The page's ledger.
-    const ledger = (
-      (
-        await call((client) =>
-          client.api.decides.pages({ artifactId: pageId }).get()
-        )
-      ).json as {
-        cards: {
-          card: string;
-          settledAt: string | null;
-          takenBackAt: string | null;
-        }[];
-      }
-    ).cards;
+    const paged = await call((client) =>
+      client.api.decides.pages({ artifactId: pageId }).get()
+    );
+    if (paged.refused) {
+      throw new Error(`the page's ledger (${paged.status}): ${paged.text}`);
+    }
+    const ledger = paged.json.cards;
     const row = (card: string) => ledger.find((one) => one.card === card);
     check(
       "f: look and shape read taken back and never settled; order settled then taken back; words open",
@@ -333,7 +324,7 @@ const run = async (kit: Kit): Promise<void> => {
 const deletedPage = async (
   { check }: Kit,
   on: {
-    call: (request: HubAsk) => Promise<Answer>;
+    call: <A extends HubAnswer>(request: HubAsk<A>) => Promise<Said<A>>;
     db: HubDb;
     recordOf: (member: string) => Promise<Record>;
     sent: (card: string, route: string, instanceId: string) => CardSettlingRow;
@@ -352,7 +343,7 @@ const deletedPage = async (
       program: PROGRAM,
     })
   );
-  const laterId = (made.json as { id?: string } | undefined)?.id;
+  const laterId = made.refused ? undefined : made.json.id;
   if (!laterId) {
     throw new Error(`later was not made (${made.status}): ${made.text}`);
   }

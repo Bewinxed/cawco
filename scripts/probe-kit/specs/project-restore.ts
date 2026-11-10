@@ -50,15 +50,17 @@ import { Database } from "bun:sqlite";
 import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import { hubPath } from "../../../packages/agent/src/hub-client";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
+import type { ForgottenProject } from "../../../packages/core/src/forgotten-project";
 import {
   type MachinePath,
   machinePath,
 } from "../../../packages/core/src/machine-path";
 import { projectTrashWords } from "../../../packages/core/src/words/project-trash";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
-import { type HubAsk, handled, said } from "../hub";
+import { type HubAsk, handled, type Said, said } from "../hub";
 import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-restore-machine";
@@ -66,21 +68,18 @@ const PRESENCE = "probe-presence-4f2a";
 const NAME = "Probe restore";
 const TASK = "Bring the project back";
 
-interface Answer {
-  json: unknown;
-  status: number;
-  text: string;
-}
-
 /** The in-process hub and what the legs read it with. */
 interface Rig {
-  call: (request: HubAsk) => Promise<Answer>;
+  call: <A extends HubAnswer>(request: HubAsk<A>) => Promise<Said<A>>;
   db: Awaited<ReturnType<typeof inProcess>>["db"];
   /** Every journal line the hub wrote. */
   journal: string[];
   kit: Kit;
   /** `POST /api/projects/:id/delete`, sent by hand: Treaty cannot name it, as `DELETE /api/projects/:id` takes the `delete` key in the hub's routes. */
-  postDelete: (id: string, body?: object) => Promise<Answer>;
+  postDelete: (
+    id: string,
+    body?: object
+  ) => Promise<{ status: number; text: string }>;
   /** The hub's database, read beside the hub. */
   raw: Database;
   /** A project's folder on the hub. */
@@ -104,25 +103,6 @@ interface Seeded {
   session: string;
 }
 
-/** A forgotten project as the list answers it. */
-interface Listed {
-  brings: Record<string, unknown>;
-  by: string | null;
-  forgottenAt: number;
-  hints: Record<string, unknown> | null;
-  id: string;
-  name: string | null;
-  places: {
-    kind: string;
-    machineId: string;
-    machineName: string;
-    path: string;
-  }[];
-}
-
-const idOf = (answer: Answer): string =>
-  (answer.json as { id?: string } | undefined)?.id ?? "";
-
 const there = (path: string): Promise<boolean> =>
   stat(path).then(
     () => true,
@@ -130,9 +110,10 @@ const there = (path: string): Promise<boolean> =>
   );
 
 /** The forgotten projects the hub lists now. */
-const listed = async (rig: Rig): Promise<Listed[]> =>
-  ((await rig.call((hub) => hub.api.projects.forgotten.get())).json as
-    Listed[] | undefined) ?? [];
+const listed = async (rig: Rig): Promise<ForgottenProject[]> => {
+  const answer = await rig.call((hub) => hub.api.projects.forgotten.get());
+  return answer.refused ? [] : answer.json;
+};
 
 /** A project carrying a checkout, a task, a routine, a rule, an account, a page and a session. */
 const seed = async (rig: Rig): Promise<Seeded> => {
@@ -195,7 +176,7 @@ const seed = async (rig: Rig): Promise<Seeded> => {
       label: "Probe account",
     })
   );
-  const accountId = idOf(account);
+  const accountId = account.refused ? "" : account.json.id;
   const allowed = await call((hub) =>
     hub.api.projects({ id }).accounts.put({
       accounts: [accountId],
@@ -207,7 +188,7 @@ const seed = async (rig: Rig): Promise<Seeded> => {
     })
   );
   const area = await call((hub) => hub.api.areas.post({ name: "Probe area" }));
-  const areaId = idOf(area);
+  const areaId = area.refused ? "" : area.json.id;
   const inArea = await call((hub) =>
     hub.api.projects({ id }).area.put({ areaId })
   );
@@ -264,8 +245,8 @@ const seed = async (rig: Rig): Promise<Seeded> => {
     checkout,
     id,
     pageId,
-    routineId: idOf(routine),
-    ruleId: idOf(rule),
+    routineId: routine.refused ? "" : routine.json.id,
+    ruleId: rule.refused ? "" : rule.json.id,
     session,
   };
 };
@@ -279,9 +260,8 @@ const held = async (rig: Rig, seeded: Seeded) => {
   const routines = await call((hub) =>
     hub.api.routines.get({ query: { projectId: id } })
   );
-  const { rules } = (await call((hub) => hub.api.rules.get())).json as {
-    rules: { id: string; scope: { projectId?: string } }[];
-  };
+  const ruled = await call((hub) => hub.api.rules.get());
+  const rules = ruled.refused ? [] : ruled.json.rules;
   const page = raw
     .query("SELECT name, project_id FROM artifacts WHERE id = ?")
     .get(seeded.pageId) as { name: string; project_id: string } | null;
@@ -361,9 +341,7 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
   const area = await call((hub) => hub.api.areas({ id: seeded.areaId }).get());
   kit.check(
     "a. its area stands, the forget taking nothing of it",
-    area.status === 200 &&
-      (area.json as { projects?: string[] } | undefined)?.projects?.length ===
-        0,
+    area.status === 200 && !area.refused && area.json.projects.length === 0,
     area.text.slice(0, 300)
   );
   const entries = (await rig.trash()).filter((one) => one.startsWith(`${id}-`));
@@ -478,12 +456,9 @@ const restoreLeg = async (
     rig,
     "d. restored: 200, its name in the answer",
     restored.status === 200 &&
-      (
-        restored.json as
-          { brought?: { browsers?: number }; name?: string } | undefined
-      )?.name === NAME &&
-      (restored.json as { brought: { browsers: number } }).brought.browsers ===
-        1,
+      !restored.refused &&
+      restored.json.name === NAME &&
+      restored.json.brought.browsers === 1,
     restored.text
   );
   for (const part of Object.keys(before) as (keyof Held)[]) {
@@ -854,17 +829,17 @@ const boardOf = async (rig: Rig, id: string) => {
     rig.call((hub) => hub.api.projects({ id }).stages.get()),
     rig.call((hub) => hub.api.projects({ id }).tasks.get()),
   ]);
-  const read = stages.json as
-    { source?: string; stages?: { name: string }[] } | undefined;
-  const columns = (read?.stages ?? []).map((one) => one.name);
+  const columns = (stages.refused ? [] : stages.json.stages).map(
+    (one) => one.name
+  );
   return {
-    source: read?.source ?? null,
+    source: stages.refused ? null : stages.json.source,
     columns,
     // Each task by its title, and the column it stands in: "" for none.
-    tasks: (
-      (tasks.json as { tasks?: { title: string; stage: string }[] } | undefined)
-        ?.tasks ?? []
-    ).map((one) => [one.title, columns.includes(one.stage) ? one.stage : ""]),
+    tasks: (tasks.refused ? [] : tasks.json.tasks).map((one) => [
+      one.title,
+      columns.includes(one.stage) ? one.stage : "",
+    ]),
   };
 };
 
@@ -980,14 +955,7 @@ const spec: Spec = {
               }
             )
           );
-          const text = await response.text();
-          let json: unknown;
-          try {
-            json = JSON.parse(text);
-          } catch {
-            // Words, not JSON: a refusal.
-          }
-          return { status: response.status, text, json };
+          return { status: response.status, text: await response.text() };
         },
         call: async (request) => {
           const answer = await request(
