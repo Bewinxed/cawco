@@ -197,6 +197,7 @@ import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
 import { claudeAuthNote, onSigninsChanged } from "./accounts";
 import { type Activity, desktopReadable, watchActivity } from "./activity";
+import type { AgentPorts } from "./agent-ports";
 import { recordAgentState } from "./agent-state";
 import { unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
@@ -267,7 +268,7 @@ import {
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { ghAccounts, ghAccountToken } from "./host-gh";
 import { hostOutputs, removeHostScratch } from "./host-scratch";
-import { cancelCommand, runHubCommand, setCommandQueue } from "./hub-command";
+import { cancelCommand, runFollowedCommand } from "./hub-command";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, followHub, stopCarrying } from "./hub-loopback";
 import { keepHubPreviews } from "./hub-previews";
@@ -293,7 +294,6 @@ import {
   movePrepare,
   moveRemoteCredential,
   moveSnapshot,
-  setMoveProgress,
 } from "./move";
 import { placePush } from "./place-push";
 import { placeLfs, placeRepo, repoRoot } from "./place-repo";
@@ -1352,6 +1352,30 @@ const send = (socket: WebSocket, envelope: Envelope): void => {
 };
 
 /**
+ * The hub connection the agent's own frames leave on ({@link AgentPorts}):
+ * the latest `attach` opened. With none open (before the first, or one that
+ * closed) a frame is dropped.
+ */
+class HubLine {
+  #open: { machine: string; socket: WebSocket } | undefined;
+
+  /** A connection opened, of `machine`: frames leave on it from here. */
+  use(socket: WebSocket, machine: string): void {
+    this.#open = { socket, machine };
+  }
+
+  send(envelope: Envelope): void {
+    if (this.#open?.socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    send(this.#open.socket, {
+      ...envelope,
+      machineId: envelope.machineId || this.#open.machine,
+    });
+  }
+}
+
+/**
  * How long a dial waits for the hub to answer its upgrade. A socket the far
  * end accepted but never answers (a hub whose loop is wedged, a middlebox
  * holding the connection, another process on the hub's port) fires neither
@@ -1746,6 +1770,8 @@ const attach = (
   sessions: () => ReturnType<typeof readSessions>,
   /** What launches ask the hub as they start; this connection carries them once registered. */
   launchAsks: LaunchAsks,
+  /** Where the agent's frames leave: this connection from here. */
+  hubLine: HubLine,
   /**
    * Called once the socket is open and the register has gone out — the moment
    * this connection counts as up. {@link reconnecting} reads it to tell a
@@ -2404,15 +2430,8 @@ const attach = (
 
     // An envelope a harness builds itself (opencode's custody inspection
     // frame); hand-offs and spawns go through the hub's MCP, never this socket.
-    supervisor.emit = (envelope) => {
-      if (socket.readyState !== WebSocket.OPEN) {
-        return;
-      }
-      send(socket, {
-        ...envelope,
-        machineId: envelope.machineId || identity.machineId,
-      });
-    };
+    hubLine.use(socket, identity.machineId);
+    supervisor.emit = (envelope) => hubLine.send(envelope);
 
     supervisor.sink = (frame) => {
       if (socket.readyState !== WebSocket.OPEN) {
@@ -3408,10 +3427,20 @@ const startDaemon = (rediscover = false) =>
       os: `${platform()}-${arch()}`,
     };
 
+    // What the modules send through, built before any of them starts; every
+    // frame leaves on the hub connection that is up (`HubLine`).
+    const hubLine = new HubLine();
+    const framed = (frame: unknown): void =>
+      hubLine.send({ verb: "frames", machineId: "", payload: frame });
+    const ports: AgentPorts = {
+      commandQueue: framed,
+      moveProgress: framed,
+    };
+
     // Outlives any one connection: a hub restart must not kill running sessions.
     const supervisor = yield* Effect.acquireRelease(
       Effect.sync(() => {
-        const created = new SessionSupervisor();
+        const created = new SessionSupervisor(ports);
         // What a restart would cut is the supervisor's to say from here on
         // (`restart.ts`); the updater and `cawco service restart` read it.
         setRestartSource(() => created.restartHolds());
@@ -3542,15 +3571,12 @@ const startDaemon = (rediscover = false) =>
       )
     );
     // A command runs as this process's child, so a restart kills it: none starts behind a raised fence.
-    setCommandQueue((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(
       CONTROL_RUN_COMMAND,
       (cwd, cmd, timeoutMs, workspace, run) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : runHubCommand(cwd, cmd, timeoutMs, workspace, run),
+          : runFollowedCommand(cwd, cmd, timeoutMs, workspace, run, ports),
       commandLane
     );
     // A cancel ends a command already running, so it is taken behind a raised fence too.
@@ -3952,9 +3978,6 @@ const startDaemon = (rediscover = false) =>
       <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
       (...args: A): Promise<R> =>
         fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : step(...args);
-    setMoveProgress((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(CONTROL_MOVE_INSPECT, (path) =>
       moveInspect(path as string)
     );
@@ -3978,13 +4001,15 @@ const startDaemon = (rediscover = false) =>
     supervisor.declareControl(
       CONTROL_MOVE_CLONE,
       unfenced((request) =>
-        moveClone(request as Parameters<typeof moveClone>[0])
+        moveClone(request as Parameters<typeof moveClone>[0], ports)
       ),
       moveLane
     );
     supervisor.declareControl(
       CONTROL_MOVE_LFS,
-      unfenced((request) => moveLfs(request as Parameters<typeof moveLfs>[0])),
+      unfenced((request) =>
+        moveLfs(request as Parameters<typeof moveLfs>[0], ports)
+      ),
       moveLane
     );
     supervisor.declareControl(CONTROL_MOVE_CANCEL, (jobId) =>
@@ -4030,6 +4055,7 @@ const startDaemon = (rediscover = false) =>
             hubUrl,
             sessions,
             launchAsks,
+            hubLine,
             markLive
           )
         ),

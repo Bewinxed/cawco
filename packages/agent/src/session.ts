@@ -160,6 +160,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core/workspace/controls";
 import { Effect } from "effect";
+import type { AgentPorts } from "./agent-ports";
 import { drawArtifact } from "./artifact-picture";
 import { withFiles } from "./attachments";
 import { boundaryFor } from "./boundary/control";
@@ -640,6 +641,9 @@ export const resumableSessions = async (
 /**
  * Owns every live session on this machine and pumps their messages at the hub.
  */
+/** What the supervisor sends through, or hands to the work it starts: a command's queue, a preview's stage and browser. */
+type SupervisorPorts = Pick<AgentPorts, "commandQueue">;
+
 export class SessionSupervisor {
   #stopSequence = 0;
 
@@ -666,7 +670,10 @@ export class SessionSupervisor {
    */
   #custodyHarnesses: Map<string, HarnessKind> | undefined;
 
-  constructor() {
+  readonly #ports: SupervisorPorts;
+
+  constructor(ports: SupervisorPorts) {
+    this.#ports = ports;
     gaugeTables("supervisor", {
       asleep: this.#asleep,
       handed: this.#handed,
@@ -1375,7 +1382,7 @@ export class SessionSupervisor {
     // A command behind another in its folder says so as it queues (folderTurn).
     const folder =
       control?.method === CONTROL_RUN_COMMAND
-        ? folderTurn(control.args, this.#queues.has(key))
+        ? folderTurn(control.args, this.#queues.has(key), this.#ports)
         : undefined;
     const routed = (this.#queues.get(key) ?? Promise.resolve()).then(() => {
       folder?.start();
