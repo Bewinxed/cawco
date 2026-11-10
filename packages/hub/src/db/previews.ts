@@ -33,7 +33,13 @@ const ARTIFACT_ORIGIN = "embed-";
  * server's or a folder's preview, a sheet), by the origin its row points at
  * (schema.ts `artifacts.origin`): the one its panel, its own tab and every
  * decision card load, and the key its machine's listener, its port, its
- * host-mode label and its passes are kept under.
+ * host-mode label and its passes are kept under. Its listener on a port of
+ * its own and its machine's listener are apart from every session's, and
+ * both last as long as that origin, whichever session opened or held it
+ * (preview-service.ts `end`); its port stays its own until the range is full
+ * and it is the least recently used of those nothing uses (preview-ports.ts
+ * `reclaimOne`). A dev server and a stage serve from their root, so no other
+ * origin can show one under a path of its own.
  */
 export const artifactOrigin = (origin: string): string =>
   `${ARTIFACT_ORIGIN}${origin}`;

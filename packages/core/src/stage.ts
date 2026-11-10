@@ -223,7 +223,7 @@ export interface CanvasShapes {
 export type DecisionMedia = {
   /** A dev server's preview or a sheet: the address of the origin the hub opened for it. */
   embed?: string;
-  /** Why the hub opened no origin for it as it served the page (every preview port in use), in its words (hub preview.ts `everyPortTaken`). */
+  /** Why the hub opened no origin for it as it served the page (every preview port in use), in its words (hub preview-ports.ts, `preview-ports-taken`). */
   unopened?: string;
   /** The version the page draws: the artifact's newest, a next version its owner's panel has not opened yet included (hub artifacts service `newestVersion`). */
   id: string;

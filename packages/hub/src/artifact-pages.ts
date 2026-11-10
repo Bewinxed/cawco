@@ -9,7 +9,7 @@ import { ElysiaStatus, problem } from "elysia";
 import { timedShowStep } from "./artifacts/service";
 import type { PageFrom } from "./artifacts/shapes";
 import type { ArtifactRow } from "./db/artifacts";
-import { projectOrigin } from "./db/previews";
+import { artifactOrigin, projectOrigin } from "./db/previews";
 import type { PageSources } from "./decision-page";
 import { buildDecisionPage } from "./decision-page";
 import type {
@@ -28,7 +28,6 @@ import {
   servedByMachine,
   shownArtifact,
 } from "./preview";
-import { embedKey } from "./preview-origin";
 import { changeFolderFiles, readFolderFile } from "./project-folder";
 
 import { unreachable } from "./unreachable";
@@ -160,7 +159,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
    */
   const embedKeyOf = (id: string): string | undefined => {
     const origin = ctx.db.artifacts.get(id)?.origin;
-    return origin === undefined ? undefined : embedKey(origin);
+    return origin === undefined ? undefined : artifactOrigin(origin);
   };
 
   /** The key of the origin a frame of `target` in session `instanceId`'s panel loads ({@link frameOrigin}'s); undefined for an artifact the hub no longer holds. */
