@@ -1,6 +1,7 @@
 /**
  * The pane's own line: what last went wrong in the frame, and an act of the pane's own the hub refused (Verify, a show from the title's menu) with its Try again.
  */
+import { z } from "zod";
 import { failureClause } from "#lib/platform/hub-read.js";
 import { toast } from "#lib/platform/toasts.js";
 import { showArtifact, verifyArtifact } from "../artifact-api";
@@ -16,8 +17,11 @@ interface Failure {
  * title's menu): said on the same line, with Try again, kept through a
  * reload (refusals.svelte.ts), until a try goes.
  */
-export type PaneAct =
-  { act: "verify" } | { act: "show"; id: string; title: string };
+const PaneActSchema = z.discriminatedUnion("act", [
+  z.object({ act: z.literal("verify") }),
+  z.object({ act: z.literal("show"), id: z.string(), title: z.string() }),
+]);
+export type PaneAct = z.infer<typeof PaneActSchema>;
 export interface PaneNoticeDeps {
   readonly instanceId: () => string;
   readonly paneSubject: PaneSubject;
@@ -43,7 +47,7 @@ export class PaneNotice {
   rerunning = $state(false);
 
   rerun = async (): Promise<void> => {
-    const asked = this.paneRefused?.asked as PaneAct | undefined;
+    const { data: asked } = PaneActSchema.safeParse(this.paneRefused?.asked);
     if (!asked) {
       return;
     }
@@ -83,7 +87,9 @@ export class PaneNotice {
           this.#deps.paneSubject.artifact.id
         )
       );
-      if ((refusals.get(key)?.asked as PaneAct | undefined)?.act === "verify") {
+      if (
+        PaneActSchema.safeParse(refusals.get(key)?.asked).data?.act === "verify"
+      ) {
         refusals.delete(key);
       }
     } catch (error) {
