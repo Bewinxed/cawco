@@ -331,11 +331,14 @@ import { blockRoutes, createBlocks } from "./blocks";
 import { createBoard } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
 import { portOf, runBootSteps } from "./boot";
-import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
+import {
+  browserStreamRoutes,
+  browserUnreached,
+  createBrowserStream,
+} from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import {
   BROWSER_CALL_MS,
-  BrowserRefusal,
   answered as browserAnswered,
   browserRoutes,
   createBrowsers,
@@ -2708,10 +2711,7 @@ export const createServer = (
     reach: async (machineId, port) => {
       const address = registry.address(machineId);
       if (!address) {
-        throw new BrowserRefusal(
-          503,
-          `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`
-        );
+        return browserUnreached(machineName(machineId));
       }
       return sshTunnels.holds(machineId)
         ? {
@@ -2733,11 +2733,16 @@ export const createServer = (
         origin,
         workspaceId: sessionWorkspace(actor)?.id ?? actor.id,
       };
-      return browserAnswered<BrowserAskedPage>(
+      const asked = browserAnswered<BrowserAskedPage>(
         await callAgent(machineId, BROWSER_PAGE, [page], BROWSER_CALL_MS),
         machineName(machineId),
         `say which page of yours is open on ${origin}`
-      ).targetId;
+      );
+      // The browser ask throws its refusals: the agent reads the sentence.
+      if (asked instanceof ElysiaStatus) {
+        throw new Error(asked.response.detail);
+      }
+      return asked.targetId;
     },
     // Not kept across a restart: the call that waits on it ends with the hub.
     park: (envelope) => parkForPerson(envelope),
@@ -7344,14 +7349,8 @@ export const createServer = (
   const stopProjectBrowsers = async (
     projectId: string
   ): Promise<string | undefined> => {
-    try {
-      await browsers.forgetProject(projectId);
-    } catch (error) {
-      if (error instanceof BrowserRefusal) {
-        return error.message;
-      }
-      throw error;
-    }
+    const kept = await browsers.forgetProject(projectId);
+    return kept?.response.detail;
   };
 
   /** A caller as a journal line names it: its kind, and its device, session or machine. */
