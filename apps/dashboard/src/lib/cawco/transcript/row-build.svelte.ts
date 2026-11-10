@@ -138,7 +138,9 @@ export interface RowBuildHost {
     frontHeld: string[];
     readonly onList: () => Set<string>;
   };
-  olderRoom: number;
+  readonly older: {
+    olderRoom: number;
+  };
   readonly scroller: HTMLElement | undefined;
   readonly session: SessionState;
   readonly slides: {
@@ -496,7 +498,7 @@ export class RowBuild {
       this.frozenBefore &&
       this.#host.session.cursor === null &&
       !this.#host.atBottom
-        ? this.#host.olderRoom
+        ? this.#host.older.olderRoom
         : 0;
     this.fronted += 1;
     if (strip > 0 && this.#host.scroller) {
@@ -515,7 +517,7 @@ export class RowBuild {
    */
   stripGone(node: HTMLElement, strip: number): void {
     flushSync();
-    this.#host.olderRoom = 0;
+    this.#host.older.olderRoom = 0;
     node.scrollTop -= strip;
     this.#host.lastWrite = node.scrollTop;
   }

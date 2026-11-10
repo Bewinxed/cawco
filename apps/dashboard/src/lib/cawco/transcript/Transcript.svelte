@@ -76,6 +76,7 @@
   import MessageRow from "./MessageRow.svelte";
   import { MountedRows } from "./mounted-rows.svelte";
   import NoticeRun from "./NoticeRun.svelte";
+  import { OlderPages } from "./older-pages.svelte";
   import {
     type OpenAsk,
     openAt,
@@ -259,15 +260,6 @@
     get listStart() {
       return listStart;
     },
-    get olderRoom() {
-      return olderRoom;
-    },
-    set olderRoom(value) {
-      olderRoom = value;
-    },
-    get paged() {
-      return paged;
-    },
     get pinBottom() {
       return pinBottom;
     },
@@ -312,6 +304,9 @@
     },
     get whole(): ListWhole {
       return whole;
+    },
+    get older(): OlderPages {
+      return older;
     },
   };
 
@@ -483,10 +478,14 @@
     // Said once, here, where the seek ends: a landing is a state change and
     // a record not held is a refusal (PRODUCT.md, screen readers), and
     // nothing after it (a scroll, a live row) says it again.
-    const index = rowAt(rowDraw.renderedRows, docId, paged()?.cursor === null);
+    const index = rowAt(
+      rowDraw.renderedRows,
+      docId,
+      older.paged()?.cursor === null
+    );
     if (index < 0) {
       marked = null;
-      unfound = paged()?.olderFault ? "unread" : "gone";
+      unfound = older.paged()?.olderFault ? "unread" : "gone";
       announcement = unfoundWords;
       return;
     }
@@ -525,7 +524,7 @@
       return;
     }
     track(rowBuild.rowCount);
-    const own = paged();
+    const own = older.paged();
     if (session.loading || own?.loading) {
       return;
     }
@@ -612,146 +611,7 @@
       node.removeEventListener("keydown", letGo);
     };
   });
-
-  // ── Older pages ─────────────────────────────────────────────────────────
-  /**
-   * The session whose older pages this view asks for: the store's own. The
-   * server's stand-in for it (see `SessionPane`) is dropped the moment the
-   * store's read lands, and a page put in front of it would go with it.
-   */
-  function paged(): SessionState | null {
-    const store = sessionsStore.session(session.instanceId);
-    return store === session ? store : null;
-  }
-
-  /**
-   * OLDER PAGES COME AS THE READER NEARS THEM, ONE AT A TIME.
-   *
-   * The view holds the newest page and whatever its reader has scrolled up
-   * to. The next older page is asked for when less than ONE VIEWPORT of rows
-   * stands between the top of the view and the first row held: `above`, the
-   * list's own top to the view's top, as virtua has the rows sized. A row it
-   * has not measured counts at `ROW_ESTIMATE`, the smallest a row can be, so
-   * the rows really there are never fewer than counted and the ask is early,
-   * never late; a wheel notch, a key or a flick moves the view by less than
-   * the viewport it is asked across. A list shorter than its viewport is
-   * inside that distance by definition, so it fills, a page at a time, until
-   * it can scroll or the conversation's start is in hand.
-   *
-   * Asked from the reader's scrolling and again once a page has landed (the
-   * rows in front may still be too few), never before the list is drawn,
-   * never for a pane off screen, and not again for a page that failed: that
-   * one is asked for by its own Try again (the strip above the list).
-   */
-  function askOlder(above: number): void {
-    const store = paged();
-    if (
-      !(list && shown && visible && store?.cursor) ||
-      store.hydrating ||
-      store.loading ||
-      store.olderFault
-    ) {
-      return;
-    }
-    // A front shift virtua is holding until a touch scroll comes to rest is
-    // not in the scroll offset yet: it stands in the first row's own offset.
-    if (above - list.getItemOffset(0) < list.getViewportSize()) {
-      detach(readOlderPage(store.instanceId), "readOlderPage");
-    }
-  }
-  /**
-   * The list's place in the view, heard in the shared size observer's
-   * delivery (frame-observer.ts): the listing is observed again in the
-   * frame's callbacks, so it reports in that frame's delivery, and is read
-   * there, on the layout the frame has just done (as motion/rows' `heard`
-   * reads its containers). Read in the frame's callbacks, its boxes laid out
-   * what the update had just written (`askOlder`, 15.6ms of style in a
-   * reply's 51ms frame).
-   */
-  let nearStart: FrameObserver | null = null;
-  /** Asked for in the frame's callbacks: the listing reports in that frame's delivery. */
-  let nearFrame = 0;
-  function askOlderInFrame(): () => void {
-    cancelAnimationFrame(nearFrame);
-    nearFrame = requestAnimationFrame(() => {
-      nearFrame = 0;
-      const node = listing;
-      if (!node) {
-        return;
-      }
-      nearStart ??= frameObserver(null, {
-        read: (entries) => {
-          const target = entries.at(-1)?.target;
-          nearStart?.unobserve(target as Element);
-          if (target && scroller) {
-            askOlder(
-              scroller.getBoundingClientRect().top -
-                target.getBoundingClientRect().top
-            );
-          }
-        },
-      });
-      nearStart.observe(node);
-    });
-    return () => {
-      cancelAnimationFrame(nearFrame);
-      nearFrame = 0;
-    };
-  }
-  onDestroy(() => nearStart?.disconnect());
-  // What can bring the first rows near without a scroll: the list drawn, a
-  // page landed with few rows in it, the pane coming on screen. Read in the
-  // next frame, once virtua has moved the view by what the page added.
-  $effect(() => {
-    const store = paged();
-    if (
-      !(shown && visible && store?.cursor) ||
-      store.hydrating ||
-      store.loading ||
-      store.olderFault
-    ) {
-      return;
-    }
-    track(rowBuild.rowCount);
-    return askOlderInFrame();
-  });
-
-  /**
-   * How tall the strip before the list stands (see the markup): the page
-   * being read, or the one that could not be. The list starts under it, and
-   * virtua is told so (`startMargin`).
-   */
-  let olderRoom = $state(0);
-  /**
-   * THE STRIP BEFORE THE LIST MOVES NOTHING. It comes and goes with the
-   * cursor, and grows when a read fails — above every row, where a change of
-   * height would push the whole conversation by as much. So the view moves
-   * with it, in the resize itself, after the frame's layout and before its
-   * paint: the rows on screen stand where they stood. At the tail the pin
-   * does the same from the other end.
-   */
-  function keepPlace(node: HTMLElement) {
-    // biome-ignore lint/style/noRestrictedGlobals: THE STRIP BEFORE THE LIST MOVES NOTHING: the view moves by the strip's growth after the frame's layout and before its paint, so the rows on screen never jump; deferred, a frame paints them pushed down
-    const watch = new ResizeObserver(() => {
-      const grew = node.offsetHeight - olderRoom;
-      if (grew === 0) {
-        return;
-      }
-      olderRoom = node.offsetHeight;
-      flushSync();
-      if (!(landed && scroller) || jumping) {
-        return;
-      }
-      if (atBottom) {
-        pinBottom();
-        return;
-      }
-      scroller.scrollTop += grew;
-      lastWrite = scroller.scrollTop;
-    });
-    watch.observe(node);
-    return () => watch.disconnect();
-  }
+  const older = new OlderPages(host);
 
   /** The scroll height the last scroll event saw — what tells a clamp from a reader. */
   let lastHeight = 0;
@@ -952,7 +812,7 @@
     }
     // Wherever the view now is, and whoever moved it: near the first rows
     // held, the page before them is asked for.
-    askOlder(lastTop - listStart);
+    older.askOlder(lastTop - listStart);
     if (jumping) {
       jumpScrolled(scroller);
       return;
@@ -1446,7 +1306,7 @@
     // top. Each page is asked for once the last one is in the rows searched:
     // a pane off screen builds its rows on its scheduler turn, and asking on
     // the page's landing alone read on past the place before it was looked for.
-    const own = paged();
+    const own = older.paged();
     if (keeper.resume && !keeper.resume.tail && keeper.anchorIndex() < 0) {
       // The place is looked for only among rows built from the store's
       // session as it stands: not while a build's second step is still to
@@ -2434,7 +2294,7 @@
     class="isolate pt-(--head-room,0px) has-data-retry:pb-space-5"
     style:--head-room={headRoom}
     bind:this={headStrip}
-    {@attach keepPlace}
+    {@attach older.keepPlace}
   >
     {#if rowDraw.renderedRows.length > 0 && session.olderFault}
       <p
@@ -2508,7 +2368,7 @@
       {onscrollend}
       scrollRef={scroller}
       shift={rowDraw.presentation.shifted}
-      startMargin={olderRoom + whole.spare}
+      startMargin={older.olderRoom + whole.spare}
       bind:this={
         () => list,
         (value) => {
