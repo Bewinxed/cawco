@@ -309,7 +309,6 @@ as-unknown-as	Listeners[1]	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	Listeners[2]	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	Listeners[3]	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	Listeners[4]	scripts/probe-kit/specs/preview-burst.ts	1
-as-unknown-as	MapCardData	apps/dashboard/src/lib/cawco/preview/map/MapNode.svelte	1
 as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
 as-unknown-as	NativeClass	apps/dashboard/src/lib/platform/frame-observer.ts	1
@@ -330,7 +329,6 @@ as-unknown-as	Parameters<typeof accountsRead>[2]	scripts/probe-kit/specs/account
 as-unknown-as	Parameters<typeof createPlaceRepos>[0]["db"]	scripts/probe-kit/specs/host-lfs.ts	1
 as-unknown-as	Pid	scripts/probe-kit/signal-wall-child.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PinPeekFrame.stories.ts	4
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	2
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1
 as-unknown-as	Pin	scripts/probe-kit/specs/comments.ts	2

@@ -5,11 +5,11 @@
    * foot (to what it renders). The handles carry the edges and draw
    * nothing.
    */
-  import { Handle, type NodeProps, Position } from "@xyflow/svelte";
+  import { Handle, type Node, type NodeProps, Position } from "@xyflow/svelte";
   import MapCard, { type MapCardData } from "./MapCard.svelte";
 
-  let { data }: NodeProps = $props();
-  const card = $derived(data as unknown as MapCardData);
+  let { data: card }: NodeProps<Node<MapCardData & Record<string, unknown>>> =
+    $props();
 </script>
 
 <div
