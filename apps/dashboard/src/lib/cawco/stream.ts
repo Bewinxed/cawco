@@ -29,6 +29,7 @@ import type {
   CommandEnvelope,
   CommandKind,
   SessionStreamEvent,
+  SessionStreamFrame,
   StreamBacklog,
   StreamClientMessage,
   StreamDelta,
@@ -170,7 +171,7 @@ export interface StreamHost {
    * THE CHOKEPOINT. Apply one relay frame to the session it belongs to,
    * given the unwrapped frame. The stream orders; it does not reshape.
    */
-  applyFrame: (sessionId: string, frame: unknown) => void;
+  applyFrame: (sessionId: string, frame: SessionStreamFrame) => void;
   clearTimer?: (handle: number) => void;
   /** Whether the dashboard follows this session's stream: a tab, the peek, a watched delegate. */
   follows: (sessionId: string) => boolean;
