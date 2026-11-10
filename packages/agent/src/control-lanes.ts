@@ -5,6 +5,7 @@
  */
 
 import type { ControlPayload } from "@cawco/core/protocol";
+import { fieldOf } from "./json-field";
 
 /** The queue key a control waits in; `undefined` for the default (`machine:<method>`). */
 export type ControlLane = (control: ControlPayload) => string | undefined;
@@ -27,12 +28,6 @@ export type MachineControl =
 /** An image generation with a request id runs in a lane of its own: a slow one blocks no machine busy probe and no other control. */
 export const imageLane: ControlLane = (control) =>
   control.requestId ? `image:${control.requestId}` : undefined;
-
-/** What `value` holds under `key`, when it is an object that has one. */
-const fieldOf = (value: unknown, key: string): unknown =>
-  typeof value === "object" && value !== null && key in value
-    ? Reflect.get(value, key)
-    : undefined;
 
 /**
  * A command the hub runs (a check, a landing gate step, up to an hour):

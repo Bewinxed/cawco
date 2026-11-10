@@ -94,7 +94,7 @@ interface Work extends Owed {
 }
 
 interface Question extends Owed {
-  arg: unknown;
+  arg: SearchArg<SearchOp>;
   /** Ends its limit's timer and its signal's listener. */
   done: () => void;
   id: number;

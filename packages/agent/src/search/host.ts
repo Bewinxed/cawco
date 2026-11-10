@@ -136,11 +136,24 @@ export type SearchAnswer<K extends SearchOp> = Awaited<
 >;
 
 /** What the agent sends: one op and its argument, under an id its answer carries. */
-export interface SearchAsk {
-  arg: unknown;
+export interface SearchAsk<K extends SearchOp = SearchOp> {
+  arg: SearchArg<K>;
   id: number;
-  op: SearchOp;
+  op: K;
 }
+
+/** Each op as a handler of its own argument and answer; a process holds those of its role. */
+type Handlers = {
+  [K in SearchOp]?: (arg: SearchArg<K>, tell: Tell) => Promise<SearchAnswer<K>>;
+};
+
+/** `ops`' handler of `op`, run on `arg`; none when this role has no such op. */
+const runOp = <K extends SearchOp>(
+  ops: Handlers,
+  op: K,
+  arg: SearchArg<K>,
+  tell: Tell
+): Promise<SearchAnswer<K>> | undefined => ops[op]?.(arg, tell);
 
 /** What the process sends: it opened (or why not), it is there, how far an op has come, its answer, or why it failed. */
 export type SearchSaid =
@@ -175,7 +188,7 @@ const serve = async (): Promise<void> => {
     );
   }
   const path = transcriptIndexPath();
-  let ops: Record<string, (arg: never, tell: Tell) => Promise<unknown>>;
+  let ops: Handlers;
   let index: TranscriptIndex;
   if (role === "write") {
     await mkdir(dirname(path), { recursive: true });
@@ -195,15 +208,14 @@ const serve = async (): Promise<void> => {
     ops = readOps(index);
   }
   process.on("message", async (ask: SearchAsk) => {
-    const run = ops[ask.op] as
-      ((arg: unknown, tell: Tell) => Promise<unknown>) | undefined;
     try {
-      if (!run) {
-        throw new Error(`the ${role} search process is not asked ${ask.op}`);
-      }
-      const value = await run(ask.arg, (told) =>
+      const running = runOp(ops, ask.op, ask.arg, (told) =>
         say({ id: ask.id, kind: "told", value: told })
       );
+      if (!running) {
+        throw new Error(`the ${role} search process is not asked ${ask.op}`);
+      }
+      const value = await running;
       say({ id: ask.id, kind: "answer", value });
     } catch (error) {
       say({ id: ask.id, kind: "failed", ...failure(error) });

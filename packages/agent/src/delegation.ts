@@ -6,6 +6,7 @@ import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
 import { END_TURN_META } from "@cawco/core/no-reply";
 import { CAWCO_HUB_PORT, mcpGatewayPort } from "@cawco/core/ports";
 import { unhandled } from "@cawco/core/unhandled";
+import { z } from "zod";
 import { hubAnswer } from "./hub-away";
 import { hubClient, hubPath, unwrap } from "./hub-client";
 
@@ -101,6 +102,22 @@ export const TOOL_DOOR = hubPath.api.delegation.call({ instanceId: "" })[
   "~path"
 ];
 
+/** What the hub's tool call answers: words and pictures, and whether the call failed or ends the turn (hub mcp-tool.ts). */
+const ToolResult = z.object({
+  _meta: z.record(z.string(), z.unknown()).optional(),
+  content: z.array(
+    z.discriminatedUnion("type", [
+      z.object({ type: z.literal("text"), text: z.string() }),
+      z.object({
+        type: z.literal("image"),
+        data: z.string(),
+        mimeType: z.string(),
+      }),
+    ])
+  ),
+  isError: z.boolean().optional(),
+});
+
 export async function callDelegationTool(
   instanceId: string,
   name: string,
@@ -134,14 +151,7 @@ export async function callDelegationTool(
     }
     // The hub's answer is its content: words, and a picture beside them,
     // and the mark of a call that ends the turn (hub mcp-tool.ts).
-    const result = (await response.json()) as {
-      _meta?: Record<string, unknown>;
-      content: (
-        | { type: "text"; text: string }
-        | { type: "image"; data: string; mimeType: string }
-      )[];
-      isError?: boolean;
-    };
+    const result = ToolResult.parse(await response.json());
     if (result.isError) {
       throw new Error(
         result.content
