@@ -47,10 +47,10 @@ import type {
 } from "@excalidraw/excalidraw/element/types";
 import type {
   AppState,
-  BinaryFileData,
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
 import { ExcalidrawBinding } from "y-excalidraw";
+import { Awareness } from "y-protocols/awareness";
 import {
   applyUpdate,
   Doc,
@@ -61,9 +61,11 @@ import {
   Map as YMap,
 } from "yjs";
 import { bindingMade } from "./bound";
+import { authorOf, type Entry, elementOf, posOf, theElement } from "./entry";
 import { clock, progressOf, tokenMs } from "./motion";
 import type { CanvasHold } from "./replica";
 import { HOLD_PX, seenByDoc, snapToShape, swapView } from "./snap";
+import { heardFirst } from "./window-events";
 
 /** Origins of the page's own transactions. */
 const LIVE = "live";
@@ -86,7 +88,12 @@ const BELOW_GAP = 64;
 /** Excalidraw's default ink, which ours replaces on what the agent draws. */
 const EXCALIDRAW_INK = "#1e1e1e";
 
-type Entry = YMap<unknown>;
+declare global {
+  interface WindowEventMap {
+    /** The overlay's Erase on a stroke's icon (preview overlay/ink.ts). */
+    "cawco:erase": CustomEvent<{ id: string }>;
+  }
+}
 
 /** The colours the canvas draws with, each a token resolved to its hex by day (Excalidraw's dark theme inverts them). */
 export interface CanvasInk {
@@ -142,16 +149,11 @@ const highest = (keys: (string | null | undefined)[]): string | null =>
 const nonce = () => Math.floor(Math.random() * 2 ** 31);
 
 /** The maps an elements event added or changed. */
-const mapsOf = (
-  elements: YArray<Entry>,
-  events: YEvent<YArray<Entry> | Entry>[]
-): Entry[] =>
+const mapsOf = (events: YEvent<YArray<Entry> | Entry>[]): Entry[] =>
   events.flatMap((event) =>
-    event.target === elements
-      ? [...event.changes.added].flatMap(
-          (item) => item.content.getContent() as Entry[]
-        )
-      : [event.target as Entry]
+    event.target instanceof YMap
+      ? [event.target]
+      : [...event.changes.added].flatMap((item) => item.content.getContent())
   );
 
 /** The agent's elements an update brought: the ones it changed first, then the ones it added, in the order of its write. */
@@ -163,8 +165,8 @@ const agentArrivals = (
   const added: string[] = [];
   for (const event of events) {
     const fresh = event.target === elements;
-    for (const map of mapsOf(elements, [event])) {
-      const el = map.get("el") as ExcalidrawElement | undefined;
+    for (const map of mapsOf([event])) {
+      const el = elementOf(map);
       if (el && map.get("by") === "agent") {
         (fresh ? added : changed).push(el.id);
       }
@@ -234,46 +236,30 @@ export function bindScene(
   const input = () => {
     lastInput = performance.now();
   };
-  const listeners: [string, (event: Event) => void][] = [
-    [
-      "pointerdown",
-      (event) => {
-        pressed.add((event as PointerEvent).pointerId);
+  stops.push(
+    heardFirst("pointerdown", (event) => {
+      pressed.add(event.pointerId);
+      input();
+    }),
+    heardFirst("pointermove", (event) => {
+      if (event.buttons > 0) {
         input();
-      },
-    ],
-    [
-      "pointermove",
-      (event) => {
-        if ((event as PointerEvent).buttons > 0) {
-          input();
-        }
-      },
-    ],
-    [
-      "pointerup",
-      (event) => {
-        pressed.delete((event as PointerEvent).pointerId);
-        input();
-        release();
-      },
-    ],
-    [
-      "pointercancel",
-      (event) => {
-        pressed.delete((event as PointerEvent).pointerId);
-        release();
-      },
-    ],
-    ["keydown", input],
-    ["paste", input],
-    ["drop", input],
-    ["input", input],
-  ];
-  for (const [type, listener] of listeners) {
-    window.addEventListener(type, listener, true);
-    stops.push(() => window.removeEventListener(type, listener, true));
-  }
+      }
+    }),
+    heardFirst("pointerup", (event) => {
+      pressed.delete(event.pointerId);
+      input();
+      release();
+    }),
+    heardFirst("pointercancel", (event) => {
+      pressed.delete(event.pointerId);
+      release();
+    }),
+    heardFirst("keydown", input),
+    heardFirst("paste", input),
+    heardFirst("drop", input),
+    heardFirst("input", input)
+  );
   const swaps = swapView();
   stops.push(
     tellStrokeEnds(api, later, (stroke) => snapToShape(api, stroke, swaps))
@@ -329,14 +315,9 @@ export function bindScene(
   };
 
   // The hub serves no awareness (awareness cursors are out of scope): the
-  // binding gets one that hears no one.
-  const awareness = {
-    clientID: scene.clientID,
-    getStates: () => new Map(),
-    on: () => undefined,
-    off: () => undefined,
-    setLocalStateField: () => undefined,
-  } as unknown as ConstructorParameters<typeof ExcalidrawBinding>[3];
+  // binding gets one that hears no one, an Awareness destroyed as it is made.
+  const awareness = new Awareness(scene);
+  awareness.destroy();
   const sceneElements = scene.getArray<Entry>("elements");
   const binding = new ExcalidrawBinding(
     sceneElements,
@@ -414,7 +395,7 @@ export function bindScene(
       transaction.origin === binding &&
       performance.now() - lastInput < INPUT_MS
     ) {
-      for (const map of mapsOf(sceneElements, events)) {
+      for (const map of mapsOf(events)) {
         unstamped.add(map);
       }
       clearTimeout(stampTimer);
@@ -544,10 +525,7 @@ const tellDrawn = (live: Doc): (() => void) => {
   const tell = () => {
     const count = elements
       .toArray()
-      .filter(
-        (map) =>
-          (map.get("el") as ExcalidrawElement | undefined)?.isDeleted !== true
-      ).length;
+      .filter((map) => elementOf(map)?.isDeleted !== true).length;
     if (count !== told) {
       told = count;
       toHost({ type: "cawco:drawn", count });
@@ -582,9 +560,7 @@ export interface SceneBox {
  * an embedded canvas tells its frame its shape by it (host.tsx).
  */
 export const sceneBox = (api: ExcalidrawImperativeAPI): SceneBox | null => {
-  const boxes = api
-    .getSceneElements()
-    .map((el) => boxOf(el as Parameters<typeof boxOf>[0]));
+  const boxes = api.getSceneElements().map((el) => boxOf(el));
   if (boxes.length === 0) {
     return null;
   }
@@ -684,18 +660,19 @@ const tellStrokeEnds = (
       const stroke = elements.findLast(
         (el) => el.type === "freedraw" && !known.has(el.id)
       );
-      if (!(stroke && "points" in stroke && stroke.points.length > 0)) {
+      const last = stroke?.type === "freedraw" ? stroke.points.at(-1) : null;
+      if (!(stroke?.type === "freedraw" && last)) {
         return;
       }
-      if (still && held(stroke as ExcalidrawFreeDrawElement)) {
+      if (still && held(stroke)) {
         return;
       }
-      const [px, py] = stroke.points.at(-1) as readonly [number, number];
+      const [px, py] = last;
       const state = api.getAppState();
       const zoom = state.zoom.value;
-      const box = boxOf(stroke as Parameters<typeof boxOf>[0]);
+      const box = boxOf(stroke);
       const crosses = (other: ExcalidrawElement) => {
-        const b = boxOf(other as Parameters<typeof boxOf>[0]);
+        const b = boxOf(other);
         return (
           b.x <= box.x + box.width &&
           box.x <= b.x + b.width &&
@@ -723,8 +700,8 @@ const tellStrokeEnds = (
       );
     }, 0);
   };
-  const erase = (event: Event) => {
-    const { id } = (event as CustomEvent<{ id: string }>).detail;
+  const erase = (event: CustomEvent<{ id: string }>) => {
+    const { id } = event.detail;
     api.updateScene({
       elements: api.getSceneElementsIncludingDeleted().map((el) =>
         el.id === id
@@ -769,7 +746,7 @@ const lands = (
       (point, i) => i > 0 && toSegment(local, el.points[i - 1], point) <= reach
     );
   }
-  const box = boxOf(el as Parameters<typeof boxOf>[0]);
+  const box = boxOf(el);
   return (
     at[0] >= box.x &&
     at[0] <= box.x + box.width &&
@@ -821,9 +798,7 @@ const tellPresses = (api: ExcalidrawImperativeAPI): (() => void) => {
     const label = pressed?.boundElements?.find((one) => one.type === "text");
     const textOf = (el: ExcalidrawElement | undefined) =>
       el && "text" in el ? el.text : "";
-    const box = pressed
-      ? boxOf(pressed as Parameters<typeof boxOf>[0])
-      : undefined;
+    const box = pressed ? boxOf(pressed) : undefined;
     window.dispatchEvent(
       new CustomEvent("cawco:element-press", {
         detail: {
@@ -875,21 +850,40 @@ const tellPresses = (api: ExcalidrawImperativeAPI): (() => void) => {
 /** A skeleton as the agent sent it. */
 type Skeleton = { id?: string; type: string } & Record<string, unknown>;
 
+/** What a request's map holds: its payload, the claims on it, the result written. */
+type Request = CanvasRequestPayload | CanvasRequestResult | string;
+
+/** Whether `sent` is a skeleton: an object with a type, and an id where it has one. */
+const isSkeleton = (sent: unknown): sent is Skeleton =>
+  typeof sent === "object" &&
+  sent !== null &&
+  "type" in sent &&
+  typeof sent.type === "string" &&
+  (!("id" in sent) || sent.id === undefined || typeof sent.id === "string");
+
+/** A skeleton the agent sent, which its tool's input holds to an object with a type. */
+const skeletonOf = (sent: unknown): Skeleton => {
+  if (!isSkeleton(sent)) {
+    throw new Error("Each element needs a type.");
+  }
+  return sent;
+};
+
 /** The live elements by id, with their maps; on a remake (`kept`) only those it keeps (core `keptOnRemake`). */
 const entriesOf = (live: Doc, kept = false) =>
   new Map(
     live
       .getArray<Entry>("elements")
       .toArray()
-      .map((map) => [(map.get("el") as ExcalidrawElement).id, map] as const)
+      .map((map) => [theElement(map).id, map] as const)
       .filter(([, map]) => !kept || keptOnRemake(entryOf(map)))
   );
 
 /** An entry's fields the keep rule reads (core `keptOnRemake`). */
 const entryOf = (map: Entry) => ({
-  el: map.get("el") as ExcalidrawElement,
-  by: map.get("by") as CanvasAuthor | undefined,
-  made: map.get("made") as CanvasAuthor | undefined,
+  el: theElement(map),
+  by: authorOf(map, "by"),
+  made: authorOf(map, "made"),
 });
 
 /**
@@ -920,7 +914,7 @@ const deleteWhere = (
 ) => {
   const array = live.getArray<Entry>("elements");
   for (let index = array.length - 1; index >= 0; index -= 1) {
-    const el = array.get(index).get("el") as ExcalidrawElement;
+    const el = theElement(array.get(index));
     if (drop(el, "containerId" in el ? el.containerId : null)) {
       array.delete(index, 1);
     }
@@ -947,10 +941,8 @@ const filled = (
     out.text = old.text;
   }
   const label = old.boundElements?.find((bound) => bound.type === "text");
-  const labelEl = label
-    ? (entries.get(label.id)?.get("el") as { text?: string } | undefined)
-    : undefined;
-  if (out.label === undefined && labelEl?.text !== undefined) {
+  const labelEl = label ? elementOf(entries.get(label.id)) : undefined;
+  if (out.label === undefined && labelEl && "text" in labelEl) {
     out.label = { text: labelEl.text };
   }
   if (old.type === "arrow" && "startBinding" in old) {
@@ -988,10 +980,8 @@ const write = (
     const entries = entriesOf(live);
     const all = array.toArray();
     const last = {
-      pos: highest(all.map((map) => map.get("pos") as string)),
-      index: highest(
-        all.map((map) => (map.get("el") as ExcalidrawElement).index)
-      ),
+      pos: highest(all.map(posOf)),
+      index: highest(all.map((map) => theElement(map).index)),
     };
     let added = 0;
     for (const converted of elements) {
@@ -1004,7 +994,7 @@ const write = (
         replaceElement(map, el, at, entries);
       } else {
         array.push([
-          new YMap<unknown>(
+          new YMap<ExcalidrawElement | string>(
             Object.entries({
               el: { ...el, index: keyAfter(last.index, added) },
               pos: keyAfter(last.pos, added),
@@ -1047,7 +1037,7 @@ const replaceElement = (
   at: string,
   entries: Map<string, Entry>
 ) => {
-  const old = map.get("el") as ExcalidrawElement;
+  const old = theElement(map);
   const arrows = (old.boundElements ?? []).filter(
     (one) =>
       one.type === "arrow" &&
@@ -1067,7 +1057,7 @@ const replaceElement = (
 
 /** An element an arrow binds to that the agent did not send: it gains the arrow. */
 const gainArrows = (map: Entry | undefined, el: OrderedExcalidrawElement) => {
-  const old = map?.get("el") as ExcalidrawElement | undefined;
+  const old = elementOf(map);
   if (!(map && old)) {
     return;
   }
@@ -1126,9 +1116,11 @@ const freeEnds = (
   sent: readonly Skeleton[]
 ): OrderedExcalidrawElement[] => {
   const asked = new Map(
-    sent
-      .filter((one) => isFree(one) && Array.isArray(one.points))
-      .map((one) => [one.id, one.points as [number, number][]])
+    sent.flatMap((one) =>
+      isFree(one) && Array.isArray(one.points)
+        ? [[one.id, one.points] as const]
+        : []
+    )
   );
   return converted.map((el) => {
     const points = asked.get(el.id);
@@ -1139,7 +1131,7 @@ const freeEnds = (
     const ys = points.map(([, y]) => y);
     return {
       ...el,
-      points: points.map(([x, y]) => [x, y]) as typeof el.points,
+      points: points.map(([x, y]): [number, number] => [x, y]),
       width: Math.max(...xs) - Math.min(...xs),
       height: Math.max(...ys) - Math.min(...ys),
     };
@@ -1158,10 +1150,7 @@ const framed = (
 ): OrderedExcalidrawElement[] => {
   const byId = new Map(converted.map((el) => [el.id, el]));
   const frameOf = (id: string) =>
-    (
-      byId.get(id) ??
-      (entries.get(id)?.get("el") as ExcalidrawElement | undefined)
-    )?.frameId ?? null;
+    (byId.get(id) ?? elementOf(entries.get(id)))?.frameId ?? null;
   return converted.map((el) => {
     if (
       el.type !== "arrow" ||
@@ -1213,11 +1202,17 @@ const SHIPPED_FAMILY: ReadonlyMap<number, number> = new Map([
   [FONT_FAMILY.Helvetica, FONT_FAMILY["Liberation Sans"]],
 ]);
 
+/** A copy of the label a skeleton carries; undefined where it carries none. */
+const labelOf = (skeleton: Skeleton): Record<string, unknown> | undefined =>
+  typeof skeleton.label === "object" && skeleton.label !== null
+    ? { ...skeleton.label }
+    : undefined;
+
 /** A skeleton's text, or label, in a family Excalidraw ships ({@link SHIPPED_FAMILY}). */
-const shippedFonts = (skeleton: Skeleton): Skeleton => {
+const shippedFonts = <T extends Skeleton>(skeleton: T): T => {
   const shipped = (family: unknown) =>
     typeof family === "number" ? SHIPPED_FAMILY.get(family) : undefined;
-  const label = skeleton.label as { fontFamily?: unknown } | undefined;
+  const label = labelOf(skeleton);
   const own = shipped(skeleton.fontFamily);
   const labels = label ? shipped(label.fontFamily) : undefined;
   return own === undefined && labels === undefined
@@ -1252,8 +1247,7 @@ const fontsLoaded = async (skeletons: readonly Skeleton[]): Promise<void> => {
     if (skeleton.type === "text") {
       add(skeleton.fontFamily, skeleton.text);
     }
-    const label = skeleton.label as
-      { fontFamily?: unknown; text?: unknown } | undefined;
+    const label = labelOf(skeleton);
     add(label?.fontFamily, label?.text);
   }
   await Promise.all(
@@ -1287,13 +1281,16 @@ const childless = (sent: readonly Skeleton[]): Map<string, FrameBox> => {
     const { x, y, width, height } = one;
     if (!(
       typeof one.id === "string" &&
-      [x, y, width, height].every((n) => typeof n === "number")
+      typeof x === "number" &&
+      typeof y === "number" &&
+      typeof width === "number" &&
+      typeof height === "number"
     )) {
       throw new Error(
         "A frame without children needs its id, x, y, width and height: it takes the elements its box holds."
       );
     }
-    boxes.set(one.id, { x, y, width, height } as FrameBox);
+    boxes.set(one.id, { x, y, width, height });
   }
   return boxes;
 };
@@ -1312,7 +1309,7 @@ const framedBy = (
     return [...converted];
   }
   const holds = (frame: FrameBox, el: ExcalidrawElement) => {
-    const box = boxOf(el as Parameters<typeof boxOf>[0]);
+    const box = boxOf(el);
     return (
       box.x >= frame.x &&
       box.y >= frame.y &&
@@ -1363,9 +1360,11 @@ const wrappedText = (
   sent: readonly Skeleton[]
 ): OrderedExcalidrawElement[] => {
   const widths = new Map(
-    sent
-      .filter((one) => one.type === "text" && typeof one.width === "number")
-      .map((one) => [one.id, one.width as number])
+    sent.flatMap((one) =>
+      one.type === "text" && typeof one.width === "number"
+        ? [[one.id, one.width] as const]
+        : []
+    )
   );
   return converted.map((el) => {
     const width = widths.get(el.id);
@@ -1391,6 +1390,15 @@ const wrappedText = (
   });
 };
 
+/** The id of the element a skeleton's `start` or `end` names; undefined where it names none. */
+const endIdOf = (end: unknown): string | undefined =>
+  typeof end === "object" &&
+  end !== null &&
+  "id" in end &&
+  typeof end.id === "string"
+    ? end.id
+    : undefined;
+
 /**
  * Skeleton elements: added, or replacing the element of the id they carry;
  * on a remake (`replace`), the drawing, which nothing it held fills or binds.
@@ -1405,37 +1413,37 @@ const fromSkeletons = async (
   const sent = skeletons.map((skeleton) => {
     const map = skeleton.id ? entries.get(skeleton.id) : undefined;
     return shippedFonts(
-      withEnds(
-        map
-          ? filled(skeleton, map.get("el") as ExcalidrawElement, entries)
-          : skeleton
-      )
+      withEnds(map ? filled(skeleton, theElement(map), entries) : skeleton)
     );
   });
   // An arrow may bind to an element already drawn: it converts beside them.
   const sentIds = new Set(sent.map((one) => one.id));
   const context = new Set<string>();
   for (const one of sent) {
-    for (const end of [one.start, one.end] as ({ id?: string } | undefined)[]) {
-      if (end?.id && !sentIds.has(end.id) && entries.has(end.id)) {
-        context.add(end.id);
+    for (const end of [one.start, one.end]) {
+      const id = endIdOf(end);
+      if (id && !sentIds.has(id) && entries.has(id)) {
+        context.add(id);
       }
     }
   }
   const frames = childless(sent);
   const skeletonsOf = [
-    ...[...context].map((id) => entries.get(id)?.get("el")),
+    ...[...context].flatMap((id) => {
+      const map = entries.get(id);
+      return map ? [theElement(map)] : [];
+    }),
     ...sent.map((one) =>
       one.id && frames.has(one.id) ? { ...one, children: [] } : one
     ),
-  ] as Skeleton[];
+  ];
   await fontsLoaded(skeletonsOf);
   const converted = framed(
     framedBy(
       wrappedText(
         freeEnds(
           convertToExcalidrawElements(
-            skeletonsOf as unknown as ExcalidrawElementSkeleton[],
+            skeletonsOf as ExcalidrawElementSkeleton[],
             { regenerateIds: false }
           ),
           sent
@@ -1467,15 +1475,11 @@ const fromMermaid = async (
   const { parseMermaidToExcalidraw } =
     await import("@excalidraw/mermaid-to-excalidraw");
   const parsed = await parseMermaidToExcalidraw(text);
-  const skeletons = (parsed.elements as unknown as Skeleton[]).map(
-    shippedFonts
-  );
+  const skeletons = parsed.elements.map(shippedFonts);
   await fontsLoaded(skeletons);
-  const converted = convertToExcalidrawElements(
-    skeletons as unknown as ExcalidrawElementSkeleton[]
-  );
+  const converted = convertToExcalidrawElements(skeletons);
   const existing = [...entriesOf(live).values()]
-    .map((map) => map.get("el") as ExcalidrawElement)
+    .map(theElement)
     .filter((el) => !el.isDeleted)
     .map((el) => boxOf(el));
   const boxes = converted.map((el) => boxOf(el));
@@ -1491,7 +1495,7 @@ const fromMermaid = async (
   const files = live.getMap("files");
   live.transact(() => {
     for (const [id, file] of Object.entries(parsed.files ?? {})) {
-      files.set(id, file as BinaryFileData);
+      files.set(id, file);
     }
   }, AGENT);
   write(live, placed, [], ink, replace);
@@ -1510,11 +1514,19 @@ const PAGE_CLAIM = String(crypto.getRandomValues(new Uint32Array(1))[0]);
 
 /** Claims every request, converts those this page holds; stops serving when called. */
 const serveRequests = (live: Doc, ink: CanvasInk): (() => void) => {
-  const requests = live.getMap<Entry>("requests");
+  const requests = live.getMap<YMap<Request>>("requests");
   const mine = `claim-${PAGE_CLAIM}`;
   const working = new Set<string>();
-  const convert = async (request: Entry): Promise<CanvasRequestResult> => {
-    const payload = request.get("payload") as CanvasRequestPayload;
+  const convert = async (
+    request: YMap<Request>
+  ): Promise<CanvasRequestResult> => {
+    const payload = request.get("payload");
+    if (!(
+      typeof payload === "object" &&
+      ("elements" in payload || "mermaid" in payload)
+    )) {
+      throw new Error("A canvas request holds no payload.");
+    }
     const replace = payload.replace === true;
     try {
       if ("mermaid" in payload) {
@@ -1525,7 +1537,7 @@ const serveRequests = (live: Doc, ink: CanvasInk): (() => void) => {
       return {
         ids: await fromSkeletons(
           live,
-          payload.elements as Skeleton[],
+          payload.elements.map(skeletonOf),
           ink,
           replace
         ),

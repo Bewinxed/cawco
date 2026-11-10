@@ -82,7 +82,7 @@ const nonce = () => Math.floor(Math.random() * 2 ** 31);
 const shapeOf = (
   stroke: ExcalidrawFreeDrawElement
 ): { skeleton: ExcalidrawElementSkeleton; points: Point[] | null } | null => {
-  const found = recognise(stroke.points.map(([px, py]) => [px, py] as Point));
+  const found = recognise(stroke.points.map(([px, py]): Point => [px, py]));
   if (!found) {
     return null;
   }
@@ -132,7 +132,7 @@ const shapeOf = (
         ? { customData: { shape: "triangle" } }
         : {}),
       ...look,
-    } as ExcalidrawElementSkeleton,
+    },
     points: local,
   };
 };
@@ -155,9 +155,10 @@ export const snapToShape = (
   const [converted] = convertToExcalidrawElements([found.skeleton]);
   // The conversion insets an arrow's ends and redraws a 0-wide line 100px:
   // the shape keeps the points it was read with.
-  const shape: OrderedExcalidrawElement = found.points
-    ? ({ ...converted, points: found.points } as OrderedExcalidrawElement)
-    : converted;
+  const shape: OrderedExcalidrawElement =
+    found.points && (converted.type === "line" || converted.type === "arrow")
+      ? { ...converted, points: found.points }
+      : converted;
   const all = api.getSceneElementsIncludingDeleted();
   const replaced = all.flatMap((el): ExcalidrawElement[] =>
     el.id === stroke.id

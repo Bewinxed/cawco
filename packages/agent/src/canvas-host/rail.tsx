@@ -39,16 +39,22 @@ import { type Glyph, Icon } from "./icons";
 import { IMAGE_ACCEPT, placeImage, refusalOf } from "./images";
 
 /** Excalidraw's tools the rail offers. */
-export type Tool =
-  | "selection"
-  | "hand"
-  | "freedraw"
-  | "rectangle"
-  | "diamond"
-  | "ellipse"
-  | "arrow"
-  | "text"
-  | "eraser";
+const TOOLS = [
+  "selection",
+  "hand",
+  "freedraw",
+  "rectangle",
+  "diamond",
+  "ellipse",
+  "arrow",
+  "text",
+  "eraser",
+] as const;
+export type Tool = (typeof TOOLS)[number];
+
+/** The rail's tool a control's `data-action` names; undefined for a name the rail offers no tool by. */
+const toolNamed = (name: string | undefined): Tool | undefined =>
+  TOOLS.find((tool) => tool === name);
 
 const SHAPES: { tool: Tool; label: string; glyph: Glyph; key: string }[] = [
   { tool: "rectangle", label: "Rectangle", glyph: "rectangle", key: "R" },
@@ -105,7 +111,10 @@ const perform = (
 ) => {
   const [kind, what] = action.split(":");
   if (kind === "tool") {
-    api.setActiveTool({ type: what as Tool });
+    const tool = toolNamed(what);
+    if (tool) {
+      api.setActiveTool({ type: tool });
+    }
   } else if (kind === "host") {
     toHost({ type: `cawco:${what}` });
   } else if (what === "in" || what === "out") {
@@ -119,11 +128,13 @@ const perform = (
 };
 
 /** The control a press landed on, with what it does. */
-const actionAt = (event: MouseEvent) =>
-  (event.currentTarget as HTMLElement).dataset.action;
+const actionAt = (event: MouseEvent<HTMLElement>) =>
+  event.currentTarget.dataset.action;
 
 /** The rail's one press handler, which every box and item takes. */
-const Press = createContext<(event: MouseEvent) => void>(() => undefined);
+const Press = createContext<(event: MouseEvent<HTMLElement>) => void>(
+  () => undefined
+);
 
 /** What a swapped box reads while it shows the eraser. */
 const [ERASER] = LAST;
@@ -250,7 +261,9 @@ function MenuBox({
       list.current?.querySelector<HTMLElement>("[data-action]")?.focus();
     }
     const outside = (event: PointerEvent) => {
-      if (!holder.current?.contains(event.target as Node)) {
+      if (!(
+        event.target instanceof Node && holder.current?.contains(event.target)
+      )) {
         setOpen(false);
       }
     };
@@ -269,9 +282,10 @@ function MenuBox({
   }, []);
   const picked = useCallback(
     (event: MouseEvent) => {
-      const item = (event.target as Element).closest<HTMLElement>(
-        "[data-action]"
-      );
+      const item =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>("[data-action]")
+          : null;
       if (item && !item.hasAttribute("data-stay")) {
         close();
       }
@@ -283,7 +297,8 @@ function MenuBox({
       const items = [
         ...(list.current?.querySelectorAll<HTMLElement>("[data-action]") ?? []),
       ];
-      const at = items.indexOf(document.activeElement as HTMLElement);
+      const active = document.activeElement;
+      const at = active instanceof HTMLElement ? items.indexOf(active) : -1;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
@@ -453,7 +468,7 @@ export function Rail({
   // Excalidraw's own key for its image tool opens this picker instead: one way in, checked.
   useEffect(() => {
     const keyed = (event: globalThis.KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof Element ? event.target : null;
       if (
         event.key !== IMAGE_KEY ||
         event.metaKey ||
@@ -472,7 +487,7 @@ export function Rail({
     return () => window.removeEventListener("keydown", keyed, true);
   }, [onPick]);
   const pressed = useCallback(
-    (event: MouseEvent) => {
+    (event: MouseEvent<HTMLElement>) => {
       const action = actionAt(event);
       if (action === "image:pick") {
         onPick();
