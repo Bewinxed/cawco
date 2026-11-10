@@ -132,4 +132,17 @@ export class PaneMode {
     this.pinsShown = visible;
     this.#deps.previewFrame.post({ type: "cawco:pins-shown", shown: visible });
   }
+
+  /** The page pinned a pin (`cawco:pin-open`) while one was being placed again: the mode goes back to how it was before. */
+  placedAgain(id: string) {
+    if (id === this.placing || this.placing) {
+      // Placed again: the mode goes back to how it was before.
+      if (this.placingFrom && this.placingFrom !== "comment") {
+        this.setMode(this.placingFrom);
+      } else {
+        this.placing = null;
+      }
+      this.placingFrom = null;
+    }
+  }
 }
