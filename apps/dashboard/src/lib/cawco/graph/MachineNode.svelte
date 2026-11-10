@@ -8,10 +8,10 @@
    * (section-header `sectionHeadVariants`: the label role, muted ink), where
    * no card or move stands.
    */
-  import type { NodeProps } from "@xyflow/svelte";
+  import type { Node, NodeProps } from "@xyflow/svelte";
 
-  let { data }: NodeProps = $props();
-  const name = $derived((data as { name: string }).name);
+  let { data }: NodeProps<Node<{ name: string }>> = $props();
+  const name = $derived(data.name);
 </script>
 
 <div

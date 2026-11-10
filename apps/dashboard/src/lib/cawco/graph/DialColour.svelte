@@ -91,8 +91,8 @@
       autocomplete="off"
       field="colour"
       onblur={keep}
-      oninput={(event: Event) => {
-        typing = (event.currentTarget as HTMLInputElement).value;
+      oninput={(event) => {
+        typing = event.currentTarget.value;
       }}
       onkeydown={(event: KeyboardEvent) => {
         if (event.key === "Enter") {

@@ -146,12 +146,14 @@ function routesOf(review: Review, graph: Graph): Record<string, Route> {
     if (!edge || points.length === 0 || move.from === move.to) {
       continue;
     }
-    const placed = move.label && edge.x !== undefined && edge.y !== undefined;
     routes[`${move.from}->${move.to}`] = {
       from: move.from,
       to: move.to,
       points: points.map((point) => ({ x: point.x, y: point.y })),
-      label: placed ? { x: edge.x as number, y: edge.y as number } : null,
+      label:
+        move.label && edge.x !== undefined && edge.y !== undefined
+          ? { x: edge.x, y: edge.y }
+          : null,
     };
   }
   return routes;

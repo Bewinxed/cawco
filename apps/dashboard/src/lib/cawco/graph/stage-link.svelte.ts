@@ -26,11 +26,15 @@ import {
   type StageDifferences,
   type StageFault,
   type StageLaid,
+  type StageLetGo,
   type StagePlay,
   type StageReach,
   type StageReached,
+  type StageRetime,
   type StageReveal,
+  type StageRing,
   type StageRoom,
+  type StageSeek,
   type StageTime,
   type StateRef,
   storyOf,
@@ -46,6 +50,29 @@ export interface StageView {
   scheme: "light" | "dark";
   width: number | null;
 }
+
+/** What the graph posts its stage page, by `type`. */
+export type StageMessage =
+  | ({ type: typeof STAGE_REACH } & StageReach)
+  | ({ type: typeof STAGE_COMPARE } & StageCompare)
+  | ({ type: typeof STAGE_ROOM } & StageRoom)
+  | ({ type: typeof STAGE_DIALS } & StageDials)
+  | ({ type: typeof STAGE_PLAY } & StagePlay)
+  | { type: typeof STAGE_PAUSE; ask: number }
+  | ({ type: typeof STAGE_SEEK } & StageSeek)
+  | ({ type: typeof STAGE_LET_GO } & StageLetGo)
+  | ({ type: typeof STAGE_RETIME } & StageRetime)
+  | ({ type: typeof STAGE_RING } & StageRing)
+  | ({ type: typeof STAGE_REVEAL } & StageReveal)
+  | {
+      type: "cawco:canvas-view";
+      view: {
+        fit: boolean;
+        motion: StageView["motion"];
+        scheme: StageView["scheme"];
+        widths: number[] | null;
+      };
+    };
 
 export class StageLink {
   /** Each states file's sheet as the page said it (`cawco:sheet`), by its file. */
@@ -78,11 +105,11 @@ export class StageLink {
   dialsWritten = $state<StageDials["values"] | null>(null);
   /** The move's clock as the page last said it (`cawco:stage-time`), and when it came on this page's clock; null while no play has been said. */
   time = $state<(StageTime & { heard: number }) | null>(null);
-  readonly #post: (message: object) => void;
+  readonly #post: (message: StageMessage) => void;
   #ask = 0;
 
   /** `post`: to the page, on its own origin, once it said it is ready (PreviewPane `post`). */
-  constructor(post: (message: object) => void) {
+  constructor(post: (message: StageMessage) => void) {
     this.#post = post;
   }
 
@@ -98,15 +125,14 @@ export class StageLink {
   ): number {
     this.#ask += 1;
     this.fault = null;
-    const message: StageReach & { type: string } = {
+    this.#post({
       type: STAGE_REACH,
       ask: this.#ask,
       to,
       from,
       play,
       still,
-    };
-    this.#post(message);
+    });
     return this.#ask;
   }
 
@@ -141,17 +167,12 @@ export class StageLink {
 
   /** The room the stage's floating head takes over the page's top, px. */
   room(px: number): void {
-    const message: StageRoom & { type: string } = { type: STAGE_ROOM, px };
-    this.#post(message);
+    this.#post({ type: STAGE_ROOM, px });
   }
 
   /** The dials as set on the drawing, the whole set by name. */
   turn(values: StageDials["values"]): void {
-    const message: StageDials & { type: string } = {
-      type: STAGE_DIALS,
-      values,
-    };
-    this.#post(message);
+    this.#post({ type: STAGE_DIALS, values });
   }
 
   /** The move the page last read, played from `from` ms as `tuning` times it (`written`: as the agent wrote it); round again from `loopFrom` on `repeat`. */

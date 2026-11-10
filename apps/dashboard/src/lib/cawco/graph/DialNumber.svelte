@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   /**
    * A number control (core stage.ts `CanvasDial`, kind `number`): one field
    * a control high, as every other control is, its fill running from its
@@ -17,7 +18,7 @@
    * a changed value is marked by its row's undo glyph, the agent's value
    * written under it (Dials).
    */
-  import { untrack } from "svelte";
+  import type { PointerEventHandler } from "svelte/elements";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import {
     clampTo,
@@ -132,8 +133,8 @@
     event.preventDefault();
     pressAt = { x: event.clientX, id: event.pointerId };
   };
-  const move = (event: PointerEvent) => {
-    const frame = event.currentTarget as HTMLElement;
+  const move: PointerEventHandler<HTMLElement> = (event) => {
+    const frame = event.currentTarget;
     if (!pressAt || pressAt.id !== event.pointerId) {
       return;
     }
@@ -214,8 +215,8 @@
     onfocus={() => {
       focused = true;
     }}
-    oninput={(event: Event) => {
-      typing = (event.currentTarget as HTMLInputElement).value;
+    oninput={(event) => {
+      typing = event.currentTarget.value;
     }}
     onkeydown={stepKey}
     role="spinbutton"

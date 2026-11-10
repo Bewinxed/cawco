@@ -7,7 +7,7 @@
   }
 
   /** A state's card on the whole set's map: what it draws, set when the set or the kept state changes, never by the view. */
-  export interface StateCard {
+  export interface StateCard extends Record<string, unknown> {
     /** It is the state the kept one is compared with. */
     against: boolean;
     id: string;
@@ -31,11 +31,10 @@
    * Performance: "Simplify node and edge styles", "Avoid accessing nodes
    * in components").
    */
-  import { Handle, type NodeProps, Position } from "@xyflow/svelte";
+  import { Handle, type Node, type NodeProps, Position } from "@xyflow/svelte";
   import WholeCard from "./WholeCard.svelte";
 
-  let { data }: NodeProps = $props();
-  const card = $derived(data as unknown as StateCard);
+  let { data: card }: NodeProps<Node<StateCard>> = $props();
 </script>
 
 <WholeCard {card}>

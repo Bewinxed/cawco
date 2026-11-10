@@ -208,7 +208,7 @@
               id,
               type: "state",
               position: { x: box.x, y: box.y },
-              data: card as unknown as Record<string, unknown>,
+              data: card,
               draggable: false,
               selectable: false,
               connectable: false,
@@ -259,7 +259,7 @@
             type: MarkerType.ArrowClosed,
             color: "var(--border-contrast)",
           },
-          data: data as unknown as Record<string, unknown>,
+          data,
         },
       ];
     });
@@ -401,9 +401,10 @@
     bind:this={pane}
     {@attach (node: HTMLElement) =>
       on(node, "keydown", (event) => {
-        const edge = (event.target as Element | null)?.closest(
-          ".svelte-flow__edge"
-        );
+        const edge =
+          event.target instanceof Element
+            ? event.target.closest(".svelte-flow__edge")
+            : null;
         const id = edge?.getAttribute("data-id");
         if (id && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();

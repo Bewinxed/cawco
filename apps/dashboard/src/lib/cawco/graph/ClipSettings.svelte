@@ -87,7 +87,7 @@
     lang: string | undefined;
   } = $props();
 
-  const first = $derived(track.clips[0] as Clip);
+  const first = $derived(track.clips[0]);
   const figure = (n: number) => figureOf(Math.round(n), lang);
   const edits = $derived(editsOf(track));
   /** The row's first clip as the engine ran it. */
@@ -190,7 +190,8 @@
     if (choice === "own") {
       return curveGlyph(clip.easing);
     }
-    return curveGlyph(houseEasing(choice as (typeof HOUSE)[number]));
+    const house = HOUSE.find((token) => token === choice);
+    return house ? curveGlyph(houseEasing(house)) : null;
   };
   /** A spring drawn on every clip of the row, the clips as long as it takes to come to rest. */
   const sendSpring = (spring: Spring) => {
@@ -206,9 +207,10 @@
     } else if (choice === "spring") {
       sendSpring(springSettling(shortest, SPRING_START));
     } else {
-      onretime(
-        reshape(track, houseEasing(choice as (typeof HOUSE)[number]), null)
-      );
+      const house = HOUSE.find((token) => token === choice);
+      if (house) {
+        onretime(reshape(track, houseEasing(house), null));
+      }
     }
   };
   /** The spring's own length: how long it takes to swing to its end, s (its response). */
@@ -383,8 +385,7 @@
             field="number"
             max={LONGEST}
             min={0}
-            onchange={(event: Event) =>
-              setDelay(Number((event.currentTarget as HTMLInputElement).value))}
+            onchange={(event) => setDelay(Number(event.currentTarget.value))}
             step={STEP}
             text="label"
             type="number"
@@ -447,10 +448,7 @@
               field="number"
               max={LONGEST}
               min={STEP}
-              onchange={(event: Event) =>
-                setLength(
-                  Number((event.currentTarget as HTMLInputElement).value)
-                )}
+              onchange={(event) => setLength(Number(event.currentTarget.value))}
               step={STEP}
               text="label"
               type="number"
@@ -506,11 +504,13 @@
                 bounce: first.spring.bounce,
                 most: BOUNCE_MOST,
                 onbounce: (next) => {
-                  const spring = first.spring as Spring;
-                  sendSpring({
-                    ...springOf(responseOf(spring), next),
-                    mass: spring.mass,
-                  });
+                  const { spring } = first;
+                  if (spring) {
+                    sendSpring({
+                      ...springOf(responseOf(spring), next),
+                      mass: spring.mass,
+                    });
+                  }
                 },
               }
             : null}
@@ -545,12 +545,12 @@
               >
               <Input
                 aria-label={words.valueFrom(said)}
-                onchange={(event: Event) =>
+                onchange={(event) =>
                   onretime(
                     revalue(
                       track,
                       one.property,
-                      (event.currentTarget as HTMLInputElement).value,
+                      event.currentTarget.value,
                       one.to
                     )
                   )}
@@ -559,13 +559,13 @@
               <span aria-hidden="true" class="type-meta text-ink-muted">→</span>
               <Input
                 aria-label={words.valueTo(said)}
-                onchange={(event: Event) =>
+                onchange={(event) =>
                   onretime(
                     revalue(
                       track,
                       one.property,
                       one.from,
-                      (event.currentTarget as HTMLInputElement).value
+                      event.currentTarget.value
                     )
                   )}
                 value={one.to}
