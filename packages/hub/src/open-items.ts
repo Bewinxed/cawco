@@ -42,9 +42,9 @@ import { ElysiaStatus } from "elysia";
 import type { QuestionAnswer } from "./artifacts/questions";
 import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
-import type { Note } from "./memory";
-import { projectRefusalOf } from "./project-refusal";
-import type { Refused } from "./refusal";
+import type { inboxNotes, Note } from "./memory";
+import type { Plans } from "./plans";
+import { refusal } from "./refusal";
 import type { Tasks } from "./tasks";
 
 /**
@@ -356,10 +356,10 @@ export const filingWrote = (
 
 export interface OpenItemsDeps {
   db: Pick<DbShape, "asks" | "getInstancesByIds" | "workItem">;
-  /** A project's memory inbox, oldest first (memory.ts `inboxNotes`). */
-  inbox: (projectId: string) => Promise<Note[]>;
+  /** A project's memory inbox, oldest first (memory.ts `inboxNotes`), or the folder's refusal. */
+  inbox: typeof inboxNotes;
   /** A session's plan as its followers hold it (plans.ts `read`), or its refusal. */
-  plan: (instanceId: string) => Promise<SessionPlan | Refused>;
+  plan: Plans["read"];
   /** Every question a session's delegation tree put to the person (artifacts/service.ts `questions`). */
   questions: (instanceId: string) => AskedOf[];
   tasks: Pick<Tasks, "get" | "list">;
@@ -371,15 +371,15 @@ const projectOf = (deps: OpenItemsDeps, row: InstanceRow): string | null =>
   (row.workItemId ? deps.db.workItem(row.workItemId)?.projectId : null) ??
   null;
 
-/** The open tasks `instanceId` filed in `projectId`, each read whole. */
+/** The open tasks `instanceId` filed in `projectId`, each read whole; the first refused read. */
 const filedTasks = async (
   deps: OpenItemsDeps,
   projectId: string,
   instanceId: string
-): Promise<OpenItemRows["tasks"]> => {
+) => {
   const list = await deps.tasks.list(projectId);
   if (list instanceof ElysiaStatus) {
-    throw projectRefusalOf(list);
+    return list;
   }
   const open = list.tasks.filter(
     (task) =>
@@ -388,39 +388,45 @@ const filedTasks = async (
       task.kind !== "dropped" &&
       task.archivedAt === null
   );
-  return await Promise.all(
-    open.map(async (task) => {
-      const read = await deps.tasks.get(projectId, task.id);
-      if (read instanceof ElysiaStatus) {
-        throw projectRefusalOf(read);
-      }
-      return {
-        id: read.id,
-        stage: read.stage,
-        title: read.title,
-        description: read.description,
-        todos: read.todos,
-      };
-    })
+  const reads = await Promise.all(
+    open.map((task) => deps.tasks.get(projectId, task.id))
   );
+  const filed: OpenItemRows["tasks"] = [];
+  for (const read of reads) {
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    filed.push({
+      id: read.id,
+      stage: read.stage,
+      title: read.title,
+      description: read.description,
+      todos: read.todos,
+    });
+  }
+  return filed;
 };
 
 export const createOpenItems = (deps: OpenItemsDeps) => {
-  /** Every source's rows for `instanceId`; a session in no project has its plan alone. */
-  const rows = async (instanceId: string): Promise<OpenItemRows> => {
+  /** Every source's rows for `instanceId`; a session in no project has its plan alone; the first refused read. */
+  const rows = async (instanceId: string) => {
     const [row] = deps.db.getInstancesByIds([instanceId]);
     if (!row) {
-      throw new Error(`No session ${instanceId} on this hub.`);
+      return refusal(
+        404,
+        "open-items-session-unknown",
+        `No session ${instanceId} on this hub.`
+      );
     }
     const projectId = projectOf(deps, row);
     const plan = await deps.plan(instanceId);
-    if (!("steps" in plan)) {
-      throw new Error(plan.response.detail);
+    if (plan instanceof ElysiaStatus) {
+      return plan;
     }
     const asks = deps.db.asks.openOf(instanceId).map(askLink);
     const questions = deps.questions(instanceId);
     if (!projectId) {
-      return {
+      const alone: OpenItemRows = {
         session: instanceId,
         projectId: null,
         asks,
@@ -429,12 +435,19 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
         tasks: [],
         notes: [],
       };
+      return alone;
     }
     const [tasks, notes] = await Promise.all([
       filedTasks(deps, projectId, instanceId),
       deps.inbox(projectId),
     ]);
-    return {
+    if (tasks instanceof ElysiaStatus) {
+      return tasks;
+    }
+    if (notes instanceof ElysiaStatus) {
+      return notes;
+    }
+    const held: OpenItemRows = {
       session: instanceId,
       projectId,
       asks,
@@ -443,6 +456,7 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
       tasks,
       notes: notes.filter((note) => note.session === instanceId),
     };
+    return held;
   };
   return {
     rows,
@@ -450,6 +464,9 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     read: async (
       instanceId: string,
       page: QuestionsPage = { cursor: 0, detailed: false }
-    ): Promise<string> => openItemsSection(await rows(instanceId), page),
+    ) => {
+      const held = await rows(instanceId);
+      return held instanceof ElysiaStatus ? held : openItemsSection(held, page);
+    },
   };
 };
