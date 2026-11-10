@@ -1,6 +1,7 @@
 /**
  * The page's frame: its load, its hold while its tab is off screen, the proxy's down page and the way back, the lock's turn-away, what the hub is told of it, its thumbnail, and what is posted into it.
  */
+
 import {
   PREVIEW_DOWNS,
   type PreviewDown,
@@ -12,7 +13,7 @@ import { frameObserver } from "#lib/platform/frame-observer.js";
 import { settleAway } from "#lib/platform/motion/rest.js";
 import { track } from "#lib/platform/track.js";
 import { theme } from "#lib/theme.svelte.js";
-import { artifactShown } from "../artifact-api";
+import { artifactShown, keepThumbnail } from "../artifact-api";
 import { artifactReached } from "../files/reached";
 import { pageVisible } from "../page-visible.svelte";
 import { afterPaint, warm } from "../workspace/warm.svelte";
@@ -27,8 +28,9 @@ import type { PaneSubject } from "./pane-subject.svelte";
 import { enterPreviews, turnedAwayWords } from "./pass";
 import type { PreviewReach } from "./preview-reach.svelte";
 import { PROBE_FIRST_MS, PROBE_MOST_MS } from "./preview-reach.svelte";
+import { previewError, previewErrorOf, previewThumbnail } from "./wire";
 
-export const frameError = (message: string | null) =>
+const frameError = (message: string | null) =>
   message ? { message, again: "reload" as const } : null;
 /** The hops that come back by themselves once what didn't answer does. */
 const COMES_BACK: ReadonlySet<PreviewDown> = new Set([
@@ -618,5 +620,84 @@ export class PreviewFrame {
       },
       true
     );
+  }
+
+  /** The page said something to the pane: its overlay, the proxy's down page, the lock's turn-away. */
+  heard() {
+    this.heardKey = this.frameKey;
+  }
+
+  /** A second ask replaces one still open: the page asked again. */
+  askedPick(id: number | string) {
+    this.cancelPick();
+    this.picking = { id };
+  }
+
+  /** The page answers: whatever the proxy said of an earlier load is over. */
+  answered() {
+    this.down = null;
+    this.downWhy = null;
+  }
+
+  /** The page said it is ready, from `origin`. */
+  ready(origin: string) {
+    this.readyFrom = origin;
+    this.connected = true;
+  }
+
+  /** The page was let in. */
+  letIn() {
+    this.refusedEntries = 0;
+    // It was let in: a later turn-away is a pass lost since, which a new entry answers.
+    this.frameSince = performance.now();
+    // The frame Try again reloaded answered: what it was tried for is over.
+    this.retrying = false;
+  }
+
+  /** The page said whether it is held (`cawco:held`). */
+  heardHeld(message: Record<string, unknown>) {
+    this.pageHeld = message.held === true;
+  }
+
+  /** The page said whether it takes the head's room itself (`cawco:head-room`). */
+  heardHeadRoom(message: Record<string, unknown>) {
+    this.headRoomTaken = message.taken === true;
+  }
+
+  /** The page took its thumbnail (`cawco:captured`), or said why not. */
+  heardCaptured(message: Record<string, unknown>) {
+    const { preview } = this.#deps.paneSubject;
+    // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
+    const shot = previewThumbnail(message);
+    if (shot && preview) {
+      preview.thumbnail = shot;
+      preview.thumbnailRevision = preview.revision;
+      preview.thumbnailWanted = false;
+      // The hub keeps it as the artifact's latest picture: Files' cards
+      // draw it, whichever panel took it: its own or its delegation
+      // tree's (the hub keeps it as the artifact's session's). A canvas
+      // keeps its own.
+      if (preview.artifact.kind !== "canvas") {
+        keepThumbnail(this.#deps.instanceId(), preview.artifact.id, shot).catch(
+          (error: unknown) => {
+            console.error("The page's thumbnail was not kept", error);
+          }
+        );
+      }
+    }
+    this.#deps.paneNotice.say(frameError(previewError(message.error)));
+    this.retrying = false;
+  }
+
+  /** The page's own error (`cawco:error`). */
+  heardError(message: Record<string, unknown>) {
+    const said = previewError(message.message);
+    const of = previewErrorOf(message.of);
+    if (said) {
+      // A send the page made itself goes again from its own button; a
+      // field's problem is the page's to show under the field.
+      this.#deps.paneNotice.say({ message: said, again: of ? null : "reload" });
+    }
+    this.retrying = false;
   }
 }

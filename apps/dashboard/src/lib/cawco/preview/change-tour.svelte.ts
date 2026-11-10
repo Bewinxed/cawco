@@ -25,7 +25,7 @@ interface ChangeStop {
   pin: string | null;
 }
 /** The page's stops as it said them, each a list of anchors and a pin or none; anything else left out. */
-export const changeStopsOf = (value: unknown): PageStop[] =>
+const changeStopsOf = (value: unknown): PageStop[] =>
   Array.isArray(value)
     ? value.flatMap((one: unknown) => {
         const stop = one as { anchors?: unknown; pin?: unknown } | null;
@@ -380,5 +380,18 @@ export class ChangeTour {
         outline: "chosen",
       });
     }
+  }
+
+  /** The stops as the page orders them (`cawco:change-stops`). */
+  heardStops(message: Record<string, unknown>) {
+    this.pageStops = changeStopsOf(message.stops);
+  }
+
+  /** The page's own foot bar over the viewport's foot (its Send): Changed since you looked stands above it (`cawco:page-foot`). */
+  heardFoot(message: Record<string, unknown>) {
+    this.pageFoot =
+      typeof message.px === "number" && Number.isFinite(message.px)
+        ? Math.max(0, message.px)
+        : 0;
   }
 }

@@ -13,7 +13,7 @@ import { NEXT_COMMENT } from "./comment-rows";
 import type { PaneDoc } from "./pane-doc.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import type { PreviewFrame } from "./preview-frame.svelte";
-import type { ComposeTarget, PreviewPinAt } from "./wire";
+import { type ComposeTarget, type PreviewPinAt, previewPinAt } from "./wire";
 
 /**
  * Where the next comment's draft stands, kept on this device per artifact
@@ -207,5 +207,27 @@ export class PinComposer {
       typeof message.error === "string"
         ? message.error
         : "The page didn't keep that comment. Try again.";
+  }
+
+  /** The page opened a comment's composer (`cawco:compose`): nothing is written yet. */
+  opened(
+    said: { chain: ComposeTarget[]; chosen: number },
+    message: Record<string, unknown>
+  ) {
+    this.composing = {
+      at: this.composing?.at ?? null,
+      chain: said.chain,
+      chosen: said.chosen,
+      error: "",
+      sending: false,
+    };
+    this.keepComposed(said, message);
+  }
+
+  /** The page said where the composer's pill stands (`cawco:compose-at`). */
+  heardAt(message: Record<string, unknown>) {
+    if (this.composing) {
+      this.composing.at = previewPinAt(message);
+    }
   }
 }

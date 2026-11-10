@@ -5,25 +5,7 @@
     previewMode,
   } from "@cawco/core/comments/model";
   import { pinName } from "@cawco/core/pin-name";
-  import {
-    PAGE_TOUCHED_MESSAGE,
-    PREVIEW_LOCKED_MESSAGE,
-  } from "@cawco/core/preview/routes";
   import { STAGE_READY_MS } from "@cawco/core/stage";
-  import {
-    STAGE_DIALS_WRITTEN,
-    STAGE_DIFFERENCES,
-    STAGE_FAULT,
-    STAGE_LAID,
-    STAGE_REACHED,
-    STAGE_TIME,
-    stageDialsWrittenOf,
-    stageDifferencesOf,
-    stageFaultOf,
-    stageLaidOf,
-    stageReachedOf,
-    stageTimeOf,
-  } from "@cawco/core/stage-graph";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { browserWords } from "@cawco/core/words/browser";
   import { commentWords } from "@cawco/core/words/comments";
@@ -39,7 +21,6 @@
   } from "#lib/components/ui/button/pending-content.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconAlert,
@@ -65,16 +46,12 @@
     IconUndockLinear,
   } from "#lib/icons.js";
   import { appear, revealOn } from "#lib/platform/motion/curves.svelte.js";
-  import { landKey } from "#lib/platform/motion/keyed.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
-  import { keepThumbnail } from "../artifact-api";
   import EmptyAsk from "../EmptyAsk.svelte";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import { refusals } from "../refusals.svelte";
-  import { heardInput } from "../reload.svelte";
-  import { runShellShortcut } from "../shell-shortcut";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
   import RailFloat from "../side/RailFloat.svelte";
   import SideSurface from "../side/SideSurface.svelte";
@@ -90,12 +67,7 @@
   import CommentRail from "./CommentRail.svelte";
   import CommentsButton from "./CommentsButton.svelte";
   import CoverState from "./CoverState.svelte";
-  import {
-    ChangeTour,
-    changeStopsOf,
-    lineOf,
-    lineOfActivity,
-  } from "./change-tour.svelte";
+  import { ChangeTour, lineOf, lineOfActivity } from "./change-tour.svelte";
   import { CommentKit } from "./comment-kit.svelte";
   import { NEXT_COMMENT } from "./comment-rows";
   import ModeButton from "./ModeButton.svelte";
@@ -104,10 +76,11 @@
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { PageCover } from "./page-cover.svelte";
+  import { PageWire } from "./page-wire.svelte";
   import { PaneBrowser } from "./pane-browser.svelte";
   import { PaneCanvas } from "./pane-canvas.svelte";
   import { PaneClose } from "./pane-close.svelte";
-  import { lostWhy, PaneDoc, pageRepliesOf } from "./pane-doc.svelte";
+  import { PaneDoc } from "./pane-doc.svelte";
   import { PaneKeys } from "./pane-keys.svelte";
   import { PaneLayout } from "./pane-layout.svelte";
   import { PaneMode } from "./pane-mode.svelte";
@@ -118,28 +91,11 @@
   import { PinComposer } from "./pin-composer.svelte";
   import { PinPeek } from "./pin-peek.svelte";
   import { PinThread } from "./pin-thread.svelte";
-  import { frameError, PreviewFrame } from "./preview-frame.svelte";
+  import { PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
   import { errorPlace, errorTitle, StageCover } from "./stage-cover.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
-  import {
-    pageMessage,
-    previewCompose,
-    previewError,
-    previewErrorOf,
-    previewKey,
-    previewOpenArtifact,
-    previewPickPlace,
-    previewPinAt,
-    previewPinId,
-    previewSheet,
-    previewShortcut,
-    previewThumbnail,
-    previewTitle,
-    previewUrl,
-    SHORTCUT_MESSAGE,
-  } from "./wire";
 
   let {
     instanceId,
@@ -327,391 +283,27 @@
     paneNotice,
     paneLayout,
   });
+  const pageWire = new PageWire({
+    instanceId: () => instanceId,
+    onScreen: () => onScreen,
+    paneSubject,
+    paneNotice,
+    previewReach,
+    previewFrame,
+    paneDoc,
+    paneSheet,
+    commentKit,
+    pinComposer,
+    paneMode,
+    pinPeek,
+    changeTour,
+    pinThread,
+    paneKeys,
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one validated dispatch for the overlay's wire protocol.
-  function receive(event: MessageEvent) {
-    // The page's own frame, from its own origin: nothing else is heard.
-    if (
-      !previewReach.paneOrigin ||
-      event.source !== previewFrame.iframe?.contentWindow ||
-      event.origin !== previewReach.paneOrigin
-    ) {
-      return;
-    }
-    previewFrame.heardKey = previewFrame.frameKey;
-    if (event.data?.type === PAGE_TOUCHED_MESSAGE) {
-      heardInput();
-      return;
-    }
-    if (event.data?.type === "cawco:down") {
-      previewFrame.heardDown(event.data);
-      return;
-    }
-    if (event.data?.type === PREVIEW_LOCKED_MESSAGE) {
-      previewFrame.turnedAway();
-      return;
-    }
-    // A decision page's Open to draw or Open full: the artifact opens where
-    // a chip of it pressed in this session's conversation opens. Loaded on
-    // the press, as a pin's chip loads it: the artifact's own tab never
-    // reaches the conversation's code (page-imports-check.ts).
-    const opening = previewOpenArtifact(event.data);
-    if (opening) {
-      import("../reference-open.svelte")
-        .then(({ openReference }) =>
-          openReference(opening.artifact, { top: true }, instanceId)
-        )
-        .then((refused) =>
-          previewFrame.post({ jsonrpc: "2.0", id: opening.id, result: refused })
-        );
-      return;
-    }
-    const ask = previewPickPlace(event.data);
-    if (ask !== null) {
-      // A second ask replaces one still open: the page asked again.
-      previewFrame.cancelPick();
-      previewFrame.picking = { id: ask };
-      return;
-    }
-    const message = pageMessage(event.data);
-    if (!message) {
-      return;
-    }
-    switch (message.type) {
-      case "cawco:ready":
-      case "cawco:navigated": {
-        const at = previewUrl(message.url, previewReach.paneOrigin);
-        if (!at) {
-          return;
-        }
-        // The page answers: whatever the proxy said of an earlier load is over.
-        previewFrame.down = null;
-        previewFrame.downWhy = null;
-        const parsed = new URL(at);
-        previewReach.keepAt(parsed);
-        if (paneSubject.preview) {
-          paneSubject.preview.title = previewTitle(message.title) ?? "";
-        }
-        if (message.type === "cawco:ready") {
-          previewFrame.readyFrom = event.origin;
-          previewFrame.connected = true;
-          // A new page holds no drawing: the design graph reaches its state again.
-          paneSheet.link?.loaded();
-          previewFrame.refusedEntries = 0;
-          // It was let in: a later turn-away is a pass lost since, which a new entry answers.
-          previewFrame.frameSince = performance.now();
-          // The frame Try again reloaded answered: what it was tried for is over.
-          previewFrame.retrying = false;
-          if (paneNotice.failure?.again === "reload") {
-            paneNotice.say(null);
-          }
-          // A page loaded again holds no comment being written.
-          pinComposer.composing = null;
-          paneMode.setMode(paneMode.mode, paneMode.placing);
-          if (!paneMode.pinsShown) {
-            paneMode.showPins(false);
-          }
-          pinThread.openLinkedPin();
-          pinComposer.restoreDraft();
-          if (pinThread.openPin) {
-            previewFrame.post({
-              type: "cawco:track-pin",
-              id: pinThread.openPin,
-            });
-          }
-          previewFrame.post({
-            type: "cawco:pin-marks",
-            live: [...pinThread.live],
-            unread: [...pinThread.unread],
-          });
-          if (!onScreen) {
-            // Loaded while its tab is off screen: held from the start.
-            previewFrame.post({ type: "cawco:hold" });
-          }
-        }
-        break;
-      }
-      case "cawco:held":
-        previewFrame.pageHeld = message.held === true;
-        break;
-      case "cawco:head-room":
-        previewFrame.headRoomTaken = message.taken === true;
-        break;
-      case "cawco:captured": {
-        // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
-        const shot = previewThumbnail(message);
-        if (shot && paneSubject.preview) {
-          paneSubject.preview.thumbnail = shot;
-          paneSubject.preview.thumbnailRevision = paneSubject.preview.revision;
-          paneSubject.preview.thumbnailWanted = false;
-          // The hub keeps it as the artifact's latest picture: Files' cards
-          // draw it, whichever panel took it: its own or its delegation
-          // tree's (the hub keeps it as the artifact's session's). A canvas
-          // keeps its own.
-          if (paneSubject.preview.artifact.kind !== "canvas") {
-            keepThumbnail(
-              instanceId,
-              paneSubject.preview.artifact.id,
-              shot
-            ).catch((error: unknown) => {
-              console.error("The page's thumbnail was not kept", error);
-            });
-          }
-        }
-        paneNotice.say(frameError(previewError(message.error)));
-        previewFrame.retrying = false;
-        break;
-      }
-      case "cawco:pin-open": {
-        const id = previewPinId(message.id);
-        if (!id) {
-          return;
-        }
-        if (id === paneMode.placing || paneMode.placing) {
-          // Placed again: the mode goes back to how it was before.
-          if (paneMode.placingFrom && paneMode.placingFrom !== "comment") {
-            paneMode.setMode(paneMode.placingFrom);
-          } else {
-            paneMode.placing = null;
-          }
-          paneMode.placingFrom = null;
-        }
-        // The pin as the page holds it: the card draws from it while the pane's doc doesn't hold it yet.
-        if (
-          message.pin !== undefined &&
-          !paneDoc.view?.pins.some((one) => one.id === id)
-        ) {
-          paneDoc.pageSays(id, message.pin);
-        }
-        pinThread.openCard(id, message.via === "key" ? "key" : "pointer");
-        break;
-      }
-      case "cawco:compose": {
-        // A press on the page (or a radial's Comment) opened a comment's composer: nothing is written yet.
-        const said = previewCompose(message);
-        if (!said) {
-          return;
-        }
-        if (pinThread.openPin) {
-          pinThread.closeCard();
-        }
-        commentKit.loadKit();
-        pinPeek.dropPeek();
-        // The press was the page's, which the host never hears: the page's last input is it.
-        lastInput.current = message.via === "key" ? "key" : "pointer";
-        pinComposer.composing = {
-          at: pinComposer.composing?.at ?? null,
-          chain: said.chain,
-          chosen: said.chosen,
-          error: "",
-          sending: false,
-        };
-        pinComposer.keepComposed(said, message);
-        break;
-      }
-      case "cawco:compose-at":
-        if (pinComposer.composing) {
-          pinComposer.composing.at = previewPinAt(message);
-        }
-        break;
-      case "cawco:comment-result":
-        pinComposer.heardComment(message);
-        break;
-      case "cawco:pin-chain": {
-        const id = previewPinId(message.id);
-        const parent = previewCompose(message)?.chain[1];
-        if (id && id === pinThread.openPin) {
-          pinThread.cardParent = {
-            id,
-            name:
-              parent && parent.anchor.selector !== "body"
-                ? pinName({
-                    anchor: parent.anchor,
-                    elements: parent.elements,
-                  } as unknown as Pin)
-                : null,
-          };
-        }
-        break;
-      }
-      case "cawco:peek":
-        pinPeek.heardPeek(message);
-        break;
-      case "cawco:change-stops":
-        changeTour.pageStops = changeStopsOf(message.stops);
-        break;
-      // The page's own foot bar over the viewport's foot (its Send): Changed since you looked stands above it.
-      case "cawco:page-foot":
-        changeTour.pageFoot =
-          typeof message.px === "number" && Number.isFinite(message.px)
-            ? Math.max(0, message.px)
-            : 0;
-        break;
-      case "cawco:change-pressed":
-        changeTour.changePressed(message.anchor);
-        break;
-      // What the page said of a write the pane sent it for a pin it holds alone.
-      case "cawco:reply-result":
-      case "cawco:resolve-result":
-      case "cawco:delete-result":
-        pinThread.heardPageWrite(message.type, message);
-        break;
-      case "cawco:page-pins":
-        // The replies the hub refused that the page keeps, every one each time: they stand in their threads.
-        paneDoc.pageReplies = pageRepliesOf(message.replies);
-        // The pins the page holds while its link isn't synced (a reload's, given back by the device among them): those the pane's doc lacks stand as the page's.
-        for (const pin of Array.isArray(message.pins) ? message.pins : []) {
-          const one = pin as Partial<Pin> | null;
-          const id = one?.id;
-          if (
-            !(typeof id === "string" && one) ||
-            paneDoc.view?.pins.some((held) => held.id === id)
-          ) {
-            continue;
-          }
-          // One the hub refused breaks a bound by its nature (the hub's reason says which): it is listed whole, so its words stay in reach.
-          if (
-            one.notSent &&
-            typeof one.number === "number" &&
-            Array.isArray(one.thread)
-          ) {
-            paneDoc.pagePins = { ...paneDoc.pagePins, [id]: one as Pin };
-          } else {
-            paneDoc.pageSays(id, pin);
-          }
-        }
-        break;
-      case "cawco:sync":
-        // The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood, or at once when lost to silence.
-        paneDoc.pageLost =
-          message.state === "lost" ? lostWhy(message.error) : null;
-        paneDoc.pageSilent =
-          message.state === "lost" && message.silent === true;
-        break;
-      case "cawco:press":
-        // A press on the page, outside the composer: the outside-press rule,
-        // heard from the page's own process. A thread stays: it closes by its
-        // Close or Esc alone. The design graph's open layers close on it, a
-        // press on its stage being outside them.
-        pinComposer.cancelComposer();
-        if (paneSheet.link) {
-          paneSheet.link.presses += 1;
-        }
-        break;
-      case "cawco:pin-at": {
-        if (
-          pinThread.openPin &&
-          previewPinId(message.id) === pinThread.openPin
-        ) {
-          pinThread.pinAt = previewPinAt(message);
-          pinThread.pinHeard = pinThread.openPin;
-        }
-        break;
-      }
-      case "cawco:key": {
-        const name = previewKey(message.key);
-        if (name) {
-          // A key the page's window heard: what it starts here lands at once
-          // (motion/keyed), as for this window's own keys.
-          landKey();
-          if (name === "Escape") {
-            paneKeys.escapeFromPage();
-          } else {
-            paneKeys.pressKey(name);
-          }
-        }
-        break;
-      }
-      case "cawco:escape":
-        // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
-        pinComposer.cancelComposer();
-        paneMode.setMode("interact");
-        break;
-      case SHORTCUT_MESSAGE: {
-        // A shell combo the page left unhandled: the shell's, as from its own keys.
-        const name = previewShortcut(message);
-        if (name) {
-          runShellShortcut(name);
-        }
-        break;
-      }
-      case "cawco:error": {
-        const said = previewError(message.message);
-        const of = previewErrorOf(message.of);
-        if (said) {
-          // A send the page made itself goes again from its own button; a
-          // field's problem is the page's to show under the field.
-          paneNotice.say({ message: said, again: of ? null : "reload" });
-        }
-        previewFrame.retrying = false;
-        break;
-      }
-      case "cawco:resolved":
-        if (paneNotice.failure && paneNotice.failure.again === null) {
-          paneNotice.say(null);
-        }
-        break;
-      case "cawco:sheet": {
-        // A sheet's page said its stories and props: the inspector's controls, and the design graph's model.
-        const said = previewSheet(message.sheet);
-        if (said) {
-          paneSheet.link?.heardSheet(said);
-        }
-        break;
-      }
-      case STAGE_REACHED: {
-        // The stage reached the state the design graph asked for.
-        const said = stageReachedOf(message);
-        if (said && paneSheet.link) {
-          paneSheet.link.reached = said;
-        }
-        break;
-      }
-      case STAGE_LAID: {
-        // The stage laid its drawing out: the design graph's split gives it what it needs.
-        const said = stageLaidOf(message);
-        if (said && paneSheet.link) {
-          paneSheet.link.laid = said;
-        }
-        break;
-      }
-      case STAGE_FAULT: {
-        // The component threw as it mounted: the page says so in the stage.
-        const said = stageFaultOf(message);
-        if (said && paneSheet.link) {
-          paneSheet.link.fault = said;
-        }
-        break;
-      }
-      case STAGE_DIFFERENCES: {
-        // What differs from the state the design graph compares with: its lines at the stage's head.
-        const said = stageDifferencesOf(message);
-        if (said && paneSheet.link) {
-          paneSheet.link.heardDifferences(said);
-        }
-        break;
-      }
-      case STAGE_TIME: {
-        // The move's clock: the Animation face's playhead runs from it.
-        const said = stageTimeOf(message);
-        if (said && paneSheet.link) {
-          paneSheet.link.heardTime(said);
-        }
-        break;
-      }
-      case STAGE_DIALS_WRITTEN: {
-        // The agent's dials as written, read off the drawing: the Dials face stands on them.
-        const said = stageDialsWrittenOf(message);
-        if (said && paneSheet.link) {
-          paneSheet.link.dialsWritten = said.values;
-        }
-        break;
-      }
-    }
-  }
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
     interact: IconInteractLinear,
@@ -844,7 +436,7 @@
     paneKeys.parentEscape(event);
     paneKeys.paneKey(event);
   }}
-  onmessage={receive}
+  onmessage={pageWire.receive}
 />
 
 <!-- A frame that loaded no page, or the proxy's page naming the hop that

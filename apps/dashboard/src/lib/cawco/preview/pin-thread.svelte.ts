@@ -1,7 +1,8 @@
 /**
  * A pin's thread: which is open and drawn, its card beside the pill or in the rail's sheet, J and K stepping through the pins, and the rail's list.
  */
-import { newAnswer, pinHeld } from "@cawco/core/comments/model";
+import { newAnswer, type Pin, pinHeld } from "@cawco/core/comments/model";
+import { pinName } from "@cawco/core/pin-name";
 import { untrack } from "svelte";
 import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
 import { frameSize } from "#lib/platform/frame-observer.js";
@@ -18,7 +19,12 @@ import type { PaneSubject } from "./pane-subject.svelte";
 import type { PinComposer } from "./pin-composer.svelte";
 import type { PinPeek } from "./pin-peek.svelte";
 import type { PreviewFrame } from "./preview-frame.svelte";
-import type { PreviewPinAt } from "./wire";
+import {
+  type PreviewPinAt,
+  previewCompose,
+  previewPinAt,
+  previewPinId,
+} from "./wire";
 
 export interface PinThreadDeps {
   readonly changeTour: ChangeTour;
@@ -706,6 +712,32 @@ export class PinThread {
     this.focusedPin = next;
     if (next) {
       this.focusPin(next, false);
+    }
+  }
+
+  /** The page named the open thread's element's nearest parent (`cawco:pin-chain`). */
+  heardChain(message: Record<string, unknown>) {
+    const id = previewPinId(message.id);
+    const parent = previewCompose(message)?.chain[1];
+    if (id && id === this.openPin) {
+      this.cardParent = {
+        id,
+        name:
+          parent && parent.anchor.selector !== "body"
+            ? pinName({
+                anchor: parent.anchor,
+                elements: parent.elements,
+              } as unknown as Pin)
+            : null,
+      };
+    }
+  }
+
+  /** The page told where the open thread's pill stands (`cawco:pin-at`). */
+  heardPinAt(message: Record<string, unknown>) {
+    if (this.openPin && previewPinId(message.id) === this.openPin) {
+      this.pinAt = previewPinAt(message);
+      this.pinHeard = this.openPin;
     }
   }
 }

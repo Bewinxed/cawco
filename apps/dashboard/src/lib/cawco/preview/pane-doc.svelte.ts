@@ -39,7 +39,7 @@ import type { PreviewReach } from "./preview-reach.svelte";
 const refusedKey = (id: string) => `cawco-refused-replies:${id}`;
 const sendRefusedKey = (id: string) => `cawco-refused-send:${id}`;
 /** `said` as the page's refused replies, each part checked: what isn't one is left out. */
-export function pageRepliesOf(said: unknown): RefusedReplies {
+function pageRepliesOf(said: unknown): RefusedReplies {
   if (!said || typeof said !== "object" || Array.isArray(said)) {
     return {};
   }
@@ -74,7 +74,7 @@ export function pageRepliesOf(said: unknown): RefusedReplies {
   return kept;
 }
 /** What closed the page's link, as the page said it (artifact.ts `closedBecause`). */
-export const lostWhy = (error: unknown): string =>
+const lostWhy = (error: unknown): string =>
   typeof error === "string" ? error : "The page's link to the hub closed.";
 export interface PaneDocDeps {
   readonly instanceId: () => string;
@@ -433,5 +433,38 @@ export class PaneDoc {
       });
     }
     this.#deps.previewFrame.post({ type: "cawco:reconnect" });
+  }
+
+  /** What the page keeps of the writes the hub refused, and the pins it holds while its link isn't synced (`cawco:page-pins`). */
+  heardPagePins(message: Record<string, unknown>) {
+    // The replies the hub refused that the page keeps, every one each time: they stand in their threads.
+    this.pageReplies = pageRepliesOf(message.replies);
+    // The pins the page holds while its link isn't synced (a reload's, given back by the device among them): those the pane's doc lacks stand as the page's.
+    for (const pin of Array.isArray(message.pins) ? message.pins : []) {
+      const one = pin as Partial<Pin> | null;
+      const id = one?.id;
+      if (
+        !(typeof id === "string" && one) ||
+        this.view?.pins.some((held) => held.id === id)
+      ) {
+        continue;
+      }
+      // One the hub refused breaks a bound by its nature (the hub's reason says which): it is listed whole, so its words stay in reach.
+      if (
+        one.notSent &&
+        typeof one.number === "number" &&
+        Array.isArray(one.thread)
+      ) {
+        this.pagePins = { ...this.pagePins, [id]: one as Pin };
+      } else {
+        this.pageSays(id, pin);
+      }
+    }
+  }
+
+  /** The page's doc's link to the hub (overlay artifact.ts `Link`): a lost one is said once it has stood, or at once when lost to silence (`cawco:sync`). */
+  heardSync(message: Record<string, unknown>) {
+    this.pageLost = message.state === "lost" ? lostWhy(message.error) : null;
+    this.pageSilent = message.state === "lost" && message.silent === true;
   }
 }
