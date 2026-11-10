@@ -84,7 +84,7 @@ import { projectWords } from "@cawco/core/words/project";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
@@ -118,8 +118,7 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import {
-  type Refused,
-  refusal,
+  type AnyProblem,
   refusalAnswer,
   refuser,
   StatusRefusal,
@@ -473,9 +472,9 @@ const typeText = (
       `${rel} was not ${approved ? "written" : "proposed"}: a delegate type is text, not bytes.`
     );
   }
-  const problem = approved ? typeFileProblem(rel, body) : undefined;
-  if (problem) {
-    throw new Error(`${rel} was not written: ${problem}`);
+  const misfit = approved ? typeFileProblem(rel, body) : undefined;
+  if (misfit) {
+    throw new Error(`${rel} was not written: ${misfit}`);
   }
   return body;
 };
@@ -582,7 +581,7 @@ export interface CawDeps {
   readonly rename: (
     projectId: string,
     name: string
-  ) => Promise<string | Refused>;
+  ) => Promise<string | AnyProblem>;
   /** Delivers one message to a session through the hub's one send path: its record, `pending` when the hub took it, else why not. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -1964,11 +1963,10 @@ export const createCaw = ({
 export type Caw = ReturnType<typeof createCaw>;
 
 const answer = refusalAnswer(CawRefusal, "caw-refused", (error) =>
-  refusal(
-    502,
-    "caw-failed",
-    error instanceof Error ? error.message : String(error)
-  )
+  problem(502, {
+    code: "caw-failed",
+    detail: error instanceof Error ? error.message : String(error),
+  })
 );
 
 const HARNESS = t.UnionEnum(HARNESSES);

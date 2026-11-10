@@ -7,9 +7,9 @@ import { Elysia, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
+
 import { discardCall } from "../work-item-calls";
-import { WorkItemRefusal } from "../work-item-state";
+import { workItemProblem } from "../work-item-state";
 import { workspaceOut } from "../work-out";
 import { sessionCallerRefusal } from "./session-caller";
 
@@ -56,13 +56,7 @@ export const workspaceRoutes = ({
         try {
           return workItems.held(params.id);
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          return refusal(
-            error instanceof WorkItemRefusal ? error.status : 502,
-            "work-item-refused",
-            message
-          );
+          return workItemProblem(error);
         }
       })
       // Refused (409, in words naming what and how big) when its clone holds
@@ -97,13 +91,7 @@ export const workspaceRoutes = ({
             workspaceArchived(workspace);
             return { ...workspaceOut(workspace), carry };
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return refusal(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              "work-item-refused",
-              message
-            );
+            return workItemProblem(error);
           }
         }
       )
@@ -119,13 +107,7 @@ export const workspaceRoutes = ({
             })),
           };
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          return refusal(
-            error instanceof WorkItemRefusal ? error.status : 502,
-            "work-item-refused",
-            message
-          );
+          return workItemProblem(error);
         }
       })
       // `discard_workspace`: a workspace a session's delegates worked in,
@@ -162,13 +144,7 @@ export const workspaceRoutes = ({
               }),
             };
           } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return refusal(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              "work-item-refused",
-              message
-            );
+            return workItemProblem(error);
           }
         }
       )

@@ -29,10 +29,11 @@ import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { until } from "@cawco/core/until";
 import { injectOverlay } from "@cawco/preview/proxy";
+import { problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { Map as YMap } from "yjs";
 import { CANVAS_ASSETS, canvasHostFile, canvasHostPage } from "../canvas-host";
-import { refusal } from "../refusal";
+
 import { type ArtifactDocs, elementsOf } from "./docs";
 
 /**
@@ -185,7 +186,10 @@ export const convertOnScreen = async (
   payload: CanvasRequestPayload
 ) => {
   if (docs.screens(artifactId) === 0) {
-    return refusal(503, "artifact-canvas-no-screen", NO_SCREEN);
+    return problem(503, {
+      code: "artifact-canvas-no-screen",
+      detail: NO_SCREEN,
+    });
   }
   const id = crypto.randomUUID();
   const doc = docs.doc(artifactId);
@@ -222,20 +226,18 @@ export const convertOnScreen = async (
         result = drawn.value;
         break;
       case "unanswered":
-        return refusal(
-          504,
-          "artifact-canvas-undrawn",
-          `The canvas wasn't changed: no screen drew it within ${secondsOf(drawn.after)} s. Try again.`
-        );
+        return problem(504, {
+          code: "artifact-canvas-undrawn",
+          detail: `The canvas wasn't changed: no screen drew it within ${secondsOf(drawn.after)} s. Try again.`,
+        });
       default:
         unhandled("read", drawn);
     }
     if ("error" in result) {
-      return refusal(
-        422,
-        "artifact-canvas-unconverted",
-        `The canvas wasn't changed: ${result.error} Fix it, then try again.`
-      );
+      return problem(422, {
+        code: "artifact-canvas-unconverted",
+        detail: `The canvas wasn't changed: ${result.error} Fix it, then try again.`,
+      });
     }
     return result.ids;
   } finally {

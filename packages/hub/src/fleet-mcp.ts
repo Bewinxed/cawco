@@ -20,11 +20,11 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { OAuthError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
+import { problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import { type Exchange, FleetMcpRelay, wholeResponse } from "./fleet-mcp-relay";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { refusal } from "./refusal";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
 /**
@@ -318,11 +318,10 @@ const reachHead = (
  * hub hands every live session the change (`sendMcpChanges` in server.ts).
  */
 const signedOut = () =>
-  refusal(
-    503,
-    "mcp-signed-out",
-    `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`
-  );
+  problem(503, {
+    code: "mcp-signed-out",
+    detail: `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`,
+  });
 
 export class FleetMcp {
   readonly #db: DbShape;
@@ -1185,10 +1184,16 @@ export class FleetMcp {
     await this.#probing.get(name);
     const server = this.#db.getMcpServer(name);
     if (!server) {
-      return refusal(404, "no-mcp-server", "This MCP server no longer exists.");
+      return problem(404, {
+        code: "no-mcp-server",
+        detail: "This MCP server no longer exists.",
+      });
     }
     if (!server.enabled) {
-      return refusal(403, "mcp-server-disabled", "This server is disabled.");
+      return problem(403, {
+        code: "mcp-server-disabled",
+        detail: "This server is disabled.",
+      });
     }
     const row = this.#db.getMcpOauth(name);
     if (!(row?.tokens && server.authMode === "oauth")) {
@@ -1205,13 +1210,13 @@ export class FleetMcp {
       if (!this.#db.getMcpOauth(name)?.tokens) {
         return signedOut();
       }
-      return refusal(
-        502,
-        "mcp-upstream-failed",
-        error instanceof NotNow
-          ? error.message
-          : "The upstream MCP server could not be reached. Retry the request."
-      );
+      return problem(502, {
+        code: "mcp-upstream-failed",
+        detail:
+          error instanceof NotNow
+            ? error.message
+            : "The upstream MCP server could not be reached. Retry the request.",
+      });
     }
   }
 }

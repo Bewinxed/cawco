@@ -110,7 +110,7 @@ import { taskTarget, waitHandle, waitTarget } from "@cawco/core/wait-targets";
 import { externalItemWords } from "@cawco/core/words/external-items";
 import { judgedWords } from "@cawco/core/words/judged";
 import { taskLinkWords } from "@cawco/core/words/task-links";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { WorkItemRow } from "./db/project-work";
 import type { Tracker } from "./db/schema";
 import type { WorkBudget } from "./db/stored-types";
@@ -144,7 +144,7 @@ import {
   writeFolderFiles,
   YOU,
 } from "./project-folder";
-import { type Refused, refusal } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { type MachineFacts, runsOnValue } from "./runs-on";
 import {
   firstStage,
@@ -793,22 +793,20 @@ const fileProblem = async (
     return path;
   }
   if (artifact.kind === "post" && !path.endsWith(".post.json")) {
-    return refusal(
-      422,
-      "task-result-post-unfit",
-      `${path} is no post: a post is a <task>.post.json file.`
-    );
+    return problem(422, {
+      code: "task-result-post-unfit",
+      detail: `${path} is no post: a post is a <task>.post.json file.`,
+    });
   }
   if (outputs.includes(path)) {
     return;
   }
   const there = await folderFileRaw(projectId, path).catch(() => undefined);
   if (there === undefined || there instanceof ElysiaStatus) {
-    return refusal(
-      422,
-      "task-result-file-unknown",
-      `${path} is neither one of the task's outputs nor a file in the project folder. Name it as the task's outputs do, from the folder's root.`
-    );
+    return problem(422, {
+      code: "task-result-file-unknown",
+      detail: `${path} is neither one of the task's outputs nor a file in the project folder. Name it as the task's outputs do, from the folder's root.`,
+    });
   }
 };
 
@@ -826,20 +824,18 @@ const artifactProblem = async (
   if (artifact.kind === "link") {
     return WEB_LINK.test(artifact.url)
       ? undefined
-      : refusal(
-          422,
-          "task-result-link-unfit",
-          `${artifact.url} is not an http(s) link.`
-        );
+      : problem(422, {
+          code: "task-result-link-unfit",
+          detail: `${artifact.url} is not an http(s) link.`,
+        });
   }
   if (artifact.kind === "artifact") {
     return artifact.artifactId.trim()
       ? undefined
-      : refusal(
-          422,
-          "task-result-artifact-unnamed",
-          "Name the artifact by its id."
-        );
+      : problem(422, {
+          code: "task-result-artifact-unnamed",
+          detail: "Name the artifact by its id.",
+        });
   }
   return await fileProblem(projectId, outputs, artifact);
 };
@@ -849,25 +845,22 @@ const artifactProblem = async (
 const oneLine = (what: string, text: string, limit: number) => {
   const trimmed = text.trim();
   if (!trimmed) {
-    return refusal(
-      400,
-      "task-words-empty",
-      `The ${what} is empty; write a few words.`
-    );
+    return problem(400, {
+      code: "task-words-empty",
+      detail: `The ${what} is empty; write a few words.`,
+    });
   }
   if (LINE_BREAK.test(trimmed)) {
-    return refusal(
-      400,
-      "task-words-line-break",
-      `The ${what} is one line; take out the line break.`
-    );
+    return problem(400, {
+      code: "task-words-line-break",
+      detail: `The ${what} is one line; take out the line break.`,
+    });
   }
   if (trimmed.length > limit) {
-    return refusal(
-      400,
-      "task-words-too-long",
-      `The ${what} is ${trimmed.length} characters long; it stops at ${limit}.`
-    );
+    return problem(400, {
+      code: "task-words-too-long",
+      detail: `The ${what} is ${trimmed.length} characters long; it stops at ${limit}.`,
+    });
   }
   return trimmed;
 };
@@ -875,18 +868,16 @@ const oneLine = (what: string, text: string, limit: number) => {
 /** A description or acceptance criteria: free text that must not open a section of its own. */
 const block = (what: string, text: string) => {
   if (text.length > TEXT_LIMIT) {
-    return refusal(
-      400,
-      "task-text-too-long",
-      `The ${what} is ${text.length} characters long; it stops at ${TEXT_LIMIT}.`
-    );
+    return problem(400, {
+      code: "task-text-too-long",
+      detail: `The ${what} is ${text.length} characters long; it stops at ${TEXT_LIMIT}.`,
+    });
   }
   if (SECTION_LINE.test(text)) {
-    return refusal(
-      400,
-      "task-text-heading",
-      `The ${what} holds a "## " heading, which would start a section of its own in the task file; use "### " inside it.`
-    );
+    return problem(400, {
+      code: "task-text-heading",
+      detail: `The ${what} holds a "## " heading, which would start a section of its own in the task file; use "### " inside it.`,
+    });
   }
   return text.trim();
 };
@@ -894,11 +885,11 @@ const block = (what: string, text: string) => {
 const todoText = (text: string) => {
   const line = oneLine("to-do", text, TODO_LIMIT);
   if (!(line instanceof ElysiaStatus) && TODO_MARKER_START.test(line)) {
-    return refusal(
-      400,
-      "task-todo-marker",
-      "A to-do's text cannot start with an id marker like [td-3]; the hub numbers to-dos itself."
-    );
+    return problem(400, {
+      code: "task-todo-marker",
+      detail:
+        "A to-do's text cannot start with an id marker like [td-3]; the hub numbers to-dos itself.",
+    });
   }
   return line;
 };
@@ -918,11 +909,10 @@ const todoTexts = (list: readonly string[]) => {
 
 const items = (what: string, list: string[]) => {
   if (list.length > LIST_LIMIT) {
-    return refusal(
-      400,
-      "task-list-too-long",
-      `${what} holds ${list.length} items; it stops at ${LIST_LIMIT}.`
-    );
+    return problem(400, {
+      code: "task-list-too-long",
+      detail: `${what} holds ${list.length} items; it stops at ${LIST_LIMIT}.`,
+    });
   }
   const kept = new Set<string>();
   for (const item of list) {
@@ -944,11 +934,10 @@ const linksOf = (links: string[]) => {
       : urls.find((url) => !refOfUrl(url));
   return unknown === undefined
     ? urls
-    : refusal(
-        400,
-        "task-link-unknown",
-        `“${unknown}” is not a GitHub issue, pull request or discussion, or a Linear issue: link one by its URL.`
-      );
+    : problem(400, {
+        code: "task-link-unknown",
+        detail: `“${unknown}” is not a GitHub issue, pull request or discussion, or a Linear issue: link one by its URL.`,
+      });
 };
 
 /**
@@ -989,15 +978,17 @@ const fileLinksOf = (
 
 /** A budget a caller gave, refused in its own words when it cannot stand. */
 const budgetOf = (budget: WorkBudget) => {
-  const problem = budgetProblem(budget);
-  return problem ? refusal(400, "task-budget-unfit", problem) : budget;
+  const misfit = budgetProblem(budget);
+  return misfit
+    ? problem(400, { code: "task-budget-unfit", detail: misfit })
+    : budget;
 };
 
 /** Owned globs a caller gave, refused when one cannot stand. */
 const ownsOf = (owns: string[]) => {
-  const problem = ownsProblem(owns);
-  return problem
-    ? refusal(400, "task-owns-unfit", problem)
+  const misfit = ownsProblem(owns);
+  return misfit
+    ? problem(400, { code: "task-owns-unfit", detail: misfit })
     : items("owns", owns);
 };
 
@@ -1027,22 +1018,20 @@ const typeName = (type: string) => {
   const name = type.trim();
   return TYPE_NAME.test(name)
     ? name
-    : refusal(
-        400,
-        "task-type-name-unfit",
-        `“${type}” is not a delegate type name: letters, digits, ".", "_" and "-", up to 64.`
-      );
+    : problem(400, {
+        code: "task-type-name-unfit",
+        detail: `“${type}” is not a delegate type name: letters, digits, ".", "_" and "-", up to 64.`,
+      });
 };
 
 const stageName = (stage: string) => {
   const name = stage.trim();
   return STAGE_NAME.test(name)
     ? name
-    : refusal(
-        400,
-        "task-stage-name-unfit",
-        `“${stage}” is not a stage name: lowercase letters, digits, "_" and "-", starting with a letter.`
-      );
+    : problem(400, {
+        code: "task-stage-name-unfit",
+        detail: `“${stage}” is not a stage name: lowercase letters, digits, "_" and "-", starting with a letter.`,
+      });
 };
 
 const OWN_FIELDS: ReadonlySet<string> = new Set(TASK_FIELDS);
@@ -1050,18 +1039,16 @@ const OWN_FIELDS: ReadonlySet<string> = new Set(TASK_FIELDS);
 /** One field a caller gave for a key a task file does not know, read; refused when its key or value cannot stand. */
 const extraFieldOf = (key: string, value: ExtraValue) => {
   if (!EXTRA_KEY.test(key)) {
-    return refusal(
-      400,
-      "task-field-name-unfit",
-      `“${key}” is not a field name: letters, digits, "_" and "-", starting with a letter or "_".`
-    );
+    return problem(400, {
+      code: "task-field-name-unfit",
+      detail: `“${key}” is not a field name: letters, digits, "_" and "-", starting with a letter or "_".`,
+    });
   }
   if (OWN_FIELDS.has(key)) {
-    return refusal(
-      400,
-      "task-field-own",
-      `${key} is one of a task file's own fields; set it through its own parameter, not fields.`
-    );
+    return problem(400, {
+      code: "task-field-own",
+      detail: `${key} is one of a task file's own fields; set it through its own parameter, not fields.`,
+    });
   }
   if (Array.isArray(value)) {
     return value.length > 0 ? items(key, value) : [];
@@ -1077,11 +1064,10 @@ const extraFieldOf = (key: string, value: ExtraValue) => {
 const extraFieldsOf = (fields: Record<string, ExtraValue>) => {
   const entries = Object.entries(fields);
   if (entries.length > LIST_LIMIT) {
-    return refusal(
-      400,
-      "task-fields-too-many",
-      `fields holds ${entries.length} fields; it stops at ${LIST_LIMIT}.`
-    );
+    return problem(400, {
+      code: "task-fields-too-many",
+      detail: `fields holds ${entries.length} fields; it stops at ${LIST_LIMIT}.`,
+    });
   }
   const read: [string, ExtraValue][] = [];
   for (const [key, value] of entries) {
@@ -1103,18 +1089,17 @@ const commentText = (text: string) => {
     return written;
   }
   if (!written) {
-    return refusal(
-      400,
-      "task-comment-empty",
-      "The comment is empty; write a few words."
-    );
+    return problem(400, {
+      code: "task-comment-empty",
+      detail: "The comment is empty; write a few words.",
+    });
   }
   if (COMMENT_ENTRY_LINE.test(written)) {
-    return refusal(
-      400,
-      "task-comment-heading",
-      'The comment holds a "### " heading, which would start a comment entry of its own; use "#### " inside it.'
-    );
+    return problem(400, {
+      code: "task-comment-heading",
+      detail:
+        'The comment holds a "### " heading, which would start a comment entry of its own; use "#### " inside it.',
+    });
   }
   return written;
 };
@@ -1337,11 +1322,10 @@ const viewOf = (
 const taskNumbered = (what: string, ref: string) => {
   const number = taskNumber(ref);
   return number === undefined
-    ? refusal(
-        400,
-        "task-id-unfit",
-        `${what}: “${ref}” is not a task id; tasks are named like tsk-12.`
-      )
+    ? problem(400, {
+        code: "task-id-unfit",
+        detail: `${what}: “${ref}” is not a task id; tasks are named like tsk-12.`,
+      })
     : { id: taskId(number), number };
 };
 
@@ -1561,10 +1545,10 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch) => {
 };
 
 /** A to-do change the file could not make, as the caller's refusal. */
-const found = (problem: string | undefined) =>
-  problem === undefined
+const found = (misfit: string | undefined) =>
+  misfit === undefined
     ? undefined
-    : refusal(404, "task-todo-unknown", problem);
+    : problem(404, { code: "task-todo-unknown", detail: misfit });
 
 /** Ticks or unticks `refs`; what it did, for the commit, or the refusal of a to-do the file does not have. */
 const mark = (doc: TaskDoc, refs: string[] | undefined, done: boolean) => {
@@ -1605,7 +1589,7 @@ const addTodos = (doc: TaskDoc, adds: TodoChanges["add"], said: string[]) => {
     }
     const done = doc.addTodo(line, under, proposed);
     if (typeof done === "string") {
-      return refusal(404, "task-todo-unknown", done);
+      return problem(404, { code: "task-todo-unknown", detail: done });
     }
     added.push(done.id);
   }
@@ -1637,11 +1621,10 @@ const applyTodos = (doc: TaskDoc, changes: TodoChanges) => {
     return adding;
   }
   return said.length === 0
-    ? refusal(
-        400,
-        "task-todos-none",
-        "Name a to-do to tick, untick, add or reword."
-      )
+    ? problem(400, {
+        code: "task-todos-none",
+        detail: "Name a to-do to tick, untick, add or reword.",
+      })
     : said.join("; ");
 };
 
@@ -1764,7 +1747,9 @@ export const createTasks = (store: TaskStore) => {
   /** The refusal of your approval, with its line, while the store says it cannot go. */
   const approvable = async (projectId: string, id: string) => {
     const held = await store.approvalRefusal?.(projectId, id);
-    return held ? refusal(409, "task-approval-held", held) : undefined;
+    return held
+      ? problem(409, { code: "task-approval-held", detail: held })
+      : undefined;
   };
   /** One change to a project's tasks at a time, around the folder's own commits. */
   const inTurn = turnTaker();
@@ -1797,7 +1782,7 @@ export const createTasks = (store: TaskStore) => {
     const checked = runsOnValue(value, store.machines());
     return "value" in checked
       ? checked.value
-      : refusal(400, "task-runs-on-unknown", checked.problem);
+      : problem(400, { code: "task-runs-on-unknown", detail: checked.problem });
   };
 
   /** The project's attempts, by task, newest first. */
@@ -2127,22 +2112,20 @@ export const createTasks = (store: TaskStore) => {
     const project = store.project(projectId);
     return project
       ? project.tracker
-      : refusal(
-          404,
-          "task-project-unknown",
-          `The hub keeps no project ${projectId}.`
-        );
+      : problem(404, {
+          code: "task-project-unknown",
+          detail: `The hub keeps no project ${projectId}.`,
+        });
   };
 
   /** The refusal of a task write whose project was deleted since the change began. */
   const stands = (projectId: string) =>
     store.project(projectId)
       ? undefined
-      : refusal(
-          404,
-          "task-project-deleted",
-          `The project "${projectId}" was deleted, so its tasks can't change. Pick another.`
-        );
+      : problem(404, {
+          code: "task-project-deleted",
+          detail: `The project "${projectId}" was deleted, so its tasks can't change. Pick another.`,
+        });
 
   const indexRow = (
     projectId: string,
@@ -2694,11 +2677,10 @@ export const createTasks = (store: TaskStore) => {
   const locate = async (projectId: string, ref: string, forChange = false) => {
     const number = taskNumber(ref);
     if (number === undefined) {
-      return refusal(
-        400,
-        "task-id-unfit",
-        `“${ref}” is not a task id; tasks are named like tsk-12.`
-      );
+      return problem(400, {
+        code: "task-id-unfit",
+        detail: `“${ref}” is not a task id; tasks are named like tsk-12.`,
+      });
     }
     const find = (rows: TaskIndexRow[]) =>
       rows.filter((row) => row.number === number);
@@ -2715,11 +2697,10 @@ export const createTasks = (store: TaskStore) => {
       return await archivedPlace(projectId, number, forChange);
     }
     if (forChange && claims.length > 1) {
-      return refusal(
-        409,
-        "task-claimed-twice",
-        `${taskId(number)} is claimed by ${claims.length} files (${claims.map((row) => row.path).join(", ")}); rename all but one before changing it.`
-      );
+      return problem(409, {
+        code: "task-claimed-twice",
+        detail: `${taskId(number)} is claimed by ${claims.length} files (${claims.map((row) => row.path).join(", ")}); rename all but one before changing it.`,
+      });
     }
     const place: { number: number; path: string } = {
       path: first.path,
@@ -2739,18 +2720,16 @@ export const createTasks = (store: TaskStore) => {
       return archived;
     }
     if (!archived) {
-      return refusal(
-        404,
-        "task-missing",
-        `The project has no task ${taskId(number)}.`
-      );
+      return problem(404, {
+        code: "task-missing",
+        detail: `The project has no task ${taskId(number)}.`,
+      });
     }
     if (forChange) {
-      return refusal(
-        409,
-        "task-archived",
-        `${taskId(number)} is archived (${archived}), so it does not change; it is kept as it was.`
-      );
+      return problem(409, {
+        code: "task-archived",
+        detail: `${taskId(number)} is archived (${archived}), so it does not change; it is kept as it was.`,
+      });
     }
     const place: { number: number; path: string } = { path: archived, number };
     return place;
@@ -2839,27 +2818,24 @@ export const createTasks = (store: TaskStore) => {
   ) => {
     const number = taskNumber(ref);
     if (number === undefined) {
-      return refusal(
-        400,
-        "task-id-unfit",
-        `${edge}: “${ref}” is not a task id; tasks are named like tsk-12.`
-      );
+      return problem(400, {
+        code: "task-id-unfit",
+        detail: `${edge}: “${ref}” is not a task id; tasks are named like tsk-12.`,
+      });
     }
     const id = taskId(number);
     if (id === self) {
-      return refusal(
-        400,
-        "task-edge-self",
-        `${self} cannot be ${edge} itself.`
-      );
+      return problem(400, {
+        code: "task-edge-self",
+        detail: `${self} cannot be ${edge} itself.`,
+      });
     }
     return have.has(id)
       ? id
-      : refusal(
-          404,
-          "task-edge-missing",
-          `${edge}: the project has no task ${id}.`
-        );
+      : problem(404, {
+          code: "task-edge-missing",
+          detail: `${edge}: the project has no task ${id}.`,
+        });
   };
 
   /** An edge as `tsk-…`, a task the project has; null for none given. */
@@ -2892,18 +2868,16 @@ export const createTasks = (store: TaskStore) => {
   ) => {
     const read = readWait(one, reader);
     if (read instanceof ElysiaStatus) {
-      return refusal(
-        400,
-        read.response.code,
-        `waits_on: ${read.response.detail}`
-      );
+      return problem(400, {
+        code: read.response.code,
+        detail: `waits_on: ${read.response.detail}`,
+      });
     }
     if (read.kind === "task" && !(have.has(read.id) || archived.has(read.id))) {
-      return refusal(
-        404,
-        "task-wait-missing",
-        `waits_on: the project has no task ${read.id}.`
-      );
+      return problem(404, {
+        code: "task-wait-missing",
+        detail: `waits_on: the project has no task ${read.id}.`,
+      });
     }
     return waitHandle(read);
   };
@@ -3001,7 +2975,10 @@ export const createTasks = (store: TaskStore) => {
     const path = cycle
       .map((at) => taskLink(projectId, at, byId.get(at)?.title ?? at))
       .join(" → ");
-    return refusal(409, "task-cycle", taskLinkWords.cycle(path));
+    return problem(409, {
+      code: "task-cycle",
+      detail: taskLinkWords.cycle(path),
+    });
   };
 
   /**
@@ -3043,18 +3020,17 @@ export const createTasks = (store: TaskStore) => {
       return stage;
     }
     if (actor.mover === "action") {
-      return refusal(
-        403,
-        "task-create-by-action",
-        "An approved action moves its task; it never files one."
-      );
+      return problem(403, {
+        code: "task-create-by-action",
+        detail: "An approved action moves its task; it never files one.",
+      });
     }
-    const problem =
+    const misfit =
       actor.mover === "hub"
         ? hubProblem(stages, stage)
         : startProblem(stages, stage, actor.mover);
     return (
-      stageRefusal(stages, stage, problem) ??
+      stageRefusal(stages, stage, misfit) ??
       refuseNobody(projectId, stages, "A new task", "", stage, actor) ??
       stage
     );
@@ -3346,18 +3322,16 @@ export const createTasks = (store: TaskStore) => {
     }
     const { reading, source } = read;
     if (source === "none") {
-      return refusal(
-        409,
-        "task-not-set-up",
-        `The project is not set up yet, so it has no stages and the hub cannot ${doing}. Its setup page writes them once the person sends it.`
-      );
+      return problem(409, {
+        code: "task-not-set-up",
+        detail: `The project is not set up yet, so it has no stages and the hub cannot ${doing}. Its setup page writes them once the person sends it.`,
+      });
     }
     if (!reading.ok) {
-      return refusal(
-        409,
-        "task-stages-unread",
-        `stages.md does not read, so the hub cannot ${doing}. ${reading.problems.join(" ")} Fix it, or apply a template.`
-      );
+      return problem(409, {
+        code: "task-stages-unread",
+        detail: `stages.md does not read, so the hub cannot ${doing}. ${reading.problems.join(" ")} Fix it, or apply a template.`,
+      });
     }
     return reading.stages;
   };
@@ -3673,7 +3647,7 @@ export const createTasks = (store: TaskStore) => {
    */
   const writeBack = async (
     projectId: string,
-    file: Exclude<Awaited<ReturnType<typeof opened>>, Refused>,
+    file: Exclude<Awaited<ReturnType<typeof opened>>, AnyProblem>,
     actor: TaskActor,
     applied: string | Did
   ) => {
@@ -3724,14 +3698,14 @@ export const createTasks = (store: TaskStore) => {
   const stageRefusal = (
     stages: Stages,
     to: string,
-    problem: string | undefined
+    misfit: string | undefined
   ) => {
-    if (!problem) {
+    if (!misfit) {
       return;
     }
     return stageNamed(stages, to)
-      ? refusal(403, "task-stage-refused", problem)
-      : refusal(400, "task-stage-unknown", problem);
+      ? problem(403, { code: "task-stage-refused", detail: misfit })
+      : problem(400, { code: "task-stage-unknown", detail: misfit });
   };
 
   /**
@@ -3757,7 +3731,9 @@ export const createTasks = (store: TaskStore) => {
       live: liveAt(projectId, id),
       dispatches: dispatches(projectId),
     });
-    return nobody ? refusal(409, "task-stage-nobody", nobody) : undefined;
+    return nobody
+      ? problem(409, { code: "task-stage-nobody", detail: nobody })
+      : undefined;
   };
 
   /**
@@ -3784,11 +3760,10 @@ export const createTasks = (store: TaskStore) => {
       actor.mover === "action" &&
       !(actor.actionId && store.actionMove?.(projectId, id, to, actor.actionId))
     ) {
-      return refusal(
-        403,
-        "task-move-not-approved",
-        `This task cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
-      );
+      return problem(403, {
+        code: "task-move-not-approved",
+        detail: `This task cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`,
+      });
     }
     const refused =
       stageRefusal(
@@ -3828,11 +3803,10 @@ export const createTasks = (store: TaskStore) => {
       at = byId.get(at)?.duplicateOf ?? null, seen += 1
     ) {
       if (at === id) {
-        return refusal(
-          409,
-          "task-duplicate-cycle",
-          `${taskLink(projectId, survivor, byId.get(survivor)?.title ?? survivor)} is already a duplicate of this task, so this task cannot be a duplicate of it. Nothing changed.`
-        );
+        return problem(409, {
+          code: "task-duplicate-cycle",
+          detail: `${taskLink(projectId, survivor, byId.get(survivor)?.title ?? survivor)} is already a duplicate of this task, so this task cannot be a duplicate of it. Nothing changed.`,
+        });
       }
     }
     doc.setField("duplicate_of", survivor);
@@ -3843,11 +3817,11 @@ export const createTasks = (store: TaskStore) => {
     }
     const dropped = stages.stages.find((each) => each.kind === "dropped");
     if (!dropped) {
-      return refusal(
-        409,
-        "task-no-dropped-stage",
-        "The project has no stage of kind dropped, so this task cannot be closed as a duplicate. Add one to stages.md."
-      );
+      return problem(409, {
+        code: "task-no-dropped-stage",
+        detail:
+          "The project has no stage of kind dropped, so this task cannot be closed as a duplicate. Add one to stages.md.",
+      });
     }
     const kept: Did = { what: phrase };
     if (kindIn(stages, doc.read().fields.stage ?? "") === "dropped") {
@@ -3930,11 +3904,10 @@ export const createTasks = (store: TaskStore) => {
         .get(id)
         ?.some((attempt) => isLive(attempt.state))
     ) {
-      return refusal(
-        409,
-        "task-attempt-live",
-        `An attempt at ${id} is live; stop it before archiving the task.`
-      );
+      return problem(409, {
+        code: "task-attempt-live",
+        detail: `An attempt at ${id} is live; stop it before archiving the task.`,
+      });
     }
     const read = await taskText(projectId, path);
     if (read instanceof ElysiaStatus) {
@@ -3982,18 +3955,20 @@ export const createTasks = (store: TaskStore) => {
     }
     const board = synced.rows.find((row) => row.number === number);
     if (board) {
-      return refusal(
-        409,
-        "task-on-board",
-        `It is on the board (${board.path}), not archived.`
-      );
+      return problem(409, {
+        code: "task-on-board",
+        detail: `It is on the board (${board.path}), not archived.`,
+      });
     }
     const from = await archivedFile(projectId, number);
     if (from instanceof ElysiaStatus) {
       return from;
     }
     if (!from) {
-      return refusal(404, "task-not-archived", "It is not archived.");
+      return problem(404, {
+        code: "task-not-archived",
+        detail: "It is not archived.",
+      });
     }
     const read = await taskText(projectId, from);
     if (read instanceof ElysiaStatus) {
@@ -4162,7 +4137,7 @@ export const createTasks = (store: TaskStore) => {
       ? store.linked(projectId, filter.link.trim())
       : undefined;
     return typeof linking === "string"
-      ? refusal(400, "task-link-unread", linking)
+      ? problem(400, { code: "task-link-unread", detail: linking })
       : linking && new Set(linking);
   };
 
@@ -4795,11 +4770,10 @@ export const createTasks = (store: TaskStore) => {
       return survivor;
     }
     if (!survivor || survivor === id) {
-      return refusal(
-        400,
-        "task-duplicate-self",
-        "A task cannot be a duplicate of itself."
-      );
+      return problem(400, {
+        code: "task-duplicate-self",
+        detail: "A task cannot be a duplicate of itself.",
+      });
     }
     const marked = await markDuplicate(projectId, doc, id, survivor, actor);
     if (marked instanceof ElysiaStatus) {
@@ -4812,7 +4786,10 @@ export const createTasks = (store: TaskStore) => {
   /** The refusal of a write that would make a task wait on itself or be its own part, by its path. */
   const refuseSelf = (projectId: string, doc: TaskDoc, id: string) => {
     const self = linked(projectId, { id, title: doc.title() });
-    return refusal(409, "task-cycle", taskLinkWords.cycle(`${self} → ${self}`));
+    return problem(409, {
+      code: "task-cycle",
+      detail: taskLinkWords.cycle(`${self} → ${self}`),
+    });
   };
 
   /** The waits a link write takes out with `remove`, each matched to one kept; refused for one it does not hold. */
@@ -4831,11 +4808,10 @@ export const createTasks = (store: TaskStore) => {
     for (const written of listed) {
       const match = keptMatch(kept, written, reader);
       if (match === undefined) {
-        return refusal(
-          404,
-          "task-wait-not-held",
-          `It waits on nothing named “${written}”. Nothing changed.`
-        );
+        return problem(404, {
+          code: "task-wait-not-held",
+          detail: `It waits on nothing named “${written}”. Nothing changed.`,
+        });
       }
       out.push(match);
     }
@@ -5281,17 +5257,17 @@ export const createTasks = (store: TaskStore) => {
     artifacts: ResultArtifact[]
   ) => {
     for (const artifact of artifacts) {
-      const problem = await artifactProblem(projectId, outputs, artifact);
-      if (problem) {
-        return problem;
+      const misfit = await artifactProblem(projectId, outputs, artifact);
+      if (misfit) {
+        return misfit;
       }
     }
     if (artifacts.filter((artifact) => artifact.primary).length > 1) {
-      return refusal(
-        422,
-        "task-result-primary-twice",
-        "Mark one artifact `primary` at most: the one the reviewer sees first."
-      );
+      return problem(422, {
+        code: "task-result-primary-twice",
+        detail:
+          "Mark one artifact `primary` at most: the one the reviewer sees first.",
+      });
     }
     const handed: AttemptResult["artifacts"] = [];
     for (const artifact of artifacts) {
@@ -5328,11 +5304,10 @@ export const createTasks = (store: TaskStore) => {
       rows.filter((row) => row.path !== path && row.partOf === id)
     );
     if (held) {
-      return refusal(
-        409,
-        "task-held",
-        `This task cannot be deleted: ${held}. Archive it instead, which they take as done, or take those edges out first.`
-      );
+      return problem(409, {
+        code: "task-held",
+        detail: `This task cannot be deleted: ${held}. Archive it instead, which they take as done, or take those edges out first.`,
+      });
     }
     const content = await taskText(projectId, path);
     if (content instanceof ElysiaStatus) {
@@ -5370,11 +5345,10 @@ export const createTasks = (store: TaskStore) => {
     }
     const reading = readStages(content);
     if (!reading.ok) {
-      return refusal(
-        422,
-        "task-stages-unfit",
-        `stages.md was not saved. ${reading.problems.join(" ")}`
-      );
+      return problem(422, {
+        code: "task-stages-unfit",
+        detail: `stages.md was not saved. ${reading.problems.join(" ")}`,
+      });
     }
     const written = await writeFolderFile(projectId, STAGES_FILE, content, {
       author: actor.author,
@@ -5625,11 +5599,11 @@ export const createTasks = (store: TaskStore) => {
         partOf === undefined &&
         duplicateOf === undefined
       ) {
-        return refusal(
-          400,
-          "task-link-empty",
-          "Give waits_on, part_of or duplicate_of: what the task waits on, the whole it is a part of, or the task it repeats."
-        );
+        return problem(400, {
+          code: "task-link-empty",
+          detail:
+            "Give waits_on, part_of or duplicate_of: what the task waits on, the whole it is a part of, or the task it repeats.",
+        });
       }
       const outcome: LinkOutcome = {
         added: [],
@@ -5757,11 +5731,10 @@ export const createTasks = (store: TaskStore) => {
           return asked;
         }
         if (asked === undefined || said.taskId !== asked) {
-          return refusal(
-            409,
-            "task-comment-elsewhere",
-            "That comment is already on another task."
-          );
+          return problem(409, {
+            code: "task-comment-elsewhere",
+            detail: "That comment is already on another task.",
+          });
         }
         return await readTask(projectId, ref);
       }
@@ -5810,11 +5783,10 @@ export const createTasks = (store: TaskStore) => {
       const { outputs } = new TaskDoc(place.path, content).read().fields;
       const summary = written.summary.trim();
       if (!summary) {
-        return refusal(
-          422,
-          "task-result-summary-missing",
-          "Say what you did in `summary`: the reviewer reads it first."
-        );
+        return problem(422, {
+          code: "task-result-summary-missing",
+          detail: "Say what you did in `summary`: the reviewer reads it first.",
+        });
       }
       const handed = await handedIn(
         projectId,
@@ -6016,11 +5988,10 @@ export const createTasks = (store: TaskStore) => {
         }
         const [kept] = waits;
         if (kept === undefined) {
-          return refusal(
-            400,
-            "task-wait-nothing",
-            `“${written}” names nothing to wait on.`
-          );
+          return problem(400, {
+            code: "task-wait-nothing",
+            detail: `“${written}” names nothing to wait on.`,
+          });
         }
         return kept;
       }
@@ -6029,11 +6000,11 @@ export const createTasks = (store: TaskStore) => {
         return target;
       }
       return target.kind === "task"
-        ? refusal(
-            400,
-            "task-wait-no-project",
-            "This session is in no project, so it has no tasks to wait on."
-          )
+        ? problem(400, {
+            code: "task-wait-no-project",
+            detail:
+              "This session is in no project, so it has no tasks to wait on.",
+          })
         : waitHandle(target);
     },
 
@@ -6060,11 +6031,10 @@ export const createTasks = (store: TaskStore) => {
           return file;
         }
         if (!file.doc.editComment(url, written)) {
-          return refusal(
-            404,
-            "task-comment-not-carried",
-            `${file.id} holds no comment carried from ${url}.`
-          );
+          return problem(404, {
+            code: "task-comment-not-carried",
+            detail: `${file.id} holds no comment carried from ${url}.`,
+          });
         }
         const source = refOfUrl(url)?.source;
         return await writeBack(projectId, file, actor, {
@@ -6289,11 +6259,10 @@ export const taskRoutes = (tasks: Tasks) =>
           return task;
         }
         if (!task.outputs.includes(query.name)) {
-          return refusal(
-            404,
-            "task-output-unknown",
-            `This task hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`
-          );
+          return problem(404, {
+            code: "task-output-unknown",
+            detail: `This task hands in no output named ${query.name}; its outputs are ${task.outputs.join(", ") || "none"}.`,
+          });
         }
         const extension = fileExtension(query.name);
         const media = MEDIA_TYPES[extension];

@@ -8,13 +8,12 @@ import {
   memoryScopeProblem,
 } from "@cawco/core/fleet";
 import { areaWords } from "@cawco/core/words/areas";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { MEMORY_ID } from "../db/schema";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
 import type { MachineReadsContext } from "../machine-reads";
 import { pushTarget, readMachineMemory } from "../machine-reads";
-import { refusal } from "../refusal";
 
 export const fleetMemoryRoutes = (
   ctx: Pick<
@@ -87,7 +86,10 @@ export const fleetMemoryRoutes = (
       .delete("/api/fleet/memory", () => {
         const main = db.getFleetMemory();
         if (!main) {
-          return refusal(404, "no-memory", "the fleet keeps no memory");
+          return problem(404, {
+            code: "no-memory",
+            detail: "the fleet keeps no memory",
+          });
         }
         const linked = db.listFleetMemoryDocs().filter((doc) => !doc.scope);
         keepRemovedMemory(main);
@@ -103,7 +105,10 @@ export const fleetMemoryRoutes = (
           Date.now()
         );
         if (trashed === undefined) {
-          return refusal(404, "no-memory", "the fleet keeps no memory");
+          return problem(404, {
+            code: "no-memory",
+            detail: "the fleet keeps no memory",
+          });
         }
         fleetChanged();
         return undoable(trashed);
@@ -133,19 +138,25 @@ export const fleetMemoryRoutes = (
           }),
         },
         ({ body, status }) => {
-          const problem =
+          const misfit =
             memoryDocProblem(body.path) ??
             (body.scope ? memoryScopeProblem(body.scope) : undefined);
-          if (problem) {
-            return refusal(400, "memory-doc-invalid", problem);
+          if (misfit) {
+            return problem(400, { code: "memory-doc-invalid", detail: misfit });
           }
           const unknown = body.scope?.projectIds?.find((id) => !db.project(id));
           if (unknown) {
-            return refusal(400, "no-project", `there is no project ${unknown}`);
+            return problem(400, {
+              code: "no-project",
+              detail: `there is no project ${unknown}`,
+            });
           }
           const noArea = body.scope?.areaIds?.find((id) => !db.areas.get(id));
           if (noArea) {
-            return refusal(400, "scope-no-area", areaWords.scopeNoArea(noArea));
+            return problem(400, {
+              code: "scope-no-area",
+              detail: areaWords.scopeNoArea(noArea),
+            });
           }
           const typeNames = new Set([
             ...delegateTypes.list().map((type) => type.name),
@@ -158,11 +169,10 @@ export const fleetMemoryRoutes = (
             (name) => !typeNames.has(name.trim())
           );
           if (unknownType) {
-            return refusal(
-              400,
-              "no-delegate-type",
-              `there is no delegate type ${unknownType}; the catalog has ${[...typeNames].sort().join(", ")}`
-            );
+            return problem(400, {
+              code: "no-delegate-type",
+              detail: `there is no delegate type ${unknownType}; the catalog has ${[...typeNames].sort().join(", ")}`,
+            });
           }
 
           const current = db.getFleetMemoryDoc(body.path);
@@ -191,11 +201,10 @@ export const fleetMemoryRoutes = (
         ({ body }) => {
           const current = db.getFleetMemoryDoc(body.path);
           if (!current) {
-            return refusal(
-              404,
-              "no-memory-doc",
-              `the fleet keeps no ${body.path}`
-            );
+            return problem(404, {
+              code: "no-memory-doc",
+              detail: `the fleet keeps no ${body.path}`,
+            });
           }
 
           keepRemovedMemory(current);
@@ -204,11 +213,10 @@ export const fleetMemoryRoutes = (
             Date.now()
           );
           if (trashed === undefined) {
-            return refusal(
-              404,
-              "no-memory-doc",
-              `the fleet keeps no ${body.path}`
-            );
+            return problem(404, {
+              code: "no-memory-doc",
+              detail: `the fleet keeps no ${body.path}`,
+            });
           }
           fleetChanged();
           return undoable(trashed);
@@ -252,28 +260,29 @@ export const fleetMemoryRoutes = (
             return read;
           }
           if (!read.copy) {
-            return refusal(
-              404,
-              "has-no-user-claude",
-              `${machineName(body.machineId)} has no user CLAUDE.md`
-            );
+            return problem(404, {
+              code: "has-no-user-claude",
+              detail: `${machineName(body.machineId)} has no user CLAUDE.md`,
+            });
           }
 
           if (body.path !== undefined) {
-            const problem = memoryDocProblem(body.path);
-            if (problem) {
-              return refusal(400, "memory-doc-invalid", problem);
+            const misfit = memoryDocProblem(body.path);
+            if (misfit) {
+              return problem(400, {
+                code: "memory-doc-invalid",
+                detail: misfit,
+              });
             }
 
             const theirs = read.copy.docs.find(
               (entry) => entry.path === body.path
             );
             if (!theirs) {
-              return refusal(
-                404,
-                "no-memory-file",
-                `${machineName(body.machineId)} has no ${body.path}`
-              );
+              return problem(404, {
+                code: "no-memory-file",
+                detail: `${machineName(body.machineId)} has no ${body.path}`,
+              });
             }
 
             keepReplacedDoc(body.path, theirs.content);
@@ -332,11 +341,10 @@ export const fleetMemoryRoutes = (
           }
           const { config } = target;
           if (!config.memory) {
-            return refusal(
-              400,
-              "no-memory",
-              "the fleet keeps no memory to push"
-            );
+            return problem(400, {
+              code: "no-memory",
+              detail: "the fleet keeps no memory to push",
+            });
           }
 
           const read = await readMachineMemory(ctx, body.machineId, set);
@@ -406,7 +414,10 @@ export const fleetMemoryRoutes = (
         const version = db.fleetMemoryVersion(Number(params.id));
         return (
           version ??
-          refusal(404, "no-memory-version", `no memory version ${params.id}`)
+          problem(404, {
+            code: "no-memory-version",
+            detail: `no memory version ${params.id}`,
+          })
         );
       })
       // Undo, through the same door as a save — so what restoring replaces is
@@ -419,11 +430,10 @@ export const fleetMemoryRoutes = (
         ({ body }) => {
           const version = db.fleetMemoryVersion(body.id);
           if (!version) {
-            return refusal(
-              404,
-              "no-memory-version",
-              `no memory version ${body.id}`
-            );
+            return problem(404, {
+              code: "no-memory-version",
+              detail: `no memory version ${body.id}`,
+            });
           }
 
           if (version.path !== undefined) {

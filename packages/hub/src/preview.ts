@@ -61,7 +61,7 @@ import {
   versionedFile,
 } from "@cawco/preview/proxy";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { serveCanvas } from "./artifacts/canvas";
 import {
   ARTIFACT_PATH,
@@ -102,7 +102,7 @@ import {
 } from "./preview-hosts";
 import { isEmbed } from "./preview-origin";
 import { folderPath } from "./project-folder";
-import { refusal } from "./refusal";
+
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
 /**
@@ -1098,11 +1098,10 @@ const atTheLock = (
 };
 /** An origin whose session or project the hub no longer holds: let go, and said, never kept. */
 const ownerGone = (key: string) =>
-  refusal(
-    409,
-    "preview-owner-gone",
-    `No session or project holds the preview origin ${key} now, so it serves nothing.`
-  );
+  problem(409, {
+    code: "preview-owner-gone",
+    detail: `No session or project holds the preview origin ${key} now, so it serves nothing.`,
+  });
 /** The port a host pattern's name ends in (`HostPattern.after`), when it names one. */
 const PATTERN_PORT = /:(\d+)$/u;
 /** One name of the pattern's, its port left off: a made-up session's, or the range's first port's. */
@@ -1181,18 +1180,17 @@ export function createPreviewListeners(
   const unlistened = () =>
     listens
       ? undefined
-      : refusal(
-          503,
-          "preview-no-listener",
-          "This hub opens no preview listener: it was built only to be read."
-        );
+      : problem(503, {
+          code: "preview-no-listener",
+          detail:
+            "This hub opens no preview listener: it was built only to be read.",
+        });
   /** A port that would not open for a reason no other port avoids, in one sentence. */
   const portRefused = (port: number, thrown: unknown) =>
-    refusal(
-      503,
-      "preview-port-unopened",
-      `Preview port ${port} didn't open on ${hostname} (${causeOf(thrown)}).`
-    );
+    problem(503, {
+      code: "preview-port-unopened",
+      detail: `Preview port ${port} didn't open on ${hostname} (${causeOf(thrown)}).`,
+    });
   /** Why a bind refused: no listener on this hub, or a port that would not open. */
   type Unlistened =
     NonNullable<ReturnType<typeof unlistened>> | ReturnType<typeof portRefused>;
@@ -1943,11 +1941,13 @@ export function createPreviewListeners(
    * words/preview-ports.ts).
    */
   const everyPortTaken = () =>
-    refusal(
-      503,
-      "preview-ports-taken",
-      previewPortWords.everyPortTaken(PREVIEW_PORTS_TEXT, portHolders())
-    );
+    problem(503, {
+      code: "preview-ports-taken",
+      detail: previewPortWords.everyPortTaken(
+        PREVIEW_PORTS_TEXT,
+        portHolders()
+      ),
+    });
 
   /** What keeps each port of the range, the barred left out: a screen that shows its origin ({@link inUse}), else another program on the hub's machine. */
   const portHolders = (): PortHolders => {
@@ -2372,7 +2372,10 @@ export function createPreviewListeners(
         }
         const unreachable = await probePattern(parsed);
         if (unreachable) {
-          return refusal(422, "preview-pattern-unresolved", unreachable);
+          return problem(422, {
+            code: "preview-pattern-unresolved",
+            detail: unreachable,
+          });
         }
         const before = settings;
         await stopAll();
@@ -2382,7 +2385,10 @@ export function createPreviewListeners(
           // Nothing changes: the mode before goes on as it was.
           settings = before;
           this.start();
-          return refusal(503, "preview-host-mode-unopened", failed.why);
+          return problem(503, {
+            code: "preview-host-mode-unopened",
+            detail: failed.why,
+          });
         }
         db.setSettings(settings);
         // Its sessions' own ports, which clients reached outside the

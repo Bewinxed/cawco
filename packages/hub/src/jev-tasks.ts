@@ -30,7 +30,7 @@
 
 import { detach } from "@cawco/core/detach";
 import { taskLink } from "@cawco/core/references";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
@@ -50,7 +50,7 @@ import {
   sameFilesAndChecks,
   TRIAGE_FIELD,
 } from "./jev-placement";
-import { refusal } from "./refusal";
+
 import {
   hubActor,
   type TaskEvent,
@@ -650,11 +650,10 @@ export const createJevTasks = ({
   const named = (picked: string | undefined, action: PhoneAction) =>
     picked
       ? picked
-      : refusal(
-          409,
-          "phone-task-unnamed",
-          `Jev read the request as “${action}” but it names no task the project has.`
-        );
+      : problem(409, {
+          code: "phone-task-unnamed",
+          detail: `Jev read the request as “${action}” but it names no task the project has.`,
+        });
 
   /** Your sentence from the phone, to the project's conversation as your words. */
   const toLead = async (
@@ -767,11 +766,11 @@ export const createJevTasks = ({
       stage?: string
     ) => {
       if (!stage) {
-        return refusal(
-          409,
-          "phone-no-stages",
-          "Jev read the request as a move, but the project has no stages."
-        );
+        return problem(409, {
+          code: "phone-no-stages",
+          detail:
+            "Jev read the request as a move, but the project has no stages.",
+        });
       }
       const ref = named(about, "move");
       if (ref instanceof ElysiaStatus) {
@@ -855,7 +854,10 @@ export const createJevTasks = ({
   ) => {
     const sentence = text.trim();
     if (!sentence) {
-      return refusal(400, "phone-request-empty", "A request needs words.");
+      return problem(400, {
+        code: "phone-request-empty",
+        detail: "A request needs words.",
+      });
     }
     const task = taskId ? await tasks.get(projectId, taskId) : undefined;
     if (task instanceof ElysiaStatus) {
@@ -910,7 +912,7 @@ export const phoneRequestRoutes = (jevTasks: JevTasks) =>
       try {
         return await jevTasks.phoneRequest(params.id, body.text, body.taskId);
       } catch (error) {
-        return refusal(502, "jev-folder", words(error));
+        return problem(502, { code: "jev-folder", detail: words(error) });
       }
     }
   );

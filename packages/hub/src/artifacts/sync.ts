@@ -86,7 +86,7 @@ import {
   type Array as YArray,
   Map as YMap,
 } from "yjs";
-import type { Refused } from "../refusal";
+import type { AnyProblem } from "../refusal";
 import {
   type ArtifactClient,
   type ArtifactDocs,
@@ -690,7 +690,7 @@ export const artifactPictures =
       instanceId: string,
       artifactId: string,
       body: MarkPictures
-    ) => { held: number } | Refused
+    ) => { held: number } | AnyProblem
   ) =>
   async (
     request: Request,
@@ -810,7 +810,7 @@ export const artifactSend =
       artifactId: string,
       body: SendBody,
       route: string
-    ) => Promise<ArtifactChoices | Refused>,
+    ) => Promise<ArtifactChoices | AnyProblem>,
     docs: ArtifactDocs
   ) =>
   async (
@@ -872,13 +872,13 @@ export const artifactSend =
  * had gone, by the hub's own send or an earlier press: what he asked for
  * holds).
  */
-const refusedSend = (refused: Refused): Response =>
+const refusedSend = (refused: AnyProblem): Response =>
   refused.response.code === "artifact-nothing-new"
     ? Response.json({ sent: "already" })
     : problemOf(refused);
 
 /** A refusal the service answered, as the page reads it: Elysia's problem, its status, code and words. */
-const problemOf = ({ status, response }: Refused): Response =>
+const problemOf = ({ status, response }: AnyProblem): Response =>
   problemResponse({ status, code: response.code, detail: response.detail });
 
 /** The listener's handlers for artifact sockets. */

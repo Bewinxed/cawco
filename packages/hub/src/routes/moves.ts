@@ -4,9 +4,9 @@
 
 import { EFFORT_LEVELS } from "@cawco/core/harness/kinds";
 import type { MoveRequest } from "@cawco/core/move";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
+
 import { harnessSchema } from "./harness-schema";
 import { continueBody, permissionModeSchema } from "./session-bodies";
 
@@ -42,11 +42,10 @@ const moveAttempt = async <T>(work: () => T | Promise<T>) => {
   try {
     return await work();
   } catch (error) {
-    return refusal(
-      422,
-      "move-failed",
-      error instanceof Error ? error.message : String(error)
-    );
+    return problem(422, {
+      code: "move-failed",
+      detail: error instanceof Error ? error.message : String(error),
+    });
   }
 };
 

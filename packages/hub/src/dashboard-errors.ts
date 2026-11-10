@@ -2,8 +2,7 @@ import {
   PAGE_FAULT_TEXT_MAX,
   type PageFaultReport,
 } from "@cawco/core/page-faults";
-import { Elysia, ElysiaStatus, ParseError, status, t } from "elysia";
-import { refusal } from "./refusal";
+import { Elysia, ElysiaStatus, ParseError, problem, status, t } from "elysia";
 
 const BODY_LIMIT = 64 * 1024;
 
@@ -63,18 +62,16 @@ export const dashboardErrorsRoutes = () =>
           error.cause instanceof ElysiaStatus
         ) {
           if (error.cause.status === 413) {
-            return refusal(
-              413,
-              "dashboard-error-report-too",
-              "Dashboard error report is too large"
-            );
+            return problem(413, {
+              code: "dashboard-error-report-too",
+              detail: "Dashboard error report is too large",
+            });
           }
           if (error.cause.status === 415) {
-            return refusal(
-              415,
-              "dashboard-errors-require-application",
-              "Dashboard errors require application/json"
-            );
+            return problem(415, {
+              code: "dashboard-errors-require-application",
+              detail: "Dashboard errors require application/json",
+            });
           }
         }
       },
@@ -93,18 +90,16 @@ export const dashboardErrorsRoutes = () =>
             request.headers.get("content-type")?.split(";")[0].trim() !==
             "application/json"
           ) {
-            throw refusal(
-              415,
-              "dashboard-errors-require-application",
-              "Dashboard errors require application/json"
-            );
+            throw problem(415, {
+              code: "dashboard-errors-require-application",
+              detail: "Dashboard errors require application/json",
+            });
           }
           if (Number(request.headers.get("content-length")) > BODY_LIMIT) {
-            throw refusal(
-              413,
-              "dashboard-error-report-too",
-              "Dashboard error report is too large"
-            );
+            throw problem(413, {
+              code: "dashboard-error-report-too",
+              detail: "Dashboard error report is too large",
+            });
           }
           const reader = request.body?.getReader();
           if (!reader) {
@@ -122,11 +117,10 @@ export const dashboardErrorsRoutes = () =>
               size += value.byteLength;
               if (size > BODY_LIMIT) {
                 await reader.cancel();
-                throw refusal(
-                  413,
-                  "dashboard-error-report-too",
-                  "Dashboard error report is too large"
-                );
+                throw problem(413, {
+                  code: "dashboard-error-report-too",
+                  detail: "Dashboard error report is too large",
+                });
               }
               text += decoder.decode(value, { stream: true });
             }

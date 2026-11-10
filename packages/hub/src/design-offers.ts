@@ -30,11 +30,11 @@ import type {
   ProjectNote,
 } from "@cawco/core/project-conversation";
 import type { StagesTemplate } from "@cawco/core/views";
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import { projectDesign } from "./landed";
 import { projectRoot } from "./project-folder";
-import { refusal } from "./refusal";
+
 import type { TaskActor, TaskEvent, Tasks, TaskView } from "./tasks";
 
 /** The templates whose work calls for a design system. */
@@ -181,22 +181,21 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       return open;
     }
     if (open) {
-      return refusal(
-        409,
-        "design-build-open",
-        `${open.id} already builds this project's design system.`
-      );
+      return problem(409, {
+        code: "design-build-open",
+        detail: `${open.id} already builds this project's design system.`,
+      });
     }
     const design = await projectDesign(deps, projectId);
     if (design instanceof ElysiaStatus) {
       return design;
     }
     if (design.hasDesign === true) {
-      return refusal(
-        409,
-        "design-system-present",
-        "This project has a design system already (design/ on its default branch, or in its folder): a change to it is a design_write proposal, not a build."
-      );
+      return problem(409, {
+        code: "design-system-present",
+        detail:
+          "This project has a design system already (design/ on its default branch, or in its folder): a change to it is a design_write proposal, not a build.",
+      });
     }
     const view = await tasks.stages(projectId);
     if (view instanceof ElysiaStatus) {
@@ -286,11 +285,10 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
   /** The project's offer as recorded, or its refusal (design-offer-unknown). */
   const answerable = (projectId: string) =>
     db.designOffers.of(projectId) ??
-    refusal(
-      404,
-      "design-offer-unknown",
-      "This project was never offered a design system."
-    );
+    problem(404, {
+      code: "design-offer-unknown",
+      detail: "This project was never offered a design system.",
+    });
 
   /** Where the project's offer stands, or its refusal. */
   const state = (projectId: string) => {

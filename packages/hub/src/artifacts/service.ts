@@ -132,7 +132,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { decidesWords } from "@cawco/core/words/decides";
 import { type FolderWeight, pageHash } from "@cawco/preview/proxy";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../db/artifacts";
 import { type BuiltProgram, mergeProgram, readKept } from "../decision-program";
@@ -143,7 +143,7 @@ import {
   folderFileNames,
   folderPath,
 } from "../project-folder";
-import { type Refused, refusal } from "../refusal";
+import type { AnyProblem } from "../refusal";
 import { artifactNamed, boardOf, createAccess, named } from "./access";
 import { canvasEntries } from "./canvas";
 import {
@@ -218,11 +218,10 @@ const merging = (existing: string, statements: string) => {
   try {
     return mergeProgram(existing, statements);
   } catch (error) {
-    return refusal(
-      422,
-      "artifact-statements-unmerged",
-      `The statements did not merge: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.`
-    );
+    return problem(422, {
+      code: "artifact-statements-unmerged",
+      detail: `The statements did not merge: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.`,
+    });
   }
 };
 /** The fields each kind takes, and what its refusal says it takes. */
@@ -378,11 +377,10 @@ const pageOf = (rows: ArtifactRow[], cursor: string | undefined) => {
   if (cursor !== undefined) {
     const parts = CURSOR.exec(cursor);
     if (!parts) {
-      return refusal(
-        400,
-        "artifact-list-cursor",
-        artifactToolWords.notListCursor(cursor)
-      );
+      return problem(400, {
+        code: "artifact-list-cursor",
+        detail: artifactToolWords.notListCursor(cursor),
+      });
     }
     const at = Number.parseInt(parts[1] as string, 36);
     const id = parts[2] as string;
@@ -459,11 +457,10 @@ const promotedFolder = (name: string) => {
   const folder = `artifacts/${name}`;
   const path = ARTIFACT_NAME.test(name) ? folderPath(folder) : undefined;
   if (path instanceof ElysiaStatus || path !== folder) {
-    return refusal(
-      400,
-      "artifact-promote-name",
-      `${JSON.stringify(name)} would not stay inside artifacts/: a name is lowercase letters, digits and dashes.`
-    );
+    return problem(400, {
+      code: "artifact-promote-name",
+      detail: `${JSON.stringify(name)} would not stay inside artifacts/: a name is lowercase letters, digits and dashes.`,
+    });
   }
   return folder;
 };
@@ -471,11 +468,13 @@ const promotedFolder = (name: string) => {
 const TRAILING_DOT = /\.$/u;
 
 /** A promote git refused, in DESIGN.md's error formula: what failed, and git's reason. */
-const notCommitted = (name: string, refused: Refused) =>
-  refusal(
+const notCommitted = (name: string, refused: AnyProblem) =>
+  problem(
     refused.status === 413 || refused.status === 409 ? refused.status : 503,
-    "artifact-promote-uncommitted",
-    `${name} could not be committed: ${refused.response.detail.replace(TRAILING_DOT, "")}.`
+    {
+      code: "artifact-promote-uncommitted",
+      detail: `${name} could not be committed: ${refused.response.detail.replace(TRAILING_DOT, "")}.`,
+    }
   );
 
 /** A promoted file's text: JSON, two-space indented, ending on a newline, as a repository keeps it. */
@@ -517,27 +516,25 @@ const pictureRefusal = (row: ArtifactRow, ask: PictureAsk, drawn: boolean) => {
     ask.link !== undefined &&
     !(row.kind === "preview" || row.kind === "page")
   ) {
-    return refusal(
-      400,
-      "artifact-read-link-unfit",
-      row.kind === "component"
-        ? `${row.name} is a component canvas: its state is a frame, { story, interaction?, scheme?, width? }.`
-        : `${row.name} is a ${row.kind}: a state's link draws a preview or a page.`
-    );
+    return problem(400, {
+      code: "artifact-read-link-unfit",
+      detail:
+        row.kind === "component"
+          ? `${row.name} is a component canvas: its state is a frame, { story, interaction?, scheme?, width? }.`
+          : `${row.name} is a ${row.kind}: a state's link draws a preview or a page.`,
+    });
   }
   if (ask.state && row.kind !== "component") {
-    return refusal(
-      400,
-      "artifact-read-state-unfit",
-      `${row.name} is a ${row.kind}: its state is the query or hash of the state's own link, like "?__state=pairing:asking".`
-    );
+    return problem(400, {
+      code: "artifact-read-state-unfit",
+      detail: `${row.name} is a ${row.kind}: its state is the query or hash of the state's own link, like "?__state=pairing:asking".`,
+    });
   }
   if (row.kind === "browser" && drawn) {
-    return refusal(
-      409,
-      "artifact-browser-undrawn",
-      `${row.name} is the project's browser: the hub serves no page of it to draw, so it has no picture. Read it without png.`
-    );
+    return problem(409, {
+      code: "artifact-browser-undrawn",
+      detail: `${row.name} is the project's browser: the hub serves no page of it to draw, so it has no picture. Read it without png.`,
+    });
   }
 };
 /**
@@ -617,7 +614,10 @@ const createdExtras = ({
 
 /** No artifact `id` on this hub at all. */
 const notOnHub = (id: string) =>
-  refusal(404, "artifact-not-on-hub", `No artifact ${id} on this hub.`);
+  problem(404, {
+    code: "artifact-not-on-hub",
+    detail: `No artifact ${id} on this hub.`,
+  });
 
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
@@ -872,11 +872,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return row;
     }
     if (!row) {
-      return refusal(
-        404,
-        "artifact-none-made",
-        "This session has made no artifact yet."
-      );
+      return problem(404, {
+        code: "artifact-none-made",
+        detail: "This session has made no artifact yet.",
+      });
     }
     return row.instanceId !== instance.id && row.madeBy === instance.id
       ? newestVersion(row)
@@ -945,27 +944,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return maker;
     }
     if (input.draft) {
-      return refusal(
-        400,
-        "artifact-draft-to-parent",
-        "A draft canvas is the person's own: it goes to no parent."
-      );
+      return problem(400, {
+        code: "artifact-draft-to-parent",
+        detail: "A draft canvas is the person's own: it goes to no parent.",
+      });
     }
     const parentId = maker.parentInstanceId;
     if (!parentId) {
-      return refusal(
-        409,
-        "artifact-no-parent",
-        'This session has no parent to put an artifact in front of: leave out to: "parent".'
-      );
+      return problem(409, {
+        code: "artifact-no-parent",
+        detail:
+          'This session has no parent to put an artifact in front of: leave out to: "parent".',
+      });
     }
     return (
       deps.instance(parentId) ??
-      refusal(
-        404,
-        "artifact-parent-gone",
-        `Your parent session ${parentId.slice(0, 8)} is gone, so nothing was put in its panel.`
-      )
+      problem(404, {
+        code: "artifact-parent-gone",
+        detail: `Your parent session ${parentId.slice(0, 8)} is gone, so nothing was put in its panel.`,
+      })
     );
   };
 
@@ -1024,7 +1021,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return (
       among(nameable(instance)) ??
       among(leftInProject(instance)) ??
-      refusal(404, "artifact-pin-unknown", artifactToolWords.noPin(pinId))
+      problem(404, {
+        code: "artifact-pin-unknown",
+        detail: artifactToolWords.noPin(pinId),
+      })
     );
   };
 
@@ -1228,13 +1228,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ];
     });
     if (problems.length > 0) {
-      return refusal(
-        422,
-        "artifact-media-unfit",
-        problems.length === 1
-          ? (problems[0] ?? "")
-          : `The program has ${problems.length} problems:\n- ${problems.join("\n- ")}`
-      );
+      return problem(422, {
+        code: "artifact-media-unfit",
+        detail:
+          problems.length === 1
+            ? (problems[0] ?? "")
+            : `The program has ${problems.length} problems:\n- ${problems.join("\n- ")}`,
+      });
     }
   };
 
@@ -1476,28 +1476,25 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const row = found.heldFor ? (db.get(found.heldFor) ?? found) : found;
     const program = programOf(row);
     if (program === undefined) {
-      return refusal(
-        409,
-        "artifact-settle-no-cards",
-        `${named(row)} asks no decision cards: settle takes a decision page's card.`
-      );
+      return problem(409, {
+        code: "artifact-settle-no-cards",
+        detail: `${named(row)} asks no decision cards: settle takes a decision page's card.`,
+      });
     }
     const { cards } = readKept(program);
     const card = cards.find((one) => one.id === asked.card);
     if (!card) {
-      return refusal(
-        404,
-        "artifact-settle-card-unknown",
-        `${row.name} asks no card “${asked.card}”. Its cards: ${cards.map((one) => one.id).join(", ") || "none"}.`
-      );
+      return problem(404, {
+        code: "artifact-settle-card-unknown",
+        detail: `${row.name} asks no card “${asked.card}”. Its cards: ${cards.map((one) => one.id).join(", ") || "none"}.`,
+      });
     }
     const option = card.options.find((one) => one.id === asked.option);
     if (!option) {
-      return refusal(
-        422,
-        "artifact-settle-option-unknown",
-        `“${asked.option}” is not an option of ${card.id}. Its options: ${card.options.map((one) => one.id).join(", ")}.`
-      );
+      return problem(422, {
+        code: "artifact-settle-option-unknown",
+        detail: `“${asked.option}” is not an option of ${card.id}. Its options: ${card.options.map((one) => one.id).join(", ")}.`,
+      });
     }
     return { row, card, option };
   };
@@ -1816,11 +1813,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // Agents and the API hear it as the 409 it is; the page's own Send
       // reads it as sent (sync.ts `artifactSend`), since what he asked for
       // already holds.
-      return refusal(
-        409,
-        "artifact-nothing-new",
-        "Nothing new to send: every pick here has gone to the session."
-      );
+      return problem(409, {
+        code: "artifact-nothing-new",
+        detail: "Nothing new to send: every pick here has gone to the session.",
+      });
     }
     return { picked, note };
   };
@@ -2011,7 +2007,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? program.read.cards.length > 0 || program.read.setup !== null
         : HTML_CHOICE.test(html ?? "");
       if (!holds) {
-        return refusal(400, "artifact-pick-no-choice", NO_CHOICE);
+        return problem(400, {
+          code: "artifact-pick-no-choice",
+          detail: NO_CHOICE,
+        });
       }
     }
     if (!(input.does === "judge" || input.does === "pick")) {
@@ -2022,7 +2021,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? await deskCaptures(html, dataUrlBytes)
         : (weight?.captures ?? 0);
     if (captures > DESK_CAPTURES_PER_PAGE) {
-      return refusal(400, "artifact-desk-captures", capturesRefused(captures));
+      return problem(400, {
+        code: "artifact-desk-captures",
+        detail: capturesRefused(captures),
+      });
     }
   };
 
@@ -2040,12 +2042,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return asked;
     }
     const { does, ask, title } = asked;
-    const problem =
+    const misfit =
       titleProblem(title, input.name) ??
       askProblem(ask) ??
       doesProblem(input, does);
-    if (problem) {
-      return refusal(400, "artifact-ask-unfit", problem);
+    if (misfit) {
+      return problem(400, { code: "artifact-ask-unfit", detail: misfit });
     }
   };
 
@@ -2056,7 +2058,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       input.ask === undefined ||
       input.title === undefined
     ) {
-      return refusal(422, "artifact-create-shape", CREATE_SHAPE);
+      return problem(422, {
+        code: "artifact-create-shape",
+        detail: CREATE_SHAPE,
+      });
     }
     const asked: { ask: string; does: ArtifactDoes; title: string } = {
       does: input.does,
@@ -2274,11 +2279,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const said = down.why
       ? `${failed.replace(TRAILING_STOPS, "")} (${down.why.replace(TRAILING_STOPS, "")}).`
       : failed;
-    return refusal(
-      503,
-      "artifact-unanswered-unhanded",
-      `${said} ${artifactToolWords.notHanded}`
-    );
+    return problem(503, {
+      code: "artifact-unanswered-unhanded",
+      detail: `${said} ${artifactToolWords.notHanded}`,
+    });
   };
 
   /** A session by its link, labelled by its title, as `artifact_list` names it. */
@@ -2383,11 +2387,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     told: ArtifactRead
   ) => {
     if (typeof told.png !== "string") {
-      return refusal(
-        409,
-        "artifact-no-picture-saved",
-        `${row.name} has no picture yet, so nothing was saved.`
-      );
+      return problem(409, {
+        code: "artifact-no-picture-saved",
+        detail: `${row.name} has no picture yet, so nothing was saved.`,
+      });
     }
     return deps.keepPicture(instance, save, told.png);
   };
@@ -2435,11 +2438,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (live !== row) {
       how = "held";
     }
-    return refusal(
-      409,
-      "artifact-answers-stand",
-      artifactToolWords.answersStand(said, how)
-    );
+    return problem(409, {
+      code: "artifact-answers-stand",
+      detail: artifactToolWords.answersStand(said, how),
+    });
   };
   const {
     askOf,
@@ -2849,11 +2851,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
     const question = questions.find((one) => one.key === pinKey);
     if (!question) {
-      return refusal(
-        404,
-        "artifact-question-unknown",
-        `${named(row)} asks no such question. Its questions: ${questions.map((one) => one.link).join(", ") || "none"}.`
-      );
+      return problem(404, {
+        code: "artifact-question-unknown",
+        detail: `${named(row)} asks no such question. Its questions: ${questions.map((one) => one.link).join(", ") || "none"}.`,
+      });
     }
     return { question, row };
   };
@@ -2945,7 +2946,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // A preview nothing could start shows nothing: it is not kept. One
       // whose server did not answer stays in the panel, its failure on it.
       discard(row);
-      return refusal(503, "artifact-preview-unstarted", shown.why);
+      return problem(503, {
+        code: "artifact-preview-unstarted",
+        detail: shown.why,
+      });
     }
     const said = heldId(row);
     askedNow(instance, said.id);
@@ -3043,25 +3047,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       front &&
       (isAbsolute(front) || front.split(PATH_PARTS).includes(".."))
     ) {
-      return refusal(
-        400,
-        "artifact-map-front-outside",
-        `${front} is no component of ${row.name}'s toolchain.`
-      );
+      return problem(400, {
+        code: "artifact-map-front-outside",
+        detail: `${front} is no component of ${row.name}'s toolchain.`,
+      });
     }
     const component = front ?? first;
     if (!(sheet && component)) {
       return sheet
-        ? refusal(
-            409,
-            "artifact-map-unresolved",
-            `${row.name}'s states file names no component the stage resolved, so it has no map.`
-          )
-        : refusal(
-            409,
-            "artifact-map-not-sheet",
-            `${row.name} is a ${row.kind}: a map is a component canvas's.`
-          );
+        ? problem(409, {
+            code: "artifact-map-unresolved",
+            detail: `${row.name}'s states file names no component the stage resolved, so it has no map.`,
+          })
+        : problem(409, {
+            code: "artifact-map-not-sheet",
+            detail: `${row.name} is a ${row.kind}: a map is a component canvas's.`,
+          });
     }
     const mapped = await deps.stageComponents(
       { workspace: sheet.workspace },
@@ -3076,11 +3077,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const [card] = mapped.components;
     if (!card) {
-      return refusal(
-        409,
-        "artifact-map-unmapped",
-        `${component} is no component the stage maps.`
-      );
+      return problem(409, {
+        code: "artifact-map-unmapped",
+        detail: `${component} is no component the stage maps.`,
+      });
     }
     // States files as a canvas address names them: from the toolchain root.
     const ownFiles = (files: string[] | undefined) =>
@@ -3237,7 +3237,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const opens = found.heldFor === null ? found : db.get(found.heldFor);
     return opens
       ? { found, opens }
-      : refusal(404, "artifact-unknown", artifactToolWords.noArtifact(id));
+      : problem(404, {
+          code: "artifact-unknown",
+          detail: artifactToolWords.noArtifact(id),
+        });
   };
 
   /**
@@ -3790,20 +3793,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const { row } = reached;
       if (row.kind === "canvas") {
-        return refusal(
-          409,
-          "artifact-thumbnail-canvas",
-          `${row.name} is a canvas: it keeps its own picture.`
-        );
+        return problem(409, {
+          code: "artifact-thumbnail-canvas",
+          detail: `${row.name} is a canvas: it keeps its own picture.`,
+        });
       }
       const light = shot.light ?? (shot.single ? null : shot.dark);
       const size = light ? pngSize(light) : null;
       if (!(light && size)) {
-        return refusal(
-          422,
-          "artifact-thumbnail-empty",
-          "A thumbnail needs a picture."
-        );
+        return problem(422, {
+          code: "artifact-thumbnail-empty",
+          detail: "A thumbnail needs a picture.",
+        });
       }
       store.keepThumbnail(id, "light", light);
       if (shot.single || !shot.dark) {
@@ -3897,11 +3898,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return notOnHub(id);
       }
       if (row.instanceId === null) {
-        return refusal(
-          404,
-          "artifact-project-page",
-          `No session holds ${row.name} now: it is its project's page, in the project's Decisions tab.`
-        );
+        return problem(404, {
+          code: "artifact-project-page",
+          detail: `No session holds ${row.name} now: it is its project's page, in the project's Decisions tab.`,
+        });
       }
       const found: ArtifactSummary & { instanceId: string; shown: boolean } = {
         ...summaryOf(row),
@@ -3929,15 +3929,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return instance;
       }
       if (!ARTIFACT_NAME.test(input.name)) {
-        return refusal(
-          400,
-          "artifact-name-unfit",
-          "A name is lowercase letters, digits and dashes, like onboarding, at most 63 characters."
-        );
+        return problem(400, {
+          code: "artifact-name-unfit",
+          detail:
+            "A name is lowercase letters, digits and dashes, like onboarding, at most 63 characters.",
+        });
       }
       const stray = strayFields(input);
       if (stray) {
-        return refusal(400, "artifact-fields-stray", stray);
+        return problem(400, { code: "artifact-fields-stray", detail: stray });
       }
       const unasked = asksFirst(input);
       if (unasked) {
@@ -3985,16 +3985,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const forCanvas = !("html" in change || "patch" in change);
       if (forCanvas !== (found.kind === "canvas")) {
         return found.kind === "canvas"
-          ? refusal(
-              409,
-              "artifact-update-canvas",
-              `${found.name} is a canvas: it takes elements, delete or mermaid.`
-            )
-          : refusal(
-              409,
-              "artifact-update-not-canvas",
-              `${found.name} is a ${found.kind}: elements, delete and mermaid are for a canvas.`
-            );
+          ? problem(409, {
+              code: "artifact-update-canvas",
+              detail: `${found.name} is a canvas: it takes elements, delete or mermaid.`,
+            })
+          : problem(409, {
+              code: "artifact-update-not-canvas",
+              detail: `${found.name} is a ${found.kind}: elements, delete and mermaid are for a canvas.`,
+            });
       }
       const answer = await changedBy(instance, found, async (row) =>
         "html" in change || "patch" in change
@@ -4083,21 +4081,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const doc = docs.doc(row.id);
       const before = stateOf(doc)[card.id];
       if (pickMade(card, before)) {
-        return refusal(
-          409,
-          "artifact-settle-decided",
-          `${card.question} is decided already; only the person picks again.`
-        );
+        return problem(409, {
+          code: "artifact-settle-decided",
+          detail: `${card.question} is decided already; only the person picks again.`,
+        });
       }
       if (
         signed.by === "practice" &&
         !asked.sources.some((one) => WEB_SOURCE.test(one))
       ) {
-        return refusal(
-          422,
-          "artifact-settle-uncited",
-          decidesWords.practiceCites
-        );
+        return problem(422, {
+          code: "artifact-settle-uncited",
+          detail: decidesWords.practiceCites,
+        });
       }
       const settled: SettledBy = {
         ...signed,
@@ -4113,13 +4109,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         at: new Date().toISOString(),
         settled,
       };
-      const problem = choiceEntryProblem(card.id, entry);
-      if (problem) {
-        return refusal(
-          422,
-          "artifact-settle-entry-unfit",
-          `${problem} Nothing was changed.`
-        );
+      const misfit = choiceEntryProblem(card.id, entry);
+      if (misfit) {
+        return problem(422, {
+          code: "artifact-settle-entry-unfit",
+          detail: `${misfit} Nothing was changed.`,
+        });
       }
       docs.transact(row.id, "agent", (live) =>
         live.getMap("state").set(card.id, entry)
@@ -4176,16 +4171,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       if (programOf(found) === undefined) {
         return found.kind === "page"
-          ? refusal(
-              409,
-              "artifact-revise-html",
-              `${found.name} is an HTML page: revise it with html.`
-            )
-          : refusal(
-              409,
-              "artifact-revise-no-program",
-              `${named(found)} takes no statements: they revise a decision page's program.`
-            );
+          ? problem(409, {
+              code: "artifact-revise-html",
+              detail: `${found.name} is an HTML page: revise it with html.`,
+            })
+          : problem(409, {
+              code: "artifact-revise-no-program",
+              detail: `${named(found)} takes no statements: they revise a decision page's program.`,
+            });
       }
       const revisedOn = async (row: ArtifactRow) => {
         // A next version is made from its artifact whole (holdNext), so it holds a program.
@@ -4413,15 +4406,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const sheet = sheetOf(row);
       if (!(sheet && "port" in row.source)) {
-        return refusal(
-          409,
-          "artifact-canvas-spec-not-sheet",
-          `${row.name} is a ${row.kind}: edges, group and dials are a component canvas's.`
-        );
+        return problem(409, {
+          code: "artifact-canvas-spec-not-sheet",
+          detail: `${row.name} is a ${row.kind}: edges, group and dials are a component canvas's.`,
+        });
       }
-      const problem = canvasProblem(input);
-      if (problem) {
-        return refusal(400, "artifact-canvas-spec-unfit", problem);
+      const misfit = canvasProblem(input);
+      if (misfit) {
+        return problem(400, {
+          code: "artifact-canvas-spec-unfit",
+          detail: misfit,
+        });
       }
       const spec = specOf(row.name, {
         edges: input.edges ?? sheet.spec.edges,
@@ -4464,9 +4459,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row instanceof ElysiaStatus) {
         return row;
       }
-      const problem = askProblem(ask);
-      if (problem) {
-        return refusal(400, "artifact-ask-unfit", problem);
+      const misfit = askProblem(ask);
+      if (misfit) {
+        return problem(400, { code: "artifact-ask-unfit", detail: misfit });
       }
       db.update(row.id, { ask, updatedAt: new Date() });
       askNow(row.id, ask);
@@ -4492,9 +4487,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row instanceof ElysiaStatus) {
         return row;
       }
-      const problem = titleProblem(title, row.name);
-      if (problem) {
-        return refusal(400, "artifact-title-unfit", problem);
+      const misfit = titleProblem(title, row.name);
+      if (misfit) {
+        return problem(400, { code: "artifact-title-unfit", detail: misfit });
       }
       const kept = title.trim();
       db.update(row.id, { title: kept, updatedAt: new Date() });
@@ -4727,11 +4722,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return row;
       }
       if (row.kind === "browser") {
-        return refusal(
-          409,
-          "artifact-handed-browser",
-          `${row.name} is a browser: nothing of it is a file. Hand what it shows as a preview, or its URL as text.`
-        );
+        return problem(409, {
+          code: "artifact-handed-browser",
+          detail: `${row.name} is a browser: nothing of it is a file. Hand what it shows as a preview, or its URL as text.`,
+        });
       }
       const base = `artifact-${row.name}`;
       const kept = await handedOwn(instance, row, base);
@@ -4758,11 +4752,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return notOnHub(id);
       }
       if (row.kind !== "canvas") {
-        return refusal(
-          409,
-          "artifact-export-not-canvas",
-          `${row.name} is a ${row.kind}: only a canvas exports.`
-        );
+        return problem(409, {
+          code: "artifact-export-not-canvas",
+          detail: `${row.name} is a ${row.kind}: only a canvas exports.`,
+        });
       }
       // A canvas is always its session's: only a project's page outlives one.
       const address = deps.previewAddress(row.instanceId as string);
@@ -4795,7 +4788,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const { projectId } = instance;
       if (!projectId) {
-        return refusal(409, "artifact-promote-no-project", NO_PROJECT);
+        return problem(409, {
+          code: "artifact-promote-no-project",
+          detail: NO_PROJECT,
+        });
       }
       const folder = promotedFolder(row.name);
       if (folder instanceof ElysiaStatus) {
@@ -4841,11 +4837,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return row;
       }
       if (row.kind !== "canvas") {
-        return refusal(
-          409,
-          "artifact-sent-not-canvas",
-          `${row.name} is a ${row.kind}: only a canvas is sent from the composer.`
-        );
+        return problem(409, {
+          code: "artifact-sent-not-canvas",
+          detail: `${row.name} is a ${row.kind}: only a canvas is sent from the composer.`,
+        });
       }
       docs.transact(row.id, "hub", (doc) => setMeta(doc, "draft", false));
       const sent: { draft: false } = { draft: false };
@@ -4899,7 +4894,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const shown = await show(row, instance.id, "card" in at ? at.card : null);
       if (!shown.started) {
-        return refusal(503, "artifact-show-unstarted", shown.why);
+        return problem(503, {
+          code: "artifact-show-unstarted",
+          detail: shown.why,
+        });
       }
       // The agent's show of its own asks again (needs.ts rule 2: a new show of it).
       if (by === "agent" && row.instanceId === instance.id) {
@@ -4930,11 +4928,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const row = newestVersion(target);
       if (row.kind === "browser") {
-        return refusal(
-          409,
-          "artifact-browse-browser",
-          `${row.name} is a browser: it is the browser your browser tool drives, so open its pages there.`
-        );
+        return problem(409, {
+          code: "artifact-browse-browser",
+          detail: `${row.name} is a browser: it is the browser your browser tool drives, so open its pages there.`,
+        });
       }
       const pass = deps.browse(instance, row);
       if (pass instanceof ElysiaStatus) {
@@ -4946,11 +4943,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? await deps.workspaceReach(pass.url, workspace.machineId)
         : null;
       if (unreached) {
-        return refusal(
-          409,
-          "artifact-browse-unreached",
-          `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`
-        );
+        return problem(409, {
+          code: "artifact-browse-unreached",
+          detail: `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`,
+        });
       }
       const browsed: Browsed & { link: string } = {
         ...pass,
@@ -5191,11 +5187,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const { row, pin } = found;
       if (pin.thread.length >= COMMENT_LIMITS.entries) {
-        return refusal(
-          409,
-          "artifact-thread-full",
-          `Pin ${pin.number}'s thread holds ${COMMENT_LIMITS.entries} entries, so this reply wasn't kept. Resolve the pin, or answer in the conversation.`
-        );
+        return problem(409, {
+          code: "artifact-thread-full",
+          detail: `Pin ${pin.number}'s thread holds ${COMMENT_LIMITS.entries} entries, so this reply wasn't kept. Resolve the pin, or answer in the conversation.`,
+        });
       }
       const entry: ThreadEntry = {
         id: crypto.randomUUID(),
@@ -5437,11 +5432,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     sendPage: async (id: string, route: string, to: PageHearer) => {
       const row = db.get(id);
       if (!row) {
-        return refusal(
-          404,
-          "artifact-unknown",
-          artifactToolWords.noArtifact(id)
-        );
+        return problem(404, {
+          code: "artifact-unknown",
+          detail: artifactToolWords.noArtifact(id),
+        });
       }
       const hearer = await sendPage(
         row,

@@ -157,7 +157,7 @@ export function awayOf(
  * THE ONE READER of a refused response, everywhere the dashboard asks the
  * hub: what it said, its reason as the hub wrote it without its closing
  * stop, and never the body as it came. Every refusal of the hub is an RFC
- * 9457 problem (hub refusal.ts): its `detail`, else its `title`, and its
+ * 9457 problem (Elysia's `problem()`): its `detail`, else its `title`, and its
  * `code`. Anything else (a proxy's page in front of the hub, an empty body)
  * is the hub not answering: that, with its status ({@link noAnswer}).
  */

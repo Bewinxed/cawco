@@ -275,7 +275,7 @@ import {
 } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
 import type { FolderWeight } from "@cawco/preview/proxy";
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { websocket } from "elysia/websocket";
 import { createAccountCarry } from "./account-carry";
@@ -565,7 +565,7 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
-import { type Refused, refusal, resaid } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRelayControl, peekAnswer } from "./relay-control";
@@ -2438,7 +2438,7 @@ export const createServer = (
     (
       input: Record<string, unknown>,
       asker: InstanceRow
-    ) => Promise<string | Refused>
+    ) => Promise<string | AnyProblem>
   > = {
     // A relay's opening asks as an admin write does (relay.ts).
     relay_create: async (input) => {
@@ -4447,11 +4447,21 @@ export const createServer = (
     decides: {
       routed: async (asker, row, cards, all, state) => {
         const routed = await settling.routed(asker, row, cards, all, state);
-        return routed instanceof ElysiaStatus ? resaid(routed) : routed;
+        return routed instanceof ElysiaStatus
+          ? problem<number, { code: string; detail: string }>(routed.status, {
+              code: routed.response.code,
+              detail: routed.response.detail,
+            })
+          : routed;
       },
       settler: async (settler, row, card) => {
         const signs = await settling.settler(settler, row, card);
-        return signs instanceof ElysiaStatus ? resaid(signs) : signs;
+        return signs instanceof ElysiaStatus
+          ? problem<number, { code: string; detail: string }>(signs.status, {
+              code: signs.response.code,
+              detail: signs.response.detail,
+            })
+          : signs;
       },
       settled: (row, card, member, answer) =>
         settling.settled(row, card, member, answer),
@@ -4620,19 +4630,41 @@ export const createServer = (
         keep,
         artifact
       );
-      return built instanceof ElysiaStatus ? resaid(built) : built;
+      return built instanceof ElysiaStatus
+        ? problem<number, { code: string; detail: string }>(built.status, {
+            code: built.response.code,
+            detail: built.response.detail,
+          })
+        : built;
     },
     afterLinks: async (projectId, name, cards) => {
       const links = await decisions.linksOf(projectId, name, cards);
-      return links instanceof ElysiaStatus ? resaid(links) : links;
+      return links instanceof ElysiaStatus
+        ? problem<number, { code: string; detail: string }>(links.status, {
+            code: links.response.code,
+            detail: links.response.detail,
+          })
+        : links;
     },
     keepPage: async (instance, name, page) => {
       const refused = await keepPage(instance, name, page);
-      return refused && resaid(refused);
+      return (
+        refused &&
+        problem<number, { code: string; detail: string }>(refused.status, {
+          code: refused.response.code,
+          detail: refused.response.detail,
+        })
+      );
     },
     dropPage: async (instance, projectId, name) => {
       const refused = await dropPage(instance, projectId, name);
-      return refused && resaid(refused);
+      return (
+        refused &&
+        problem<number, { code: string; detail: string }>(refused.status, {
+          code: refused.response.code,
+          detail: refused.response.detail,
+        })
+      );
     },
     sending: async (to, artifact, page) => {
       // A step of the session's plan that waited on a card picked here stops waiting.
@@ -4670,7 +4702,10 @@ export const createServer = (
         });
       } catch (error) {
         if (error instanceof PlaceRefusal) {
-          return refusal(error.status, "setup-place-refused", error.message);
+          return problem(error.status, {
+            code: "setup-place-refused",
+            detail: error.message,
+          });
         }
         throw error;
       }
@@ -4790,11 +4825,10 @@ export const createServer = (
     screen: async (artifact, sync) => {
       const machineId = await ownMachineId;
       if (!registry.agent(machineId)) {
-        return refusal(
-          503,
-          "artifact-screen-no-daemon",
-          `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
-        );
+        return problem(503, {
+          code: "artifact-screen-no-daemon",
+          detail: `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`,
+        });
       }
       // A canvas is always its session's: only a project's page outlives one.
       const owner = artifact.instanceId as string;
@@ -4832,22 +4866,20 @@ export const createServer = (
               "late canvas screen close"
             );
           }
-          return refusal(
-            503,
-            "artifact-screen-unopened",
-            `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`
-          );
+          return problem(503, {
+            code: "artifact-screen-unopened",
+            detail: `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`,
+          });
         case "answered":
           break;
         default:
           throw unreachable(asked);
       }
       if (!asked.value.ok) {
-        return refusal(
-          503,
-          "artifact-screen-unopened",
-          `The canvas ${artifact.name} wasn't drawn: ${asked.value.error ?? "the hub's machine couldn't open it."}`
-        );
+        return problem(503, {
+          code: "artifact-screen-unopened",
+          detail: `The canvas ${artifact.name} wasn't drawn: ${asked.value.error ?? "the hub's machine couldn't open it."}`,
+        });
       }
       return {
         // The same open again holds the page on (agent canvas-screen.ts).
@@ -4880,16 +4912,15 @@ export const createServer = (
       switch (asked.kind) {
         case "unanswered":
           return asked.reason === "dead"
-            ? refusal(
-                503,
-                "artifact-serve-machine-away",
-                "The workspace's machine isn't connected to the hub, so its server can't start."
-              )
-            : refusal(
-                504,
-                "artifact-serve-machine-late",
-                `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`
-              );
+            ? problem(503, {
+                code: "artifact-serve-machine-away",
+                detail:
+                  "The workspace's machine isn't connected to the hub, so its server can't start.",
+              })
+            : problem(504, {
+                code: "artifact-serve-machine-late",
+                detail: `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`,
+              });
         case "answered":
           break;
         default:
@@ -4897,11 +4928,10 @@ export const createServer = (
       }
       const answer = asked.value;
       if (!answer.ok) {
-        return refusal(
-          422,
-          "artifact-serve-unstarted",
-          answer.error ?? "The server didn't start."
-        );
+        return problem(422, {
+          code: "artifact-serve-unstarted",
+          detail: answer.error ?? "The server didn't start.",
+        });
       }
       return answer.result as StageState;
     },
@@ -4916,16 +4946,15 @@ export const createServer = (
       switch (asked.kind) {
         case "unanswered":
           return asked.reason === "dead"
-            ? refusal(
-                503,
-                "artifact-folder-machine-away",
-                "The folder's machine isn't connected to the hub, so its folder can't be read."
-              )
-            : refusal(
-                504,
-                "artifact-folder-machine-late",
-                `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`
-              );
+            ? problem(503, {
+                code: "artifact-folder-machine-away",
+                detail:
+                  "The folder's machine isn't connected to the hub, so its folder can't be read.",
+              })
+            : problem(504, {
+                code: "artifact-folder-machine-late",
+                detail: `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`,
+              });
         case "answered":
           break;
         default:
@@ -4933,11 +4962,10 @@ export const createServer = (
       }
       const answer = asked.value;
       if (!answer.ok) {
-        return refusal(
-          422,
-          "artifact-folder-unread",
-          answer.error ?? "The folder couldn't be read."
-        );
+        return problem(422, {
+          code: "artifact-folder-unread",
+          detail: answer.error ?? "The folder couldn't be read.",
+        });
       }
       return answer.result as FolderWeight;
     },
@@ -9940,7 +9968,7 @@ export const createServer = (
   onFolderCommits((projectId, { written, deleted }) => {
     const paths = new Set([...written, ...deleted]);
     /** `work` detached, a refusal it answers logged as a failure is. */
-    const reread = (work: Promise<Refused | undefined>, what: string) =>
+    const reread = (work: Promise<AnyProblem | undefined>, what: string) =>
       detach(
         work.then((refused) => {
           if (refused) {
@@ -10524,8 +10552,8 @@ export const createServer = (
     );
   };
 
-  const failedSessionIdentity = (instanceId: string, problem: unknown) => {
-    const error = problem instanceof Error ? problem.message : String(problem);
+  const failedSessionIdentity = (instanceId: string, misfit: unknown) => {
+    const error = misfit instanceof Error ? misfit.message : String(misfit);
     db.sessionIdentityError(
       instanceId,
       error,
@@ -10597,8 +10625,8 @@ export const createServer = (
           ? { changedServers: installed.changedServers }
           : {}),
       };
-    } catch (problem) {
-      return failedSessionIdentity(instanceId, problem);
+    } catch (misfit) {
+      return failedSessionIdentity(instanceId, misfit);
     }
   };
 
@@ -11265,12 +11293,15 @@ export const createServer = (
       placed as { areaId?: string; projectId?: string }
     );
     if (unplaced) {
-      return refusal(400, "harness-config-unplaced", unplaced);
+      return problem(400, {
+        code: "harness-config-unplaced",
+        detail: unplaced,
+      });
     }
     const row = placed as unknown as FleetHarnessConfig;
-    const problem = harnessConfigProblem(row);
-    if (problem) {
-      return refusal(400, "harness-config-invalid", problem);
+    const misfit = harnessConfigProblem(row);
+    if (misfit) {
+      return problem(400, { code: "harness-config-invalid", detail: misfit });
     }
     const kept = db.putHarnessConfig(row);
     fleetChanged();
@@ -11286,11 +11317,10 @@ export const createServer = (
         )
       : undefined;
     if (trashed === undefined) {
-      return refusal(
-        404,
-        "no-harness-config",
-        `the fleet keeps no ${kind} row ${name}`
-      );
+      return problem(404, {
+        code: "no-harness-config",
+        detail: `the fleet keeps no ${kind} row ${name}`,
+      });
     }
     fleetChanged();
     return undoable(trashed);
@@ -11599,11 +11629,10 @@ export const createServer = (
       .onError("global", ({ error }) => {
         const unknown = unknownFieldsOf(error);
         return unknown
-          ? refusal(
-              422,
-              "unknown-fields",
-              hubFailureWords.unknownFields(unknown.on, unknown.fields)
-            )
+          ? problem(422, {
+              code: "unknown-fields",
+              detail: hubFailureWords.unknownFields(unknown.on, unknown.fields),
+            })
           : undefined;
       })
       // Every answer the hub sends, its text compressed for the client that
@@ -11628,11 +11657,11 @@ export const createServer = (
           console.warn(
             `[hub] refused ${refused} to ${request.method} ${new URL(request.url).pathname}`
           );
-          return refusal(
-            403,
-            "hub-answers-own-dashboard",
-            "The hub answers its own dashboard only: this request came from another page."
-          );
+          return problem(403, {
+            code: "hub-answers-own-dashboard",
+            detail:
+              "The hub answers its own dashboard only: this request came from another page.",
+          });
         }
       })
       // Who is calling, and whether they may (hub-auth.ts): every route is

@@ -29,6 +29,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workWords } from "@cawco/core/words/work";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
+import { problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
 import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
 import { artifactTaker } from "./artifacts/taker";
@@ -41,7 +42,7 @@ import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
 import { externalizeImages } from "./media";
 import { handle as idHandle } from "./presenters/words";
-import { refusal } from "./refusal";
+
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
 import { isLive } from "./work-item-state";
@@ -643,19 +644,17 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     if (!where) {
       // Only a sheet's names one that can be gone: a session always has a place.
       const named = "workspace" in at ? at.workspace : "";
-      return refusal(
-        409,
-        "stage-workspace-gone",
-        `The sheet's workspace ${named.slice(0, 8)} is gone, so its stage can't run.`
-      );
+      return problem(409, {
+        code: "stage-workspace-gone",
+        detail: `The sheet's workspace ${named.slice(0, 8)} is gone, so its stage can't run.`,
+      });
     }
     const { workspace, machineId } = where;
     if (machineId === undefined) {
-      return refusal(
-        409,
-        "stage-workspace-unplaced",
-        `The sheet's workspace ${workspace.id.slice(0, 8)} is on no machine the hub knows, so its stage can't run.`
-      );
+      return problem(409, {
+        code: "stage-workspace-unplaced",
+        detail: `The sheet's workspace ${workspace.id.slice(0, 8)} is on no machine the hub knows, so its stage can't run.`,
+      });
     }
     // A stage installs its project first when its lockfile moved (agent
     // stage-install.ts); a place's runs in a clone of its checkout, cut on
@@ -672,16 +671,15 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     switch (asked.kind) {
       case "unanswered":
         return asked.reason === "dead"
-          ? refusal(
-              503,
-              "stage-machine-away",
-              "The workspace's machine isn't connected to the hub, so its stage can't be reached."
-            )
-          : refusal(
-              504,
-              "stage-machine-late",
-              `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the stage's state is unknown.`
-            );
+          ? problem(503, {
+              code: "stage-machine-away",
+              detail:
+                "The workspace's machine isn't connected to the hub, so its stage can't be reached.",
+            })
+          : problem(504, {
+              code: "stage-machine-late",
+              detail: `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the stage's state is unknown.`,
+            });
       case "answered":
         break;
       default:
@@ -689,11 +687,10 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     }
     const answer = asked.value;
     if (!answer.ok) {
-      return refusal(
-        422,
-        "stage-said-no",
-        answer.error ?? "The stage said no."
-      );
+      return problem(422, {
+        code: "stage-said-no",
+        detail: answer.error ?? "The stage said no.",
+      });
     }
     const staged: { machineId: string; result: unknown; workspace: string } = {
       machineId,
@@ -775,15 +772,17 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       return goes;
     }
     if (!reason?.trim()) {
-      return refusal(400, "discard-ask-reason", workWords.discardAskReason);
+      return problem(400, {
+        code: "discard-ask-reason",
+        detail: workWords.discardAskReason,
+      });
     }
     const [actor] = ctx.db.getInstancesByIds([from]);
     if (!actor) {
-      return refusal(
-        404,
-        "discard-ask-session-unknown",
-        `No session ${from} on this hub.`
-      );
+      return problem(404, {
+        code: "discard-ask-session-unknown",
+        detail: `No session ${from} on this hub.`,
+      });
     }
     const recorded = await ctx.hubAsks.ask(actor, "discard_workspace", {
       workspace: asked.id,

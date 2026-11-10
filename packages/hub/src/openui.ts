@@ -34,7 +34,7 @@ import {
   type ParseResult,
   tokenize,
 } from "@openuidev/lang-core";
-import { refusal } from "./refusal";
+import { problem } from "elysia";
 
 // lang-core's runtime telemetry is opt-in and only `generateSystemPrompt`
 // sends it, which the hub never calls (the prompt is generated at build
@@ -65,13 +65,13 @@ const TOKEN = { Str: 14, Type: 17, BuiltinCall: 35 } as const;
 
 /** Refuses a view with every reason, as the refusal its route answers (422) and its tool call reads. */
 const unfit = (problems: string[]) =>
-  refusal(
-    422,
-    "view-unfit",
-    problems.length === 1
-      ? (problems[0] ?? "")
-      : `The view has ${problems.length} problems:\n- ${problems.slice(0, MAX_PROBLEMS).join("\n- ")}`
-  );
+  problem(422, {
+    code: "view-unfit",
+    detail:
+      problems.length === 1
+        ? (problems[0] ?? "")
+        : `The view has ${problems.length} problems:\n- ${problems.slice(0, MAX_PROBLEMS).join("\n- ")}`,
+  });
 
 /** Its strings, action steps and functions that would run code or reach out. */
 const unsafe = (source: string): string[] => {

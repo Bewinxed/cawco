@@ -21,10 +21,9 @@ import {
   CONTROL_PLACE_LFS,
   type PlaceLfsMade,
 } from "@cawco/core/workspace/controls";
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { LfsOfferRow } from "./db/lfs-offers";
-import { refusal } from "./refusal";
 
 const MB = 1024 * 1024;
 
@@ -55,7 +54,10 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
   /** The offer `id` as recorded, or its refusal (lfs-offer-unknown). */
   const answerable = (id: string) =>
     db.lfsOffers.of(id) ??
-    refusal(404, "lfs-offer-unknown", "This offer of Git LFS is not recorded.");
+    problem(404, {
+      code: "lfs-offer-unknown",
+      detail: "This offer of Git LFS is not recorded.",
+    });
 
   /** Where offer `id` stands, or its refusal. */
   const stateNow = (id: string) => {
@@ -65,11 +67,10 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
 
   const track = async (row: LfsOfferRow) => {
     if (!db.project(row.projectId)) {
-      return refusal(
-        409,
-        "lfs-offer-project-gone",
-        "This offer's project is gone, so nothing was tracked."
-      );
+      return problem(409, {
+        code: "lfs-offer-project-gone",
+        detail: "This offer's project is gone, so nothing was tracked.",
+      });
     }
     // The machine's own words are the refusal the card shows.
     let made: PlaceLfsMade;
@@ -79,11 +80,10 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
         row.rows,
       ])) as PlaceLfsMade;
     } catch (error) {
-      return refusal(
-        409,
-        "lfs-offer-track-refused",
-        error instanceof Error ? error.message : String(error)
-      );
+      return problem(409, {
+        code: "lfs-offer-track-refused",
+        detail: error instanceof Error ? error.message : String(error),
+      });
     }
     db.lfsOffers.answer(row.id, "tracked", made.commit);
     notice(row.projectId, {

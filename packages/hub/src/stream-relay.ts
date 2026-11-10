@@ -57,11 +57,11 @@ import {
 } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
-import { type RefusalOf, refusal } from "./refusal";
+
 import { received } from "./stored-json";
 
 /** How long a STUN binding request has to be answered. */
@@ -151,16 +151,33 @@ export interface StreamRelayDeps {
 
 /** The relay's machine's refusal: away or late (503), or refusing in its own words (409). */
 export type RelayMachineRefusal =
-  | RefusalOf<503, "stream-relay-machine-away">
-  | RefusalOf<503, "stream-relay-machine-late">
-  | RefusalOf<409, "stream-relay-machine-refused">;
+  | ReturnType<
+      typeof problem<503, { code: "stream-relay-machine-away"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<503, { code: "stream-relay-machine-late"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "stream-relay-machine-refused"; detail: string }
+      >
+    >;
 
 /** Why the relay did not start: its machine's refusal, or a secret that no longer opens. */
 export type RelayStartRefusal =
-  RelayMachineRefusal | RefusalOf<409, "stream-relay-secret-unsealed">;
+  | RelayMachineRefusal
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "stream-relay-secret-unsealed"; detail: string }
+      >
+    >;
 
 /** The fleet has no relay to start or stop. */
-type RelayNone = RefusalOf<404, "stream-relay-none">;
+type RelayNone = ReturnType<
+  typeof problem<404, { code: "stream-relay-none"; detail: string }>
+>;
 
 /**
  * Where a machine's relay would be reached: its candidate row, or undefined
@@ -262,23 +279,20 @@ const answered = <T>(
 ): T | RelayMachineRefusal => {
   if (read.kind === "unanswered") {
     return read.reason === "dead"
-      ? refusal(
-          503,
-          "stream-relay-machine-away",
-          STREAM_RELAY_WORDS.machineAway(machine)
-        )
-      : refusal(
-          503,
-          "stream-relay-machine-late",
-          `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`
-        );
+      ? problem(503, {
+          code: "stream-relay-machine-away",
+          detail: STREAM_RELAY_WORDS.machineAway(machine),
+        })
+      : problem(503, {
+          code: "stream-relay-machine-late",
+          detail: `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`,
+        });
   }
   if (!read.value.ok) {
-    return refusal(
-      409,
-      "stream-relay-machine-refused",
-      read.value.error ?? `The stream relay was not ${what}.`
-    );
+    return problem(409, {
+      code: "stream-relay-machine-refused",
+      detail: read.value.error ?? `The stream relay was not ${what}.`,
+    });
   }
   return read.value.result as T;
 };
@@ -307,7 +321,15 @@ export interface StreamRelay {
   /** The fleet's relay, as stored; null with none. */
   read: () => StoredRelay | null;
   /** The relay gone from its machine and the record; refused, and kept, when its machine would not remove it. */
-  remove: () => Promise<undefined | RefusalOf<409, "stream-relay-not-removed">>;
+  remove: () => Promise<
+    | undefined
+    | ReturnType<
+        typeof problem<
+          409,
+          { code: "stream-relay-not-removed"; detail: string }
+        >
+      >
+  >;
   /** The relay set up as the journey picked it, and started; the one before goes from its machine. */
   setup: (setup: RelaySetup) => Promise<undefined | RelayStartRefusal>;
   start: () => Promise<undefined | RelayNone | RelayStartRefusal>;
@@ -327,11 +349,11 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
 
   const startArgs = (relay: StoredRelay) => {
     if (!relay.secret) {
-      return refusal(
-        409,
-        "stream-relay-secret-unsealed",
-        "The stream relay could not start: its secret no longer opens under the hub's key. Remove it and set it up again."
-      );
+      return problem(409, {
+        code: "stream-relay-secret-unsealed",
+        detail:
+          "The stream relay could not start: its secret no longer opens under the hub's key. Remove it and set it up again.",
+      });
     }
     const args: RelayStartArgs = {
       secret: relay.secret,
@@ -520,22 +542,20 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     start: async () => {
       const relay = db.read();
       if (!relay) {
-        return refusal(
-          404,
-          "stream-relay-none",
-          "The fleet has no stream relay to start."
-        );
+        return problem(404, {
+          code: "stream-relay-none",
+          detail: "The fleet has no stream relay to start.",
+        });
       }
       return await send(relay);
     },
     stop: async () => {
       const relay = db.read();
       if (!relay) {
-        return refusal(
-          404,
-          "stream-relay-none",
-          "The fleet has no stream relay to stop."
-        );
+        return problem(404, {
+          code: "stream-relay-none",
+          detail: "The fleet has no stream relay to stop.",
+        });
       }
       const read = await call(relay.machineId, RELAY_STOP, [], STOP_MS);
       const frame = answered<RelayFrame>(
@@ -560,12 +580,12 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       // A machine that is gone holds nothing the hub could remove; the record
       // goes either way, and every credential minted from it lapses.
       if (read.kind === "answered" && !read.value.ok) {
-        return refusal(
-          409,
-          "stream-relay-not-removed",
-          read.value.error ??
-            "The stream relay was not removed, so it was kept."
-        );
+        return problem(409, {
+          code: "stream-relay-not-removed",
+          detail:
+            read.value.error ??
+            "The stream relay was not removed, so it was kept.",
+        });
       }
       db.forget();
       changed();

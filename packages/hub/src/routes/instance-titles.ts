@@ -2,10 +2,9 @@ import { accountNameAmong } from "@cawco/core/accounts";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { harnessNamed } from "@cawco/core/harness/kinds";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
 
 /**
  * How many conversations one naming request may ask about. A reader's open tabs
@@ -64,19 +63,21 @@ export const instanceTitleRoutes = ({
         await owedCarries.get(params.id)?.catch(() => undefined);
         const [row] = db.getInstancesByIds([params.id]);
         if (!row) {
-          return refusal(404, "session-not-found", "Session not found");
+          return problem(404, {
+            code: "session-not-found",
+            detail: "Session not found",
+          });
         }
         const account = db.accounts.get(body.accountId);
         if (!account) {
-          return refusal(
-            404,
-            "no-account",
-            `There is no account ${body.accountId}.`
-          );
+          return problem(404, {
+            code: "no-account",
+            detail: `There is no account ${body.accountId}.`,
+          });
         }
         const why = handMoveRefusal(row, account);
         if (why) {
-          return refusal(409, "move-refused", why);
+          return problem(409, { code: "move-refused", detail: why });
         }
         if (row.accountId === account.id) {
           // Back to the account it runs on: a move asked mid-turn is off.
@@ -95,14 +96,17 @@ export const instanceTitleRoutes = ({
           `[accounts] ${"refusal" in moved ? moved.refusal : moved.why}`
         );
         return "refusal" in moved
-          ? refusal(409, "move-refused", moved.refusal)
+          ? problem(409, { code: "move-refused", detail: moved.refusal })
           : moved;
       }
     )
     .post("/api/instances/:id/context-size", hidden, async ({ params }) => {
       const [row] = db.getInstancesByIds([params.id]);
       if (!row) {
-        return refusal(404, "session-not-found", "Session not found");
+        return problem(404, {
+          code: "session-not-found",
+          detail: "Session not found",
+        });
       }
       const reported = await reportedContextOf(row);
       // The answer's own words for a machine that did not answer.

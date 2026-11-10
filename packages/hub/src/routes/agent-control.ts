@@ -12,13 +12,13 @@ import {
 import { CONTROL_FOLDER_COMMANDS } from "@cawco/core/session/controls";
 import type { SupportedCommands } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { machineAccount } from "../accounts";
 import type { HubContext } from "../hub-context";
 import { BUSY_TIMEOUT_MS, READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
 import { unansweredStatus } from "../machine-reads";
-import { refusal } from "../refusal";
+
 import { unreachable } from "../unreachable";
 import { harnessSchema } from "./harness-schema";
 
@@ -59,11 +59,10 @@ export const agentControlRoutes = (
           case "answered":
             return answer.value.ok
               ? (answer.value.result as { busy: number; instances: string[] })
-              : refusal(
-                  500,
-                  "busy-probe-failed",
-                  answer.value.error ?? "the busy probe failed"
-                );
+              : problem(500, {
+                  code: "busy-probe-failed",
+                  detail: answer.value.error ?? "the busy probe failed",
+                });
           default:
             throw unreachable(answer);
         }
@@ -95,24 +94,21 @@ export const agentControlRoutes = (
               // into a socket that no longer exists, so this is not proof that
               // nothing happened — only that the hub stopped hearing about it.
               return answer.reason === "dead"
-                ? refusal(
-                    404,
-                    "machine-offline",
-                    machineFault(params.machineId, "offline")
-                  )
-                : refusal(
-                    504,
-                    "didnt-finish-update-within",
-                    `${machineName(params.machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`
-                  );
+                ? problem(404, {
+                    code: "machine-offline",
+                    detail: machineFault(params.machineId, "offline"),
+                  })
+                : problem(504, {
+                    code: "didnt-finish-update-within",
+                    detail: `${machineName(params.machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`,
+                  });
             case "answered":
               return answer.value.ok
                 ? (answer.value.result as UpdateReport)
-                : refusal(
-                    500,
-                    "update-failed",
-                    answer.value.error ?? "the update failed"
-                  );
+                : problem(500, {
+                    code: "update-failed",
+                    detail: answer.value.error ?? "the update failed",
+                  });
             default:
               throw unreachable(answer);
           }
@@ -138,12 +134,12 @@ export const agentControlRoutes = (
               return answer.value.ok
                 ? (answer.value
                     .result as import("@cawco/core/fleet").ConfigInspection)
-                : refusal(
-                    500,
-                    "config-unread",
-                    answer.value.error ??
-                      "the machine could not read its config"
-                  );
+                : problem(500, {
+                    code: "config-unread",
+                    detail:
+                      answer.value.error ??
+                      "the machine could not read its config",
+                  });
             default:
               throw unreachable(answer);
           }
@@ -182,12 +178,12 @@ export const agentControlRoutes = (
             case "answered":
               return answer.value.ok
                 ? (answer.value.result as SupportedCommands)
-                : refusal(
-                    500,
-                    "config-not-written",
-                    answer.value.error ??
-                      `${machineName(params.machineId)} could not list the commands of ${query.cwd}`
-                  );
+                : problem(500, {
+                    code: "config-not-written",
+                    detail:
+                      answer.value.error ??
+                      `${machineName(params.machineId)} could not list the commands of ${query.cwd}`,
+                  });
             default:
               throw unreachable(answer);
           }

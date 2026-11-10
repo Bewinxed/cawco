@@ -58,7 +58,7 @@ import {
   writeStateFileSync,
 } from "@cawco/core/state-file";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import { type ProjectRows, ProjectRowsSchema } from "./db/forget";
@@ -70,7 +70,7 @@ import {
   trashProjectFolder,
   untrashProjectFolder,
 } from "./project-folder";
-import { refusal } from "./refusal";
+
 import { readStages } from "./stages";
 import {
   ARCHIVE_DIR,
@@ -464,11 +464,10 @@ const newestEntry = async (id: string, forgottenAt: number | undefined) => {
   const record = entry
     ? await recordOf(entry).catch((error: unknown) => {
         if (isDamagedRecord(error)) {
-          return refusal(
-            422,
-            "restore-record-unreadable",
-            projectTrashWords.unreadable(id, error.reason)
-          );
+          return problem(422, {
+            code: "restore-record-unreadable",
+            detail: projectTrashWords.unreadable(id, error.reason),
+          });
         }
         throw error;
       })
@@ -668,11 +667,10 @@ export const projectTrash = (
   const liveHolds = (id: string) => {
     const live = db.project(id);
     return live
-      ? refusal(
-          409,
-          "restore-id-taken",
-          projectTrashWords.idTaken(live.name, id)
-        )
+      ? problem(409, {
+          code: "restore-id-taken",
+          detail: projectTrashWords.idTaken(live.name, id),
+        })
       : undefined;
   };
   /** A folder standing where the entry's goes back to, refused in words (restore-folder-taken), or the folder's refusal of the id. */
@@ -682,11 +680,10 @@ export const projectTrash = (
       return root;
     }
     if (entry.folder && (await stat(root).catch(() => undefined))) {
-      return refusal(
-        409,
-        "restore-folder-taken",
-        projectTrashWords.folderTaken(name, root)
-      );
+      return problem(409, {
+        code: "restore-folder-taken",
+        detail: projectTrashWords.folderTaken(name, root),
+      });
     }
   };
   /** The entry's folder moved out to the trash again, when it has one; the folder's refusal of the move. */
@@ -764,19 +761,17 @@ export const projectTrash = (
       return alone;
     }
     if (alone.foldedInto) {
-      return refusal(
-        409,
-        "restore-folded",
-        projectTrashWords.foldedInto(id, alone.foldedInto.name)
-      );
+      return problem(409, {
+        code: "restore-folded",
+        detail: projectTrashWords.foldedInto(id, alone.foldedInto.name),
+      });
     }
     const name = asked.name?.trim();
     if (!name) {
-      return refusal(
-        400,
-        "restore-name-needed",
-        projectTrashWords.nameNeeded(id)
-      );
+      return problem(400, {
+        code: "restore-name-needed",
+        detail: projectTrashWords.nameNeeded(id),
+      });
     }
     const held = liveHolds(id) ?? (await folderHolds(entry, name));
     if (held) {
@@ -1012,21 +1007,19 @@ export const projectTrash = (
         return record;
       }
       if (!(entry && (record || entry.folder))) {
-        return refusal(
-          404,
-          "restore-not-forgotten",
-          projectTrashWords.notForgotten(id)
-        );
+        return problem(404, {
+          code: "restore-not-forgotten",
+          detail: projectTrashWords.notForgotten(id),
+        });
       }
       if (record?.kind === "folded") {
-        return refusal(
-          409,
-          "restore-folded",
-          projectTrashWords.foldedInto(
+        return problem(409, {
+          code: "restore-folded",
+          detail: projectTrashWords.foldedInto(
             id,
             db.project(record.into)?.name ?? record.into
-          )
-        );
+          ),
+        });
       }
       if (!record) {
         return await restoreFolder(entry, asked);
@@ -1041,20 +1034,18 @@ export const projectTrash = (
           return done;
         }
         return done.why === "live"
-          ? refusal(
-              409,
-              "restore-id-taken",
-              projectTrashWords.idTaken(db.project(id)?.name ?? id, id)
-            )
-          : refusal(
-              409,
-              "restore-place-taken",
-              projectTrashWords.placeTaken(
+          ? problem(409, {
+              code: "restore-id-taken",
+              detail: projectTrashWords.idTaken(db.project(id)?.name ?? id, id),
+            })
+          : problem(409, {
+              code: "restore-place-taken",
+              detail: projectTrashWords.placeTaken(
                 record.name,
                 done.holder.name,
                 done.path
-              )
-            );
+              ),
+            });
       });
       if (restored instanceof ElysiaStatus) {
         return restored;

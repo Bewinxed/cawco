@@ -60,8 +60,8 @@ import {
   split,
   tokenize,
 } from "@openuidev/lang-core";
-import { ElysiaStatus } from "elysia";
-import { type Refused, refusal } from "./refusal";
+import { ElysiaStatus, problem } from "elysia";
+import type { AnyProblem } from "./refusal";
 
 process.env.OPENUI_TELEMETRY_DISABLED = "1";
 process.env.DO_NOT_TRACK = "1";
@@ -100,13 +100,13 @@ const programRefusal = <const Code extends string>(
   problems: string[]
 ) => {
   const unique = [...new Set(problems)];
-  return refusal(
-    422,
+  return problem(422, {
     code,
-    unique.length === 1
-      ? (unique[0] ?? "")
-      : `The program has ${unique.length} problems:\n- ${unique.slice(0, MAX_PROBLEMS).join("\n- ")}`
-  );
+    detail:
+      unique.length === 1
+        ? (unique[0] ?? "")
+        : `The program has ${unique.length} problems:\n- ${unique.slice(0, MAX_PROBLEMS).join("\n- ")}`,
+  });
 };
 
 const isElement = (value: unknown): value is ElementNode =>
@@ -136,9 +136,9 @@ const unsafeWords = (root: ElementNode | null): string[] => {
   const found: string[] = [];
   const look = (value: unknown, prop: string, component: string): void => {
     if (typeof value === "string") {
-      const problem = wordProblem(value, prop, component);
-      if (problem) {
-        found.push(problem);
+      const misfit = wordProblem(value, prop, component);
+      if (misfit) {
+        found.push(misfit);
       }
     } else if (Array.isArray(value)) {
       for (const each of value) {
@@ -243,11 +243,11 @@ const undrawnWords = (root: ElementNode | null): string[] => {
     at: WordsAt
   ): void => {
     if (typeof value === "string") {
-      const problem = UNDRAWN_PROPS.has(prop)
+      const misfit = UNDRAWN_PROPS.has(prop)
         ? null
         : glyphProblem(value, prop, component, at);
-      if (problem) {
-        found.push(problem);
+      if (misfit) {
+        found.push(misfit);
       }
     } else if (Array.isArray(value)) {
       for (const each of value) {
@@ -446,7 +446,7 @@ const afterProblems = (
  * (access.ts `whole`, handles.ts), its refusal in words when it names none
  * or several.
  */
-export type ArtifactNamed = (asked: string) => string | Refused;
+export type ArtifactNamed = (asked: string) => string | AnyProblem;
 
 /** `artifact`'s whole id for `id`, or why it names none: its refusal's words, or what it threw. */
 const wholeOf = (

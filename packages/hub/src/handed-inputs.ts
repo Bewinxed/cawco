@@ -22,7 +22,7 @@ import { pictureName, pictureNamed } from "@cawco/core/attachments";
 import { dataUrlBytes } from "@cawco/core/captures";
 import type { InstanceRow, SessionAttachment } from "@cawco/core/protocol";
 import { INPUTS_LIMIT_BYTES } from "@cawco/core/workspace/controls";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { Artifacts } from "./artifacts/service";
 import type { HandedReceiver } from "./artifacts/shapes";
 import type { WorkItemRow } from "./db/project-work";
@@ -30,7 +30,7 @@ import { type HeldInput, inputFileName } from "./handed-input";
 import { byHandle } from "./handles";
 import { mediaBytes, mediaFilePath, storedFilePath } from "./media";
 import { listFolder, readFolderBytes } from "./project-folder";
-import { type Refused, refusal } from "./refusal";
+import type { AnyProblem } from "./refusal";
 
 /**
  * One file the hub writes into `inputs/`: its name there, what it was handed
@@ -105,7 +105,7 @@ const unhanded = <const Status extends number, const Code extends string>(
   code: Code,
   entry: string,
   words: string
-) => refusal(status, code, `${entry}: ${words}`);
+) => problem(status, { code, detail: `${entry}: ${words}` });
 
 /** A thrown failure's words. */
 const failure = (error: unknown) =>
@@ -124,11 +124,10 @@ const folderFiles = async (projectId: string, dir: string) => {
     return listed.status === 404 ? [] : listed;
   }
   if (listed.truncated) {
-    return refusal(
-      413,
-      "handed-folder-too-large",
-      `${dir}/ holds more entries than one listing reads; hand its files by path`
-    );
+    return problem(413, {
+      code: "handed-folder-too-large",
+      detail: `${dir}/ holds more entries than one listing reads; hand its files by path`,
+    });
   }
   return listed.entries.flatMap((entry) =>
     entry.kind === "file" ? [entry.path] : []
@@ -212,7 +211,7 @@ export const createHandedInputs = (deps: HandedInputDeps) => {
   };
 
   /** The artifacts' refusal of what the input names, in the input's words. */
-  const artifactRefused = (entry: string, { status, response }: Refused) =>
+  const artifactRefused = (entry: string, { status, response }: AnyProblem) =>
     unhanded(status, "handed-artifact-refused", entry, response.detail);
 
   /**
