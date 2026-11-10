@@ -17,24 +17,20 @@ import type { RequestHandler } from "./$types";
  * them, so no copy is left half its page's.
  */
 export const POST: RequestHandler = async ({ cookies, request, url }) => {
-  const body = (await request.json().catch(() => null)) as Record<
-    string,
-    unknown
-  > | null;
+  const body: unknown = await request.json().catch(() => null);
   if (!body || typeof body !== "object") {
     error(400, "Prefs are a JSON object of names and values.");
   }
-  const entries = Object.entries(body);
-  for (const [name, value] of entries) {
-    if (!(
-      PREFS.includes(name as Pref) &&
-      (typeof value === "string" || value === null)
-    )) {
+  const entries: [Pref, string | null][] = [];
+  for (const [name, value] of Object.entries(body)) {
+    const pref = PREFS.find((one) => one === name);
+    if (!(pref && (typeof value === "string" || value === null))) {
       error(400, `${name} is not a pref this dashboard keeps.`);
     }
     if (value !== null && encodeURIComponent(value).length > PREF_VALUE_LIMIT) {
       error(413, `${name} is too large for a cookie.`);
     }
+    entries.push([pref, value]);
   }
   const options = {
     path: "/",
@@ -42,7 +38,7 @@ export const POST: RequestHandler = async ({ cookies, request, url }) => {
     sameSite: "lax",
     secure: secureScheme(url),
   } as const;
-  for (const [name, value] of entries as [Pref, string | null][]) {
+  for (const [name, value] of entries) {
     if (value === null) {
       cookies.delete(prefCookie(name, url), options);
     } else {

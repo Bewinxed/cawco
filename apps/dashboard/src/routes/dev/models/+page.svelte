@@ -48,12 +48,13 @@
 
   provideConfig(new ConfigStore());
 
-  const FLEETS = {
+  const FLEET_KEYS = ["today", "ready", "empty"] as const;
+  type Fleet = (typeof FLEET_KEYS)[number];
+  const FLEETS: Record<Fleet, string> = {
     today: "Today: some machines lack a sign-in",
     ready: "Every machine ready",
     empty: "No machine has joined",
-  } as const;
-  type Fleet = keyof typeof FLEETS;
+  };
   const FLEET_OF: Record<
     Fleet,
     { machines: ImageMachine[]; accounts: ImageAccounts }
@@ -66,13 +67,14 @@
     },
   };
 
-  const HUBS = {
+  const HUB_KEYS = ["answers", "slow", "fails", "unreachable"] as const;
+  type Hub = (typeof HUB_KEYS)[number];
+  const HUBS: Record<Hub, string> = {
     answers: "Saves at once",
     slow: "Saves after 2 s",
     fails: "Refuses: its database is locked",
     unreachable: "Unreachable",
-  } as const;
-  type Hub = keyof typeof HUBS;
+  };
 
   let fleet = $state<Fleet>("today");
   let hub = $state<Hub>("answers");
@@ -196,12 +198,13 @@
         <NativeSelect
           aria-label="Fleet"
           onchange={(event) => {
-            fleet = event.currentTarget.value as Fleet;
+            const { value } = event.currentTarget;
+            fleet = FLEET_KEYS.find((one) => one === value) ?? fleet;
           }}
           value={fleet}
         >
-          {#each Object.entries(FLEETS) as [value, label] (value)}
-            <NativeSelectOption {value}>{label}</NativeSelectOption>
+          {#each FLEET_KEYS as value (value)}
+            <NativeSelectOption {value}>{FLEETS[value]}</NativeSelectOption>
           {/each}
         </NativeSelect>
       </label>
@@ -210,12 +213,13 @@
         <NativeSelect
           aria-label="Hub"
           onchange={(event) => {
-            hub = event.currentTarget.value as Hub;
+            const { value } = event.currentTarget;
+            hub = HUB_KEYS.find((one) => one === value) ?? hub;
           }}
           value={hub}
         >
-          {#each Object.entries(HUBS) as [value, label] (value)}
-            <NativeSelectOption {value}>{label}</NativeSelectOption>
+          {#each HUB_KEYS as value (value)}
+            <NativeSelectOption {value}>{HUBS[value]}</NativeSelectOption>
           {/each}
         </NativeSelect>
       </label>

@@ -48,25 +48,24 @@
   import { page } from "$app/state";
 
   /* ── The switches, from the URL ────────────────────────────────────── */
-  type Fixture = "full" | "update" | "none" | "relay";
-  type Width = "desk" | "phone";
+  const FIXTURES = ["full", "update", "none", "relay"] as const;
+  type Fixture = (typeof FIXTURES)[number];
+  const WIDTHS = ["desk", "phone"] as const;
+  type Width = (typeof WIDTHS)[number];
   const query = page.url.searchParams;
-  const pick = <T extends string>(key: string, options: T[]): T =>
-    (options.find((one) => one === query.get(key)) ?? options[0]) as T;
+  const pick = <T extends string>(
+    key: string,
+    options: readonly [T, ...T[]]
+  ): T => options.find((one) => one === query.get(key)) ?? options[0];
 
   /** Inside the phone frame: the stage alone. */
   const framed = query.has("frame");
   /** Under the desk line: the page is the phone form, the stage alone. */
   const drawer = new MediaQuery(DRAWER_QUERY);
   const stageOnly = $derived(framed || drawer.current);
-  const firstFixture = pick<Fixture>("fixture", [
-    "full",
-    "update",
-    "none",
-    "relay",
-  ]);
+  const firstFixture = pick("fixture", FIXTURES);
   let fixture = $state<Fixture>(firstFixture);
-  let width = $state<Width>(pick("width", ["desk", "phone"]));
+  let width = $state<Width>(pick("width", WIDTHS));
 
   /** The switches as a query: the frame's URL, and this page's. */
   const search = $derived(new URLSearchParams({ fixture, width }).toString());
@@ -144,7 +143,7 @@
       seen: new Set(),
     },
     machineLabel
-  ) as Notice;
+  );
   /**
    * A build every machine waits to install, with auto-update off: the
    * notice whose act is Install now.
@@ -165,7 +164,7 @@
       seen: new Set(),
     },
     machineLabel
-  ) as Notice;
+  );
 
   /**
    * The stream relay's set-up in Needs you, on a machine with a public
@@ -473,7 +472,7 @@
         <ToggleGroup.Root
           onValueChange={(next) => {
             if (next) {
-              fixture = next as Fixture;
+              fixture = FIXTURES.find((one) => one === next) ?? fixture;
               reset();
             }
           }}
@@ -495,7 +494,7 @@
         <ToggleGroup.Root
           onValueChange={(next) => {
             if (next) {
-              width = next as Width;
+              width = WIDTHS.find((one) => one === next) ?? width;
             }
           }}
           type="single"

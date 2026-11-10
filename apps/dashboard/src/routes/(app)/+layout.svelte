@@ -97,13 +97,14 @@
   // plea while something needs the operator.
   onMount(restWhenHidden);
   // The tab's icon is app.html's link; across the app it follows the fleet.
-  $effect(() =>
-    tabIcon(document.querySelector('link[rel="icon"]') as HTMLLinkElement)
-  );
+  $effect(() => {
+    const icon = document.querySelector('link[rel="icon"]');
+    return icon instanceof HTMLLinkElement ? tabIcon(icon) : undefined;
+  });
 
   /** Configure's sections in the rail's order, top to bottom. */
-  const SECTION_ORDER = GROUPS.flatMap(({ sections }) =>
-    sections.map((section) => section.slug as string)
+  const SECTION_ORDER: string[] = GROUPS.flatMap(({ sections }) =>
+    sections.map((section) => section.slug)
   );
   const narrow = new MediaQuery(NARROW_QUERY);
 

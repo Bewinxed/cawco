@@ -137,6 +137,7 @@ async function proxyToHub(
   // on every route that takes a body, its sign-in to an MCP server among
   // them (`POST /api/fleet/mcp/:name/sign-in`).
   const contentType = request.headers.get("content-type");
+  const userAgent = request.headers.get("user-agent");
 
   try {
     const response = await fetch(targetUrl, {
@@ -151,9 +152,7 @@ async function proxyToHub(
         ...(authorization && { Authorization: authorization }),
         ...(cookie && { Cookie: cookie }),
         // What a pairing is named by ("Chrome on Linux", hub hub-auth.ts).
-        ...(request.headers.has("user-agent") && {
-          "User-Agent": request.headers.get("user-agent") as string,
-        }),
+        ...(userAgent !== null && { "User-Agent": userAgent }),
         // The page's own origin, which the gate (hooks.server.ts) found
         // ours: an https one gets its cookie with `__Host-` and `Secure`.
         [PAGE_ORIGIN_HEADER]: ownOrigin(event),
@@ -197,6 +196,11 @@ async function proxyToHub(
           },
         })
       ) ?? null;
+    const cacheControl = response.headers.get("Cache-Control");
+    const retryAfter = response.headers.get("Retry-After");
+    const setCookie = response.headers.get("Set-Cookie");
+    const location = response.headers.get("Location");
+    const pairing = response.headers.get("X-Cawco-Pairing");
     return new Response(body, {
       status: response.status,
       statusText: response.statusText,
@@ -205,27 +209,17 @@ async function proxyToHub(
           response.headers.get("Content-Type") || "application/json",
         // A machine image is read from disk on every look; the hub's no-store
         // has to survive the hop or the browser keeps a picture that moved.
-        ...(response.headers.has("Cache-Control") && {
-          "Cache-Control": response.headers.get("Cache-Control") as string,
-        }),
+        ...(cacheControl !== null && { "Cache-Control": cacheControl }),
         // A refused read's when-to-ask-again (a machine reconnecting: when
         // the hub stops reading it so) is the reader's to act on.
-        ...(response.headers.has("Retry-After") && {
-          "Retry-After": response.headers.get("Retry-After") as string,
-        }),
+        ...(retryAfter !== null && { "Retry-After": retryAfter }),
         // A pairing approved, or pairing turned on from this browser: its
         // device cookie, set by the hub (HttpOnly, SameSite=Lax).
-        ...(response.headers.has("Set-Cookie") && {
-          "Set-Cookie": response.headers.get("Set-Cookie") as string,
-        }),
+        ...(setCookie !== null && { "Set-Cookie": setCookie }),
         // Where a hub redirect sends the browser.
-        ...(response.headers.has("Location") && {
-          Location: response.headers.get("Location") as string,
-        }),
+        ...(location !== null && { Location: location }),
         // The hub requires paired devices and this browser is none.
-        ...(response.headers.has("X-Cawco-Pairing") && {
-          "X-Cawco-Pairing": response.headers.get("X-Cawco-Pairing") as string,
-        }),
+        ...(pairing !== null && { "X-Cawco-Pairing": pairing }),
         ...Object.fromEntries(
           (response.status === PARTIAL_CONTENT
             ? RANGE_HEADERS

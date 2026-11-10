@@ -36,6 +36,13 @@ declare global {
     /** Whether the focus ring draws on the element focused by script (Chrome 144, Safari 18.4; the DOM lib does not name it yet). */
     focusVisible?: boolean;
   }
+  /**
+   * The app's web view hears the page here (ProjectViewPane.swift): a task
+   * opens the app's own sheet over the project.
+   */
+  interface AppHost {
+    postMessage: (message: { task: string; type: "cawco:open-task" }) => void;
+  }
   interface Window {
     /** The /motion/button-pending bench's work: `start`, then `stop` ends it well. */
     __buttonBench: { start: () => void; stop: () => void };
@@ -49,6 +56,8 @@ declare global {
     __skeletonBench: { load: () => void; wait: () => void };
     /** Replays the button clicks app.html held before hydration. */
     releaseHeldTaps: () => void;
+    /** Safari's and the app's web view's bridge to their host; a desktop browser has none. */
+    webkit?: { messageHandlers?: { cawco?: AppHost } };
   }
   // biome-ignore lint/style/noNamespace: SvelteKit's app.d.ts convention requires the global App namespace for ambient typing hooks
   namespace App {

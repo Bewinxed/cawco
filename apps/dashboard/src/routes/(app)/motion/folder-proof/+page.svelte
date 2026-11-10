@@ -189,7 +189,8 @@
   let workEl = $state<HTMLElement>();
   /** Chooses Working or Finished as a click on its tab does. */
   function chooseWork(id: string) {
-    const at = WORK_IDS.indexOf(id as (typeof WORK_IDS)[number]);
+    const workIds: readonly string[] = WORK_IDS;
+    const at = workIds.indexOf(id);
     workEl
       ?.querySelectorAll<HTMLElement>(
         '[data-slot="ff-tab"] > [data-slot="hit"]'

@@ -61,14 +61,29 @@
 
   const narrowToasts = new MediaQuery("(max-width: 640px)");
 
-  type View = "project" | "forgotten" | "home";
+  const VIEWS = ["project", "forgotten", "home"] as const;
+  type View = (typeof VIEWS)[number];
   let view = $state<View>("project");
   /** The project the page stands on: Private office, or one brought back. */
   let pageName = $state(NAME);
 
   /* ── The project page ───────────────────────────────────────────── */
 
-  const STEPS = {
+  const STEP_KEYS = [
+    "forget",
+    "forget-running",
+    "forget-armed",
+    "delete",
+    "delete-files",
+    "delete-running",
+    "delete-hub",
+    "refused-running",
+    "refused-away",
+    "refused-shared",
+    "refused-agent",
+  ] as const;
+  type Step = (typeof STEP_KEYS)[number];
+  const STEPS: Record<Step, string> = {
     forget: "Forget, nothing running",
     "forget-running": "Forget, 4 running",
     "forget-armed": "Forget, 2 mid-turn (armed)",
@@ -80,8 +95,7 @@
     "refused-away": "Refused: kestrel away",
     "refused-shared": "Refused: folder shared",
     "refused-agent": "Refused: agent too old",
-  } as const;
-  type Step = keyof typeof STEPS;
+  };
 
   /** Each refusal, said of the project the page stands on. */
   const refusalsOf = (name: string): Partial<Record<Step, string>> => ({
@@ -325,7 +339,7 @@
   >
     <Tabs
       onValueChange={(next) => {
-        view = next as View;
+        view = VIEWS.find((one) => one === next) ?? view;
       }}
       value={view}
     >
@@ -340,12 +354,15 @@
         Step
         <NativeSelect
           aria-label="Step"
-          onchange={(event) => show(event.currentTarget.value as Step | "")}
+          onchange={(event) => {
+            const { value } = event.currentTarget;
+            show(STEP_KEYS.find((one) => one === value) ?? "");
+          }}
           value={step}
         >
           <NativeSelectOption value="">None</NativeSelectOption>
-          {#each Object.entries(STEPS) as [value, label] (value)}
-            <NativeSelectOption {value}>{label}</NativeSelectOption>
+          {#each STEP_KEYS as value (value)}
+            <NativeSelectOption {value}>{STEPS[value]}</NativeSelectOption>
           {/each}
         </NativeSelect>
       </label>

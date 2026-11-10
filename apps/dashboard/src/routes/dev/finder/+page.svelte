@@ -31,20 +31,28 @@
   let editor = $state<HTMLDivElement | null>(null);
   let opener: HTMLElement | null = null;
 
-  const log = {
-    opened: [] as {
+  const log: {
+    opened: {
       kind: string;
       id: string;
       title: string;
       moment: string | null;
-    }[],
-    waiting: [] as { kind: string; id: string }[],
-    machine: [] as { id: string; act: MachineAct }[],
-    sent: [] as string[],
+    }[];
+    waiting: { kind: string; id: string }[];
+    machine: { id: string; act: MachineAct }[];
+    sent: string[];
+  } = {
+    opened: [],
+    waiting: [],
+    machine: [],
+    sent: [],
   };
 
   function show() {
-    opener = document.activeElement as HTMLElement | null;
+    opener =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     open = true;
     finder.open();
     queueMicrotask(() => field?.focus());
