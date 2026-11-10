@@ -64,13 +64,10 @@
     IconUndock,
     IconUndockLinear,
   } from "#lib/icons.js";
-  import { failureWords } from "#lib/platform/hub-read.js";
-  import { appear, dur, revealOn } from "#lib/platform/motion/curves.svelte.js";
+  import { appear, revealOn } from "#lib/platform/motion/curves.svelte.js";
   import { landKey } from "#lib/platform/motion/keyed.svelte.js";
-  import { closeInto } from "#lib/platform/motion/share.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
-  import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
   import { keepThumbnail } from "../artifact-api";
   import EmptyAsk from "../EmptyAsk.svelte";
@@ -109,6 +106,7 @@
   import { PageCover } from "./page-cover.svelte";
   import { PaneBrowser } from "./pane-browser.svelte";
   import { PaneCanvas } from "./pane-canvas.svelte";
+  import { PaneClose } from "./pane-close.svelte";
   import { lostWhy, PaneDoc, pageRepliesOf } from "./pane-doc.svelte";
   import { PaneKeys } from "./pane-keys.svelte";
   import { PaneLayout } from "./pane-layout.svelte";
@@ -321,6 +319,13 @@
     instanceId: () => instanceId,
     paneSubject,
     paneNotice,
+  });
+  const paneClose = new PaneClose({
+    instanceId: () => instanceId,
+    sheet: () => sheet,
+    paneSubject,
+    paneNotice,
+    paneLayout,
   });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
@@ -705,76 +710,6 @@
         }
         break;
       }
-    }
-  }
-  let shown = false;
-  $effect(() => {
-    const open = paneSubject.preview?.state === "open";
-    if (
-      shown &&
-      !open &&
-      !sheet &&
-      paneLayout.section &&
-      paneSubject.artifact
-    ) {
-      closeToRow(paneLayout.section, paneSubject.artifact.id);
-    }
-    shown = open;
-  });
-  function closeToRow(pane: HTMLElement, id: string) {
-    const row = [
-      ...document.querySelectorAll<HTMLElement>(
-        `[data-slot="preview-tool"][data-share="preview:${CSS.escape(instanceId)}"][data-artifact="${CSS.escape(id)}"]`
-      ),
-    ].at(-1);
-    if (!row) {
-      return;
-    }
-    const box = row.getBoundingClientRect();
-    if (box.height === 0 || box.bottom <= 0 || box.top >= innerHeight) {
-      return;
-    }
-    const rect = pane.getBoundingClientRect();
-    const stand = document.createElement("div");
-    stand.setAttribute("aria-hidden", "true");
-    stand.className = "preview-close-flight";
-    Object.assign(stand.style, {
-      position: "fixed",
-      left: `${rect.left}px`,
-      top: `${rect.top}px`,
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
-      borderRadius: "var(--radius-lg)",
-      background: "var(--surface-raised)",
-      boxShadow: "var(--shadow-drawer)",
-      pointerEvents: "none",
-      zIndex: "var(--layer-flight)",
-    });
-    document.body.append(stand);
-    const done = () => stand.remove();
-    const flight = closeInto(stand, row, dur("--dur-panel"));
-    if (flight) {
-      flight.finished.then(done, done);
-    } else {
-      done();
-    }
-  }
-  /** Close in the artifact's own tab: back to the session that made it. */
-  async function backToSession() {
-    await goto(paneSubject.fleet.sessionHref(instanceId));
-  }
-  let closing = $state(false);
-  async function close() {
-    closing = true;
-    try {
-      await paneSubject.fleet.closePreview(instanceId);
-    } catch (error) {
-      paneNotice.say({
-        message: failureWords(error),
-        again: "close",
-      });
-    } finally {
-      closing = false;
     }
   }
   /** The mode's glyph and word, for its one-button form. */
@@ -1438,10 +1373,10 @@
       ? undefined
       : paneMode.mode}
     closeFailed={paneNotice.failure?.again === "close"}
-    {closing}
+    closing={paneClose.closing}
     items={headItems}
     label="Preview"
-    onclose={ownTab ? backToSession : close}
+    onclose={ownTab ? paneClose.backToSession : paneClose.close}
     placement={sheet ? "sheet" : "beside"}
     subtitle={paneDoc.headLine}
     subtitleId={`${paneId}-line`}
@@ -2161,8 +2096,8 @@
       {:else if paneNotice.failure?.again === "close"}
         <Button
           label={commonWords.tryAgain}
-          onclick={close}
-          pending={closing}
+          onclick={paneClose.close}
+          pending={paneClose.closing}
           pendingLabel="Closing…"
           size="sm"
           variant="outline"
