@@ -20,7 +20,6 @@ import type { FolderWeight } from "@cawco/preview/proxy";
 import type { problem } from "elysia";
 import type { TellProblem } from "../caw-problems";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
-import type { FolderProblem } from "../decision-page";
 import type { ArtifactNamed, BuiltProgram } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
 import type { HubLifetimeShape } from "../lifetime";
@@ -47,6 +46,11 @@ import type {
 type Resaid = ReturnType<
   typeof problem<number, { code: string; detail: string }>
 >;
+
+/** A problem of each status of `Status` alone, its code and words as the wiring says them. */
+type PerStatus<Status extends number> = Status extends number
+  ? ReturnType<typeof problem<Status, { code: string; detail: string }>>
+  : never;
 
 /** A machine call of the hub's own wiring that no machine answered: away (503), or not in time (504). */
 type Unanswered<Away extends string, Late extends string> =
@@ -415,23 +419,18 @@ export interface ArtifactServiceDeps {
   >;
   /**
    * What a send applies before the session hears it (setup.ts
-   * `applySetupPicks`): the page as it stands ({@link SentPage}); a place's
-   * refusal (place-refusal.ts) or the folder's problem reading the decided
-   * page (decisions.ts `decide`) is answered and nothing is sent.
+   * `setupPicksOf`): the page as it stands ({@link SentPage}); the problem
+   * of a pick that cannot be applied or a record that cannot be written is
+   * answered and nothing is sent. The statuses are those of the project's
+   * edits, areas, template and decisions, which this file cannot name across
+   * the import cycle.
    */
   sending: (
     to: PageHearer,
     artifact: ArtifactRow,
     page: SentPage
   ) => Promise<
-    | ReturnType<
-        typeof problem<
-          400 | 404 | 409 | 413 | 503 | 504,
-          { code: "setup-place-refused"; detail: string }
-        >
-      >
-    | FolderProblem
-    | undefined
+    PerStatus<400 | 404 | 409 | 413 | 415 | 422 | 500 | 503 | 504> | undefined
   >;
   /**
    * A workspace preview's server (agent stage.ts `ensureServed`), started or

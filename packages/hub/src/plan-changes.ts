@@ -51,7 +51,6 @@ import {
   stepLines,
   type WrittenStep,
 } from "./plans";
-import { projectAttempt } from "./project-refusal";
 import type { AnyProblem } from "./refusal";
 
 /** What became of a message to a session about its plan's changes. */
@@ -80,9 +79,10 @@ export interface PlanChangesDeps {
   /**
    * A new session in `row`'s project and place, opening on `opening` and the
    * old session's records, its plan copied: the one that goes on from a
-   * session that cannot. Its id; throws why it could not start.
+   * session that cannot. Its id; the problem of a read of the old session's
+   * records that failed, else throws why it could not start.
    */
-  goOnFrom: (row: InstanceRow, opening: string) => Promise<string>;
+  goOnFrom: (row: InstanceRow, opening: string) => Promise<string | AnyProblem>;
   lifetime: HubLifetimeShape;
   plans: Plans;
   /**
@@ -193,19 +193,25 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     text: string,
     ids: string[]
   ): Promise<void> => {
+    const unstarted = (why: string): void =>
+      db.closePlanChanges(ids, {
+        undelivered: `${reason}, and no new session started: ${why}`,
+      });
     try {
       const next = await deps.goOnFrom(
         ended,
         `${named(ended)} cannot go on (${reason}), so this session goes on from it.\n\n${text}`
       );
+      if (typeof next !== "string") {
+        unstarted(next.response.detail);
+        return;
+      }
       console.info(
         `[plan-changes] ${ended.id.slice(0, 8)} cannot go on (${reason}): the person's plan changes went to the new session ${next.slice(0, 8)}`
       );
       db.closePlanChanges(ids, { at: new Date() });
     } catch (error) {
-      db.closePlanChanges(ids, {
-        undelivered: `${reason}, and no new session started: ${error instanceof Error ? error.message : String(error)}`,
-      });
+      unstarted(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -470,6 +476,5 @@ export const planChangeRoutes = (changes: PlanChanges) =>
   new Elysia().post(
     "/api/instances/:id/plan/edits",
     { params: t.Object({ id: t.String() }), body: PLAN_EDIT_SCHEMA },
-    ({ params, body }) =>
-      projectAttempt(() => changes.edit(params.id, body as PlanEdit))
+    ({ params, body }) => changes.edit(params.id, body)
   );
