@@ -1042,7 +1042,7 @@ export async function failedSendPayload(
  */
 export async function retryFailed(message: Message): Promise<void> {
   const { text, extras } = await failedSendPayload(message);
-  retries[message.id as string] = submitCommand(
+  retries[message.id] = submitCommand(
     message.instanceId,
     session(message.instanceId).machineId,
     { kind: "send", intent: { text, extras, replaces: message.id } }

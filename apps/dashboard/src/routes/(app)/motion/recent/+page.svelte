@@ -1,6 +1,6 @@
 <script lang="ts">
   import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
-  import type { PermissionRequestFrame, PulseFrame } from "@cawco/core/frames";
+  import type { PermissionRequestFrame } from "@cawco/core/frames";
   import { CAPABILITIES_NONE } from "@cawco/core/harness";
   import { PERMISSION_MODES } from "@cawco/core/harness/kinds";
   import {
@@ -83,7 +83,10 @@
       read: boolean;
     };
     boardState: { machines: unknown[] };
-    frame: (frame: PulseFrame | PermissionRequestFrame | object) => void;
+    frame: (
+      frame:
+        Parameters<CawcoDebug["frame"]>[0] | PermissionRequestFrame | object
+    ) => void;
     leaveHub: () => void;
     projectsState: { projects: unknown[]; projectsRead: boolean };
     standHub: (
