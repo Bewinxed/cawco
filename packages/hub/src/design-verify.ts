@@ -516,7 +516,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
    * design work, in a workspace whose base branch holds a system (one only
    * its own commits hold, or its own open task landed, is its build, the
    * person's to judge in review).
-   * Its task and workspace when it is; its task's refused read.
+   * Its task and workspace when it is; the problem of a task or a history that could not be read.
    */
   const judged = async (item: WorkItemRow) => {
     const { projectId, taskId } = item;
@@ -541,6 +541,9 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
         task.kind !== "done" && task.kind !== "dropped"
       )
     );
+    if (onBase instanceof ElysiaStatus) {
+      return onBase;
+    }
     return onBase ? { projectId, taskId, workspace } : undefined;
   };
 
@@ -640,7 +643,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   };
 
   return {
-    /** work-items.ts `designHold`: the words a `finish_item` answers while held, or nothing to go on; its task's refused read. */
+    /** work-items.ts `designHold`: the words a `finish_item` answers while held, or nothing to go on; the problem of a task or a history that could not be read. */
     async hold(item: WorkItemRow, submission: WorkItemSubmission) {
       const subject = await judged(item);
       if (!subject || subject instanceof ElysiaStatus) {
