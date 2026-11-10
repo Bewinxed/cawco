@@ -145,7 +145,7 @@
     const next = row;
     track(laidOut);
     untrack(() => {
-      const current = faces.at(-1) as Face;
+      const [current] = faces.slice(-1);
       const phase = phaseOf(next);
       if (phase !== current.phase) {
         const moving = !!box && motionOk.current && !!ledger?.watched;

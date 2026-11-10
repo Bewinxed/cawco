@@ -416,8 +416,9 @@
   function placeRows(): void {
     deckEdge = deck().at;
     for (const node of ghosts?.children ?? []) {
-      const el = node as HTMLElement;
-      place(el, Number(el.dataset.k));
+      if (node instanceof HTMLElement) {
+        place(node, Number(node.dataset.k));
+      }
     }
   }
 
