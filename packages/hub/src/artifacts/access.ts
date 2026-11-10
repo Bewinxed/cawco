@@ -77,13 +77,6 @@ export interface AccessContext {
 }
 
 /** Who may do what to an artifact: a session's relationship to it (holder, maker, its delegation tree above or beside, the project it leads, the one it left the artifact in) and each act's rule over those. */
-/** Artifact `id` is not there for the session that asks: one it has not, or may not reach. */
-const noArtifact = (id: string) =>
-  problem(404, {
-    code: "artifact-unknown",
-    detail: artifactToolWords.noArtifact(id),
-  });
-
 export const createAccess = (ctx: AccessContext) => {
   const { db, deps, docs } = ctx;
 
@@ -224,7 +217,10 @@ export const createAccess = (ctx: AccessContext) => {
       });
     }
     if (!row || row.instanceId !== instance.id) {
-      return noArtifact(id);
+      return problem(404, {
+        code: "artifact-unknown",
+        detail: artifactToolWords.noArtifact(id),
+      });
     }
     return row;
   };
@@ -244,7 +240,10 @@ export const createAccess = (ctx: AccessContext) => {
     const row = db.get(id);
     const owner = row ? holder(row) : undefined;
     if (!(row && owner && sees(panel, row))) {
-      return noArtifact(id);
+      return problem(404, {
+        code: "artifact-unknown",
+        detail: artifactToolWords.noArtifact(id),
+      });
     }
     return { owner, row };
   };
@@ -462,7 +461,12 @@ export const createAccess = (ctx: AccessContext) => {
       return id;
     }
     const row = db.get(id);
-    return row && sees(instance, row) ? row : noArtifact(id);
+    return row && sees(instance, row)
+      ? row
+      : problem(404, {
+          code: "artifact-unknown",
+          detail: artifactToolWords.noArtifact(id),
+        });
   };
   /**
    * Artifact `id` for the person's show from session `instance`'s view:
@@ -478,7 +482,10 @@ export const createAccess = (ctx: AccessContext) => {
     const row = db.get(id);
     return row && (row.instanceId !== null || sees(instance, row))
       ? row
-      : noArtifact(asked);
+      : problem(404, {
+          code: "artifact-unknown",
+          detail: artifactToolWords.noArtifact(asked),
+        });
   };
   /**
    * Where the person's show of `row` (`found`, or the version it is held
@@ -608,11 +615,20 @@ export const createAccess = (ctx: AccessContext) => {
       (next && (inTree(instance, next) || leftFor(instance, next))
         ? next
         : undefined);
-    return row ?? noArtifact(id);
+    return (
+      row ??
+      problem(404, {
+        code: "artifact-unknown",
+        detail: artifactToolWords.noArtifact(id),
+      })
+    );
   };
   /** Why {@link readable} reads no artifact: a name that names none, or an id it may not read. */
   type NotReadable =
-    Exclude<ReturnType<typeof whole>, string> | ReturnType<typeof noArtifact>;
+    | Exclude<ReturnType<typeof whole>, string>
+    | ReturnType<
+        typeof problem<404, { code: "artifact-unknown"; detail: string }>
+      >;
   /**
    * Whether the session is the one the artifact's marks go to
    * ({@link ArtifactServiceDeps.answersTo}, artifacts/taker.ts): its writer;
