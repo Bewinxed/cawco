@@ -76,10 +76,12 @@ interface Cookie {
 }
 
 const isCookie = (value: unknown): value is Cookie =>
-  !!value &&
   typeof value === "object" &&
-  typeof (value as Cookie).name === "string" &&
-  typeof (value as Cookie).domain === "string";
+  value !== null &&
+  "name" in value &&
+  typeof value.name === "string" &&
+  "domain" in value &&
+  typeof value.domain === "string";
 
 const cookiesOf = (result: Json): Cookie[] =>
   Array.isArray(result.cookies) ? result.cookies.filter(isCookie) : [];
@@ -188,6 +190,17 @@ const OPEN_MS = 10_000;
 const OPEN_POLL_MS = 50;
 const CALL_SHORT_MS = 5000;
 
+/** `Runtime.evaluate`'s answer, as far as the evaluation is read. */
+const EvaluateAnswer = z.object({
+  exceptionDetails: z
+    .object({
+      exception: z.object({ description: z.string().optional() }).optional(),
+      text: z.string().optional(),
+    })
+    .optional(),
+  result: z.object({ value: z.unknown().optional() }).optional(),
+});
+
 /** `expression` evaluated on `session`'s page, its promise awaited: its value, or why it threw. */
 const evaluate = async (
   link: CdpLink,
@@ -195,15 +208,14 @@ const evaluate = async (
   expression: string,
   ms: number
 ): Promise<unknown> => {
-  const { result, exceptionDetails } = (await link.call(
-    "Runtime.evaluate",
-    { expression, awaitPromise: true, returnByValue: true },
-    session,
-    ms
-  )) as {
-    exceptionDetails?: { exception?: { description?: string }; text?: string };
-    result?: { value?: unknown };
-  };
+  const { result, exceptionDetails } = EvaluateAnswer.parse(
+    await link.call(
+      "Runtime.evaluate",
+      { expression, awaitPromise: true, returnByValue: true },
+      session,
+      ms
+    )
+  );
   if (exceptionDetails) {
     throw new Error(
       exceptionDetails.exception?.description ??

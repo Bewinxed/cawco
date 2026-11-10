@@ -46,6 +46,9 @@ export interface DeltaApplied {
   removed: string[];
 }
 
+/** The fleet's policy item (core fleet-items.ts): the tools its sessions are denied. */
+const PolicyItem = z.object({ deniedTools: z.array(z.string()) });
+
 /** What the disk keeps of what the agent holds ({@link FleetDesired.keep}). */
 const FleetDesiredShape = z.object({
   forced: z.array(z.string()),
@@ -135,9 +138,7 @@ export class FleetDesired {
 
   /** The fleet's denied tools as held now; none before a delta carried the policy. */
   get deniedTools(): string[] | undefined {
-    const policy = this.#items.get("policy") as
-      { deniedTools: string[] } | undefined;
-    return policy?.deniedTools;
+    return PolicyItem.safeParse(this.#items.get("policy")).data?.deniedTools;
   }
 
   /** The generation whose converge has ended (fleet-converged.ts): 0 before the first. */
@@ -276,7 +277,7 @@ export class FleetDesired {
       [...this.#items].map(([id, value]) => [
         id,
         this.#forced.has(id) && value && typeof value === "object"
-          ? { ...(value as object), force: true }
+          ? { ...value, force: true }
           : value,
       ])
     );

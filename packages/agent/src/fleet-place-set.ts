@@ -94,7 +94,7 @@ export const dropPlaceSet = (cwd: string): Promise<void> => {
 
 /** Every place's file on this machine. */
 export const placeSets = async (): Promise<FleetPlaceSet[]> => {
-  const names = await readdir(fleetPlacesDir()).catch(() => [] as string[]);
+  const names = await readdir(fleetPlacesDir()).catch((): string[] => []);
   const sets = await Promise.all(
     names
       .filter((name) => name.endsWith(EXT))
