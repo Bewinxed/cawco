@@ -11,7 +11,14 @@
  * Claude Code, OpenAI chat completions for opencode and pi) with the words
  * the probe's `respond` picks, streamed at its pace, and keeps every request
  * it answered in `seen` (the oldest one's text let go past `SEEN_CHARS`).
+ *
+ * No git a fleet, the probe kit or a spec starts (`git init`, `clone`,
+ * `commit`, `push` on a scratch repository) acts on the repository of
+ * whoever started the probe: git's own variables for one leave this process
+ * as it loads (core git-repository-env.ts), which every probe and the kit do
+ * before they start anything.
  */
+import "../packages/core/src/git-repository-env";
 import { Database } from "bun:sqlite";
 import {
   closeSync,
@@ -79,33 +86,6 @@ import { anotherEnds, END_SIGNALS, type EndSignal } from "./lib/stop-signals";
 import { probeSlot } from "./probe-kit/slot";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 import { STAND_INS_ENV, type StandIns } from "./stand-ins/index";
-
-/**
- * WHERE GIT LOOKS. Git finds its repository from these variables before its
- * folder, and `git bisect run` and a git hook export them to what they run
- * (GIT_DIR, the caller's own gitdir). Inherited here, every git a fleet, the
- * probe kit or a spec starts (`git init`, `clone`, `commit`, `push` on a
- * scratch repository) acted on the caller's repository instead: a fleet
- * spec run as a bisect step committed "init" onto the bisect's checkout and
- * failed every step. So they leave this process's environment as this module
- * loads, which every probe and the kit do before they start anything: `Bun.$`
- * reads `process.env` as it runs, and a `Bun.spawn` passes `env: process.env`
- * (without one it is handed the environment the process started with). Git's
- * config (GIT_CONFIG_*), which a workspace passes its own through, stays.
- */
-const GIT_REPOSITORY_ENV = [
-  "GIT_DIR",
-  "GIT_WORK_TREE",
-  "GIT_INDEX_FILE",
-  "GIT_PREFIX",
-  "GIT_COMMON_DIR",
-  "GIT_OBJECT_DIRECTORY",
-  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-  "GIT_IMPLICIT_WORK_TREE",
-];
-for (const name of GIT_REPOSITORY_ENV) {
-  delete process.env[name];
-}
 
 /** A launch's stderr file, whose stdout is the same name in `.log`. */
 const ERR_SUFFIX = /\.err$/u;

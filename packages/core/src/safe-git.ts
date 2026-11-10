@@ -15,6 +15,11 @@
  *   or diff driver, a credential helper, `core.sshCommand`, an include) means
  *   git does not run there at all. The global and system config are the
  *   owner's, and nothing inside a workspace writes them.
+ * - Which repository a git call is for is the folder it runs in, or what the
+ *   call names itself: the variables git reads one from (`GIT_DIR` and the
+ *   rest, which git exports to a hook or a `rebase --exec` step) leave this
+ *   process's environment as this module loads (git-repository-env.ts), so
+ *   no git CawCo starts acts on the repository of whoever started CawCo.
  *
  * A git call in a live workspace's clone also runs inside the workspace's
  * boundary, where a race on its config can only reach the workspace itself.
@@ -24,6 +29,7 @@
  * itself), when nothing can write it, and through a `.git` that is a folder,
  * never a link.
  */
+import "./git-repository-env";
 import { join } from "node:path";
 
 /** The flags that go right after `git`. */

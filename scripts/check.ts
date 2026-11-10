@@ -50,7 +50,14 @@
  * `runInBackground`). Its own parallelism is its share of the machine's
  * cores as it starts: the cores over the runs holding a slot then
  * ({@link SHARE}).
+ *
+ * Whatever started it (a shell, the pre-push hook, a `git rebase --exec`
+ * step), it and every check it starts read the checkout this file is in:
+ * git's own variables for another repository leave this process as it loads
+ * (core git-repository-env.ts), before the checks that `git init` a scratch
+ * repository run.
  */
+import "../packages/core/src/git-repository-env";
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { availableParallelism } from "node:os";
