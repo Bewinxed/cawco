@@ -2,6 +2,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { LimitWindow, OpenCodeGoLimits } from "@cawco/core/usage/types";
+import { z } from "zod";
 
 /**
  * The OpenCode Go plan's live windows. OpenCode Go meters every key by dollar
@@ -34,19 +35,22 @@ const TIMEOUT_MS = 10_000;
 const CACHE_TTL_MS = 180_000;
 const FAILURE_BACKOFF_MS = 2 * 60_000;
 
-interface GoWindowRaw {
-  percent?: number;
-  resetsAt?: string | null;
-  status?: string;
-}
+const GoWindowRaw = z.object({
+  percent: z.number().optional(),
+  resetsAt: z.string().nullish(),
+  status: z.string().optional(),
+});
 
-interface GoUsageResponse {
-  usage?: {
-    monthly?: GoWindowRaw | null;
-    rolling?: GoWindowRaw | null;
-    weekly?: GoWindowRaw | null;
-  } | null;
-}
+const GoUsageResponse = z.object({
+  usage: z
+    .object({
+      monthly: GoWindowRaw.nullish(),
+      rolling: GoWindowRaw.nullish(),
+      weekly: GoWindowRaw.nullish(),
+    })
+    .nullish(),
+});
+type GoUsageResponse = z.infer<typeof GoUsageResponse>;
 
 /** The three Go windows and the {@link LimitWindow} identity each maps onto. */
 const MAPPED = [
@@ -128,7 +132,7 @@ export async function fetchOpenCodeGoLimits(
       }
       return {
         ok: true as const,
-        windows: windowsOf((await res.json()) as GoUsageResponse),
+        windows: windowsOf(GoUsageResponse.parse(await res.json())),
       };
     });
     switch (read.kind) {

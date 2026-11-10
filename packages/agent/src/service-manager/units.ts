@@ -245,8 +245,8 @@ const orderingComment = (spec: ServiceSpec): string => {
   // like `network-online.target` have no launchd counterpart to name.
   const siblings = spec.after
     .map((target) => CAWCO_SIBLING_SERVICE.exec(target)?.[1])
-    .filter((id): id is string => id !== undefined && isServiceId(id))
-    .map((id) => label(id as ServiceId));
+    .filter((id): id is ServiceId => id !== undefined && isServiceId(id))
+    .map((id) => label(id));
   if (siblings.length === 0) {
     return "";
   }

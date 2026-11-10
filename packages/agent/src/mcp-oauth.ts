@@ -8,6 +8,7 @@ import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
+import { fieldOf } from "./json-field";
 import { GATE_PATH } from "./mcp-gate";
 import { HOSTED_PATH, mcpHost } from "./mcp-host";
 import {
@@ -33,13 +34,14 @@ const FLEET_PATH = /^\/mcp\/fleet\//u;
  * caller that went away is not resent for.
  */
 function throughDrops(
-  first: Response & { body: ReadableStream<Uint8Array> },
+  first: Response,
+  firstBody: ReadableStream<Uint8Array>,
   again: () => Promise<Response | { away: string }>,
   stopped: AbortSignal,
   what: string
 ): ReadableStream<Uint8Array> {
   const kind = first.headers.get("content-type");
-  let reader = first.body.getReader();
+  let reader = firstBody.getReader();
   let passed = 0;
   let skip = 0;
   /**
@@ -193,7 +195,8 @@ async function relayMcp(
   return new Response(
     keyed && response.body
       ? throughDrops(
-          response as Response & { body: ReadableStream<Uint8Array> },
+          response,
+          response.body,
           () => throughHubAway(tryOnce, request.signal),
           request.signal,
           `${request.method} ${incoming.pathname}`
@@ -231,7 +234,7 @@ function toolCall(
   }
   const message = parsed(body);
   return (Array.isArray(message) ? message : [message]).some(
-    (one) => (one as { method?: unknown } | null)?.method === "tools/call"
+    (one) => fieldOf(one, "method") === "tools/call"
   );
 }
 
@@ -251,7 +254,7 @@ function heldCall(
   if (MCP_RELAY_PATH.test(pathname)) {
     return heldMcpCall(pathname, parsed(body));
   }
-  const name = (parsed(body) as { name?: unknown } | undefined)?.name;
+  const name = fieldOf(parsed(body), "name");
   if (typeof name !== "string") {
     return "unnamed";
   }
@@ -262,11 +265,9 @@ function heldCall(
 function heldMcpCall(pathname: string, message: unknown): string | undefined {
   const cawco = pathname === "/mcp/cawco";
   for (const one of Array.isArray(message) ? message : [message]) {
-    const call = one as
-      { method?: unknown; params?: { name?: unknown } } | undefined;
-    const name =
-      typeof call?.params?.name === "string" ? call.params.name : "unnamed";
-    if (call?.method !== "tools/call") {
+    const called = fieldOf(fieldOf(one, "params"), "name");
+    const name = typeof called === "string" ? called : "unnamed";
+    if (fieldOf(one, "method") !== "tools/call") {
       continue;
     }
     if (!cawco) {
@@ -321,7 +322,7 @@ function holdingUntilEnd(response: Response, release: () => void): Response {
  */
 function notStarted(body: ArrayBuffer | undefined): Response {
   const message = body ? parsed(body) : undefined;
-  const id = (message as { id?: unknown } | undefined)?.id;
+  const id = fieldOf(message, "id");
   return Response.json(
     id === undefined
       ? { error: AGENT_RESTARTING, started: false }
@@ -344,9 +345,7 @@ async function restartRoute(request: Request): Promise<Response> {
     return new Response("Not from a browser.", { status: 403 });
   }
   if (request.method === "POST") {
-    const { ms } = (await request.json().catch(() => ({}))) as {
-      ms?: unknown;
-    };
+    const ms = fieldOf(await request.json().catch(() => undefined), "ms");
     if (typeof ms === "number" && ms > 0) {
       raiseFence("service-restart", Math.min(ms, 5 * 60_000));
     } else {
@@ -530,7 +529,11 @@ export const startMcpGateway = async (hubUrl: () => string) => {
     console.info(`[gateway] MCP gateway serving on 127.0.0.1:${port}`);
     return server;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "EADDRINUSE"
+    ) {
       // Whoever it is, by name: on 2026-10-08 it was a leaf's network namespace
       // forwarding the port, not an agent, and saying "another agent" sent the
       // diagnosis the wrong way for an hour and a half.

@@ -244,6 +244,14 @@ const YIELD_MS = 8;
 /** Usage records one turn of the loop folds in ({@link UsageScanner}). Ours: a few milliseconds of them. */
 const INGEST_PART = 500;
 
+/** The id an `INSERT … RETURNING id` gave: such an insert always returns its row. */
+const inserted = (row: { id: number } | null): number => {
+  if (!row) {
+    throw new Error("the usage store's insert returned no row");
+  }
+  return row.id;
+};
+
 /**
  * Hands `onLine` every whole line of `path` from byte `offset` on, as the
  * file streams in, and answers the offset after the last whole line: a
@@ -597,7 +605,7 @@ export class UsageScanner {
       this.#setClaude.run(...values, main.id);
       mainId = main.id;
     } else {
-      mainId = (this.#addClaude.get(mainKey, ...values) as { id: number }).id;
+      mainId = inserted(this.#addClaude.get(mainKey, ...values));
       this.#claudeRows.add(mainKey, mainId);
     }
     if (rec.isSidechain) {
@@ -619,7 +627,7 @@ export class UsageScanner {
       this.#takeBack(side);
     }
     if (!sideRow) {
-      const sideId = (this.#addSide.get(sideKey, mainId) as { id: number }).id;
+      const sideId = inserted(this.#addSide.get(sideKey, mainId));
       this.#sideRows.add(sideKey, sideId);
     } else if (sideRow.main !== mainId) {
       this.#setSide.run(mainId, sideRow.id);

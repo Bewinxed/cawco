@@ -10,7 +10,7 @@ import { usageHost } from "./usage-host";
 /** How an op says how far it has come, before it answers. */
 export type Tell = (value: unknown) => void;
 
-export const storeOps = {
+const opsOf = {
   "opencode.ownRows": (_: undefined) => opencodeReads.ownRows(),
   "opencode.ownChanges": (_: undefined) => opencodeReads.ownChanges(),
   "opencode.ownSignInTypes": (_: undefined) => opencodeReads.ownSignInTypes(),
@@ -21,16 +21,21 @@ export const storeOps = {
   "usage.scan": (now: number) => usageHost.scan(now),
 } satisfies Record<string, (arg: never, tell: Tell) => Promise<unknown>>;
 
-type StoreOps = typeof storeOps;
+type StoreOps = typeof opsOf;
 export type StoreOp = keyof StoreOps;
 export type StoreArg<K extends StoreOp> = Parameters<StoreOps[K]>[0];
 export type StoreAnswer<K extends StoreOp> = Awaited<ReturnType<StoreOps[K]>>;
 
+/** Each op as a handler of its own argument and answer: what lets one call by a name `K` and its argument pass the checker. */
+export const storeOps: {
+  [K in StoreOp]: (arg: StoreArg<K>, tell: Tell) => Promise<StoreAnswer<K>>;
+} = opsOf;
+
 /** What the loop sends: one op and its argument, under an id its answer carries. */
-export interface StoreAsk {
-  arg: unknown;
+export interface StoreAsk<K extends StoreOp = StoreOp> {
+  arg: StoreArg<K>;
   id: number;
-  op: StoreOp;
+  op: K;
 }
 
 /** What the thread sends: how far an op has come, its answer, or why it failed. */

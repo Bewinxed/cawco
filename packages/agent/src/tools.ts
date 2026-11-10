@@ -636,7 +636,7 @@ const refusal = async (
     const ways = spec.install.map((method) => method.label).join(", ");
     return `${at.path} came from none of the ways CawCo installs ${spec.name} (${ways}), and CawCo puts no second copy beside it: install ${spec.name}${version ? ` ${version}` : ""} there the way it got there`;
   }
-  if (!at.method.platforms.includes(platform() as ToolPlatform)) {
+  if (!at.method.platforms.some((one) => one === platform())) {
     return `${at.path} was installed with ${at.method.label}, which CawCo does not run on ${platform()}`;
   }
   const unmet = at.method.needs
@@ -740,7 +740,7 @@ const methodFor = async (
   }
   const unheld = spec.install.filter((one) => !holdsCopies(one));
   const onPlatform = (unheld.length > 0 ? unheld : spec.install).filter((one) =>
-    one.platforms.includes(platform() as ToolPlatform)
+    one.platforms.some((each) => each === platform())
   );
   const here = onPlatform.filter(
     (one) => !(pinned && one.pinnedCommand === undefined)
@@ -838,6 +838,14 @@ const retried = (where: string): SwitchPlace => ({
   where,
 });
 
+/** This machine's platform as a tool's install table names it; none for one the table has no row for. */
+const toolPlatform = (): ToolPlatform | undefined => {
+  const here = platform();
+  return here === "linux" || here === "darwin" || here === "win32"
+    ? here
+    : undefined;
+};
+
 /**
  * Where one source of a tool's settings is (core `ToolUpdateSwitches.places`),
  * and how an unset there reaches CawCo's next read: a file by its path; a
@@ -860,7 +868,8 @@ const sourcePlace = (
     return retried(shownPath(source.path));
   }
   const { files, registry } = places;
-  const dir = files.dirs[platform() as ToolPlatform];
+  const here = toolPlatform();
+  const dir = here ? files.dirs[here] : undefined;
   const named: Record<string, SwitchPlace> = {
     ...(dir
       ? {
