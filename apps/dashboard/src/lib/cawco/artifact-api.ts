@@ -16,6 +16,7 @@ import type {
   SessionAttachments,
 } from "@cawco/core/protocol";
 import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
+import { z } from "zod";
 import { hub, hubPath } from "#lib/platform/hub.js";
 import {
   hubData,
@@ -290,12 +291,12 @@ export async function verifyArtifact(
   instanceId: string,
   id: string
 ): Promise<string> {
-  const answer = (await hubJson(
+  const answer = await hubJson(
     hubRequest("POST /api/instances/:id/artifacts/:artifact/verify", {
       path: { id: instanceId, artifact: id },
     })
-  )) as { verify: string };
-  return answer.verify;
+  );
+  return z.object({ verify: z.string() }).parse(answer).verify;
 }
 
 /** The draft canvas went out with a send: the session holds it now. */
