@@ -18,23 +18,33 @@ import { load } from "../hub/load";
 import { readAccounts } from "./accounts.svelte";
 import { equal } from "./same";
 
-export const usageState = $state({
+export const usageState = $state<{
   /**
    * Each Claude account's own limits, by account id — folded in from the
    * `kind: 'usage'` frame so the pill updates live rather than polling
    * (USAGE-SPEC.md §7.1). Empty while there is no Claude account.
    */
-  usageLimits: {} as Record<string, ClaudeLimits>,
+  usageLimits: Record<string, ClaudeLimits>;
+
   /** Each machine's OpenCode Go windows, from the same frame; absent on a machine with no Go key. */
-  openCodeGoLimits: {} as Record<string, OpenCodeGoLimits>,
+  openCodeGoLimits: Record<string, OpenCodeGoLimits>;
+
   /** The hub's limit readings have been read once, so an empty map means none, not not-yet. */
-  usageLimitsRead: false,
+  usageLimitsRead: boolean;
+
   /**
    * The fleet's spend as the hub reckons it (`/api/usage/spend`, then every
    * `kind: 'usage'` frame); null until it lands.
    */
-  spend: null as UsageSpend | null,
+  spend: UsageSpend | null;
+
   /** The last read of `/api/usage/spend` failed and no frame has answered since. */
+  spendFailed: boolean;
+}>({
+  usageLimits: {},
+  openCodeGoLimits: {},
+  usageLimitsRead: false,
+  spend: null,
   spendFailed: false,
 });
 

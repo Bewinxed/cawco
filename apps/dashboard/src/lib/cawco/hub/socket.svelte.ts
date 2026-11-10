@@ -64,8 +64,9 @@ export type HubState = "connected" | "connecting" | "unreachable";
  */
 const OUTAGE_GRACE = 4000;
 
-export const connectionState = $state({
-  status: "disconnected" as ConnectionStatus,
+export const connectionState = $state<{
+  status: ConnectionStatus;
+
   /**
    * Whether an attempt has actually FAILED — the socket errored, or closed
    * without ever opening. A dashboard that has not tried yet reads
@@ -73,28 +74,39 @@ export const connectionState = $state({
    * says one came back empty-handed. Cleared on every open, so a healthy load
    * never carries a fault forward.
    */
-  failed: false,
+  failed: boolean;
+
   /**
    * When the hub is said unreachable (epoch ms): {@link OUTAGE_GRACE} after
    * the first close, null again once it answers. Retries in between leave
    * it. A deadline, not a flag: `connectionStore.hub` reads it against the clock.
    */
-  outageAt: null as number | null,
+  outageAt: number | null;
+
   /**
    * The hub said it restarts for an update (`hub.restart`), and by when it
    * answers again (epoch ms, on this clock). A close before then is the
    * update: the outage is said from the deadline, not from the close.
    * Null once the hub answers again, or takes it back.
    */
-  restart: null as { until: number; version: string | null } | null,
+  restart: { until: number; version: string | null } | null;
+
   /**
    * This page was built for an older wire than the hub's, so it reads nothing
    * more off the socket ({@link olderThanHub}) until the update toast's
    * reload takes it to the hub's build.
    */
-  older: false,
+  older: boolean;
+
   /** When the next reconnect attempt fires, so the banner can count it down. */
-  retryAt: null as number | null,
+  retryAt: number | null;
+}>({
+  status: "disconnected",
+  failed: false,
+  outageAt: null,
+  restart: null,
+  older: false,
+  retryAt: null,
 });
 
 interface Waiter {

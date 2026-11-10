@@ -10,14 +10,18 @@ import { heardFrame, heardSince, readLeaves } from "../heard";
 import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
 
-const tailnetState = $state({
+const tailnetState = $state<{
   /**
    * HTTPS on the hub machine's tailnet name (`GET /api/tailnet-https`, then
    * each `tailnet.https` frame): Needs you shows its step while one needs
    * the person; undefined until read.
    */
-  tailnetHttps: undefined as TailnetHttps | undefined,
+  tailnetHttps: TailnetHttps | undefined;
+
   /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
+  tailnetTicked: boolean;
+}>({
+  tailnetHttps: undefined,
   tailnetTicked: false,
 });
 

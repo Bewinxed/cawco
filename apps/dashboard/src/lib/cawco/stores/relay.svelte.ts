@@ -18,16 +18,22 @@ import {
   refusedOrUnreached,
 } from "#lib/platform/hub-read.js";
 
-const relayState = $state({
+const relayState = $state<{
   /**
    * The stream relay's journey (`GET /api/stream-relay`, then each
    * `stream_relay.journey` frame): Needs you shows its row while it asks,
    * Settings › Browsers its card or its summary; undefined until read.
    */
-  relayJourney: undefined as RelayJourneyView | undefined,
+  relayJourney: RelayJourneyView | undefined;
+
   /** The domain this page reached CawCo through, as the hub saw it (null by IP, the tailnet, a name of the hub's). */
-  relayDomain: null as string | null,
+  relayDomain: string | null;
+
   /** It went live and was proven from outside while this page stood: the row ticks until the next open. */
+  relayTicked: boolean;
+}>({
+  relayJourney: undefined,
+  relayDomain: null,
   relayTicked: false,
 });
 

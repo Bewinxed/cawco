@@ -25,17 +25,21 @@ import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
 import { rereadHub } from "../hub/socket.svelte";
 
-const offersState = $state({
+const offersState = $state<{
   /**
    * "Make this a project" offers standing on plain sessions, by session id:
    * read on connect, then kept by `project_offer` frames.
    */
-  projectOffers: {} as Record<string, ProjectOfferSummary>,
+  projectOffers: Record<string, ProjectOfferSummary>;
+
   /**
    * An offer this tab answered by joining a project that already was: the
    * card stays where the offer stood, saying what it joined, until put away.
    */
-  projectJoins: {} as Record<string, ProjectOfferAccepted>,
+  projectJoins: Record<string, ProjectOfferAccepted>;
+}>({
+  projectOffers: {},
+  projectJoins: {},
 });
 
 export function takeProjectOffer(frame: FrameOf<"project_offer">): void {

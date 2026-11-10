@@ -14,12 +14,14 @@ import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
 import { equal } from "./same";
 
-export const workItemsState = $state({
+export const workItemsState = $state<{
   /**
    * Every work item a parent's delegate tray has been told of, by item id:
    * read when the parent's view opens, then kept by `work_item` frames.
    */
-  workItems: {} as Record<string, WorkItemSummary>,
+  workItems: Record<string, WorkItemSummary>;
+}>({
+  workItems: {},
 });
 
 /** Views whose delegate tray has been read — frames keep it after that. */
