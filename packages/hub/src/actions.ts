@@ -41,7 +41,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -55,9 +55,7 @@ import {
   actionProposedWords,
   actionWords,
 } from "./presenters/project";
-import { projectRefusalOf } from "./project-refusal";
 import type { Push } from "./push";
-import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import { roleOf } from "./roles";
 import { stageNamed } from "./stages";
 import { actionActor, sessionActor, type Tasks } from "./tasks";
@@ -84,11 +82,6 @@ const PROPOSERS: ReadonlySet<SessionRole> = new Set(["worker"]);
 
 /** The states that wait on you: Needs you shows these. */
 const WAITING: readonly ActionState[] = ["proposed", "failed", "unknown"];
-
-/** A refusal, with the status a route answers and the words a tool returns. */
-class ActionRefusal extends StatusRefusal {}
-
-const refuse = refuser(ActionRefusal);
 
 const sha256 = (text: string): string =>
   createHash("sha256").update(text, "utf8").digest("hex");
@@ -188,8 +181,12 @@ export const createActions = ({
   /** Task titles by `<project>/<task>`, read once each. */
   const titles = new Map<string, string>();
 
-  const rowOf = (id: string): ActionRow =>
-    store.get(id) ?? refuse(404, `There is no approved action ${id}.`);
+  const rowOf = (id: string) =>
+    store.get(id) ??
+    problem(404, {
+      code: "action-unknown",
+      detail: `There is no approved action ${id}.`,
+    });
 
   const view = (row: ActionRow): ApprovedActionView => {
     const [proposer] = db.getInstancesByIds([row.proposedBy]);
@@ -251,49 +248,55 @@ export const createActions = ({
 
   // --- proposing -----------------------------------------------------------------
 
-  /** When it runs, read from what the proposer wrote; refused when it cannot be. */
-  const runAtOf = (written: string | undefined, now: number): Date | null => {
+  /** When it runs, read from what the proposer wrote; a problem when it cannot be. */
+  const runAtOf = (written: string | undefined, now: number) => {
     if (written === undefined || written.trim() === "") {
       return null;
     }
     const at = Date.parse(written);
     if (Number.isNaN(at)) {
-      return refuse(
-        400,
-        `run_at “${written}” is not a time; write ISO 8601 with a zone, like 2026-10-13T09:00:00+01:00.`
-      );
+      return problem(400, {
+        code: "action-run-at-unparsed",
+        detail: `run_at “${written}” is not a time; write ISO 8601 with a zone, like 2026-10-13T09:00:00+01:00.`,
+      });
     }
     if (at < now - PAST_GRACE_MS) {
-      refuse(
-        400,
-        `run_at ${new Date(at).toISOString()} has passed; leave it out to run as soon as it is approved.`
-      );
+      return problem(400, {
+        code: "action-run-at-passed",
+        detail: `run_at ${new Date(at).toISOString()} has passed; leave it out to run as soon as it is approved.`,
+      });
     }
     if (at > now + AHEAD_MAX_MS) {
-      refuse(400, "run_at is more than a year away.");
+      return problem(400, {
+        code: "action-run-at-far",
+        detail: "run_at is more than a year away.",
+      });
     }
     return new Date(at);
   };
 
-  /** The task it is for, read, and the stage it may move to; refused when either cannot be. */
+  /** The task it is for, read, and the stage it may move to; a problem when either cannot be. */
   const taskOf = async (
     projectId: string,
     task: string | undefined,
     thenStage: string | undefined
-  ): Promise<{ taskId: string | null; thenStage: string | null }> => {
+  ) => {
     if (task === undefined) {
       if (thenStage !== undefined) {
-        refuse(400, "then_stage moves a task: name the task too.");
+        return problem(400, {
+          code: "action-stage-taskless",
+          detail: "then_stage moves a task: name the task too.",
+        });
       }
       return { taskId: null, thenStage: null };
     }
-    // A task that does not read, refused or failing, is the proposal's 404.
+    // A task that does not read, or fails to, is the proposal's 404.
     const found = await tasks.get(projectId, task).then(
       (read) => (read instanceof ElysiaStatus ? read.response.detail : read),
       (error: unknown) => wordsOf(error)
     );
     if (typeof found === "string") {
-      return refuse(404, found);
+      return problem(404, { code: "action-task-unread", detail: found });
     }
     titles.set(`${projectId}/${found.id}`, found.title);
     if (thenStage === undefined) {
@@ -301,25 +304,25 @@ export const createActions = ({
     }
     const stages = await tasks.stages(projectId);
     if (stages instanceof ElysiaStatus) {
-      throw projectRefusalOf(stages);
+      return stages;
     }
     const stage = stageNamed(stages, thenStage);
     if (!stage) {
-      refuse(
-        400,
-        `${thenStage} is not a stage of this project; its stages are ${stages.stages.map((each) => each.name).join(", ")}.`
-      );
+      return problem(400, {
+        code: "action-stage-unknown",
+        detail: `${thenStage} is not a stage of this project; its stages are ${stages.stages.map((each) => each.name).join(", ")}.`,
+      });
     }
     const entered = stages.moves.some(
       (move) =>
         (move.to === "*" || move.to === thenStage) &&
         move.who.includes("action")
     );
-    if (!(entered && (stage?.hooks.by ?? "action") === "action")) {
-      refuse(
-        400,
-        `stages.md lets no approved action move a task to ${thenStage}; a move line naming action (like “scheduled → ${thenStage}  action”) does.`
-      );
+    if (!(entered && (stage.hooks.by ?? "action") === "action")) {
+      return problem(400, {
+        code: "action-stage-not-action",
+        detail: `stages.md lets no approved action move a task to ${thenStage}; a move line naming action (like “scheduled → ${thenStage}  action”) does.`,
+      });
     }
     return { taskId: found.id, thenStage };
   };
@@ -350,59 +353,90 @@ export const createActions = ({
     return null;
   };
 
-  const propose = async (
-    actor: InstanceRow,
-    input: ActionProposal
-  ): Promise<ApprovedActionView> => {
+  /** A proposal's proposer, connection, reason and arguments as they will be filed, or the problem with them. */
+  const fitted = (actor: InstanceRow, input: ActionProposal) => {
     const role = roleOf(actor);
     if (!PROPOSERS.has(role)) {
-      refuse(
-        403,
-        "Only a session the owner started, or a project's Caw, proposes an approved action. Hand it to the session that started this one."
-      );
+      return problem(403, {
+        code: "action-proposer-unfit",
+        detail:
+          "Only a session the owner started, or a project's Caw, proposes an approved action. Hand it to the session that started this one.",
+      });
     }
-    const projectId =
-      actor.projectId ??
-      refuse(
-        403,
-        "This session is in no project, so it has no connections to propose on."
-      );
+    const { projectId } = actor;
+    if (!projectId) {
+      return problem(403, {
+        code: "action-no-project",
+        detail:
+          "This session is in no project, so it has no connections to propose on.",
+      });
+    }
     if (!connections.proposable(actor).includes(input.connection)) {
-      refuse(
-        403,
-        `Neither this session's delegate type nor its project lists the connection ${input.connection}.`
-      );
+      return problem(403, {
+        code: "action-connection-unlisted",
+        detail: `Neither this session's delegate type nor its project lists the connection ${input.connection}.`,
+      });
     }
     const reason = input.reason.trim();
     if (!reason || reason.length > REASON_MAX) {
-      refuse(
-        400,
-        `reason is one sentence of up to ${REASON_MAX} characters: why this call, for the owner deciding.`
-      );
+      return problem(400, {
+        code: "action-reason-unfit",
+        detail: `reason is one sentence of up to ${REASON_MAX} characters: why this call, for the owner deciding.`,
+      });
     }
     const args = JSON.stringify(input.args);
     if (Buffer.byteLength(args, "utf8") > ARGS_MAX) {
-      refuse(400, `args are over ${ARGS_MAX / 1024} KB as JSON.`);
+      return problem(400, {
+        code: "action-args-too-large",
+        detail: `args are over ${ARGS_MAX / 1024} KB as JSON.`,
+      });
     }
-    const now = Date.now();
-    const runAt = runAtOf(input.runAt, now);
+    return { projectId, reason, args };
+  };
+
+  /** The tool the connection's server lists under the proposal's name, or the problem with it or its arguments. */
+  const listedTool = async (input: ActionProposal) => {
     let found: Tool | undefined;
     try {
       found = await connections.toolNamed(input.connection, input.tool);
     } catch (error) {
-      return refuse(409, wordsOf(error));
+      return problem(409, {
+        code: "action-connection-unreached",
+        detail: wordsOf(error),
+      });
     }
     if (!found) {
-      return refuse(
-        404,
-        `${input.connection} lists no tool ${input.tool}; give the tool's own name on its server.`
-      );
+      return problem(404, {
+        code: "action-tool-unknown",
+        detail: `${input.connection} lists no tool ${input.tool}; give the tool's own name on its server.`,
+      });
     }
     const misfit = argsProblem(found, input.args);
     if (misfit) {
-      refuse(400, misfit);
+      return problem(400, { code: "action-args-unfit", detail: misfit });
+    }
+    return found;
+  };
+
+  const propose = async (actor: InstanceRow, input: ActionProposal) => {
+    const filed = fitted(actor, input);
+    if (filed instanceof ElysiaStatus) {
+      return filed;
+    }
+    const { projectId, reason, args } = filed;
+    const now = Date.now();
+    const runAt = runAtOf(input.runAt, now);
+    if (runAt instanceof ElysiaStatus) {
+      return runAt;
+    }
+    const found = await listedTool(input);
+    if (found instanceof ElysiaStatus) {
+      return found;
     }
     const linked = await taskOf(projectId, input.task, input.thenStage);
+    if (linked instanceof ElysiaStatus) {
+      return linked;
+    }
     const signedIn = connections.get(input.connection);
     const routine = routineRunOf(actor);
     const row = store.insert({
@@ -477,7 +511,7 @@ export const createActions = ({
 
   // --- deciding ------------------------------------------------------------------
 
-  /** Refuses a call whose connection no longer signs in as the account it was proposed with. */
+  /** Why a call's connection no longer signs in as the account it was proposed with, or nothing. */
   const sameAccount = (row: ActionRow): string | undefined => {
     let now: ReturnType<Connections["get"]>;
     try {
@@ -490,34 +524,41 @@ export const createActions = ({
       : `${row.connection} now signs in to ${now.service} as ${now.account}, not ${row.service} as ${row.account} as when it was proposed.`;
   };
 
-  /** A move from one of `from`, or the refusal naming where it is. */
+  /** A move from one of `from`, or the problem naming where it is. */
   const moved = (
     row: ActionRow,
     from: readonly ActionState[],
     patch: Parameters<typeof store.settle>[2],
     what: string
-  ): ActionRow =>
+  ) =>
     store.settle(row.id, from, patch) ??
-    refuse(
-      409,
-      `It is ${store.get(row.id)?.state ?? "gone"}, so it cannot be ${what}.`
-    );
+    problem(409, {
+      code: "action-state-moved",
+      detail: `It is ${store.get(row.id)?.state ?? "gone"}, so it cannot be ${what}.`,
+    });
 
   /** Yours: the exact call shown, named by its arguments' hash. */
-  const approve = (id: string, argsHash: string): ApprovedActionView => {
+  const approve = (id: string, argsHash: string) => {
     const row = rowOf(id);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     if (row.state !== "proposed") {
-      refuse(409, `It is ${row.state}, not waiting for approval.`);
+      return problem(409, {
+        code: "action-not-waiting",
+        detail: `It is ${row.state}, not waiting for approval.`,
+      });
     }
     if (argsHash !== row.argsHash) {
-      refuse(
-        409,
-        "These are not the arguments it was proposed with. Reload it and approve the call it shows."
-      );
+      return problem(409, {
+        code: "action-args-changed",
+        detail:
+          "These are not the arguments it was proposed with. Reload it and approve the call it shows.",
+      });
     }
     const drifted = sameAccount(row);
     if (drifted) {
-      refuse(409, drifted);
+      return problem(409, { code: "action-account-drifted", detail: drifted });
     }
     const now = new Date();
     const approved = moved(
@@ -526,6 +567,9 @@ export const createActions = ({
       { state: "approved", approvedBy: "owner", approvedAt: now },
       "approved"
     );
+    if (approved instanceof ElysiaStatus) {
+      return approved;
+    }
     console.info(
       `[actions] ${id} approved: runs ${approved.runAt ? `at ${approved.runAt.toISOString()}` : "now"}`
     );
@@ -534,26 +578,36 @@ export const createActions = ({
     return view(approved);
   };
 
-  const deny = (id: string): ApprovedActionView => {
+  const deny = (id: string) => {
+    const found = rowOf(id);
+    if (found instanceof ElysiaStatus) {
+      return found;
+    }
     const row = moved(
-      rowOf(id),
+      found,
       ["proposed"],
       { state: "denied", endedAt: new Date(), error: "You denied it." },
       "denied"
     );
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     console.info(`[actions] ${id} denied`);
     told();
     return view(row);
   };
 
   /** Before it runs: by you, or by a session of its project. */
-  const cancel = (
-    id: string,
-    by: "owner" | InstanceRow
-  ): ApprovedActionView => {
+  const cancel = (id: string, by: "owner" | InstanceRow) => {
     const row = rowOf(id);
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     if (by !== "owner" && by.projectId !== row.projectId) {
-      refuse(403, "That action is not one of this session's project's.");
+      return problem(403, {
+        code: "action-not-yours",
+        detail: "That action is not one of this session's project's.",
+      });
     }
     const cancelled = moved(
       row,
@@ -565,6 +619,9 @@ export const createActions = ({
       },
       "cancelled"
     );
+    if (cancelled instanceof ElysiaStatus) {
+      return cancelled;
+    }
     console.info(`[actions] ${id} cancelled`);
     told();
     schedule();
@@ -572,13 +629,20 @@ export const createActions = ({
   };
 
   /** Yours: a failed or unknown one, read (and checked at the service) and put away. */
-  const check = (id: string): ApprovedActionView => {
+  const check = (id: string) => {
+    const found = rowOf(id);
+    if (found instanceof ElysiaStatus) {
+      return found;
+    }
     const row = moved(
-      rowOf(id),
+      found,
       ["failed", "unknown"],
       { checkedAt: new Date() },
       "put away (only one that failed or whose outcome is unknown is)"
     );
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     told();
     return view(row);
   };
@@ -804,18 +868,15 @@ export const createActions = ({
       .filter((row) => state === undefined || row.state === state)
       .map(view);
 
-  // --- tools ---------------------------------------------------------------------
+  /** The project a session's tools act on, or the problem that it is in none. */
+  const projectOf = (actor: InstanceRow) =>
+    actor.projectId ??
+    problem(403, {
+      code: "action-no-project",
+      detail: "This session is in no project.",
+    });
 
-  const run = async <T>(work: () => T | Promise<T>): Promise<T> => {
-    try {
-      return await work();
-    } catch (error) {
-      if (error instanceof ActionRefusal) {
-        throw new Error(error.message, { cause: error });
-      }
-      throw error;
-    }
-  };
+  // --- tools ---------------------------------------------------------------------
 
   /** The action tools, bound to the calling session; with none, the same definitions for discovery. */
   const tools = (actor: InstanceRow | undefined) => {
@@ -863,25 +924,27 @@ export const createActions = ({
               "The stage the task moves to once the call is done; stages.md must let an action make that move."
             ),
         },
-        (input) =>
-          run(async () => {
-            const filed = await propose(me(), {
-              connection: input.connection,
-              tool: input.tool,
-              args: input.args,
-              reason: input.reason,
-              ...(input.run_at === undefined ? {} : { runAt: input.run_at }),
-              ...(input.task === undefined ? {} : { task: input.task }),
-              ...(input.then_stage === undefined
-                ? {}
-                : { thenStage: input.then_stage }),
-            });
-            return {
-              id: filed.id,
-              state: filed.state,
-              said: "Waiting for the owner's approval.",
-            };
-          }),
+        async (input) => {
+          const filed = await propose(me(), {
+            connection: input.connection,
+            tool: input.tool,
+            args: input.args,
+            reason: input.reason,
+            ...(input.run_at === undefined ? {} : { runAt: input.run_at }),
+            ...(input.task === undefined ? {} : { task: input.task }),
+            ...(input.then_stage === undefined
+              ? {}
+              : { thenStage: input.then_stage }),
+          });
+          if (filed instanceof ElysiaStatus) {
+            return filed;
+          }
+          return {
+            id: filed.id,
+            state: filed.state,
+            said: "Waiting for the owner's approval.",
+          };
+        },
         actionProposedWords
       ),
       tool(
@@ -890,38 +953,40 @@ export const createActions = ({
         {
           state: z.enum(ACTION_STATES).optional(),
         },
-        ({ state }) =>
-          run(async () => {
-            const projectId =
-              me().projectId ?? refuse(403, "This session is in no project.");
-            await titlesOf(store.list(projectId, LISTED));
-            return list(projectId, state);
-          }),
+        async ({ state }) => {
+          const projectId = projectOf(me());
+          if (projectId instanceof ElysiaStatus) {
+            return projectId;
+          }
+          await titlesOf(store.list(projectId, LISTED));
+          return list(projectId, state);
+        },
         actionListWords
       ),
       tool(
         "action_cancel",
         "Cancel an approved action of your project before it runs.",
         { id: z.string().trim().min(1).describe("Its id.") },
-        ({ id }) =>
-          run(() =>
-            cancel(
-              byHandle(
-                id,
-                list(
-                  me().projectId ??
-                    refuse(403, "This session is in no project.")
-                ),
-                {
-                  id: (action) => action.id,
-                  said: (action) =>
-                    `${action.connection}:${action.tool} ${action.id.slice(0, 8)}`,
-                },
-                "action"
-              ).id,
-              me()
-            )
-          ),
+        ({ id }) => {
+          const projectId = projectOf(me());
+          return Promise.resolve(
+            projectId instanceof ElysiaStatus
+              ? projectId
+              : cancel(
+                  byHandle(
+                    id,
+                    list(projectId),
+                    {
+                      id: (action) => action.id,
+                      said: (action) =>
+                        `${action.connection}:${action.tool} ${action.id.slice(0, 8)}`,
+                    },
+                    "action"
+                  ).id,
+                  me()
+                )
+          );
+        },
         actionWords
       ),
     ];
@@ -933,7 +998,10 @@ export const createActions = ({
     cancel,
     check,
     deny,
-    get: (id: string) => view(rowOf(id)),
+    get: (id: string) => {
+      const row = rowOf(id);
+      return row instanceof ElysiaStatus ? row : view(row);
+    },
     list,
     propose,
     start,
@@ -951,8 +1019,6 @@ export const ACTION_TOOLS: ReadonlySet<string> = new Set([
   "action_list",
   "action_cancel",
 ]);
-
-const attempt = refusalAttempt(ActionRefusal, "action-refused");
 
 const STATE = t.Union([
   t.Literal("proposed"),
@@ -984,9 +1050,7 @@ export const actionRoutes = (actions: Actions) =>
       ({ query }) => ({ actions: actions.list(query.projectId, query.state) })
     )
     .get("/api/actions/waiting", () => ({ actions: actions.waiting() }))
-    .get("/api/actions/:id", ({ params }) =>
-      attempt(() => actions.get(params.id))
-    )
+    .get("/api/actions/:id", ({ params }) => actions.get(params.id))
     .post(
       "/api/actions/:id/approve",
       {
@@ -995,15 +1059,10 @@ export const actionRoutes = (actions: Actions) =>
           argsHash: t.String({ minLength: 64, maxLength: 64 }),
         }),
       },
-      ({ params, body }) =>
-        attempt(() => actions.approve(params.id, body.argsHash))
+      ({ params, body }) => actions.approve(params.id, body.argsHash)
     )
-    .post("/api/actions/:id/deny", ({ params }) =>
-      attempt(() => actions.deny(params.id))
-    )
+    .post("/api/actions/:id/deny", ({ params }) => actions.deny(params.id))
     .post("/api/actions/:id/cancel", ({ params }) =>
-      attempt(() => actions.cancel(params.id, "owner"))
+      actions.cancel(params.id, "owner")
     )
-    .post("/api/actions/:id/checked", ({ params }) =>
-      attempt(() => actions.check(params.id))
-    );
+    .post("/api/actions/:id/checked", ({ params }) => actions.check(params.id));

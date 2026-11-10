@@ -75,18 +75,3 @@ export const refusalAnswer =
     error instanceof Kind
       ? problem(error.status, { code, detail: error.message })
       : otherwise(error);
-
-/** Runs a route's work, answering a thrown refusal of `Kind` as {@link refusalAnswer}. */
-export const refusalAttempt = <const Code extends string>(
-  Kind: RefusalKind,
-  code: Code
-) => {
-  const answer = refusalAnswer(Kind, code);
-  return async <T>(work: () => T | Promise<T>) => {
-    try {
-      return await work();
-    } catch (error) {
-      return answer(error);
-    }
-  };
-};
