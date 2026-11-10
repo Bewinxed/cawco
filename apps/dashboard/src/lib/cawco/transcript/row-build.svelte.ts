@@ -126,13 +126,15 @@ function frontOnly(prior: Row[], next: Row[]): boolean {
   );
 }
 export interface RowBuildHost {
+  readonly arrivals: {
+    readonly ledger: (fold: Fold) => void;
+  };
   readonly atBottom: boolean;
   buffer: number;
   frontHeld: string[];
   readonly isFocused: boolean;
   readonly landed: boolean;
   lastWrite: number | null;
-  readonly ledger: (fold: Fold) => void;
   olderRoom: number;
   readonly onList: () => Set<string>;
   readonly scroller: HTMLElement | undefined;
@@ -521,7 +523,7 @@ export class RowBuild {
     const { rows: next } = folded;
     ({ memo: this.memo } = folded);
     const settled = folded.memo.drawn.rows;
-    this.#host.ledger(folded);
+    this.#host.arrivals.ledger(folded);
     this.#host.slides.noteMoves(this.frozen, next, folded.ended, settled);
     // FRONT-CHANGE DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
