@@ -122,17 +122,6 @@ import { differences } from "./diff";
 import { tellHolder } from "./embed";
 import { drew, firstWords, lookOf, partsOf, readAnimation } from "./measure";
 import { nameOf, thingOf } from "./names";
-import { allClass } from "./pseudo";
-import {
-  answerMoves,
-  frameCurveOf,
-  framedOf,
-  type Held,
-  interpolated,
-  legsOf,
-  Replays,
-  valuesOf,
-} from "./replays";
 import {
   type Column,
   detailsOf,
@@ -144,7 +133,18 @@ import {
   type Page,
   type Section,
   type SectionFailure,
-} from "./runtime";
+} from "./page";
+import { allClass } from "./pseudo";
+import {
+  answerMoves,
+  frameCurveOf,
+  framedOf,
+  type Held,
+  interpolated,
+  legsOf,
+  Replays,
+  valuesOf,
+} from "./replays";
 import {
   frameAsViewport,
   windowHeight,
