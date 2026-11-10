@@ -18,12 +18,13 @@ import { tv } from "#lib/utils.js";
  * slots below; the fluid Tabs' segmented track (fluid-tabs/TabsList) takes
  * {@link SEGMENTED_TRACK} and reads the same properties. By day
  * `surface-hover` is the groove's own colour, so a hover there drew nothing:
- * a segment's hover is `groove-hover`, painted by the kit's segments and,
- * through the groove's `--color-surface-hover` that the kit ghost
- * (components/ui/highlight) reads, by the fluid track's ghost.
+ * a segment's hover is `groove-hover`, a step darker by day (away from the
+ * lifted thumb), painted by the kit's segments and, through the groove's
+ * `--ghost` that the kit ghost (components/ui/highlight) reads, by the fluid
+ * track's ghost.
  */
 export const SEGMENTED_TRACK =
-  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--color-surface-hover:var(--groove-hover)] [--item:var(--c-btn-h-sm)] [--pad:var(--c-segmented-pad)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
+  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--ghost:var(--groove-hover)] [--item:var(--c-btn-h-sm)] [--pad:var(--c-segmented-pad)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
 
 /**
  * The kit's segmented parts: the groove (its recipe above), the thumb that

@@ -1145,18 +1145,18 @@
       "groove-hover": {
         "role": "neutral",
         "displayName": "Groove Hover",
-        "canonical": "light-dark(oklch(0.967 0.008 84), oklch(0.282 0.007 70))",
-        "hex": "#f7f4ee",
+        "canonical": "light-dark(oklch(0.89 0.013 82), oklch(0.282 0.007 70))",
+        "hex": "#dfdad1",
         "hexDark": "#2c2926",
         "tonalRamp": [
-          "#0d0b07",
-          "#272520",
-          "#44423d",
-          "#63615c",
-          "#85827d",
-          "#a7a59f",
-          "#ccc9c3",
-          "#f1eee8"
+          "#0e0b05",
+          "#28251e",
+          "#45413a",
+          "#656159",
+          "#86827a",
+          "#a9a49c",
+          "#cdc8c0",
+          "#f3eee5"
         ]
       },
       "surface-hover": {

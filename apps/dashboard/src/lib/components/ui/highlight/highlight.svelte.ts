@@ -86,7 +86,8 @@ const OVERLAP = 1;
  * mid-glide and after: the parts each on their own, the list's rows on one
  * layer over them.
  *
- * - The ghost is the one hover fill. Where nothing hovers (a touch screen:
+ * - The ghost is the one hover fill: `surface-hover`, or the container's
+ *   `--ghost` where its ground is that colour (a segmented groove). Where nothing hovers (a touch screen:
  *   a tap fires a synthetic mousemove and no mouseleave, so a ghost would
  *   park on the last tap as a second selection) there is none, unless the
  *   rows' own highlight drives it (`data-follow`). It fades in place over
@@ -117,7 +118,7 @@ const LAYERS = `
 }
 [data-slot="highlight-ghost"] {
   display: none;
-  background-color: var(--color-surface-hover);
+  background-color: var(--ghost, var(--color-surface-hover));
   transition: opacity var(--dur-control) var(--ease-out);
 }
 @media (hover: hover) {

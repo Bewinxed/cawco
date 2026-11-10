@@ -798,8 +798,8 @@
     },
     "groove-hover": {
       "$type": "color",
-      "$value": "{color.surface-recess}",
-      "$description": "A segment's hover on a groove (surface-recess-deep), the kit Tabs', a single toggle group's and the fluid-tabs ghost's: the recess by day, where surface-hover is the groove's own colour; surface-hover at night."
+      "$value": "{color.neutral-5}",
+      "$description": "A segment's hover on a groove (surface-recess-deep), the kit Tabs', a single toggle group's and the fluid-tabs ghost's (`--ghost`): by day a step darker than the groove, away from the lifted chosen sheet, as surface-hover steps darker than the recess it covers (surface-hover is the groove's own colour by day); surface-hover at night."
     },
     "surface-hover": {
       "$type": "color",
