@@ -1040,6 +1040,10 @@ export const createTrackers = (deps: TrackersDeps) => {
           comment.body
         )
       );
+      if (filed instanceof ElysiaStatus) {
+        unheld(filed.response.detail);
+        return;
+      }
       if (filed.kind === "none") {
         return;
       }
