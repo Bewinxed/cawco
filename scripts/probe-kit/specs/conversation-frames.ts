@@ -271,14 +271,7 @@ const spec: Spec = {
   name: "conversation-frames",
   run: async (kit) => {
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const id = await fleet.spawn("claude", "Long orchestrator");
     await fleet.send(id, "conversation-frames: go.");
     // Every call answered before the page opens: the transcript as the

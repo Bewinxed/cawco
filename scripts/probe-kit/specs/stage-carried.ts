@@ -247,14 +247,7 @@ const run = async (kit: Kit) => {
     .env(env)
     .quiet();
 
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const session = await fleet.spawn("claude", "Cards", cards);
 
   // 1. A canvas whose stage is live, and nothing viewing it.

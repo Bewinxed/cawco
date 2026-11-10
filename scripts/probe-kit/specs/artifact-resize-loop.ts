@@ -1515,14 +1515,7 @@ export const made = async (
 /** A scratch fleet whose sessions answer through {@link respond}: sessiond, hub and agent up, its account signed in. */
 export const fleetUp = async (kit: Kit): Promise<KitFleet> => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   return fleet;
 };
 

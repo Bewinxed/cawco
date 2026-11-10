@@ -30,14 +30,7 @@ const spec: Spec = {
       everyMs: 5,
       words: ["clone-any-host", "answer"],
     }));
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
 
     const url = `file://${join(fleet.sandbox, "origin.git")}`;
     const baseDir = join(fleet.workdir, "clones");

@@ -709,14 +709,7 @@ const spec: Spec = {
     await skeletonReveal(kit, bench);
 
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const base = await fleet.dashboard();
     await loads(kit, fleet, base);
     await composerCases(kit, fleet, base);

@@ -539,14 +539,7 @@ const spec: Spec = {
   name: "edge-fade-perf",
   async run(kit) {
     const fleet = await kit.fleet(() => ({ everyMs: 20, words: ["Ready."] }));
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const { id: project } = await fleet.api((hub) =>
       hub.api.projects.post({
         name: "long-list",

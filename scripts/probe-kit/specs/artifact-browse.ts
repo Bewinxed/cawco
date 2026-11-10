@@ -669,18 +669,10 @@ const run = async (kit: Kit) => {
     await import("../../../packages/agent/src/browser/runtime");
   const runtime = await findRuntime();
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch(
-    "agent",
-    [],
-    "missing" in runtime ? {} : { DOCKER_HOST: `unix://${runtime.endpoint}` }
-  );
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up({
+    agent:
+      "missing" in runtime ? {} : { DOCKER_HOST: `unix://${runtime.endpoint}` },
+  });
   const home = fleet.env.HOME as string;
 
   // Every session's browser tool, as a person adds it: the door it is

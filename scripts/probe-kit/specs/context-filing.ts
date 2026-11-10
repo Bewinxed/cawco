@@ -1184,14 +1184,7 @@ const configured = async (kit: Kit, fleet: KitFleet) => {
 const run = async (kit: Kit) => {
   rules(kit);
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const read = reads(fleet);
   await claude200k(kit, fleet, read);
   await midTurn(kit, fleet, read);

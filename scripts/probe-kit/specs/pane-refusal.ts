@@ -1115,14 +1115,7 @@ const legW = async (kit: Kit, fleet: KitFleet, session: string) => {
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const session = await fleet.spawn("claude", "Pane refusal");
   await fleet.send(session, "hello");
   const made = await callIn(fleet, session, CREATE, {

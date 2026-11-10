@@ -25,14 +25,7 @@ import type { Kit, KitFleet, Spec } from "../spec";
 
 const run = async (kit: Kit): Promise<void> => {
   const fleet = await kit.fleet((): Reply => ({ everyMs: 5, words: ["ok"] }));
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const base = await fleet.dashboard();
   await moveLeg(kit, fleet, base);
 };

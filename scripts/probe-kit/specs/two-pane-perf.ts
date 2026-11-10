@@ -2120,14 +2120,7 @@ const spec: Spec = {
     const { counts, mark } = scene;
     const fleet = await kit.fleet(scene.respond);
     scene.workdir = fleet.workdir;
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const ids: Record<string, string> = {};
     const start = async (name: string, title: string) => {
       ids[name] = await fleet.spawn("claude", title);

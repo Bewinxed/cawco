@@ -254,14 +254,7 @@ const spec: Spec = {
   name: "safari-long-ask",
   run: async (kit) => {
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const base = await fleet.dashboard();
     await leg(kit, fleet, base, "storage given", true);
     await leg(kit, fleet, base, "storage refused", false);

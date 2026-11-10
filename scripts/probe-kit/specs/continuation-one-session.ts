@@ -130,14 +130,7 @@ const spec: Spec = {
   run: async (kit: Kit) => {
     const { check } = kit;
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
 
     // (a) The fold fails: nothing of the continuation stands.
     const source = await turnTaken(fleet, "one-session source");

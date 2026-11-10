@@ -84,14 +84,7 @@ const cardReads = async (page: Page) => {
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   let base = await fleet.dashboard();
   const session = await fleet.spawn("claude", "Own origins", fleet.repo);
 

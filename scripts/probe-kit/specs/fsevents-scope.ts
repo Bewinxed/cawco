@@ -320,14 +320,7 @@ const daemonLeg = async (kit: Kit, dylib: string, root: string) => {
     await mkdir(join(pi, "sessions"), { recursive: true });
     await writeFile(join(pi, "settings.json"), "{}\n");
     await writeFile(join(pi, "auth.json"), "{}\n");
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const id = await fleet.spawn("claude", "PROBE-FSEV adopted");
     await fleet.send(id, "PROBE-FSEV hello");
     const transcript = await waitFor(

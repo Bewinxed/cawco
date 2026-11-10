@@ -213,11 +213,6 @@ const cookieTabs = async (page: Page, base: string): Promise<string[]> => {
 
 const run = async (kit: Kit): Promise<void> => {
   const fleet = await kit.fleet(() => ({ everyMs: 40, words: WORDS }));
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
   // e's conversation, on the machine's disk before its agent registers, so
   // its register's catalog names it.
   const project = join(
@@ -235,9 +230,7 @@ const run = async (kit: Kit): Promise<void> => {
     cwd: fleet.workdir,
   });
   await withPicture(storedFile, fleet.workdir);
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const busy = await fleet.spawn("claude", "Busy session");
   const quiet = await fleet.spawn("claude", "Quiet session");
   await fleet.send(busy, "Say a great many words.");

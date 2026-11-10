@@ -449,14 +449,7 @@ function heardLinks(): void {
 
 const setUp = async (kit: Kit): Promise<On> => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const session = await fleet.spawn("claude", "Canvas", fleet.repo);
   const base = await fleet.dashboard();
   const page = await kit.page("desk", { init: [heardRefusals] });

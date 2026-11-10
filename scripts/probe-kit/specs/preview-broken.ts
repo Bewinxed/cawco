@@ -283,14 +283,7 @@ const spec: Spec = {
     const app = serve();
     const port = Number(app.port);
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const base = await fleet.dashboard();
     const missingSession = await fleet.spawn(
       "claude",

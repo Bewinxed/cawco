@@ -197,18 +197,13 @@ const underTheLimit = async (
 
 const run = async (kit: Kit): Promise<void> => {
   const fleet = await kit.fleet(respond);
-  const sessiond = fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent", [], {
-    // 1 PiB: more than any machine has available.
-    CAWCO_ROOM_MEMORY_AVAILABLE_MIN_MIB: String(1024 ** 3),
-    CAWCO_ROOM_PRESSURE_LEVEL: "1",
+  const { sessiond } = await fleet.up({
+    agent: {
+      // 1 PiB: more than any machine has available.
+      CAWCO_ROOM_MEMORY_AVAILABLE_MIN_MIB: String(1024 ** 3),
+      CAWCO_ROOM_PRESSURE_LEVEL: "1",
+    },
   });
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
 
   await heldAndStopped(kit, fleet);
   if (process.platform === "linux" && sessiond.pid !== undefined) {

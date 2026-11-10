@@ -110,14 +110,10 @@ const spec: Spec = {
   run: async (kit: Kit) => {
     const { check } = kit;
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond", [], { [SUBREAPER_ENV]: "1" });
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent", [], { CAWCO_LEAK_MEMORY_GIB: String(THRESHOLD_GIB) });
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up({
+      sessiond: { [SUBREAPER_ENV]: "1" },
+      agent: { CAWCO_LEAK_MEMORY_GIB: String(THRESHOLD_GIB) },
+    });
     try {
       // ── (m1), (m2) a process whose memory keeps climbing ─────────────────
       const grower = await fleet.spawn("claude", "Leak memory");

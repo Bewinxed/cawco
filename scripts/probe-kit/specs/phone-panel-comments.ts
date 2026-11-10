@@ -370,14 +370,7 @@ const leg = async (kit: Kit, url: string, view: View, label: string) => {
 
 const probe = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const base = await fleet.dashboard();
   // Each leg on a session and page of its own, so each starts with no comments.
   for (const [at, view, label] of [

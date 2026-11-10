@@ -469,14 +469,7 @@ export const dragFromIcon = async (
 
 const setUp = async (kit: Kit): Promise<On> => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const session = await fleet.spawn("claude", "Ink", fleet.repo);
   let sent = 0;
   const call = async (tool: string, input: object): Promise<string> => {

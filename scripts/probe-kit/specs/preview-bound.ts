@@ -546,14 +546,7 @@ const run = async (kit: Kit) => {
   const folder = join(kit.out, "heavy");
   await cp(heavy, folder, { recursive: true });
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const heavyOne = await fleet.spawn("claude", "Heavy preview", fleet.repo);
   await fleet.api((hub) =>
     hub.api.instances({ id: heavyOne }).artifacts.post({

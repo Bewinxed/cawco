@@ -3359,6 +3359,38 @@ async function standUp(
     await dirs.remove();
   };
 
+  /**
+   * The whole fleet, booted in the order its services need: sessiond first
+   * (the hub's and agent's sessions live in it), the hub, the probe's
+   * account filed before the agent reports it, then the agent, then the
+   * account signed in. It returns the three launched processes. A caller that
+   * stops between steps, leaves one out or does something between them calls
+   * the steps itself. `launched` is what each service launches with besides
+   * the fleet's own (`launch`'s overrides).
+   */
+  const up = async (
+    launched: Partial<
+      Record<
+        Extract<Role, "sessiond" | "hub" | "agent">,
+        Record<string, string | undefined>
+      >
+    > = {}
+  ) => {
+    const sessiondProcess = launch("sessiond", [], launched.sessiond);
+    await sessiondUp();
+    const hubProcess = launch("hub", [], launched.hub);
+    await hubUp();
+    fileAccount();
+    const agentProcess = launch("agent", [], launched.agent);
+    await agentUp();
+    await accountSignedIn();
+    return {
+      sessiond: sessiondProcess,
+      hub: hubProcess,
+      agent: agentProcess,
+    };
+  };
+
   return {
     /** The hub's own address, `http://127.0.0.1:<port>` (or where `hub.at` names). */
     base,
@@ -3411,6 +3443,7 @@ async function standUp(
     launchMachine,
     fileAccount,
     accountSignedIn,
+    up,
     instance,
     sendRow,
     spawn,

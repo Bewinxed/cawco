@@ -212,14 +212,7 @@ const spec: Spec = {
     const rowOf = async (id: string) =>
       (await rows()).find((row) => row.id === id);
 
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
 
     const src = join(fleet.sandbox, "src");
     await mkdir(src, { recursive: true });
