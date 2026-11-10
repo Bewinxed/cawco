@@ -1,7 +1,9 @@
 /**
  * A component artifact's sheet: the inspector, the canvas view and the design graph's line to its stage page.
  */
+
 import { canvasOf } from "@cawco/core/stage";
+import { stageDialsOf } from "@cawco/core/stage-graph";
 import { untrack } from "svelte";
 import { store, stored } from "#lib/platform/storage.js";
 import { writeSheet } from "../artifact-api";
@@ -31,9 +33,7 @@ export class PaneSheet {
   /** His dial values as the artifact's doc keeps them (`dials`), by name: the design graph stands them again on open. */
   readonly keptDials = $derived.by(() => {
     const kept = this.#deps.paneDoc.view?.choices.dials?.value;
-    return kept && typeof kept === "object" && !Array.isArray(kept)
-      ? (kept as Record<string, number | string | boolean>)
-      : {};
+    return stageDialsOf({ values: kept })?.values ?? {};
   });
 
   /** His tuning of every move as the artifact's doc keeps it (its `tuned` map): the design graph puts it back on each move's first read. */
