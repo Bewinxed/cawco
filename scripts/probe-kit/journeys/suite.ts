@@ -29,6 +29,7 @@ import type { ConsoleMessage, Locator, Page } from "playwright-core";
 import type { ArtifactNeedsFrame } from "../../../packages/core/src/artifact-needs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { PRESENCE_ONBOARDING_SKIPPED } from "../../../packages/core/src/presence-onboarding";
+import type { Envelope } from "../../../packages/core/src/protocol";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import type { SpecGroup } from "../groups";
@@ -325,21 +326,15 @@ const PRESENCE_ANSWERED = {
  */
 export async function waiting(
   fleet: KitFleet
-): Promise<{ artifacts: ArtifactNeedsFrame["needs"]; asks: unknown[] }> {
-  const listed = await fleet.api((hub) => hub.api.pending.get());
-  const asks: unknown[] = [];
-  const artifacts: ArtifactNeedsFrame["needs"] = [];
-  for (const { payload } of listed) {
-    if (payloadOf({ payload }).kind === "artifact.needs") {
-      const needs: unknown = payloadOf({ payload }).needs;
-      if (Array.isArray(needs)) {
-        artifacts.push(...needs);
-      }
-    } else {
-      asks.push(payload);
-    }
-  }
-  return { artifacts, asks };
+): Promise<{ artifacts: ArtifactNeedsFrame["needs"]; asks: Envelope[] }> {
+  const [listed, lane] = await Promise.all([
+    fleet.api((hub) => hub.api.pending.get()),
+    fleet.api((hub) => hub.api["artifact-needs"].get()),
+  ]);
+  return {
+    artifacts: lane.needs,
+    asks: listed.filter((one) => payloadOf(one).kind !== "artifact.needs"),
+  };
 }
 
 /** What a failed step measured: its own words, or where a script error came from. */

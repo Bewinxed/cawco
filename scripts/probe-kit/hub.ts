@@ -8,6 +8,7 @@ import {
   type HubAnswer,
   type HubClient,
   type HubConfig,
+  type HubData,
   hubClient,
   refusalText,
 } from "../../packages/agent/src/hub-client";
@@ -36,8 +37,10 @@ export const answerText = (answer: HubAnswer): string => {
     : JSON.stringify(answer.data);
 };
 
-/** A request of the hub as a spec's helper takes it. */
-export type HubAsk = (hub: HubClient) => Promise<HubAnswer>;
+/** A request of the hub as a spec's helper takes it, by the answer its route types. */
+export type HubAsk<A extends HubAnswer = HubAnswer> = (
+  hub: HubClient
+) => Promise<A>;
 
 /** A hub this process runs (`hub.handle`), asked through Eden with `config`'s headers on every request. */
 export const handled = (
@@ -50,19 +53,36 @@ export const handled = (
     config
   );
 
-/** What an answer said, however the hub said it. */
-export interface Said {
-  json: unknown;
+/** What the hub refused `A` with: the refusal bodies its route types, none for a route that cannot refuse. */
+type RefusalOf<A> = A extends { error: { value: infer V } } ? V : never;
+
+/**
+ * What an answer said, however the hub said it: `refused` tells its success
+ * body (`HubData<A>`, what the route answers) from its refusal's (what the
+ * route types for its error), and `status`/`text` hold either.
+ */
+export type Said<A extends HubAnswer> = {
   status: number;
   text: string;
-}
+} & (
+  { json: HubData<A>; refused: false } | { json: RefusalOf<A>; refused: true }
+);
 
-/** `answer` as a spec reads it. */
-export const said = (answer: HubAnswer): Said => ({
-  json: answer.error ? answer.error.value : answer.data,
-  status: answer.status,
-  text: answerText(answer),
-});
+/** `answer` as a spec reads it, its route's type kept. */
+export function said<A extends HubAnswer>(answer: A): Said<A>;
+export function said(answer: HubAnswer): {
+  json: unknown;
+  refused: boolean;
+  status: number;
+  text: string;
+} {
+  return {
+    json: answer.error ? answer.error.value : answer.data,
+    refused: answer.error !== null,
+    status: answer.status,
+    text: answerText(answer),
+  };
+}
 
 /**
  * The hub as this browser page asks it: Eden from the probe's process, at the

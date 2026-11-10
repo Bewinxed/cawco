@@ -43,22 +43,17 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
-import { type HubAsk, handled, said as saidOf } from "../hub";
+import { type HubAsk, handled, type Said, said as saidOf } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-areas-machine";
 
-interface Answer {
-  json: unknown;
-  status: number;
-  text: string;
-}
-
 type Hub = Awaited<ReturnType<typeof inProcess>>;
 
 interface Rig {
-  call: (request: HubAsk) => Promise<Answer>;
+  call: <A extends HubAnswer>(request: HubAsk<A>) => Promise<Said<A>>;
   db: Hub["db"];
   kit: Kit;
 }
@@ -108,8 +103,11 @@ interface Read {
   type: string | null;
 }
 
-const idOf = (answer: Answer): string =>
-  (answer.json as { id?: string } | undefined)?.id ?? "";
+/** The id a create answered, or "" for a refusal. */
+const idOf = (
+  answer:
+    { json: { id: string }; refused: false } | { json: unknown; refused: true }
+): string => (answer.refused ? "" : answer.json.id);
 
 const SCOPE_KIND = "scope";
 const TYPE = "probe-client-writer";
@@ -302,14 +300,11 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
     await import("../../../packages/core/src/accounts");
   const { ruleInScope } = await import("../../../packages/core/src/rules");
   const { sessionTakes } = await import("../../../packages/core/src/fleet");
-  const listed = (
-    (await call((client) => client.api.projects.get())).json as {
-      id: string;
-      areaId: string | null;
-      cap: Read["cap"];
-      inEffect: Record<string, Sourced>;
-    }[]
-  ).find((one) => one.id === projectId);
+  const projects = await call((client) => client.api.projects.get());
+  if (projects.refused) {
+    throw new Error(`projects: ${projects.status} ${projects.text}`);
+  }
+  const listed = projects.json.find((one) => one.id === projectId);
   const project = db.project(projectId);
   if (!(listed && project)) {
     throw new Error(`no project ${projectId}`);
@@ -338,19 +333,19 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
     })),
     ...projectAccountOf(project, (id) => db.areas.get(id)?.name ?? null),
   });
-  const { decides } = (
-    await call((client) => client.api.projects({ id: projectId }).decides.get())
-  ).json as {
-    decides: {
-      from: Partial<Record<string, string>>;
-      routes: Partial<Record<string, string>>;
-    };
-  };
-  const { types } = (
-    await call((client) =>
-      client.api.projects({ id: projectId })["delegate-types"].get()
-    )
-  ).json as { types: { name: string; source: string }[] };
+  const decided = await call((client) =>
+    client.api.projects({ id: projectId }).decides.get()
+  );
+  const catalog = await call((client) =>
+    client.api.projects({ id: projectId })["delegate-types"].get()
+  );
+  if (decided.refused || catalog.refused) {
+    throw new Error(
+      `${projectId}: decides ${decided.status} ${decided.text}, delegate types ${catalog.status} ${catalog.text}`
+    );
+  }
+  const { decides } = decided.json;
+  const { types } = catalog.json;
   const doc = db.listFleetMemoryDocs().find((one) => one.path === DOC);
   // What a machine holding the project is sent of it, and of every machine.
   const { projectRowsFor, unbound } =
@@ -526,7 +521,7 @@ const moveLeg = async (rig: Rig, m: Made): Promise<void> => {
       areaId: null,
     })
   );
-  const said = (out.json as { said?: string[] } | undefined)?.said ?? [];
+  const said = out.refused ? [] : out.json.said;
   const after = await read(rig, m, m.first);
   rig.kit.check(
     "c. moved out, the first project falls back to the fleet's on every reader, and the move says so",
@@ -547,7 +542,7 @@ const moveLeg = async (rig: Rig, m: Made): Promise<void> => {
   rig.kit.check(
     "c. put back, it takes the area's again",
     back.status === 200 &&
-      ((back.json as { said?: string[] } | undefined)?.said ?? []).includes(
+      (back.refused ? [] : back.json.said).includes(
         "It takes the area Probe client's account"
       ) &&
       inArea(again, m, null),
@@ -560,10 +555,12 @@ const forgetLeg = async (rig: Rig, m: Made): Promise<void> => {
     client.api.projects({ id: m.first }).delete()
   );
   const gone = rig.db.project(m.first);
-  const listed = (
-    (await rig.call((client) => client.api.projects.forgotten.get())).json as
-      { id: string; forgottenAt: number }[] | undefined
-  )?.find((one) => one.id === m.first);
+  const forgotten = await rig.call((client) =>
+    client.api.projects.forgotten.get()
+  );
+  const listed = forgotten.refused
+    ? undefined
+    : forgotten.json.find((one) => one.id === m.first);
   const restored = await rig.call((client) =>
     client.api.projects({ id: m.first }).restore.post({
       forgottenAt: listed?.forgottenAt,
@@ -604,8 +601,11 @@ const undo = async (
 };
 
 /** The trash entry a delete's answer names for its Undo. */
-const restoreOf = (answer: Answer): number =>
-  (answer.json as { restore?: number } | undefined)?.restore ?? -1;
+const restoreOf = (
+  answer:
+    | { json: { restore?: number }; refused: false }
+    | { json: unknown; refused: true }
+): number => (answer.refused ? -1 : (answer.json.restore ?? -1));
 
 /** f, before the area goes: a document scoped to it alone, one to the outside project alone and its hook, each deleted. */
 /** The outside project's skills and server: two deleted before it is forgotten, one kept. */
@@ -752,10 +752,12 @@ const undoLeg = async (
       keptGone,
     })
   );
-  const listed = (
-    (await rig.call((client) => client.api.projects.forgotten.get())).json as
-      { id: string; forgottenAt: number }[] | undefined
-  )?.find((one) => one.id === m.outside);
+  const forgotten = await rig.call((client) =>
+    client.api.projects.forgotten.get()
+  );
+  const listed = forgotten.refused
+    ? undefined
+    : forgotten.json.find((one) => one.id === m.outside);
   const restored = await rig.call((client) =>
     client.api.projects({ id: m.outside }).restore.post({
       forgottenAt: listed?.forgottenAt,
@@ -773,15 +775,15 @@ const deleteLeg = async (rig: Rig, m: Made): Promise<void> => {
   const deleted = await rig.call((client) =>
     client.api.areas({ id: m.area }).delete()
   );
-  const answer = deleted.json as
-    { projects?: string[]; said?: string[] } | undefined;
+  const answer = deleted.refused ? undefined : deleted.json;
   const said = answer?.said ?? [];
   const first = await read(rig, m, m.first);
   const second = await read(rig, m, m.second);
-  const { areas } = (await rig.call((client) => client.api.areas.get()))
-    .json as {
-    areas: unknown[];
-  };
+  const listing = await rig.call((client) => client.api.areas.get());
+  if (listing.refused) {
+    throw new Error(`areas: ${listing.status} ${listing.text}`);
+  }
+  const { areas } = listing.json;
   rig.kit.check(
     "e. the area deleted: its projects ungrouped and kept, and the answer says what falls back",
     deleted.status === 200 &&
