@@ -18,6 +18,7 @@
   import { detach } from "@cawco/core/detach";
   import type { ChangedItem } from "@cawco/core/doc-meta";
   import { machineLabel } from "@cawco/core/machine-names";
+  import type { FrameSays } from "@cawco/core/page-wire";
   import { pinName } from "@cawco/core/pin-name";
   import {
     PREVIEW_DOWNS,
@@ -1947,7 +1948,7 @@
               sync: artifactSyncPath(artifact.id),
             }
           : {}),
-      },
+      } satisfies FrameSays,
       true
     );
   }
@@ -1959,7 +1960,7 @@
     const scheme = theme.resolved;
     untrack(() => {
       if (connected) {
-        post({ type: "cawco:theme", theme: scheme });
+        post({ type: "cawco:theme", theme: scheme } satisfies FrameSays);
       }
     });
   });
@@ -1972,7 +1973,11 @@
     mode = next;
     placing = next === "comment" ? place : null;
     store("local", modeKey, next);
-    post({ type: "cawco:mode", mode: next, place: placing });
+    post({
+      type: "cawco:mode",
+      mode: next,
+      place: placing,
+    } satisfies FrameSays);
   }
   /** ⇧C: every pin shown on the page, or hidden. */
   function showPins(visible: boolean) {

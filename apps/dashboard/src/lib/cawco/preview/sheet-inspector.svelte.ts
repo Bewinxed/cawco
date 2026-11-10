@@ -9,6 +9,7 @@
  * story buttons add one from the current controls, duplicate, remove and
  * move one. Everything inside a component stays a pin.
  */
+import type { FrameSays } from "@cawco/core/page-wire";
 import {
   type ComponentDoc,
   fileSets,
@@ -22,13 +23,10 @@ import { failureWords } from "#lib/platform/hub-read.js";
 import type { SheetChange } from "../artifact-api";
 
 /** What the inspector says to the sheet's page. */
-type ToPage =
-  | {
-      args: Record<string, unknown> | null;
-      story: string;
-      type: "cawco:story-args";
-    }
-  | { story: string | null; type: "cawco:story-select" };
+type ToPage = Extract<
+  FrameSays,
+  { type: "cawco:story-args" | "cawco:story-select" }
+>;
 
 /** A story's name the file can take: an identifier starting with a capital (story-file.ts `STORY_NAME`). */
 export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;

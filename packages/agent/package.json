@@ -72,6 +72,7 @@
     "react-docgen-typescript": "2.4.0",
     "svelte2tsx": "0.7.61",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vite": "^8.3.5",
     "vue-component-meta": "3.3.13"
   }
 }

@@ -65,9 +65,11 @@
 -->
 <script lang="ts">
   import {
-    PREVIEW_DOWNS,
-    type PreviewDown,
-  } from "@cawco/core/preview/protocol";
+    type FrameSays,
+    type PageHeard,
+    pageSaid,
+  } from "@cawco/core/page-wire";
+  import type { PreviewDown } from "@cawco/core/preview/protocol";
   import {
     askHubReach,
     PREVIEW_REACH_PATH,
@@ -294,18 +296,10 @@
   /** A component canvas's own height and widest story, as it says them (agent canvas runtime `by=embed`): its frame is as tall and as wide. */
   $effect(() => {
     const heard = (event: MessageEvent) => {
-      const said = event.data as {
-        down?: unknown;
-        height?: unknown;
-        rest?: unknown;
-        type?: unknown;
-        urls?: unknown;
-        why?: unknown;
-        width?: unknown;
-      } | null;
       if (event.source !== frame?.contentWindow) {
         return;
       }
+      const said = pageSaid(event.data);
       const why = failureIn(said);
       if (why !== null) {
         fail(why);
@@ -313,13 +307,13 @@
       }
       // Its graph, told before it fetches any of it, by every load of its
       // frame: each load fetches on a turn of its own.
-      if (said?.type === CANVAS_EMBED_GRAPH && Array.isArray(said.urls)) {
+      if (said?.type === CANVAS_EMBED_GRAPH) {
         graphHeard = true;
         turnState = "waiting";
-        turn?.graph(said.urls.map(String));
+        turn?.graph(said.urls);
         return;
       }
-      if (heardScreen(said?.type)) {
+      if (heardScreen(event.data?.type)) {
         return;
       }
       // Its share arrived: those modules are the page's, and the budget they held is free.
@@ -328,9 +322,9 @@
         turn?.fetched();
         return;
       }
-      if (said?.type === CANVAS_EMBED_SIZE && typeof said.height === "number") {
+      if (said?.type === CANVAS_EMBED_SIZE) {
         tall = said.height;
-        saidWidth = typeof said.width === "number" ? said.width : null;
+        saidWidth = said.width;
         turn?.done();
         if (said.rest === true) {
           tellShape({ h: tall, w: saidWidth });
@@ -457,15 +451,11 @@
    * `downResponse`, `cawco:down`), or a canvas that can't draw what this
    * Preview names (core `CANVAS_EMBED_FAILED`); null for any other message.
    */
-  const failureIn = (
-    said: { down?: unknown; type?: unknown; why?: unknown } | null
-  ): string | null => {
-    const why = typeof said?.why === "string" ? said.why : null;
+  const failureIn = (said: PageHeard | null): string | null => {
     if (said?.type === "cawco:down") {
-      const hop = PREVIEW_DOWNS.find((one) => one === said.down);
-      return hop ? downWhy(hop, why) : null;
+      return downWhy(said.down, said.why);
     }
-    return said?.type === CANVAS_EMBED_FAILED ? why : null;
+    return said?.type === CANVAS_EMBED_FAILED ? said.why : null;
   };
   /** Why the proxy's page says nothing serves it, by the hop it named (core `PreviewDown`) and the machine's words for it. */
   const downWhy = (hop: PreviewDown, why: string | null): string => {
@@ -537,7 +527,10 @@
   // A canvas's frame told its box stood in the view, once it has loaded: standing at no height until it says its shape, it can't see that itself.
   $effect(() => {
     if (seen && drawn && held?.kind === "component") {
-      frame?.contentWindow?.postMessage({ type: CANVAS_EMBED_SEEN }, "*");
+      frame?.contentWindow?.postMessage(
+        { type: CANVAS_EMBED_SEEN } satisfies FrameSays,
+        "*"
+      );
     }
   });
   /** Watches its card until it comes within `margin` of its scroller's view, then calls `came` once. */
@@ -589,7 +582,7 @@
   $effect(() => {
     if (close && rest) {
       frame?.contentWindow?.postMessage(
-        { type: CANVAS_EMBED_READY, urls: rest.urls },
+        { type: CANVAS_EMBED_READY, urls: rest.urls } satisfies FrameSays,
         rest.origin
       );
       rest = null;
@@ -724,7 +717,7 @@
           if (!gone) {
             turnState = "fetching";
             frame?.contentWindow?.postMessage(
-              { type: CANVAS_EMBED_GO, urls: share },
+              { type: CANVAS_EMBED_GO, urls: share } satisfies FrameSays,
               origin
             );
           }

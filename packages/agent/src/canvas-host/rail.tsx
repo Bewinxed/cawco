@@ -16,7 +16,7 @@
  * press handler that reads it.
  */
 
-import { toHost } from "@cawco/preview/overlay/host-origin";
+import { RAIL_SAYS } from "@cawco/core/page-wire";
 import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import type {
   ExcalidrawImperativeAPI,
@@ -37,6 +37,7 @@ import {
 } from "react";
 import { type Glyph, Icon } from "./icons";
 import { IMAGE_ACCEPT, placeImage, refusalOf } from "./images";
+import { sayToHost } from "./say";
 
 /** Excalidraw's tools the rail offers. */
 const TOOLS = [
@@ -116,7 +117,10 @@ const perform = (
       api.setActiveTool({ type: tool });
     }
   } else if (kind === "host") {
-    toHost({ type: `cawco:${what}` });
+    const said = RAIL_SAYS.find((one) => one === `cawco:${what}`);
+    if (said) {
+      sayToHost({ type: said });
+    }
   } else if (what === "in" || what === "out") {
     const zoom = api.getAppState().zoom.value;
     zoomTo(api, what === "in" ? zoom + ZOOM_STEP : zoom - ZOOM_STEP);

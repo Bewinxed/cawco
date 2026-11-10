@@ -287,6 +287,9 @@ export interface StagePlay {
 
 /** Pane → page: every replay paused where it stands; answered with the time. */
 export const STAGE_PAUSE = "cawco:stage-pause";
+export interface StagePause {
+  ask: number;
+}
 
 /** Pane → page: every clip stood at `t` ms into the move and held there, as `tuning` times it (a scrub's frame). */
 export const STAGE_SEEK = "cawco:stage-seek";
@@ -820,8 +823,8 @@ export function stagePlayOf(value: unknown): StagePlay | null {
   };
 }
 
-/** A pause ({@link STAGE_PAUSE}) as it crossed the frame; null when it is none. */
-export function stagePauseOf(value: unknown): { ask: number } | null {
+/** A {@link StagePause} as it crossed the frame; null when it is none. */
+export function stagePauseOf(value: unknown): StagePause | null {
   const ask = isRecord(value) ? finite(value.ask) : null;
   return ask === null ? null : { ask };
 }

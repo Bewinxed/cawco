@@ -25,9 +25,9 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import { awaySaid } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
-  awaySaid,
   CANVAS_PLAN_ID,
   type CanvasDial,
   type CanvasSpec,
@@ -118,15 +118,7 @@ import {
   splitWidth,
   WIDTH_CONTAINER,
 } from "./width";
-
-/** Vite's error as its server sends it to pages (`prepareError`): its message, the module's id and its place. */
-interface ViteError {
-  frame?: string;
-  id?: string;
-  loc?: { column?: number; file?: string; line?: number };
-  message: string;
-  pluginCode?: string;
-}
+import "./window-events";
 
 /** How long a section's failed import waits for the stage's words. Our call: Vite sends them before it answers the request. */
 const STAGE_SAYS_MS = 1000;
@@ -237,8 +229,7 @@ const byOf = (params: URLSearchParams): PageBy => {
   const by = params.get("by");
   return by === "stage" || by === "embed" || by === "map" ? by : "panel";
 };
-export const bridge = (): Bridge | undefined =>
-  (window as unknown as { cawco?: Bridge }).cawco;
+export const bridge = (): Bridge | undefined => window.cawco;
 
 /**
  * Every animation-frame callback the page asks for (the canvas's own and
@@ -393,7 +384,7 @@ export function boot(options: BootOptions): void {
   let stageSaid: { at: number; failure: SectionFailure } | null = null;
   const stageHeard = new Set<() => void>();
   window.addEventListener("cawco:stage-error", (event) => {
-    const err = (event as CustomEvent<ViteError | undefined>).detail;
+    const err = event.detail;
     if (!err?.message) {
       return;
     }
@@ -1463,13 +1454,7 @@ export function boot(options: BootOptions): void {
   /* --- The pane's words, through the overlay ----------------------------- */
 
   window.addEventListener("cawco:story-args", (event) => {
-    const { story, args } =
-      (
-        event as CustomEvent<{
-          args?: Record<string, unknown> | null;
-          story?: string;
-        }>
-      ).detail ?? {};
+    const { story, args } = event.detail ?? {};
     for (const section of sections) {
       if (!(
         story && section.mod?.SHEET.stories.some((one) => one.name === story)
@@ -1491,14 +1476,14 @@ export function boot(options: BootOptions): void {
   // `mode`): in Comment mode what the page marks of its own stays quiet,
   // since the comment target's tint is the one mark.
   window.addEventListener("cawco:mode", (event) => {
-    const paneMode = (event as CustomEvent<{ mode?: unknown }>).detail?.mode;
+    const paneMode = event.detail?.mode;
     document.documentElement.toggleAttribute(
       "data-cawco-commenting",
       paneMode === "comment"
     );
   });
   window.addEventListener("cawco:story-select", (event) => {
-    const story = (event as CustomEvent<{ story?: unknown }>).detail?.story;
+    const story = event.detail?.story;
     const chosen = typeof story === "string" ? story : null;
     window.__cawcoSheetChosen = chosen;
     mode?.selected(chosen);
@@ -1521,13 +1506,13 @@ export function boot(options: BootOptions): void {
     later();
   };
   window.addEventListener("cawco:canvas-view", (event) => {
-    setView((event as CustomEvent<Partial<View>>).detail ?? {});
+    setView(event.detail ?? {});
   });
 
   /* --- HMR ------------------------------------------------------------- */
 
   window.addEventListener("cawco:section", (event) => {
-    const mod = (event as CustomEvent<SectionModule>).detail;
+    const mod = event.detail;
     const section = sectionOf(mod?.SHEET.file ?? "");
     if (!section) {
       return;
@@ -1540,7 +1525,7 @@ export function boot(options: BootOptions): void {
   });
   // A states file it found missing is written: its section loads again, with no reload of the canvas.
   window.addEventListener(SECTION_WRITTEN, (event) => {
-    const section = sectionOf((event as CustomEvent<string>).detail ?? "");
+    const section = sectionOf(event.detail ?? "");
     if (!section || section.loaded || section.loading) {
       return;
     }
@@ -1567,9 +1552,7 @@ export function boot(options: BootOptions): void {
    * the page.
    */
   window.addEventListener("cawco:updates", (event) => {
-    const updated = new Set(
-      ((event as CustomEvent<string[]>).detail ?? []).map(sectionOfPath)
-    );
+    const updated = new Set((event.detail ?? []).map(sectionOfPath));
     for (const section of sections) {
       if (section.failure && !section.loading && updated.has(section.file)) {
         quietly(
