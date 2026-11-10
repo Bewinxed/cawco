@@ -26,7 +26,6 @@ import {
   workItems,
   workspaces,
 } from "./schema";
-import { singletonColumn } from "./singleton";
 
 /** An artifact as the find engine reads it: its row, and whether the person changed any of its keys. */
 export type FindArtifactRow = typeof artifacts.$inferSelect & {
@@ -368,12 +367,11 @@ export const findSettingsDb = (core: DbCore): FindSettingsDb => {
   return {
     findSettings: {
       hideSecrets: () =>
-        singletonColumn(
-          db,
-          findSettings,
-          FIND_SETTINGS_ID,
-          findSettings.hideSecrets
-        ) ?? true,
+        db
+          .select({ value: findSettings.hideSecrets })
+          .from(findSettings)
+          .where(eq(findSettings.id, FIND_SETTINGS_ID))
+          .get()?.value ?? true,
       setHideSecrets: (on, at) => {
         const set = { hideSecrets: on, changedAt: at };
         db.insert(findSettings)
