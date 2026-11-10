@@ -217,7 +217,7 @@ import type { ProjectTrash } from "./project-trash";
 import type { createProviderRetries } from "./provider-retries";
 import type { createPush } from "./push";
 import type { ForecastRead } from "./rebalance";
-import type { Refused } from "./refusal";
+import type { RefusalOf, Refused } from "./refusal";
 import type { RegistryShape } from "./registry";
 import type { createRelayControl } from "./relay-control";
 import type { createRelayJourney } from "./relay-journey";
@@ -670,11 +670,16 @@ export interface HubContext {
     automatic: boolean
   ) => unknown[];
   installAsk: (toolId: string) => { newest?: string; pin?: string };
-  installFromFolder: <Refused>(
+  installFromFolder: (
     name: string,
-    body: FolderSkillBody,
-    refuse: (code: 400 | 409, said: string) => Refused
-  ) => Promise<FleetSkillMeta | Refused | undefined>;
+    body: FolderSkillBody
+  ) => Promise<
+    | FleetSkillMeta
+    | RefusalOf<400, "skill-folder-unnamed">
+    | RefusalOf<400, "skill-folder-unread">
+    | RefusalOf<409, "skill-folder-changed">
+    | undefined
+  >;
   installSessionIdentity: (instanceId: string) => Promise<
     | { instanceId: string; installed: boolean; error: string }
     | {

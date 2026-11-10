@@ -311,10 +311,10 @@ interface Waiting extends WaitingMachine {
    * forward.
    */
   quiet: boolean;
-  /** The person refused the machine: said on the connection, which then ends. */
-  refuse: (reason: string) => void;
   /** Which connection holds this place, so a closing older one leaves a newer one be. */
   socket: string;
+  /** The person refused the machine: said on the connection, which then ends. */
+  turnAway: (reason: string) => void;
 }
 
 /** What the server does as the person changes the mode or a device. */
@@ -989,14 +989,14 @@ export const createHubAuth = ({
     return true;
   };
 
-  const refuse = (machineId: string): boolean => {
+  const turnAway = (machineId: string): boolean => {
     const entry = waiting.get(machineId);
     if (!entry || entry.quiet) {
       return false;
     }
     waiting.delete(machineId);
     refusals.set(machineId, connectWords.machineRefused);
-    entry.refuse(connectWords.machineRefused);
+    entry.turnAway(connectWords.machineRefused);
     console.log(`[hub-auth] machine ${machineId} refused`);
     changed();
     return true;
@@ -1230,7 +1230,7 @@ export const createHubAuth = ({
             )
       )
       .post("/api/machines/waiting/:machineId/refuse", ({ params }) =>
-        refuse(params.machineId)
+        turnAway(params.machineId)
           ? { ok: true }
           : refusal(
               404,
