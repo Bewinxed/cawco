@@ -1,4 +1,4 @@
-import { Elysia, t, ValidationError } from "elysia";
+import { Elysia, problem, t, ValidationError } from "elysia";
 import type {
   ContinuationAsker,
   PreparedContinuation,
@@ -7,7 +7,7 @@ import type { HubContext } from "../hub-context";
 import { MachineAway } from "../hub-shapes";
 import type { MachineReadsContext } from "../machine-reads";
 import { awayStatus } from "../machine-reads";
-import { refusal } from "../refusal";
+
 import { continueBody } from "../routes/session-bodies";
 import { firstValidationIssue } from "../validation-issue";
 
@@ -71,7 +71,10 @@ export const continuationRoutes = (
             if (error instanceof MachineAway) {
               return awayStatus(ctx, set, error.machineId, error.message);
             }
-            return refusal(422, "thrown-words", thrownWords(error));
+            return problem(422, {
+              code: "thrown-words",
+              detail: thrownWords(error),
+            });
           }
         }
       )
@@ -96,13 +99,12 @@ export const continuationRoutes = (
                 : "";
               const at = parent ? `${parent}.` : "";
               const missing = first.params?.requiredProperties?.join(", ");
-              return refusal(
-                400,
-                "continuation-invalid",
-                missing
+              return problem(400, {
+                code: "continuation-invalid",
+                detail: missing
                   ? `${at}${missing} is required`
-                  : `${first.path}: ${first.message}`
-              );
+                  : `${first.path}: ${first.message}`,
+              });
             }
           },
         },
@@ -127,18 +129,24 @@ export const continuationRoutes = (
             if (error instanceof MachineAway) {
               return awayStatus(ctx, set, error.machineId, error.message);
             }
-            return refusal(422, "thrown-words", thrownWords(error));
+            return problem(422, {
+              code: "thrown-words",
+              detail: thrownWords(error),
+            });
           }
           if (why) {
             release();
-            return refusal(409, "continuation-refused", why);
+            return problem(409, { code: "continuation-refused", detail: why });
           }
           // What the source's process holds that ending it would lose: the
           // job waits for it, and the caller hears so at once.
           const inFlight = await inFlightFor(params.id);
           if ("refusal" in inFlight) {
             release();
-            return refusal(422, "work-in-flight", inFlight.refusal);
+            return problem(422, {
+              code: "work-in-flight",
+              detail: inFlight.refusal,
+            });
           }
           const row = startContinuation(
             prepared,
@@ -166,11 +174,10 @@ export const continuationRoutes = (
         const cancelled = cancelContinuation(params.id);
         return "row" in cancelled
           ? continuationJob(cancelled.row)
-          : refusal(
-              cancelled.refused,
-              "continuation-not-cancelled",
-              cancelled.why
-            );
+          : problem(cancelled.refused, {
+              code: "continuation-not-cancelled",
+              detail: cancelled.why,
+            });
       })
   );
 };

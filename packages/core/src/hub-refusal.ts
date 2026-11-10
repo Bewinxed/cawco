@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { hubFailureWords } from "./words/hub-failure";
 
-/** A hub refusal's body as every route sends it: an RFC 9457 problem (hub refusal.ts). */
+/** A hub refusal's body as every route sends it: an RFC 9457 problem (Elysia's `problem()`). */
 const PROBLEM = z.object({ code: z.string(), detail: z.string() });
 
 /**

@@ -16,7 +16,7 @@ import {
   CancelledNotificationSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
@@ -64,7 +64,7 @@ import {
   projectFromSessionTool,
 } from "./project-offers";
 import type { ProjectSettings } from "./project-settings";
-import { resaid } from "./refusal";
+
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
@@ -740,7 +740,12 @@ export function createDelegationMcp(options: {
         artifactNamed: options.artifactNamed
           ? (asked) => {
               const named = options.artifactNamed?.(actor.id, asked) ?? asked;
-              return named instanceof ElysiaStatus ? resaid(named) : named;
+              return named instanceof ElysiaStatus
+                ? problem<number, { code: string; detail: string }>(
+                    named.status,
+                    { code: named.response.code, detail: named.response.detail }
+                  )
+                : named;
             }
           : undefined,
         retryAttempt: attemptCut(options.retryAttempt, started),

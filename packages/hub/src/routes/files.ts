@@ -2,7 +2,7 @@
  * The hub's media and file stores.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import {
   mediaContentType,
   mediaFilePath,
@@ -10,7 +10,6 @@ import {
   storedFilePath,
   storeFile,
 } from "../media";
-import { refusal } from "../refusal";
 
 export const fileRoutes = () =>
   new Elysia()
@@ -22,7 +21,7 @@ export const fileRoutes = () =>
       const writing = path ? mediaWriting(params.name) : undefined;
       const file = path && !writing ? Bun.file(path) : undefined;
       if (!(writing || (file && (await file.exists())))) {
-        return refusal(404, "no-such-media", "no such media");
+        return problem(404, { code: "no-such-media", detail: "no such media" });
       }
       return new Response(writing ? new Uint8Array(writing) : file, {
         headers: {
@@ -69,7 +68,7 @@ export const fileRoutes = () =>
       const path = storedFilePath(params.hash);
       const file = path ? Bun.file(path) : undefined;
       if (!(file && (await file.exists()))) {
-        return refusal(404, "no-such-file", "no such file");
+        return problem(404, { code: "no-such-file", detail: "no such file" });
       }
       return new Response(file, {
         headers: {

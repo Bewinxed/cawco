@@ -3,10 +3,9 @@
  */
 
 import { detach } from "@cawco/core/detach";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
 
 export const fleetPluginRoutes = ({
   db,
@@ -53,22 +52,20 @@ export const fleetPluginRoutes = ({
       { body: t.Object({ enabled: t.Boolean() }) },
       ({ params, body }) => {
         if (!db.listPlugins().some(({ id }) => id === params.id)) {
-          return refusal(
-            404,
-            "no-plugin-fleet",
-            `no plugin ${params.id} in this fleet`
-          );
+          return problem(404, {
+            code: "no-plugin-fleet",
+            detail: `no plugin ${params.id} in this fleet`,
+          });
         }
         db.putPlugin({ id: params.id, enabled: body.enabled });
         fleetChanged();
         const row = db.listPlugins().find(({ id }) => id === params.id);
         return row
           ? pluginRow(row)
-          : refusal(
-              404,
-              "no-plugin-fleet",
-              `no plugin ${params.id} in this fleet`
-            );
+          : problem(404, {
+              code: "no-plugin-fleet",
+              detail: `no plugin ${params.id} in this fleet`,
+            });
       }
     )
     // Re-fetch one plugin's bytes. The same verb a skill has, and the way a
@@ -79,11 +76,10 @@ export const fleetPluginRoutes = ({
     .post("/api/fleet/plugins/:id/refresh", ({ params }) => {
       const row = db.listPlugins().find(({ id }) => id === params.id);
       if (!row) {
-        return refusal(
-          404,
-          "no-plugin-fleet",
-          `no plugin ${params.id} in this fleet`
-        );
+        return problem(404, {
+          code: "no-plugin-fleet",
+          detail: `no plugin ${params.id} in this fleet`,
+        });
       }
       // A copy that changed goes to the machines as the item it moved; one
       // that came back the same is sent forced, so every machine online
@@ -108,11 +104,10 @@ export const fleetPluginRoutes = ({
         Date.now()
       );
       if (trashed === undefined) {
-        return refusal(
-          404,
-          "no-plugin",
-          `the fleet installs no plugin ${params.id}`
-        );
+        return problem(404, {
+          code: "no-plugin",
+          detail: `the fleet installs no plugin ${params.id}`,
+        });
       }
       fleetChanged();
       return undoable(trashed);

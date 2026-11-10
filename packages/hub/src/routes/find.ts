@@ -10,12 +10,11 @@ import type {
   TranscriptPlacesQuery,
 } from "@cawco/core/find";
 import { CONTROL_TRANSCRIPT_PLACES } from "@cawco/core/session/controls";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { answerFind, FIND_PLACES_QUERY, FIND_QUERY } from "../find";
 import { PLACES_LIMIT, placesForScreens, placesHeard } from "../find-places";
 import { forScreens } from "../find-secrets";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
 
 /**
  * Who asks `GET /api/find`, as the hub's log names a slow machine's search
@@ -70,7 +69,10 @@ export const findRoutes = ({
       async ({ query, request }) => {
         const [row] = db.find.instances([query.session]);
         if (!row) {
-          return refusal(404, "no-session", `no session ${query.session}`);
+          return problem(404, {
+            code: "no-session",
+            detail: `no session ${query.session}`,
+          });
         }
         const named = (
           took: PlacesHeard,

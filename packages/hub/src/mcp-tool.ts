@@ -32,7 +32,7 @@ export interface Picture {
 }
 
 /**
- * A run's answer without its refusals (refusal.ts), by Elysia's own mark on
+ * A run's answer without its problems (Elysia's `problem()`), by Elysia's own mark on
  * its status: what a presenter reads. A refusal is the call's error.
  */
 type Answered<R> = Exclude<R, { readonly "~status": true }>;

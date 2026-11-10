@@ -23,6 +23,7 @@
  * that poll itself (ingress.ts `githubWait`). A project with no GitHub
  * poller is refused either target where it is written ({@link readWait}).
  */
+
 import { referenceHref } from "@cawco/core/references";
 import type { WaitState } from "@cawco/core/task-views";
 import type { StageKind } from "@cawco/core/views";
@@ -34,8 +35,8 @@ import {
   waitTarget,
 } from "@cawco/core/wait-targets";
 import { taskLinkWords } from "@cawco/core/words/task-links";
+import { problem } from "elysia";
 import type { WorkItemState } from "./db/schema";
-import { refusal } from "./refusal";
 
 /** A pull request's state as its link row holds it, or an Actions run's as the poller last read it. */
 export type GitHubWaitState =
@@ -378,14 +379,13 @@ const WEB = /^https?:\/\//iu;
 const sessionWait = (written: string, reader: WaitReader) => {
   const session = reader.session(written);
   if (typeof session === "string") {
-    return refusal(400, "wait-session-unknown", session);
+    return problem(400, { code: "wait-session-unknown", detail: session });
   }
   if (!session.item) {
-    return refusal(
-      400,
-      "wait-session-no-item",
-      `“${written}” is a session that runs no work item, so it never finishes: wait on its task or a card instead.`
-    );
+    return problem(400, {
+      code: "wait-session-no-item",
+      detail: `“${written}” is a session that runs no work item, so it never finishes: wait on its task or a card instead.`,
+    });
   }
   const target: WaitTarget = {
     kind: "session",
@@ -423,30 +423,27 @@ export const readWait = (written: string, reader: WaitReader) => {
   if (slash > 0 && PIN_NUMBER.test(said.slice(slash + 1))) {
     return readPin(said, slash, reader);
   }
-  return refusal(
-    400,
-    "wait-target-unknown",
-    `“${said}” names nothing the hub waits on: a task (tsk-12), a card (<page>#<card>), a pin (<page>/<number>), a GitHub pull request or Actions run, or a session (<dir>#<id>).`
-  );
+  return problem(400, {
+    code: "wait-target-unknown",
+    detail: `“${said}” names nothing the hub waits on: a task (tsk-12), a card (<page>#<card>), a pin (<page>/<number>), a GitHub pull request or Actions run, or a session (<dir>#<id>).`,
+  });
 };
 
 /** A link as a wait: a GitHub pull request or Actions run, while the project has GitHub. */
 const readLink = (said: string, reader: WaitReader) => {
   const github = githubTarget(said);
   if (!github) {
-    return refusal(
-      400,
-      "wait-link-unsettled",
-      `“${said}” is a link the hub cannot settle: wait on a GitHub pull request or Actions run, a task, a card, a pin or a session.`
-    );
+    return problem(400, {
+      code: "wait-link-unsettled",
+      detail: `“${said}” is a link the hub cannot settle: wait on a GitHub pull request or Actions run, a task, a card, a pin or a session.`,
+    });
   }
   const refused = reader.githubRefusal();
   return refused
-    ? refusal(
-        400,
-        "wait-github-unavailable",
-        `“${said}” cannot be waited on: ${refused}`
-      )
+    ? problem(400, {
+        code: "wait-github-unavailable",
+        detail: `“${said}” cannot be waited on: ${refused}`,
+      })
     : github;
 };
 
@@ -457,16 +454,15 @@ const readCard = (said: string, hash: number, reader: WaitReader) => {
   if (typeof page === "string") {
     return HANDLE_HEX.test(card) && option === undefined
       ? sessionWait(said, reader)
-      : refusal(400, "wait-page-unknown", page);
+      : problem(400, { code: "wait-page-unknown", detail: page });
   }
   const cards = reader.cards(page.id);
   const asked = cards.find((one) => one.id === card);
   if (!asked) {
-    return refusal(
-      400,
-      "wait-card-unknown",
-      `${page.name} asks no card “${card}”. Its cards: ${cards.map((one) => one.id).join(", ") || "none"}.`
-    );
+    return problem(400, {
+      code: "wait-card-unknown",
+      detail: `${page.name} asks no card “${card}”. Its cards: ${cards.map((one) => one.id).join(", ") || "none"}.`,
+    });
   }
   if (option === undefined) {
     const any: WaitTarget = { kind: "card", artifactId: page.id, card };
@@ -480,24 +476,26 @@ const readCard = (said: string, hash: number, reader: WaitReader) => {
   };
   return option && rest.length === 0 && asked.options.includes(option)
     ? picked
-    : refusal(
-        400,
-        "wait-option-unknown",
-        `The card “${card}” on ${page.name} has no option “${option}”. Its options: ${asked.options.join(", ") || "none"}.`
-      );
+    : problem(400, {
+        code: "wait-option-unknown",
+        detail: `The card “${card}” on ${page.name} has no option “${option}”. Its options: ${asked.options.join(", ") || "none"}.`,
+      });
 };
 
 /** `<page>/<number>` as a pin the page holds. */
 const readPin = (said: string, slash: number, reader: WaitReader) => {
   const page = reader.page(said.slice(0, slash));
   if (typeof page === "string") {
-    return refusal(400, "wait-page-unknown", page);
+    return problem(400, { code: "wait-page-unknown", detail: page });
   }
   const number = Number(said.slice(slash + 1));
   const target: WaitTarget = { kind: "pin", artifactId: page.id, number };
   return reader.pinHeld(page.id, number)
     ? target
-    : refusal(400, "wait-pin-unknown", `${page.name} holds no pin ${number}.`);
+    : problem(400, {
+        code: "wait-pin-unknown",
+        detail: `${page.name} holds no pin ${number}.`,
+      });
 };
 
 // --- cycles -----------------------------------------------------------------------

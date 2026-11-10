@@ -5,14 +5,14 @@
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetSkillMeta, READ_SKILL_FILES } from "@cawco/core/fleet";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
 import { machineSkillFiles } from "../machine-answers";
 import { READ_TIMEOUT_MS } from "../machine-read-timeouts";
 import type { MachineReadsContext } from "../machine-reads";
 import { pushTarget, skillFilesOff, unansweredStatus } from "../machine-reads";
-import { refusal } from "../refusal";
+
 import { unreachable } from "../unreachable";
 import { boundFields } from "./bound-fields";
 
@@ -87,15 +87,14 @@ export const fleetSkillRoutes = (
         },
         async ({ params, body, set }) => {
           if (!SKILL_NAME.test(params.name)) {
-            return refusal(
-              400,
-              "not-usable-skill-name",
-              `${params.name} is not a usable skill name`
-            );
+            return problem(400, {
+              code: "not-usable-skill-name",
+              detail: `${params.name} is not a usable skill name`,
+            });
           }
           const unbindable = boundProblem(body);
           if (unbindable) {
-            return refusal(400, "unbindable", unbindable);
+            return problem(400, { code: "unbindable", detail: unbindable });
           }
 
           if (body.fromMachine) {
@@ -128,11 +127,10 @@ export const fleetSkillRoutes = (
           }
 
           if (!body.source) {
-            return refusal(
-              400,
-              "name-source-machine-adopt",
-              "name a source, or the machine to adopt it from"
-            );
+            return problem(400, {
+              code: "name-source-machine-adopt",
+              detail: "name a source, or the machine to adopt it from",
+            });
           }
 
           const fromFolder = await installFromFolder(params.name, {
@@ -165,7 +163,10 @@ export const fleetSkillRoutes = (
             .find((entry) => entry.name === params.name);
           return staged
             ? skillRow(staged)
-            : refusal(404, "no-skill", `no skill ${params.name}`);
+            : problem(404, {
+                code: "no-skill",
+                detail: `no skill ${params.name}`,
+              });
         }
       )
       // On or off: the stored row's flag, its source and files as they are.
@@ -179,14 +180,16 @@ export const fleetSkillRoutes = (
           try {
             row = db.setSkillEnabled(params.name, body.enabled);
           } catch (error) {
-            return refusal(
-              400,
-              "skill-not-saved",
-              error instanceof Error ? error.message : String(error)
-            );
+            return problem(400, {
+              code: "skill-not-saved",
+              detail: error instanceof Error ? error.message : String(error),
+            });
           }
           if (!row) {
-            return refusal(404, "no-skill", `no skill ${params.name}`);
+            return problem(404, {
+              code: "no-skill",
+              detail: `no skill ${params.name}`,
+            });
           }
           fleetChanged();
           return skillRow(row);
@@ -207,7 +210,10 @@ export const fleetSkillRoutes = (
           .listSkills()
           .find((entry) => entry.name === params.name);
         if (!stored) {
-          return refusal(404, "no-skill", `no skill ${params.name}`);
+          return problem(404, {
+            code: "no-skill",
+            detail: `no skill ${params.name}`,
+          });
         }
 
         // An adopted skill's source is the machine it came off, so that is where
@@ -251,11 +257,10 @@ export const fleetSkillRoutes = (
           Date.now()
         );
         if (trashed === undefined) {
-          return refusal(
-            404,
-            "no-skill",
-            `the fleet keeps no skill ${params.name}`
-          );
+          return problem(404, {
+            code: "no-skill",
+            detail: `the fleet keeps no skill ${params.name}`,
+          });
         }
         skillChoices.delete(params.name);
         fleetChanged();
@@ -277,11 +282,10 @@ export const fleetSkillRoutes = (
         ({ body }) => {
           const version = db.fleetSkillVersion(body.id);
           if (!version) {
-            return refusal(
-              404,
-              "no-skill-version",
-              `no skill version ${body.id}`
-            );
+            return problem(404, {
+              code: "no-skill-version",
+              detail: `no skill version ${body.id}`,
+            });
           }
           const current = db
             .listSkills()
@@ -303,11 +307,10 @@ export const fleetSkillRoutes = (
               db.listSkills().find((row) => row.name === skill.name) ?? skill
             );
           } catch (error) {
-            return refusal(
-              400,
-              "skill-not-saved",
-              error instanceof Error ? error.message : String(error)
-            );
+            return problem(400, {
+              code: "skill-not-saved",
+              detail: error instanceof Error ? error.message : String(error),
+            });
           }
         }
       )
@@ -331,11 +334,10 @@ export const fleetSkillRoutes = (
             (skill) => skill.name === params.name
           );
           if (!fleetCopy) {
-            return refusal(
-              404,
-              "no-skill",
-              `the fleet carries no skill ${params.name}`
-            );
+            return problem(404, {
+              code: "no-skill",
+              detail: `the fleet carries no skill ${params.name}`,
+            });
           }
 
           const asked = await readAgent(
@@ -357,11 +359,10 @@ export const fleetSkillRoutes = (
           // No copy on the machine is nothing to keep; any other refusal
           // stops the push, because the copy it would destroy was not read.
           if (!(answer.ok || answer.error?.startsWith("no skill "))) {
-            return refusal(
-              500,
-              "skill-unread",
-              answer.error ?? "the machine could not read the skill"
-            );
+            return problem(500, {
+              code: "skill-unread",
+              detail: answer.error ?? "the machine could not read the skill",
+            });
           }
           if (answer.ok) {
             const theirs = machineSkillFiles(answer.result);

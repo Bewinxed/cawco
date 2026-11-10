@@ -63,7 +63,7 @@ import {
 } from "@cawco/core/find-match";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import {
   cursorAt,
@@ -76,7 +76,7 @@ import { byId, handleId, isHandle } from "./handles";
 import { boardTitle } from "./labels";
 import { tool } from "./mcp-tool";
 import { findWords } from "./presenters/find";
-import { type Refused, refusal } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { roleOf } from "./roles";
 import {
   outOfSentenceRanges,
@@ -181,11 +181,10 @@ const listedFrom = (cursor: string | undefined) => {
   } catch {
     // Not a listing's cursor: refused below.
   }
-  return refusal(
-    400,
-    "find-listing-cursor-unknown",
-    `"${cursor}" is not a cursor a listing gave: pass the next_cursor of the same listing (same by and filters), or none for its newest page. Example: ${LISTING_EXAMPLE}`
-  );
+  return problem(400, {
+    code: "find-listing-cursor-unknown",
+    detail: `"${cursor}" is not a cursor a listing gave: pass the next_cursor of the same listing (same by and filters), or none for its newest page. Example: ${LISTING_EXAMPLE}`,
+  });
 };
 
 /** Newest first; the same instant by record id, highest first: a listing's one order, which its cursor pages through. */
@@ -623,11 +622,10 @@ const pick = (
   if (found) {
     return found.id;
   }
-  return refusal(
-    404,
-    `find-${what}-unknown`,
-    `${what} "${asked}" is no ${what} of this fleet. ${what === "project" ? "Projects" : "Machines"}: ${things.map((thing) => thing.name).join(", ") || "none"}. Example: ${example}`
-  );
+  return problem(404, {
+    code: `find-${what}-unknown`,
+    detail: `${what} "${asked}" is no ${what} of this fleet. ${what === "project" ? "Projects" : "Machines"}: ${things.map((thing) => thing.name).join(", ") || "none"}. Example: ${example}`,
+  });
 };
 
 /** One call that works, with `field` set to `value`, for a refusal to give. */
@@ -642,11 +640,10 @@ const dayOf = (input: FindInput, field: "since" | "before") => {
   }
   const at = DAY.test(day) ? Date.parse(`${day}T00:00:00Z`) : Number.NaN;
   if (Number.isNaN(at)) {
-    return refusal(
-      400,
-      "find-day-unread",
-      `${field} is "${day}": give a day as YYYY-MM-DD. Example: ${exampleWith(input, field, "2026-10-01")}`
-    );
+    return problem(400, {
+      code: "find-day-unread",
+      detail: `${field} is "${day}": give a day as YYYY-MM-DD. Example: ${exampleWith(input, field, "2026-10-01")}`,
+    });
   }
   return at;
 };
@@ -767,30 +764,27 @@ const listedNote = (
 const checked = (input: FindInput) => {
   const query = input.query?.trim() ?? "";
   if (!(query || narrowed(input))) {
-    return refusal(
-      400,
-      "find-query-empty",
-      `query is empty and nothing narrows it: give the words to look for, as typed into the dashboard's Find; or a filter (by, since, before, kinds, project, machine) to list what matches it, newest first; or around with a hit's ref. Example: ${EXAMPLE} or ${LISTING_EXAMPLE}`
-    );
+    return problem(400, {
+      code: "find-query-empty",
+      detail: `query is empty and nothing narrows it: give the words to look for, as typed into the dashboard's Find; or a filter (by, since, before, kinds, project, machine) to list what matches it, newest first; or around with a hit's ref. Example: ${EXAMPLE} or ${LISTING_EXAMPLE}`,
+    });
   }
   const limit = Math.trunc(input.limit ?? DEFAULT_LIMIT);
   if (!(limit >= 1 && limit <= MAX_LIMIT)) {
-    return refusal(
-      400,
-      "find-limit-out-of-range",
-      `limit is ${input.limit}: give 1 to ${MAX_LIMIT}. Example: {"query": "${clip(query, 40)}", "limit": 20}`
-    );
+    return problem(400, {
+      code: "find-limit-out-of-range",
+      detail: `limit is ${input.limit}: give 1 to ${MAX_LIMIT}. Example: {"query": "${clip(query, 40)}", "limit": 20}`,
+    });
   }
   return { query, limit };
 };
 
 /** The engine's refusal of a cursor it did not give, with one call that works. */
-const withExample = (refused: Refused) =>
-  refusal(
-    400,
-    "find-cursor-unknown",
-    `${refused.response.detail} Example: ${EXAMPLE}`
-  );
+const withExample = (refused: AnyProblem) =>
+  problem(400, {
+    code: "find-cursor-unknown",
+    detail: `${refused.response.detail} Example: ${EXAMPLE}`,
+  });
 
 export const createFindTool = (deps: FindToolDeps) => {
   /** The project a call narrows to: its own word, else a delegate's own project (`scoped`). */
@@ -985,19 +979,17 @@ export const createFindTool = (deps: FindToolDeps) => {
     const centre: Centre = asRef ? centreOf(ref.slice(mark + 1)) : {};
     const target = targetOf(id);
     if (!target) {
-      return refusal(
-        404,
-        "find-around-no-session",
-        `around "${ref}" names no session: pass a conversation hit's id or ref (tasks, artifacts and the rest have no turns; read them with their own tools). Example: {"around": "${id || "3f2c9a1e-…"}"}`
-      );
+      return problem(404, {
+        code: "find-around-no-session",
+        detail: `around "${ref}" names no session: pass a conversation hit's id or ref (tasks, artifacts and the rest have no turns; read them with their own tools). Example: {"around": "${id || "3f2c9a1e-…"}"}`,
+      });
     }
     const read = await target.read(centre, side, chars);
     if ("why" in read) {
-      return refusal(
-        404,
-        "find-around-unread",
-        `around "${ref}": ${read.why}.`
-      );
+      return problem(404, {
+        code: "find-around-unread",
+        detail: `around "${ref}": ${read.why}.`,
+      });
     }
     const more = [read.earlier ? "before" : "", read.later ? "after" : ""]
       .filter(Boolean)
@@ -1274,7 +1266,7 @@ export const findToolDefinition = (
   call: (
     input: z.infer<typeof SCHEMA>,
     format: "concise" | "detailed"
-  ) => Promise<Parameters<typeof findWords>[0] | Refused>
+  ) => Promise<Parameters<typeof findWords>[0] | AnyProblem>
 ) =>
   tool(FIND_TOOL, DESCRIPTION, INPUT, call, findWords, {
     annotations: {

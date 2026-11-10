@@ -69,14 +69,13 @@ import { AFTER_REF } from "@cawco/core/decisions-library";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { pageHash } from "@cawco/preview/proxy";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Artifacts } from "./artifacts/service";
 import type { ArtifactTaker } from "./artifacts/taker";
 import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { PROGRAM_FILE, readKept } from "./decision-program";
 import { boardTitle } from "./labels";
-import { refusal } from "./refusal";
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
@@ -592,11 +591,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
   const unknownProject = (projectId: string) =>
     deps.projectExists(projectId)
       ? undefined
-      : refusal(
-          404,
-          "decision-project-unknown",
-          `The hub keeps no project ${projectId}.`
-        );
+      : problem(404, {
+          code: "decision-project-unknown",
+          detail: `The hub keeps no project ${projectId}.`,
+        });
 
   /** Each page name with its newest artifact, and the folder's built pages beside them. */
   const pageNames = async (
@@ -794,11 +792,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
       return unknown;
     }
     if (!NAME.test(name)) {
-      return refusal(
-        400,
-        "decision-page-name-unfit",
-        `${JSON.stringify(name)} names no page.`
-      );
+      return problem(400, {
+        code: "decision-page-name-unfit",
+        detail: `${JSON.stringify(name)} names no page.`,
+      });
     }
     const found = (await pageNames(projectId)).find(
       (page) => page.name === name
@@ -812,11 +809,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
         )
       : undefined;
     if (!(one && decisionPage(one.read, one.page))) {
-      return refusal(
-        404,
-        "decision-page-missing",
-        `This project has no decision page ${name}.`
-      );
+      return problem(404, {
+        code: "decision-page-missing",
+        detail: `This project has no decision page ${name}.`,
+      });
     }
     return one;
   };
@@ -1180,18 +1176,20 @@ export const createDecisions = (deps: DecisionsDeps) => {
       }
       const { read } = found;
       if (!read.artifactId) {
-        return refusal(
-          409,
-          "decision-page-no-artifact",
-          `${read.title} has no artifact on this hub to send on; its session can publish it again.`
-        );
+        return problem(409, {
+          code: "decision-page-no-artifact",
+          detail: `${read.title} has no artifact on this hub to send on; its session can publish it again.`,
+        });
       }
       // What the page open in the person's tab shows goes in first, so the
       // picks read are the ones they see (open-pages.ts).
       if (writes) {
         const refused = deps.takeWrites(read.artifactId, writes);
         if (refused) {
-          return refusal(422, "decision-writes-refused", refused);
+          return problem(422, {
+            code: "decision-writes-refused",
+            detail: refused,
+          });
         }
       }
       const words = text?.trim() || undefined;
@@ -1238,26 +1236,23 @@ export const createDecisions = (deps: DecisionsDeps) => {
       }
       const { read } = found;
       if (read.tasks > 0) {
-        return refusal(
-          409,
-          "decision-tasks-filed",
-          `${read.title} has its tasks already.`
-        );
+        return problem(409, {
+          code: "decision-tasks-filed",
+          detail: `${read.title} has its tasks already.`,
+        });
       }
       if (read.state === "making") {
-        return refusal(
-          409,
-          "decision-tasks-making",
-          `${read.title}'s tasks are being made now.`
-        );
+        return problem(409, {
+          code: "decision-tasks-making",
+          detail: `${read.title}'s tasks are being made now.`,
+        });
       }
       const { artifactId } = read;
       if (!artifactId) {
-        return refusal(
-          409,
-          "decision-page-no-artifact",
-          `${read.title} has no artifact on this hub, so its picks can't be read.`
-        );
+        return problem(409, {
+          code: "decision-page-no-artifact",
+          detail: `${read.title} has no artifact on this hub, so its picks can't be read.`,
+        });
       }
       const to = heardBy(read);
       const ask: PersonsSend = {
@@ -1280,11 +1275,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
         const prior = await readRecord(projectId, name);
         const now = await recordNow(projectId, name, artifactId, prior, tasks);
         if (!now) {
-          return refusal(
-            404,
-            "decision-page-missing",
-            `This project has no decision page ${name}.`
-          );
+          return problem(404, {
+            code: "decision-page-missing",
+            detail: `This project has no decision page ${name}.`,
+          });
         }
         const { askedSend: _askedSendBefore, ...picks } = now;
         const record: StoredRecord = { ...picks, ...asked };
@@ -1302,11 +1296,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
               : { writes: [], deletes: [recordPath(name), logPath(name)] },
             `decisions: ${name}'s tasks were not asked for`
           );
-          return refusal(
-            503,
-            "decision-tasks-unasked",
-            `Couldn't make tasks: ${refused.why}`
-          );
+          return problem(503, {
+            code: "decision-tasks-unasked",
+            detail: `Couldn't make tasks: ${refused.why}`,
+          });
         }
       });
       if (unasked) {

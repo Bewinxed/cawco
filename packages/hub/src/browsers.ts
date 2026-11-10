@@ -65,11 +65,11 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { SHIELD_WORDS } from "@cawco/core/words/browser";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
-import { refusal } from "./refusal";
+
 import type { RelayCall } from "./stream-relay";
 
 /** How a take-over came to end, as the hub's log says it. */
@@ -134,23 +134,20 @@ export const answered = <T>(
 ) => {
   if (read.kind === "unanswered") {
     return read.reason === "dead"
-      ? refusal(
-          503,
-          "browser-machine-away",
-          `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`
-        )
-      : refusal(
-          503,
-          "browser-machine-late",
-          `${machine}'s browser did not ${what} in time; it may still be at it there.`
-        );
+      ? problem(503, {
+          code: "browser-machine-away",
+          detail: `${machine} is not connected, so its browser could not ${what}. Try again once it is back.`,
+        })
+      : problem(503, {
+          code: "browser-machine-late",
+          detail: `${machine}'s browser did not ${what} in time; it may still be at it there.`,
+        });
   }
   if (!read.value.ok) {
-    return refusal(
-      409,
-      "browser-machine-refused",
-      read.value.error ?? `${machine}'s browser did not ${what}.`
-    );
+    return problem(409, {
+      code: "browser-machine-refused",
+      detail: read.value.error ?? `${machine}'s browser did not ${what}.`,
+    });
   }
   return read.value.result as T;
 };
@@ -235,16 +232,14 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       return only.machineId;
     }
     return rows.length === 0
-      ? refusal(
-          404,
-          "browser-unreported",
-          `No machine has reported the browser ${key}: name its machine.`
-        )
-      : refusal(
-          409,
-          "browser-machine-unnamed",
-          `The browser ${key} runs on ${rows.length} machines: name one.`
-        );
+      ? problem(404, {
+          code: "browser-unreported",
+          detail: `No machine has reported the browser ${key}: name its machine.`,
+        })
+      : problem(409, {
+          code: "browser-machine-unnamed",
+          detail: `The browser ${key} runs on ${rows.length} machines: name one.`,
+        });
   };
 
   /** Every dashboard told the fleet's browsers as they stand now: after each change of any. */
@@ -277,18 +272,16 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     }
     const ask = deps.asks().get(requestId);
     if (!ask) {
-      return refusal(
-        404,
-        "browser-ask-closed",
-        "That browser ask is no longer open."
-      );
+      return problem(404, {
+        code: "browser-ask-closed",
+        detail: "That browser ask is no longer open.",
+      });
     }
     if (ask.key !== key) {
-      return refusal(
-        400,
-        "browser-ask-other",
-        `That browser ask is about ${ask.key}, not ${key}.`
-      );
+      return problem(400, {
+        code: "browser-ask-other",
+        detail: `That browser ask is about ${ask.key}, not ${key}.`,
+      });
     }
     return ask;
   };
@@ -364,11 +357,10 @@ export const createBrowsers = (deps: BrowsersDeps) => {
   /** Browser `row` of a project being forgotten handed back when held and stopped; the forget's refusal when it isn't. */
   const stopKept = async (key: BrowserKey, row: StoredBrowser) => {
     const unstopped = (status: number, why: string) =>
-      refusal(
-        status,
-        "browser-not-stopped",
-        `Its browser on ${deps.machineName(row.machineId)} wasn't stopped: ${why} The project is kept; Forget tries again.`
-      );
+      problem(status, {
+        code: "browser-not-stopped",
+        detail: `Its browser on ${deps.machineName(row.machineId)} wasn't stopped: ${why} The project is kept; Forget tries again.`,
+      });
     try {
       const back = row.takeover
         ? await browsers.handback(key, row.machineId)
@@ -607,11 +599,11 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         return machineId;
       }
       if (db.browsers.get(machineId, key)?.takeover) {
-        return refusal(
-          409,
-          "browser-held",
-          "You have control of this browser now. Hand it back first, then forget its sign-ins."
-        );
+        return problem(409, {
+          code: "browser-held",
+          detail:
+            "You have control of this browser now. Hand it back first, then forget its sign-ins.",
+        });
       }
       const removed = answered<null>(
         await deps.call(machineId, BROWSER_REMOVE, [{ key }], BROWSER_CALL_MS),
@@ -665,7 +657,10 @@ const keyOf = (raw: string) => {
   const key = decodeURIComponent(raw);
   return isBrowserKey(key)
     ? key
-    : refusal(400, "browser-key-unfit", `${key} is no browser key.`);
+    : problem(400, {
+        code: "browser-key-unfit",
+        detail: `${key} is no browser key.`,
+      });
 };
 
 const machineBody = t.Object({

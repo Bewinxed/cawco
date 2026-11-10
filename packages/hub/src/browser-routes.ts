@@ -49,14 +49,14 @@ import {
   RELAY_HEADER,
 } from "@cawco/preview/proxy";
 import type { ServerWebSocket } from "bun";
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import { answered } from "./browsers";
 import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";
-import { refusal } from "./refusal";
+
 import type { RelayCall } from "./stream-relay";
 
 /** How long a viewer's stream relay credential lasts (Projects spec item 4). */
@@ -74,11 +74,10 @@ const HOP = "hub browser relay";
 
 /** Machine `machine`, which the hub does not reach now: its browser's refusal. */
 export const browserUnreached = (machine: string) =>
-  refusal(
-    503,
-    "browser-machine-unreached",
-    `${machine} is not connected, so its browser could not be reached. Try again once it is back.`
-  );
+  problem(503, {
+    code: "browser-machine-unreached",
+    detail: `${machine} is not connected, so its browser could not be reached. Try again once it is back.`,
+  });
 
 /** The bytes a WebSocket close reason may take (RFC 6455 §5.5: a control frame's payload is 125 bytes, two of them the code). */
 const REASON_BYTES = 123;
@@ -239,11 +238,10 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       row.machineId &&
       isBrowserKey(page)
     )) {
-      return refusal(
-        404,
-        "browser-unknown",
-        "This session has no such browser."
-      );
+      return problem(404, {
+        code: "browser-unknown",
+        detail: "This session has no such browser.",
+      });
     }
     const place: Place = { key: page, machineId: row.machineId };
     return place;

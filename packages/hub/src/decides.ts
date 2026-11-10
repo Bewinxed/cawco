@@ -33,12 +33,11 @@ import { ANY_TYPE } from "@cawco/core/delegate-types";
 import type { EffortLevel, HarnessKind } from "@cawco/core/harness/kinds";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { decidesWords } from "@cawco/core/words/decides";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DecidesDb } from "./db/decides";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { DECIDES_FILE, decidesTable, decidesText } from "./decides-file";
 import { MESSAGE_LIMIT, writeFolderFile, YOU } from "./project-folder";
-import { refusal } from "./refusal";
 
 /** A harness on the fleet, as the page draws setup from it. */
 export interface HarnessOffer {
@@ -114,11 +113,10 @@ const unknownMembers = (fleet: FleetDecides, ids: string[]) => {
   const unknown = ids.find((id) => !memberOf(fleet, id));
   return unknown === undefined
     ? undefined
-    : refusal(
-        422,
-        "decides-routed-member-unknown",
-        decidesWords.unknownMember(unknown)
-      );
+    : problem(422, {
+        code: "decides-routed-member-unknown",
+        detail: decidesWords.unknownMember(unknown),
+      });
 };
 
 /** The refusal of the first of `ids` the fleet knows no kind by; none when it knows them all. */
@@ -126,11 +124,10 @@ const unknownKinds = (fleet: FleetDecides, ids: string[]) => {
   const unknown = ids.find((id) => !kindOf(fleet, id));
   return unknown === undefined
     ? undefined
-    : refusal(
-        422,
-        "decides-routed-kind-unknown",
-        decidesWords.unknownKind(unknown)
-      );
+    : problem(422, {
+        code: "decides-routed-kind-unknown",
+        detail: decidesWords.unknownKind(unknown),
+      });
 };
 
 /** The refusal of `routes` naming a kind or a member the fleet does not know; none when it knows them all. */
@@ -163,31 +160,33 @@ export const decidesRoutes = (deps: DecidesDeps) => {
   const unknownProject = (id: string) =>
     deps.project(id)
       ? undefined
-      : refusal(
-          404,
-          "decides-project-unknown",
-          `The hub keeps no project ${id}.`
-        );
+      : problem(404, {
+          code: "decides-project-unknown",
+          detail: `The hub keeps no project ${id}.`,
+        });
   /** The area a project sits in, for its table (decides-file.ts); null: none. */
   const areaOf = (id: string): string | null =>
     deps.project(id)?.areaId ?? null;
 
+  /** The member `id`, or its problem: the fleet has none. */
+  const known = (id: string) =>
+    memberOf(db.fleet(), id) ??
+    problem(404, {
+      code: "decides-member-unknown",
+      detail: decidesWords.unknownMember(id),
+    });
+
   /** A member he added, or refused: unknown, or built in. */
   const added = (id: string) => {
-    const member = memberOf(db.fleet(), id);
-    if (!member) {
-      return refusal(
-        404,
-        "decides-member-unknown",
-        decidesWords.unknownMember(id)
-      );
+    const member = known(id);
+    if (member instanceof ElysiaStatus) {
+      return member;
     }
     if (member.builtIn) {
-      return refusal(
-        403,
-        "decides-member-built-in",
-        decidesWords.builtInMember
-      );
+      return problem(403, {
+        code: "decides-member-built-in",
+        detail: decidesWords.builtInMember,
+      });
     }
     return member;
   };
@@ -196,11 +195,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
   const typeOf = (name: string, agent: AgentBody, was?: DelegateType) => {
     const offer = deps.harnesses().find((one) => one.id === agent.harness);
     if (!offer || offer.machines.length === 0) {
-      return refusal(
-        422,
-        "decides-harness-runs-nowhere",
-        decidesWords.noMachine(offer?.name ?? agent.harness)
-      );
+      return problem(422, {
+        code: "decides-harness-runs-nowhere",
+        detail: decidesWords.noMachine(offer?.name ?? agent.harness),
+      });
     }
     const type: DelegateType = {
       ...was,
@@ -217,34 +215,31 @@ export const decidesRoutes = (deps: DecidesDeps) => {
         : (was?.mayStart?.filter((kept) => kept !== ANY_TYPE) ?? []),
     };
     if (!type.description.trim()) {
-      return refusal(
-        422,
-        "decides-instructions-missing",
-        decidesWords.instructionsMissing
-      );
+      return problem(422, {
+        code: "decides-instructions-missing",
+        detail: decidesWords.instructionsMissing,
+      });
     }
     return type;
   };
 
   /** A member whose settings he changes here, or refused: unknown, Caw (his are the project's), You or The agent (none). */
   const editable = (id: string) => {
-    const member = memberOf(db.fleet(), id);
-    if (!member) {
-      return refusal(
-        404,
-        "decides-member-unknown",
-        decidesWords.unknownMember(id)
-      );
+    const member = known(id);
+    if (member instanceof ElysiaStatus) {
+      return member;
     }
     if (member.type === "caw") {
-      return refusal(403, "decides-caw-runs-on", decidesWords.cawRunsOn);
+      return problem(403, {
+        code: "decides-caw-runs-on",
+        detail: decidesWords.cawRunsOn,
+      });
     }
     if (member.type === "you" || member.type === "asker") {
-      return refusal(
-        403,
-        "decides-member-built-in",
-        decidesWords.builtInMember
-      );
+      return problem(403, {
+        code: "decides-member-built-in",
+        detail: decidesWords.builtInMember,
+      });
     }
     return member;
   };
@@ -266,11 +261,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     }
     const row = db.members().find((one) => one.id === member.id);
     if (!row) {
-      return refusal(
-        404,
-        "decides-member-unknown",
-        decidesWords.unknownMember(member.id)
-      );
+      return problem(404, {
+        code: "decides-member-unknown",
+        detail: decidesWords.unknownMember(member.id),
+      });
     }
     db.putMember(
       {
@@ -293,11 +287,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     const name = body.name.trim();
     const example = body.example.trim();
     if (!(name && slugOf(name) && example)) {
-      return refusal(
-        422,
-        "decides-kind-fields-missing",
-        decidesWords.kindFields
-      );
+      return problem(422, {
+        code: "decides-kind-fields-missing",
+        detail: decidesWords.kindFields,
+      });
     }
     const taken = fleet.kinds.some(
       (one) =>
@@ -306,7 +299,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           (except === undefined && one.id === slugOf(name)))
     );
     if (taken) {
-      return refusal(409, "decides-kind-taken", decidesWords.kindTaken(name));
+      return problem(409, {
+        code: "decides-kind-taken",
+        detail: decidesWords.kindTaken(name),
+      });
     }
     return { name, example };
   };
@@ -315,17 +311,22 @@ export const decidesRoutes = (deps: DecidesDeps) => {
   const removable = (fleet: FleetDecides, id: string, moveTo: string) => {
     const kind = kindOf(fleet, id);
     if (!kind) {
-      return refusal(404, "decides-kind-unknown", decidesWords.unknownKind(id));
+      return problem(404, {
+        code: "decides-kind-unknown",
+        detail: decidesWords.unknownKind(id),
+      });
     }
     if (kind.builtIn) {
-      return refusal(403, "decides-kind-built-in", decidesWords.builtInKind);
+      return problem(403, {
+        code: "decides-kind-built-in",
+        detail: decidesWords.builtInKind,
+      });
     }
     if (moveTo === kind.id) {
-      return refusal(
-        422,
-        "decides-kind-moved-to-itself",
-        decidesWords.moveToSelf
-      );
+      return problem(422, {
+        code: "decides-kind-moved-to-itself",
+        detail: decidesWords.moveToSelf,
+      });
     }
     return unknownKinds(fleet, [moveTo]) ?? kind;
   };
@@ -368,11 +369,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     const text = read ?? null;
     const reading = text === null ? undefined : readDecides(text, fleet);
     if (reading && !reading.ok) {
-      return refusal(
-        409,
-        "decides-file-unread",
-        decidesWords.fileUnread(reading.problems.join(" "))
-      );
+      return problem(409, {
+        code: "decides-file-unread",
+        detail: decidesWords.fileUnread(reading.problems.join(" ")),
+      });
     }
     const own = { ...(reading?.routes ?? {}) };
     for (const [kind, member] of Object.entries(routes)) {
@@ -462,11 +462,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           const name = body.name.trim();
           const id = slugOf(name);
           if (!(name && id)) {
-            return refusal(
-              422,
-              "decides-member-name-missing",
-              decidesWords.nameMissing
-            );
+            return problem(422, {
+              code: "decides-member-name-missing",
+              detail: decidesWords.nameMissing,
+            });
           }
           const fleet = db.fleet();
           if (
@@ -475,11 +474,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             types.get(id) ||
             !DECIDES_ID.test(id)
           ) {
-            return refusal(
-              409,
-              "decides-member-name-taken",
-              decidesWords.nameTaken(name)
-            );
+            return problem(409, {
+              code: "decides-member-name-taken",
+              detail: decidesWords.nameTaken(name),
+            });
           }
           const type = typeOf(id, body.agent);
           if (type instanceof ElysiaStatus) {
@@ -530,21 +528,16 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           ]),
         },
         ({ params, body }) => {
-          const member = memberOf(db.fleet(), params.id);
-          if (!member) {
-            return refusal(
-              404,
-              "decides-member-unknown",
-              decidesWords.unknownMember(params.id)
-            );
+          const member = known(params.id);
+          if (member instanceof ElysiaStatus) {
+            return member;
           }
           if ("pose" in body) {
             if (member.pose === null) {
-              return refusal(
-                422,
-                "decides-member-wears-mark",
-                decidesWords.wearsMark(member.name)
-              );
+              return problem(422, {
+                code: "decides-member-wears-mark",
+                detail: decidesWords.wearsMark(member.name),
+              });
             }
             db.setBuiltIn({
               pictures: { [member.id as FlockMember]: body.pose },
@@ -552,11 +545,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           } else {
             const row = db.members().find((one) => one.id === member.id);
             if (!row) {
-              return refusal(
-                422,
-                "decides-member-wears-pose",
-                decidesWords.wearsPose(member.name)
-              );
+              return problem(422, {
+                code: "decides-member-wears-pose",
+                detail: decidesWords.wearsPose(member.name),
+              });
             }
             db.putMember({ ...row, hue: body.hue }, null);
           }
@@ -652,11 +644,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           const fleet = db.fleet();
           const kind = kindOf(fleet, params.id);
           if (!kind) {
-            return refusal(
-              404,
-              "decides-kind-unknown",
-              decidesWords.unknownKind(params.id)
-            );
+            return problem(404, {
+              code: "decides-kind-unknown",
+              detail: decidesWords.unknownKind(params.id),
+            });
           }
           const fields = kindFields(fleet, body, kind.id);
           if (fields instanceof ElysiaStatus) {
@@ -719,13 +710,9 @@ export const decidesRoutes = (deps: DecidesDeps) => {
         "/api/decides/members/:id/record",
         { query: t.Object({ project: t.Optional(t.String()) }) },
         ({ params, query }) => {
-          const member = memberOf(db.fleet(), params.id);
-          if (!member) {
-            return refusal(
-              404,
-              "decides-member-unknown",
-              decidesWords.unknownMember(params.id)
-            );
+          const member = known(params.id);
+          if (member instanceof ElysiaStatus) {
+            return member;
           }
           const record = db.record(params.id);
           const month = new Date();

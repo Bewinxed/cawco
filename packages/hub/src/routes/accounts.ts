@@ -8,9 +8,9 @@ import {
 import { ACCOUNT_HUES } from "@cawco/core/accounts/kinds";
 import { secondsOf } from "@cawco/core/time";
 import { configurePage } from "@cawco/core/words/configure";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
+
 import { unreachable } from "../unreachable";
 
 const accountHue = t.UnionEnum(ACCOUNT_HUES);
@@ -134,7 +134,7 @@ export const accountRoutes = ({
       ({ body }) => {
         const why = accountKindRefusal(body.provider, body.kind);
         return why
-          ? refusal(400, "account-kind", why)
+          ? problem(400, { code: "account-kind", detail: why })
           : db.accounts.create(body);
       }
     )
@@ -163,7 +163,10 @@ export const accountRoutes = ({
         const account = accountOf(params.id);
         return (
           (account && db.accounts.patch(account.id, body)) ??
-          refusal(404, "no-account", `There is no account ${params.id}.`)
+          problem(404, {
+            code: "no-account",
+            detail: `There is no account ${params.id}.`,
+          })
         );
       }
     )
@@ -173,25 +176,30 @@ export const accountRoutes = ({
     .get("/api/accounts/:id/removal", ({ params }) => {
       const account = accountOf(params.id);
       if (!account) {
-        return refusal(404, "no-account", `There is no account ${params.id}.`);
+        return problem(404, {
+          code: "no-account",
+          detail: `There is no account ${params.id}.`,
+        });
       }
       return removalOf(account);
     })
     .delete("/api/accounts/:id", async ({ params }) => {
       const account = accountOf(params.id);
       if (!account) {
-        return refusal(404, "no-account", `There is no account ${params.id}.`);
+        return problem(404, {
+          code: "no-account",
+          detail: `There is no account ${params.id}.`,
+        });
       }
       const named = accountNameAmong(account, db.accounts.list());
       // An id a join removed names the account it became, which is not the
       // one the screen asking made: removing that is never done by its old
       // id.
       if (account.id !== params.id) {
-        return refusal(
-          409,
-          "accounts-sign-was-already",
-          `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in ${configurePage("accounts")}.`
-        );
+        return problem(409, {
+          code: "accounts-sign-was-already",
+          detail: `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in ${configurePage("accounts")}.`,
+        });
       }
       const signins = db.accounts
         .signins()
@@ -220,10 +228,9 @@ export const accountRoutes = ({
           .filter((machineId) => !leavesOn.includes(machineId))
       );
       if (failed.length > 0 || silent.length > 0) {
-        return refusal(
-          409,
-          "not-signed-out",
-          [
+        return problem(409, {
+          code: "not-signed-out",
+          detail: [
             failed.length > 0
               ? `${failed.join(", ")} did not sign ${named} out.`
               : "",
@@ -233,8 +240,8 @@ export const accountRoutes = ({
             "Try again.",
           ]
             .filter(Boolean)
-            .join(" ")
-        );
+            .join(" "),
+        });
       }
       const { moving, staying } = removeWithSessions(account, named, leavesOn);
       // Machines offline now, which sign it out when they next connect.
@@ -248,7 +255,10 @@ export const accountRoutes = ({
     .delete("/api/accounts/:id/machines/:machineId", async ({ params }) => {
       const account = accountOf(params.id);
       if (!account) {
-        return refusal(404, "no-account", `There is no account ${params.id}.`);
+        return problem(404, {
+          code: "no-account",
+          detail: `There is no account ${params.id}.`,
+        });
       }
       const machine = machineName(params.machineId);
       const named = accountNameAmong(account, db.accounts.list());
@@ -259,11 +269,10 @@ export const accountRoutes = ({
             one.accountId === account.id && one.machineId === params.machineId
         );
       if (!signin) {
-        return refusal(
-          404,
-          "not-signed-in",
-          `${named} is not signed in on ${machine}.`
-        );
+        return problem(404, {
+          code: "not-signed-in",
+          detail: `${named} is not signed in on ${machine}.`,
+        });
       }
       // A process there still running in its store keeps the store
       // until none does (`leaveAccounts`), as an account's
@@ -284,23 +293,20 @@ export const accountRoutes = ({
       switch (answer.kind) {
         case "unanswered":
           return answer.reason === "dead"
-            ? refusal(
-                409,
-                "offline-so-was-not",
-                `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
-              )
-            : refusal(
-                409,
-                "did-not-answer-within",
-                `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`
-              );
+            ? problem(409, {
+                code: "offline-so-was-not",
+                detail: `${machine} is offline, so ${named} was not signed out there; try again when it is online.`,
+              })
+            : problem(409, {
+                code: "did-not-answer-within",
+                detail: `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`,
+              });
         case "answered":
           if (!answer.value.ok) {
-            return refusal(
-              409,
-              "did-not-sign-out",
-              `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
-            );
+            return problem(409, {
+              code: "did-not-sign-out",
+              detail: `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`,
+            });
           }
           break;
         default:

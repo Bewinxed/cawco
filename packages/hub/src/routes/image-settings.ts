@@ -8,9 +8,8 @@ import {
   offersModelChoice,
 } from "@cawco/core/image-generation";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
 
 export const imageSettingRoutes = ({ db }: Pick<HubContext, "db">) =>
   new Elysia()
@@ -30,29 +29,29 @@ export const imageSettingRoutes = ({ db }: Pick<HubContext, "db">) =>
       ({ body }) => {
         const provider = imageProviderOf(body.provider);
         if (!provider) {
-          return refusal(
-            400,
-            "no-such-provider",
-            imageGenerationWords.noSuchProvider(body.provider)
-          );
+          return problem(400, {
+            code: "no-such-provider",
+            detail: imageGenerationWords.noSuchProvider(body.provider),
+          });
         }
         const model = body.model?.trim() || null;
         const models = IMAGE_PROVIDER_MODELS[provider];
         if (model && !offersModelChoice(provider)) {
-          return refusal(
-            400,
-            "settings-no-model-choice",
-            imageGenerationWords.settingsNoModelChoice(provider, models[0])
-          );
+          return problem(400, {
+            code: "settings-no-model-choice",
+            detail: imageGenerationWords.settingsNoModelChoice(
+              provider,
+              models[0]
+            ),
+          });
         }
         if (model && !models.includes(model)) {
-          return refusal(
-            400,
-            "settings-unknown-model",
-            imageGenerationWords.settingsUnknownModel(provider, model, [
+          return problem(400, {
+            code: "settings-unknown-model",
+            detail: imageGenerationWords.settingsUnknownModel(provider, model, [
               ...models,
-            ])
-          );
+            ]),
+          });
         }
         const chosen: ImageSettings = { provider, model };
         db.setImageSettings(chosen);

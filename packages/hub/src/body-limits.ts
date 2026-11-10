@@ -20,9 +20,9 @@
  * the cap before the route reads it: past the cap it is refused, and within
  * it the route reads the body as it came.
  */
+import { problem } from "elysia";
 import { MAX_REQUEST_BYTES } from "./config";
 import { FILE_LIMIT_BYTES } from "./media";
-import { refusal } from "./refusal";
 
 /** Bodies outside git and attachments: the model API's own request limit. */
 const JSON_BODY_LIMIT_BYTES = 32 * 1024 * 1024;
@@ -42,13 +42,13 @@ const megabytes = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MB`;
 
 const tooLarge = (path: string, limit: number) =>
-  refusal(
-    413,
-    "body-too-large",
-    path === FILES_PATH
-      ? `Files up to ${megabytes(limit)}.`
-      : `This route takes bodies up to ${megabytes(limit)}.`
-  );
+  problem(413, {
+    code: "body-too-large",
+    detail:
+      path === FILES_PATH
+        ? `Files up to ${megabytes(limit)}.`
+        : `This route takes bodies up to ${megabytes(limit)}.`,
+  });
 
 /** Whether a body that declares no length ends within `limit` bytes; reading stops past it. */
 const endsWithin = async (

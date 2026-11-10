@@ -45,7 +45,7 @@ import {
 import { viewToolInput } from "@cawco/core/views-library";
 import { askWords } from "@cawco/core/words/asks";
 import { hubFailureWords } from "@cawco/core/words/hub-failure";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Blocks } from "./blocks";
 import type { DbShape } from "./db";
 import { fileOr } from "./memory";
@@ -62,7 +62,7 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
-import { refusal } from "./refusal";
+
 import { nextRunsOf, slotLabel } from "./routines";
 import type { Tasks } from "./tasks";
 import { unrecognizedKeys } from "./unrecognized-keys";
@@ -79,11 +79,10 @@ const ISO_DATE =
 const nameOf = (raw: string) =>
   VIEW_NAME.test(raw)
     ? raw
-    : refusal(
-        400,
-        "view-name-unfit",
-        `“${raw}” is not a view name: lowercase letters, digits and dashes, like weekly-review.`
-      );
+    : problem(400, {
+        code: "view-name-unfit",
+        detail: `“${raw}” is not a view name: lowercase letters, digits and dashes, like weekly-review.`,
+      });
 
 /** A task's dates as a view reads them: its own, its newest attempt's, and its file's ISO date fields. */
 const datesOf = (task: TaskSummary): Record<string, number> => {
@@ -152,11 +151,10 @@ export const createViews = ({
   const known = (projectId: string) => {
     const name = projectName(projectId);
     if (name === undefined) {
-      return refusal(
-        404,
-        "view-project-unknown",
-        `The hub keeps no project ${projectId}.`
-      );
+      return problem(404, {
+        code: "view-project-unknown",
+        detail: `The hub keeps no project ${projectId}.`,
+      });
     }
     return name;
   };
@@ -226,11 +224,10 @@ export const createViews = ({
       return kept;
     }
     if (!kept.includes(name)) {
-      return refusal(
-        404,
-        "view-not-kept",
-        `The project keeps no view “${name}”; a draft is kept or discarded first.`
-      );
+      return problem(404, {
+        code: "view-not-kept",
+        detail: `The project keeps no view “${name}”; a draft is kept or discarded first.`,
+      });
     }
     return await readOne(projectId, name, false);
   };
@@ -395,20 +392,18 @@ export const createViews = ({
       // route name it (core `viewToolInput`, one strict schema at every door).
       const unknown = unrecognizedKeys(parsed.error.issues);
       return unknown.length
-        ? refusal(
-            422,
-            "view-tool-arguments-unknown",
-            hubFailureWords.unknownArguments(
+        ? problem(422, {
+            code: "view-tool-arguments-unknown",
+            detail: hubFailureWords.unknownArguments(
               `Query("${tool}", …)`,
               tool,
               unknown
-            )
-          )
-        : refusal(
-            400,
-            "view-tool-arguments-unfit",
-            `${tool}'s arguments: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(all)"} ${issue.message}`).join("; ")}.`
-          );
+            ),
+          })
+        : problem(400, {
+            code: "view-tool-arguments-unfit",
+            detail: `${tool}'s arguments: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(all)"} ${issue.message}`).join("; ")}.`,
+          });
     }
     const input = parsed.data as Record<string, never>;
     switch (tool) {
@@ -425,11 +420,10 @@ export const createViews = ({
       case "events":
         return eventsOf(projectId, (input as { limit?: number }).limit);
       default:
-        return refusal(
-          404,
-          "view-tool-unknown",
-          `No view tool “${String(tool)}”; the tools are ${VIEW_TOOLS.join(", ")}.`
-        );
+        return problem(404, {
+          code: "view-tool-unknown",
+          detail: `No view tool “${String(tool)}”; the tools are ${VIEW_TOOLS.join(", ")}.`,
+        });
     }
   };
 
@@ -620,11 +614,10 @@ export const createViews = ({
       }
       const key = `${projectId}\0${name}`;
       if (keeping.has(key)) {
-        return refusal(
-          409,
-          "view-draft-being-kept",
-          `The draft ${name} is being kept already.`
-        );
+        return problem(409, {
+          code: "view-draft-being-kept",
+          detail: `The draft ${name} is being kept already.`,
+        });
       }
       keeping.add(key);
       try {
@@ -647,11 +640,10 @@ export const createViews = ({
           if (closed instanceof ElysiaStatus) {
             return closed;
           }
-          return refusal(
-            409,
-            "view-draft-closed",
-            askWords.proposalClosedOnAnswer(keptPath(name))
-          );
+          return problem(409, {
+            code: "view-draft-closed",
+            detail: askWords.proposalClosedOnAnswer(keptPath(name)),
+          });
         }
         const source = applies.writes[0]?.content ?? draft.source;
         const moved = await moveFolderFile(

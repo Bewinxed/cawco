@@ -58,7 +58,7 @@ import {
   zoneOf,
 } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/words/stream-relay";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import {
   addRecord,
   isCloudflareAddress,
@@ -72,7 +72,7 @@ import type {
   StreamRelayDb,
 } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
-import { type RefusalOf, refusal } from "./refusal";
+
 import {
   candidateOf,
   type RelayCall,
@@ -118,14 +118,31 @@ export interface RelayJourneyDeps {
 
 /** Why an act on the journey was refused, each under its own code. */
 type RelayActRefusal =
-  | RefusalOf<404, "stream-relay-not-set-up">
-  | RefusalOf<409, "stream-relay-machine-unreached">
-  | RefusalOf<400, "stream-relay-name-unfit">
-  | RefusalOf<409, "stream-relay-zone-none">
-  | RefusalOf<409, "stream-relay-name-none">
-  | RefusalOf<404, "stream-relay-none">
+  | ReturnType<
+      typeof problem<404, { code: "stream-relay-not-set-up"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<
+        409,
+        { code: "stream-relay-machine-unreached"; detail: string }
+      >
+    >
+  | ReturnType<
+      typeof problem<400, { code: "stream-relay-name-unfit"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<409, { code: "stream-relay-zone-none"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<409, { code: "stream-relay-name-none"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<404, { code: "stream-relay-none"; detail: string }>
+    >
   | RelayMachineRefusal
-  | RefusalOf<409, "stream-relay-not-removed">;
+  | ReturnType<
+      typeof problem<409, { code: "stream-relay-not-removed"; detail: string }>
+    >;
 
 /** What an act answers: nothing, or its refusal. */
 type ActAnswer = undefined | RelayActRefusal;
@@ -139,13 +156,24 @@ export interface RelayJourney {
   proof: (
     report: RelayProofReport,
     asker: RelayAsker
-  ) => undefined | RefusalOf<409, "stream-relay-none-to-prove">;
+  ) =>
+    | undefined
+    | ReturnType<
+        typeof problem<
+          409,
+          { code: "stream-relay-none-to-prove"; detail: string }
+        >
+      >;
   /** The person's Cloudflare token, for a renewal by DNS. */
   token: () => string | null;
   /** A credential for this screen's proof; a refusal while the relay is not live. */
   try: (
     asker: RelayAsker
-  ) => RelayTry | RefusalOf<409, "stream-relay-not-live">;
+  ) =>
+    | RelayTry
+    | ReturnType<
+        typeof problem<409, { code: "stream-relay-not-live"; detail: string }>
+      >;
   view: () => RelayJourneyView;
   /** The tick, on the hub's lifetime (lifetime.ts); the returned function ends it. */
   watch: () => () => void;
@@ -973,11 +1001,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   const keepToken = async (journey: StoredJourney, token: string) => {
     const zone = journey.name ? zoneOf(journey.name) : null;
     if (!zone) {
-      return refusal(
-        409,
-        "stream-relay-zone-none",
-        "The stream relay has no name with a zone for a token yet."
-      );
+      return problem(409, {
+        code: "stream-relay-zone-none",
+        detail: "The stream relay has no name with a zone for a token yet.",
+      });
     }
     const kept = await tokenKept(token, zone);
     if ("zone" in kept) {
@@ -1009,11 +1036,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   const addTheRecord = async (journey: StoredJourney, token: string) => {
     const { name, address } = journey;
     if (!(name && address)) {
-      return refusal(
-        409,
-        "stream-relay-name-none",
-        "The stream relay has no name with a zone to add yet."
-      );
+      return problem(409, {
+        code: "stream-relay-name-none",
+        detail: "The stream relay has no name with a zone to add yet.",
+      });
     }
     tokenWhy = undefined;
     const kept = await keepToken(journey, token);
@@ -1082,22 +1108,20 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         (each) => each.machineId === one.machineId
       );
       if (!candidate) {
-        return refusal(
-          409,
-          "stream-relay-machine-unreached",
-          `${machineName(one.machineId)} can't run the stream relay: the internet reaches it nowhere the hub knows.`
-        );
+        return problem(409, {
+          code: "stream-relay-machine-unreached",
+          detail: `${machineName(one.machineId)} can't run the stream relay: the internet reaches it nowhere the hub knows.`,
+        });
       }
       pick(candidate);
     },
     name: (_journey, one) => {
       const name = one.name.trim().toLowerCase();
       if (!RELAY_DNS_NAME.test(name)) {
-        return refusal(
-          400,
-          "stream-relay-name-unfit",
-          STREAM_RELAY_WORDS.notDnsName(name || one.name)
-        );
+        return problem(400, {
+          code: "stream-relay-name-unfit",
+          detail: STREAM_RELAY_WORDS.notDnsName(name || one.name),
+        });
       }
       db.journeyUpdate({ name, nameState: "open" });
       nameCheck = null;
@@ -1173,11 +1197,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         db.asked();
         return;
       }
-      return refusal(
-        404,
-        "stream-relay-not-set-up",
-        "The stream relay is not set up yet: press Set up first."
-      );
+      return problem(404, {
+        code: "stream-relay-not-set-up",
+        detail: "The stream relay is not set up yet: press Set up first.",
+      });
     }
     const run = ACTS[one.act] as (
       journey: StoredJourney,
@@ -1220,22 +1243,21 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     try: (asker) => {
       const minted = relay.mint(`proof:${asker.device.id}`, TRY_MS);
       if (!(minted && relay.read()?.state === "live")) {
-        return refusal(
-          409,
-          "stream-relay-not-live",
-          "The stream relay is not live yet, so there is nothing to prove."
-        );
+        return problem(409, {
+          code: "stream-relay-not-live",
+          detail:
+            "The stream relay is not live yet, so there is nothing to prove.",
+        });
       }
       return minted;
     },
     proof: (report, asker) => {
       const stored = relay.read();
       if (!stored) {
-        return refusal(
-          409,
-          "stream-relay-none-to-prove",
-          "The fleet has no stream relay to prove."
-        );
+        return problem(409, {
+          code: "stream-relay-none-to-prove",
+          detail: "The fleet has no stream relay to prove.",
+        });
       }
       const urls = streamRelayUrls(stored.address, stored.hostname);
       db.proved({

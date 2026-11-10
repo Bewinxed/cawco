@@ -33,7 +33,7 @@ import {
 } from "@cawco/core/areas";
 import { type OfferedMode, PERMISSION_MODES } from "@cawco/core/harness/kinds";
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { AreaDeleted, AreaSettingsChange } from "./db/areas";
 import type { ProjectRow } from "./db/projects";
@@ -47,7 +47,7 @@ import {
   readFolderFile,
   writeAsked,
 } from "./project-folder";
-import { refusal, schemaRefusal } from "./refusal";
+import { schemaRefusal } from "./refusal";
 
 /** What an area's settings write asks: any field, null clearing it. */
 export interface AreaSettingsAsk {
@@ -135,7 +135,8 @@ export const createAreas = ({
   folderSources,
 }: AreasDeps) => {
   const known = (id: string) =>
-    db.areas.get(id) ?? refusal(404, "no-area", areaWords.noArea(id));
+    db.areas.get(id) ??
+    problem(404, { code: "no-area", detail: areaWords.noArea(id) });
 
   /** An area as the API answers it: its projects, and its time the ISO string it is sent as. */
   const viewOf = (area: Area) => ({
@@ -175,7 +176,10 @@ export const createAreas = ({
   /** An area's settings write, checked; what the row takes. A field left out stays as it is. */
   const settingsChange = (ask: AreaSettingsAsk) => {
     if (ask.account && !db.accounts.get(ask.account)) {
-      return refusal(400, "no-account", areaWords.noAccount(ask.account));
+      return problem(400, {
+        code: "no-account",
+        detail: areaWords.noAccount(ask.account),
+      });
     }
     const asked: AreaSettingsChange = {
       account: ask.account,
@@ -239,7 +243,10 @@ export const createAreas = ({
   const place = async (projectId: string, areaId: string | null) => {
     const before = db.project(projectId);
     if (!before) {
-      return refusal(404, "no-project", areaWords.noProject(projectId));
+      return problem(404, {
+        code: "no-project",
+        detail: areaWords.noProject(projectId),
+      });
     }
     const area = areaId === null ? null : known(areaId);
     if (area instanceof ElysiaStatus) {
@@ -313,7 +320,7 @@ export const createAreas = ({
     }
     const deleted = db.areas.delete(id);
     if (!deleted) {
-      return refusal(404, "no-area", areaWords.noArea(id));
+      return problem(404, { code: "no-area", detail: areaWords.noArea(id) });
     }
     const folderGone = await deleteProjectFolder(areaFolder(id));
     if (folderGone instanceof ElysiaStatus) {
@@ -376,7 +383,10 @@ export const createAreas = ({
             asked.size !== all.length ||
             !all.every((id) => asked.has(id))
           ) {
-            return refusal(400, "area-order", areaWords.order);
+            return problem(400, {
+              code: "area-order",
+              detail: areaWords.order,
+            });
           }
           db.areas.order(body.ids);
           changed();

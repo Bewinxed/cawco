@@ -3,7 +3,7 @@
  */
 
 import { HOOK_TEMPLATES, type HookDraft, hookProblem } from "@cawco/core/hooks";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { hashHookMaterial } from "../db/fleet-catalog";
 import { undoable } from "../db/trash";
 import { hidden } from "../hidden";
@@ -14,7 +14,6 @@ import {
   pushTarget,
   readMachineHookScript,
 } from "../machine-reads";
-import { refusal } from "../refusal";
 
 /** A hook on one machine, as the routes that read or adopt its copy name it. */
 const HOOK_ON_MACHINE = t.Object({ machineId: t.String(), id: t.String() });
@@ -95,18 +94,17 @@ export const fleetHookRoutes = (
 
           const draft = hookDraftOf(current, patch);
           if (typeof draft.enabled !== "boolean") {
-            return refusal(
-              400,
-              "say-whether-hook-enabled",
-              "Say whether the hook is enabled."
-            );
+            return problem(400, {
+              code: "say-whether-hook-enabled",
+              detail: "Say whether the hook is enabled.",
+            });
           }
           const [first] = [
             boundProblem(draft),
             ...Object.values(hookProblem(draft)),
           ].filter(Boolean);
           if (first) {
-            return refusal(400, "hook-invalid", first);
+            return problem(400, { code: "hook-invalid", detail: first });
           }
 
           if (current) {
@@ -121,11 +119,10 @@ export const fleetHookRoutes = (
       .delete("/api/fleet/hooks/:id", ({ params }) => {
         const current = db.getFleetHook(params.id);
         if (!current) {
-          return refusal(
-            404,
-            "no-hook",
-            `the fleet keeps no hook ${params.id}`
-          );
+          return problem(404, {
+            code: "no-hook",
+            detail: `the fleet keeps no hook ${params.id}`,
+          });
         }
 
         keepHookVersion(current);
@@ -134,11 +131,10 @@ export const fleetHookRoutes = (
           Date.now()
         );
         if (trashed === undefined) {
-          return refusal(
-            404,
-            "no-hook",
-            `the fleet keeps no hook ${params.id}`
-          );
+          return problem(404, {
+            code: "no-hook",
+            detail: `the fleet keeps no hook ${params.id}`,
+          });
         }
         fleetChanged();
         return undoable(trashed);
@@ -155,7 +151,10 @@ export const fleetHookRoutes = (
         const version = db.fleetHookVersion(Number(params.id));
         return (
           version ??
-          refusal(404, "no-hook-version", `no hook version ${params.id}`)
+          problem(404, {
+            code: "no-hook-version",
+            detail: `no hook version ${params.id}`,
+          })
         );
       })
       // Undo, through the same door as a save: what restoring replaces is
@@ -167,11 +166,10 @@ export const fleetHookRoutes = (
         ({ body }) => {
           const version = db.fleetHookVersion(body.id);
           if (!version) {
-            return refusal(
-              404,
-              "no-hook-version",
-              `no hook version ${body.id}`
-            );
+            return problem(404, {
+              code: "no-hook-version",
+              detail: `no hook version ${body.id}`,
+            });
           }
 
           const current = db.getFleetHook(version.hookId);
@@ -221,11 +219,10 @@ export const fleetHookRoutes = (
           }
           const { current } = read;
           if (!read.copy) {
-            return refusal(
-              404,
-              "has-no-script",
-              `${machineName(body.machineId)} has no script for ${current.name}`
-            );
+            return problem(404, {
+              code: "has-no-script",
+              detail: `${machineName(body.machineId)} has no script for ${current.name}`,
+            });
           }
 
           const draft: HookDraft = {
@@ -240,7 +237,7 @@ export const fleetHookRoutes = (
           };
           const [first] = Object.values(hookProblem(draft));
           if (first) {
-            return refusal(400, "hook-invalid", first);
+            return problem(400, { code: "hook-invalid", detail: first });
           }
 
           keepHookVersion(current);
@@ -269,17 +266,19 @@ export const fleetHookRoutes = (
           }
           const { config } = target;
           if (config.hooks.length === 0) {
-            return refusal(400, "no-hooks", "the fleet keeps no hooks to push");
+            return problem(400, {
+              code: "no-hooks",
+              detail: "the fleet keeps no hooks to push",
+            });
           }
           if (
             body.id !== undefined &&
             !config.hooks.some((hook) => hook.id === body.id)
           ) {
-            return refusal(
-              404,
-              "no-hook",
-              `the fleet keeps no hook ${body.id}`
-            );
+            return problem(404, {
+              code: "no-hook",
+              detail: `the fleet keeps no hook ${body.id}`,
+            });
           }
 
           const forced = db

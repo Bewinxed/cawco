@@ -45,13 +45,14 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   changeLine,
   type Plans,
+  planSessionOf,
   receiverKey,
   receiverOfKey,
   stepLines,
   type WrittenStep,
 } from "./plans";
 import { projectAttempt } from "./project-refusal";
-import { type Refused, refusal } from "./refusal";
+import type { AnyProblem } from "./refusal";
 
 /** What became of a message to a session about its plan's changes. */
 export type PlanTold =
@@ -108,17 +109,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   /** Each receiver's deliveries, one at a time and in order. */
   const queues = new Map<string, Promise<unknown>>();
 
-  const rowOf = (instanceId: string) => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (!row) {
-      return refusal(
-        404,
-        "plan-session-unknown",
-        "No session with that id on this hub."
-      );
-    }
-    return row;
-  };
+  const rowOf = (instanceId: string) => planSessionOf(db, instanceId);
 
   /**
    * Who hears a change to `row`'s plan: a task attempt's, the project's Caw;
@@ -228,7 +219,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
   /** Runs `work` for `key` after whatever runs for it already; what it refused or threw goes to the hub's log. */
   const inOrder = (
     key: string,
-    work: () => Promise<Refused | undefined>
+    work: () => Promise<AnyProblem | undefined>
   ): Promise<void> => {
     const logged = (said: string) =>
       console.warn(`[plan-changes] ${key}: ${said}`);

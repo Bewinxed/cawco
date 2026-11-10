@@ -17,7 +17,7 @@ import type { WorkItemRow } from "./db/project-work";
 import { byHandle } from "./handles";
 import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
-import type { Refused } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { type Step, stepsEnough, stepsOf } from "./transcript-steps";
 import { isHubParent } from "./work-item-state";
 import type { QueuedDelegate } from "./work-items";
@@ -193,7 +193,7 @@ export interface DelegationTreeDeps {
   /** The session's plan progress, when it has steps (plans.ts); or its refusal. */
   plan: (
     instanceId: string
-  ) => Promise<{ done: number; total: number } | undefined | Refused>;
+  ) => Promise<{ done: number; total: number } | undefined | AnyProblem>;
   /** The delegates `caller` may withdraw, still queued (work-items `queuedOf`). */
   queued: (caller: string) => QueuedDelegate[];
   /** The session stopped at its account's limit, in words (at-limit.ts `stall`); undefined while it runs. */

@@ -104,7 +104,7 @@ import { causeLine } from "@cawco/core/words/install";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { pairingWords } from "@cawco/core/words/pairing";
 import { presenceLogWords } from "@cawco/core/words/presence-log";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { isProjectConversation } from "./caw";
 import type { DbShape } from "./db";
 import type { PushDeviceRow } from "./db/presence";
@@ -126,7 +126,7 @@ import {
   taskCollapseId,
   turnCollapseId,
 } from "./notifications";
-import { refusal } from "./refusal";
+
 import type { Decided } from "./settling";
 import type { TaskEvent } from "./tasks";
 
@@ -2539,19 +2539,18 @@ export const pushRoutes = (db: DbShape, push: Push) =>
           const device = devices.find((row) => row.pairingId === pairingId);
           return device
             ? await push.test([device])
-            : refusal(
-                404,
-                "device-no-longer-registered",
-                "That device is no longer registered."
-              );
+            : problem(404, {
+                code: "device-no-longer-registered",
+                detail: "That device is no longer registered.",
+              });
         }
         return devices.length > 0
           ? await push.test(devices)
-          : refusal(
-              409,
-              "no-phone-registered-yet",
-              "No phone is registered yet. Open CawCo on your phone and allow notifications."
-            );
+          : problem(409, {
+              code: "no-phone-registered-yet",
+              detail:
+                "No phone is registered yet. Open CawCo on your phone and allow notifications.",
+            });
       }
     )
     .put(
@@ -2560,20 +2559,18 @@ export const pushRoutes = (db: DbShape, push: Push) =>
       ({ params, body }) =>
         db.push.setQuiet(params.id, body.quiet)
           ? { ok: true }
-          : refusal(
-              404,
-              "device-no-longer-registered",
-              "That device is no longer registered."
-            )
+          : problem(404, {
+              code: "device-no-longer-registered",
+              detail: "That device is no longer registered.",
+            })
     )
     .delete("/api/push/devices/:id", async ({ params }) =>
       (await removeDevice(db, params.id))
         ? { ok: true }
-        : refusal(
-            404,
-            "device-no-longer-registered",
-            "That device is no longer registered."
-          )
+        : problem(404, {
+            code: "device-no-longer-registered",
+            detail: "That device is no longer registered.",
+          })
     )
     // ── The app: register and unregister its pairing (hidden) ────────────
     .post(
@@ -2595,25 +2592,24 @@ export const pushRoutes = (db: DbShape, push: Push) =>
       },
       ({ body }) => {
         if (!PAIRING_ID.test(body.pairingId)) {
-          return refusal(
-            400,
-            "pairing-id-not-lowercase",
-            "The pairing id is not a lowercase v4 uuid."
-          );
+          return problem(400, {
+            code: "pairing-id-not-lowercase",
+            detail: "The pairing id is not a lowercase v4 uuid.",
+          });
         }
         if (!SECRET.test(body.secret)) {
-          return refusal(
-            400,
-            "pairing-secret-not-32",
-            "The pairing secret is not 32 bytes in base64url (43 characters)."
-          );
+          return problem(400, {
+            code: "pairing-secret-not-32",
+            detail:
+              "The pairing secret is not 32 bytes in base64url (43 characters).",
+          });
         }
         if (!KEY.test(body.key)) {
-          return refusal(
-            400,
-            "push-key-not-32",
-            "The push key is not 32 bytes in padded base64 (44 characters)."
-          );
+          return problem(400, {
+            code: "push-key-not-32",
+            detail:
+              "The push key is not 32 bytes in padded base64 (44 characters).",
+          });
         }
         const device = db.push.putDevice({
           pairingId: body.pairingId,

@@ -7,12 +7,12 @@ import {
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
 } from "@cawco/core/accounts/controls";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { SIGNIN_TIMEOUT_MS } from "../login-moves";
 import type { MachineReadsContext } from "../machine-reads";
 import { awayStatus } from "../machine-reads";
-import { refusal } from "../refusal";
+
 import { unreachable } from "../unreachable";
 
 /**
@@ -74,18 +74,16 @@ export const accountHomeLoginRoutes = (
               if (others.reason === "dead") {
                 return awayStatus(ctx, set, query.machineId);
               }
-              return refusal(
-                503,
-                "machine-away",
-                awayWords(query.machineId, others)
-              );
+              return problem(503, {
+                code: "machine-away",
+                detail: awayWords(query.machineId, others),
+              });
             case "answered":
               if (!others.value.ok) {
-                return refusal(
-                  422,
-                  "home-logins-unread",
-                  others.value.error ?? "The machine gave no reason."
-                );
+                return problem(422, {
+                  code: "home-logins-unread",
+                  detail: others.value.error ?? "The machine gave no reason.",
+                });
               }
               break;
             default:
@@ -99,11 +97,10 @@ export const accountHomeLoginRoutes = (
               if (claude.reason === "dead") {
                 return awayStatus(ctx, set, query.machineId);
               }
-              return refusal(
-                503,
-                "machine-away",
-                awayWords(query.machineId, claude)
-              );
+              return problem(503, {
+                code: "machine-away",
+                detail: awayWords(query.machineId, claude),
+              });
             case "answered":
               home = claude.value.ok
                 ? (claude.value.result as HomeLogin)
@@ -139,11 +136,17 @@ export const accountHomeLoginRoutes = (
           const { machineId, store } = body;
           const found = await homeCredentialOf(machineId, store, body.provider);
           if ("error" in found) {
-            return refusal(found.status, "home-login-refused", found.error);
+            return problem(found.status, {
+              code: "home-login-refused",
+              detail: found.error,
+            });
           }
           const started = await startMove(machineId, store, found);
           return "error" in started
-            ? refusal(started.status, "home-login-refused", started.error)
+            ? problem(started.status, {
+                code: "home-login-refused",
+                detail: started.error,
+              })
             : status(202, started);
         }
       )
