@@ -34,8 +34,8 @@ const movesView = (key: string): boolean =>
 const TAIL_SLACK = 1;
 
 /** A thinking row opening or closing on the kit's reveal. */
-const isThinking = (event: Event): boolean =>
-  !!(event.target as Element).closest('[data-slot="thinking-steps-content"]');
+const isThinking = (target: Element): boolean =>
+  !!target.closest('[data-slot="thinking-steps-content"]');
 
 /** Keys that scroll the transcript: pressed during a jump, they are the reader's. */
 export const SCROLL_KEYS = new Set([
@@ -223,7 +223,7 @@ export class ScrollPin {
       }
     };
     const key = (event: KeyboardEvent): void => {
-      const target = event.target as Node | null;
+      const target = event.target instanceof Node ? event.target : null;
       if (
         movesView(event.key) &&
         (target === document.body || node.contains(target))
@@ -578,9 +578,11 @@ export class ScrollPin {
    * motion, and keeps the pin.
    */
   onrevealstart = (event: Event): void => {
+    const { target } = event;
     if (
-      !isThinking(event) &&
-      (event.target as Element).getAttribute("data-state") === "open"
+      target instanceof Element &&
+      !isThinking(target) &&
+      target.getAttribute("data-state") === "open"
     ) {
       this.stopFollow();
       this.#host.arrivals.tickets.clear();

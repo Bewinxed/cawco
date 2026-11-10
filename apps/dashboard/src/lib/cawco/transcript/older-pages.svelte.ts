@@ -120,8 +120,11 @@ export class OlderPages {
       this.nearStart ??= frameObserver(null, {
         read: (entries) => {
           const target = entries.at(-1)?.target;
-          this.nearStart?.unobserve(target as Element);
-          if (target && this.#host.pin.scroller) {
+          if (!target) {
+            return;
+          }
+          this.nearStart?.unobserve(target);
+          if (this.#host.pin.scroller) {
             this.askOlder(
               this.#host.pin.scroller.getBoundingClientRect().top -
                 target.getBoundingClientRect().top
