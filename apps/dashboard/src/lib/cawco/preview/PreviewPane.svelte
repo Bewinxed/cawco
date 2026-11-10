@@ -111,11 +111,7 @@
   import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
   import { graceWhile } from "#lib/platform/grace-while.svelte.js";
   import { hub } from "#lib/platform/hub.js";
-  import {
-    failureClause,
-    failureWords,
-    hubData,
-  } from "#lib/platform/hub-read.js";
+  import { failureWords, hubData } from "#lib/platform/hub-read.js";
   import {
     appear,
     dur,
@@ -132,7 +128,6 @@
     unstore,
     writeJson,
   } from "#lib/platform/storage.js";
-  import { toast } from "#lib/platform/toasts.js";
   import { track } from "#lib/platform/track.js";
   import { floor as visibleFloor } from "#lib/platform/visible-viewport.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -143,8 +138,6 @@
     artifactShown,
     keepThumbnail,
     removeArtifact,
-    showArtifact,
-    verifyArtifact,
     writeSheet,
   } from "../artifact-api";
   import {
@@ -222,6 +215,7 @@
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { artifactAddress } from "./page-source";
+  import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
   import { enterPreviews, turnedAwayWords } from "./pass";
   import SheetInspector from "./SheetInspector.svelte";
@@ -289,6 +283,10 @@
     instanceId: () => instanceId,
     ownTab: () => ownTab,
   });
+  const paneNotice = new PaneNotice({
+    instanceId: () => instanceId,
+    paneSubject,
+  });
   let iframe = $state<HTMLIFrameElement>();
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
@@ -340,56 +338,6 @@
   let headRoomTaken = $state(false);
   let loaded = $state(false);
   let reload = $state(0);
-  /**
-   * What last went wrong, and what trying again means: the frame's own
-   * errors (a capture the page refused) reload the frame; a refused close
-   * asks again. A page's own send the hub refused, and a field the hub's
-   * bounds refused, have no way back here: the page sends again from its
-   * own button, and says a field's problem under the field; the band goes
-   * once the page is heard from again.
-   */
-  let failure = $state<Failure | null>(null);
-  interface Failure {
-    again: "reload" | "close" | null;
-    message: string;
-  }
-  function say(next: Failure | null) {
-    failure = next;
-  }
-  /**
-   * An act of the pane's own the hub refused (Verify, a show from the
-   * title's menu): said on the same line, with Try again, kept through a
-   * reload (refusals.svelte.ts), until a try goes.
-   */
-  type PaneAct = { act: "verify" } | { act: "show"; id: string; title: string };
-  const actKey = $derived(`pane:${instanceId}`);
-  const paneRefused = $derived(refusals.get(actKey));
-  /** The refused act's Try again is running. */
-  let rerunning = $state(false);
-  async function rerun(): Promise<void> {
-    const asked = paneRefused?.asked as PaneAct | undefined;
-    if (!asked) {
-      return;
-    }
-    rerunning = true;
-    try {
-      if (asked.act === "verify") {
-        await verify();
-        return;
-      }
-      try {
-        await showArtifact(instanceId, asked.id);
-        refusals.delete(actKey);
-      } catch (error) {
-        refusals.set(actKey, {
-          reason: `${asked.title} was not shown: ${failureClause(error)}.`,
-          asked,
-        });
-      }
-    } finally {
-      rerunning = false;
-    }
-  }
   let well = $state<HTMLDivElement>();
   /**
    * The preview's own origin, never the dashboard's, picked by where this
@@ -766,7 +714,7 @@
     }
     refusedEntries += 1;
     if (refusedEntries > 1) {
-      say({
+      paneNotice.say({
         message: turnedAwayWords(origin),
         again: "reload",
       });
@@ -774,7 +722,7 @@
     }
     const refused = await enterPreviews(origin, frameSince);
     if (refused) {
-      say({
+      paneNotice.say({
         message: `The hub didn't give this preview a pass: ${refused}`,
         again: "reload",
       });
@@ -1329,7 +1277,7 @@
     }
     const refused = await enterPreviews(origin, performance.now());
     if (refused && said) {
-      say({
+      paneNotice.say({
         message: `The hub didn't give this preview a pass: ${refused}`,
         again: null,
       });
@@ -1718,7 +1666,7 @@
       // The hub didn't keep a write of the pane's: said where the page's own
       // refusals are, and the person's words in it kept aside in their thread.
       (why, lost) => {
-        say({ message: why, again: null });
+        paneNotice.say({ message: why, again: null });
         keepRefused(id, why, lost);
       }
     );
@@ -1763,7 +1711,7 @@
     try {
       await sendArtifact(instanceId, paneSubject.artifact.id, control);
     } catch (error) {
-      say({ message: failureWords(error), again: null });
+      paneNotice.say({ message: failureWords(error), again: null });
     } finally {
       sending = false;
     }
@@ -1840,7 +1788,7 @@
         await retryComment(instanceId, paneSubject.artifact.id, id);
       }
     } catch (error) {
-      say({ message: failureWords(error), again: null });
+      paneNotice.say({ message: failureWords(error), again: null });
     } finally {
       pinsRetrying = new Set([...pinsRetrying].filter((one) => one !== id));
     }
@@ -2474,7 +2422,7 @@
         0
       );
     } catch (error) {
-      say({ message: failureWords(error), again: null });
+      paneNotice.say({ message: failureWords(error), again: null });
     } finally {
       askingAgain = new Set([...askingAgain].filter((one) => one !== id));
     }
@@ -3046,7 +2994,7 @@
     if (id === openPin) {
       cardError = refused;
     } else if (refused) {
-      say({ message: refused, again: null });
+      paneNotice.say({ message: refused, again: null });
     }
   }
   /**
@@ -3356,8 +3304,8 @@
           frameSince = performance.now();
           // The frame Try again reloaded answered: what it was tried for is over.
           retrying = false;
-          if (failure?.again === "reload") {
-            say(null);
+          if (paneNotice.failure?.again === "reload") {
+            paneNotice.say(null);
           }
           // A page loaded again holds no comment being written.
           composing = null;
@@ -3409,7 +3357,7 @@
             });
           }
         }
-        say(frameError(previewError(message.error)));
+        paneNotice.say(frameError(previewError(message.error)));
         retrying = false;
         break;
       }
@@ -3587,14 +3535,14 @@
         if (said) {
           // A send the page made itself goes again from its own button; a
           // field's problem is the page's to show under the field.
-          say({ message: said, again: of ? null : "reload" });
+          paneNotice.say({ message: said, again: of ? null : "reload" });
         }
         retrying = false;
         break;
       }
       case "cawco:resolved":
-        if (failure && failure.again === null) {
-          say(null);
+        if (paneNotice.failure && paneNotice.failure.again === null) {
+          paneNotice.say(null);
         }
         break;
       case "cawco:sheet": {
@@ -3807,7 +3755,7 @@
           machineId: row.machineId,
         });
     browserActing = false;
-    say(
+    paneNotice.say(
       why
         ? {
             message: holding
@@ -3890,7 +3838,7 @@
     try {
       await paneSubject.fleet.closePreview(instanceId);
     } catch (error) {
-      say({
+      paneNotice.say({
         message: failureWords(error),
         again: "close",
       });
@@ -3965,30 +3913,6 @@
     measure();
     return () => watch.disconnect();
   });
-  /** The canvas view's Verify: a design system round on the canvas, its verdict to the session; the hub's sentence says what it did. */
-  let verifying = $state(false);
-  async function verify() {
-    if (!paneSubject.artifact) {
-      return;
-    }
-    verifying = true;
-    const key = actKey;
-    try {
-      toast.info(await verifyArtifact(instanceId, paneSubject.artifact.id));
-      if ((refusals.get(key)?.asked as PaneAct | undefined)?.act === "verify") {
-        refusals.delete(key);
-      }
-    } catch (error) {
-      // Said on the pane's own line, with Try again, never a toast
-      // (DESIGN.md, The Work Outlives Its Surface Rule).
-      refusals.set(key, {
-        reason: `${paneSubject.artifact.title} was not verified: ${failureClause(error)}. The canvas stays as it is.`,
-        asked: { act: "verify" } satisfies PaneAct,
-      });
-    } finally {
-      verifying = false;
-    }
-  }
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
     interact: IconInteractLinear,
@@ -4333,12 +4257,21 @@
 {#snippet viewBar()}
   {#if canvasView}
     <!-- A component artifact's view: Map and Verify. -->
-    <CanvasView onverify={verify} view={canvasView} {verifying} />
+    <CanvasView
+      onverify={paneNotice.verify}
+      view={canvasView}
+      verifying={paneNotice.verifying}
+    />
   {/if}
 {/snippet}
 {#snippet viewMenu()}
   {#if canvasView}
-    <CanvasView as="sub" onverify={verify} view={canvasView} {verifying} />
+    <CanvasView
+      as="sub"
+      onverify={paneNotice.verify}
+      view={canvasView}
+      verifying={paneNotice.verifying}
+    />
   {/if}
 {/snippet}
 
@@ -4487,7 +4420,7 @@
       line={headLine}
       lineId={`${paneId}-line`}
       onrefused={(reason, chosen) => {
-        refusals.set(actKey, {
+        refusals.set(paneNotice.actKey, {
           reason,
           asked: {
             act: "show",
@@ -4619,7 +4552,7 @@
   <SideSurface
     of="preview"
     mode={paneSubject.isCanvas || paneSubject.isBrowser ? undefined : mode}
-    closeFailed={failure?.again === "close"}
+    closeFailed={paneNotice.failure?.again === "close"}
     {closing}
     items={headItems}
     label="Preview"
@@ -4817,14 +4750,14 @@
             // the panel's Send counts and artifact_read answers.
             const refused = doc?.keep("dials", values);
             if (refused) {
-              failure = { message: refused, again: null };
+              paneNotice.say({ message: refused, again: null });
             }
           }}
           ontuned={(records) => {
             // His tuning of every move is the artifact's: its doc's `tuned` map, which artifact_read answers.
             const refused = doc?.keepTuned(records);
             if (refused) {
-              failure = { message: refused, again: null };
+              paneNotice.say({ message: refused, again: null });
             }
           }}
           onroom={() => showInspector(false)}
@@ -5272,7 +5205,7 @@
       {/key}
     {/if}
   </div>
-  {#if failure || paneRefused}
+  {#if paneNotice.failure || paneNotice.paneRefused}
     <!-- The pane's own line: a frame's failure, or an act of the pane's the
          hub refused, kept through a reload. -->
     <div
@@ -5285,9 +5218,11 @@
       <p
         class="flex-1 basis-c-draft-line min-w-0 m-0 text-data-bad text-size-body font-normal text-pretty wrap-anywhere"
       >
-        {failure ? failure.message : paneRefused?.reason}
+        {paneNotice.failure
+          ? paneNotice.failure.message
+          : paneNotice.paneRefused?.reason}
       </p>
-      {#if failure?.again === "reload"}
+      {#if paneNotice.failure?.again === "reload"}
         <Button
           label={commonWords.tryAgain}
           onclick={retry}
@@ -5296,7 +5231,7 @@
           size="sm"
           variant="outline"
         />
-      {:else if failure?.again === "close"}
+      {:else if paneNotice.failure?.again === "close"}
         <Button
           label={commonWords.tryAgain}
           onclick={close}
@@ -5305,12 +5240,12 @@
           size="sm"
           variant="outline"
         />
-      {:else if !failure && paneRefused}
+      {:else if !paneNotice.failure && paneNotice.paneRefused}
         <Button
           data-again
           label={commonWords.tryAgain}
-          onclick={rerun}
-          pending={rerunning}
+          onclick={paneNotice.rerun}
+          pending={paneNotice.rerunning}
           pendingLabel="Trying again…"
           size="sm"
           variant="outline"
