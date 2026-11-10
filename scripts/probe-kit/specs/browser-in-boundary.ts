@@ -27,6 +27,9 @@ import { join } from "node:path";
 import type { BrowserKey } from "../../../packages/core/src/browser";
 import type { Kit, Spec } from "../kit";
 
+/** This probe's process has no hub link: the registry tells nothing. */
+const NO_HUB = { browsers: (): void => undefined, machineId: "probe-machine" };
+
 const KEY: BrowserKey = "project:probe-in-boundary";
 const TITLE = "boundary page";
 
@@ -56,7 +59,7 @@ const run = async (kit: Kit): Promise<void> => {
     await import("../../../packages/agent/src/browser/cdp-takeover");
   try {
     await browsers.browserRuntime(true);
-    const start = await browsers.startBrowser({ key: KEY }).then(
+    const start = await browsers.startBrowser(NO_HUB, { key: KEY }).then(
       (row) => ({ row, error: undefined as string | undefined }),
       (error: unknown) => ({
         row: undefined,
@@ -116,7 +119,7 @@ const run = async (kit: Kit): Promise<void> => {
       link.close();
     }
   } finally {
-    await browsers.removeBrowser(KEY).catch(() => undefined);
+    await browsers.removeBrowser(NO_HUB, KEY).catch(() => undefined);
     if (hidden === undefined) {
       delete process.env.DOCKER_HOST;
     } else {

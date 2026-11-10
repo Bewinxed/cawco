@@ -6,6 +6,7 @@ import {
 import { portHolder } from "@cawco/core/live-processes";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { HOP_BY_HOP_HEADERS } from "@cawco/core/preview/hop-headers";
+import type { BrowserPorts } from "./browser/browsers";
 import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
 import { fieldOf } from "./json-field";
@@ -449,7 +450,8 @@ async function hostedRoute(
 /** A hosted server's request, a shared one's or a workspace gate's; none for any other path. */
 const hostedRoutes = (
   url: URL,
-  request: Request
+  request: Request,
+  ports: BrowserPorts
 ): Promise<Response> | undefined => {
   const shared = url.pathname.match(HOSTED_PATH)?.[1];
   if (shared) {
@@ -460,13 +462,15 @@ const hostedRoutes = (
   const [, gate, gated] = url.pathname.match(GATE_PATH) ?? [];
   return gate && gated
     ? hostedRoute(gated, request, (forward) =>
-        mcpHost.fetchGate(gate, gated, forward)
+        mcpHost.fetchGate(ports, gate, gated, forward)
       )
     : undefined;
 };
 
 /** What the gateway answers with that is not its own: the agent's refresh of a provider account's sign-in, and what its supervisor holds a restart for. */
 interface Gateway {
+  /** What a workspace's browser door tells the hub through when it makes a browser's record (browser/door.ts). */
+  readonly browsers: BrowserPorts;
   readonly freshen: (accountId: string) => Promise<void>;
   readonly supervisorHolds: SupervisorHolds;
 }
@@ -496,7 +500,7 @@ export const startMcpGateway = async (
         if (accounts) {
           return await accounts;
         }
-        const hosted = hostedRoutes(url, request);
+        const hosted = hostedRoutes(url, request, gateway.browsers);
         if (hosted) {
           return await hosted;
         }
