@@ -47,7 +47,6 @@
   import { HOSTED_STRIP, SESSION_STRIP } from "#lib/cawco/tab-strips.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
-  import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
   import {
     restRank,
     TabItem,
@@ -72,7 +71,6 @@
     IconSplitRight,
   } from "#lib/icons.js";
   import { frameSize } from "#lib/platform/frame-observer.js";
-  import type { HubRead } from "#lib/platform/hub-read.js";
   import {
     dur,
     ease,
@@ -132,13 +130,9 @@
     travel?: TabsTravel | null;
   } = $props();
 
-  const servedNames = $derived(
-    (page.data as { names?: Record<string, HubRead<string>> }).names ?? {}
-  );
+  const servedNames = $derived(page.data.names ?? {});
   /** Each tab's shape as last measured, from the layout's cookie (fluid-tabs/fold-memory.ts). */
-  const servedBoxes = $derived(
-    (page.data as { foldBoxes?: Record<string, FoldMeasure> }).foldBoxes ?? {}
-  );
+  const servedBoxes = $derived(page.data.foldBoxes ?? {});
 
   interface Tab {
     activity: Activity;

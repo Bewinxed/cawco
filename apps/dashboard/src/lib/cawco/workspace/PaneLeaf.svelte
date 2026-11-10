@@ -31,7 +31,6 @@
   import ProjectPage from "../project/ProjectPage.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
-  import type { ServerTail } from "../stores/transcript-reads.svelte";
   import Composer, { type TrayRow } from "../transcript/Composer.svelte";
   import { composerFleet } from "../transcript/composer-fleet";
   import {
@@ -75,7 +74,7 @@
     if (browser) {
       return takeProjectSeed(projectId);
     }
-    const { seed } = page.data as { seed?: ProjectSeed | null };
+    const { seed } = page.data;
     return seed?.id === projectId ? seed : null;
   };
 
@@ -540,7 +539,7 @@
             browsingHarness={ctx?.harness}
             focused={false}
             serverTail={paneId === page.params.id
-              ? ((page.data as { tail?: ServerTail | null }).tail ?? null)
+              ? (page.data.tail ?? null)
               : null}
             viewId={paneId}
             visible={shown}

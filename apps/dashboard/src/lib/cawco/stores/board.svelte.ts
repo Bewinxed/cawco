@@ -268,8 +268,7 @@ export function pulseOf(instanceId: string): PulseReading | undefined {
   if (held || boardState.liveRead) {
     return held;
   }
-  return (servedPage.data as { pulses?: Record<string, SessionPulse> })
-    .pulses?.[instanceId];
+  return servedPage.data.pulses?.[instanceId];
 }
 
 /**
