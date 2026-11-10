@@ -92,7 +92,6 @@
     easeOut,
     lifting,
     motionOk,
-    pinned,
     reveal,
     revealOut,
   } from "../motion/curves.svelte";
@@ -230,20 +229,27 @@
     easing: easeDrawer,
     css: wipe(from),
   });
+  /**
+   * The field and the bar share the head's one cell (a one-cell grid), so
+   * the row coming never takes room from the row leaving: lifted out of the
+   * flow as its wipe began, the bar was measured after the field had joined
+   * the row and held half its width, its Search, + and Sort jumping onto
+   * the lists for the wipe's first frames. The leaving row only stands out
+   * of the pointer's way.
+   */
+  const untouched = () => ({ "pointer-events": "none" });
   /** The field: drawn from the trailing end. */
   const fieldIn = (node: Element) =>
     motionOk.current ? wiping("start") : crossIn(node);
   const fieldOut = (node: HTMLElement) =>
     motionOk.current
-      ? lifting(node, pinned(node), wiping("start"))
+      ? lifting(node, untouched, wiping("start"))
       : crossOut(node);
   /** The bar: put away toward its leading end as the field comes. */
   const barIn = (node: Element) =>
     motionOk.current ? wiping("end") : crossIn(node);
   const barOut = (node: HTMLElement) =>
-    motionOk.current
-      ? lifting(node, pinned(node), wiping("end"))
-      : crossOut(node);
+    motionOk.current ? lifting(node, untouched, wiping("end")) : crossOut(node);
   /** The floating stack's height over the rows, px (its bar, the lists and what opens under them): the rows' top padding. */
   let headHeight = $state(0);
   /**
@@ -866,7 +872,7 @@
     <header
       data-slot="head"
       data-searching={searching || undefined}
-      class="relative flex flex-none items-center gap-space-1 h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5 data-[layout=beside]:mt-space-2"
+      class="relative grid flex-none grid-cols-1 items-center h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:hit-gap-x-space-5 data-[layout=beside]:mt-space-2 *:col-start-1 *:row-start-1"
       data-layout={layout}
     >
       {#if searching}

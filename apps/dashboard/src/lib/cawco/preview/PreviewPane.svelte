@@ -301,7 +301,17 @@
   $effect(() => {
     store("local", sortKey, railSort);
   });
+  /**
+   * The Comments list opened or shut, by its Close, by Comments or by its
+   * menu item alike. A thread standing with the list (joined to its card,
+   * or pushed into its sheet) goes with it: left open, it fell back beside
+   * its pill, and on a phone its own sheet stood up, modal over the bar, as
+   * the list's went down.
+   */
   function showList(open: boolean) {
+    if (!open && openPin && (threadPushed || threadHung)) {
+      backToList();
+    }
     listOpen = open;
     store("local", listKey, open ? "open" : "shut");
   }
@@ -3748,13 +3758,6 @@
     closeCard();
     closingPin = null;
   }
-  /** The Comments sheet goes, with a thread standing in it. */
-  function closeSheet() {
-    if (threadPushed) {
-      backToList();
-    }
-    showList(false);
-  }
   $effect(() => {
     if (railSheetOpen) {
       railSheetDrawn = true;
@@ -4393,7 +4396,7 @@
       back={pushed
         ? { to: commentWords.comments, onback: backToList }
         : undefined}
-      onclose={pushed ? closeSheet : () => closeCard()}
+      onclose={pushed ? () => showList(false) : () => closeCard()}
       sheet={pushed || sheet}
       ondelete={deleteOpenPin}
       ondraft={() => drafts?.changed(pin.id)}
@@ -5056,7 +5059,7 @@
       label={threadPushed && cardPin
         ? `Comment ${cardPin.number}`
         : commentWords.comments}
-      onclose={closeSheet}
+      onclose={() => showList(false)}
       onclosed={() => {
         if (!railSheetOpen) {
           railSheetDrawn = false;
