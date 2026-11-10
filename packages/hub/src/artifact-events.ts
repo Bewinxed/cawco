@@ -44,7 +44,7 @@ import { handle as idHandle } from "./presenters/words";
 import { refusal } from "./refusal";
 import { sendMode } from "./sends";
 import { unreachable } from "./unreachable";
-import { isLive, WorkItemRefusal } from "./work-item-state";
+import { isLive } from "./work-item-state";
 
 /** A picture's number in a comments delivery's words (core comments.ts `attachedLine`). */
 const PICTURE_NUMBER = /\(picture (\d+) of this message/gu;
@@ -765,18 +765,25 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     from: string,
     id: string,
     reason: string | undefined
-  ): Promise<{ recorded: string } | { approved: boolean }> => {
+  ) => {
     const asked = ctx.workItems.discardable(from, id);
     const stillWaiting = ctx.workItems.waiting(asked.id);
+    const goes: { recorded: string } | { approved: boolean } = {
+      approved: false,
+    };
     if (stillWaiting.length === 0) {
-      return { approved: false };
+      return goes;
     }
     if (!reason?.trim()) {
-      throw new WorkItemRefusal(400, workWords.discardAskReason);
+      return refusal(400, "discard-ask-reason", workWords.discardAskReason);
     }
     const [actor] = ctx.db.getInstancesByIds([from]);
     if (!actor) {
-      throw new WorkItemRefusal(404, `No session ${from} on this hub.`);
+      return refusal(
+        404,
+        "discard-ask-session-unknown",
+        `No session ${from} on this hub.`
+      );
     }
     const recorded = await ctx.hubAsks.ask(actor, "discard_workspace", {
       workspace: asked.id,
@@ -785,7 +792,9 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
         stillWaiting.map((one) => artifactLink(one.id, one.title))
       ),
     });
-    return recorded === undefined ? { approved: true } : { recorded };
+    const decided: { recorded: string } | { approved: boolean } =
+      recorded === undefined ? { approved: true } : { recorded };
+    return decided;
   };
 
   return {
