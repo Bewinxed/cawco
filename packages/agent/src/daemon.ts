@@ -339,14 +339,12 @@ import {
   renderStage,
   resumeStages,
   StageRefusal,
-  setStageSink,
   stageComponents,
   stopServed,
   tellStages,
   warmStage,
   writeSheet,
 } from "./stage";
-import { setStageCloneSink } from "./stage-clone";
 import type { RenderAsk } from "./stage-render";
 import { endToolSignins } from "./tool-signin";
 import { onNeedsAnswered, onToolsMoved, probeTools } from "./tools";
@@ -3387,6 +3385,8 @@ const startDaemon = (rediscover = false) =>
       commandQueue: framed,
       moveProgress: framed,
       opencodeAccounts,
+      stage: framed,
+      stageClone: framed,
     };
     yield* Effect.acquireRelease(
       Effect.promise(() =>
@@ -3854,17 +3854,11 @@ const startDaemon = (rediscover = false) =>
       )
     );
     // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
-    setStageSink((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     // Each stage that answered as the last agent ended, started again at its port (stage.ts `carryStages`).
-    resumeStages().catch((error: unknown) =>
+    resumeStages(ports).catch((error: unknown) =>
       console.warn(
         `[stage] the stages the last agent carried were not started again: ${error instanceof Error ? error.message : String(error)}`
       )
-    );
-    setStageCloneSink((frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
     // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads; `opening` as the canvas is made.
     supervisor.declareControl(STAGE_ENSURE, (ref, file) => {
@@ -3874,8 +3868,9 @@ const startDaemon = (rediscover = false) =>
       const named = file as
         { file?: string; files?: string[]; opening?: boolean } | string;
       return typeof named === "string"
-        ? ensureStage(ref as WorkspaceRef, named)
+        ? ensureStage(ports, ref as WorkspaceRef, named)
         : ensureStage(
+            ports,
             ref as WorkspaceRef,
             String(named.file),
             named.files,
@@ -3887,26 +3882,27 @@ const startDaemon = (rediscover = false) =>
       if (fenced()) {
         return Promise.reject(new Error(AGENT_RESTARTING));
       }
-      warmStage(ref as WorkspaceRef, warm as StageWarm);
+      warmStage(ports, ref as WorkspaceRef, warm as StageWarm);
       return Promise.resolve();
     });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
     supervisor.declareControl(STAGE_WRITE, (ref, write) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : writeSheet(ref as WorkspaceRef, write as SheetWrite)
+        : writeSheet(ports, ref as WorkspaceRef, write as SheetWrite)
     );
     // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
     supervisor.declareControl(STAGE_RENDER, (ref, ask) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : renderStage(ref as WorkspaceRef, ask as RenderAsk)
+        : renderStage(ports, ref as WorkspaceRef, ask as RenderAsk)
     );
     // A toolchain root's components, as its stage finds them (spec §6's discovery).
     supervisor.declareControl(STAGE_COMPONENTS, (ref, dir) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : stageComponents(
+            ports,
             ref as WorkspaceRef,
             dir && typeof dir === "object" ? (dir as DesignQuery) : {}
           )
@@ -3920,7 +3916,7 @@ const startDaemon = (rediscover = false) =>
       if (!ref) {
         throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
       }
-      return ensureServed(ref, serve as ServeSpec);
+      return ensureServed(ports, ref, serve as ServeSpec);
     });
     supervisor.declareControl(STAGE_UNSERVE, (workspace, port) =>
       stopServed(String(workspace), Number(port))

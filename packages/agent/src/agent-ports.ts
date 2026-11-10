@@ -12,6 +12,7 @@
 import type { AccountBorrowFrame } from "@cawco/core/accounts";
 import type { CommandQueueFrame } from "@cawco/core/commands/controls";
 import type { MoveProgressFrame } from "@cawco/core/move";
+import type { StageCloneFrame, StageFrame } from "@cawco/core/stage";
 
 export interface AgentPorts {
   /** A borrower's ask for a fresh access token of a lender's sign-in (provider-accounts.ts). */
@@ -22,6 +23,10 @@ export interface AgentPorts {
   readonly moveProgress: (frame: MoveProgressFrame) => void;
   /** What the OpenCode harness does for the accounts here (provider-accounts.ts). */
   readonly opencodeAccounts: OpencodeAccountsHost;
+  /** A workspace's stage, where it is now (stage.ts). */
+  readonly stage: (frame: StageFrame) => void;
+  /** A place's stage clone, as the hub files it as a workspace (stage-clone.ts). */
+  readonly stageClone: (frame: StageCloneFrame) => void;
 }
 
 /**
