@@ -13,6 +13,9 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { defineConfig, Logger, parse } from "@terrazzo/parser";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["design/tokens/"];
+
 const DIR = join(import.meta.dir, "../design/tokens");
 
 interface Ref {

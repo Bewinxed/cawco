@@ -60,6 +60,15 @@ import { fontOrderDrift } from "./role-order";
 import { printLadder } from "./theme-ladder";
 import { isWebToken } from "./token-groups";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/",
+  "design/",
+  "DESIGN.md",
+  "apps/apple/Packages/CawCoKit/Sources/CawCoDesign/",
+  "packages/hub/skills/decision-page/kit/tokens.css",
+];
+
 const CHECK = process.argv.includes("--check");
 /** The outputs unlike the committed files, in check mode. */
 const drift: string[] = [];

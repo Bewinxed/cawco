@@ -33,6 +33,9 @@ import {
   evaluatorOf,
 } from "../packages/design-tokens/src/design-tokens";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = ["design/tokens/"];
+
 const DIR = join(import.meta.dir, "../design/tokens");
 const TEXT = 4.5;
 const UI = 3;

@@ -36,6 +36,13 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import ts from "typescript";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "packages/",
+  "scripts/probe-kit/",
+  "scripts/scratch-fleet.ts",
+];
+
 const ROOT = join(import.meta.dir, "..");
 /** The longest a spec may sleep: a few seconds of the product's own work, never an interval of it. */
 export const LIMIT_MS = 30_000;

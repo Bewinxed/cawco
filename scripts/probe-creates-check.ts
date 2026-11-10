@@ -35,6 +35,13 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "scripts/probe-kit/",
+  "scripts/scratch-fleet.ts",
+  "scripts/binary/",
+];
+
 const ROOT = join(import.meta.dir, "..");
 /** A probe's call through Eden: `fleet.api(…)` and `fleet.sessionApi(…)`. */
 const HUB_CALLS = /^(?:api|sessionApi)/u;

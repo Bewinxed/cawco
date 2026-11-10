@@ -20,6 +20,13 @@
  */
 import { join } from "node:path";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  ".impeccable/design.json",
+  "DESIGN.md",
+  "design/tokens/",
+];
+
 const ROOT = join(import.meta.dir, "..");
 const SIDECAR = ".impeccable/design.json";
 const SOURCES = ["DESIGN.md", "design/tokens/"];

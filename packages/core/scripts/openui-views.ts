@@ -22,6 +22,14 @@ import { join } from "node:path";
 import type { SystemPromptSpec } from "@openuidev/lang-core";
 import { z } from "zod";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "packages/core/",
+  "packages/hub/skills/decision-page/",
+  "apps/*/package.json",
+  "packages/*/package.json",
+];
+
 // lang-core's runtime telemetry is opt-in and these turn it off outright,
 // before the prompt is generated (shared.ts `isTelemetryDisabled`).
 process.env.OPENUI_TELEMETRY_DISABLED = "1";

@@ -14,6 +14,15 @@ import { buildCanvasHost } from "../packages/hub/src/canvas-host";
 import { buildDecisionHost } from "../packages/hub/src/decision-host";
 import { loadOverlay } from "../packages/preview/src/proxy";
 
+// Read at run time beyond its imports; check.ts keys the check on them.
+export const checkReads = [
+  "apps/dashboard/",
+  "design/",
+  "DESIGN.md",
+  "packages/agent/src/",
+  "packages/core/src/",
+];
+
 const started = performance.now();
 const bundles = {
   "canvas host": buildCanvasHost,
