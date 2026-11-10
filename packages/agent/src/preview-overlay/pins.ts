@@ -234,7 +234,7 @@ export interface Pins {
   pointOn: (el: Element, x: number, y: number) => { x: number; y: number };
   /** Every pin shown on the page, or hidden (⇧C). */
   show: (shown: boolean) => void;
-  /** The elements its pins stand on now. */
+  /** The elements its pins, and the comment being written, stand on now. */
   standingOn: () => Iterable<Element | null>;
   /** The pin whose thread the host shows, whose place it hears as the page scrolls; or none. */
   track: (id: string | null) => void;
@@ -699,6 +699,16 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   /**
+   * The page's edges as one draw places its pills against them: Floating UI
+   * reads them off the root for every middleware of every pill (the
+   * document's scroll extent, its scroll and its scrollbar, and each
+   * through the canvas's viewport getters), and every pill is placed
+   * against the same root, its own `EDGES`, in one draw. Read once per draw
+   * ({@link drawNow} lets the last draw's go).
+   */
+  let edges: ReturnType<Platform["getClippingRect"]> | null = null;
+
+  /**
    * Where a pill `w` wide stands on its spot, placed by Floating UI
    * (`computePosition`) against a virtual reference in the page's px: past
    * its line's end, in the line's band (`right-end`), else before its start
@@ -732,6 +742,11 @@ export function startPins(deps: PinsDeps): Pins {
     const root = document.documentElement;
     const sized: Platform = {
       ...platform,
+      // Floating UI hands each call its cache as `this` (its `_c`).
+      getClippingRect(asked) {
+        edges ??= platform.getClippingRect.call(this, asked);
+        return edges;
+      },
       getDimensions: () => ({ width: w, height: h }),
       getOffsetParent: () => window,
       isRTL: () => false,
@@ -1443,6 +1458,7 @@ export function startPins(deps: PinsDeps): Pins {
   };
 
   async function drawNow(asked: number, following: boolean): Promise<void> {
+    edges = null;
     if (!(onPage() && artifact.keeps())) {
       placed.clear();
       holdIn(layer, []);
@@ -1851,7 +1867,10 @@ export function startPins(deps: PinsDeps): Pins {
       open(pin.id, true);
       return pin.id;
     },
-    standingOn: () => [...placed.values()].map(({ el }) => el),
+    standingOn: () => [
+      ...[...placed.values()].map(({ el }) => el),
+      ...(drafted ? [drafted.el] : []),
+    ],
     pinInk: (group, kind, elements) => {
       // A comment is composed first, but the apps' radial Comment pins the
       // ink at once and opens its card (until tsk-59).

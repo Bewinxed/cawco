@@ -180,6 +180,8 @@ export interface InkDeps {
   anchorOf: (el: Element) => PageAnchor;
   /** A mark's anchor as this page may read it, `at` when the mark was made (page.ts `anchorToday`). */
   anchorToday: (anchor: PageAnchor, at: string) => PageAnchor;
+  /** The count of the page's changes an anchor may read otherwise after (its nodes, words and names: page.ts `changesNow`). */
+  changes: () => number;
   chrome: InkChrome;
   describe: (el: Element) => PinnedElement;
   /** The deepest element at each of the viewport's points, inside same-origin frames; one hit test pass. */
@@ -1191,15 +1193,53 @@ export function startInk(deps: InkDeps): Ink {
     };
   };
 
+  /**
+   * Where the marks stand, read and nothing written: the count of the
+   * page's changes an anchor reads (its nodes, words and names), the page's
+   * extent, and the box in the page of each element a mark stands on as the
+   * last draw placed it. Two reads alike mean a draw would place every mark
+   * where it stands.
+   */
+  const whereNow = () =>
+    JSON.stringify([
+      deps.changes(),
+      document.body?.scrollWidth ?? 0,
+      document.body?.scrollHeight ?? 0,
+      [
+        ...[...placed.values()].map(({ anchor }) => anchor),
+        ...deps.pins().standingOn(),
+      ].map((el) => (el?.isConnected ? pageBox(el) : null)),
+    ]);
+  /** {@link whereNow} as the last draw left the marks. */
+  let drawnWhere = "";
+
   let frame = 0;
-  /** Placed again on the next frame: whatever moved this frame, once. */
+  /** A draw is due on the next frame whatever {@link whereNow} reads ({@link drawSoon}). */
+  let wanted = false;
+  /**
+   * Placed again on the next frame, once, if what the marks stand on moved
+   * ({@link whereNow}). A change anywhere in the page asks: a class, a
+   * style, an attribute, a transition's end. Most move nothing a mark stands
+   * on (a hover's colour, a control's state), and a draw places every pin
+   * again through Floating UI: 15 pins drew for 25 to 48 ms on each pointer
+   * move over a canvas.
+   */
   function later() {
     if (!frame) {
       frame = requestAnimationFrame(() => {
         frame = 0;
-        draw();
+        const due = wanted || whereNow() !== drawnWhere;
+        wanted = false;
+        if (due) {
+          draw();
+        }
       });
     }
+  }
+  /** A draw on the next frame wherever the marks stand: the overlay wrote where a mark stands itself, a write that wakes no draw of its own. */
+  function drawSoon() {
+    wanted = true;
+    later();
   }
 
   /** Whether a group whose element is gone may be moved aside now: a page the agent wrote, or a sheet of its components, laid out. */
@@ -1241,10 +1281,14 @@ export function startInk(deps: InkDeps): Ink {
     }
     const { ink } = maps();
     const groups = [...ink.values()];
-    fitToPage(
-      layer,
-      groups.length > 0 || layer.querySelector("[data-live]") !== null
-    );
+    const marked =
+      groups.length > 0 || layer.querySelector("[data-live]") !== null;
+    // A layer that held nothing and holds nothing stands as it is: fitting it
+    // folds every layer away and reads the page's scroll, which lays the
+    // page out, for the pins' draw to do it all again.
+    if (marked || holding.has(layer)) {
+      fitToPage(layer, marked);
+    }
     // Read only for a group to draw: a token is the page's style, read there and then.
     const brand = groups.length > 0 ? chrome.token("--brand-solid") : "";
     const located = groups.map((group) => {
@@ -1279,7 +1323,12 @@ export function startInk(deps: InkDeps): Ink {
       settleGroups(found, gone);
       bringBackMoved();
     }
-    deps.pins().draw();
+    deps
+      .pins()
+      .draw()
+      .then(() => {
+        drawnWhere = whereNow();
+      });
     watchMoves();
   }
 
@@ -1477,7 +1526,7 @@ export function startInk(deps: InkDeps): Ink {
         });
       }
     }, PLACED);
-    later();
+    drawSoon();
   }
 
   /** Writes the groups found again by their source or text, and moves aside those no anchor finds. */

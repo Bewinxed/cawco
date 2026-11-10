@@ -60,7 +60,6 @@ import {
 } from "@cawco/core/stage";
 import {
   STAGE_COMPARE,
-  STAGE_DIALS,
   STAGE_LET_GO,
   STAGE_PAUSE,
   STAGE_PLAY,
@@ -284,8 +283,22 @@ const sectionOfPath = (path: string): string | null => {
   return encoded ? decodeURIComponent(encoded) : null;
 };
 
-/** The next task: the page draws and answers between two. */
-const nextTask = () => new Promise<void>((done) => setTimeout(done, 0));
+/** The callbacks waiting for {@link nextTask}'s message, in order. */
+const tasksDue: (() => void)[] = [];
+const tasks = new MessageChannel();
+tasks.port1.onmessage = () => tasksDue.shift()?.();
+/**
+ * The next task: the page draws and answers between two. A message's task,
+ * never a timer's: a hidden tab wakes its timers once a second (Chromium's
+ * background throttling), a chain of them once a minute after five
+ * (intensive throttling), and a read takes several tasks for each story,
+ * so a canvas in a tab out of sight read its sheet for minutes, or never.
+ */
+const nextTask = () =>
+  new Promise<void>((done) => {
+    tasksDue.push(done);
+    tasks.port2.postMessage(null);
+  });
 
 /**
  * How long the rig's work stands aside after the person acts on the page
@@ -295,7 +308,13 @@ const nextTask = () => new Promise<void>((done) => setTimeout(done, 0));
  * scroll's run.
  */
 const PERSON_QUIET_MS = 1000;
-/** The words the panel sends for the person's acts (core stage-graph.ts, the inspector's and the view's). */
+/**
+ * The words the panel sends for the person's acts (core stage-graph.ts, the
+ * inspector's). The view and the dials are acts only where they change
+ * what the page draws ({@link boot}'s `setView`, `applyDials`): the design
+ * graph says both again to every page it loads, and each held the first
+ * read a second after the load.
+ */
 const PERSON_ACTS = [
   STAGE_REACH,
   STAGE_REVEAL,
@@ -306,16 +325,51 @@ const PERSON_ACTS = [
   STAGE_LET_GO,
   STAGE_RETIME,
   STAGE_RING,
-  STAGE_DIALS,
-  "cawco:canvas-view",
   "cawco:story-args",
 ];
 
-/** Two frames on: what was mounted has drawn and its first frames' work is done. */
+/**
+ * The pane says it is away (core `CANVAS_AWAY`): its frames are held
+ * ({@link holdWhileAway}).
+ */
+let paneAway = false;
+/** Whether no frame comes now: the tab is out of sight (the browser draws none), or the pane is away (its frames held). */
+const frameless = () => document.visibilityState === "hidden" || paneAway;
+/** Each {@link frameTick} waiting on a frame, ended once frames stop coming. */
+const framesAwaited = new Set<() => void>();
+/** Frames stopped coming: whoever waits on one goes on without it. */
+const framesStopped = () => {
+  if (frameless()) {
+    for (const go of framesAwaited) {
+      go();
+    }
+  }
+};
+addEventListener("visibilitychange", framesStopped);
+
+/**
+ * Two frames on: what was mounted has drawn and its first frames' work is
+ * done. Where no frame comes (a tab out of sight, a pane away) nothing is
+ * drawn to wait for, so it is the next task: a read waiting on a frame
+ * there never ended, and the report a session reads waited with it.
+ */
 export const frameTick = () =>
-  new Promise<void>((done) =>
-    requestAnimationFrame(() => requestAnimationFrame(() => done()))
-  );
+  new Promise<void>((done) => {
+    let ended = false;
+    const go = () => {
+      if (!ended) {
+        ended = true;
+        framesAwaited.delete(go);
+        done();
+      }
+    };
+    if (frameless()) {
+      nextTask().then(go);
+      return;
+    }
+    framesAwaited.add(go);
+    requestAnimationFrame(() => requestAnimationFrame(go));
+  });
 
 /** The view the page's URL asks for. */
 function viewOf(params: URLSearchParams): View {
@@ -452,10 +506,12 @@ export const bridge = (): Bridge | undefined =>
 function holdWhileAway(): void {
   const ask = window.requestAnimationFrame.bind(window);
   const cancel = window.cancelAnimationFrame.bind(window);
-  let away = false;
   let unseen = false;
   const rest = () =>
-    document.documentElement.toggleAttribute("data-offscreen", away || unseen);
+    document.documentElement.toggleAttribute(
+      "data-offscreen",
+      paneAway || unseen
+    );
   new IntersectionObserver(([entry]) => {
     unseen = !entry?.isIntersecting;
     rest();
@@ -466,7 +522,7 @@ function holdWhileAway(): void {
   const asked = new Map<number, number>();
   let last = 0;
   window.requestAnimationFrame = (callback) => {
-    if (!away) {
+    if (!paneAway) {
       return ask(callback);
     }
     last -= 1;
@@ -487,9 +543,10 @@ function holdWhileAway(): void {
     if (said === undefined) {
       return;
     }
-    away = said;
+    paneAway = said;
     rest();
-    if (away) {
+    if (paneAway) {
+      framesStopped();
       return;
     }
     for (const [id, callback] of held) {
@@ -1334,10 +1391,12 @@ export function boot(options: BootOptions): void {
 
   /** The person's last act on the page (performance.now()). */
   let actedAt = Number.NEGATIVE_INFINITY;
+  /** The person acted on the page now: the rig's next step stands aside ({@link turn}). */
+  const acted = () => {
+    actedAt = performance.now();
+  };
   for (const type of PERSON_ACTS) {
-    addEventListener(type, () => {
-      actedAt = performance.now();
-    });
+    addEventListener(type, acted);
   }
   async function turn(): Promise<void> {
     await nextTask();
@@ -1503,13 +1562,17 @@ export function boot(options: BootOptions): void {
     const reads: AnimationRead[] = [];
     const t0 = document.timeline.currentTime as number;
     let watching = true;
-    const watch = () => {
+    /** Every animation running in the body that was not seen yet, read as it started. */
+    const look = () => {
       for (const one of body.getAnimations({ subtree: true })) {
         if (!seen.has(one)) {
           seen.add(one);
           reads.push(readAnimation(one, t0));
         }
       }
+    };
+    const watch = () => {
+      look();
       if (watching) {
         requestAnimationFrame(watch);
       }
@@ -1534,13 +1597,23 @@ export function boot(options: BootOptions): void {
       if (played.kind === "unanswered") {
         throw new Error(`${to}'s play ran past ${PLAY_LIMIT_MS / 1000} s.`);
       }
-      // The motion it started, played out (or the wait's end).
+      // The motion it started, played out (or the wait's end): each run's
+      // end awaited, never a frame polled, so a page no frame comes to (a
+      // tab out of sight, where the timeline stands still) waits once to
+      // the end and does not spin; a run one of them starts as it ends is
+      // seen on the frame after.
+      look();
       const end = performance.now() + SETTLE_LIMIT_MS;
-      while (
-        performance.now() < end &&
-        [...seen].some((one) => one.playState === "running")
+      for (
+        let running = [...seen].filter((one) => one.playState === "running");
+        running.length > 0 && performance.now() < end;
+        running = [...seen].filter((one) => one.playState === "running")
       ) {
+        await readWithin(Math.max(0, end - performance.now()), () =>
+          Promise.all(running.map((one) => one.finished.catch(() => null)))
+        );
         await frameTick();
+        look();
       }
     } catch (error) {
       move.error = pageError(error, root, base);
@@ -1713,6 +1786,14 @@ export function boot(options: BootOptions): void {
     const unset = [...dialVars.keys()].filter((name) => !vars.has(name));
     const back = Object.keys(dialArgs).filter((name) => !(name in args));
     const argsChanged = JSON.stringify(args) !== JSON.stringify(dialArgs);
+    // The set the page draws already: nothing to set, and no act of the person's.
+    if (
+      !argsChanged &&
+      JSON.stringify([...vars]) === JSON.stringify([...dialVars])
+    ) {
+      return;
+    }
+    acted();
     dialVars = vars;
     dialArgs = args;
     for (const { body, mounted, written } of mode?.bodies() ?? []) {
@@ -1801,6 +1882,7 @@ export function boot(options: BootOptions): void {
     if (drawnView() === was) {
       return;
     }
+    acted();
     if (view.motion !== motionWas) {
       for (const sheet of sheetsNow()) {
         forceMotion(sheet, view.motion);

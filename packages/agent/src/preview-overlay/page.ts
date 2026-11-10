@@ -586,6 +586,7 @@ const ink = startInk({
   ended: (id) => requestAnimationFrame(() => groupPicture(id)),
   pageSized,
   freehand,
+  changes: () => changesNow(document),
   locate,
   pins: () => pins,
   waiting,
