@@ -1,6 +1,14 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
 cycle	@cawco/agent	packages/agent/src/stage-host/canvas/runtime.ts	1
 cycle	@cawco/agent	packages/agent/src/stage-host/canvas/stage.ts	1
+cycle	@cawco/agent	packages/agent/src/browser/media-forwarding.ts	1
+cycle	@cawco/agent	packages/agent/src/browser/runtime.ts	1
+cycle	@cawco/agent	packages/agent/src/fleet-harness-set.ts	1
+cycle	@cawco/agent	packages/agent/src/fleet-place-set.ts	1
+cycle	@cawco/agent	packages/agent/src/forges/forge.ts	3
+cycle	@cawco/agent	packages/agent/src/forges/gitea.ts	1
+cycle	@cawco/agent	packages/agent/src/forges/github.ts	1
+cycle	@cawco/agent	packages/agent/src/forges/gitlab.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/draft-store.ts	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
 cycle	@cawco/dashboard	apps/dashboard/src/lib/cawco/graph/WholeCard.svelte	1
