@@ -382,7 +382,7 @@ catch-drops-reason	BinaryExpression	scripts/probe-kit/specs/preview-reach.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/config/editors/RuleEditor.svelte	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/connect/installs.svelte.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/decisions/PageFrame.svelte	1
-catch-drops-reason	block	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
+catch-drops-reason	block	apps/dashboard/src/lib/cawco/preview/preview-frame.svelte.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/spawn/NewSessionForm.svelte	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/tab-icon/tab-icon.svelte.ts	1
 catch-drops-reason	block	apps/dashboard/src/lib/cawco/transcript/LiveRow.svelte	1
