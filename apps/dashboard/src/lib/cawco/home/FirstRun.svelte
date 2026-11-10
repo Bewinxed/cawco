@@ -207,8 +207,8 @@
             >
               <Button
                 label={act.label}
-                onclick={(event: MouseEvent) =>
-                  act.run(event.currentTarget as HTMLElement)}
+                onclick={(event: MouseEvent & { currentTarget: HTMLElement }) =>
+                  act.run(event.currentTarget)}
                 size="sm"
                 variant={next === one.id ? "default" : "outline"}
               />

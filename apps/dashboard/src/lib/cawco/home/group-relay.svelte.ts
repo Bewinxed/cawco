@@ -78,9 +78,13 @@ export class GroupRelay<
     const ids = [...new Set([...old.keys(), ...live.keys()])].sort(
       (a, b) => this.#place(a) - this.#place(b)
     );
-    return ids.map((id) => {
+    return ids.flatMap((id) => {
       const fresh = live.get(id);
       const was = old.get(id);
+      const group = fresh ?? was;
+      if (!group) {
+        return [];
+      }
       let kind: Kind = "stay";
       if (this.plan && !was) {
         kind = "new";
@@ -88,7 +92,7 @@ export class GroupRelay<
         kind = "gone";
       }
       return {
-        group: (fresh ?? was) as G,
+        group,
         rows: fresh?.rows ?? [],
         gone: this.swap.leaving.filter((line) => line.machineId === id),
         kind,

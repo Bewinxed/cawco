@@ -53,7 +53,6 @@
   import { WORK_STRIP } from "#lib/cawco/tab-strips.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
   import {
     TabItem,
     Tabs,
@@ -276,11 +275,8 @@
     const tops = byMachine(
       lines.filter((line) => line.depth === 0).map((line) => line.row)
     );
-    const at = new Map(
-      tops.map((group) => [
-        group.machineId,
-        { ...group, rows: [] as BoardRow[] },
-      ])
+    const at = new Map<string, Group>(
+      tops.map((group) => [group.machineId, { ...group, rows: [] }])
     );
     let top = "";
     for (const line of lines) {
@@ -330,11 +326,12 @@
    * a "Show 1 more" line costs the height of the row it hides.
    */
   function beyondCap(tab: WorkTab, group: Group): TreeLine<BoardRow>[] {
-    const hidden = (
-      group.rows
-        .map((row) => shapeOf(tab, row.id))
-        .filter((line) => line?.depth === 0) as TreeLine<BoardRow>[]
-    ).slice(MORE_AT);
+    const hidden = group.rows
+      .flatMap((row) => {
+        const line = shapeOf(tab, row.id);
+        return line?.depth === 0 ? [line] : [];
+      })
+      .slice(MORE_AT);
     return hidden.length > 1 ? hidden : [];
   }
 
@@ -578,7 +575,9 @@
     style:--leave={leave}
   >
     <div data-slot="tree-line" class="relative" style:animation={leave}>
-      {@render sessionRow(line.row as BoardRow, line.tab, line.machineId)}
+      {#if line.row}
+        {@render sessionRow(line.row, line.tab, line.machineId)}
+      {/if}
     </div>
     {#if kids.length > 0}
       <ul
@@ -686,10 +685,14 @@
              sheet the only mark, the section's seam under the row. -->
         <Tabs
           data-work-tabs
-          boxes={(page.data as { foldBoxes?: Record<string, FoldMeasure> })
-            .foldBoxes}
+          boxes={page.data.foldBoxes}
           fill="none"
-          onValueChange={(id: string) => choose(id as WorkTab)}
+          onValueChange={(id: string) => {
+            const picked = TABS.find((tab) => tab.id === id);
+            if (picked) {
+              choose(picked.id);
+            }
+          }}
           strip={WORK_STRIP}
           value={workTab.current}
           values={TAB_IDS}
@@ -786,6 +789,7 @@
           {#each drawn as entry (entry.group.machineId)}
             {@const id = entry.group.machineId}
             {@const tops = under(shown, entry.rows, null)}
+            {@const moreLine = entry.kind === "gone" ? undefined : more.get(id)}
             <!-- A flex column, so its header's margin stays inside it: closed
                  to nothing, a group takes no room at all. Every group keeps
                  the room a seam would take; the seam itself is drawn in it,
@@ -848,8 +852,7 @@
               <!-- The machine's last line: the rest of its trees, or back to
                its first few. It comes and goes in the relay like any other
                line, inside its machine's box. -->
-              {#if entry.kind !== "gone" && more.get(id)}
-                {@const line = more.get(id) as More}
+              {#if moreLine}
                 <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
                 <button
@@ -862,10 +865,10 @@
                   style:animation={enterAnim(moreKey(id))}
                   type="button"
                 >
-                  {line.words}
-                  {#if line.failed > 0}
+                  {moreLine.words}
+                  {#if moreLine.failed > 0}
                     <span class="ms-space-1 text-status-fail-ink"
-                      >{failedWords(line.failed)}</span
+                      >{failedWords(moreLine.failed)}</span
                     >
                   {/if}
                 </button>

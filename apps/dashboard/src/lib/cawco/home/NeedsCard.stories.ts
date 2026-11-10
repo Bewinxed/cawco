@@ -25,6 +25,6 @@ export const Budget = {
       place: "Budget reached",
       href: "/usage?project=probe-project",
       raisedAt: undefined,
-    } as NeedsItem,
+    } satisfies NeedsItem,
   },
 };

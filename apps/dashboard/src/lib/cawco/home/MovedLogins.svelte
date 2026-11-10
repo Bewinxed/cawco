@@ -42,12 +42,14 @@
   let open = $state(false);
 
   /** The fold moved the rows after it: every `reflow` around reads them again. */
-  function settled(event: TransitionEvent): void {
+  function settled(
+    event: TransitionEvent & { currentTarget: HTMLElement }
+  ): void {
     if (
       event.target === event.currentTarget &&
       event.propertyName === "grid-template-rows"
     ) {
-      reread(reflowsFrom((event.currentTarget as HTMLElement).parentElement));
+      reread(reflowsFrom(event.currentTarget.parentElement));
     }
   }
 </script>

@@ -322,7 +322,9 @@
                     <span>Each</span>
                     <Tabs
                       onValueChange={(next) => {
-                        capPeriod = next as CapPeriod;
+                        if (next === "day" || next === "month") {
+                          capPeriod = next;
+                        }
                       }}
                       value={capPeriod}
                     >

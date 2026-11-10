@@ -47,7 +47,11 @@
     if (open) {
       const from = anchor;
       untrack(() => {
-        opener = from ?? (document.activeElement as HTMLElement | null);
+        opener =
+          from ??
+          (document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null);
       });
     }
   });
