@@ -181,8 +181,7 @@ export interface Bridge {
   set: (key: string, value: unknown) => Promise<void>;
 }
 
-export const bridge = (): Bridge | null =>
-  (window as unknown as { cawco?: Bridge }).cawco ?? null;
+export const bridge = (): Bridge | null => window.cawco ?? null;
 
 /** This page's artifact id and the overlay's served hash, from the overlay's tag. */
 export const overlayTag = (): { artifact: string | null; hash: string } => {

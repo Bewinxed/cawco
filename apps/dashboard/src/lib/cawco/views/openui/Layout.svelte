@@ -1,6 +1,7 @@
 <script lang="ts">
   /** Row and Column: their children side by side, or one under another. */
   import type { Snippet } from "svelte";
+  import { ALIGN, JUSTIFY } from "./layout-classes";
 
   let {
     axis,
@@ -13,19 +14,6 @@
     justify?: string;
     align?: string;
   } = $props();
-
-  const JUSTIFY: Record<string, string> = {
-    start: "justify-start",
-    center: "justify-center",
-    end: "justify-end",
-    spaceBetween: "justify-between",
-  };
-  const ALIGN: Record<string, string> = {
-    start: "items-start",
-    center: "items-center",
-    end: "items-end",
-    stretch: "items-stretch",
-  };
 </script>
 
 <div

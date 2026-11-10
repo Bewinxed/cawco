@@ -15,16 +15,21 @@
 
   const data = $derived(rowsOf<ViewTaskRow>(props.rows));
   const columnList = $derived(
-    rowsOf<{ label: unknown; field: unknown }>(props.columns)
-      .filter((column) => typeof column?.field === "string")
-      .map((column) => {
-        const field = column.field as string;
-        return {
-          id: field,
-          header: typeof column.label === "string" ? column.label : field,
-          accessorFn: (task: ViewTaskRow) => fieldText(task, field),
-        };
-      })
+    rowsOf<{ label: unknown; field: unknown }>(props.columns).flatMap(
+      (column) => {
+        const field = column?.field;
+        if (typeof field !== "string") {
+          return [];
+        }
+        return [
+          {
+            id: field,
+            header: typeof column.label === "string" ? column.label : field,
+            accessorFn: (task: ViewTaskRow) => fieldText(task, field),
+          },
+        ];
+      }
+    )
   );
   const features = tableFeatures({});
   const table = createTable({

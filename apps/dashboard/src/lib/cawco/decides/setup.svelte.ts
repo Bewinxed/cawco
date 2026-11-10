@@ -83,7 +83,7 @@ export type Problems = Partial<Record<RowId, string>>;
 export class Setup {
   /** The member's id; {@link NEW} while adding, until the hub has added it. */
   key = $state(NEW);
-  draft = $state<Draft>() as Draft;
+  draft: Draft;
   /** The draft as opened: a draft equal to it parks nothing. */
   readonly start: Draft;
   /** Adding: the kind of member picked; null while the three tiles ask. */
@@ -110,7 +110,7 @@ export class Setup {
     this.from = key;
     this.added = key === NEW;
     this.start = parked?.start ?? $state.snapshot(draft);
-    this.draft = parked?.draft ?? draft;
+    this.draft = $state(parked?.draft ?? draft);
     this.adding = parked?.adding ?? null;
     this.open = parked?.open ?? null;
     this.reached = parked?.reached ?? 0;
@@ -174,11 +174,11 @@ const freeHue = (members: Member[]): number =>
 
 /** A harness on an online machine, Claude Code first. */
 const firstHarness = (fleet: FleetOffer): HarnessKind | null =>
-  (HARNESSES.find((id) =>
+  HARNESSES.find((id) =>
     fleet.harnesses.some(
       (offer) => offer.id === id && offer.machines.length > 0
     )
-  ) as HarnessKind | undefined) ?? null;
+  ) ?? null;
 
 /** The model a harness answers on unasked, by its id. */
 const defaultModel = (

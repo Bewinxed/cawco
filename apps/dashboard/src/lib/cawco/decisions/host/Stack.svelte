@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { ALIGN, JUSTIFY } from "../../views/openui/layout-classes";
 
   let {
     axis,
@@ -21,24 +22,8 @@
     ratioMin?: number;
   } = $props();
 
-  const JUSTIFY = {
-    start: "justify-start",
-    center: "justify-center",
-    end: "justify-end",
-    spaceBetween: "justify-between",
-  } as const;
-  const ALIGN = {
-    start: "items-start",
-    center: "items-center",
-    end: "items-end",
-    stretch: "items-stretch",
-  } as const;
-  const along = $derived(
-    JUSTIFY[String(justify ?? "start") as keyof typeof JUSTIFY] ?? JUSTIFY.start
-  );
-  const across = $derived(
-    ALIGN[String(align ?? "stretch") as keyof typeof ALIGN] ?? ALIGN.stretch
-  );
+  const along = $derived(JUSTIFY[String(justify ?? "start")] ?? JUSTIFY.start);
+  const across = $derived(ALIGN[String(align ?? "stretch")] ?? ALIGN.stretch);
 </script>
 
 <div

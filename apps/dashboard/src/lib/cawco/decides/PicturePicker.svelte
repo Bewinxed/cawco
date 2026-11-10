@@ -43,9 +43,14 @@
         if (picked === undefined) {
           return;
         }
-        onpicked(
-          flock ? { pose: picked as CawPoseId } : { hue: Number(picked) }
-        );
+        if (!flock) {
+          onpicked({ hue: Number(picked) });
+          return;
+        }
+        const pose = CAW_POSES.find((one) => one.id === picked);
+        if (pose) {
+          onpicked({ pose: pose.id });
+        }
       }
     }
   >

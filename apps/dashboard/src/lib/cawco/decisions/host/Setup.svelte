@@ -55,7 +55,7 @@
     }
     aim = typeof keptAim === "string" ? keptAim : drafted.aim;
     stages = Array.isArray(keptStages)
-      ? keptStages.map((one) => stageOf(one as Record<string, unknown>))
+      ? keptStages.map((one) => stageOf(one))
       : drafted.stages;
   });
   // What it starts from, as drafted, kept once.

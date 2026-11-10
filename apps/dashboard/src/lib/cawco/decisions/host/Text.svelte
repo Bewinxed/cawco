@@ -15,10 +15,9 @@
     body: "type-body text-pretty text-ink-strong",
     meta: "type-meta text-pretty text-ink-muted",
   } as const;
+  const named = $derived(String(props.variant));
   const role = $derived(
-    String(props.variant) in ROLES
-      ? (String(props.variant) as keyof typeof ROLES)
-      : "body"
+    named === "title" || named === "label" || named === "meta" ? named : "body"
   );
 </script>
 

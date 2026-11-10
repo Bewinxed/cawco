@@ -770,7 +770,7 @@
           )}">{decidesWords.openType}</a
         >
       {/if}
-      {#if member !== null && !member.builtIn && !(BUILT_IN_MEMBERS as readonly string[]).includes(member.id)}
+      {#if member !== null && !member.builtIn && !BUILT_IN_MEMBERS.some((builtIn) => builtIn === member.id)}
         <div class="border-t border-border-hairline pt-space-2">
           <Button
             disabled={removeAsked}

@@ -10,7 +10,6 @@
   import { decidesWords } from "@cawco/core/words/decides";
   import { conversationWords } from "@cawco/core/words/project-conversation";
   import { untrack } from "svelte";
-  import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { HUB_UNREACHABLE } from "#lib/platform/hub-read.js";
   import { type RecordRead, WhoDecides } from "../decides.svelte";
@@ -98,16 +97,14 @@
       types,
     };
     if (project !== null) {
-      const projectRow = {
-        id: "cawco-dev",
-        name: project,
-        eventsOn: true,
-        cawHarness: "claude",
-        cawModel: null,
-      };
       // His seat as the page's CawLead holds it: on, at rest, nothing moving.
       who.lead = {
-        project: projectRow,
+        project: {
+          cawHarness: "claude",
+          cawModel: null,
+          eventsOn: true,
+          name: project,
+        },
         on: true,
         moving: false,
         harness: "claude",
@@ -117,7 +114,7 @@
         view: null,
         configure: () => Promise.resolve(),
         read: () => Promise.resolve(),
-      } as unknown as CawLead;
+      };
     }
   });
 

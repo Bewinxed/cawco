@@ -61,7 +61,10 @@
         return Promise.resolve(true);
       }}
       onputback={(kind) => {
-        routes = { ...routes, [kind]: fleetRoutes[kind] as string };
+        const home = fleetRoutes[kind];
+        if (home !== undefined) {
+          routes = { ...routes, [kind]: home };
+        }
         return Promise.resolve(true);
       }}
       {own}

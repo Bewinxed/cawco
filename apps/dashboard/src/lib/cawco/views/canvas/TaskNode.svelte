@@ -5,20 +5,21 @@
    * sheet, as on the board; a drag is the canvas's own (it pans), so the
    * card is not movable here. Its handles are where edges meet it, unseen.
    */
-  import { Handle, type NodeProps, Position } from "@xyflow/svelte";
+  import { Handle, type Node, type NodeProps, Position } from "@xyflow/svelte";
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import TaskCard from "#lib/cawco/tasks/TaskCard.svelte";
   import type { Flow } from "../task-graph";
 
-  let { data }: NodeProps = $props();
-  const node = $derived(
-    data as {
+  let {
+    data: node,
+  }: NodeProps<
+    Node<{
       task: TaskSummary;
       href: string;
       onopen: (id: string) => void;
       flow: Flow;
-    }
-  );
+    }>
+  > = $props();
   /** The flow's ends, and the cross axis the side relations meet it on. */
   const ends = $derived(
     node.flow === "TB"
