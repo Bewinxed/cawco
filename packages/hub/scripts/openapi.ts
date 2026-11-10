@@ -615,38 +615,103 @@ for (const [name, schema] of Object.entries(definitions)) {
 }
 
 /**
- * swift-openapi-generator drops a `{type: "null"}` member of an anyOf/oneOf,
- * and with it the whole schema (apple/swift-openapi-generator#817: "rely on
- * the `required` property … If it's absent, it'll be optional"). So `X | null`
- * is written as `X`, and the property holding it leaves `required`: Swift reads
- * both a missing value and an explicit null as nil. A component that is only
- * `X | null` gives way to `X` wherever it is used.
+ * What the app receives never writes a null. swift-openapi-generator drops a
+ * `{type: "null"}` member of an anyOf/oneOf, and with it the whole schema
+ * (apple/swift-openapi-generator#817: "rely on the `required` property … If
+ * it's absent, it'll be optional"), and reads a type array's `"null"`
+ * (`type: ["string", "null"]`, OpenAPI 3.1's own form) as the same Optional
+ * (its `isOptional`: nullable, or not required). So both forms are written
+ * the one way: `X | null` is `X`, and the property holding it leaves
+ * `required`: Swift reads both a missing value and an explicit null as nil. A
+ * component that is only `X | null` gives way to `X` wherever it is used.
+ *
+ * What the app or an agent sends keeps the null its body admits: a request
+ * body, a parameter, a frame the app sends and every component they reach
+ * (one a response shares included) go on admitting what the sender writes,
+ * and the generator reads a type array's null there as it does everywhere.
+ * An anyOf's null is still dropped there: the generator cannot read it. A
+ * type array's null is also kept where no property holds it to leave
+ * `required` (an array's items, a union's member).
  */
 const isNull = (schema: unknown): boolean =>
   typeof schema === "object" &&
   schema !== null &&
   (schema as Schema).type === "null";
 const UNIONS = ["anyOf", "oneOf"] as const;
-/** The schema without its null member, or undefined when it has none. */
-const withoutNull = (schema: Schema): Schema | undefined => {
+/** The schema without the `"null"` of its type array, or undefined when it has none to drop. */
+const withoutNullKind = (schema: Schema): Schema | undefined => {
+  const kinds = schema.type;
+  if (!(Array.isArray(kinds) && kinds.includes("null") && kinds.length > 1)) {
+    return undefined;
+  }
+  const rest = kinds.filter((kind) => kind !== "null");
+  return { ...schema, type: rest.length === 1 ? rest[0] : rest };
+};
+/**
+ * The schema without its null (a member of its union, or a kind in its type
+ * array or its union members' unless the schema is one that is sent), or
+ * undefined when it has none.
+ */
+const withoutNull = (schema: Schema, byCaller: boolean): Schema | undefined => {
   for (const union of UNIONS) {
     const members = schema[union];
-    if (Array.isArray(members) && members.some(isNull)) {
+    if (!Array.isArray(members)) {
+      continue;
+    }
+    const asKinds = byCaller
+      ? []
+      : members.filter((member) => withoutNullKind(member as Schema));
+    if (members.some(isNull) || asKinds.length) {
       const { [union]: _, ...others } = schema;
-      const kept = members.filter((member) => !isNull(member)) as Schema[];
+      const kept = members
+        .filter((member) => !isNull(member))
+        .map((member) =>
+          byCaller ? member : (withoutNullKind(member as Schema) ?? member)
+        ) as Schema[];
       return kept.length === 1
         ? { ...others, ...kept[0] }
         : { ...others, [union]: kept };
     }
   }
-  return undefined;
+  return byCaller ? undefined : withoutNullKind(schema);
 };
+/** The components a value reaches by `$ref`, itself included, added to `into`. */
+const reaching = (value: unknown, into: Set<string>): Set<string> => {
+  if (typeof value === "string" && value.startsWith(COMPONENT)) {
+    const name = value.slice(COMPONENT.length);
+    if (!into.has(name)) {
+      into.add(name);
+      reaching(components[name], into);
+    }
+  } else if (typeof value === "object" && value !== null) {
+    for (const item of Object.values(value)) {
+      reaching(item, into);
+    }
+  }
+  return into;
+};
+/** What is sent: the app's frames, and every request body and parameter. */
+const sentComponents = new Set<string>();
+for (const name of socket.sent) {
+  reaching(`${COMPONENT}${name}`, sentComponents);
+}
+/** The parts of an operation the caller writes. */
+const SENDS = ["requestBody", "parameters"];
+for (const item of Object.values(paths)) {
+  for (const op of Object.values(item ?? {})) {
+    for (const [key, part] of Object.entries(op as object)) {
+      if (SENDS.includes(key)) {
+        reaching(part, sentComponents);
+      }
+    }
+  }
+}
 let unionsRewritten = 0;
 let madeOptional = 0;
 const nullable = new Set<string>();
 const replaced = new Map<string, Schema>();
 for (const [name, schema] of Object.entries(components)) {
-  const kept = withoutNull(schema as Schema);
+  const kept = withoutNull(schema as Schema, sentComponents.has(name));
   if (kept) {
     unionsRewritten += 1;
     nullable.add(name);
@@ -661,9 +726,9 @@ for (const [name, schema] of Object.entries(components)) {
 const isNullableRef = (schema: Schema): boolean =>
   typeof schema.$ref === "string" &&
   nullable.has(schema.$ref.slice(COMPONENT.length));
-const dropNulls = (value: unknown): unknown => {
+const dropNulls = (value: unknown, byCaller: boolean): unknown => {
   if (Array.isArray(value)) {
-    return value.map(dropNulls);
+    return value.map((item) => dropNulls(item, byCaller));
   }
   if (typeof value !== "object" || value === null) {
     return value;
@@ -679,7 +744,7 @@ const dropNulls = (value: unknown): unknown => {
   const out: Schema = Object.fromEntries(
     Object.entries(schema).map(([key, item]) => [
       key,
-      key === "properties" ? item : dropNulls(item),
+      key === "properties" ? item : dropNulls(item, byCaller),
     ])
   );
   const properties = schema.properties as Record<string, Schema> | undefined;
@@ -687,14 +752,14 @@ const dropNulls = (value: unknown): unknown => {
     const optional = new Set<string>();
     out.properties = Object.fromEntries(
       Object.entries(properties).map(([field, property]) => {
-        const kept = withoutNull(property);
+        const kept = withoutNull(property, byCaller);
         if (kept) {
           unionsRewritten += 1;
         }
         if (kept || isNullableRef(property)) {
           optional.add(field);
         }
-        return [field, dropNulls(kept ?? property)];
+        return [field, dropNulls(kept ?? property, byCaller)];
       })
     );
     const required = (schema.required as string[] | undefined) ?? [];
@@ -706,11 +771,16 @@ const dropNulls = (value: unknown): unknown => {
   return out;
 };
 for (const [name, schema] of Object.entries(components)) {
-  components[name] = dropNulls(schema);
+  components[name] = dropNulls(schema, sentComponents.has(name));
 }
 for (const item of Object.values(paths)) {
   for (const op of Object.values(item ?? {})) {
-    Object.assign(op as object, dropNulls(op));
+    for (const [key, part] of Object.entries(op as object)) {
+      (op as Record<string, unknown>)[key] = dropNulls(
+        part,
+        SENDS.includes(key)
+      );
+    }
   }
 }
 
@@ -1387,9 +1457,10 @@ if (decidedByOrder.length) {
   );
 }
 
-// The Swift generator would drop each of these, so none may be written.
+// The Swift generator would drop each of these, and what the app receives
+// writes no null at all (the rule above), so none may be written.
 const leftNulls: string[] = [];
-const findNulls = (value: unknown, at: string): void => {
+const findNulls = (value: unknown, at: string, byCaller: boolean): void => {
   if (typeof value !== "object" || value === null) {
     return;
   }
@@ -1401,12 +1472,22 @@ const findNulls = (value: unknown, at: string): void => {
     ) {
       leftNulls.push(`${at}/${key}`);
     }
-    findNulls(item, `${at}/${key}`);
+    if (key === "properties" && !byCaller && typeof item === "object" && item) {
+      for (const [field, property] of Object.entries(item)) {
+        if (withoutNull(property as Schema, false)) {
+          leftNulls.push(`${at}/properties/${field}`);
+        }
+      }
+    }
+    findNulls(item, `${at}/${key}`, byCaller || SENDS.includes(key));
   }
 };
-findNulls(document, "#");
+findNulls(paths, "#/paths", false);
+for (const [name, schema] of Object.entries(components)) {
+  findNulls(schema, `#/components/schemas/${name}`, sentComponents.has(name));
+}
 if (leftNulls.length) {
-  throw new Error(`null left in a union:\n${leftNulls.join("\n")}`);
+  throw new Error(`null left where it is dropped:\n${leftNulls.join("\n")}`);
 }
 
 /**
@@ -1674,6 +1755,6 @@ if (check) {
   process.exit(0);
 }
 console.log(
-  `${operations.length} operations, ${Object.keys(components).length} schemas, ${unionsRewritten} null unions rewritten, ${madeOptional} properties made optional, ${openEnums.size} open enums (${hoisted} inline uses named) → ${OUT}`
+  `${operations.length} operations, ${Object.keys(components).length} schemas, ${unionsRewritten} nulls dropped, ${madeOptional} properties made optional, ${openEnums.size} open enums (${hoisted} inline uses named) → ${OUT}`
 );
 process.exit(0);
