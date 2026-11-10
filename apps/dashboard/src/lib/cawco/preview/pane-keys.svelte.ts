@@ -1,7 +1,9 @@
 /**
  * The pane's keys: V, C and D, ⇧C, J and K, Enter, `/` and Esc.
  */
+
 import type { PaneKey } from "@cawco/core/shell-shortcuts";
+import { landKey } from "#lib/platform/motion/keyed.svelte.js";
 import type CommentRail from "./CommentRail.svelte";
 import type { PaneDoc } from "./pane-doc.svelte";
 import type { PaneLayout } from "./pane-layout.svelte";
@@ -152,6 +154,21 @@ export class PaneKeys {
     ) {
       this.pressKey("Escape");
       event.preventDefault();
+    }
+  }
+
+  /** A key the page's window heard (`cawco:key`). */
+  heardKey(message: Record<string, unknown>) {
+    const name = previewKey(message.key);
+    if (name) {
+      // A key the page's window heard: what it starts here lands at once
+      // (motion/keyed), as for this window's own keys.
+      landKey();
+      if (name === "Escape") {
+        this.escapeFromPage();
+      } else {
+        this.pressKey(name);
+      }
     }
   }
 }

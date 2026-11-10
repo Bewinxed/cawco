@@ -328,7 +328,8 @@ as-unknown-as	Parameters<typeof createPlaceRepos>[0]["db"]	scripts/probe-kit/spe
 as-unknown-as	Pictures	packages/agent/src/frame-picture.ts	5
 as-unknown-as	Pid	scripts/probe-kit/signal-wall-child.ts	1
 as-unknown-as	Pin	apps/dashboard/src/lib/cawco/fault/states/FailedComment.svelte	1
-as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	2
+as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/pin-thread.svelte.ts	1
+as-unknown-as	Pin	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
 as-unknown-as	Pin	packages/preview/src/overlay/page.ts	1
 as-unknown-as	Pin	scripts/probe-kit/specs/comments.ts	2
 as-unknown-as	PlacementInput	scripts/probe-kit/specs/fallback-refusals.ts	1
@@ -693,7 +694,7 @@ suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/co
 suppression	biome-ignore lint/a11y/useSemanticElements	apps/dashboard/src/lib/platform/motion/Rail.svelte	1
 suppression	biome-ignore lint/a11y/useValidAnchor	apps/dashboard/src/lib/components/ui/sidebar/sidebar-menu-sub-button.svelte	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/connect/words.ts	1
-suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
+suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/preview/page-wire.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/stores/transcripts.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/deck.svelte.ts	1
 suppression	biome-ignore lint/complexity/noExcessiveCognitiveComplexity	apps/dashboard/src/lib/cawco/workspace/gesture.svelte.ts	1
