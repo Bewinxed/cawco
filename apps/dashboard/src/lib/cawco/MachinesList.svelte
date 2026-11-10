@@ -81,9 +81,9 @@
   /** Each machine the fleet lists that an install is bringing back: its row is that install's. */
   const returning = $derived(
     new Map(
-      connect.band
-        .filter((one) => one.returning !== null)
-        .map((one) => [one.returning as string, one])
+      connect.band.flatMap((one) =>
+        one.returning === null ? [] : [[one.returning, one] as const]
+      )
     )
   );
   /** The installs with no machine row of their own to grow out of. */

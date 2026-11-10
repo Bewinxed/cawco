@@ -51,8 +51,7 @@
   const count = $derived(
     (boardStore.fleetRead || boardStore.machines.length > 0
       ? boardStore.machines.length
-      : ((page.data as { machineCount?: number | null }).machineCount ?? 0)) +
-      adding
+      : (page.data.machineCount ?? 0)) + adding
   );
   /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
   const tone = $derived.by(() => {

@@ -220,7 +220,10 @@
       return;
     }
     const box = tile.getBoundingClientRect();
-    const copy = tile.cloneNode(true) as HTMLElement;
+    const copy = tile.cloneNode(true);
+    if (!(copy instanceof HTMLElement)) {
+      return;
+    }
     copy.setAttribute("aria-hidden", "true");
     Object.assign(copy.style, {
       position: "fixed",

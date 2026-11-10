@@ -20,8 +20,6 @@ const RAIL_LAYOUT_KEY = "cawco-rail-layout";
  */
 export type RailSort = "recent" | "name" | "state";
 
-const SORTS: readonly string[] = ["recent", "name", "state"];
-
 /** A project the reader pinned: it sorts to the top of the rail's Projects. */
 interface Pin {
   id: string;
@@ -60,9 +58,7 @@ function read(): RailLayout {
     machines: Array.isArray(stored.machines)
       ? stored.machines.filter((id) => typeof id === "string")
       : [],
-    sort: SORTS.includes(stored.sort ?? "")
-      ? (stored.sort as RailSort)
-      : "recent",
+    sort: stored.sort ?? "recent",
     delegates: stored.delegates === true,
   };
 }
@@ -79,8 +75,12 @@ export const rail = {
   get sort(): RailSort {
     return layout.sort;
   },
-  setSort(sort: RailSort): void {
-    layout.sort = sort;
+  setSort(value: string): void {
+    const sort = RailLayoutShape.shape.sort.safeParse(value);
+    if (!sort.success) {
+      return;
+    }
+    layout.sort = sort.data;
     save();
   },
   get delegates(): boolean {

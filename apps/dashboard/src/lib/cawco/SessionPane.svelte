@@ -1080,10 +1080,7 @@
   const waitingAsks = $derived<WaitingAsk[]>([
     ...parked.map((row): WaitingAsk => {
       const [first] =
-        questionsOf(
-          row.request.toolName,
-          row.request.input as Record<string, unknown>
-        ) ?? [];
+        questionsOf(row.request.toolName, row.request.input) ?? [];
       return {
         kind: first ? "question" : "permission",
         requestId: row.request.requestId,

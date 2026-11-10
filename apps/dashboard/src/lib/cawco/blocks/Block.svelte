@@ -20,7 +20,7 @@
    * across that edge in the gap, its dot at the leading end. A width change
    * tweens the box (`morph`, while `resizing`).
    */
-  import type { BlockWidth } from "@cawco/core/blocks";
+  import { BLOCK_WIDTHS, type BlockWidth } from "@cawco/core/blocks";
   import { blocksWords as words } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
   import type { Component, Snippet } from "svelte";
@@ -170,7 +170,12 @@
         {#if !wideOnly}
           <DropdownMenu.Separator />
           <DropdownMenu.RadioGroup
-            onValueChange={(next) => onwidth(next as BlockWidth)}
+            onValueChange={(next) => {
+              const picked = BLOCK_WIDTHS.find((one) => one === next);
+              if (picked) {
+                onwidth(picked);
+              }
+            }}
             value={width}
           >
             <DropdownMenu.RadioItem value="narrow"

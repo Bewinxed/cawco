@@ -377,7 +377,9 @@
       }
       const timing = moving.effect?.getTiming();
       const [first] =
-        (moving.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+        moving.effect instanceof KeyframeEffect
+          ? moving.effect.getKeyframes()
+          : [];
       const run = node.animate(
         [
           { clipPath: from, easing: first?.easing ?? "linear" },
@@ -519,9 +521,10 @@
       names = ["open", "full"];
     }
     // `open` is the whole host where the room allows no more.
-    return names.filter(
-      (name, at) => at === 0 || next[name] !== next[names[at - 1] as Stop]
-    );
+    return names.filter((name, at) => {
+      const before = names[at - 1];
+      return before === undefined || next[name] !== next[before];
+    });
   }
   $effect(() => {
     const dimensions = viewportHeight + hostHeight + composerRoom + pillRoom;
