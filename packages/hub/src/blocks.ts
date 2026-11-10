@@ -53,15 +53,14 @@ export const createBlocks = ({
   keptViews,
   projectName,
 }: BlocksDeps) => {
-  /** The refusal of a project the hub does not keep. */
-  const noProject = (projectId: string) =>
-    problem(404, {
-      code: "block-project-unknown",
-      detail: `The hub keeps no project ${projectId}.`,
-    });
   /** The refusal of a project the hub does not keep; none for one it does. */
   const unknownProject = (projectId: string) =>
-    projectName(projectId) === undefined ? noProject(projectId) : undefined;
+    projectName(projectId) === undefined
+      ? problem(404, {
+          code: "block-project-unknown",
+          detail: `The hub keeps no project ${projectId}.`,
+        })
+      : undefined;
 
   const arrangement = (projectId: string): BlockArrangement => {
     const pages: BlockArrangement["pages"] = {};
@@ -131,7 +130,10 @@ export const createBlocks = ({
       if (placed.length > 0) {
         const views = await keptViews(projectId);
         if (!views) {
-          return noProject(projectId);
+          return problem(404, {
+            code: "block-project-unknown",
+            detail: `The hub keeps no project ${projectId}.`,
+          });
         }
         const kept = new Set(views);
         const missing = placed.filter((name) => !kept.has(name));
@@ -192,7 +194,10 @@ export const createBlocks = ({
       const block = viewBlock(view);
       const views = await keptViews(projectId);
       if (!views) {
-        return noProject(projectId);
+        return problem(404, {
+          code: "block-project-unknown",
+          detail: `The hub keeps no project ${projectId}.`,
+        });
       }
       const places = placesOf(projectId, proposal.page, new Set(views)).filter(
         (place) => place.block !== block
