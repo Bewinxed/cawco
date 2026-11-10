@@ -3,6 +3,8 @@
 // for information about these interfaces
 declare global {
   interface Window {
+    /** Set once the touch long-press menus are installed (utils/longpress.ts); the probe reads it. */
+    __longPressInstalled?: boolean;
     /** Replays the button clicks app.html held before hydration. */
     releaseHeldTaps: () => void;
   }

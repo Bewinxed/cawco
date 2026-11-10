@@ -9,7 +9,6 @@
    * why in the box, with a retry.
    */
   import {
-    type FileContents,
     type FileDiffMetadata,
     isHighlighterLoaded,
     parseDiffFromFile,
@@ -65,7 +64,7 @@
   const CAP = 400;
 
   const files = $derived.by(() => {
-    const lang = languageOf(filePath) as FileContents["lang"];
+    const lang = languageOf(filePath);
     const name = fileName(filePath);
     return {
       oldFile: { name, contents: oldContent, lang },

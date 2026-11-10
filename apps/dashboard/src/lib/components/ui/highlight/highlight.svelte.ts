@@ -791,7 +791,7 @@ export function highlight(options: HighlightOptions) {
     /** Whether a row is one of the list's own, shown and in reach. */
     const isRow = (row: HTMLElement) =>
       container.contains(row) &&
-      !(row as HTMLButtonElement).disabled &&
+      !("disabled" in row && row.disabled) &&
       row.offsetParent !== null &&
       (!laidOut || laidOut().has(row));
     /**

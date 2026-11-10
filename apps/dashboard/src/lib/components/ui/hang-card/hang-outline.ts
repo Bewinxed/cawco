@@ -57,11 +57,14 @@ export function outlineLayer(card: HTMLElement): OutlineLayer {
 </defs>
 <path data-slot="cast" filter="url(#${id}-cast)" clip-path="url(#${id}-under)"/>
 <path data-slot="line" fill="none" stroke="url(#${id}-ink)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
-  const gradient = svg.querySelector("linearGradient") as SVGElement;
-  const rimStop = svg.querySelector('[data-slot="rim"]') as SVGElement;
-  const under = svg.querySelector('[data-slot="under"]') as SVGElement;
-  const cast = svg.querySelector('[data-slot="cast"]') as SVGElement;
-  const line = svg.querySelector('[data-slot="line"]') as SVGElement;
+  const gradient = svg.querySelector("linearGradient");
+  const rimStop = svg.querySelector('[data-slot="rim"]');
+  const under = svg.querySelector('[data-slot="under"]');
+  const cast = svg.querySelector('[data-slot="cast"]');
+  const line = svg.querySelector('[data-slot="line"]');
+  if (!(gradient && rimStop instanceof SVGElement && under && cast && line)) {
+    throw new Error("The hang outline's markup is missing a part.");
+  }
   // Just over the card: at its stack (its own z-index, or its floating
   // wrapper's), later in the page, so over it.
   const stacks = [card, card.parentElement ?? card]

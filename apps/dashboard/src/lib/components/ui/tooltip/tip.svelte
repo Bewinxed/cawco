@@ -65,11 +65,11 @@
   const CONTROL = "button, a[href], [data-tooltip-trigger]";
   /** Whether an event landed on a control nested in this trigger. */
   const nested = (event: Event): boolean => {
-    const own = (event.target as Element | null)?.closest(CONTROL);
+    const own =
+      event.target instanceof Element ? event.target.closest(CONTROL) : null;
     return Boolean(own && own !== event.currentTarget);
   };
 
-  type Handler = ((event: Event) => void) | undefined;
   /**
    * The trigger's props for the control, less the kit trigger's slot
    * (`data-slot="tooltip-trigger"`): spread after the control's own slot
@@ -88,10 +88,14 @@
     onpointerdown: (event: PointerEvent) => {
       touched = event.pointerType === "touch" && !nested(event);
       wasOpen = open;
-      (props.onpointerdown as Handler)?.(event);
+      if (typeof props.onpointerdown === "function") {
+        props.onpointerdown(event);
+      }
     },
     onclick: (event: MouseEvent) => {
-      (props.onclick as Handler)?.(event);
+      if (typeof props.onclick === "function") {
+        props.onclick(event);
+      }
       if (tap && touched) {
         open = !wasOpen;
       }
