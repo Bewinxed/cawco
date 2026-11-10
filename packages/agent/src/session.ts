@@ -641,7 +641,12 @@ export const resumableSessions = async (
 /** What the supervisor sends through, or hands to the work it starts: a command's queue, a preview's stage and browser. */
 type SupervisorPorts = Pick<
   AgentPorts,
-  "borrowAsk" | "commandQueue" | "stage" | "stageClone"
+  | "borrowAsk"
+  | "browsers"
+  | "commandQueue"
+  | "machineId"
+  | "stage"
+  | "stageClone"
 >;
 
 export class SessionSupervisor {
@@ -2945,8 +2950,8 @@ export class SessionSupervisor {
         ? undefined
         : () =>
             place
-              ? browserDoor(place.id)
-              : browserDoor(spec.instanceId, spec.projectId),
+              ? browserDoor(this.#ports, place.id)
+              : browserDoor(this.#ports, spec.instanceId, spec.projectId),
       containerEnv,
       hostTmp
     );

@@ -10,19 +10,29 @@
  * dropped.
  */
 import type { AccountBorrowFrame } from "@cawco/core/accounts";
+import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
 import type { CommandQueueFrame } from "@cawco/core/commands/controls";
 import type { MoveProgressFrame } from "@cawco/core/move";
 import type { StageCloneFrame, StageFrame } from "@cawco/core/stage";
+import type { RelayFrame } from "@cawco/core/stream-relay";
 
 export interface AgentPorts {
   /** A borrower's ask for a fresh access token of a lender's sign-in (provider-accounts.ts). */
   readonly borrowAsk: (frame: AccountBorrowFrame) => void;
+  /** The machine's browsers whole, told on each change (browser/browsers.ts). */
+  readonly browsers: (frame: BrowserFrame) => void;
   /** A command's place in the slot queues (hub-command.ts). */
   readonly commandQueue: (frame: CommandQueueFrame) => void;
+  /** The machine this agent is: the browsers' and the relay's frames name it. */
+  readonly machineId: string;
   /** A project move's progress (move.ts). */
   readonly moveProgress: (frame: MoveProgressFrame) => void;
   /** What the OpenCode harness does for the accounts here (provider-accounts.ts). */
   readonly opencodeAccounts: OpencodeAccountsHost;
+  /** The stream relay's state (browser/relay.ts). */
+  readonly relay: (frame: RelayFrame) => void;
+  /** A take-over the agent ended itself (browser/shield.ts). */
+  readonly shield: (frame: BrowserHandedBackFrame) => void;
   /** A workspace's stage, where it is now (stage.ts). */
   readonly stage: (frame: StageFrame) => void;
   /** A place's stage clone, as the hub files it as a workspace (stage-clone.ts). */

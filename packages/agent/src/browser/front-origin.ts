@@ -36,6 +36,8 @@ interface Watch {
   devtools: string;
   /** The page a take-over brought to the front, while it stands. */
   front?: string;
+  /** Who hears this browser's origin change: the registry, which tells the hub. */
+  heard: (key: BrowserKey) => void;
   /** The host it was opened on: a browser moved into a container (same ports) is watched afresh. */
   host: BrowserHostKind;
   link?: CdpLink;
@@ -47,22 +49,16 @@ interface Watch {
 }
 
 const watches = new Map<BrowserKey, Watch>();
-let heard: (key: BrowserKey) => void = () => undefined;
-let frontMoved: (key: BrowserKey) => void = () => undefined;
+const frontMovers = new Set<(key: BrowserKey) => void>();
 
-/** Who hears the page in front move to another (cdp-watch.ts, whose screencast follows it). */
-export const onFrontMoved = (sink: (key: BrowserKey) => void): void => {
-  frontMoved = sink;
+/** Hears the page in front move to another (cdp-watch.ts, whose screencast follows it). */
+export const onFrontMoved = (listener: (key: BrowserKey) => void): void => {
+  frontMovers.add(listener);
 };
 
 /** The page `key`'s view shows now (its target id); undefined for none. */
 export const frontTarget = (key: BrowserKey): string | undefined =>
   watches.get(key)?.shown;
-
-/** Who hears an origin change: the registry, which tells the hub. */
-export const setOriginSink = (sink: (key: BrowserKey) => void): void => {
-  heard = sink;
-};
 
 /** The origin `key`'s view shows now; undefined for none. */
 export const frontOrigin = (key: BrowserKey): string | undefined =>
@@ -101,11 +97,13 @@ const show = (key: BrowserKey, watch: Watch): void => {
   const origin = page ? originOf(page.url) : undefined;
   if (shown !== watch.shown) {
     watch.shown = shown;
-    frontMoved(key);
+    for (const moved of frontMovers) {
+      moved(key);
+    }
   }
   if (origin !== watch.origin) {
     watch.origin = origin;
-    heard(key);
+    watch.heard(key);
   }
 };
 
@@ -209,7 +207,8 @@ const close = (key: BrowserKey, watch: Watch): void => {
  * had, its origin with it, and is watched afresh.
  */
 export const syncOrigins = (
-  live: Map<BrowserKey, { devtools: string; host: BrowserHostKind }>
+  live: Map<BrowserKey, { devtools: string; host: BrowserHostKind }>,
+  heard: (key: BrowserKey) => void
 ): void => {
   for (const [key, watch] of watches) {
     const now = live.get(key);
@@ -220,7 +219,13 @@ export const syncOrigins = (
   }
   for (const [key, { devtools, host }] of live) {
     if (!watches.has(key)) {
-      const watch: Watch = { devtools, host, pages: new Map(), closed: false };
+      const watch: Watch = {
+        devtools,
+        heard,
+        host,
+        pages: new Map(),
+        closed: false,
+      };
       watches.set(key, watch);
       open(key, watch);
     }

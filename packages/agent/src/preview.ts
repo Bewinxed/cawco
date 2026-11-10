@@ -42,7 +42,7 @@ import {
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
 import type { AgentPorts } from "./agent-ports";
-import { wakeBrowser } from "./browser/browsers";
+import { type BrowserPorts, wakeBrowser } from "./browser/browsers";
 import { cdpView } from "./browser/shield";
 import { type BrowserRecord, portsOf, readBrowser } from "./browser/state";
 import {
@@ -429,6 +429,7 @@ let browserListener:
 
 /** The live browser a listener path names, woken first when it sleeps; or the refusal. */
 async function liveBrowser(
+  ports: BrowserPorts,
   named: string | undefined
 ): Promise<{ key: BrowserKey; record: BrowserRecord } | Response> {
   let key = "";
@@ -448,7 +449,7 @@ async function liveBrowser(
     return refused(404, `${key} has no browser on this machine.`);
   }
   try {
-    const record = await wakeBrowser(key);
+    const record = await wakeBrowser(ports, key);
     return record
       ? { key, record }
       : refused(404, `${key} has no browser on this machine.`);
@@ -538,7 +539,8 @@ async function toNeko(
 /** One request on the browser listener, its token already checked. */
 async function serveBrowser(
   request: Request,
-  server: Server<BrowserSocket>
+  server: Server<BrowserSocket>,
+  ports: BrowserPorts
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   if (url.pathname === PREVIEW_PING_PATH) {
@@ -548,7 +550,7 @@ async function serveBrowser(
   if (!rest) {
     return refused(404, "There is no such browser path on this machine.");
   }
-  const live = await liveBrowser(named);
+  const live = await liveBrowser(ports, named);
   if (live instanceof Response) {
     return live;
   }
@@ -561,7 +563,10 @@ async function serveBrowser(
  * Opens the machine's browser listener when it has none; from now on it
  * answers `token` alone. Answers the port it listens on.
  */
-export function listenBrowsers(args: unknown): { port: number } {
+export function listenBrowsers(
+  args: unknown,
+  ports: BrowserPorts
+): { port: number } {
   const { token } = (args ?? {}) as Partial<BrowserListenArgs>;
   if (typeof token !== "string" || token.length === 0) {
     throw new Error("browser.listen names the hub's token for it.");
@@ -589,7 +594,7 @@ export function listenBrowsers(args: unknown): { port: number } {
         );
         return notRelayed();
       }
-      return serveBrowser(request, server);
+      return serveBrowser(request, server, ports);
     },
     error(error) {
       previewFailed("agent browser listener", null, causeOf(error));

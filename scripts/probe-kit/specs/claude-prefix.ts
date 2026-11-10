@@ -407,6 +407,7 @@ const run = async (kit: Kit) => {
   });
   const gateway = await startMcpGateway(() => "ws://127.0.0.1:9/ws", {
     freshen: (accountId) => freshen(accountId, { borrowAsk: () => undefined }),
+    browsers: { browsers: () => undefined, machineId: "probe-machine" },
     supervisorHolds: () => undefined,
   });
   const gate = mcpGateOf(id);
