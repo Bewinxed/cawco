@@ -15,7 +15,8 @@
  * The tabs in its leaves are also what is live: the dashboard subscribes to
  * frames for every id `openIds` names, so a tab is streaming exactly when it
  * is open. `workingSet` only remembers what a conversation is called and
- * where a stored one lives.
+ * where a stored one lives, and forgets none the tabs hold open (registered
+ * once below, `workingSet.holdOpen`).
  */
 
 import { artifactStopOf } from "@cawco/core/artifact-needs";
@@ -679,12 +680,10 @@ export const workspace = {
   open(sessionId: string, ctx?: AskedContext, into?: string): void {
     restore();
     remember(sessionId, ctx);
-    if (!isSessionTab(sessionId)) {
-      // A project's tab: no conversation to visit.
-    } else if (ctx) {
-      workingSet.visit(sessionId, workspace.openIds, ctx);
+    if (isSessionTab(sessionId)) {
+      workingSet.visit(sessionId, ctx);
     } else {
-      workingSet.visit(sessionId, workspace.openIds);
+      // A project's tab: no conversation to visit.
     }
     this.activate(sessionId, leafHolding(sessionId)?.id ?? into);
   },
@@ -699,11 +698,7 @@ export const workspace = {
     restore();
     if (sessionId && isSessionTab(sessionId)) {
       remember(sessionId, ctx);
-      if (ctx) {
-        workingSet.visit(sessionId, workspace.openIds, ctx);
-      } else {
-        workingSet.visit(sessionId, workspace.openIds);
-      }
+      workingSet.visit(sessionId, ctx);
     }
     const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
     if (sessionId) {
@@ -818,7 +813,7 @@ export const workspace = {
       leaf.opened.from = to;
     }
     workingSet.forget(from);
-    workingSet.visit(to, workspace.openIds);
+    workingSet.visit(to);
     if (held.ctx) {
       delete held.ctx[from];
     }
@@ -870,7 +865,7 @@ export const workspace = {
    */
   land(sessionId: string): void {
     restore();
-    workingSet.visit(sessionId, workspace.openIds);
+    workingSet.visit(sessionId);
     const leaf = leafHolding(sessionId) ?? focused();
     placeTab(leaf, sessionId);
     show(leaf, sessionId);
@@ -1086,6 +1081,8 @@ export const workspace = {
   /** Once the first paint is up: the tree localStorage keeps, in front of the server's (Persistence above). */
   restore,
 };
+
+workingSet.holdOpen(() => workspace.openIds);
 
 followTabs({
   get openIds() {
