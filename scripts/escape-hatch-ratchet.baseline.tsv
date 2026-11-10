@@ -847,7 +847,6 @@ suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/artifacts/acc
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/browsers.ts	1
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/connections.ts	5
 suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/fleet-mcp.ts	2
-suppression	biome-ignore lint/style/useErrorCause	packages/hub/src/project-delete.ts	1
 suppression	biome-ignore lint/style/useFilenamingConvention	apps/dashboard/src/lib/cawco/spawnPrefs.svelte.ts	1
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/agent/src/redaction.ts	1
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/hooks.ts	2
