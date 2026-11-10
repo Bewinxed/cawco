@@ -156,21 +156,6 @@
   });
   /** The case a resting pointer stands on in the text switch, null while none: its words stand in the text rows until it leaves (the owner's pick on pin 15, "Show it on hover"), nothing pressed or sent. */
   let previewing = $state<string | null>(null);
-  /**
-   * The pointer's case, written once a frame: crossing from one segment to
-   * the next leaves one and enters the other in the same frame, and the rows
-   * take only where it came to rest, never the saved words and back between.
-   */
-  let restsOn: string | null = null;
-  let frame = 0;
-  const preview = (next: string | null) => {
-    restsOn = next;
-    frame ||= requestAnimationFrame(() => {
-      frame = 0;
-      previewing = restsOn;
-    });
-  };
-  $effect(() => () => cancelAnimationFrame(frame));
   /** The text rows' words while a case is previewed, by prop name: the case's where it reaches, the saved elsewhere. */
   const previewed = $derived.by(() => {
     const cases = stateProps?.content?.cases ?? [];
@@ -358,12 +343,10 @@
                 <!-- The kit's segmented control in its glass (BarSegments):
                      one glyph a case, the chosen one washed; never a menu
                      (the owner's pin 14). Hovering a case shows it in the
-                     text rows (pin 15), so no tooltip stands over it: the
-                     two together re-measured the tooltip on every move and
-                     lagged the card. -->
+                     text rows (pin 15). -->
                 <BarSegments
                   label={words.dials.content}
-                  onpreview={preview}
+                  onpreview={(next) => (previewing = next)}
                   onValueChange={(next) =>
                     pick.onpick(
                       pick.cases.find((one) => one.is === next)?.fill ?? null
@@ -373,13 +356,11 @@
                       value: "saved",
                       label: words.dials.cases.saved,
                       icon: CASE_ICON.saved,
-                      tip: false,
                     },
                     ...pick.cases.map((one) => ({
                       value: one.is,
                       label: one.label,
                       icon: CASE_ICON[one.is],
-                      tip: false as const,
                     })),
                   ]}
                   value={contentPicked}

@@ -18,8 +18,10 @@
    *
    * It follows `value` while mounted; a press asks for another through
    * `onValueChange` (or `bind:value`). `onpreview` tells which segment a
-   * resting pointer stands on, and null as it leaves, for a switch whose
-   * choice shows its result before it is pressed (a finger has no rest).
+   * resting pointer stands on, and null once it leaves the switch (crossing
+   * from one segment to the next is one step, never a leave between), for a
+   * switch whose choice shows its result before it is pressed (a finger has
+   * no rest).
    */
   import { Tabs } from "bits-ui";
   import type { Component } from "svelte";
@@ -32,8 +34,8 @@
     keys?: string;
     /** Its name, for the screen reader and in its tooltip. */
     label: string;
-    /** Its tooltip's words, where they say more than its name; `false`: none, where hovering it shows what it does (`onpreview`). */
-    tip?: string | false;
+    /** Its tooltip's words, where they say more than its name. */
+    tip?: string;
     value: T;
   }
 
@@ -81,7 +83,11 @@
 <Tabs.Root class="contents" onValueChange={choose} {value}>
   <Tabs.List aria-label={label}>
     {#snippet child({ props })}
-      <BarGlass {...props} form="group">
+      <BarGlass
+        {...props}
+        form="group"
+        onpointerleave={onpreview ? leave : undefined}
+      >
         {#each segments as segment (segment.value)}
           <Tabs.Trigger value={segment.value}>
             {#snippet child({ props: trigger })}
@@ -93,7 +99,6 @@
                 marked={segment.value === value}
                 data-segment={segment.value}
                 onpointerenter={onpreview ? enter : undefined}
-                onpointerleave={onpreview ? leave : undefined}
                 props={trigger}
                 tip={segment.tip}
               />
