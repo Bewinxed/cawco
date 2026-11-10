@@ -115,6 +115,7 @@ export type TokenColor =
   | "color.surface-fill-strong"
   | "color.press-fill"
   | "color.surface-pressed"
+  | "color.groove-hover"
   | "color.surface-hover"
   | "color.well-edge"
   | "color.seam"

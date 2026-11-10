@@ -152,6 +152,8 @@ public enum Palette {
     public static let pressFill = Palette.named("press-fill")
     /// The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered.
     public static let surfacePressed = Palette.named("surface-pressed")
+    /// A segment's hover on a groove (surface-recess-deep), the kit Tabs', a single toggle group's and the fluid-tabs ghost's: the recess by day, where surface-hover is the groove's own colour; surface-hover at night.
+    public static let grooveHover = Palette.named("groove-hover")
     /// Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike.
     public static let surfaceHover = Palette.named("surface-hover")
     /// The reader's well edge: darker than the well by day, the ink at 8% at night.

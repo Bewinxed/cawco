@@ -1142,6 +1142,23 @@
           "#f3eee4"
         ]
       },
+      "groove-hover": {
+        "role": "neutral",
+        "displayName": "Groove Hover",
+        "canonical": "light-dark(oklch(0.967 0.008 84), oklch(0.282 0.007 70))",
+        "hex": "#f7f4ee",
+        "hexDark": "#2c2926",
+        "tonalRamp": [
+          "#0d0b07",
+          "#272520",
+          "#44423d",
+          "#63615c",
+          "#85827d",
+          "#a7a59f",
+          "#ccc9c3",
+          "#f1eee8"
+        ]
+      },
       "surface-hover": {
         "role": "neutral",
         "displayName": "Surface Hover",
@@ -3234,7 +3251,7 @@
       "refersTo": "segmented",
       "description": "A recessed groove with a lifted thumb under the chosen segment, thumb and segments concentric with it; in a bar's glass it is BarSegments, the glass its list and each segment a bar item. Segments tint on press, never scale.",
       "html": "<div class=\"ds-seg\" role=\"tablist\"><span class=\"ds-seg-thumb\" aria-hidden=\"true\"></span><button class=\"ds-seg-item ds-seg-on\" role=\"tab\" aria-selected=\"true\">Sessions</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Machines</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Runs</button></div>",
-      "css": ".ds-seg { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-recess-deep); } .ds-seg-thumb { position: absolute; top: 3px; left: 3px; width: 84px; height: 30px; border-radius: var(--radius-well); background: var(--surface-lift); box-shadow: var(--shadow-raised); transition: transform var(--dur-pop) var(--ease-in-out); } .ds-seg-item { position: relative; width: 84px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-well); background: transparent; color: var(--ink-muted); font: 500 var(--text-label) / 1 var(--font-body); cursor: pointer; transition: var(--transition-control); } .ds-seg-on { color: var(--ink-strong); } .ds-seg-item:not(.ds-seg-on):active { background-color: var(--surface-pressed); } .ds-seg-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }"
+      "css": ".ds-seg { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-recess-deep); } .ds-seg-thumb { position: absolute; top: 3px; left: 3px; width: 84px; height: 30px; border-radius: var(--radius-well); background: var(--surface-lift); box-shadow: var(--shadow-raised); transition: transform var(--dur-pop) var(--ease-in-out); } .ds-seg-item { position: relative; width: 84px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-well); background: transparent; color: var(--ink-muted); font: 500 var(--text-label) / 1 var(--font-body); cursor: pointer; transition: var(--transition-control); } .ds-seg-on { color: var(--ink-strong); } .ds-seg-item:not(.ds-seg-on):hover { background-color: var(--groove-hover); } .ds-seg-item:not(.ds-seg-on):active { background-color: var(--surface-pressed); } .ds-seg-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }"
     },
     {
       "name": "Permission Gate",
@@ -3510,7 +3527,7 @@
       },
       {
         "name": "The Solar Duotone Rule",
-        "body": "Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts` (packages/icons); a bar's symbols, chevrons, arrows and CopyButton take Solar's linear cut (`\u2026Linear`, house/bar-symbol-linear). The duotone's second layer is `currentColor` at 50%. A status glyph keeps its `status-*-glyph` hue and holds 3:1 as a whole on its surfaces. Close, Plus and Tick are local glyphs on Solar's 24px grid, a 1.5 stroke with round caps; the Tick is also the done glyph, in `status-done-glyph`. An icon is the glyph alone, no container round it; where Solar ships only a contained cut, a bare one is drawn in its style.",
+        "body": "Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts` (packages/icons); a bar's symbols, chevrons, arrows and CopyButton take Solar's linear cut (`…Linear`, house/bar-symbol-linear). The duotone's second layer is `currentColor` at 50%. A status glyph keeps its `status-*-glyph` hue and holds 3:1 as a whole on its surfaces. Close, Plus and Tick are local glyphs on Solar's 24px grid, a 1.5 stroke with round caps; the Tick is also the done glyph, in `status-done-glyph`. An icon is the glyph alone, no container round it; where Solar ships only a contained cut, a bare one is drawn in its style.",
         "section": "components"
       },
       {

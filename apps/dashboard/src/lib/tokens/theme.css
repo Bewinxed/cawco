@@ -145,6 +145,7 @@
   --color-surface-fill-strong: var(--surface-fill-strong);
   --color-press-fill: var(--press-fill);
   --color-surface-pressed: var(--surface-pressed);
+  --color-groove-hover: var(--groove-hover);
   --color-surface-hover: var(--surface-hover);
   --color-well-edge: var(--well-edge);
   --color-seam: var(--seam);

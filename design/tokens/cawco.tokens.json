@@ -796,6 +796,11 @@
       "$value": "{color.neutral-6}",
       "$description": "The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered."
     },
+    "groove-hover": {
+      "$type": "color",
+      "$value": "{color.surface-recess}",
+      "$description": "A segment's hover on a groove (surface-recess-deep), the kit Tabs', a single toggle group's and the fluid-tabs ghost's: the recess by day, where surface-hover is the groove's own colour; surface-hover at night."
+    },
     "surface-hover": {
       "$type": "color",
       "$value": "{color.neutral-4}",
