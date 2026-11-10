@@ -70,7 +70,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { noticeWords } from "@cawco/core/words/notices";
 import { pageHash } from "@cawco/preview/proxy";
 import { Elysia, ElysiaStatus, t } from "elysia";
-import type { PageHearer } from "./artifacts/shapes";
+import type { Artifacts } from "./artifacts/service";
 import type { ArtifactTaker } from "./artifacts/taker";
 import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
@@ -371,11 +371,7 @@ export interface DecisionsDeps {
    * Answers the session that heard it, or the artifact's refusal: its
    * status and sentence.
    */
-  send: (
-    artifactId: string,
-    route: string,
-    to: PageHearer
-  ) => Promise<string | { refused: string; status: 404 | 409 | 503 }>;
+  send: Artifacts["sendPage"];
   /**
    * Whether the send `uuid` (a Make tasks ask) is in flight: its session
    * has not read it yet, or the turn that read it has not ended.
@@ -1219,8 +1215,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
               },
             }
       );
-      if (typeof heard !== "string") {
-        return refusal(heard.status, "decision-send-refused", heard.refused);
+      if (heard instanceof ElysiaStatus) {
+        return heard;
       }
       deps.changed(projectId);
       const sent: DecisionSent =
