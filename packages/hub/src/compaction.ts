@@ -17,6 +17,7 @@ import type { NeutralSystemMessage } from "@cawco/core/session-messages";
 import { ContextLineSchema } from "@cawco/core/stored-shapes";
 import { contextWords } from "@cawco/core/words/context";
 import { noticeWords } from "@cawco/core/words/notices";
+import { ElysiaStatus } from "elysia";
 import { fileDue } from "./at-limit";
 import type { LimitCompaction } from "./db/at-limit";
 import type { HubContext } from "./hub-context";
@@ -74,6 +75,16 @@ export type CompactionContext = Pick<
   | "transcripts"
   | "unnoteAtLimit"
 >;
+
+/** A session's open-item rows as the records its filing counts (open-items.ts `recordsOf`); a refused read thrown on in its words, logged where a failed read is. */
+const heldRecords = (
+  rows: Awaited<ReturnType<CompactionContext["openItems"]["rows"]>>
+) => {
+  if (rows instanceof ElysiaStatus) {
+    throw new Error(rows.response.detail);
+  }
+  return recordsOf(rows);
+};
 
 export const createCompaction = (ctx: CompactionContext) => {
   /**
@@ -916,7 +927,7 @@ export const createCompaction = (ctx: CompactionContext) => {
     const after = plan.records
       ? await ctx.openItems
           .rows(plan.instanceId)
-          .then(recordsOf)
+          .then(heldRecords)
           .catch((error: unknown) => {
             console.warn(
               `[context] ${plan.instanceId.slice(0, 8)}: what its filing wrote could not be read: ${error instanceof Error ? error.message : String(error)}`
@@ -1016,7 +1027,7 @@ export const createCompaction = (ctx: CompactionContext) => {
       // check, so the filing follows that check with no wait between.
       const records = await ctx.openItems
         .rows(instanceId)
-        .then(recordsOf)
+        .then(heldRecords)
         .catch((error: unknown) => {
           console.warn(
             `[context] ${ctx.sessionName(row)}: its records could not be read before its filing, so its line will not say what it wrote: ${error instanceof Error ? error.message : String(error)}`
