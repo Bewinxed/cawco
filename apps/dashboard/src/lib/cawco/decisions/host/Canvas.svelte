@@ -17,6 +17,7 @@
 -->
 <script lang="ts">
   import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
+  import { z } from "zod";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { revealHere, revealOut } from "#lib/platform/motion/curves.svelte.js";
@@ -78,11 +79,13 @@
   let underSkeleton = false;
   $effect(() => {
     const heard = (event: MessageEvent) => {
-      const told = event.data as {
-        height?: unknown;
-        type?: unknown;
-        width?: unknown;
-      } | null;
+      const told = z
+        .looseObject({
+          height: z.unknown(),
+          type: z.unknown(),
+          width: z.unknown(),
+        })
+        .safeParse(event.data).data;
       if (
         event.source === frame?.contentWindow &&
         told?.type === CANVAS_EMBED_SIZE &&

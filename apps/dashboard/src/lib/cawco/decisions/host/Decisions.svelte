@@ -55,7 +55,6 @@
   import { unsentChoices } from "@cawco/core/choices";
   import { answerMade, readProgram } from "@cawco/core/decisions";
   import { setupPageWords } from "@cawco/core/words/onboarding";
-  import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
@@ -87,7 +86,7 @@
     renderNode,
   }: OpenUIRenderProps<{
     title: unknown;
-    children: unknown[];
+    children: ({ typeName?: unknown } | null)[];
   }> = $props();
 
   const program = $derived(
@@ -97,7 +96,7 @@
       props,
       partial: false,
       hasDynamicProps: false,
-    } as unknown as ElementNode)
+    })
   );
   const cards = $derived(program.cards);
   /**
@@ -106,7 +105,7 @@
    */
   const setupPage = $derived(
     (Array.isArray(props.children) ? props.children : []).some(
-      (child) => (child as { typeName?: string } | null)?.typeName === "Setup"
+      (child) => child?.typeName === "Setup"
     )
   );
   /**

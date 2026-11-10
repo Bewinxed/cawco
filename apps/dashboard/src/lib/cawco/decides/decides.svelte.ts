@@ -96,6 +96,26 @@ export interface Fault {
   reason: string;
 }
 
+/** What his settings read of Caw's seat: the page's {@link CawLead}, or a stand-in with the same reads. */
+export type CawSeat = Pick<
+  CawLead,
+  | "configure"
+  | "harness"
+  | "model"
+  | "moving"
+  | "on"
+  | "read"
+  | "refused"
+  | "sentence"
+  | "view"
+> & { project: SeatProject | null };
+
+/** The project's row as his settings read it. */
+export type SeatProject = Pick<
+  ProjectRow,
+  "cawHarness" | "cawModel" | "eventsOn" | "name"
+>;
+
 export class WhoDecides {
   readonly projectId: string | null;
   read = $state<Read>({ state: "reading" });
@@ -111,7 +131,7 @@ export class WhoDecides {
   /** Asks before a member is removed, in its settings' flow. */
   readonly asker = new Asker<AskHereRequest>();
   /** The project's Caw, whose switch and harness his settings change; null on the fleet's page. */
-  lead: CawLead | null = null;
+  lead: CawSeat | null = null;
   /** The record of the member whose settings stand open, by its id. */
   record = $state<{ member: string; read: RecordRead } | null>(null);
   /** Kinds of choice stands open, hung from the head's button. */
@@ -225,7 +245,7 @@ export class WhoDecides {
   }
 
   /** What `member` runs on, or why it can't be reached; null for members with none. */
-  facts = (member: Member, project: ProjectRow | undefined): Facts | null => {
+  facts = (member: Member, project: SeatProject | undefined): Facts | null => {
     if (this.read.state !== "read") {
       return null;
     }
@@ -297,11 +317,15 @@ export class WhoDecides {
       return;
     }
     if (this.projectId === null) {
+      const handed: Record<string, string> = {};
+      for (const [kind, member] of Object.entries(routes)) {
+        if (member !== null) {
+          handed[kind] = member;
+        }
+      }
       const fleet = await writeFleetRoutes({
         ...read.fleet.routes,
-        ...(Object.fromEntries(
-          Object.entries(routes).filter(([, member]) => member !== null)
-        ) as Record<string, string>),
+        ...handed,
       });
       this.#replace({ fleet: { ...read.fleet, ...fleet } });
     } else {
