@@ -158,8 +158,11 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
 
   /** The open task that builds the system already: filed by Build, or by Caw when the person asked him ({@link fileBuild}). */
   const building = async (projectId: string) => {
-    const { tasks: all } = await tasks.list(projectId);
-    return all.find(
+    const list = await tasks.list(projectId);
+    if (list instanceof ElysiaStatus) {
+      throw projectRefusalOf(list);
+    }
+    return list.tasks.find(
       (task) =>
         task.kind !== "done" &&
         task.kind !== "dropped" &&
@@ -190,9 +193,13 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
         "This project has a design system already (design/ on its default branch, or in its folder): a change to it is a design_write proposal, not a build."
       );
     }
-    const { stages } = await tasks.stages(projectId);
-    const first = stage ?? stages.find((each) => each.kind === "todo")?.name;
-    return await tasks.create(
+    const view = await tasks.stages(projectId);
+    if (view instanceof ElysiaStatus) {
+      throw projectRefusalOf(view);
+    }
+    const first =
+      stage ?? view.stages.find((each) => each.kind === "todo")?.name;
+    const task = await tasks.create(
       projectId,
       {
         ...buildWords(sourcesOf(projectId)),
@@ -200,6 +207,10 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       },
       actor
     );
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
+    return task;
   };
 
   const offer = async (projectId: string, taskId: string): Promise<void> => {
@@ -208,6 +219,9 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       return;
     }
     const task = await tasks.get(projectId, taskId);
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
     if (
       task.kind !== "active" ||
       !designShaped(project.template ?? null, task) ||
