@@ -150,7 +150,11 @@ const run = async (kit: Kit) => {
   const opened: string[] = [];
   const open = (n: number) => {
     opened.push(key(n));
-    return listeners.embed(key(n), RUNNING).port;
+    const embed = listeners.embed(key(n), RUNNING);
+    if (!("port" in embed)) {
+      throw new Error(embed.response.detail);
+    }
+    return embed.port;
   };
   try {
     // 0. The hub up, no port handed out: every one stays free for another program.
