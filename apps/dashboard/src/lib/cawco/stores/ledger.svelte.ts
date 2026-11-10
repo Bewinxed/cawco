@@ -70,9 +70,8 @@ export const streamHost: StreamHost = {
    * of a permanent ghost: the operator's words on screen, at "sending…",
    * indefinitely. A real timer settles them whether or not anything arrives.
    */
-  setTimer: (delayMs, run) => setTimeout(run, delayMs) as unknown as number,
-  clearTimer: (handle) =>
-    clearTimeout(handle as unknown as ReturnType<typeof setTimeout>),
+  setTimer: (delayMs, run) => window.setTimeout(run, delayMs),
+  clearTimer: (handle) => window.clearTimeout(handle),
   noteFailure: (record) => ledgerPorts.noteFailure(record),
 };
 
