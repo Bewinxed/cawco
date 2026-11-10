@@ -84,7 +84,7 @@ async function addressAt(
       problem: await said(answer, previewWords.notOpenedLine),
     };
   }
-  return { address: (await answer.json()) as PreviewAddress };
+  return { address: await answer.json() };
 }
 
 /** Where `origin` (a project's, a session's) is served now, its listener started when it has none; or the hub's refusal. */

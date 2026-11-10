@@ -93,11 +93,11 @@ export function frameHand(
     const id = lastAsk;
     return new Promise((resolve) => {
       const heard = (event: MessageEvent) => {
-        const told = event.data as {
+        const told: {
           id?: unknown;
           type?: unknown;
           writes?: unknown;
-        } | null;
+        } | null = event.data;
         if (
           event.source !== target ||
           event.origin !== at ||

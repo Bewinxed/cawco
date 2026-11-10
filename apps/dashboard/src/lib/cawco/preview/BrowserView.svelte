@@ -196,8 +196,9 @@
   $effect(() => {
     track(again);
     const kind = host;
-    const media = kind === "container" ? video : canvas;
-    if (!(live && kind && media)) {
+    const screenVideo = kind === "container" ? video : undefined;
+    const screenCanvas = kind === "container" ? undefined : canvas;
+    if (!(live && kind)) {
       return;
     }
     const events = {
@@ -208,29 +209,40 @@
         session = id;
       },
     };
-    const opened = untrack(() =>
-      kind === "container"
-        ? nekoStream(
+    const attach = (opened: BrowserStream) => {
+      stream = opened;
+      return () => {
+        opened.close();
+        if (stream === opened) {
+          stream = null;
+        }
+        session = null;
+        streamState = { kind: "connecting" };
+      };
+    };
+    if (screenVideo) {
+      return attach(
+        untrack(() =>
+          nekoStream(
             streamUrl(instanceId, artifactId, "api", viewer),
-            media as HTMLVideoElement,
+            screenVideo,
             events
           )
-        : cdpStream(
+        )
+      );
+    }
+    if (screenCanvas) {
+      return attach(
+        untrack(() =>
+          cdpStream(
             streamUrl(instanceId, artifactId, "cdp", viewer),
-            media as HTMLCanvasElement,
+            screenCanvas,
             events,
             counted
           )
-    );
-    stream = opened;
-    return () => {
-      opened.close();
-      if (stream === opened) {
-        stream = null;
-      }
-      session = null;
-      streamState = { kind: "connecting" };
-    };
+        )
+      );
+    }
   });
 
   // The video's frames, counted as they are presented.
@@ -476,7 +488,7 @@
       stream.type(typed);
     }
     // A composition's field is the IME's until it ends.
-    if ((event as InputEvent).isComposing) {
+    if (event instanceof InputEvent && event.isComposing) {
       return;
     }
     const caret = now.length;

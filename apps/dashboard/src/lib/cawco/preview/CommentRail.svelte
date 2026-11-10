@@ -1040,7 +1040,10 @@
       >
         <Tabs
           onValueChange={(next) => {
-            filter = next as RailList;
+            const chosen = lists.find((one) => one.value === next);
+            if (chosen) {
+              filter = chosen.value;
+            }
           }}
           size="compact"
           value={filter}

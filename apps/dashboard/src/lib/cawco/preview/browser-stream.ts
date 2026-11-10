@@ -99,11 +99,15 @@ export const streamUrl = (
   return `${scheme}//${location.host}${path}?token=${encodeURIComponent(viewer)}`;
 };
 
+/** F1 to F12 by name. */
+const FUNCTION_KEYSYMS: Record<string, number> = Object.fromEntries(
+  Array.from({ length: 12 }, (_, n) => [`F${n + 1}`, 0xff_be + n])
+);
 /**
  * X11 keysyms for the keys a keyboard names (X.Org keysymdef.h): a
  * character is its Latin-1 code, else `0x01000000` plus its code point.
  */
-const KEYSYMS: Record<string, number> = {
+const NAMED_KEYSYMS = {
   Backspace: 0xff_08,
   Tab: 0xff_09,
   Enter: 0xff_0d,
@@ -126,11 +130,16 @@ const KEYSYMS: Record<string, number> = {
   AltGraph: 0xfe_03,
   Meta: 0xff_eb,
 };
-for (let n = 1; n <= 12; n += 1) {
-  KEYSYMS[`F${n}`] = 0xff_be + n - 1;
-}
+const KEYSYMS: Record<string, number> = {
+  ...NAMED_KEYSYMS,
+  ...FUNCTION_KEYSYMS,
+};
 const LATIN1_LAST = 0xff;
 const UNICODE_KEYSYM = 0x01_00_00_00;
+
+/** The keysym of a code point with no name: its Latin-1 code, else Unicode's. */
+const keysymOfPoint = (point: number): number =>
+  point <= LATIN1_LAST ? point : UNICODE_KEYSYM + point;
 
 /** The keysym of a keyboard event's key; undefined for a key X has none for ("Unidentified", "Dead"). */
 const keysymOf = (key: string): number | undefined => {
@@ -142,7 +151,7 @@ const keysymOf = (key: string): number | undefined => {
   if (point === undefined || [...key].length !== 1) {
     return;
   }
-  return point <= LATIN1_LAST ? point : UNICODE_KEYSYM + point;
+  return keysymOfPoint(point);
 };
 
 /**
@@ -186,6 +195,14 @@ const NekoMessageSchema = z.object({
   payload: z.record(z.string(), z.unknown()).optional(),
 });
 type NekoMessage = z.infer<typeof NekoMessageSchema>;
+const ScreenSizeSchema = z.object({ width: z.number(), height: z.number() });
+/** A candidate as neko relays it: the browser's `RTCIceCandidateInit`. */
+const IceCandidateSchema = z.object({
+  candidate: z.string().optional(),
+  sdpMid: z.string().nullish(),
+  sdpMLineIndex: z.number().nullish(),
+  usernameFragment: z.string().nullish(),
+});
 
 /** neko's stream into `video`, with its input on the data channel. */
 export const nekoStream = (
@@ -270,7 +287,7 @@ export const nekoStream = (
   const provided = async (payload: Record<string, unknown>) => {
     closePeer();
     const at = new RTCPeerConnection({
-      iceServers: (payload.iceservers as RTCIceServer[] | undefined) ?? [],
+      iceServers: Array.isArray(payload.iceservers) ? payload.iceservers : [],
     });
     peer = at;
     at.onicecandidate = (found) => {
@@ -315,9 +332,10 @@ export const nekoStream = (
     switch (message.event) {
       case "system/init": {
         tries = 0;
-        const size = payload.screen_size as
-          { width: number; height: number } | undefined;
-        screen = size ? { width: size.width, height: size.height } : null;
+        const size = ScreenSizeSchema.safeParse(payload.screen_size);
+        screen = size.success
+          ? { width: size.data.width, height: size.data.height }
+          : null;
         events.session(
           typeof payload.session_id === "string" ? payload.session_id : null
         );
@@ -344,15 +362,18 @@ export const nekoStream = (
       case "signal/restart":
         answer(String(payload.sdp ?? "")).catch(() => undefined);
         return;
-      case "signal/candidate":
+      case "signal/candidate": {
+        const found = IceCandidateSchema.safeParse(payload);
+        if (!found.success) {
+          return;
+        }
         if (peer?.remoteDescription) {
-          peer
-            .addIceCandidate(payload as RTCIceCandidateInit)
-            .catch(() => undefined);
+          peer.addIceCandidate(found.data).catch(() => undefined);
         } else {
-          held.push(payload as RTCIceCandidateInit);
+          held.push(found.data);
         }
         return;
+      }
       case "signal/close":
         closePeer();
         requestPeer();
@@ -410,9 +431,9 @@ export const nekoStream = (
     press(keysym, true);
     press(keysym, false);
   };
-  const shift = KEYSYMS.Shift as number;
-  const control = KEYSYMS.Control as number;
-  const enter = KEYSYMS.Enter as number;
+  const shift = NAMED_KEYSYMS.Shift;
+  const control = NAMED_KEYSYMS.Control;
+  const enter = NAMED_KEYSYMS.Enter;
 
   /**
    * A character no key of neko's layout has, as GTK's Unicode entry:
@@ -433,11 +454,11 @@ export const nekoStream = (
   const unicodeEntry = (point: number, holdShift: boolean) => {
     press(control, true);
     press(shift, true);
-    tap(keysymOf("U") as number);
+    tap(keysymOfPoint("U".charCodeAt(0)));
     press(shift, false);
     press(control, false);
     for (const digit of point.toString(16)) {
-      tap(keysymOf(digit) as number);
+      tap(keysymOfPoint(digit.charCodeAt(0)));
     }
     tap(enter);
     press(shift, true);
@@ -453,7 +474,10 @@ export const nekoStream = (
       tap(enter);
       return;
     }
-    const point = char.codePointAt(0) as number;
+    const point = char.codePointAt(0);
+    if (point === undefined) {
+      return;
+    }
     if (loneSurrogate(point)) {
       console.warn(
         `[cawco] browser keyboard: a lone surrogate (U+${point.toString(16).toUpperCase()}) is no character to type; dropped.`
@@ -544,7 +568,7 @@ export const nekoStream = (
     },
     type: ({ back, text }) => {
       for (let n = 0; n < back; n += 1) {
-        tap(KEYSYMS.Backspace as number);
+        tap(NAMED_KEYSYMS.Backspace);
       }
       for (const char of text) {
         typeChar(char);
@@ -554,7 +578,7 @@ export const nekoStream = (
       // The person's clipboard into the browser's, then its paste keystroke.
       send("clipboard/set", { text });
       press(control, true);
-      tap(keysymOf("v") as number);
+      tap(keysymOfPoint("v".charCodeAt(0)));
       press(control, false);
     },
   };
@@ -644,9 +668,9 @@ export const cdpStream = (
         events.state({ kind: "live" });
       }
       if (decoding) {
-        next = event.data as ArrayBuffer;
+        next = event.data;
       } else {
-        draw(event.data as ArrayBuffer).catch(() => undefined);
+        draw(event.data).catch(() => undefined);
       }
     };
     at.onclose = (event) => {

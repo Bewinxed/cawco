@@ -350,7 +350,12 @@
     const pinRadii: Radii = p
       ? [pinR, pinR, pinR, hair]
       : [pinR, pinR, pinR, pinR];
-    const radii = pinRadii.map((r) => lerp(r, CARD_R, k)) as Radii;
+    const radii: Radii = [
+      lerp(pinRadii[0], CARD_R, k),
+      lerp(pinRadii[1], CARD_R, k),
+      lerp(pinRadii[2], CARD_R, k),
+      lerp(pinRadii[3], CARD_R, k),
+    ];
     const shapes = [roundedBox(shape, radii)];
     // The pill joins the shape only while it pours: at rest the card
     // stands alone, so a travel to a new place carries no pill with it.

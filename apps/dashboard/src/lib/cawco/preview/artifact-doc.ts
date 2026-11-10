@@ -179,12 +179,12 @@ const viewOf = (doc: Doc): ArtifactView => {
   const pins = [...readPins(doc).values()].filter((pin) => !gone.has(pin.id));
   const changes = meta.get("changes") ?? null;
   return {
-    activity: activityOf(doc).toJSON() as Record<string, ActivityLine[]>,
+    activity: activityOf(doc).toJSON(),
     changes,
     seen: new Set(
       changes ? (seenOf(doc).get(String(changes.revision)) ?? []) : []
     ),
-    choices: doc.getMap("state").toJSON() as Record<string, ChoiceEntry>,
+    choices: doc.getMap("state").toJSON(),
     pageHash: meta.get("pageHash") ?? null,
     sentAt: meta.get("sentAt") ?? null,
     ownSend: meta.get("ownSend") === true,
