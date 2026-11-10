@@ -5,13 +5,13 @@
  * its previous value, downstream updates will be skipped",
  * svelte.dev/docs/svelte/$derived).
  */
-export function unlessSame<T>(was: readonly T[] | undefined, next: T[]): T[] {
+export function unlessSame<T>(was: T[] | undefined, next: T[]): T[] {
   if (
     was !== undefined &&
     was.length === next.length &&
     was.every((value, i) => value === next[i])
   ) {
-    return was as T[];
+    return was;
   }
   return next;
 }

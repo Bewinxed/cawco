@@ -80,7 +80,10 @@ export function autosize(
     const area = node instanceof HTMLTextAreaElement ? node : null;
     // Measured on a hidden twin, never on the field: collapsing the field to
     // measure it would cancel the height transition it is running.
-    const twin = node.cloneNode() as HTMLElement;
+    const twin = node.cloneNode();
+    if (!(twin instanceof HTMLElement)) {
+      return;
+    }
     for (const name of [
       "id",
       "name",
@@ -165,6 +168,8 @@ export function autosize(
         cap: Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY,
       };
     };
+    const mirrored =
+      area && twin instanceof HTMLTextAreaElement ? { area, twin } : null;
     /** The field as a resize's delivery read it, for the refit it asked for. */
     let readAtResize: ReturnType<typeof readField> | null = null;
     const fit = () => {
@@ -173,8 +178,8 @@ export function autosize(
       ({ width } = field);
       twin.style.width = `${width}px`;
       twin.style.padding = field.padding;
-      if (area) {
-        (twin as HTMLTextAreaElement).value = area.value;
+      if (mirrored) {
+        mirrored.twin.value = mirrored.area.value;
       } else {
         // An empty box measures one line, as an empty textarea of one row.
         const copy = node.cloneNode(true);
