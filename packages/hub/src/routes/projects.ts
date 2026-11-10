@@ -4,13 +4,13 @@
 
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { projectOrigin } from "../db/previews";
 import type { HubContext } from "../hub-context";
 import { PlaceRefusal } from "../place-refusal";
 import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
-import { refusal, schemaRefusal } from "../refusal";
+import { schemaRefusal } from "../refusal";
 import { LANDS } from "../tasks";
 
 export const projectRoutes = ({
@@ -87,15 +87,18 @@ export const projectRoutes = ({
       },
       async ({ body }) => {
         if ((body.machineId === undefined) !== (body.cwd === undefined)) {
-          return refusal(
-            400,
-            "checkout-machine-folder-send",
-            "A checkout is a machine and a folder: send both machineId and cwd, or neither."
-          );
+          return problem(400, {
+            code: "checkout-machine-folder-send",
+            detail:
+              "A checkout is a machine and a folder: send both machineId and cwd, or neither.",
+          });
         }
         const name = askedProjectName(body);
         if (!name) {
-          return refusal(400, "project-needs-name", "A project needs a name.");
+          return problem(400, {
+            code: "project-needs-name",
+            detail: "A project needs a name.",
+          });
         }
         // A folder that is no absolute path on its machine is refused in
         // the hub's words (db `placePathOn`).
@@ -116,7 +119,10 @@ export const projectRoutes = ({
             : {}),
         });
         if ("response" in made) {
-          return refusal(made.status, "project-not-made", made.response.detail);
+          return problem(made.status, {
+            code: "project-not-made",
+            detail: made.response.detail,
+          });
         }
         return {
           ...projectOut(made.project),
@@ -134,11 +140,10 @@ export const projectRoutes = ({
     // what a forget stops first (project-stops.ts).
     .get("/api/projects/:id/running", ({ params }) => {
       if (!db.project(params.id)) {
-        return refusal(
-          404,
-          "project-no-longer-recorded",
-          "This project is no longer recorded. Refresh."
-        );
+        return problem(404, {
+          code: "project-no-longer-recorded",
+          detail: "This project is no longer recorded. Refresh.",
+        });
       }
       return { sessions: projectStops.running(params.id) };
     })
@@ -154,20 +159,18 @@ export const projectRoutes = ({
       },
       ({ params, body }) => {
         if (!db.project(params.id)) {
-          return refusal(
-            404,
-            "project-no-longer-recorded",
-            "This project is no longer recorded. Refresh."
-          );
+          return problem(404, {
+            code: "project-no-longer-recorded",
+            detail: "This project is no longer recorded. Refresh.",
+          });
         }
         try {
           projectStops.stop(params.id, body.instanceIds);
         } catch (error) {
-          return refusal(
-            400,
-            "project-not-edited",
-            error instanceof Error ? error.message : String(error)
-          );
+          return problem(400, {
+            code: "project-not-edited",
+            detail: error instanceof Error ? error.message : String(error),
+          });
         }
         return { ok: true };
       }
@@ -236,13 +239,13 @@ export const projectRoutes = ({
       const still = project ? projectStops.stillRunning(params.id) : 0;
       if (project && still > 0) {
         said(`refused running=${still}`);
-        return refusal(
-          409,
-          "sessions-still-run",
-          still === 1
-            ? `1 session still runs in ${project.name}; stop it first.`
-            : `${still} sessions still run in ${project.name}; stop them first.`
-        );
+        return problem(409, {
+          code: "sessions-still-run",
+          detail:
+            still === 1
+              ? `1 session still runs in ${project.name}; stop it first.`
+              : `${still} sessions still run in ${project.name}; stop them first.`,
+        });
       }
       // Its browsers stop first, their profiles (its sign-ins) kept: one
       // that can't be stopped keeps the project, in the hub's words.
@@ -251,7 +254,7 @@ export const projectRoutes = ({
         : undefined;
       if (running) {
         said("refused browsers");
-        return refusal(409, "sessions-still-run", running);
+        return problem(409, { code: "sessions-still-run", detail: running });
       }
       const machines = new Set(
         db.project(params.id)?.places.map((place) => place.machineId)
@@ -370,7 +373,10 @@ export const projectRoutes = ({
           return await addProjectPlace(params.id, body.machineId, body.path);
         } catch (error) {
           if (error instanceof PlaceRefusal) {
-            return refusal(error.status, "place-refused", error.message);
+            return problem(error.status, {
+              code: "place-refused",
+              detail: error.message,
+            });
           }
           throw error;
         }
@@ -387,21 +393,19 @@ export const projectRoutes = ({
       ({ params, body }) => {
         const project = db.project(params.id);
         if (!project) {
-          return refusal(
-            404,
-            "no-project",
-            `There is no project ${params.id}.`
-          );
+          return problem(404, {
+            code: "no-project",
+            detail: `There is no project ${params.id}.`,
+          });
         }
         const unknown = (body.accounts ?? []).filter(
           (id) => !db.accounts.get(id)
         );
         if (unknown.length > 0) {
-          return refusal(
-            400,
-            "no-account",
-            `There is no account ${unknown.join(", ")}.`
-          );
+          return problem(400, {
+            code: "no-account",
+            detail: `There is no account ${unknown.join(", ")}.`,
+          });
         }
         db.setProjectAccounts(project.id, body.accounts);
         return projectOut(db.project(project.id) ?? project);
@@ -416,20 +420,19 @@ export const projectRoutes = ({
         placesChanged(leaving.machineId, params.id);
       }
       if (removed === "missing") {
-        return refusal(
-          404,
-          "no-place-id-project",
-          "No place with that id in this project."
-        );
+        return problem(404, {
+          code: "no-place-id-project",
+          detail: "No place with that id in this project.",
+        });
       }
       if (removed === "primary") {
-        return refusal(
-          409,
-          "projects-folder-hub-goes",
-          leaving?.kind === "hub"
-            ? "This is the project's folder on the hub; it goes when the project does. Forget the project to remove it."
-            : "This is the project's primary checkout. Forget the project to remove it."
-        );
+        return problem(409, {
+          code: "projects-folder-hub-goes",
+          detail:
+            leaving?.kind === "hub"
+              ? "This is the project's folder on the hub; it goes when the project does. Forget the project to remove it."
+              : "This is the project's primary checkout. Forget the project to remove it.",
+        });
       }
       return { ok: true };
     });

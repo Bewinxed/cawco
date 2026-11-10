@@ -50,11 +50,11 @@ import {
 import { BinaryUpdatePolicySchema } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { damagedHubRecordWords } from "@cawco/core/words/damaged";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
 import { hidden } from "./hidden";
-import { refusal } from "./refusal";
+
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
 
 /** How long a discovered release is served before the host is asked again. */
@@ -305,7 +305,7 @@ export function createBinaryUpdates(options: Options) {
   const routes = new Elysia()
     .get("/api/binary-updates/settings", () =>
       "damaged" in held
-        ? refusal(409, "update-policy-damaged", refused())
+        ? problem(409, { code: "update-policy-damaged", detail: refused() })
         : held.policy
     )
     .put(
@@ -318,7 +318,7 @@ export function createBinaryUpdates(options: Options) {
       },
       ({ body }) =>
         "damaged" in held
-          ? refusal(409, "update-policy-damaged", refused())
+          ? problem(409, { code: "update-policy-damaged", detail: refused() })
           : adopt(body)
     )
     // Reset: the one way out of a damaged policy record. A fresh record (the
@@ -326,11 +326,11 @@ export function createBinaryUpdates(options: Options) {
     // and updates on again. Refused while the record reads whole.
     .post("/api/binary-updates/settings/reset", () => {
       if (!("damaged" in held)) {
-        return refusal(
-          409,
-          "update-policy-record-reads",
-          "The update policy record reads whole, so there is nothing to reset."
-        );
+        return problem(409, {
+          code: "update-policy-record-reads",
+          detail:
+            "The update policy record reads whole, so there is nothing to reset.",
+        });
       }
       console.info(`[updates] ${held.damaged.file} reset: updates are on`);
       return adopt(FIRST_POLICY);
@@ -340,7 +340,10 @@ export function createBinaryUpdates(options: Options) {
     }))
     .post("/api/binary-updates/check", async () => {
       if ("damaged" in held) {
-        return refusal(409, "update-policy-damaged", refused());
+        return problem(409, {
+          code: "update-policy-damaged",
+          detail: refused(),
+        });
       }
       // A look of its own, begun after the ask: one a poll began earlier
       // (before a release was published, as ship's announce asks right
@@ -398,12 +401,14 @@ export function createBinaryUpdates(options: Options) {
     .get(
       "/api/binary-updates/release",
       async () =>
-        (await offer()) ?? refusal(409, "update-policy-damaged", refused())
+        (await offer()) ??
+        problem(409, { code: "update-policy-damaged", detail: refused() })
     )
     .get(
       "/api/binary-updates/latest",
       async () =>
-        (await offer()) ?? refusal(409, "update-policy-damaged", refused())
+        (await offer()) ??
+        problem(409, { code: "update-policy-damaged", detail: refused() })
     )
     .get(
       "/api/binary-updates/artifacts/:version/:archive",
@@ -421,11 +426,10 @@ export function createBinaryUpdates(options: Options) {
           (a) => a.archive === params.archive
         );
         if (!(found && artifact)) {
-          return refusal(
-            404,
-            "build-not-one-hub",
-            "This build is not one the hub offers"
-          );
+          return problem(404, {
+            code: "build-not-one-hub",
+            detail: "This build is not one the hub offers",
+          });
         }
         // Answered at once, never held open on the release host: a machine
         // whose fetch waited on a silent hub was cut by its own idle timer
@@ -459,11 +463,10 @@ export function createBinaryUpdates(options: Options) {
               }
             );
           case "failed":
-            return refusal(
-              502,
-              "hub-could-not-fetch",
-              `The hub could not fetch this build from its release host: ${archive.error}`
-            );
+            return problem(502, {
+              code: "hub-could-not-fetch",
+              detail: `The hub could not fetch this build from its release host: ${archive.error}`,
+            });
           default:
             unhandled("archive", archive);
         }
