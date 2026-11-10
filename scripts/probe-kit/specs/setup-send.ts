@@ -238,6 +238,7 @@ const run = async (kit: Kit) => {
   const question = parked.find(
     (one) => payloadOf(one).instanceId === own.session
   );
+  const { input } = payloadOf(question ?? {});
   await fleet.post({
     type: "command",
     commandId: crypto.randomUUID(),
@@ -253,7 +254,7 @@ const run = async (kit: Kit) => {
         {
           behavior: "allow",
           updatedInput: {
-            ...(question?.payload as { input?: object } | undefined)?.input,
+            ...(typeof input === "object" ? input : {}),
             answers: { "Which city is the flat in?": "Lisbon" },
           },
         },

@@ -17,12 +17,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import { machinePath } from "../../../packages/core/src/machine-path";
-import type { TaskHistory } from "../../../packages/core/src/task-views";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
-import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
-import { type HubAsk, handled, said } from "../hub";
+import { type HubAsk, handled, type Said, said } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-hooks-machine";
@@ -37,16 +36,11 @@ dropped     dropped
 ---
 `;
 
-interface Answer {
-  status: number;
-  text: string;
-}
-
 type Db = Awaited<ReturnType<typeof inProcess>>["db"];
 
 interface Rig {
   /** A board call, as the person. */
-  board: (request: HubAsk) => Promise<Answer>;
+  board: <A extends HubAnswer>(request: HubAsk<A>) => Promise<Said<A>>;
   db: Db;
   /** A `task_update` of `id`'s own fields as the project's session. */
   fields: (
@@ -153,7 +147,7 @@ const run = async (
     const made = await rig.board((client) =>
       client.api.projects({ id: projectId }).tasks.post({ title })
     );
-    const id = (JSON.parse(made.text) as { id?: string }).id ?? "";
+    const id = made.refused ? "" : made.json.id;
     if (!id) {
       throw new Error(`the task was not filed: ${made.status} ${made.text}`);
     }
@@ -163,7 +157,10 @@ const run = async (
     const read = await rig.board((client) =>
       client.api.projects({ id: projectId }).tasks({ taskId: id }).get()
     );
-    return (JSON.parse(read.text) as TaskView).stage;
+    if (read.refused) {
+      throw new Error(`the task was not read: ${read.status} ${read.text}`);
+    }
+    return read.json.stage;
   };
   /**
    * The routine as the hub runs it (waits.ts) over the hub's database and
@@ -190,16 +187,17 @@ const run = async (
     } finally {
       Date.now = now;
     }
-    const history = JSON.parse(
-      (
-        await rig.board((client) =>
-          client.api.projects({ id: projectId }).tasks({ taskId }).history.get()
-        )
-      ).text
-    ) as TaskHistory;
+    const history = await rig.board((client) =>
+      client.api.projects({ id: projectId }).tasks({ taskId }).history.get()
+    );
+    if (history.refused) {
+      throw new Error(
+        `the task's history was not read: ${history.status} ${history.text}`
+      );
+    }
     return {
       moved,
-      event: history.events.findLast((event) => event.stage?.to === to),
+      event: history.json.events.findLast((event) => event.stage?.to === to),
     };
   };
 

@@ -29,6 +29,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector } from "yjs";
+import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
 import { presenceLine } from "../../../packages/core/src/injected";
@@ -36,7 +37,7 @@ import { machinePath } from "../../../packages/core/src/machine-path";
 import { NO_REPLY_TOOL } from "../../../packages/core/src/no-reply";
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
-import { type HubAsk, handled, said } from "../hub";
+import { type HubAsk, handled, type Said, said } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-filed-machine";
@@ -73,12 +74,6 @@ no = Option("not-now", "Not now", "Nothing is drafted.", false, [], "The leads m
 other = Decision("outreach", "Write to the two agencies the scan listed?", [yes2, no2], "Nobody asked to contact agencies.", [], [], false, null, "scope")
 yes2 = Option("do", "Do it", "The writer drafts two intro emails.", false, [], "Half an hour of the writer.")
 no2 = Option("not-now", "Not now", "Nothing is written.", true, [], "None.")`;
-
-interface Answer {
-  json: unknown;
-  status: number;
-  text: string;
-}
 
 /** His pick, as his views write it: no `settled`. */
 const his = (options: string[]): ChoiceEntry => ({
@@ -131,7 +126,9 @@ const run = async (
   });
 
   /** A board call, as the person. */
-  const board = async (request: HubAsk): Promise<Answer> => {
+  const board = async <A extends HubAnswer>(
+    request: HubAsk<A>
+  ): Promise<Said<A>> => {
     const answer = await request(
       handled((r) => hub.handle(r), {
         headers: { [PRESENCE_HEADER]: PRESENCE },
@@ -180,12 +177,15 @@ const run = async (
   };
   const create = (args: { title: string; waits_on?: string[] }) =>
     toolWords(session, "task_create", args);
-  const read = async (id: string): Promise<TaskView> =>
-    (
-      await board((client) =>
-        client.api.projects({ id: projectId }).tasks({ taskId: id }).get()
-      )
-    ).json as TaskView;
+  const read = async (id: string): Promise<TaskView> => {
+    const got = await board((client) =>
+      client.api.projects({ id: projectId }).tasks({ taskId: id }).get()
+    );
+    if (got.refused) {
+      throw new Error(`the task was not read: ${got.status} ${got.text}`);
+    }
+    return got.json;
+  };
   /** The id a task tool's words link, `tsk-<n>`. */
   const idIn = (text: string): string => TASK_ID.exec(text)?.[0] ?? "";
 
@@ -200,7 +200,7 @@ const run = async (
       program: PROGRAM,
     })
   );
-  const pageId = (made.json as { id?: string } | undefined)?.id;
+  const pageId = made.refused ? undefined : made.json.id;
   if (!pageId) {
     throw new Error(`the page was not made (${made.status}): ${made.text}`);
   }

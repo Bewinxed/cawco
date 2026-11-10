@@ -24,11 +24,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import { machinePath } from "../../../packages/core/src/machine-path";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
-import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
-import { answerText, type HubAsk, handled } from "../hub";
+import { type HubAsk, handled, type Said, said as saidOf } from "../hub";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE = "probe-start-moves-machine";
@@ -54,16 +54,11 @@ const SHARED = YOURS.replace(
   "  review → brief     session\n  review → build     session\n"
 );
 
-interface Answer {
-  status: number;
-  text: string;
-}
-
 type Db = Awaited<ReturnType<typeof inProcess>>["db"];
 
 interface Rig {
   /** A board call, as the person. */
-  board: (request: HubAsk) => Promise<Answer>;
+  board: <A extends HubAnswer>(request: HubAsk<A>) => Promise<Said<A>>;
   db: Db;
   kit: Kit;
   /** A `task_update` of `id` to `stage` as the project's session; its answer's words. */
@@ -117,11 +112,7 @@ const run = async (
   const rig: Rig = {
     db,
     kit,
-    board: (request) =>
-      request(handled((r) => hub.handle(r))).then((answer) => ({
-        status: answer.status,
-        text: answerText(answer),
-      })),
+    board: (request) => request(handled((r) => hub.handle(r))).then(saidOf),
     session: (projectId, id, stage) =>
       toolWords(sessionOf(projectId), "task_update", { id, stage }),
     start: (projectId, id) =>
@@ -173,7 +164,7 @@ const run = async (
     const made = await rig.board((client) =>
       client.api.projects({ id: projectId }).tasks.post({ title })
     );
-    const id = (JSON.parse(made.text) as { id?: string }).id ?? "";
+    const id = made.refused ? "" : made.json.id;
     if (!id) {
       throw new Error(`the task was not filed: ${made.status} ${made.text}`);
     }
@@ -183,7 +174,10 @@ const run = async (
     const read = await rig.board((client) =>
       client.api.projects({ id: projectId }).tasks({ taskId: id }).get()
     );
-    return (JSON.parse(read.text) as TaskView).stage;
+    if (read.refused) {
+      throw new Error(`the task was not read: ${read.status} ${read.text}`);
+    }
+    return read.json.stage;
   };
   const { moveProblem, readStages } =
     await import("../../../packages/hub/src/stages");
