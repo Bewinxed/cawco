@@ -741,7 +741,10 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     advancing.add(id);
     let waits = false;
     try {
-      await continuationSteps(id);
+      const stopped = await continuationSteps(id);
+      if (stopped instanceof ElysiaStatus) {
+        waits = continuationStepFailed(id, stopped.response.detail);
+      }
     } catch (error) {
       waits = continuationStepFailed(id, error);
     } finally {
@@ -776,7 +779,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * is here: the source's filing turn ({@link fileStep}), the summary, then
    * the new session started and handed the opening ({@link startTarget}).
    */
-  const continuationSteps = async (id: string): Promise<void> => {
+  const continuationSteps = async (id: string) => {
     let row = ctx.db.continuationRow(id);
     if (row) {
       doing(
@@ -790,13 +793,26 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       row = await fileStep(row);
     }
     if (row?.stage === "summarising") {
-      row = await summaryStep(row);
-    }
-    if (row?.stage === "starting" && ctx.registry.agent(machineFor(row))) {
-      const started = await startTarget(row);
-      if (started) {
-        moveContinuation(row.id, { stage: "started" });
+      const summarised = await summaryStep(row);
+      // The job as it stands; anything else is the hub's problem.
+      if (summarised && !("stage" in summarised)) {
+        return summarised;
       }
+      row = summarised;
+    }
+    return row?.stage === "starting" && ctx.registry.agent(machineFor(row))
+      ? await startingStep(row)
+      : undefined;
+  };
+
+  /** The `starting` step, while its machine is here: the target started and handed its opening, the job then `started`; or the problem that stopped it. */
+  const startingStep = async (row: ContinuationRow) => {
+    const started = await startTarget(row);
+    if (started instanceof ElysiaStatus) {
+      return started;
+    }
+    if (started) {
+      moveContinuation(row.id, { stage: "started" });
     }
   };
 
@@ -816,7 +832,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
       return undefined;
     }
     if (!ctx.db.sendRecord(row.id)) {
-      ctx.deliverSend({
+      const sent = ctx.deliverSend({
         verb: "send",
         machineId: row.prepared.source.machineId,
         instanceId: sourceId,
@@ -831,6 +847,11 @@ export const createContinuations = (ctx: ContinuationsContext) => {
           },
         },
       });
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[continuation] the filing turn was not sent: ${sent.response.detail}`
+        );
+      }
     }
     if (!(await untilFiled(row))) {
       return undefined;
@@ -875,13 +896,14 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * job as it then stands; nothing when its machine is away, or a Cancel
    * landed while the summariser answered.
    */
-  const summaryStep = async (
-    row: ContinuationRow
-  ): Promise<ContinuationRow | undefined> => {
+  const summaryStep = async (row: ContinuationRow) => {
     if (!ctx.registry.agent(machineFor(row))) {
-      return undefined;
+      return;
     }
     const summary = row.prepared.prompt ? await continuationSummary(row) : null;
+    if (summary !== null && typeof summary !== "string") {
+      return summary;
+    }
     return cancelledContinuation(row.id)
       ? undefined
       : moveContinuation(row.id, { stage: "starting", summary });
@@ -960,7 +982,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
   };
 
   /**
-   * A step that threw: nothing, when the job has settled meanwhile (a
+   * A step that threw, or answered a problem (its detail): nothing, when the job has settled meanwhile (a
    * Cancel); a wait, when its machine went away before the job changed
    * anything that cannot wait; otherwise the job fails at its step, in the
    * error's own words. True when it waits for its machine: its register, or
@@ -1028,7 +1050,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * Otherwise that one is stopped and a fresh one, recorded on the job, is
    * asked the same prompt.
    */
-  const continuationSummary = async (row: ContinuationRow): Promise<string> => {
+  const continuationSummary = async (row: ContinuationRow) => {
     const { source, prompt } = row.prepared;
     const summarizer = summarizerAsked(row.request, row.sourceInstanceId);
     if (!(prompt && row.summariserInstanceId)) {
@@ -1079,7 +1101,7 @@ export const createContinuations = (ctx: ContinuationsContext) => {
    * started stops it: nothing is adopted and no opening goes. True once the
    * opening has gone.
    */
-  const startTarget = async (row: ContinuationRow): Promise<boolean> => {
+  const startTarget = async (row: ContinuationRow) => {
     const sent = ctx.db.sendRecord(row.openingUuid);
     if (sent) {
       if (sent.state === "failed") {
@@ -1091,31 +1113,42 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     }
     const { prepared } = row;
     const [source] = ctx.db.getInstancesByIds([prepared.source.instanceId]);
-    await spawnTarget(row, source);
+    const spawned = await spawnTarget(row, source);
+    if (spawned instanceof ElysiaStatus) {
+      return spawned;
+    }
     const open =
       row.openItems ??
       (source ? await ctx.openItems.read(prepared.source.instanceId) : null);
     if (open instanceof ElysiaStatus) {
-      throw new Error(open.response.detail);
+      return open;
     }
     if (cancelledContinuation(row.id)) {
       ctx.retireSession(targetMachineOf(row), row.targetInstanceId);
       return false;
     }
-    const ready = moveContinuation(row.id, { openItems: open }) ?? row;
+    openTarget(moveContinuation(row.id, { openItems: open }) ?? row, source);
+    return true;
+  };
+
+  /** The opening handed to the target, by the way its job goes on: folded already, one session, or a separate one. */
+  const openTarget = (
+    ready: ContinuationRow,
+    source: ReturnType<typeof ctx.db.getInstancesByIds>[number] | undefined
+  ): void => {
     if (
-      ctx.db.instanceIdOf(prepared.source.instanceId) === row.targetInstanceId
+      ctx.db.instanceIdOf(ready.prepared.source.instanceId) ===
+      ready.targetInstanceId
     ) {
       // Folded before a restart, its opening not yet gone: the source's row
       // may be gone with its process meanwhile.
       sendOpening(ready, "continuation");
       afterFold(ready);
-    } else if (source && row.askedBy.kind !== "person") {
+    } else if (source && ready.askedBy.kind !== "person") {
       oneSession(ready, source);
     } else {
       separateSession(ready, source);
     }
-    return true;
   };
 
   /**
@@ -1388,13 +1421,13 @@ export const createContinuations = (ctx: ContinuationsContext) => {
   const spawnTarget = async (
     row: ContinuationRow,
     source: ReturnType<typeof ctx.db.getInstancesByIds>[number] | undefined
-  ): Promise<void> => {
+  ) => {
     const { request, prepared } = row;
     const [target] = ctx.db.getInstancesByIds([row.targetInstanceId]);
     if (target?.status === "running") {
       return;
     }
-    await ctx.spawnFromHub(
+    return await ctx.spawnFromHub(
       targetMachineOf(row),
       targetSpawn(
         request,

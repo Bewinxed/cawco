@@ -40,7 +40,7 @@ import {
   type WorkspaceUnlanded,
   type WorkspaceWorkEnd,
 } from "@cawco/core/workspace/controls";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { ArtifactRow } from "./db/artifacts";
 import type { WorkItemRow, WorkspaceRow } from "./db/project-work";
@@ -49,9 +49,8 @@ import { machineName } from "./machine-name";
 import type { CommandOptions } from "./machine-pause";
 import { handle } from "./presenters/words";
 import { makeProjectFolder, writeFolderFiles } from "./project-folder";
-import { projectRefusalOf } from "./project-refusal";
 import { received } from "./stored-json";
-import { LIVE, type Parent, WorkItemRefusal } from "./work-item-state";
+import { LIVE, type Parent } from "./work-item-state";
 
 /**
  * What a held workspace holds that is nowhere else, as its machine read it
@@ -119,30 +118,23 @@ export const excludedNamed = (excluded: readonly string[] = []): string =>
     : excluded.join(", ");
 
 /**
- * An archive refused because the clone holds work that is nowhere else: it
+ * What an archive says when the clone holds work that is nowhere else: it
  * names what, the workspace is held, and nothing is deleted. `discard`
  * archives it anyway, its unlanded commits, changes, stashes and excluded
  * files saved to a carry first.
  */
-class WorkspaceHoldsWork extends WorkItemRefusal {
-  readonly held: HeldWork;
-  constructor(held: HeldWork) {
-    const named = excludedNamed(held.excluded);
-    super(
-      409,
-      held.refused
-        ? workWords.refusedHeld(
-            handle(held.workspaceId),
-            held.machine,
-            held.refused,
-            held.size,
-            held.path
-          )
-        : `Workspace ${handle(held.workspaceId)} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`
-    );
-    this.held = held;
-  }
-}
+const holdsWorkWords = (held: HeldWork): string => {
+  const named = excludedNamed(held.excluded);
+  return held.refused
+    ? workWords.refusedHeld(
+        handle(held.workspaceId),
+        held.machine,
+        held.refused,
+        held.size,
+        held.path
+      )
+    : `Workspace ${handle(held.workspaceId)} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted: it is held.${named ? ` Kept out of git by its own excludes: ${named}.` : ""} Continue its work, or pass discard: true to archive it with its unlanded commits, changes, stashes and excluded files saved to a carry in ~/.cawco/carries on ${held.machine}.`;
+};
 
 /**
  * How long archiving waits on a running session's machine to confirm its
@@ -401,7 +393,17 @@ export interface WorkspacesDeps extends WorkspacesHub {
   readonly landingRuns: (itemId: string) => boolean;
   readonly leadFor: (item: WorkItemRow) => InstanceRow | undefined;
   readonly mayReopen: (item: WorkItemRow, origin: NeutralOrigin) => boolean;
-  readonly notPaused: (machineId: string) => void;
+  /** The problem of a start on a machine the owner paused (work-items.ts `notPaused`), or nothing. */
+  readonly notPaused: (
+    machineId: string
+  ) =>
+    | ReturnType<
+        typeof problem<
+          409,
+          { code: "work-item-machine-paused"; detail: string }
+        >
+      >
+    | undefined;
   readonly report: (
     row: InstanceRow,
     body: string,
@@ -460,17 +462,22 @@ export const createWorkspaces = ({
     }
   };
   /** The one workspace `needle` names; refused when it names none or several. */
-  const namedWorkspace = (needle: string): WorkspaceRow => {
+  const namedWorkspace = (needle: string) => {
     const named = db.workspacesNamed(needle.trim());
-    if (named.length !== 1) {
-      throw new WorkItemRefusal(
-        404,
-        named.length
-          ? `"${needle}" names ${named.length} workspaces. Pass the full workspace id.`
-          : `No workspace "${needle}".`
-      );
+    if (named.length > 1) {
+      return problem(404, {
+        code: "workspace-ambiguous",
+        detail: `"${needle}" names ${named.length} workspaces. Pass the full workspace id.`,
+      });
     }
-    return named[0];
+    const [found] = named;
+    if (!found) {
+      return problem(404, {
+        code: "workspace-unknown",
+        detail: `No workspace "${needle}".`,
+      });
+    }
+    return found;
   };
   /** The paths a workspace's items handed over as outputs: `git status` passes over them. */
   const handedOver = (workspace: WorkspaceRow): string[] => [
@@ -625,7 +632,7 @@ export const createWorkspaces = ({
    * dir goes ({@link settleHost}). A gate workspace has no scratch outputs;
    * an item of no project has no folder to copy into.
    */
-  const keepScratchOutputs = async (workspace: WorkspaceRow): Promise<void> => {
+  const keepScratchOutputs = async (workspace: WorkspaceRow) => {
     if (isGateClone(workspace)) {
       return;
     }
@@ -652,7 +659,10 @@ export const createWorkspaces = ({
         message: `assets: ${SCRATCH_OUTPUTS} of work item ${item.id.slice(0, 8)}, kept as its workspace closed`,
       });
       if (written instanceof ElysiaStatus) {
-        throw projectRefusalOf(written);
+        return problem(written.status, {
+          code: "workspace-outputs-not-kept",
+          detail: `its ${SCRATCH_OUTPUTS} could not be copied into ${folder}/ of its project's folder, so it stays: ${written.response.detail}`,
+        });
       }
       console.log(
         `[workspaces] ${workspace.id}: ${SCRATCH_OUTPUTS} copied into ${folder}/ before it closed ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}: ${written.paths.join(", ")}`
@@ -716,8 +726,11 @@ export const createWorkspaces = ({
     workspace: WorkspaceRow,
     unlanded: WorkspaceUnlanded | "discard" | "carry",
     skip: string[] = []
-  ): Promise<ArchivedWorkspace> => {
-    await keepScratchOutputs(workspace);
+  ) => {
+    const kept = await keepScratchOutputs(workspace);
+    if (kept instanceof ElysiaStatus) {
+      return kept;
+    }
     const discard = unlanded === "discard" || unlanded === "carry";
     const landed = landedFrom(workspace.id);
     const request: WorkspaceArchive = {
@@ -739,22 +752,27 @@ export const createWorkspaces = ({
       "a machine's workspace archive"
     );
     if (held) {
-      const kept =
+      const holding =
         db.updateWorkspace(workspace.id, {
           state: "held",
           holding: held,
           heldAt: new Date(),
           boundaryPid: null,
         }) ?? workspace;
-      workspaceChanged?.(kept);
-      const work = heldWork({ ...kept, holding: held });
+      workspaceChanged?.(holding);
+      const work = heldWork({ ...holding, holding: held });
       console.log(
         `[workspaces] ${workspace.id} on ${work.machine}: held, ${work.holds} (${work.size} at ${workspace.path}); the session that started its work continues it or discards it`
       );
       if (workspace.state !== "held") {
         heldNotice(workspace, work);
       }
-      return { workspace: kept, carry: null, held: work };
+      const inHold: ArchivedWorkspace = {
+        workspace: holding,
+        carry: null,
+        held: work,
+      };
+      return inHold;
     }
     const archived =
       db.updateWorkspace(workspace.id, {
@@ -766,15 +784,19 @@ export const createWorkspaces = ({
         ...(carry ? { carry } : {}),
       }) ?? workspace;
     workspaceChanged?.(archived);
-    return { workspace: archived, carry };
+    const closed: ArchivedWorkspace = { workspace: archived, carry };
+    return closed;
   };
   /**
    * Refuses session `from` the discard of workspace `needle` when it is
    * not one of that session's (work-items.ts `discardFor`); the workspace when it
    * is. What a discard asked of the person checks before it is recorded.
    */
-  const discardable = (from: string, needle: string): WorkspaceRow => {
+  const discardable = (from: string, needle: string) => {
     const workspace = namedWorkspace(needle);
+    if (workspace instanceof ElysiaStatus) {
+      return workspace;
+    }
     const items = db.workItemsIn(workspace.id);
     const ours =
       workspace.createdByInstanceId === from ||
@@ -782,10 +804,10 @@ export const createWorkspaces = ({
         (item) => item.parentInstanceId === from || leadFor(item)?.id === from
       );
     if (!ours) {
-      throw new WorkItemRefusal(
-        403,
-        `Workspace ${handle(workspace.id)} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`
-      );
+      return problem(403, {
+        code: "workspace-discard-not-yours",
+        detail: `Workspace ${handle(workspace.id)} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`,
+      });
     }
     return workspace;
   };
@@ -883,21 +905,21 @@ export const createWorkspaces = ({
    */
   const waitingFrom = (workspace: WorkspaceRow): ArtifactRow[] =>
     waitingOnPerson?.(servedFrom(workspace)) ?? [];
-  /** Refuses an archive of `workspace` in `refused`'s words while what it serves waits on the person ({@link waitingFrom}); nothing without words (he decided it goes). */
-  const refuseWaiting = (
+  /** Why an archive of `workspace` stops, in `refused`'s words, while what it serves waits on the person ({@link waitingFrom}); nothing without words (he decided it goes). */
+  const stoppedWhileWaiting = (
     workspace: WorkspaceRow,
     refused: WaitingWords | undefined
-  ): void => {
+  ) => {
     const waiting = refused ? waitingFrom(workspace) : [];
-    if (refused && waiting.length > 0) {
-      throw new WorkItemRefusal(
-        409,
-        refused(
-          handle(workspace.id),
-          waiting.map((row) => artifactLink(row.id, row.title))
-        )
-      );
-    }
+    return refused && waiting.length > 0
+      ? problem(409, {
+          code: "workspace-serves-waiting",
+          detail: refused(
+            handle(workspace.id),
+            waiting.map((row) => artifactLink(row.id, row.title))
+          ),
+        })
+      : undefined;
   };
   /**
    * The projects' places inside a workspace's clone or its scratch dir, other
@@ -1123,6 +1145,15 @@ export const createWorkspaces = ({
     }
     settleFailures.set(workspace.id, failure);
   };
+  /** The gate workspaces of `workspace` on other machines closed with it: the first problem that stopped one. */
+  const closeChecks = async (workspace: WorkspaceRow) => {
+    const closed = await Promise.all(
+      db
+        .checkWorkspacesOf(workspace.id)
+        .map((check) => closeWorkspace(check, "check"))
+    );
+    return closed.find((check) => check instanceof ElysiaStatus);
+  };
   /**
    * A settled workspace closed on its machine ({@link closeWorkspace}): a
    * `keep`, or a `carry` when its items land none ({@link carriesOff}),
@@ -1132,30 +1163,34 @@ export const createWorkspaces = ({
   const closeSettled = async (
     workspace: WorkspaceRow,
     items: readonly WorkItemRow[]
-  ): Promise<Settled> => {
+  ) => {
     const closed = await closeWorkspace(
       workspace,
       carriesOff(items) ? "carry" : "keep",
       handedOver(workspace)
     );
+    if (closed instanceof ElysiaStatus) {
+      return closed;
+    }
     settleFailures.delete(workspace.id);
     workEndedFor.delete(workspace.id);
     workEndFailures.delete(workspace.id);
     if (closed.held) {
-      return { kind: "held", held: closed.held };
+      const held: Settled = { kind: "held", held: closed.held };
+      return held;
     }
     if (closed.carry) {
       carryNotice(closed.workspace, closed.carry);
     }
-    await Promise.all(
-      db
-        .checkWorkspacesOf(workspace.id)
-        .map((check) => closeWorkspace(check, "check"))
-    );
+    const unclosed = await closeChecks(workspace);
+    if (unclosed) {
+      return unclosed;
+    }
     console.log(
       `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: retired, its work over and nothing of it anywhere but on its remote${closed.carry ? ` or in its carry ${closed.carry}` : ""}; ${workspace.path} and what it owned there are gone`
     );
-    return { kind: "retired", carry: closed.carry };
+    const retired: Settled = { kind: "retired", carry: closed.carry };
+    return retired;
   };
   /** Each archived workspace whose folder is being cleared ({@link closeLeftClones}), from its turn's start: a cut again of it waits for that ({@link recut}). */
   const reclosing = new Map<string, Promise<void>>();
@@ -1348,12 +1383,17 @@ export const createWorkspaces = ({
       endLeftWork(workspace, items, holds);
       return { kind: "deferred", hold: hold.words };
     }
-    try {
-      return await closeSettled(workspace, items);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+    const failed = (reason: string): Settled => {
       settleFailed(workspace, reason);
       return { kind: "failed", reason };
+    };
+    try {
+      const closed = await closeSettled(workspace, items);
+      return closed instanceof ElysiaStatus
+        ? failed(closed.response.detail)
+        : closed;
+    } catch (error) {
+      return failed(error instanceof Error ? error.message : String(error));
     }
   };
   /**
@@ -1379,8 +1419,17 @@ export const createWorkspaces = ({
     }
     // A machine away keeps the dir until the session's next event settles
     // it again: no sweep reads a host-scope row.
+    const stays = (reason: string): Settled => {
+      console.warn(
+        `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: its host-scope scratch dir stays: ${reason}`
+      );
+      return { kind: "failed", reason };
+    };
     try {
-      await keepScratchOutputs(workspace);
+      const kept = await keepScratchOutputs(workspace);
+      if (kept instanceof ElysiaStatus) {
+        return stays(kept.response.detail);
+      }
       await onHostScratch(
         workspace,
         CONTROL_HOST_SCRATCH_REMOVE,
@@ -1388,11 +1437,7 @@ export const createWorkspaces = ({
         undefined
       );
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: its host-scope scratch dir stays: ${reason}`
-      );
-      return { kind: "failed", reason };
+      return stays(error instanceof Error ? error.message : String(error));
     }
     console.log(
       `[workspaces] ${workspace.id} on ${machineName(db, workspace.machineId)}: its host-scope scratch dir removed, its outputs kept`
@@ -1443,19 +1488,15 @@ export const createWorkspaces = ({
    * one wait per session ({@link recutWaits}), so nothing when one already
    * waits for it.
    */
-  const recutInTurn = (
-    instanceId: string,
-    workspaceId: string
-  ): Promise<void> | undefined => {
+  const recutInTurn = (instanceId: string, workspaceId: string) => {
     if (recutWaits.has(instanceId)) {
-      return undefined;
+      return;
     }
     recutWaits.add(instanceId);
     return inWorkspaceTurn(workspaceId, async () => {
       const [now] = db.workspacesNamed(workspaceId);
-      if (now && recuttable(now)) {
-        await recut(now);
-      }
+      const cut = now && recuttable(now) ? await recut(now) : undefined;
+      return cut instanceof ElysiaStatus ? cut : undefined;
     }).finally(() => recutWaits.delete(instanceId));
   };
   /**
@@ -1577,14 +1618,22 @@ export const createWorkspaces = ({
         return;
       }
       const closed = await closeWorkspace(now, "keep", handedOver(now));
+      if (closed instanceof ElysiaStatus) {
+        console.warn(
+          `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: its commits landed through the workspace cut from it, and it was not closed: ${closed.response.detail}`
+        );
+        return;
+      }
       if (closed.held) {
         return;
       }
-      await Promise.all(
-        db
-          .checkWorkspacesOf(now.id)
-          .map((check) => closeWorkspace(check, "check"))
-      );
+      const unclosed = await closeChecks(now);
+      if (unclosed) {
+        console.warn(
+          `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: a gate workspace of it was not closed: ${unclosed.response.detail}`
+        );
+        return;
+      }
       console.log(
         `[workspaces] ${now.id} on ${machineName(db, now.machineId)}: retired, its commits landed through the workspace cut from it and nothing else of it anywhere but on its remote`
       );
@@ -1669,53 +1718,66 @@ export const createWorkspaces = ({
         },
       };
     });
+  /**
+   * What keeps a clone from being archived, as the problem: a live item
+   * there, a project's folder inside it (even with `discard`: a discard lets
+   * go of the clone's own work, never a project's folder there), or what it
+   * serves that waits on the person, unless he decided it goes anyway; the
+   * archive ends anything else it serves ({@link waitingFrom}).
+   */
+  const archiveBlocked = (
+    workspace: WorkspaceRow,
+    refused: WaitingWords | undefined
+  ) => {
+    const live = db
+      .workItemsIn(workspace.id)
+      .find((item) => LIVE.has(item.state));
+    if (live) {
+      return problem(409, {
+        code: "workspace-archive-live",
+        detail: `Workspace ${handle(workspace.id)} has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. Stop it before archiving the workspace.`,
+      });
+    }
+    const places = placesIn(workspace);
+    if (places) {
+      return problem(409, {
+        code: "workspace-archive-holds-places",
+        detail: `Workspace ${handle(workspace.id)} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`,
+      });
+    }
+    return stoppedWhileWaiting(workspace, refused);
+  };
   /** The `archive` method's work, in the workspace's turn: the workspace read as it stands then. */
   const archiveNow = async (
     needle: string,
     discard: boolean,
     /** Its refusal while what it serves waits on the person ({@link waitingFrom}); none when the person decided it goes anyway. */
     refused: WaitingWords | undefined
-  ): Promise<ArchivedWorkspace> => {
+  ) => {
     const workspace = namedWorkspace(needle);
+    if (workspace instanceof ElysiaStatus) {
+      return workspace;
+    }
     if (workspace.state === "archived") {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(workspace.id)} is already archived.`
-      );
+      return problem(409, {
+        code: "workspace-archived-already",
+        detail: `Workspace ${handle(workspace.id)} is already archived.`,
+      });
     }
     const member = workspaceOf(workspace);
     if (member.kind === "hostFolder") {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(db, workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`
-      );
+      return problem(409, {
+        code: "workspace-archive-host-folder",
+        detail: `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path} on ${machineName(db, workspace.machineId)}, not a clone: there is nothing to archive or discard, and nothing was deleted.`,
+      });
     }
     if (member.kind === "gateClone") {
       return closeWorkspace(workspace, "check");
     }
-    const live = db
-      .workItemsIn(workspace.id)
-      .find((item) => LIVE.has(item.state));
-    if (live) {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(workspace.id)} has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. Stop it before archiving the workspace.`
-      );
+    const blocked = archiveBlocked(workspace, refused);
+    if (blocked) {
+      return blocked;
     }
-    // Even with `discard`: a discard lets go of the clone's own work, never
-    // a project's folder there.
-    const places = placesIn(workspace);
-    if (places) {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(workspace.id)} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`
-      );
-    }
-    // Nor what it serves that waits on the person, unless he decided it
-    // goes anyway: a preview, a sheet, or a decision page showing one.
-    // Anything else it serves does not refuse: the archive ends its served
-    // server ({@link waitingFrom}).
-    refuseWaiting(workspace, refused);
     const skip = handedOver(workspace);
     // Bounded well inside the HTTP call's own idle timeout: a machine that
     // never confirms leaves the workspace active, and the answer says so.
@@ -1734,26 +1796,27 @@ export const createWorkspaces = ({
         : []
     );
     if (unconfirmed.length > 0) {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(workspace.id)} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
-      );
+      return problem(409, {
+        code: "workspace-archive-unconfirmed",
+        detail: `Workspace ${handle(workspace.id)} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`,
+      });
     }
     const closed = await closeWorkspace(
       workspace,
       discard ? "discard" : "keep",
       skip
     );
+    if (closed instanceof ElysiaStatus) {
+      return closed;
+    }
     if (closed.held) {
-      throw new WorkspaceHoldsWork(closed.held);
+      return problem(409, {
+        code: "workspace-holds-work",
+        detail: holdsWorkWords(closed.held),
+      });
     }
     // Its gate workspaces on other machines go with it: none outlives it.
-    await Promise.all(
-      db
-        .checkWorkspacesOf(workspace.id)
-        .map((check) => closeWorkspace(check, "check"))
-    );
-    return closed;
+    return (await closeChecks(workspace)) ?? closed;
   };
   /**
    * Whether a workspace is retired and may be cut again: archived, not a
@@ -1813,12 +1876,12 @@ export const createWorkspaces = ({
       at: WorkspaceCut | null,
       first: WorkspaceFirstSession | null,
     ]
-  ): Promise<WorkspaceCheckout> => {
+  ) => {
     const [, , projectId] = args;
     if (projectId) {
       const made = await makeProjectFolder(projectId);
       if (made instanceof ElysiaStatus) {
-        throw projectRefusalOf(made);
+        return made;
       }
     }
     return (await call(
@@ -1827,8 +1890,12 @@ export const createWorkspaces = ({
       args
     )) as WorkspaceCheckout;
   };
+  /** What a cut that did not go says: its machine is paused, or the project's folder could not be made. */
+  type NotCut =
+    | Exclude<Awaited<ReturnType<typeof cutOn>>, WorkspaceCheckout>
+    | NonNullable<ReturnType<typeof notPaused>>;
   /** Each workspace's cut under way ({@link recut}): one at a time. */
-  const recutting = new Map<string, Promise<WorkspaceRow>>();
+  const recutting = new Map<string, Promise<WorkspaceRow | NotCut>>();
   /**
    * A retired workspace ({@link recuttable}) cut again on its machine, at the
    * same path (a function of its id) with the same id and branch, at the
@@ -1883,12 +1950,14 @@ export const createWorkspaces = ({
   const recut = (
     workspace: WorkspaceRow,
     onCut?: () => void
-  ): Promise<WorkspaceRow> => {
+  ): Promise<WorkspaceRow | NotCut> => {
     const pending = recutting.get(workspace.id);
     if (pending !== undefined) {
       return onCut
         ? pending.then((row) => {
-            onCut();
+            if (!(row instanceof ElysiaStatus)) {
+              onCut();
+            }
             return row;
           })
         : pending;
@@ -1901,10 +1970,13 @@ export const createWorkspaces = ({
         )
       );
     }
-    const work = (async (): Promise<WorkspaceRow> => {
+    const work = (async (): Promise<WorkspaceRow | NotCut> => {
       // A folder at its path being cleared: cut once that is done.
       await reclosing.get(workspace.id);
-      notPaused(workspace.machineId);
+      const paused = notPaused(workspace.machineId);
+      if (paused) {
+        return paused;
+      }
       const [latest] = db.workItemsIn(workspace.id);
       const [session] = latest ? db.getInstancesByIds([latest.instanceId]) : [];
       const projectId = latest?.projectId ?? null;
@@ -1930,6 +2002,9 @@ export const createWorkspaces = ({
         head,
         first,
       ]);
+      if (checkout instanceof ElysiaStatus) {
+        return checkout;
+      }
       const path = cutPath(workspace.machineId, checkout.path);
       if (path !== workspace.path) {
         throw new Error(
@@ -1967,11 +2042,14 @@ export const createWorkspaces = ({
   const goOnIn = <T>(
     id: string,
     work: (workspace: WorkspaceRow | undefined, cut: boolean) => Promise<T>
-  ): Promise<T> =>
+  ) =>
     inWorkspaceTurn(id, async () => {
       const [now] = db.workspacesNamed(id);
       const cut = now !== undefined && recuttable(now);
       const workspace = now && cut ? await recut(now) : now;
+      if (workspace instanceof ElysiaStatus) {
+        return workspace;
+      }
       goingOn.add(id);
       try {
         return await work(workspace, cut);
@@ -2020,48 +2098,44 @@ export const createWorkspaces = ({
    * here awaits, so the check and the item work-items.ts `start` files after it are
    * one step — two follow-ups can never both pass it.
    */
-  const claim = (
-    needle: string
-  ): { workspace: WorkspaceRow; previous: WorkItemRow | undefined } => {
-    const named = db.workspacesNamed(needle.trim());
-    if (named.length !== 1) {
-      throw new WorkItemRefusal(
-        404,
-        named.length
-          ? `"${needle}" names ${named.length} workspaces. Pass the full workspace id.`
-          : `No workspace "${needle}".`
-      );
+  const claim = (needle: string) => {
+    const workspace = namedWorkspace(needle);
+    if (workspace instanceof ElysiaStatus) {
+      return workspace;
     }
-    const [workspace] = named;
     // A retired one was cut again before this (work-items.ts `startFollowUp`).
     if (workspace.state === "archived") {
-      throw new WorkItemRefusal(
-        409,
-        `Not continued: ${archivedWords(workspace)} Delegate without workspace to start a new one.`
-      );
+      return problem(409, {
+        code: "workspace-continue-archived",
+        detail: `Not continued: ${archivedWords(workspace)} Delegate without workspace to start a new one.`,
+      });
     }
     const member = workspaceOf(workspace);
     if (member.kind === "hostFolder") {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}, not a clone: continue its session with handoff, or delegate with host again.`
-      );
+      return problem(409, {
+        code: "workspace-continue-host-folder",
+        detail: `Workspace ${handle(workspace.id)} is a host-scope delegate's folder ${workspace.path}, not a clone: continue its session with handoff, or delegate with host again.`,
+      });
     }
     if (member.kind === "gateClone") {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(workspace.id)} runs the iOS build of the merge checks for workspace ${handle(member.checksFor)} on its machine and takes no work item. Delegate with workspace ${handle(member.checksFor)}, or without workspace to start a new one.`
-      );
+      return problem(409, {
+        code: "workspace-continue-gate-clone",
+        detail: `Workspace ${handle(workspace.id)} runs the iOS build of the merge checks for workspace ${handle(member.checksFor)} on its machine and takes no work item. Delegate with workspace ${handle(member.checksFor)}, or without workspace to start a new one.`,
+      });
     }
     const items = db.workItemsIn(workspace.id);
     const live = items.find((item) => LIVE.has(item.state));
     if (live) {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(workspace.id)} already has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. A workspace runs one work item at a time; wait for its report, or delegate without workspace to start a new one.`
-      );
+      return problem(409, {
+        code: "workspace-continue-live",
+        detail: `Workspace ${handle(workspace.id)} already has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. A workspace runs one work item at a time; wait for its report, or delegate without workspace to start a new one.`,
+      });
     }
-    return { workspace, previous: items[0] };
+    const claimed: {
+      workspace: WorkspaceRow;
+      previous: WorkItemRow | undefined;
+    } = { workspace, previous: items[0] };
+    return claimed;
   };
   /**
    * A follow-up's boundary, running before its item is filed: the machine
@@ -2091,12 +2165,11 @@ export const createWorkspaces = ({
    * machine its workspace is cut on (db `machinePathOn`): refused with that
    * gate's sentence, a 400, before anything is cut.
    */
-  const cwdOn = (machineId: string, raw: string): MachinePath => {
+  const cwdOn = (machineId: string, raw: string) => {
     const path = db.machinePathOn(machineId, raw);
-    if (path instanceof MachinePathRefused) {
-      throw new WorkItemRefusal(400, path.message, { cause: path });
-    }
-    return path;
+    return path instanceof MachinePathRefused
+      ? problem(400, { code: "workspace-cwd-unfit", detail: path.message })
+      : path;
   };
   /**
    * The folder a repository workspace's delegation was asked from (`raw`, on
@@ -2179,7 +2252,7 @@ export const createWorkspaces = ({
       checksFor?: string;
       first?: WorkspaceFirstSession;
     } = {}
-  ): Promise<WorkspaceRow> => {
+  ) => {
     const id = crypto.randomUUID();
     db.beginWorkspaceCreate(id, machineId);
     opening.add(id);
@@ -2187,6 +2260,19 @@ export const createWorkspaces = ({
       cuttingFor.set(id, { machineId, projectId });
     }
     const started = Date.now();
+    /** The create let go of, and what it says of `reason`. */
+    const letGo = async (reason: string): Promise<string> => {
+      opening.delete(id);
+      const waited = ((Date.now() - started) / 1000).toFixed(1);
+      const pending = await discardCreate(id, machineId).then(
+        () => undefined,
+        (discardError: unknown) =>
+          discardError instanceof Error
+            ? discardError.message
+            : String(discardError)
+      );
+      return createFailed(machineId, id, reason, waited, pending);
+    };
     try {
       const checkout = await cutOn(machineId, [
         cwd,
@@ -2196,6 +2282,12 @@ export const createWorkspaces = ({
         null,
         first ?? null,
       ]);
+      if (checkout instanceof ElysiaStatus) {
+        return problem(checkout.status, {
+          code: "workspace-folder-unmade",
+          detail: await letGo(checkout.response.detail),
+        });
+      }
       return db.createWorkspace({
         id,
         machineId,
@@ -2212,19 +2304,10 @@ export const createWorkspaces = ({
         checksFor: checksFor ?? null,
       });
     } catch (error) {
-      opening.delete(id);
-      const reason = error instanceof Error ? error.message : String(error);
-      const waited = ((Date.now() - started) / 1000).toFixed(1);
-      const pending = await discardCreate(id, machineId).then(
-        () => undefined,
-        (discardError: unknown) =>
-          discardError instanceof Error
-            ? discardError.message
-            : String(discardError)
+      throw new Error(
+        await letGo(error instanceof Error ? error.message : String(error)),
+        { cause: error }
       );
-      throw new Error(createFailed(machineId, id, reason, waited, pending), {
-        cause: error,
-      });
     } finally {
       opening.delete(id);
       cuttingFor.delete(id);
@@ -2293,26 +2376,30 @@ export const createWorkspaces = ({
    * (its own delegates' workspace), with no live item, whose clone is still
    * on its machine. Refused in a sentence naming what to do otherwise.
    */
-  const fromSource = (needle: string, parent: Parent): WorkspaceRow => {
+  const fromSource = (needle: string, parent: Parent) => {
     const named = db.workspacesNamed(needle.trim());
-    if (named.length !== 1) {
-      throw new WorkItemRefusal(
-        404,
-        named.length
-          ? `"${needle}" names ${named.length} workspaces. Pass the full workspace id as from.`
-          : `No workspace "${needle}". Pass as from a workspace id from one of your delegates' results or reports.`
-      );
+    if (named.length > 1) {
+      return problem(404, {
+        code: "workspace-from-ambiguous",
+        detail: `"${needle}" names ${named.length} workspaces. Pass the full workspace id as from.`,
+      });
     }
-    const [source] = named as [WorkspaceRow];
+    const [source] = named;
+    if (!source) {
+      return problem(404, {
+        code: "workspace-from-unknown",
+        detail: `No workspace "${needle}". Pass as from a workspace id from one of your delegates' results or reports.`,
+      });
+    }
     const items = db.workItemsIn(source.id);
     if (
       source.createdByInstanceId !== parent.id &&
       !items.some((item) => item.parentInstanceId === parent.id)
     ) {
-      throw new WorkItemRefusal(
-        403,
-        `Workspace ${handle(source.id)} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`
-      );
+      return problem(403, {
+        code: "workspace-from-not-yours",
+        detail: `Workspace ${handle(source.id)} is not one of yours: from takes a workspace one of your own delegates worked in. Delegate without from, or ask the session that owns it.`,
+      });
     }
     const member = workspaceOf(source);
     if (
@@ -2326,17 +2413,17 @@ export const createWorkspaces = ({
       } else if (member.kind === "gateClone") {
         why = "it runs the iOS build of the merge checks";
       }
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(source.id)} has no branch to cut from: ${why}. Delegate without from.`
-      );
+      return problem(409, {
+        code: "workspace-from-no-branch",
+        detail: `Workspace ${handle(source.id)} has no branch to cut from: ${why}. Delegate without from.`,
+      });
     }
     const live = items.find((item) => LIVE.has(item.state));
     if (live) {
-      throw new WorkItemRefusal(
-        409,
-        `Workspace ${handle(source.id)} has a live work item, ${live.title} (${handle(live.id)}), so its branch is still moving. Wait for its report, or stop it with stop_delegate, then delegate with from.`
-      );
+      return problem(409, {
+        code: "workspace-from-live",
+        detail: `Workspace ${handle(source.id)} has a live work item, ${live.title} (${handle(live.id)}), so its branch is still moving. Wait for its report, or stop it with stop_delegate, then delegate with from.`,
+      });
     }
     return source;
   };
@@ -2346,15 +2433,15 @@ export const createWorkspaces = ({
    * started for that, is closed again however the bundle went, and the
    * workspace stays held.
    */
-  const bundleOf = (id: string): Promise<WorkspaceCommit> =>
+  const bundleOf = (id: string) =>
     inWorkspaceTurn(id, async () => {
       // As it stands in its turn: a settle before it may have closed it.
       const [source] = db.workspacesNamed(id);
       if (!source || source.state === "archived") {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${id} was archived before its branch could be read: its clone is gone. Delegate without from.`
-        );
+        return problem(409, {
+          code: "workspace-from-archived",
+          detail: `Workspace ${id} was archived before its branch could be read: its clone is gone. Delegate without from.`,
+        });
       }
       try {
         return (await call(source.machineId, CONTROL_WORKSPACE_BUNDLE, [
@@ -2363,7 +2450,16 @@ export const createWorkspaces = ({
         ])) as WorkspaceCommit;
       } finally {
         if (source.state === "held") {
-          await closeWorkspace(source, "keep", handedOver(source));
+          const closed = await closeWorkspace(
+            source,
+            "keep",
+            handedOver(source)
+          );
+          if (closed instanceof ElysiaStatus) {
+            console.warn(
+              `[workspaces] ${source.id}: held again after its branch was read, and not closed: ${closed.response.detail}`
+            );
+          }
         }
       }
     });
@@ -2378,12 +2474,24 @@ export const createWorkspaces = ({
    * workspace's boundary closed (agent workspace.ts `workspaceAt`). A move
    * that fails archives the new workspace, unworked, and throws why.
    */
-  const cutFrom = async (
-    workspace: WorkspaceRow,
-    source: WorkspaceRow
-  ): Promise<void> => {
+  const cutFrom = async (workspace: WorkspaceRow, source: WorkspaceRow) => {
+    /** The workspace archived, unworked, and why it was not cut from `source`. */
+    const unmade = async (why: string) => {
+      const closed = await closeWorkspace(workspace, "unmade");
+      const left =
+        closed instanceof ElysiaStatus
+          ? ` It stays, its outputs not kept: ${closed.response.detail}`
+          : "";
+      return `Workspace ${handle(workspace.id)} could not be cut from workspace ${handle(source.id)}, so it was archived: ${why}${left}`;
+    };
     try {
       const made = await bundleOf(source.id);
+      if (made instanceof ElysiaStatus) {
+        return problem(made.status, {
+          code: "workspace-from-unread",
+          detail: await unmade(made.response.detail),
+        });
+      }
       await call(workspace.machineId, CONTROL_WORKSPACE_AT, [
         refOf(workspace),
         workspace.base,
@@ -2410,11 +2518,10 @@ export const createWorkspaces = ({
         cutFrom: { workspace: source.id, commit: made.head, landed: false },
       });
     } catch (error) {
-      await closeWorkspace(workspace, "unmade");
-      const words = `Workspace ${handle(workspace.id)} could not be cut from workspace ${handle(source.id)}, so it was archived: ${error instanceof Error ? error.message : String(error)}`;
-      throw error instanceof WorkItemRefusal
-        ? new WorkItemRefusal(error.status, words, { cause: error })
-        : new Error(words, { cause: error });
+      throw new Error(
+        await unmade(error instanceof Error ? error.message : String(error)),
+        { cause: error }
+      );
     }
   };
   /**
@@ -2444,9 +2551,13 @@ export const createWorkspaces = ({
     if (moved.exitCode === 0) {
       return;
     }
-    await closeWorkspace(workspace, "unmade");
+    const closed = await closeWorkspace(workspace, "unmade");
+    const left =
+      closed instanceof ElysiaStatus
+        ? ` It stays, its outputs not kept: ${closed.response.detail}`
+        : "";
     throw new Error(
-      `Workspace ${handle(workspace.id)} could not be moved to ${at.slice(0, 9)}, so it was archived: ${(moved.stderr || moved.stdout).trim() || `exit ${moved.exitCode}`}`
+      `Workspace ${handle(workspace.id)} could not be moved to ${at.slice(0, 9)}, so it was archived: ${(moved.stderr || moved.stdout).trim() || `exit ${moved.exitCode}`}${left}`
     );
   };
 

@@ -21,6 +21,7 @@ import {
 } from "@cawco/core/session/controls";
 import { noticeWords } from "@cawco/core/words/notices";
 import { workWords } from "@cawco/core/words/work";
+import { ElysiaStatus } from "elysia";
 import type { Kept } from "./at-limit";
 import type { AccountLeave } from "./db/accounts";
 import type { HubContext } from "./hub-context";
@@ -270,13 +271,18 @@ export const createAccountCarry = (ctx: AccountCarryContext) => {
     if (!ended || (ended.tasks.length === 0 && ended.wakeups === 0)) {
       return;
     }
-    ctx.deliverSend(
+    const sent = ctx.deliverSend(
       sessionWord(row, endedByMoveWords(ended), {
         kind: "system",
         name: LIMIT_ORIGIN,
         line: noticeWords.movedEnded(ended.tasks.length),
       })
     );
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[account-carry] the note that its process ended by a move was not sent: ${sent.response.detail}`
+      );
+    }
   };
 
   /**

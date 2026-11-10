@@ -20,6 +20,7 @@ import { relaunchOf } from "@cawco/core/relaunch";
 import type { ModeAsk } from "@cawco/core/session-messages";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import { ElysiaStatus, problem } from "elysia";
 import { cleanSpawn, fencedSpawn } from "./caw";
 import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
@@ -30,7 +31,6 @@ import { documentFacts, sessionInstructions } from "./memory-scopes";
 import { makesRoutines } from "./roles";
 import { UNREAD } from "./sends";
 import { peekResume } from "./spawns";
-import { WorkItemRefusal } from "./work-item-state";
 import { blockWords } from "./work-items";
 
 /** Settings reported by the harness, including a live mode change's receipt. */
@@ -376,7 +376,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
   const accountDirOf = (
     row: ReturnType<typeof ctx.db.getInstancesByIds>[number],
     reattachOnly: SpawnPayload["reattachOnly"]
-  ): Pick<SpawnPayload, "accountDir" | "homeLoginMove"> => {
+  ) => {
     if (reattachOnly) {
       return row.accountId ? { accountDir: { accountId: row.accountId } } : {};
     }
@@ -387,7 +387,10 @@ export const createLaunches = (ctx: LaunchesContext) => {
       "claim"
     );
     if ("refusal" in launch) {
-      throw new WorkItemRefusal(409, launch.refusal);
+      return problem(409, {
+        code: "launch-account-unavailable",
+        detail: launch.refusal,
+      });
     }
     if (launch.homeLoginMove) {
       return { homeLoginMove: launch.homeLoginMove };
@@ -479,10 +482,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
   /** The boundary a session's every spawn carries: its work item's workspace; none for any other session. */
   const sessionWorkspace = (row: InstanceRow): WorkspaceRef | undefined =>
     ctx.workItems.workspaceOf(row);
-  const bounded = (
-    payload: SpawnPayload,
-    knownRow?: InstanceRow
-  ): NamedSpawn => {
+  const bounded = (payload: SpawnPayload, knownRow?: InstanceRow) => {
     const {
       scratchWorktree: _callerWorktree,
       account: _pick,
@@ -510,16 +510,17 @@ export const createLaunches = (ctx: LaunchesContext) => {
     // sent the account its process runs on, and that process proves its own
     // credential.
     const where = accountDirOf(stored, payload.reattachOnly);
+    if (where instanceof ElysiaStatus) {
+      return where;
+    }
     if (!payload.reattachOnly) {
       launchGoes(payload, stored);
-    }
-    const effort = launchEffort(payload, stored);
-    // A process launched now runs where this launch says, whatever the one
-    // before it ran from.
-    if (!payload.reattachOnly) {
+      // A process launched now runs where this launch says, whatever the one
+      // before it ran from.
       ctx.db.accounts.removeMovedFrom(payload.instanceId);
     }
-    return {
+    const effort = launchEffort(payload, stored);
+    const bound: NamedSpawn = {
       // A fenced run (triage, a memory curator) is fenced on every spawn of
       // its row: the first, and each revive, restore and relaunch.
       // A clean session is clean on every spawn of its row: no skills, and
@@ -541,6 +542,7 @@ export const createLaunches = (ctx: LaunchesContext) => {
       ...ctx.workItems.spawnPlace(row),
       ...(payload.reattachOnly ? where : {}),
     };
+    return bound;
   };
 
   /** Each folder a spawn names, as a path on `machineId`; throws the gate's refusal. */
@@ -972,12 +974,17 @@ export const createLaunches = (ctx: LaunchesContext) => {
       model: row.model ?? undefined,
     });
     // A relaunch is the hub's own launch: it goes in its turn.
-    ctx.sendSpawn(
+    const sent = ctx.sendSpawn(
       agent,
       machineId,
       { verb: "spawn", machineId, instanceId, payload: revive },
       paced
     );
+    // It may run on no account: what it was sent fails, saying why, as a wake no account can take does.
+    if (sent instanceof ElysiaStatus) {
+      ctx.forgetPending(instanceId, sent.response.detail, false, "none");
+      return;
+    }
     // What a move ended with its old process, said to this one first.
     ctx.tellEndedByMove(row);
     ctx.publishInstances(machineId);

@@ -135,7 +135,7 @@ export interface HubToolsDeps {
   designVerdict: (
     actor: InstanceRow,
     verdict: DesignVerdict
-  ) => Promise<{ finished: string; recorded: string }>;
+  ) => Promise<{ finished: string; recorded: string } | AnyProblem>;
   /** Writes the caller's project's design system, or proposes the change (design-system.ts `write`). */
   designWrite: (
     actor: InstanceRow,

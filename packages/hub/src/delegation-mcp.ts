@@ -64,7 +64,7 @@ import {
   projectFromSessionTool,
 } from "./project-offers";
 import type { ProjectSettings } from "./project-settings";
-import type { ProblemStatus } from "./refusal";
+import type { AnyProblem, ProblemStatus } from "./refusal";
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import {
@@ -248,27 +248,32 @@ export function createDelegationMcp(options: {
   ledBy?: (instanceId: string, leadId: string) => boolean;
   /** The sessions `instanceId` was forked from, nearest first (launches.ts `forkLineage`). */
   forkOrigins?: (instanceId: string) => ForkOrigin[];
-  forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
+  /** Carries out what a call emitted; the hub's problem when it may not, which is the call's error. */
+  forward: (
+    envelope: Envelope,
+    actor: InstanceRow
+  ) => Promise<AnyProblem | undefined>;
   /** A session's start_session, held until the session is in place; answers its settled folder (delegation-actions `spawn`). */
   spawn: (
     envelope: Parameters<HandoffDeps["spawn"]>[0],
     actor: InstanceRow
-  ) => Promise<MachinePath>;
+  ) => Promise<MachinePath | AnyProblem>;
   /**
    * Hands a session's send to the hub's one send path now, and answers what
-   * became of it (`handoff` words its reply from this); a refused send throws.
+   * became of it (`handoff` words its reply from this); a send that does not
+   * go answers the hub's problem.
    */
   deliver: (
     envelope: Envelope<SendPayload>,
     actor: InstanceRow
-  ) => Promise<SendDelivery>;
+  ) => Promise<SendDelivery | AnyProblem>;
   /** A session's send with inputs, written and sent in one step (delegation-actions `handOff`). */
   handOff: (
     target: string,
     inputs: unknown[],
     compose: Parameters<HandoffDeps["handOff"]>[2],
     actor: InstanceRow
-  ) => Promise<SendDelivery>;
+  ) => Promise<SendDelivery | AnyProblem>;
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
   /** Whether `token` is a session credential the hub holds (by its hash). */
   knownCredential: (token: string) => boolean;
@@ -1057,7 +1062,13 @@ export function createDelegationMcp(options: {
       return result;
     }
     for (const envelope of emitted) {
-      await options.forward(envelope, actor);
+      const forwarded = await options.forward(envelope, actor);
+      if (forwarded instanceof ElysiaStatus) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: forwarded.response.detail }],
+        };
+      }
     }
     return result;
   };

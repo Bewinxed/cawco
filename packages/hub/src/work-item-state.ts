@@ -1,7 +1,6 @@
 import { ANY_TYPE } from "@cawco/core/delegate-types";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { InstanceRow } from "@cawco/core/protocol";
-import { problem } from "elysia";
 import type { WorkItemRow } from "./db/project-work";
 
 /**
@@ -107,26 +106,6 @@ export const LIVE: ReadonlySet<WorkItemRow["state"]> = new Set([
 
 /** Whether an item in `state` is live work: starting or running. */
 export const isLive = (state: WorkItemRow["state"]): boolean => LIVE.has(state);
-
-/** A request the hub turns down, with the status and the words the caller reads. */
-export class WorkItemRefusal extends Error {
-  readonly status: 400 | 403 | 404 | 409;
-  constructor(
-    status: 400 | 403 | 404 | 409,
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options);
-    this.status = status;
-  }
-}
-
-/** What a work-item route threw, as its problem: a {@link WorkItemRefusal} in its status, anything else as 502, in its words. */
-export const workItemProblem = (error: unknown) =>
-  problem(error instanceof WorkItemRefusal ? error.status : 502, {
-    code: "work-item-refused",
-    detail: error instanceof Error ? error.message : String(error),
-  });
 
 /**
  * The longest wait an item declares, in whole minutes: `wait_item`'s tool,
