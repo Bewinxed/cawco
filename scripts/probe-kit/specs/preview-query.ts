@@ -483,7 +483,11 @@ const run = async (kit: Kit) => {
   };
   try {
     // 1. Port mode: the artifact origin's own port, past its lock.
-    const ownPort = listeners.embed(ORIGIN, INSTANCE).port;
+    const own = listeners.embed(ORIGIN, INSTANCE);
+    if (!("port" in own)) {
+      throw new Error(own.response.detail);
+    }
+    const ownPort = own.port;
     const portPass = (
       await rawGet(
         ownPort,
