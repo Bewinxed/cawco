@@ -18,38 +18,49 @@ import type { FrameOf } from "../hub/frames";
 import { load } from "../hub/load";
 import { notices } from "../notices.svelte";
 
-const needsState = $state({
+const needsState = $state<{
   /**
    * How many times a session closed one of its questions to the person
    * since this page connected (`questions.moved` frames): a session's
    * list of what it asked him (waiting/questions.svelte.ts) reads again
    * when it moves, as it does on each `artifact.needs` frame.
    */
-  questionsMoved: 0,
+  questionsMoved: number;
+
   /**
    * Approved actions waiting on the operator (proposed, or failed or of
    * unknown outcome until put away): read on connect, then kept whole by
    * `actions` frames.
    */
-  actions: [] as ApprovedActionView[],
+  actions: ApprovedActionView[];
+
   /**
    * Fleet watch's needs-you notices (core `FleetWatchNotice`), oldest first:
    * read as the dashboard connects, then kept whole by the hub's
    * `fleet_watch.notices` frames.
    */
-  watchNotices: [] as FleetWatchNotice[],
+  watchNotices: FleetWatchNotice[];
+
   /**
    * The artifacts waiting on the person, and their notices (core
    * artifact-needs.ts): read as the dashboard connects, in `/api/pending`'s
    * `artifact.needs` envelope, then kept whole by the hub's frames.
    */
-  artifactNeeds: [] as ArtifactNeed[],
-  artifactNotices: [] as ArtifactNeedNotice[],
+  artifactNeeds: ArtifactNeed[];
+  artifactNotices: ArtifactNeedNotice[];
+
   /**
    * Every system law the hub caught broken since it started (core
    * invariant.ts), whole on each `laws.broken` frame; none until one breaks.
    */
-  lawsBroken: [] as LawBroken[],
+  lawsBroken: LawBroken[];
+}>({
+  questionsMoved: 0,
+  actions: [],
+  watchNotices: [],
+  artifactNeeds: [],
+  artifactNotices: [],
+  lawsBroken: [],
 });
 
 export function takeActions(frame: FrameOf<"actions">): void {

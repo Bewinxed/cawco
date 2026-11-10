@@ -45,9 +45,12 @@ import { servedBoard } from "./board.svelte";
 import { minute } from "./clock.svelte";
 import { reconcileRows } from "./same";
 
-export const projectsState = $state({
-  projects: [] as ProjectRow[],
+export const projectsState = $state<{
+  projects: ProjectRow[];
   /** `/api/projects` has answered this page once: an empty list then means none (home FirstRun). */
+  projectsRead: boolean;
+}>({
+  projects: [],
   projectsRead: false,
 });
 

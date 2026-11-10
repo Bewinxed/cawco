@@ -2,9 +2,10 @@
 import type { FrameOf } from "../hub/frames";
 import { equal } from "./same";
 
-const fleetMcpState = $state({
-  fleetMcp: null as
-    import("@cawco/core/fleet-secrets").FleetMcpServerView[] | null,
+const fleetMcpState = $state<{
+  fleetMcp: import("@cawco/core/fleet-secrets").FleetMcpServerView[] | null;
+}>({
+  fleetMcp: null,
 });
 
 export function takeFleetMcp(frame: FrameOf<"fleet_mcp">): void {
