@@ -122,22 +122,110 @@ const written = new WeakMap<Element, string>();
 
 const ROW = "[data-line-row]";
 
-/** How far an element is drawn off its layout by its own `translate` and `transform`'s move. */
-function movedBy(element: Element): [number, number] {
+/**
+ * How an element is drawn off its own layout: its `translate`, `scale` and
+ * `transform`, as a size it is drawn at (`sx`, `sy`) about its origin
+ * (`ox`, `oy`, from its box's corner) and a move (`tx`, `ty`). Null where it
+ * is drawn as laid out.
+ */
+interface Drawn {
+  ox: number;
+  oy: number;
+  sx: number;
+  sy: number;
+  tx: number;
+  ty: number;
+}
+
+const numbers = (value: string): number[] =>
+  value.split(" ").map((part) => Number.parseFloat(part));
+
+function drawnOff(element: Element): Drawn | null {
   const style = getComputedStyle(element);
-  const [dx = 0, dy = 0] =
-    style.translate === "none"
-      ? []
-      : style.translate.split(" ").map((length) => Number.parseFloat(length));
+  if (
+    style.translate === "none" &&
+    style.scale === "none" &&
+    style.transform === "none"
+  ) {
+    return null;
+  }
+  const [tx = 0, ty = 0] =
+    style.translate === "none" ? [] : numbers(style.translate);
+  const [sx = 1, sy = sx] = style.scale === "none" ? [] : numbers(style.scale);
   const matrix =
     style.transform === "none" ? null : new DOMMatrixReadOnly(style.transform);
-  return [dx + (matrix?.m41 ?? 0), dy + (matrix?.m42 ?? 0)];
+  const [ox = 0, oy = 0] = numbers(style.transformOrigin);
+  // `translate`, then `scale`, then `transform`, all about the one origin.
+  return {
+    ox,
+    oy,
+    sx: sx * (matrix?.m11 ?? 1),
+    sy: sy * (matrix?.m22 ?? 1),
+    tx: tx + sx * (matrix?.m41 ?? 0),
+    ty: ty + sy * (matrix?.m42 ?? 0),
+  };
+}
+
+/** A box where it is laid out, in the viewport. */
+interface Laid {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
 }
 
 /**
- * A row's glyph, where it is laid out: drawn, less every move between it
- * and the row (a regroup's flight on the row's own box, a fold's ride on
- * the glyph), to the subpixel.
+ * A row's glyph where it is laid out: its drawn box taken back through
+ * every move and every size between it and the row, outermost first (a
+ * regroup's flight on the row's own box; a fold's ride on the glyph, which
+ * moves it and, for a parent's deck's cards, draws it smaller), to the
+ * subpixel. Each element's is undone about its own origin, so the box is
+ * its layout's whatever it is drawn through. Null while one of them is
+ * drawn at no size: nothing is left to read it from.
+ */
+function laidOut(mark: HTMLElement, row: HTMLElement): Laid | null {
+  const off: { drawn: Drawn; element: Element }[] = [];
+  for (
+    let element: Element | null = mark;
+    element && element !== row;
+    element = element.parentElement
+  ) {
+    const drawn = drawnOff(element);
+    if (drawn) {
+      off.unshift({ drawn, element });
+    } else if (element === mark) {
+      off.unshift({
+        drawn: { ox: 0, oy: 0, sx: 1, sy: 1, tx: 0, ty: 0 },
+        element,
+      });
+    }
+  }
+  // What is over the element being read draws a point of its layout, `at`,
+  // at `at * size + move` on each axis.
+  let [sizeX, moveX, sizeY, moveY] = [1, 0, 1, 0];
+  let laid: Laid | null = null;
+  for (const { drawn, element } of off) {
+    if (drawn.sx === 0 || drawn.sy === 0) {
+      return null;
+    }
+    const box = element.getBoundingClientRect();
+    laid = {
+      width: box.width / sizeX / drawn.sx,
+      height: box.height / sizeY / drawn.sy,
+      left: (box.left - moveX) / sizeX - drawn.tx - drawn.ox * (1 - drawn.sx),
+      top: (box.top - moveY) / sizeY - drawn.ty - drawn.oy * (1 - drawn.sy),
+    };
+    moveX += sizeX * ((laid.left + drawn.ox) * (1 - drawn.sx) + drawn.tx);
+    moveY += sizeY * ((laid.top + drawn.oy) * (1 - drawn.sy) + drawn.ty);
+    sizeX *= drawn.sx;
+    sizeY *= drawn.sy;
+  }
+  return laid;
+}
+
+/**
+ * What a row's lines are placed by: its glyph where it is laid out
+ * (`laidOut`), against the row.
  */
 function geoOf(row: HTMLElement, glyph: string): Geo | null {
   if (row.offsetParent === null) {
@@ -156,25 +244,21 @@ function geoOf(row: HTMLElement, glyph: string): Geo | null {
       below: box.height / 2,
     };
   }
-  const drawn = mark.getBoundingClientRect();
-  let dx = 0;
-  let dy = 0;
-  for (let at: Element | null = mark; at && at !== row; at = at.parentElement) {
-    const [x, y] = movedBy(at);
-    dx += x;
-    dy += y;
+  const laid = laidOut(mark, row);
+  if (!laid) {
+    return null;
   }
-  const centreX = drawn.left + drawn.width / 2 - dx;
-  const y = drawn.top + drawn.height / 2 - dy - box.top;
+  const centreX = laid.left + laid.width / 2;
+  const y = laid.top + laid.height / 2 - box.top;
   const inset = Number.parseFloat(style.paddingInlineStart) || 0;
   const start = rtl ? box.right - inset : box.left + inset;
   const half = Number.parseFloat(style.getPropertyValue("--line-half")) || 0;
   return {
     centre: rtl ? start - centreX : centreX - start,
-    drift: half > 0 ? drawn.width / 2 - half : 0,
+    drift: half > 0 ? laid.width / 2 - half : 0,
     gap: Number.parseFloat(style.marginBlockStart) || 0,
     y,
-    below: box.height - (y + mark.offsetHeight / 2),
+    below: box.height - (y + laid.height / 2),
   };
 }
 
