@@ -73,7 +73,6 @@ import {
 } from "./stores/commands.svelte";
 import { takeBoardContinuations } from "./stores/continuations.svelte";
 import { hearDelegateEvent, rereadDelegates } from "./stores/delegates.svelte";
-import { watchedIds } from "./stores/follows.svelte";
 import { plugLedger, streamHost, streamState } from "./stores/ledger.svelte";
 import { dropFleetFetches, takeFleetFetch } from "./stores/machines";
 import { takeFleetMcp } from "./stores/mcp-servers.svelte";
@@ -564,7 +563,6 @@ plugLedger({
     trackWorking(target);
     target.lastActivityAt = new Date();
   },
-  follows: (sessionId) => watchedIds().includes(sessionId),
   // The newest page again, which resumes the stream from the `seq` it carries.
   rereadHistory: (sessionId, cause) => {
     detach(readTranscript(sessionId, cause), "readTranscript");
