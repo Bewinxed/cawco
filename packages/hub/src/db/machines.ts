@@ -20,7 +20,8 @@ import type {
 } from "@cawco/core/protocol";
 import type { ToolStatus } from "@cawco/core/tools";
 import { stoppedWords } from "@cawco/core/words/machine-pause";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, getTableName, ne, sql } from "drizzle-orm";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { DbCore } from "./core";
 import { GO_WITH_MACHINE, walkOwned } from "./owned-rows";
 import {
@@ -31,6 +32,7 @@ import {
   instances,
   projectPlaces,
   removedMachines,
+  usageBuckets,
 } from "./schema";
 import type { Tx } from "./tx";
 
@@ -43,9 +45,9 @@ type Moved = (what: string, count: number) => void;
  * Rows of `table` whose `column` names `from`. Through `all`: bun-sqlite's
  * `get` of raw SQL answers the row as an array of values.
  */
-const naming = (tx: Tx, table: string, column: string, from: string) =>
+const naming = (tx: Tx, column: SQLiteColumn, from: string) =>
   tx.all<{ n: number }>(
-    sql`SELECT count(*) AS n FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} = ${from}`
+    sql`SELECT count(*) AS n FROM ${column.table} WHERE ${sql.identifier(column.name)} = ${from}`
   )[0]?.n ?? 0;
 
 /** Whether the hub keeps a row for the machine. */
@@ -238,15 +240,12 @@ export const machinesDb = (core: DbCore): MachinesDb => {
         .values({ ...row, machineId: to })
         .run();
       note("agents", 1);
-      note("agent_tools", naming(tx, "agent_tools", "machine_id", from));
+      note("agent_tools", naming(tx, agentTools.machineId, from));
       tx.update(agentTools)
         .set({ machineId: to })
         .where(eq(agentTools.machineId, from))
         .run();
-      note(
-        "agent_harnesses",
-        naming(tx, "agent_harnesses", "machine_id", from)
-      );
+      note("agent_harnesses", naming(tx, agentHarnesses.machineId, from));
       tx.update(agentHarnesses)
         .set({ machineId: to })
         .where(eq(agentHarnesses.machineId, from))
@@ -738,11 +737,13 @@ export const machinesDb = (core: DbCore): MachinesDb => {
               .run();
           }
         }
-        for (const { table, column } of GO_WITH_MACHINE) {
+        for (const { column } of GO_WITH_MACHINE) {
           tx.run(
-            sql`DELETE FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} = ${machineId}`
+            sql`DELETE FROM ${column.table} WHERE ${sql.identifier(column.name)} = ${machineId}`
           );
         }
+        // Its own row goes last: the rows above named it.
+        tx.delete(agents).where(eq(agents.machineId, machineId)).run();
         return { instanceIds: ids };
       }),
     rekeyMachine: (from, to) =>
@@ -760,30 +761,29 @@ export const machinesDb = (core: DbCore): MachinesDb => {
             // A bucket's id leads with its machine's (`putUsageBuckets`), so a
             // re-report from the new id lands on the bucket it moved to.
             usage_buckets: () => {
-              note(
-                "usage_buckets",
-                naming(tx, "usage_buckets", "machine_id", from)
+              note("usage_buckets", naming(tx, usageBuckets.machineId, from));
+              tx.run(
+                sql`UPDATE OR IGNORE ${usageBuckets} SET machine_id = ${to}, id = ${to} || substr(id, ${from.length + 1}) WHERE machine_id = ${from} AND substr(id, 1, ${from.length + 1}) = ${`${from}:`}`
               );
               tx.run(
-                sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to}, id = ${to} || substr(id, ${from.length + 1}) WHERE machine_id = ${from} AND substr(id, 1, ${from.length + 1}) = ${`${from}:`}`
+                sql`UPDATE OR IGNORE ${usageBuckets} SET machine_id = ${to} WHERE machine_id = ${from}`
               );
               tx.run(
-                sql`UPDATE OR IGNORE usage_buckets SET machine_id = ${to} WHERE machine_id = ${from}`
+                sql`DELETE FROM ${usageBuckets} WHERE machine_id = ${from}`
               );
-              tx.run(sql`DELETE FROM usage_buckets WHERE machine_id = ${from}`);
             },
           },
-          ({ table, column, rekey }) => {
-            const name = sql.identifier(table);
-            const by = sql.identifier(column);
-            const before = naming(tx, table, column, from);
+          ({ column, rekey }) => {
+            const name = column.table;
+            const by = sql.identifier(column.name);
+            const before = naming(tx, column, from);
             tx.run(
               sql`UPDATE OR IGNORE ${name} SET ${by} = ${to} WHERE ${by} = ${from}`
             );
             if (rekey === "keyed") {
               tx.run(sql`DELETE FROM ${name} WHERE ${by} = ${from}`);
             }
-            note(table, before);
+            note(getTableName(name), before);
           }
         );
         return moved;

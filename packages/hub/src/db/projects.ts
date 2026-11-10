@@ -24,6 +24,7 @@ import {
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { AreaRow } from "./areas";
 import { projectPage } from "./artifacts";
 import type { DbCore } from "./core";
@@ -1056,9 +1057,9 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         const renamed = (taskId: string | null): string | null =>
           taskId ? (taskIds.get(taskId) ?? taskId) : null;
         /** The duplicate's rows of `table`, by `column`, the kept project's. */
-        const moveRows = (table: string, column: string): void => {
+        const moveRows = (column: SQLiteColumn): void => {
           tx.run(
-            sql`UPDATE ${sql.identifier(table)} SET ${sql.identifier(column)} = ${keepId} WHERE ${sql.identifier(column)} = ${dupId}`
+            sql`UPDATE ${column.table} SET ${sql.identifier(column.name)} = ${keepId} WHERE ${sql.identifier(column.name)} = ${dupId}`
           );
         };
         let places = 0;
@@ -1177,7 +1178,7 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
                   .where(eq(actions.id, action.id))
                   .run();
               }
-              moveRows("actions", "project_id");
+              moveRows(actions.projectId);
             },
             // A page of a name the kept project has goes: the kept project's
             // source of that name stood (project-merge.ts copies only the
@@ -1196,7 +1197,7 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
                   inArray(artifacts.name, keptNames)
                 )
               );
-              moveRows("artifacts", "project_id");
+              moveRows(artifacts.projectId);
             },
             // The connections it was granted go with its row: project-merge.ts
             // grants them to the kept project through connections.ts.
@@ -1288,7 +1289,7 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
           // servers, skills and its offer: the kept project's from now on,
           // where the duplicate's row going would have taken them or left
           // them naming it.
-          ({ table, column }) => moveRows(table, column)
+          ({ column }) => moveRows(column)
         );
         // Its index rows and the rest of its own rows go with it (cascade).
         tx.delete(projects).where(eq(projects.id, dupId)).run();
