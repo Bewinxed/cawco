@@ -336,6 +336,8 @@ export default {
         "scripts/svelte-unused-css.ts",
         // scripts/check.ts:547
         "scripts/spacing-ratchet.ts",
+        // scripts/check.ts:582
+        "scripts/css-layers-check.ts",
       ],
       project: [
         // Knip's default, with the extensions its Svelte and Tailwind compilers add here.

@@ -7,11 +7,7 @@ import {
   crossSiteRefusal,
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
-import {
-  documentLayers,
-  layersNamed,
-  unlayeredRules,
-} from "@cawco/core/css-layers";
+import { documentLayers, layerFaults } from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
 import { linkedRebundle } from "@cawco/core/linked-rebundle";
 import { devServerWords } from "@cawco/core/words/dev-server";
@@ -316,8 +312,10 @@ const runningVersion = (): Plugin => ({
  * moved one library to `@import … layer()` and missed that its component
  * imported the same sheet again, unlayered, which silently outranked the
  * house). One unlayered rule fails the build, naming its asset and selector
- * (core css-layers.ts `unlayeredRules`, the guard the decision host's sheet
- * is held to as well).
+ * (core css-layers.ts `layerFaults`, over `unlayeredRules`, the guard the
+ * decision host's sheet is held to as well). `bun run check` holds the
+ * house's own sheets to the same guard before any build
+ * (scripts/css-layers-check.ts).
  *
  * The layers' order is app.html's, stated in a `<style>` of its own ahead
  * of every sheet a page links (core css-layers.ts `documentLayers`), so no
@@ -390,43 +388,17 @@ export const vendorComponentSheets = (): Plugin => ({
       : null;
   },
   async generateBundle(_options, bundle) {
-    const sheets = Object.values(bundle).filter(
-      (chunk) => chunk.type === "asset" && chunk.fileName.endsWith(".css")
+    const sheets = Object.values(bundle).flatMap((chunk) =>
+      chunk.type === "asset" && chunk.fileName.endsWith(".css")
+        ? [{ name: chunk.fileName, css: String(chunk.source) }]
+        : []
     );
     if (sheets.length === 0) {
       return;
     }
-    const undeclared = (
-      await Promise.all(
-        sheets.map(async (sheet) =>
-          sheet.type === "asset"
-            ? (await layersNamed(String(sheet.source)))
-                .filter((layer) => !DOCUMENT_LAYERS.includes(layer))
-                .map((layer) => `${sheet.fileName}: @layer ${layer}`)
-            : []
-        )
-      )
-    ).flat();
-    if (undeclared.length > 0) {
-      this.error(
-        `css layers: ${undeclared.length} layer(s) app.html's order leaves out; a layer joins its <style> where it belongs:\n${undeclared.join("\n")}`
-      );
-    }
-    const unlayered = (
-      await Promise.all(
-        sheets.map(async (sheet) =>
-          sheet.type === "asset"
-            ? (await unlayeredRules(String(sheet.source))).map(
-                (selector) => `${sheet.fileName}: ${selector}`
-              )
-            : []
-        )
-      )
-    ).flat();
-    if (unlayered.length > 0) {
-      this.error(
-        `css layers: ${unlayered.length} unlayered style rule(s); a library's sheet joins vendorComponentSheets' list, a house rule moves into its layer:\n${unlayered.join("\n")}`
-      );
+    const fault = await layerFaults(sheets, DOCUMENT_LAYERS);
+    if (fault) {
+      this.error(fault);
     }
     console.log(
       `css layers: ${sheets.length} assets, 0 unlayered rules, every layer in app.html's order`

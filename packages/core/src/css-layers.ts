@@ -1,7 +1,8 @@
 /**
  * The guards every sheet built over the house's cascade layers is held to:
  * no style rule outside a layer, for the dashboard's assets (vite.config.ts
- * `vendorComponentSheets`) and the decision host's (decision-host.ts); and
+ * `vendorComponentSheets`, and its house sheets before any build:
+ * apps/dashboard/scripts/css-layers-check.ts) and the decision host's (decision-host.ts); and
  * for the dashboard, no layer its page template (app.html) leaves out of the
  * order it states before any sheet. A module of its own with no relative
  * imports, so the dashboard's Vite config loads it under Node as written.
@@ -49,7 +50,7 @@ export function documentLayers(html: string): string[] {
  * nested layer (`vendor.calendar`) takes its place inside its parent's, so
  * it counts as its parent.
  */
-export async function layersNamed(css: string): Promise<string[]> {
+async function layersNamed(css: string): Promise<string[]> {
   const { default: postcss } = await import("postcss");
   const named: string[] = [];
   postcss.parse(css).walkAtRules("layer", (rule) => {
@@ -90,4 +91,44 @@ export async function unlayeredRules(css: string): Promise<string[]> {
     found.push(rule.selector.replace(/\s+/gu, " "));
   });
   return found;
+}
+
+/** A sheet the guards read: a name its faults are reported by, and its CSS. */
+export interface NamedSheet {
+  css: string;
+  name: string;
+}
+
+/**
+ * What fails the dashboard's sheets, as the error the build and `bun run
+ * check` both stop with: first each layer `order` (the page template's,
+ * {@link documentLayers}) leaves out, then each style rule no layer holds,
+ * every one named by its sheet. Undefined when every sheet passes.
+ */
+export async function layerFaults(
+  sheets: NamedSheet[],
+  order: string[]
+): Promise<string | undefined> {
+  const undeclared = (
+    await Promise.all(
+      sheets.map(async ({ name, css }) =>
+        (await layersNamed(css))
+          .filter((layer) => !order.includes(layer))
+          .map((layer) => `${name}: @layer ${layer}`)
+      )
+    )
+  ).flat();
+  if (undeclared.length > 0) {
+    return `css layers: ${undeclared.length} layer(s) app.html's order leaves out; a layer joins its <style> where it belongs:\n${undeclared.join("\n")}`;
+  }
+  const unlayered = (
+    await Promise.all(
+      sheets.map(async ({ name, css }) =>
+        (await unlayeredRules(css)).map((selector) => `${name}: ${selector}`)
+      )
+    )
+  ).flat();
+  if (unlayered.length > 0) {
+    return `css layers: ${unlayered.length} unlayered style rule(s); a library's sheet joins vendorComponentSheets' list, a house rule moves into its layer:\n${unlayered.join("\n")}`;
+  }
 }

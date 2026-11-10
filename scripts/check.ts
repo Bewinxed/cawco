@@ -578,6 +578,12 @@ const gated: Gated[] = [
   bun("apps/dashboard/scripts/specificity-trap.ts", DASH),
   bun("apps/dashboard/scripts/lib-import-check.ts", DASH),
   bun("apps/dashboard/scripts/svelte-unused-css.ts", DASH),
+  // The release build's layers guard, over the house's sheets unbundled.
+  bun("apps/dashboard/scripts/css-layers-check.ts", [
+    ...DASH,
+    "packages/core/src/css-layers.ts",
+    "bun.lock",
+  ]),
   bun("apps/dashboard/scripts/spacing-ratchet.ts", DASH),
   inDashboard("scripts/build-tokens.ts", "--check"),
   inDashboard("scripts/build-variants.ts", "--check"),
