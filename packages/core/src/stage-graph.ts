@@ -941,10 +941,15 @@ export function stageFaultOf(value: unknown): StageFault | null {
 }
 
 const CASE_BREAK = /([a-z0-9])([A-Z])/gu;
+/** A figure after a word (`JustOpened2`, a state Save as new state counted on): a word of its own, "Just opened 2". */
+const FIGURE_BREAK = /([a-z])([0-9])/gu;
 
 /** A story's export in plain words, CSF 3's own rule: `FailedSave` → "Failed save". */
 export const storyWords = (name: string): string => {
-  const spaced = name.replace(CASE_BREAK, "$1 $2").toLowerCase();
+  const spaced = name
+    .replace(CASE_BREAK, "$1 $2")
+    .replace(FIGURE_BREAK, "$1 $2")
+    .toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
 
