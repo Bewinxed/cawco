@@ -206,7 +206,7 @@
     <Choice
       label={words.harness}
       onchange={(next) => {
-        draft.harness = next as DelegateType["harness"];
+        draft.harness = next;
       }}
       options={HARNESSES.map((harness) => ({
         value: harness,
@@ -234,7 +234,7 @@
           // biome-ignore lint/performance/noDelete: an unset effort is omitted from the saved payload, not serialized as effort: undefined
           delete draft.effort;
         } else {
-          draft.effort = next as DelegateType["effort"];
+          draft.effort = next;
         }
       }}
       options={[
