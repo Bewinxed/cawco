@@ -21,10 +21,10 @@ import {
   CONTROL_PLACE_LFS,
   type PlaceLfsMade,
 } from "@cawco/core/workspace/controls";
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { LfsOfferRow } from "./db/lfs-offers";
-import { ProjectRefusal, projectAttempt } from "./project-refusal";
+import { refusal } from "./refusal";
 
 const MB = 1024 * 1024;
 
@@ -50,34 +50,41 @@ const stateOf = (row: LfsOfferRow): LfsOfferState => ({
 
 export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
   /** Offers whose Track runs now: a second press waits on the first's answer. */
-  const tracking = new Map<string, Promise<LfsOfferState>>();
+  const tracking = new Map<string, ReturnType<typeof track>>();
 
-  const answerable = (id: string): LfsOfferRow => {
-    const row = db.lfsOffers.of(id);
-    if (!row) {
-      throw new ProjectRefusal(404, "This offer of Git LFS is not recorded.");
-    }
-    return row;
+  /** The offer `id` as recorded, or its refusal (lfs-offer-unknown). */
+  const answerable = (id: string) =>
+    db.lfsOffers.of(id) ??
+    refusal(404, "lfs-offer-unknown", "This offer of Git LFS is not recorded.");
+
+  /** Where offer `id` stands, or its refusal. */
+  const stateNow = (id: string) => {
+    const row = answerable(id);
+    return row instanceof ElysiaStatus ? row : stateOf(row);
   };
 
-  const track = async (row: LfsOfferRow): Promise<LfsOfferState> => {
+  const track = async (row: LfsOfferRow) => {
     if (!db.project(row.projectId)) {
-      throw new ProjectRefusal(
+      return refusal(
         409,
+        "lfs-offer-project-gone",
         "This offer's project is gone, so nothing was tracked."
       );
     }
     // The machine's own words are the refusal the card shows.
-    const made = (await call(row.machineId, CONTROL_PLACE_LFS, [
-      row.root,
-      row.rows,
-    ]).catch((error: unknown) => {
-      throw new ProjectRefusal(
+    let made: PlaceLfsMade;
+    try {
+      made = (await call(row.machineId, CONTROL_PLACE_LFS, [
+        row.root,
+        row.rows,
+      ])) as PlaceLfsMade;
+    } catch (error) {
+      return refusal(
         409,
-        error instanceof Error ? error.message : String(error),
-        { cause: error }
+        "lfs-offer-track-refused",
+        error instanceof Error ? error.message : String(error)
       );
-    })) as PlaceLfsMade;
+    }
     db.lfsOffers.answer(row.id, "tracked", made.commit);
     notice(row.projectId, {
       title: `Committed ${made.files} large ${made.files === 1 ? "file" : "files"} through Git LFS`,
@@ -89,27 +96,31 @@ export const createLfsOffers = ({ call, db, notice }: LfsOffersDeps) => {
       },
       body: `${row.root} tracks ${made.patterns.map((pattern) => `\`${pattern}\``).join(", ")} with Git LFS now, and commit ${made.commit.slice(0, 9)} holds the ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB) its first commit left out. Nothing was pushed: they go to the project's LFS with its next push.${made.hooks ? "" : "\n\nThe folder has a pre-push hook of its own, so git-lfs's was not put beside it: a push from there sends the large files only with `git lfs push origin --all`, or once the hooks are merged (`git lfs update --manual` says how)."}`,
     });
-    return stateOf(answerable(row.id));
+    return stateNow(row.id);
   };
 
   return {
     /** Where an offer stands. */
-    state(id: string): LfsOfferState {
-      return stateOf(answerable(id));
-    },
+    state: stateNow,
 
     /** "Not now": recorded, and the files stay out. */
-    dismiss(id: string): LfsOfferState {
+    dismiss(id: string) {
       const row = answerable(id);
+      if (row instanceof ElysiaStatus) {
+        return row;
+      }
       if (!(row.answer || tracking.has(id))) {
         db.lfsOffers.answer(id, "dismissed");
       }
-      return stateOf(answerable(id));
+      return stateNow(id);
     },
 
     /** "Track with LFS": the patterns tracked and the files committed, once. */
-    track(id: string): Promise<LfsOfferState> {
+    track(id: string) {
       const row = answerable(id);
+      if (row instanceof ElysiaStatus) {
+        return Promise.resolve(row);
+      }
       if (row.answer) {
         return Promise.resolve(stateOf(row));
       }
@@ -129,12 +140,8 @@ export type LfsOffers = ReturnType<typeof createLfsOffers>;
 /** The card's routes: where it stands, and its two answers. */
 export const lfsOfferRoutes = (offers: LfsOffers) =>
   new Elysia()
-    .get("/api/lfs-offers/:id", ({ params }) =>
-      projectAttempt(() => offers.state(params.id))
-    )
+    .get("/api/lfs-offers/:id", ({ params }) => offers.state(params.id))
     .post("/api/lfs-offers/:id/dismiss", ({ params }) =>
-      projectAttempt(() => offers.dismiss(params.id))
+      offers.dismiss(params.id)
     )
-    .post("/api/lfs-offers/:id/track", ({ params }) =>
-      projectAttempt(() => offers.track(params.id))
-    );
+    .post("/api/lfs-offers/:id/track", ({ params }) => offers.track(params.id));
