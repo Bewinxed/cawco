@@ -228,8 +228,7 @@
     </h2>
     <Tabs
       onValueChange={(next) => {
-        const to = next as "chart" | "table";
-        if (to === view) {
+        if ((next !== "chart" && next !== "table") || next === view) {
           return;
         }
         if (ready) {
@@ -237,10 +236,10 @@
             charts
               .filter((c) => !c.missing)
               .map((c) => ({ harness: c.harness, view })),
-            to === "table" ? 1 : -1
+            next === "table" ? 1 : -1
           );
         }
-        view = to;
+        view = next;
       }}
       value={view}
     >

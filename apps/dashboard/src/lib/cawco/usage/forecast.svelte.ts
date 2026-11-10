@@ -27,12 +27,17 @@ import {
   type RingAccount,
 } from "./rings";
 
-const state = $state({
-  forecast: null as ProviderForecast | null,
+const state = $state<{
+  forecast: ProviderForecast | null;
+  read: boolean;
+  now: number;
+  cause: "data" | "clock";
+}>({
+  forecast: null,
   /** The forecast has been read once: none since means none, not not-yet. */
   read: false,
   now: Date.now(),
-  cause: "data" as "data" | "clock",
+  cause: "data",
 });
 
 async function readForecast(): Promise<void> {

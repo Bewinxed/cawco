@@ -143,8 +143,10 @@ export class TreeView {
       if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
         return;
       }
-      const id = (event.target as Element).closest<HTMLElement>("[data-key]")
-        ?.dataset.key;
+      const id =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>("[data-key]")?.dataset.key
+          : undefined;
       const line = id ? this.shapeOf(id) : undefined;
       if (!(id && line)) {
         return;

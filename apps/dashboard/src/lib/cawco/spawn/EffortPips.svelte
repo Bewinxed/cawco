@@ -57,7 +57,7 @@
 
   const n = $derived(efforts.length);
   const effortIdx = $derived(
-    Math.max(0, efforts.indexOf(displayed as EffortLevel))
+    Math.max(0, displayed === null ? -1 : efforts.indexOf(displayed))
   );
   const frac = (i: number) => (n > 1 ? i / (n - 1) : 0);
   /** The chip always sits on a level; the pointer picks the nearest one. */
@@ -124,8 +124,8 @@
   }
 
   /** The pointer's x inside the track, and the rail the chip's centre travels. */
-  function locate(event: PointerEvent) {
-    const el = event.currentTarget as HTMLElement;
+  function locate(event: PointerEvent & { currentTarget: HTMLElement }) {
+    const el = event.currentTarget;
     const x = event.clientX - el.getBoundingClientRect().left - el.clientLeft;
     return { x, rail: Math.max(1, el.clientWidth - kw) };
   }
@@ -135,7 +135,7 @@
     return clamp01((x - kw / 2) / rail);
   }
   const levelOf = (f: number) => Math.round(f * (n - 1));
-  function down(event: PointerEvent) {
+  function down(event: PointerEvent & { currentTarget: HTMLElement }) {
     if (!n || (event.pointerType === "mouse" && event.button !== 0)) {
       return;
     }
@@ -145,7 +145,7 @@
     const onKnob = Math.abs(x - centre) <= kw / 2;
     grab = onKnob ? centre - x : 0;
     try {
-      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+      event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
       // Pointer capture is a nicety; the move handler still tracks the pointer.
     }
@@ -153,7 +153,7 @@
     hover = false;
     change(efforts[levelOf(fracAt(x + grab, rail))]);
   }
-  function move(event: PointerEvent) {
+  function move(event: PointerEvent & { currentTarget: HTMLElement }) {
     if (!n) {
       return;
     }

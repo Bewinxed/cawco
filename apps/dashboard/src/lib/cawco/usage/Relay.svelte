@@ -207,17 +207,15 @@
               data-relay-band={id}
               data-stale={seg.ring.state === "stale" || undefined}
               onpointerenter={(event) => {
-                (
-                  props.onpointerenter as
-                    ((e: PointerEvent) => void) | undefined
-                )?.(event);
+                if (typeof props.onpointerenter === "function") {
+                  props.onpointerenter(event);
+                }
                 onlight(id);
               }}
               onpointerleave={(event) => {
-                (
-                  props.onpointerleave as
-                    ((e: PointerEvent) => void) | undefined
-                )?.(event);
+                if (typeof props.onpointerleave === "function") {
+                  props.onpointerleave(event);
+                }
                 onlight(null);
               }}
               role="img"
