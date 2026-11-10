@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { PermissionRequestFrame, PulseFrame } from "@cawco/core/frames";
+  import type { NeutralSessionInfo } from "@cawco/core/harness";
   import type { InstanceRow, SessionPulse } from "@cawco/core/protocol";
   import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
   import { onMount } from "svelte";
   import { z } from "zod";
   import Home from "#lib/cawco/home/Home.svelte";
+  import { MINI, OBELISK, storedListing } from "./stored-listing";
 
   /**
    * The sidebar's one Recent list (tsk-323) on a bench: the real rail around
@@ -20,6 +22,11 @@
    * on its own work); `wrote(id)` is the person writing to it; `ids` names
    * the sketch's sessions by letter. Done (the row's archive) is answered
    * here as the hub would: `doneAt` on its row.
+   *
+   * The machines' stored transcripts stand in too (stored-listing.ts), as
+   * each machine's listing answers them: three in a project's folder, two
+   * in none, one behind a listed session and one behind a session the
+   * person pressed Done on ("Refund flow edge cases", which stays hidden).
    */
 
   /** The client's stores as a bench writes them (dev `__cawcoDebug`). */
@@ -28,6 +35,11 @@
     areas: { areas: { id: string; name: string; position: number }[] };
     frame: (frame: PulseFrame | PermissionRequestFrame | object) => void;
     leaveHub: () => void;
+    standCatalog: (
+      machineId: string,
+      sessions: NeutralSessionInfo[],
+      leftOut?: string[]
+    ) => void;
     standHub: (answer: () => void) => void;
     state: { machines: unknown[]; projects: unknown[]; projectsRead: boolean };
   }
@@ -35,8 +47,6 @@
 
   const now = Date.now();
 
-  const OBELISK = "obelisk-of-light";
-  const MINI = "mac-mini";
   const AREAS = [
     { id: "area-cawco", name: "CawCo", position: 0 },
     { id: "area-acme", name: "Acme Studio", position: 1 },
@@ -276,9 +286,22 @@
     lastError: how === "error" ? "The build failed" : null,
   }));
 
+  /** A session the person pressed Done on: Recent leaves it out, and its transcript stays out too. */
+  const DONE = idOf(90);
+  const doneRow: InstanceRow = {
+    ...rowOf(DONE, {
+      title: "Refund flow edge cases",
+      project: "p-storefront",
+      doing: "yours",
+      ago: 90 * MINUTE_MS,
+    }),
+    doneAt: now - 60 * MINUTE_MS,
+  };
+
   let rows = $state<InstanceRow[]>([
     ...seeds.map(([id, seed]) => rowOf(id, seed)),
     ...delegates,
+    doneRow,
   ]);
   const adopt = () => debug.adoptInstances(rows.map((row) => ({ ...row })));
 
@@ -439,6 +462,10 @@
     }));
     debug.state.projectsRead = true;
     adopt();
+    const listing = storedListing(now, idOf(3), DONE);
+    for (const [machineId, sessions] of Object.entries(listing)) {
+      debug.standCatalog(machineId, sessions);
+    }
     for (const [id, seed] of seeds) {
       if (seed.doing === "working") {
         pulse(id, "working");
@@ -467,6 +494,7 @@
       ids: Object.fromEntries(
         SKETCH.map(([letter], n) => [letter, idOf(n + 1)])
       ),
+      done: DONE,
       status,
       wrote: (id: string) => {
         patch(id, { wroteAt: Date.now(), doneAt: null });

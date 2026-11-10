@@ -37,9 +37,11 @@
     IconServerAlt as Server,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
+  import { cawco, loadCatalog } from "../client.svelte";
   import Choice from "../config/Choice.svelte";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import RowFault from "../RowFault.svelte";
   import FindField from "./FindField.svelte";
   import FindPeek from "./FindPeek.svelte";
   import FindRow from "./FindRow.svelte";
@@ -300,6 +302,7 @@
     | { t: "head"; key: string; label: string }
     | { t: "chips"; key: string }
     | { t: "coverage"; key: string }
+    | { t: "leftout"; key: string; machineId: string; words: string }
     | { t: "rule"; key: string }
     | { t: "row"; key: string; result: Spoken; section: "names" | "said" }
     | { t: "peek"; key: string; result: Spoken; row: string }
@@ -365,6 +368,33 @@
     ];
   }
 
+  /**
+   * Each online machine whose last listing of its stored transcripts left a
+   * harness out (not in time, or its listing threw), in the machine's
+   * words: said at the head of the sessions found by name, where its stored
+   * transcripts stand, with Try again, which lists that machine again
+   * (client `loadCatalog`); never a toast (DESIGN.md, The Work Outlives Its
+   * Surface Rule).
+   */
+  const leftOut = $derived(
+    cawco.machines.flatMap((machine): Item[] => {
+      const said =
+        machine.status === "online"
+          ? cawco.catalogLeftOutOf(machine.machineId)
+          : [];
+      return said.length > 0
+        ? [
+            {
+              t: "leftout",
+              key: `leftout:${machine.machineId}`,
+              machineId: machine.machineId,
+              words: said.join(" "),
+            },
+          ]
+        : [];
+    })
+  );
+
   function typed(): Section[] {
     const goTo: Section = {
       key: "goto",
@@ -402,7 +432,7 @@
         said.units = skeletons("said", 2, true);
       }
     }
-    return [goTo, { key: "names", lead: [], units: nameUnits }, said];
+    return [goTo, { key: "names", lead: leftOut, units: nameUnits }, said];
   }
 
   /** The list, in drawn order: a hairline between sections that hold something. */
@@ -757,6 +787,16 @@
         onclick={() => finder.retry()}
         type="button">Retry</button
       >
+    </div>
+  {:else if item.t === "leftout"}
+    <div data-flip>
+      <RowFault
+        again={() => loadCatalog(item.machineId)}
+        data-catalog-left-out={item.machineId}
+        end="var(--space-3)"
+        indent="var(--space-3)"
+        reason={item.words}
+      />
     </div>
   {:else if item.t === "rule"}
     <hr

@@ -19,14 +19,30 @@
  * person's last word) only while it needs them. A session a project or a
  * task started stands only while it needs the person.
  *
- * Order: the person's last message to it (`wroteAt`), else its start
- * (`createdAt`): an agent's reply never moves a row.
+ * A transcript stored on a machine (its catalog, `cawco.catalogOf`) stands
+ * here too when it was run inside a project's folder on that machine (core
+ * `projectAt`), under that project, unless the hub holds a session of it
+ * (that session is its row, or none if the list leaves it out). It is Your
+ * turn, never unread, and has no Done: the hub keeps nothing for a transcript
+ * it never ran to archive it by. One outside every project's folder is found
+ * in Jump's search.
+ *
+ * Order: the person's last message to it (`wroteAt`, a stored transcript's
+ * read from it by its harness), else its start (`createdAt`): an agent's
+ * reply never moves a row.
  */
-import { topsIn } from "@cawco/core/project-membership";
+import type { NeutralSessionInfo } from "@cawco/core/harness";
+import { projectAt, topsIn } from "@cawco/core/project-membership";
 import { DAY_MS } from "@cawco/core/time";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { epochOf } from "../board.svelte";
-import { type BoardRow, cawco, isFailed, isStale } from "../client.svelte";
+import {
+  type BoardRow,
+  cawco,
+  isFailed,
+  isStale,
+  type ProjectRow,
+} from "../client.svelte";
 import { markHue } from "../mark";
 import { folderOf } from "../projects";
 import type { MarkStatus } from "../TreeMark.svelte";
@@ -42,20 +58,38 @@ import {
 export type RecentStatus = "working" | "needs" | "yours";
 type Day = "today" | "yesterday" | "older";
 
-/** One session of the list, with what its row says. */
-export interface RecentEntry {
+/** What every row of the list says. */
+interface EntryBase {
   /** When the person last wrote to it, else when it started: its place. */
   at: number;
   day: Day;
   /** The mark: its own status, or a failed delegate's dot under it. */
   mark: MarkStatus;
-  row: BoardRow;
   status: RecentStatus;
-  /** Every listed row under it, at any depth: its delegates. */
-  under: BoardRow[];
   /** It ended a turn the person has not opened since (home-state `endedUnseen`). */
   unread: boolean;
 }
+
+/** One session the hub holds, with what its row says. */
+export interface SessionEntry extends EntryBase {
+  kind: "session";
+  row: BoardRow;
+  /** Every listed row under it, at any depth: its delegates. */
+  under: BoardRow[];
+}
+
+/** One transcript stored on a machine, in a project's folder there. */
+export interface StoredEntry extends EntryBase {
+  info: NeutralSessionInfo;
+  /** `machineId:sessionId`: unique across the fleet. */
+  key: string;
+  kind: "stored";
+  machineId: string;
+  /** The project whose folder holds it. */
+  project: ProjectRow;
+}
+
+export type RecentEntry = SessionEntry | StoredEntry;
 
 /** A group parent and what hangs under it: groups of the next level, or the sessions. */
 export interface RecentGroup {
@@ -167,7 +201,58 @@ function listedHere(row: BoardRow, from: BoardRow | undefined): boolean {
   return needsThem(row) || (own && !done(row));
 }
 
-/** Recent's sessions, newest first: read only where the list is drawn. */
+/**
+ * The transcripts stored on the machines that stand in Recent: each in a
+ * project's folder on its machine, the hub holding no session of it. Read
+ * again only when a catalog, a machine, a project or the sessions the hub
+ * holds change, never on a turn's frames: a machine's catalog is a thousand
+ * and more. Their day is the list's, read with the clock.
+ */
+class StoredTranscripts {
+  /** The machines' ids, as text: the same text while none is added or removed. */
+  readonly #machineIds = $derived(
+    cawco.machines.map((machine) => machine.machineId).join("\n")
+  );
+
+  readonly entries = $derived.by(() => {
+    const held = cawco.instanceIndex.bySession;
+    const out: Omit<StoredEntry, "day">[] = [];
+    for (const machineId of this.#machineIds.split("\n")) {
+      if (!machineId) {
+        continue;
+      }
+      for (const info of cawco.catalogOf(machineId)) {
+        // A session the hub holds is its own row, or none.
+        if (held.has(info.sessionId)) {
+          continue;
+        }
+        const project = projectAt(cawco.projects, {
+          machineId,
+          cwd: info.cwd ?? "",
+        });
+        if (!project) {
+          continue;
+        }
+        out.push({
+          kind: "stored",
+          key: `${machineId}:${info.sessionId}`,
+          info,
+          machineId,
+          project,
+          at: info.wroteAt ?? info.createdAt ?? 0,
+          status: "yours",
+          mark: "idle",
+          unread: false,
+        });
+      }
+    }
+    return out;
+  });
+}
+
+const stored = new StoredTranscripts();
+
+/** Recent's rows, newest first: read only where the list is drawn. */
 export function recentEntries(): RecentEntry[] {
   const listed = cawco.listedInstances;
   const under = delegatesByTop(listed);
@@ -188,6 +273,7 @@ export function recentEntries(): RecentEntry[] {
     const delegates = under.get(row.id) ?? [];
     const at = placeOf(row);
     entries.push({
+      kind: "session",
       row,
       status,
       mark: markOf(row, status, delegates),
@@ -197,12 +283,27 @@ export function recentEntries(): RecentEntry[] {
       under: delegates,
     });
   }
-  return entries.sort((a, b) => b.at - a.at || (a.row.id < b.row.id ? -1 : 1));
+  for (const entry of stored.entries) {
+    entries.push({ ...entry, day: dayOf(entry.at, now) });
+  }
+  return entries.sort((a, b) => b.at - a.at || (keyOf(a) < keyOf(b) ? -1 : 1));
 }
 
-/** The row's project, if it is in one. */
-const projectOf = (row: BoardRow) =>
-  row.projectId ? cawco.project(row.projectId) : null;
+/** A row's key in the list: a session's id, a stored transcript's `machineId:sessionId`. */
+const keyOf = (entry: RecentEntry): string =>
+  entry.kind === "session" ? entry.row.id : entry.key;
+
+/** The entry's project, if it is in one. */
+const projectOf = (entry: RecentEntry) => {
+  if (entry.kind === "stored") {
+    return entry.project;
+  }
+  return entry.row.projectId ? cawco.project(entry.row.projectId) : null;
+};
+
+/** The machine a row is on. */
+const machineOf = (entry: RecentEntry): string =>
+  entry.kind === "session" ? entry.row.machineId : entry.machineId;
 
 /** The group a session falls in, by one level: its key and its words. */
 function groupOf(
@@ -213,13 +314,13 @@ function groupOf(
     case "day":
       return { key: entry.day, label: sidebarWords[entry.day] };
     case "project": {
-      const project = projectOf(entry.row);
+      const project = projectOf(entry);
       return project
         ? { key: project.id, label: project.name }
         : { key: "", label: sidebarWords.noProject };
     }
     case "area": {
-      const id = areaIdOf(projectOf(entry.row) ?? undefined);
+      const id = areaIdOf(projectOf(entry) ?? undefined);
       const name = id ? areas.nameOf(id) : null;
       return id && name
         ? { key: id, label: name }
@@ -227,8 +328,8 @@ function groupOf(
     }
     case "machine":
       return {
-        key: entry.row.machineId,
-        label: machineName(entry.row.machineId),
+        key: machineOf(entry),
+        label: machineName(machineOf(entry)),
       };
     default:
       return by satisfies never;

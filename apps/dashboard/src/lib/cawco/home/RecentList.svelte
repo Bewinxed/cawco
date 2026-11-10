@@ -32,8 +32,8 @@
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
-  import type { BoardRow } from "../client.svelte";
-  import { rowHref } from "../links";
+  import { type BoardRow, cawco } from "../client.svelte";
+  import { catalogTitle, conversationHref, rowHref } from "../links";
   import { type BranchOptions, branch } from "../motion/branch.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { regroup, regroupPrimer } from "../motion/share.svelte";
@@ -67,6 +67,8 @@
     type RecentGroup,
     type RecentStatus,
     recentEntries,
+    type SessionEntry,
+    type StoredEntry,
   } from "./recent.svelte";
 
   let {
@@ -114,16 +116,15 @@
     yours: sidebarWords.yourTurn,
   };
 
-  const ageOf = (row: BoardRow): string => {
-    const at = lastAt(row);
-    return at === 0 ? "" : formatAgeShort(at, clock.now);
-  };
-  const ageHint = (row: BoardRow): string => {
-    const at = lastAt(row);
-    return at === 0
+  /** A row's age: when it last moved (a stored transcript, when its file last changed). */
+  const ageAt = (at: number): string =>
+    at === 0 ? "" : formatAgeShort(at, clock.now);
+  const hintAt = (at: number): string =>
+    at === 0
       ? "No activity recorded"
       : `${sidebarWords.lastActivity} ${formatDistanceToNow(new Date(at))}`;
-  };
+  const ageOf = (row: BoardRow): string => ageAt(lastAt(row));
+  const ageHint = (row: BoardRow): string => hintAt(lastAt(row));
 
   /** How many sessions a group holds, at every level under it. */
   const countIn = (group: RecentGroup): number => group.entries.length;
@@ -148,7 +149,7 @@
   });
 
   /** The session's own branch, its delegates under it newest first. */
-  function branchOf(entry: RecentEntry): Branch {
+  function branchOf(entry: SessionEntry): Branch {
     const rows = [entry.row, ...entry.under];
     const lines = tree(rows, {
       order: (siblings) => [...siblings].sort((a, b) => lastAt(b) - lastAt(a)),
@@ -198,27 +199,32 @@
 
   /**
    * A row of the list: a group parent, a session (one of the list's, or a
-   * delegate under one, `node`), or a session's "N older" row.
+   * delegate under one, `node`), a session's "N older" row, or a transcript
+   * stored on a machine.
    */
   type Node =
     | { kind: "group"; group: RecentGroup }
     | {
         kind: "session";
         count: number;
-        entry: RecentEntry | null;
+        entry: SessionEntry | null;
         node: Branch | null;
         row: BoardRow;
       }
-    | { kind: "older"; node: Branch };
+    | { kind: "older"; node: Branch }
+    | { kind: "stored"; entry: StoredEntry };
 
   const groupNode = (group: RecentGroup): Node => ({ kind: "group", group });
-  const entryNode = (entry: RecentEntry): Node => ({
-    kind: "session",
-    row: entry.row,
-    count: entry.under.length,
-    entry,
-    node: null,
-  });
+  const entryNode = (entry: RecentEntry): Node =>
+    entry.kind === "stored"
+      ? { kind: "stored", entry }
+      : {
+          kind: "session",
+          row: entry.row,
+          count: entry.under.length,
+          entry,
+          node: null,
+        };
   const branchNode = (node: Branch): Node => ({
     kind: "session",
     row: node.row,
@@ -229,6 +235,9 @@
 
   /** Whether a row's own rows are out under it. */
   function isOpen(node: Node): boolean {
+    if (node.kind === "stored") {
+      return false;
+    }
     if (node.kind === "group") {
       return !grouping.folded(node.group.path);
     }
@@ -240,7 +249,7 @@
 
   /** What hangs under a row while it is open: the next level, or a session's delegates. */
   function kidsOf(node: Node): Node[] {
-    if (node.kind === "older" || !isOpen(node)) {
+    if (node.kind === "older" || node.kind === "stored" || !isOpen(node)) {
       return [];
     }
     if (node.kind === "group") {
@@ -249,7 +258,7 @@
         ? group.groups.map(groupNode)
         : group.entries.map(entryNode);
     }
-    const own = node.node ?? branchOf(node.entry as RecentEntry);
+    const own = node.node ?? branchOf(node.entry as SessionEntry);
     return [
       ...own.recent.map(branchNode),
       ...(own.older.length > 0 ? [{ kind: "older" as const, node: own }] : []),
@@ -258,12 +267,18 @@
 
   /** A row's key: a group by its path, a session by its id, wherever it moves. */
   const keyOf = (node: Node): string => {
-    if (node.kind === "group") {
-      return `group:${node.group.path}`;
+    switch (node.kind) {
+      case "group":
+        return `group:${node.group.path}`;
+      case "session":
+        return `session:${node.row.id}`;
+      case "stored":
+        return `stored:${node.entry.key}`;
+      case "older":
+        return `older:${node.node.row.id}`;
+      default:
+        return node satisfies never;
     }
-    return node.kind === "session"
-      ? `session:${node.row.id}`
-      : `older:${node.node.row.id}`;
   };
 
   const rows = $derived(
@@ -296,6 +311,7 @@
     data-line-open={isOpen(node) || undefined}
     data-recent-group={node.kind === "group" ? node.group.path : undefined}
     data-session-row={node.kind === "session" ? node.row.id : undefined}
+    data-stored-row={node.kind === "stored" ? node.entry.key : undefined}
     data-sidebar="menu-sub-item"
     data-slot="sidebar-menu-sub-item"
     style:--line-depth={item.line.depth}
@@ -340,6 +356,30 @@
         title={instanceTitle(row)}
         trail={ageOf(row)}
         word={entry ? WORD[entry.status] : undefined}
+      />
+    {:else if node.kind === "stored"}
+      <!-- A transcript stored on its machine: Your turn, never unread, and
+           no Done (the hub keeps nothing to archive it by). -->
+      {@const { info, machineId, project } = node.entry}
+      <SessionRow
+        active={active !== null && active === info.sessionId}
+        compact={!tall}
+        hint={hintAt(info.lastModified)}
+        href={conversationHref(info.sessionId, cawco.instanceIndex, {
+          machineId,
+          cwd: info.cwd ?? "",
+        })}
+        {info}
+        line={tall ? project.name : ""}
+        {machineId}
+        mark={node.entry.mark}
+        peek={false}
+        quiet
+        regroup="regroup:stored:{node.entry.key}"
+        {stale}
+        title={catalogTitle(info, cawco.instanceIndex, machineId)}
+        trail={ageAt(info.lastModified)}
+        word={WORD[node.entry.status]}
       />
     {:else}
       {@const own = node.node}

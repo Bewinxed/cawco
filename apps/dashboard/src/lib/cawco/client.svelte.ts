@@ -1328,7 +1328,23 @@ if (import.meta.env.DEV) {
     frame: handleFrame,
     standHub,
     leaveHub,
+    standCatalog,
   });
+}
+
+/**
+ * Stands a machine's stored sessions in as its listing answered them, the
+ * sentences for any harness it left out with them (dev only: a bench's, on
+ * its hub; {@link loadCatalog} is the real read).
+ */
+function standCatalog(
+  machineId: string,
+  sessions: NeutralSessionInfo[],
+  leftOut: string[] = []
+): void {
+  catalog = { ...catalog, [machineId]: sessions };
+  catalogLeftOut = { ...catalogLeftOut, [machineId]: leftOut };
+  catalogsTried[machineId] = true;
 }
 
 /**
