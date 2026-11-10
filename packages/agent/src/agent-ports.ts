@@ -13,6 +13,7 @@ import type { AccountBorrowFrame } from "@cawco/core/accounts";
 import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
 import type { CommandQueueFrame } from "@cawco/core/commands/controls";
 import type { MoveProgressFrame } from "@cawco/core/move";
+import type { Envelope } from "@cawco/core/protocol";
 import type { StageCloneFrame, StageFrame } from "@cawco/core/stage";
 import type { RelayFrame } from "@cawco/core/stream-relay";
 
@@ -23,6 +24,8 @@ export interface AgentPorts {
   readonly browsers: (frame: BrowserFrame) => void;
   /** A command's place in the slot queues (hub-command.ts). */
   readonly commandQueue: (frame: CommandQueueFrame) => void;
+  /** An envelope a harness builds itself, or the supervisor hands off (session.ts `emit`). */
+  readonly emit: (envelope: Envelope) => void;
   /** The machine this agent is: the browsers' and the relay's frames name it. */
   readonly machineId: string;
   /** A project move's progress (move.ts). */
