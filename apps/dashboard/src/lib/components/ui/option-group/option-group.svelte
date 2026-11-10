@@ -28,6 +28,7 @@
 
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
   import { setOptionGroup } from "./state.svelte.js";
 
@@ -51,6 +52,7 @@
     value = $bindable([]),
     multiple = false,
     disabled = false,
+    glide = false,
     layout,
     onenter,
     onkeydown,
@@ -62,6 +64,14 @@
     /** Several options may be chosen at once. */
     multiple?: boolean;
     disabled?: boolean;
+    /**
+     * One pick whose mark moves: the kit's selection pill (`highlight`,
+     * `look: "card"`, the chip's own picked edge over the recess) glides
+     * from the option left to the one chosen, across a wrap too, the way
+     * the segmented control's thumb slides; the options stand over it with
+     * no fill or edge of their own while chosen.
+     */
+    glide?: boolean;
     layout?: OptionGroupLayout;
     /** Enter on an option: the host's own act (continue, send, answer). */
     onenter?: (event: KeyboardEvent) => void;
@@ -71,6 +81,7 @@
     value: () => value,
     multiple: () => multiple,
     disabled: () => disabled,
+    glide: () => glide && !multiple,
     layout: () => layout ?? "chips",
     setValue: (next) => {
       value = next;
@@ -181,6 +192,15 @@
   role={multiple ? "group" : "radiogroup"}
   bind:this={ref}
   {...restProps}
+  {@attach glide && !multiple
+    ? highlight({
+        rows: '[data-slot="option"]',
+        selected: '[data-slot="option"][aria-checked="true"]',
+        axis: "xy",
+        ghost: false,
+        look: "card",
+      })
+    : undefined}
 >
   {@render children?.()}
 </div>

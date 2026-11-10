@@ -263,6 +263,14 @@ export function colourLike(picked: string, like: string): string {
   return `${match?.[1]}(${lead}${channels.join(" ")}${alphaText ? ` / ${alphaText}` : ""})`;
 }
 
+/** At most this many options, this many characters in all, stand in place as chips; past it a set is a list. */
+const IN_PLACE_MAX = 8;
+const IN_PLACE_CHARS = 64;
+
+/** Whether a set of options, as their words read, stands in place (segments or chips) in the card's width. */
+export const fitsInPlace = (words: readonly string[]): boolean =>
+  words.length <= IN_PLACE_MAX && words.join("").length <= IN_PLACE_CHARS;
+
 /** The dials he changed from as written, by name. */
 export const changedOf = (
   dials: readonly GraphDial[],

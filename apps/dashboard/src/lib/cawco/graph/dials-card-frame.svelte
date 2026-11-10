@@ -47,7 +47,8 @@
   const phone = new MediaQuery("(width < 640px)");
   const stage = $derived(phone.current ? 700 : 820);
   const nothing = () => undefined;
-  const shown = $derived(propDials(props, dials));
+  const saved = $derived(savedOf(props, args));
+  const shown = $derived(propDials(props, dials, saved));
   const cases = $derived(contentCases(shown, longest));
   /** His edits with the picked case's words over the text props it reaches. */
   const held = $derived({
@@ -84,7 +85,7 @@
         component,
         props: shown,
         content: { cases, onpick: nothing },
-        saved: savedOf(props, args),
+        saved,
         edits: held,
         onchange: nothing,
         onreset: nothing,

@@ -6,9 +6,6 @@
   /** At most this many options, their words this long in all, stand as one segmented row. */
   const SEGMENTS_MAX = 3;
   const SEGMENTS_CHARS = 18;
-  /** Past this many, or this many characters in all, the options stand in a list: the last resort, where chips would fill the card. */
-  const CHIPS_MAX = 8;
-  const CHIPS_CHARS = 64;
 
   /** A design system's colour name: words joined by hyphens, as its variable is named. */
   const TOKEN_NAME = /^[a-z]+(?:-[a-z0-9]+)+$/u;
@@ -54,6 +51,7 @@
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
+  import { fitsInPlace } from "./dials";
 
   let {
     options,
@@ -78,10 +76,8 @@
   } = $props();
 
   const words = $derived(optionWords(options));
-  const listed = $derived(
-    !swatches &&
-      (options.length > CHIPS_MAX || words.join("").length > CHIPS_CHARS)
-  );
+  /** A set too long to stand in place is a list: the last resort (an agent's dial; a prop's long set is data, a line of words). */
+  const listed = $derived(!(swatches || fitsInPlace(words)));
   const segmented = $derived(
     !swatches &&
       options.length <= SEGMENTS_MAX &&
@@ -129,6 +125,7 @@
     <OptionGroup
       aria-label={label}
       bind:value={() => [value], (next) => next[0] && onchange(next[0])}
+      glide
     >
       {#each options as option, at (option)}
         {#if swatches}

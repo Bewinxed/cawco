@@ -363,8 +363,8 @@ export const graphWords = {
     agentHead: "Agent's dials",
     /** The card's part that holds the props of the state on the stage, by its component's name in words. */
     propsHead: (component: string) => `${component} props`,
-    /** The props' one switch of words: the row's name, and its cases, each filling every text prop it reaches at once. */
-    content: "All text",
+    /** The props' one switch of words, led by what it does: each case fills every text prop it reaches at once. */
+    content: "Fill all text with",
     cases: {
       saved: "Saved",
       empty: "Empty",

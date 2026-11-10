@@ -9,7 +9,28 @@
 import type { PropMeta } from "@cawco/core/stage";
 import { graphWords } from "@cawco/core/words/graph";
 import { controlOf } from "../preview/sheet-inspector.svelte";
-import type { DialValue, DialValues, GraphDial } from "./dials";
+import {
+  type DialValue,
+  type DialValues,
+  fitsInPlace,
+  type GraphDial,
+  isColour,
+} from "./dials";
+
+/** How a line of words is entered, read off its prop's type and value: a date, a time, both, or a link; none for free words. */
+type WordsFormat = "date" | "time" | "datetime" | "url";
+
+/** A prop as the face lists it: its dial, and for words with a form of their own, that form. */
+export type PropDial = GraphDial & { format?: WordsFormat };
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
+const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/u;
+const CLOCK = /^\d{2}:\d{2}(?::\d{2})?$/u;
+const LINK = /^https?:\/\//u;
+/** A figure counted in milliseconds by its name (`delayMs`, `duration`, `timeout`). */
+const MILLIS = /(?:Ms|^ms|Duration|^duration|Delay|^delay|Timeout|^timeout)$/u;
+/** A colour written out (a hex, a colour function), never a word the browser also reads as one ("red" stays words). */
+const WRITTEN_COLOUR = /^#|\(/u;
 
 /** A default's quotes, as docgen writes it (`"neutral"`). */
 const QUOTES = /^["'`]|["'`]$/gu;
@@ -55,10 +76,10 @@ export interface ContentCase {
  * branch, a path, a link), which runs unbroken in one script.
  */
 export function contentCases(
-  props: readonly GraphDial[],
+  props: readonly PropDial[],
   longest: DialValues = {}
 ): ContentCase[] {
-  const text = props.filter((dial) => dial.kind === "text");
+  const text = props.filter((dial) => dial.kind === "text" && !dial.format);
   const prose = text.filter((dial) => !IDENTIFIER.test(dial.name));
   const fill = (
     dials: readonly GraphDial[],
@@ -105,11 +126,13 @@ export function wordsOf(identifier: string): string {
 
 /**
  * A prop as the dial of its kind, named in words; none for a slot or a
- * code-typed prop. Whatever has a known set of values is picked from it: an
- * enum and a size or font token as a choice, a colour token as its
- * swatches; only free words are typed.
+ * code-typed prop. Whatever selects a look or a behaviour is picked: an
+ * enum of a few looks and a size or font token as a choice, a colour token
+ * as its swatches, a boolean as a switch, a figure as a number; data (free
+ * words, and a set of names too long to stand in place) is one line of
+ * words, its length and script the words' switch's.
  */
-function dialOf(prop: PropMeta): GraphDial | null {
+function dialOf(prop: PropMeta, value: DialValue | undefined): PropDial | null {
   const base = {
     name: prop.name,
     label: wordsOf(prop.name),
@@ -128,30 +151,67 @@ function dialOf(prop: PropMeta): GraphDial | null {
   switch (controlOf(prop)) {
     case "segments":
     case "select":
-      return { ...base, kind: "select", options };
+      // A set too long to stand in place names data (projects, people),
+      // not looks: which one it holds changes the drawing only by its
+      // length and script, so it is a line of words under the words'
+      // switch, never a list of its values (the owner's pin, 2026-11-10).
+      return fitsInPlace(options)
+        ? { ...base, kind: "select", options }
+        : { ...base, kind: "text" };
     case "switch":
       return { ...base, kind: "toggle" };
     case "number":
-      return { ...base, kind: "number" };
-    case "text":
-      return { ...base, kind: "text" };
+      return MILLIS.test(prop.name)
+        ? { ...base, kind: "number", unit: "ms" }
+        : { ...base, kind: "number" };
+    case "text": {
+      const words = typeof value === "string" ? value : "";
+      const format = formatOf(prop, words);
+      if (!format && WRITTEN_COLOUR.test(words) && isColour(words)) {
+        return { ...base, kind: "color" };
+      }
+      return format
+        ? { ...base, kind: "text", format }
+        : { ...base, kind: "text" };
+    }
     case "slot":
     case "code":
       return null;
   }
 }
 
-/** The props the face lists, each as the dial of its kind, in the component's order. */
+/** The form a prop's words take, by its type and its value: a `Date` or an ISO date, a time, both, a link. */
+function formatOf(prop: PropMeta, words: string): WordsFormat | undefined {
+  if (ISO_DATETIME.test(words)) {
+    return "datetime";
+  }
+  if (prop.type.raw === "Date" || ISO_DATE.test(words)) {
+    return "date";
+  }
+  if (CLOCK.test(words)) {
+    return "time";
+  }
+  if (LINK.test(words)) {
+    return "url";
+  }
+}
+
+/**
+ * The props the face lists, each as the dial of its kind, in the
+ * component's order: the control read off its type and its saved value
+ * (`saved`, by name) before it falls back to a line of words.
+ */
 export function propDials(
   props: readonly PropMeta[],
-  dials: readonly GraphDial[]
-): GraphDial[] {
+  dials: readonly GraphDial[],
+  saved: DialValues = {}
+): PropDial[] {
   const dialed = new Set(
     dials.flatMap((dial) => ("arg" in dial.target ? [dial.target.arg] : []))
   );
   return props
     .filter((prop) => !dialed.has(prop.name))
-    .map(dialOf)
+    .map((prop) => dialOf(prop, saved[prop.name]))
     .filter((dial) => dial !== null);
 }
 

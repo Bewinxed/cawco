@@ -30,6 +30,7 @@
    */
   import { graphWords } from "@cawco/core/words/graph";
   import { MediaQuery } from "svelte/reactivity";
+  import Choice from "#lib/cawco/config/Choice.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import { IconReset } from "#lib/icons.js";
@@ -111,22 +112,6 @@
   const changed = $derived(changedOf(dials, written, values));
   const propsChanged = $derived(
     state ? changedOf(state.props, state.saved, state.edits) : []
-  );
-  /** The words' switch as a row of the grid: a choice among its cases, Saved first. */
-  const CONTENT = "content";
-  const contentDial = $derived<GraphDial | null>(
-    state?.content && state.content.cases.length > 0
-      ? {
-          kind: "select",
-          name: CONTENT,
-          label: words.dials.content,
-          options: [
-            words.dials.cases.saved,
-            ...state.content.cases.map((one) => one.label),
-          ],
-          target: { arg: CONTENT },
-        }
-      : null
   );
   /** The case the text props stand in now: Saved while all hold their saved words, a case while each it reaches holds its words and the rest their saved; none once he wrote his own. */
   const contentPicked = $derived.by(() => {
@@ -304,28 +289,43 @@
             data-slot="dials-props"
           >
             {@render partHead(title)}
-            <div
-              class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
-            >
-              {#if contentDial && own.content}
-                {@const pick = own.content}
-                <DialRow
-                  dial={contentDial}
-                  edited={false}
-                  idPrefix="prop"
-                  {lang}
+            <!-- The props' own control, not one of them: in the section's
+                 head band, under its title, a segmented switch of the
+                 kit's (its thumb sliding between cases) led by what it
+                 does, across the card rather than in the props' columns,
+                 a part's gap above the props it fills. -->
+            {#if own.content && own.content.cases.length > 0}
+              {@const pick = own.content}
+              <div
+                class="col-span-full mb-space-2 flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1"
+                data-slot="dials-content"
+              >
+                <span class="flex-none text-ink-muted type-meta"
+                  >{words.dials.content}</span
+                >
+                <Choice
+                  label={words.dials.content}
                   onchange={(next) =>
                     pick.onpick(
                       pick.cases.find((one) => one.label === next)?.fill ?? null
                     )}
-                  onopenchange={layerOf(`prop:${CONTENT}`)}
-                  onreset={() => pick.onpick(null)}
-                  open={open === `prop:${CONTENT}`}
-                  phone={phone.current}
+                  options={[
+                    {
+                      value: words.dials.cases.saved,
+                      label: words.dials.cases.saved,
+                    },
+                    ...pick.cases.map((one) => ({
+                      value: one.label,
+                      label: one.label,
+                    })),
+                  ]}
                   value={contentPicked}
-                  was={contentPicked}
                 />
-              {/if}
+              </div>
+            {/if}
+            <div
+              class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+            >
               {#each own.props as prop (prop.name)}
                 <DialRow
                   dial={prop}

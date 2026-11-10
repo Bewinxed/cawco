@@ -134,7 +134,6 @@ export const TASK_LONGEST: DialValues = {
   title:
     "Hub: a session's row says when the person last wrote to it, when they pressed Done, and whether its turn ended waiting on its own work",
   assignee: "design-review delegate on obelisk-of-light",
-  due: "Thursday 12 November 2026, 17:30",
   estimate: 40,
 };
 
@@ -145,20 +144,7 @@ export const TASK_CARD: PropMeta[] = [
   oneOf("column", ["inbox", "next", "doing", "review", "done"]),
   oneOf("priority", ["low", "normal", "high", "urgent"], "normal"),
   prop("assignee", "string", "string"),
-  oneOf("project", [
-    "cockpit",
-    "cawco-ios",
-    "landing",
-    "hub-migrations",
-    "routines",
-    "design-system",
-    "docs",
-    "billing",
-    "probe-kit",
-    "fleet-watch",
-    "onboarding",
-    "release-notes",
-  ]),
+  prop("project", "string", "string"),
   prop("due", "string", "string"),
   prop("estimate", "number", "number"),
   prop("spent", "number", "number"),
@@ -189,7 +175,7 @@ export const TASK_ARGS = {
   priority: "high",
   assignee: "design delegate",
   project: "cockpit",
-  due: "Thu 12 Nov",
+  due: "2026-11-12",
   estimate: 3,
   spent: 2.5,
   cost: 6.12,

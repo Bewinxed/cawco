@@ -22,10 +22,17 @@
   import DialChoice, { optionSaid, paint } from "./DialChoice.svelte";
   import DialColour from "./DialColour.svelte";
   import DialNumber from "./DialNumber.svelte";
-  import { type DialValue, type GraphDial, rangeOf } from "./dials";
+  import { type DialValue, rangeOf } from "./dials";
   import { figureOf } from "./figures";
+  import type { PropDial } from "./prop-dials";
 
   const words = graphWords;
+  /** The input each form of words takes. */
+  const INPUT_TYPE = {
+    date: "date",
+    time: "time",
+    datetime: "datetime-local",
+  } as const;
 
   let {
     dial,
@@ -41,8 +48,8 @@
     onchange,
     onreset,
   }: {
-    /** The control: an agent's dial, or a prop as one. */
-    dial: GraphDial;
+    /** The control: an agent's dial, or a prop as one (its words' form read off its type and value). */
+    dial: PropDial;
     /** What the control shows: his value, else `was`. */
     value: DialValue | undefined;
     /** The value it was: the agent's as written, or the state's saved prop. */
@@ -159,6 +166,17 @@
           {id}
           onCheckedChange={(next: boolean) => onchange(next)}
         />
+      {:else if dial.format === "date" || dial.format === "time" || dial.format === "datetime"}
+        <!-- A date, a time or both: the platform's own picker in the kit's
+             field (the kit has no calendar of its own yet). -->
+        <Input
+          {id}
+          measure="shrink"
+          onchange={(event: Event) =>
+            onchange((event.currentTarget as HTMLInputElement).value)}
+          type={INPUT_TYPE[dial.format]}
+          value={String(value ?? "")}
+        />
       {:else}
         <!-- Free words: one line holding the value, its end an ellipsis
              while it is longer; pressed, it takes the caret and his own
@@ -170,6 +188,7 @@
           measure="shrink"
           onchange={(event: Event) =>
             onchange((event.currentTarget as HTMLInputElement).value)}
+          type={dial.format === "url" ? "url" : "text"}
           value={String(value ?? "")}
         />
       {/if}
