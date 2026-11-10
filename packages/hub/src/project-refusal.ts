@@ -1,5 +1,4 @@
-import { ElysiaStatus, problem } from "elysia";
-import { projectRoot } from "./project-folder";
+import { problem } from "elysia";
 import { StatusRefusal } from "./refusal";
 
 /**
@@ -34,12 +33,3 @@ export const projectRefusalOf = (refused: {
   response: { detail: string };
   status: ProjectRefusal["status"];
 }) => new ProjectRefusal(refused.status, refused.response.detail);
-
-/** A project's folder on disk (project-folder.ts `projectRoot`) for a family that still throws: its path, a refused id thrown on as a {@link ProjectRefusal}. */
-export const projectRootOf = (projectId: string): string => {
-  const root = projectRoot(projectId);
-  if (root instanceof ElysiaStatus) {
-    throw projectRefusalOf(root);
-  }
-  return root;
-};

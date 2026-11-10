@@ -86,7 +86,7 @@ export const lfsRoutes = ({
           return { ok: true };
         }
         const machineId = project.machineId ?? body.machineId;
-        caw.notice(params.id, {
+        const noted = caw.notice(params.id, {
           title: "Large files left as pointers: an undeclared LFS server",
           event: {
             kind: "repo",
@@ -97,6 +97,6 @@ export const lfsRoutes = ({
           },
           body: `The repository's \`.lfsconfig\` says its large files live at ${body.endpoint}, which is neither its origin's LFS nor where ${project.row.name} declared its large files live. CawCo fetches nothing from a server it was not told of, so in ${body.root} on ${machineName(db, machineId)} they are pointer files, not the files themselves.\n\nIf they belong there, declare it: Project details › Large files, set to ${body.endpoint} with the connection that signs in there. Workspaces cut after that fetch them.`,
         });
-        return { ok: true };
+        return noted ?? { ok: true };
       }
     );

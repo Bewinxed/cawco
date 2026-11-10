@@ -29,7 +29,7 @@ import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { workWords } from "@cawco/core/words/work";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { isPlace } from "@cawco/core/workspace-policy";
-import { problem } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactServiceDeps } from "./artifacts/deps";
 import type { MarksDelivery, MarksOutcome, StageAt } from "./artifacts/shapes";
 import { artifactTaker } from "./artifacts/taker";
@@ -416,11 +416,13 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
             }
           : {}),
       })
-      .catch((error: unknown) => ({
-        woke: false as const,
-        why: error instanceof Error ? error.message : String(error),
-      }));
-    if (woke.woke) {
+      .catch((error: unknown) =>
+        problem(502, {
+          code: "caw-failed",
+          detail: error instanceof Error ? error.message : String(error),
+        })
+      );
+    if (!(woke instanceof ElysiaStatus)) {
       console.log(
         artifactToolWords.marksWokeCaw(
           instance.id,
@@ -430,7 +432,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       );
       return { ok: true };
     }
-    const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.why.replace(CLOSING_STOP, "")}.`;
+    const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.response.detail.replace(CLOSING_STOP, "")}.`;
     recordUndelivered(instance, text, images, reason, attachments);
     return { ok: false, reason };
   };
