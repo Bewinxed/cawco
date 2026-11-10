@@ -440,8 +440,11 @@
         field={{ id: "hook-event" }}
         label="Event"
         onpick={(next) => {
-          form.touched.event = true;
-          setEvent(next as HookEvent);
+          const info = HOOK_EVENTS.find((one) => one.event === next);
+          if (info) {
+            form.touched.event = true;
+            setEvent(info.event);
+          }
         }}
         options={HOOK_EVENTS.map((info) => ({
           value: info.event,
@@ -503,7 +506,7 @@
     </p>
     <Choice
       label="Handler"
-      onchange={(next) => setHandlerType(next as HandlerType)}
+      onchange={(next) => setHandlerType(next)}
       options={HANDLERS}
       value={draft.handler.type}
     />
@@ -565,8 +568,7 @@
             label="Shell"
             onchange={(next) => {
               if (draft.handler.type === "command") {
-                draft.handler.shell =
-                  next === "bash" ? undefined : (next as "powershell");
+                draft.handler.shell = next === "bash" ? undefined : next;
               }
             }}
             options={[

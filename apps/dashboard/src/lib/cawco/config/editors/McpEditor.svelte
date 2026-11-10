@@ -259,7 +259,7 @@
     <Choice
       label={words.kind}
       onchange={(next) => {
-        mode = next as Mode;
+        mode = next;
       }}
       options={[
         { value: "bunx", label: words.kindBunx },
@@ -365,7 +365,7 @@
           <Choice
             label={words.transport}
             onchange={(next) => {
-              transport = next as "http" | "sse";
+              transport = next;
             }}
             options={[
               { value: "http", label: words.transportHttp },

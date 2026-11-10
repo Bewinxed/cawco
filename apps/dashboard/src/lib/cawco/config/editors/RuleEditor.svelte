@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { HARNESSES, type HarnessKind } from "@cawco/core/harness/kinds";
+  import { HARNESSES } from "@cawco/core/harness/kinds";
   import {
     type RuleDraft,
     type RuleMatchKind,
@@ -169,7 +169,10 @@
     if (value === "") {
       delete draft.scope[key];
     } else if (key === "harness") {
-      draft.scope.harness = value as HarnessKind;
+      const harness = HARNESSES.find((one) => one === value);
+      if (harness) {
+        draft.scope.harness = harness;
+      }
     } else {
       draft.scope[key] = value;
     }
@@ -263,7 +266,7 @@
     <div data-slot="fold" class="flex flex-col gap-inherit">
       <Choice
         label="Match"
-        onchange={(next) => setMatchKind(next as RuleMatchKind)}
+        onchange={(next) => setMatchKind(next)}
         options={[
           { value: "phrase", label: "A phrase" },
           { value: "regex", label: "A regular expression" },
@@ -347,7 +350,7 @@
       <Choice
         label="Read"
         onchange={(next) => {
-          draft.watch = next as RuleWatch;
+          draft.watch = next;
         }}
         options={WATCH}
         value={draft.watch}
@@ -397,7 +400,7 @@
         <Choice
           label="Send it"
           onchange={(next) => {
-            draft.timing = next as RuleTiming;
+            draft.timing = next;
           }}
           options={TIMING.map((option) => ({
             value: option.value,
