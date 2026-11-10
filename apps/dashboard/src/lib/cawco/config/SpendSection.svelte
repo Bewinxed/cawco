@@ -73,8 +73,14 @@
         class="w-full"
         id="spend-on-cap"
         measure="cap-md"
-        onchange={(event) =>
-          choose((event.currentTarget as HTMLSelectElement).value as OnCap)}
+        onchange={(event) => {
+          const way = SPEND_ON_CAP.find(
+            (one) => one.value === event.currentTarget.value
+          );
+          if (way) {
+            choose(way.value);
+          }
+        }}
         value={onCap ?? ""}
       >
         {#each SPEND_ON_CAP as each (each.value)}

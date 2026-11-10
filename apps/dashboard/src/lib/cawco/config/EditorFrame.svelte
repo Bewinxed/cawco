@@ -32,7 +32,7 @@
   import { page } from "$app/state";
   import { connectionStore } from "../hub/socket.svelte";
 
-  import { type Cards, rememberCard } from "./cards";
+  import { rememberCard } from "./cards";
   import EditorFooter, { type EditorQuestion } from "./EditorFooter.svelte";
   import { hubDown } from "./hub.svelte";
   import SkeletonRows from "./SkeletonRows.svelte";
@@ -95,9 +95,7 @@
   /** Held at the kept height from opening until the parts are in. */
   let holding = $state(untrack(() => settling));
   const card = $derived(
-    holding
-      ? ((page.data.cards as Cards | undefined)?.[page.url.pathname] ?? null)
-      : null
+    holding ? (page.data.cards?.[page.url.pathname] ?? null) : null
   );
   let body = $state<HTMLElement | null>(null);
   // Let go once everything is in: any difference from the kept height is

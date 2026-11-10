@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="V extends string">
   /**
    * A choice between a few named options: the kit's segmented control, on one
    * line (DESIGN.md, Segmented: one groove, never two rows). Where the row is
@@ -15,9 +15,9 @@
     onchange,
   }: {
     label: string;
-    value: string;
-    options: { value: string; label: string; disabled?: boolean }[];
-    onchange: (next: string) => void;
+    value: V;
+    options: { value: V; label: string; disabled?: boolean }[];
+    onchange: (next: V) => void;
   } = $props();
 
   /**
@@ -61,8 +61,9 @@
     aria-label={label}
     class="flex-none"
     onValueChange={(next) => {
-      if (next) {
-        onchange(next);
+      const chosen = options.find((option) => option.value === next);
+      if (chosen) {
+        onchange(chosen.value);
       }
     }}
     type="single"

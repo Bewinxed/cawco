@@ -115,8 +115,10 @@
         id="preview-mode"
         measure="cap-md"
         onchange={(event) => {
-          mode = (event.currentTarget as HTMLSelectElement).value as
-            "port" | "host";
+          const { value } = event.currentTarget;
+          if (value === "port" || value === "host") {
+            mode = value;
+          }
           refused = undefined;
         }}
         value={mode}
