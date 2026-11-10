@@ -4,7 +4,7 @@
    * Projects' area or machine) as a tree parent: its own tree mark (a day
    * the calendar, an area the layers, a machine its OS mark, a project its
    * ProjectMark) and its name, the rows under it hung from that mark by the
-   * rail's nesting lines (app.css .kit-nest). The row is the switch that
+   * rail's nesting lines (tree-lines.ts). The row is the switch that
    * folds them; folded, its mark shows how many it holds. It is the row's
    * own box a regroup moves (`data-regroup`), a parent the regroup makes
    * fading in where it stands and one it removes fading out where it stood

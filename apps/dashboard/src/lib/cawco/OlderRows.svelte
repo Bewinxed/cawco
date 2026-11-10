@@ -14,7 +14,7 @@
   ): boolean => front || olderOpen[list].has(id);
 </script>
 
-<script generics="T" lang="ts">
+<script generics="T, R" lang="ts">
   import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * A parent's older rows (older.ts): the "N older" row, the last row under
@@ -28,8 +28,11 @@
    * The row is a disclosure, so a button. Its lead is a tree mark on its
    * siblings' axis (where the parent's arm ends), with the history glyph as
    * its face and no tile under it; the row is the switch. The box opens and
-   * folds as every tree does (motion/branch), and draws no line: it scrolls
-   * on its own, off the parent's rail, which ends at the row that opens it.
+   * folds as every tree does (motion/branch), and draws no line to the
+   * row: it scrolls on its own, off the parent's rail, which ends at the
+   * row that opens it. Inside, the older trees are a flat tree of their own
+   * (tree-lines.ts), drawn row by row by the list's own `row`, inside the
+   * row the list gives this one (its `li`).
    *
    * The press shows at once: the row is busy and its glyph gives way to the
    * spinner in the frame of the press, and the rows are drawn on the frame
@@ -49,6 +52,7 @@
   import { type BranchOptions, branch } from "./motion/branch.svelte";
   import { failedWords, OLDER_ROWS } from "./older";
   import TreeMark from "./TreeMark.svelte";
+  import { type FlatRow, treeLines } from "./tree-lines";
 
   let {
     id,
@@ -56,11 +60,11 @@
     trees = [],
     count,
     failed = 0,
-    keyOf,
-    tree,
+    flatten,
+    row,
+    glyph,
     front = false,
     tall = false,
-    flip = true,
     still = false,
     motion,
   }: {
@@ -74,15 +78,16 @@
     count: number;
     /** How many of those rows failed (older.ts `failedIn`). */
     failed?: number;
-    keyOf?: (held: T) => string;
-    /** One older tree, drawn as the list draws its rows. */
-    tree?: Snippet<[T]>;
+    /** The older trees as the rows of one flat tree (tree-lines `flatTree`). */
+    flatten: (trees: T[]) => FlatRow<R>[];
+    /** One row, drawn as the list draws its rows: its `li`, keyed here. */
+    row: Snippet<[FlatRow<R>]>;
+    /** The glyph its rows' lines are placed by. */
+    glyph: string;
     /** The conversation in front is one of them: the box is out, on it. */
     front?: boolean;
     /** Among two-line rows (the home's): the row stands at their height. */
     tall?: boolean;
-    /** Its box is reflow's to move (motion/rows); not while a list drives it. */
-    flip?: boolean;
     /** A copy on its way out of a list: the row alone, taking no press. */
     still?: boolean;
     /** The row's own motion, as an `animation` value, where the list gives its rows one. */
@@ -159,9 +164,9 @@
     }
     const within = box;
     const scroll = requestAnimationFrame(() => {
-      const row = within.querySelector('[aria-current="page"]');
-      if (row) {
-        bringIntoView(row);
+      const current = within.querySelector('[aria-current="page"]');
+      if (current) {
+        bringIntoView(current);
       }
     });
     return () => cancelAnimationFrame(scroll);
@@ -194,94 +199,84 @@
   };
 </script>
 
-<!-- The row's box (`data-flip="box"`): its older rows open in it, so it
-     takes their room at once and what is under it slides with its edge
-     (motion/rows), as a session's delegates do. -->
-<Sidebar.MenuSubItem
-  data-flip={flip && !still ? "box" : undefined}
-  style="--older-h:{height}"
->
-  <!-- The row's measures: the compact session row's own in a tree in the
+<!-- Inside the list's row (its `li`, `data-flip="box"`): its older rows
+     open in it, so it takes their room at once and what is under it slides
+     with its edge (motion/rows). -->
+<!-- The row's measures: the compact session row's own in a tree in the
        rail, a two-line row's among the home's (`data-tall`), so its lead and
        its words stand on its siblings' axes and the nesting line meets its
        mark as it meets theirs. -->
-  <Sidebar.MenuSubButton
-    data-branch-item
-    data-tall={tall || undefined}
-    row="compact-tall"
-    tone="muted"
-  >
-    {#snippet child({ props })}
-      <!-- Busy from the press until its rows are drawn: the glyph gives way
+<Sidebar.MenuSubButton
+  data-branch-item
+  data-tall={tall || undefined}
+  row="compact-tall"
+  tone="muted"
+>
+  {#snippet child({ props })}
+    <!-- Busy from the press until its rows are drawn: the glyph gives way
            to the kit's spinner, as a pending Button's icon does. -->
-      <button
-        {...props}
-        class={["select-none", props.class, "mark-line"]}
-        aria-busy={pending || undefined}
-        aria-expanded={out}
-        onclick={toggle}
-        style:animation={motion}
-        type="button"
-      >
-        <TreeMark
-          open={out}
-          rowToggles
-          status={failed > 0 ? "fail" : undefined}
-        >
-          {#snippet face()}
-            <!-- The glyph and the spinner stacked in one cell (the kit's
+    <button
+      {...props}
+      class={["select-none", props.class, "mark-line"]}
+      aria-busy={pending || undefined}
+      aria-expanded={out}
+      onclick={toggle}
+      style:animation={motion}
+      type="button"
+    >
+      <TreeMark open={out} rowToggles status={failed > 0 ? "fail" : undefined}>
+        {#snippet face()}
+          <!-- The glyph and the spinner stacked in one cell (the kit's
                  icon swap, at a control's pace). Out of the button's name:
                  `aria-busy` says it, and a status in here was read into the
                  name at rest. -->
-            <span class="icon-swap" style:--icon-swap-dur="var(--dur-control)">
-              <span data-active={!pending}
-                ><IconHistory class="size-icon-md" /></span
-              >
-              <span data-active={pending}><Spinner role="presentation" /></span>
-            </span>
-          {/snippet}
-        </TreeMark>
-        <span data-slot="num" class="num"
-          ><span
-            class="inline-grid"
-            style:inline-size="{String(count).length}ch"
-            ><MorphText text={String(count)} /></span
-          >
-          older</span
+          <span class="icon-swap" style:--icon-swap-dur="var(--dur-control)">
+            <span data-active={!pending}
+              ><IconHistory class="size-icon-md" /></span
+            >
+            <span data-active={pending}><Spinner role="presentation" /></span>
+          </span>
+        {/snippet}
+      </TreeMark>
+      <span data-slot="num" class="num"
+        ><span class="inline-grid" style:inline-size="{String(count).length}ch"
+          ><MorphText text={String(count)} /></span
         >
-        {#if failed > 0}
-          <span class="ms-space-1 text-status-fail-ink"
-            >{failedWords(failed)}</span
-          >
-        {/if}
-      </button>
-    {/snippet}
-  </Sidebar.MenuSubButton>
-  {#if out}
-    <!-- reflow never copies or uncovers what is inside (`data-flip-anchor`).
+        older</span
+      >
+      {#if failed > 0}
+        <span class="ms-space-1 text-status-fail-ink"
+          >{failedWords(failed)}</span
+        >
+      {/if}
+    </button>
+  {/snippet}
+</Sidebar.MenuSubButton>
+{#if out}
+  <!-- reflow never copies or uncovers what is inside (`data-flip-anchor`).
          Six rows at most, scrolling in place. The edges fade only while
          there is more past them: a mask on each edge (scrollEdges sets the
          attributes). -->
-    <ul
-      data-slot="older-rows-box"
-      class="flex flex-col gap-(--gap) max-h-(--older-max) mt-(--tree-gap) mx-0 mb-0 p-0 overflow-y-auto overscroll-contain scrollbar-thin list-none not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
-      data-flip-anchor
-      style:--fade="var(--space-4)"
-      style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
-      style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
-      style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
-      style:--gap="calc(var(--tree-gap) / 2)"
-      style:--older-max="calc(6 * var(--older-h) + 5 * var(--gap))"
-      data-keep-scroll="{list}:{id}"
-      bind:this={box}
-      in:branch={TREE}
-      out:branch={TREE}
-      {@attach scrollEdges}
-      {@attach fill}
-    >
-      {#each trees.slice(0, drawn) as held (keyOf?.(held))}
-        {@render tree?.(held)}
-      {/each}
-    </ul>
-  {/if}
-</Sidebar.MenuSubItem>
+  <ul
+    data-slot="older-rows-box"
+    class="kit-tree flex flex-col max-h-(--older-max) mt-(--tree-gap) overflow-y-auto overscroll-contain scrollbar-thin not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
+    data-flip-anchor
+    style:--fade="var(--space-4)"
+    style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
+    style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+    style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+    style:--line-root-gap="calc(var(--tree-gap) / 2)"
+    style:--older-max="calc(6 * {height} + 5 * var(--line-root-gap))"
+    data-keep-scroll="{list}:{id}"
+    bind:this={box}
+    in:branch={TREE}
+    out:branch={TREE}
+    {@attach scrollEdges}
+    {@attach fill}
+    {@attach treeLines(glyph)}
+  >
+    {#each flatten(trees.slice(0, drawn)) as item (item.key)}
+      {@render row(item)}
+    {/each}
+  </ul>
+{/if}

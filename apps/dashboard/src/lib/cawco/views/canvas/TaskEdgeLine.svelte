@@ -3,7 +3,8 @@
    * One edge of the task graph, drawn by its kind (task-graph.ts):
    * - `waits_on`: solid, an arrow into the task that waits; muted once what
    *   it waited on has landed;
-   * - `part_of`: the nesting line's own ink and width (app.css .kit-nest);
+   * - `part_of`: the nesting line's own ink and width (design.css
+   *   `--tree-line`, .kit-tree-line);
    * - `found_in`: dashed and muted.
    * The side relation leaves and meets a card on the cross axis (task-graph
    * `handlesOf`), apart from the arrows and the trunk.
@@ -46,7 +47,7 @@
   <BaseEdge
     {id}
     path={route[0]}
-    style="stroke: var(--nest-ink); stroke-width: var(--nest-line, 1px)"
+    style="stroke: var(--nest-ink); stroke-width: var(--tree-line)"
   />
 {:else if edge.kind === "found_in"}
   <BaseEdge

@@ -133,7 +133,7 @@
 
 <!-- The lead slot's box (18px; --mark-size where a list sets its own): the
      scene its deck recedes in. Over the nesting arm that ends at the tile
-     (.kit-nest, z-index 1): the arm runs under the mark, never across it.
+     (.kit-tree-line, z-index 1): the arm runs under the mark, never across it.
      A step up while its rows are out (--mark-level): their marks start and
      end their ride under it (app.css, motion/branch). No tile: the face
      stands bare in the slot, in the muted ink (a row that is no session or

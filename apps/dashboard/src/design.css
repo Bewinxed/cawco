@@ -84,7 +84,7 @@
   initial-value: 0px;
 }
 /* How far a stretch of a nesting line is cut back from its right and from
-   its foot while the line draws (.kit-nest, motion/branch), registered so the
+   its foot while the line draws (.kit-tree-line, motion/branch), registered so the
    fold can move them. At rest neither cuts: well clear of the stretch. */
 @property --nest-cut-r {
   syntax: "<length>";
@@ -97,6 +97,27 @@
   inherits: false;
   /* biome-ignore lint/plugin/no-raw-css-values: no cut, a sentinel past any box rather than a size; an @property's initial value takes no var(). */
   initial-value: -9999px;
+}
+/* A tree row's depth and the shift that sets its glyph a whole step in
+   (.kit-tree-row), registered as not inherited: a regroup changes many rows'
+   depth at once, and an inherited one restyled every element in each of
+   those rows for a value only the row's own inset reads. */
+@property --line-depth {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --line-shift {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+/* Half a tree mark (.kit-tree), registered so it is read as a length: a
+   row's lines are placed from where its glyph's centre is against it. */
+@property --line-half {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
 }
 /* A swap between two things in one slot (`.icon-swap`, a tree mark's count
    and its chevron), a turn and a press, each as one number the transition
@@ -179,6 +200,10 @@
     /* How far each level of a tree is set in from the one above it, mark to
        mark: the same in every tree, whatever inset its rows keep. */
     --tree-step: calc(var(--space-1) + var(--space-2) + var(--space-3));
+    /* A tree's nesting line, one device pixel at the least and a whole
+       number of them (.kit-tree-line); the task graph's part-of edge is
+       drawn at it too. */
+    --tree-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
 
     @media (width < --theme(--breakpoint-desk)) {
       --seam-inset: var(--space-2);
@@ -2206,113 +2231,153 @@
    the bottom edge of the parent's glyph, under its centre; each child joins
    it with an elbow that curves (--radius-sm) from the rail into an arm
    ending at the child's glyph, and the last child's elbow ends the rail. One
-   primitive for every nested list (a project → its sessions, session →
-   delegates, delegate → its own, run → steps), each level stepping in by the
-   same --nest-pad and its rows --tree-gap apart. A child with children of
-   its own holds its own `kit-nest` list inside its item, so every parent has
-   one rail of its own. The lines are drawn by the children themselves, so
-   as rows open, reflow or leave, the rail grows and shrinks with them.
-   Set on the child list (measured by motion/branch `nestFrom`):
-     --nest-x       the rail's x from the list's left edge,
-     --nest-lead    the parent glyph's bottom to the list's top,
-     --nest-glyph-y a child glyph's centre from its row's top,
-     --nest-reach   a child row's left edge to its glyph,
-     --nest-in      the rail to the child row's left edge,
-     --nest-gap     the gap between child rows.
-   Drawn in and out by the fold (motion/branch): a list drawing
-   (`data-branch-draw`) cuts each stretch where the line's head is, by two
-   lengths the fold moves (--nest-cut-r, --nest-cut-b); a list held
-   (`data-branch-hold`) is cut whole from below until its piece is built.
+   primitive for every tree (a group → its projects or sessions, session →
+   delegates, delegate → its own, run → steps), each level --tree-step in,
+   mark to mark, and its rows --line-gap apart.
+
+   A tree is one flat list (`kit-tree`) of rows (`kit-tree-row`, each an
+   item of one keyed each), so a row that moves to another parent is the
+   same node. Each row draws its own share of every line beside it, as
+   VS Code's indent guides and the WAI-ARIA tree pattern carry a tree on
+   flat rows: its depth, and for each level above it whether that level's
+   line runs on past it. TreeLine draws the share (`kit-tree-line`): the
+   rails of the levels above that run on (`data-line-rail`), its elbow
+   (`data-line-elbow`, from the gap above it, or from its parent's glyph
+   when it is the first child) and its own rail on to its next sibling
+   (`data-line-on`). Each stroke is one of the row's own boxes, so a row
+   that moves, opens, closes or leaves takes its share with it.
+
+   Measured per row (tree-lines.ts `treeLines`), on the stroke's container:
+     --line-s     the row's --line-shift, for its inset edge,
+     --line-c     the row's glyph centre from its inset edge,
+     --rail-s-k, --rail-c-k  the same of the row above it at level k, for
+                  the rail of that level it draws,
+     --line-y     the row's glyph centre from its top,
+     --line-lead  its parent's glyph foot to its own top (a first child),
+     --line-drift how far a glyph narrower or wider than a tree mark moves
+                  each level's centre off a whole --tree-step (a plan's tick);
+   and on the row, --line-shift: what sets its glyph that step in from its
+   parent's, whatever inset the row keeps. --line-depth
+   (the row's) and --line-d (the container's) are the row's depth, from its
+   data.
+   Drawn in and out by the fold (motion/branch): a row's strokes that are
+   the fold's (`data-branch-cut`) are cut where the line's head is, by two
+   lengths the fold moves (--nest-cut-r, --nest-cut-b), and cut whole from
+   below while the fold holds them (`data-branch-hold`).
    The line's weight and every length it is placed by are whole device
    pixels (--dpx, device-pixel.ts), so it is the same crisp line in every
    frame. */
-@utility kit-nest {
-  /* Valid until measured, so nothing built on it drops a declaration. */
-  --nest-x: 0px;
-  --nest-reach: 0px;
-  /* The rail to a child row's left edge: what is left of one --tree-step
-     after the half mark the rail stands under and the row's own inset. */
-  --nest-half: calc(var(--mark-size, var(--space-5)) / 2);
-  --nest-in: calc(var(--tree-step) - var(--nest-half) - var(--nest-reach));
-  --nest-glyph-y: var(--space-4);
-  --nest-gap: var(--tree-gap);
-  --nest-lead: 0px;
-  --nest-pad: calc(var(--nest-x) + var(--nest-in));
-  --nest-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
-  --nest-left: round(
-    calc(var(--nest-x) - var(--nest-pad) - var(--nest-line) / 2),
-    var(--dpx, 1px)
-  );
+@utility kit-tree {
+  /* The gap between the rows of a level, and between a parent and its
+     first child; the gap between two rows at the root, the list's own. */
+  --line-gap: var(--tree-gap);
+  --line-root-gap: var(--line-gap);
+  --line-half: calc(var(--mark-size, var(--space-5)) / 2);
   position: relative;
-
-  & > li {
-    position: relative;
+  min-width: 0;
+  /* A list whose roots stand row against row (a question's reach, a
+     project's end): only its levels keep the gap. */
+  &[data-roots="touch"] {
+    --line-root-gap: 0px;
   }
-  & > li::before,
-  & > li::after {
-    content: "";
+}
+@utility kit-tree-row {
+  position: relative;
+  margin-block-start: var(--line-gap);
+  padding-inline-start: calc(
+    var(--line-depth) * var(--tree-step) + var(--line-shift)
+  );
+  &[data-line-depth="0"] {
+    margin-block-start: var(--line-root-gap);
+  }
+  &:first-child {
+    margin-block-start: 0;
+  }
+}
+@utility kit-tree-line {
+  /* Valid until measured, so nothing built on it drops a declaration. */
+  --line-c: var(--line-half);
+  --line-s: 0px;
+  --line-y: var(--space-4);
+  --line-lead: 0px;
+  --line-drift: 0px;
+  /* Glyph centre to glyph centre, one level in. */
+  --line-step: calc(var(--tree-step) + var(--line-drift));
+  /* From the row's own inset edge, where its words and glyph start, as
+     each level's rows start one step further in. */
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(var(--line-d) * var(--tree-step) + var(--line-s));
+  /* Over the row, under its mark (TreeMark --mark-z): the arm runs under
+     the mark, never across it. */
+  z-index: 1;
+  pointer-events: none;
+
+  & > span {
     position: absolute;
-    z-index: 1;
-    /* From the list's inline start, so right to left mirrors it (motion/branch
-       measures --nest-x and --nest-reach from that edge too). */
-    inset-inline-start: var(--nest-left);
-    pointer-events: none;
+    /* A level's rail stands under the glyphs of the level above, placed
+       from the inset edge of that level's rows (`--rail-s`, `--rail-c`: the
+       row above this one at that level; this row's own for its elbow), on
+       the device's pixels from it, so every row that draws a stretch of it
+       draws it in the same place. From the inline start, so right to left
+       mirrors it. */
+    inset-inline-start: calc(
+      var(--k) * var(--tree-step) + var(--rail-s, var(--line-s)) -
+        (var(--line-d) * var(--tree-step) + var(--line-s)) +
+        round(
+          var(--rail-c, var(--line-c)) - var(--line-step) - var(--tree-line) / 2,
+          var(--dpx, 1px)
+        )
+    );
     border-color: var(--nest-ink);
     border-style: solid;
     border-width: 0;
+    border-inline-start-width: var(--tree-line);
+  }
+  /* A level above that runs on past the row: through it and the gap above. */
+  & > [data-line-rail] {
+    top: calc(-1 * var(--line-gap));
+    bottom: 0;
   }
   /* The elbow: down the rail from the row above, round the curve, and out
-     along the arm to the child's glyph. */
-  & > li::before {
-    top: calc(-1 * var(--nest-gap));
+     along the arm to the row's glyph. */
+  & > [data-line-elbow] {
+    top: calc(-1 * var(--line-gap));
     width: round(
-      calc(var(--nest-in) + var(--nest-reach) + var(--nest-line) / 2),
+      calc(var(--tree-step) - var(--line-half) + var(--tree-line) / 2),
       var(--dpx, 1px)
     );
     height: round(
-      calc(var(--nest-glyph-y) + var(--nest-gap) + var(--nest-line) / 2),
+      calc(var(--line-y) + var(--line-gap) + var(--tree-line) / 2),
       var(--dpx, 1px)
     );
-    border-inline-start-width: var(--nest-line);
-    border-bottom-width: var(--nest-line);
+    border-bottom-width: var(--tree-line);
     border-end-start-radius: var(--radius-sm);
   }
-  & > li:first-child::before {
-    top: calc(-1 * var(--nest-lead));
+  /* A first child's elbow leaves its parent's glyph. */
+  [data-line-first] > & > [data-line-elbow] {
+    top: calc(-1 * var(--line-lead));
     height: round(
-      calc(var(--nest-glyph-y) + var(--nest-lead) + var(--nest-line) / 2),
+      calc(var(--line-y) + var(--line-lead) + var(--tree-line) / 2),
       var(--dpx, 1px)
     );
   }
-  /* The rail on past this child to the next one, from where the elbow
-     starts to curve away; the last child has none. */
-  & > li::after {
-    top: calc(var(--nest-glyph-y) - var(--radius-sm));
-    bottom: calc(-1 * var(--nest-gap));
-    border-inline-start-width: var(--nest-line);
+  /* The rail on past the row to its next sibling, from where the elbow
+     starts to curve away. */
+  & > [data-line-on] {
+    top: calc(var(--line-y) - var(--radius-sm));
+    bottom: 0;
   }
-  & > li:last-child::after {
-    content: none;
-  }
-  [data-branch-draw]& > li::before,
-  [data-branch-draw]& > li::after,
-  [data-branch-draw] & > li::before,
-  [data-branch-draw] & > li::after {
+  [data-branch-draw] & > [data-branch-cut] {
     /* biome-ignore lint/plugin/no-raw-css-values: no cut on these sides, a sentinel past any box rather than a size, as --nest-cut-r and --nest-cut-b rest at. */
     clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
   }
-  [data-branch-hold]& > li::before,
-  [data-branch-hold]& > li::after,
-  [data-branch-hold] & > li::before,
-  [data-branch-hold] & > li::after {
+  [data-branch-hold] & > [data-branch-cut] {
     /* biome-ignore lint/plugin/no-raw-css-values: no cut at the foot while the line holds, the same sentinel as --nest-cut-b's rest. */
     --nest-cut-b: 9999px;
   }
   /* Right to left the line's head travels leftward: its cut is on the left. */
-  [data-branch-draw]&:dir(rtl) > li::before,
-  [data-branch-draw]&:dir(rtl) > li::after,
-  [data-branch-draw] &:dir(rtl) > li::before,
-  [data-branch-draw] &:dir(rtl) > li::after {
+  [data-branch-draw] &:dir(rtl) > [data-branch-cut] {
     /* biome-ignore lint/plugin/no-raw-css-values: no cut on these sides, the same sentinel as above, mirrored. */
     clip-path: inset(-9999px -9999px var(--nest-cut-b) var(--nest-cut-r));
   }

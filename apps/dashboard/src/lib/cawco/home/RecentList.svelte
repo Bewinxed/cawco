@@ -5,7 +5,7 @@
    * newest first by their own last word, grouped by the levels the reader
    * picks in its menu (grouping.svelte.ts: Day then Project until they
    * pick). Every level is a tree parent with its mark (GroupParent), its
-   * rows hung from it by the rail's nesting lines (app.css .kit-nest), and
+   * rows hung from it by the rail's nesting lines (tree-lines.ts), and
    * folds on its row; Older starts folded.
    *
    * A row is the one session row (SessionRow): its mark says its status (the
@@ -17,10 +17,15 @@
    * row's archive (its press, its swipe): the row closes where it stood and
    * the rows under it slide up (motion/rows `reflow`, the rail's own).
    *
-   * A pick in the menu regroups the list behind it (motion/share
-   * `regroup`): every row, group parent and heading moves to its new place,
-   * never closing and opening again; the nesting lines read their place
-   * again once the rows have landed (motion/branch `nestsLanded`).
+   * The whole tree is one flat keyed list (tree-lines.ts `flatTree`): the
+   * group parents, the sessions, the delegates a session has unfolded and
+   * the "N older" row under them, each a row keyed by what it is (a group
+   * by its path, a session by its id), its depth and its siblings carried
+   * to a reader by `aria-level`, `aria-posinset` and `aria-setsize`. A pick
+   * in the menu regroups the list behind it (motion/share `regroup`): the
+   * same rows are reordered, never rebuilt, and each row's own box moves to
+   * its new place; its lines are its own and stand there from the first
+   * frame.
    */
   import { sidebarWords } from "@cawco/core/words/sidebar";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -29,7 +34,7 @@
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import type { BoardRow } from "../client.svelte";
   import { rowHref } from "../links";
-  import { nestsLanded } from "../motion/branch.svelte";
+  import { type BranchOptions, branch } from "../motion/branch.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { regroup } from "../motion/share.svelte";
   import OlderRows, { olderOut } from "../OlderRows.svelte";
@@ -42,7 +47,9 @@
   } from "../older";
   import { openTrees, type TreeList } from "../open-trees.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
+  import TreeLine from "../TreeLine.svelte";
   import { tree } from "../tree";
+  import { type FlatRow, flatTree, lineAttrs, treeLines } from "../tree-lines";
   import GroupMenu from "./GroupMenu.svelte";
   import GroupParent from "./GroupParent.svelte";
   import { grouping, inForce, RECENT_OPTIONS } from "./grouping.svelte";
@@ -54,7 +61,6 @@
     lastAt,
     projectOfRow,
   } from "./home-state.svelte";
-  import { nestList } from "./NestList.svelte";
   import {
     groupEntries,
     type RecentEntry,
@@ -94,11 +100,7 @@
       grouping.pickRecent(at, by);
       return;
     }
-    regroup(
-      root,
-      () => grouping.pickRecent(at, by),
-      () => nestsLanded(root)
-    );
+    regroup(root, () => grouping.pickRecent(at, by));
   }
 
   /** The status word a row is read out with: never drawn, its mark says it. */
@@ -185,97 +187,119 @@
         node.row.id === active || node.under.some((row) => row.id === active)
     );
   const rowsIn = (trees: Branch[]): number =>
-    trees.reduce((rows, node) => rows + 1 + node.count, 0);
+    trees.reduce((held, node) => held + 1 + node.count, 0);
+
+  /* ── The list as one flat tree ─────────────────────────────────────── */
+
+  /**
+   * A row of the list: a group parent, a session (one of the list's, or a
+   * delegate under one, `node`), or a session's "N older" row.
+   */
+  type Node =
+    | { kind: "group"; group: RecentGroup }
+    | {
+        kind: "session";
+        count: number;
+        entry: RecentEntry | null;
+        node: Branch | null;
+        row: BoardRow;
+      }
+    | { kind: "older"; node: Branch };
+
+  const groupNode = (group: RecentGroup): Node => ({ kind: "group", group });
+  const entryNode = (entry: RecentEntry): Node => ({
+    kind: "session",
+    row: entry.row,
+    count: entry.under.length,
+    entry,
+    node: null,
+  });
+  const branchNode = (node: Branch): Node => ({
+    kind: "session",
+    row: node.row,
+    count: node.count,
+    entry: null,
+    node,
+  });
+
+  /** Whether a row's own rows are out under it. */
+  function isOpen(node: Node): boolean {
+    if (node.kind === "group") {
+      return !grouping.folded(node.group.path);
+    }
+    if (node.kind === "session") {
+      return node.count > 0 && openTrees.has(node.row.id, list);
+    }
+    return olderOut(node.node.row.id, inFront(node.node.older), list);
+  }
+
+  /** What hangs under a row while it is open: the next level, or a session's delegates. */
+  function kidsOf(node: Node): Node[] {
+    if (node.kind === "older" || !isOpen(node)) {
+      return [];
+    }
+    if (node.kind === "group") {
+      const { group } = node;
+      return group.groups
+        ? group.groups.map(groupNode)
+        : group.entries.map(entryNode);
+    }
+    const own = node.node ?? branchOf(node.entry as RecentEntry);
+    return [
+      ...own.recent.map(branchNode),
+      ...(own.older.length > 0 ? [{ kind: "older" as const, node: own }] : []),
+    ];
+  }
+
+  /** A row's key: a group by its path, a session by its id, wherever it moves. */
+  const keyOf = (node: Node): string => {
+    if (node.kind === "group") {
+      return `group:${node.group.path}`;
+    }
+    return node.kind === "session"
+      ? `session:${node.row.id}`
+      : `older:${node.node.row.id}`;
+  };
+
+  const rows = $derived(
+    flatTree(
+      levels.length === 0 ? entries.map(entryNode) : groups.map(groupNode),
+      kidsOf,
+      keyOf
+    )
+  );
+  /** A box of older delegates' trees: their rows, flat, under the box. */
+  const olderRows = (trees: Branch[]): FlatRow<Node>[] =>
+    flatTree(trees.map(branchNode), kidsOf, keyOf);
+
+  /** How every row opens and folds: off its mark (motion/branch). */
+  const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
+  /** The glyph each row's lines are placed by. */
+  const GLYPH = "[data-tree-mark]";
 </script>
 
-{#snippet delegates(node: Branch)}
-  <!-- Its delegates, on a rail of their own that grows from its mark. -->
-  {#snippet rows()}
-    {#each node.recent as child (child.row.id)}
-      {@render item(child.row, child.count, null, child)}
-    {/each}
-    {#if node.older.length > 0}
-      <OlderRows
-        count={rowsIn(node.older)}
-        failed={failedIn(
-          node.older.flatMap((held) => [held.row, ...held.under])
-        )}
-        front={inFront(node.older)}
-        id={node.row.id}
-        keyOf={(held) => held.row.id}
-        {list}
-        trees={olderOut(node.row.id, inFront(node.older), list)
-          ? node.older
-          : []}
-      >
-        {#snippet tree(held)}
-          {@render item(held.row, held.count, null, held)}
-        {/snippet}
-      </OlderRows>
-    {/if}
-  {/snippet}
-  {@render nestList(rows)}
-{/snippet}
-
-<!-- A session of the list (`entry`), or a delegate under one (`node`):
-     the one session row. Its own box moves on a regroup (`regroup`), never
-     this item: each row flies on its own, and the item and its nesting
-     lines stand at the new layout from the first frame. -->
-{#snippet item(
-  row: BoardRow,
-  count: number,
-  entry: RecentEntry | null,
-  node: Branch | null
-)}
-  {@const unfolded = count > 0 && openTrees.has(row.id, list)}
+<!-- A row of the tree, keyed in the one list (`rows`, or an "N older"
+     box's own). The row's own box moves on a regroup (`regroup`), never
+     this item: each row flies on its own, and the item and its lines stand
+     at the new layout from the first frame. -->
+{#snippet treeRow(item: FlatRow<Node>)}
+  {@const node = item.node}
   <li
-    class="group/menu-sub-item relative"
+    class="kit-tree-row group/menu-sub-item"
+    {...lineAttrs(item.line)}
     data-flip="box"
-    data-session-row={row.id}
+    data-line-open={isOpen(node) || undefined}
+    data-recent-group={node.kind === "group" ? node.group.path : undefined}
+    data-session-row={node.kind === "session" ? node.row.id : undefined}
     data-sidebar="menu-sub-item"
     data-slot="sidebar-menu-sub-item"
+    style:--line-depth={item.line.depth}
+    in:branch={TREE}
+    out:branch={TREE}
   >
-    <SessionRow
-      active={active === row.id}
-      compact={entry === null || !tall}
-      fold={count > 0
-        ? {
-            count,
-            open: unfolded,
-            ontoggle: () => openTrees.toggle(row.id, list),
-          }
-        : null}
-      hint={ageHint(row)}
-      href={rowHref(row.id)}
-      instance={row}
-      line={entry && tall ? projectOfRow(row) : ""}
-      machineId={row.machineId}
-      mark={entry?.mark}
-      onarchive={entry?.status === "yours" && home.archivable(row)
-        ? () => archive(home.treeOf(row.id))
-        : undefined}
-      peek={false}
-      quiet={!(entry?.status === "needs" || entry?.unread)}
-      regroup="regroup:session:{row.id}"
-      {stale}
-      title={instanceTitle(row)}
-      trail={ageOf(row)}
-      word={entry ? WORD[entry.status] : undefined}
-    />
-    {#if unfolded}
-      {@render delegates(node ?? branchOf(entry as RecentEntry))}
-    {/if}
-  </li>
-{/snippet}
-
-{#snippet session(entry: RecentEntry)}
-  {@render item(entry.row, entry.under.length, entry, null)}
-{/snippet}
-
-{#snippet level(nodes: RecentGroup[])}
-  {#each nodes as group (group.path)}
-    {@const open = !grouping.folded(group.path)}
-    <li class="relative" data-recent-group={group.path}>
+    <TreeLine line={item.line} />
+    {#if node.kind === "group"}
+      {@const group = node.group}
       <GroupParent
         by={group.by}
         count={countIn(group)}
@@ -283,21 +307,53 @@
         label={group.label}
         path={group.path}
       />
-      {#if open}
-        <!-- What it holds hangs from its mark, one tree step in. -->
-        {#snippet held()}
-          {#if group.groups}
-            {@render level(group.groups)}
-          {:else}
-            {#each group.entries as entry (entry.row.id)}
-              {@render session(entry)}
-            {/each}
-          {/if}
-        {/snippet}
-        {@render nestList(held)}
-      {/if}
-    </li>
-  {/each}
+    {:else if node.kind === "session"}
+      {@const { row, count, entry } = node}
+      <SessionRow
+        active={active === row.id}
+        compact={entry === null || !tall}
+        fold={count > 0
+          ? {
+              count,
+              open: isOpen(node),
+              ontoggle: () => openTrees.toggle(row.id, list),
+            }
+          : null}
+        hint={ageHint(row)}
+        href={rowHref(row.id)}
+        instance={row}
+        line={entry && tall ? projectOfRow(row) : ""}
+        machineId={row.machineId}
+        mark={entry?.mark}
+        onarchive={entry?.status === "yours" && home.archivable(row)
+          ? () => archive(home.treeOf(row.id))
+          : undefined}
+        peek={false}
+        quiet={!(entry?.status === "needs" || entry?.unread)}
+        regroup="regroup:session:{row.id}"
+        {stale}
+        title={instanceTitle(row)}
+        trail={ageOf(row)}
+        word={entry ? WORD[entry.status] : undefined}
+      />
+    {:else}
+      {@const own = node.node}
+      <!-- Its older delegates, in a box of their own under the row. -->
+      <OlderRows
+        count={rowsIn(own.older)}
+        failed={failedIn(
+          own.older.flatMap((held) => [held.row, ...held.under])
+        )}
+        flatten={olderRows}
+        front={inFront(own.older)}
+        glyph={GLYPH}
+        id={own.row.id}
+        {list}
+        row={treeRow}
+        trees={isOpen(node) ? own.older : []}
+      />
+    {/if}
+  </li>
 {/snippet}
 
 <!-- A section of the rail: a hairline seam and room above it, its name in
@@ -336,17 +392,16 @@
     <!-- The rail's working rows echo in turn, top to bottom (motion/echo);
          the open conversation's row takes the list's pill (highlight). -->
     <div {@attach highlight(ROW_PILL)} {@attach echoBeat()}>
+      <!-- One flat tree, every row keyed (`rows`); between the groups at
+           the root, a section's room. -->
       <ul
-        class="m-0 flex min-w-0 list-none flex-col p-0 data-grouped:gap-space-3 not-data-grouped:gap-(--tree-gap)"
-        data-grouped={levels.length > 0 || undefined}
+        class="kit-tree flex flex-col"
+        style:--line-root-gap={levels.length > 0 ? "var(--space-3)" : undefined}
+        {@attach treeLines(GLYPH)}
       >
-        {#if levels.length === 0}
-          {#each entries as entry (entry.row.id)}
-            {@render session(entry)}
-          {/each}
-        {:else}
-          {@render level(groups)}
-        {/if}
+        {#each rows as item (item.key)}
+          {@render treeRow(item)}
+        {/each}
       </ul>
     </div>
   {/if}

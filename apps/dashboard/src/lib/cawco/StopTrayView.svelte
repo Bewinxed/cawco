@@ -72,7 +72,6 @@
   import FromDiskBox from "./FromDiskBox.svelte";
   import { resolveSessionTitle } from "./links";
   import { sessionSprite } from "./mark";
-  import { nestFrom } from "./motion/branch.svelte";
   import { CURVE, dur, motionOk } from "./motion/curves.svelte";
   import { echoBeat } from "./motion/echo.svelte";
   import { fold, unfold } from "./motion/fold.svelte";
@@ -80,7 +79,9 @@
   import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import type { StopJob, StopRow } from "./stop-work.svelte";
+  import TreeLine from "./TreeLine.svelte";
   import TreeMark from "./TreeMark.svelte";
+  import { flatTree, lineAttrs, treeLines } from "./tree-lines";
 
   let {
     class: className,
@@ -404,6 +405,17 @@
     row.s.parentId !== null && rows.some((each) => each.s.id === row.s.parentId)
       ? row.s.parentId
       : null;
+  /** The rows still listed under `parentId`: a lead's own, or the roots. */
+  const shownUnder = (parentId: string | null) =>
+    rows.filter((row) => rootOf(row) === parentId && !row.gone);
+  /** The rows as one flat tree on the nesting lines (tree-lines.ts). */
+  const tree = $derived(
+    flatTree(
+      shownUnder(null),
+      (row) => shownUnder(row.s.id),
+      (row) => row.s.id
+    )
+  );
   /** The ring's share: only a tray with sessions to stop counts. */
   const progress = $derived.by(() => {
     if (rows.length === 0) {
@@ -464,8 +476,9 @@
   const intoRing = glyphOut;
 </script>
 
-{#snippet branch(parentId: string | null)}
-  {#each rows.filter((row) => rootOf(row) === parentId && !row.gone) as row (row.s.id)}
+{#snippet branch()}
+  {#each tree as entry (entry.key)}
+    {@const { line, node: row } = entry}
     {@const status = statusOf(row)}
     {@const kids = rows.filter(
       (each) => each.s.parentId === row.s.id && !each.gone
@@ -480,10 +493,13 @@
         id: row.s.id,
       })}
     <li
-      class="relative col-span-full grid grid-cols-subgrid"
+      class="kit-tree-row col-span-full grid grid-cols-subgrid"
+      {...lineAttrs(line)}
       data-row={row.s.id}
+      style:--line-depth={line.depth}
       {@attach item(row.s.id)}
     >
+      <TreeLine {line} />
       <div
         data-slot="rin"
         class="col-span-full grid min-w-0 grid-cols-subgrid"
@@ -586,15 +602,6 @@
           reason={row.state === "failed" ? row.error : null}
         />
       </div>
-      {#if kids.length > 0}
-        <ul
-          data-nest
-          class="kit-nest col-span-full grid grid-cols-subgrid gap-y-(--tree-gap) m-0 pt-(--tree-gap) pb-0 ps-(--nest-pad) pe-0 list-none"
-          {@attach nestFrom("[data-tree-mark]")}
-        >
-          {@render branch(row.s.id)}
-        </ul>
-      {/if}
     </li>
   {/each}
 {/snippet}
@@ -665,11 +672,13 @@
         <ul
           data-slot="sessions"
           aria-label="Running sessions"
-          class="grid list-none grid-cols-(--tray-cols) gap-x-(--row-compact-gap) overflow-x-clip clip-margin-space-2"
+          class="kit-tree grid grid-cols-(--tray-cols) gap-x-(--row-compact-gap) overflow-x-clip clip-margin-space-2"
+          data-roots="touch"
           style:--tray-cols={TRAY_COLS}
           {@attach echoBeat()}
+          {@attach treeLines("[data-tree-mark]")}
         >
-          {@render branch(null)}
+          {@render branch()}
         </ul>
       {/if}
       {#if job.kind === "delete"}

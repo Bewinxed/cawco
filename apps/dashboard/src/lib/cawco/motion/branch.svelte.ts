@@ -5,7 +5,7 @@
  * result). One primitive, read off one moving point: the head of the line
  * that leaves the parent's glyph, measured from the glyph's centre.
  *
- * The line. Each child's line (app.css .kit-nest) runs from the parent's
+ * The line. Each child's line (design.css .kit-tree-line) runs from the parent's
  * glyph down the rail, round the corner of its elbow and out along its arm
  * to the child's glyph. Its head travels the whole tree at one pace: as far
  * along every branch at once, so where the rail meets a
@@ -53,22 +53,23 @@
  * took 38 to 73ms over each of them.
  *
  * Folding. The group leaves as one piece, quicker than it opened and under
- * way in the next frame, from the click's own time (motion/rows `now`): one
- * clip closes it from its foot over --dur-exit, on the rows' curve, as the
- * rows under it slide up with the room's edge (the batch's "close" pace).
- * The clip's edge is the line's end: the line shortens from its foot up the
- * rail and on up to the parent's glyph, where the clip stops; then the group
- * unmounts. One animation, however many rows the tree has. Each row left on
- * its own (its title wiped out, its glyph rode the line back, each stretch
- * of line was cut back): thirty-eight animations for a tree of seven, made
- * inside a fold that is shown in ten frames, and Safari showed four.
+ * way in the next frame, from the click's own time (motion/rows `now`): it
+ * is closed from its foot over --dur-exit, on the rows' curve, as the rows
+ * under it slide up with the room's edge (the batch's "close" pace). The
+ * close is one edge: each of the group's rows is cut at it (a clip a row,
+ * all on one clock and one curve), so the line shortens from its foot up
+ * the rail and on up to the parent's glyph, where the edge stops; then the
+ * rows unmount. Each row left on its own (its title wiped out, its glyph
+ * rode the line back, each stretch of line was cut back): thirty-eight
+ * animations for a tree of seven, made inside a fold that is shown in ten
+ * frames, and Safari showed four.
  *
  * Turned back mid-way, an opening carries on from where the fold left the
  * room, with every row as it stood; a fold takes an opening as it stands,
  * its pieces held at the click's time, and closes over them. Either starts
- * at that same time with the box and the rows under it, so the next frame
- * already shows it under way. Waiting for a batch of its own, the line stood
- * still a frame (a fold) or two (an opening) at every turn.
+ * at that same time with the rows under it, so the next frame already
+ * shows it under way. Waiting for a batch of its own, the line stood still
+ * a frame (a fold) or two (an opening) at every turn.
  *
  * Reduced motion: nothing travels. Opening, the room lands at once and the
  * children fade in; folding, they fade out where they stand and then the
@@ -79,40 +80,38 @@
  * when every turn of the same update has written its own (`afterWrites`),
  * so one click styles a tree's rows once however many lists the tree is
  * open in. The reads themselves are a few ms for a tree of 150 once the
- * page is styled: each row's and glyph's drawn box, its line's two computed
- * styles, and its layout box, every offset parent read once for the whole
+ * page is styled: each row's and glyph's drawn box, each stroke's box and
+ * corner, and its layout box, every offset parent read once for the whole
  * tree (`layoutBoxes`). Every row is read, in view or not: a tree's rows
- * differ in height (a row with a list open under it, a project's sessions
- * beside its "N older" box, a run step's result), so none is placed by
- * arithmetic. A fold reads its group's box and its parent's glyph alone,
- * then leaves the flow as its last write, and motion/rows reads after it. A
- * tree opening has one layout to pay in the task that
- * shows it, its rows', and a list never measured before takes its insets
- * off its first row ahead of that layout (`measureFirst`), not after it.
+ * differ in height (a row with a box open under it, a run step's wrapped
+ * words), so none is placed by arithmetic. A fold reads its rows' boxes
+ * and its parent's glyph alone, then takes them out of the flow as its
+ * last write, and motion/rows reads after it. A tree opening has one layout
+ * to pay in the task that shows it, its rows', and its rows' lines are
+ * placed before it (tree-lines `settleLines`).
  *
- * Markup. The group is the element the transition is on, mounted under its
- * parent row in the parent's own element (an `li`, or a box marked
- * `data-nest-host`), which is `data-flip="box"` and `position: relative`;
- * the group is `data-flip-anchor`, so reflow never copies or uncovers what
- * is inside it. Each row in it, at any depth, is `data-branch-item`, with
- * its glyph matching `glyph`. A nesting group's line (the `kit-nest`
- * utility, app.css) is its list items' `::before` (the elbow: down, round
- * its corner, out along its arm) and `::after` (the rail on past the child),
- * placed by `nestFrom`. The script finds a nesting list by its `data-nest`
- * hook, never by the utility's name.
+ * Markup. A tree is one flat list (tree-lines.ts, design.css `kit-tree`):
+ * the group is the rows a parent shows, every row of its subtree that
+ * mounts or unmounts in one update, each `in:branch` and `out:branch`; the
+ * turns of one update are taken together, as one group, under the nearest
+ * row of the list that stays (its parent). Each row's share of the line is
+ * its own strokes (TreeLine): the strokes of the levels the group draws
+ * are cut as the head passes, the rails of the levels above it stand with
+ * the room. A box that scrolls its own rows (OlderRows) is a group of one
+ * element, under the row whose element holds it (an `li`, or a box marked
+ * `data-nest-host`). Each row, at any depth, is `data-branch-item`, with
+ * its glyph matching `glyph`. While a group turns, each of its elements is
+ * `data-flip-anchor`, so reflow never copies or uncovers it, and slides
+ * only the rows around it.
  *
- *   {#if open}
- *     <ul class="kit-nest" data-nest data-flip-anchor
- *         in:branch={{ glyph: "[data-tree-mark]" }} out:branch={{ glyph: "[data-tree-mark]" }}
- *         {@attach nestFrom("[data-tree-mark]")}>
+ *   {#each rows as row (row.key)}
+ *     <li class="kit-tree-row" {...lineAttrs(row.line)}
+ *         in:branch={TREE} out:branch={TREE}>
+ *       <TreeLine line={row.line} />
  */
 
-import type { Attachment } from "svelte/attachments";
 import type { TransitionConfig } from "svelte/transition";
-import {
-  type FrameObserver,
-  frameObserver,
-} from "#lib/cawco/frame-observer.js";
+import { settleLines } from "../tree-lines";
 import {
   CURVE,
   dur,
@@ -130,6 +129,7 @@ import {
   heldToTravel,
   skippedAt,
 } from "./rows.svelte";
+import { regrouping } from "./share.svelte";
 
 export interface BranchOptions {
   /** A row's glyph, a selector inside the row: its line ends there. */
@@ -181,9 +181,6 @@ function layoutBoxes(): (element: HTMLElement) => Box {
   });
 }
 
-/** One element's layout box on the page, transforms ignored. */
-const layoutBox = (element: HTMLElement): Box => layoutBoxes()(element);
-
 const px = (value: number) => `${value.toFixed(2)}px`;
 
 /**
@@ -205,326 +202,167 @@ function restOf(glyph: HTMLElement): { x: number; y: number } {
 }
 
 /** How far an element is drawn off its layout by its own `translate` and `transform`'s move. */
-function movedBy(element: Element): number {
-  const style = getComputedStyle(element);
-  const [, dy = 0] =
-    style.translate === "none"
-      ? []
-      : style.translate.split(" ").map((length) => Number.parseFloat(length));
-  const moved =
-    style.transform === "none" ? 0 : new DOMMatrixReadOnly(style.transform).m42;
-  return dy + moved;
+
+/* ── A group: the rows that turn together ─────────────────────────── */
+
+/** A row of a flat tree (tree-lines.ts). */
+const ROW = "[data-line-row]";
+
+const depthOf = (row: Element): number =>
+  Number((row as HTMLElement).dataset.lineDepth ?? 0);
+
+/**
+ * The rows that open or fold under one parent in one update: the parent's
+ * child rows and every row under them that turns with them, in the page's
+ * order; or one box of rows (OlderRows).
+ */
+interface Group {
+  els: HTMLElement[];
+  options: BranchOptions;
+  /** The parent row's own element: where its glyph is, and its flight's key. */
+  parent: HTMLElement;
 }
 
 /**
- * An element's centre, down, where it is laid out: where it is drawn, less
- * what moves it and every box around it up to `within` (excluded). A row
- * still flying to its place (motion/share, a regroup: the move is on the
- * row's own box, around its glyph) is read where it lands, not where it is
- * on the way, so a line measured mid-flight joins the right rows.
+ * The row a turning element hangs under: for a tree's row, the nearest row
+ * before it one level up; for a box, the row whose element holds it.
  */
-function laidY(element: HTMLElement, within: Element | null): number {
-  const box = element.getBoundingClientRect();
-  let moved = 0;
-  for (
-    let at: Element | null = element;
-    at && at !== within && !at.contains(within);
-    at = at.parentElement
-  ) {
-    moved += movedBy(at);
+function parentOf(node: HTMLElement): HTMLElement | null {
+  if (!node.matches(ROW)) {
+    return (
+      node.parentElement?.closest<HTMLElement>("li, [data-nest-host]") ?? null
+    );
   }
-  return box.top + box.height / 2 - moved;
+  const depth = depthOf(node);
+  for (
+    let at = node.previousElementSibling;
+    at && depth > 0;
+    at = at.previousElementSibling
+  ) {
+    if (at.matches(ROW) && depthOf(at) < depth) {
+      return depthOf(at) === depth - 1 ? (at as HTMLElement) : null;
+    }
+  }
+  return null;
 }
 
-/** Whether a list is laid out right to left: its rails stand from its right edge. */
-const rtlOf = (node: Element): boolean =>
-  getComputedStyle(node).direction === "rtl";
-
-/** The parent row's own element around a group, and its glyph. */
-function parentGlyph(group: HTMLElement, selector: string) {
-  const host = group.parentElement?.closest<HTMLElement>(
-    "li, [data-nest-host]"
-  );
-  return host?.querySelector<HTMLElement>(selector) ?? null;
+/** A parent row's child rows as they stand in its list. */
+function childrenOf(parent: HTMLElement): HTMLElement[] {
+  const depth = depthOf(parent);
+  const kids: HTMLElement[] = [];
+  for (
+    let at = parent.nextElementSibling;
+    at?.matches(ROW) && depthOf(at) > depth;
+    at = at.nextElementSibling
+  ) {
+    if (depthOf(at) === depth + 1) {
+      kids.push(at as HTMLElement);
+    }
+  }
+  return kids;
 }
 
-/**
- * Where a nested list's rails stand (app.css .kit-nest), measured rather
- * than assumed, so a rail leaves its parent's glyph and meets each child's
- * wherever the rows put them: `--nest-x` under the centre of the parent's
- * glyph, `--nest-lead` from that glyph's foot to the list's first row,
- * `--nest-glyph-y` a child glyph's centre from its row's top and
- * `--nest-reach` from its row's left edge to it. The parent's glyph is the
- * first `glyph` in the nearest list item around the list (or the box marked
- * `data-nest-host`); a child's is the first `child` in the first row.
- *
- *   <ul class="kit-nest" data-nest {@attach nestFrom("[data-tree-mark]")}>
- *
- * Measured in layout, transforms ignored: first just before motion/rows
- * reads where the rows are, after the update that drew the list
- * (`beforeReflow`), or as `open` shows the group it is in; then by a size
- * observer, when a rail or font change moves a glyph. Left to the
- * observer's first call, after layout, the rows were read at the default
- * inset and the inset landed after: every child of a tree opening in the
- * rail was tweened 15px narrower, its trailing count sliding in from past
- * the rail's edge.
- * Every list measured at once is read, then written: read and written a
- * list at a time, each list's write laid the page out again for the next
- * one's read, a tree opening in the rail and the home at once paid a layout
- * a list. A list starts out where the last one under the same parent stood,
- * or the last one of its kind (its glyphs, its depth), and a measure that
- * finds it there writes nothing: written every time, the inset laid out
- * the forty rows of a tree opening in the rail twice in the click.
- */
-type Measured = [HTMLElement, Record<string, string>];
+/** The group's own line's parent element's glyph. */
+function parentGlyph(group: Group, selector: string) {
+  return group.parent.querySelector<HTMLElement>(selector);
+}
 
 /**
  * Groups mounted but not yet shown (`open`): laid out a task after the
- * update that drew them. A list inside one has nothing to measure yet.
+ * update that drew them.
  */
 const unshown = new WeakSet<Element>();
 
-function isUnshown(node: Element): boolean {
-  for (let at: Element | null = node; at; at = at.parentElement) {
-    if (unshown.has(at)) {
-      return true;
-    }
-  }
-  return false;
+/**
+ * Each row of a group, in order, with the line each of its strokes and its
+ * glyph is on: the parent's own (`null`), a row of the group's (its
+ * element), or none (`undefined`: a rail of a level above the parent's,
+ * standing with the room, never cut). Read off the rows' attributes alone.
+ */
+interface GroupRow {
+  /** The line its glyph hangs from. */
+  hangs: HTMLElement | null;
+  row: HTMLElement;
+  strokes: { line: HTMLElement | null; span: HTMLElement }[];
 }
 
-/** Where a list's rails go: down in drawn boxes, across in layout. */
-function nestOf(
-  node: HTMLElement,
-  glyph: string,
-  child: string
-): Measured | null {
-  const parent = isUnshown(node) ? null : parentGlyph(node, glyph);
-  if (!parent) {
-    return null;
-  }
-  // Across in layout (a glyph caught mid-flight is drawn off its place);
-  // down in drawn boxes read against each other, to the subpixel, a glyph's
-  // less its own ride (`restOf`; nothing else here moves vertically on its
-  // own transform; see `railsOf`).
-  const mark = layoutBox(parent);
-  const list = layoutBox(node);
-  // Across from the list's inline start: its right edge, right to left.
-  const rtl = rtlOf(node);
-  const first =
-    node.getBoundingClientRect().top +
-    node.clientTop +
-    Number.parseFloat(getComputedStyle(node).paddingTop);
-  const centre = mark.left + mark.width / 2;
-  const vars: Record<string, string> = {
-    "--nest-x": px(rtl ? list.left + list.width - centre : centre - list.left),
-    "--nest-lead": px(first - (laidY(parent, node) + parent.offsetHeight / 2)),
+function rowsOf(group: Group): GroupRow[] {
+  const { parent } = group;
+  const home = parent.parentElement;
+  const parentDepth = parent.matches(ROW) ? depthOf(parent) : -1;
+  // The rows above each row in its own list, by depth.
+  const chains = new Map<Element, HTMLElement[]>();
+  const found: GroupRow[] = [];
+  /** The line from the row at `depth` above a row in `list`. */
+  const lineAt = (
+    list: Element,
+    depth: number
+  ): HTMLElement | null | undefined => {
+    const own = list === home ? parentDepth : -1;
+    if (depth < own) {
+      return undefined;
+    }
+    if (depth === own || depth < 0) {
+      return null;
+    }
+    return chains.get(list)?.[depth] ?? null;
   };
-  const row = node.querySelector<HTMLElement>(":scope > li");
-  const own = row?.querySelector<HTMLElement>(child);
-  if (row && own) {
-    vars["--nest-glyph-y"] = px(
-      laidY(own, row) - row.getBoundingClientRect().top
-    );
-    const ownBox = layoutBox(own);
-    const rowBox = layoutBox(row);
-    vars["--nest-reach"] = px(
-      rtl
-        ? rowBox.left + rowBox.width - (ownBox.left + ownBox.width)
-        : ownBox.left - rowBox.left
-    );
-  }
-  return [node, vars];
-}
-
-interface Nest {
-  host: Element | null;
-  kind: string;
-  measure: () => Measured | null;
-  /** It started out where another list stood; false, at the stylesheet's own insets. */
-  seeded: boolean;
-}
-
-const nests = new Map<Element, Nest>();
-let nestSizes: FrameObserver | null = null;
-/** What the size observer read inside its delivery, written in the next frame. */
-const nestReads: NestReads = [];
-/** Lists drawn in this update, measured together before rows are read. */
-const drawnNow = new Set<Element>();
-/** Where the last list under each parent, and of each kind, stood. */
-const byHost = new WeakMap<Element, Record<string, string>>();
-const byKind = new Map<string, Record<string, string>>();
-
-/** Each list's insets, read; `writeNests` puts them on. */
-type NestReads = (readonly [Nest, Measured | null] | null)[];
-
-function readNests(lists: Iterable<Element>): NestReads {
-  return [...lists].map((list) => {
-    const nest = nests.get(list);
-    return nest ? ([nest, nest.measure()] as const) : null;
-  });
-}
-
-function measureNests(lists: Iterable<Element>): void {
-  writeNests(readNests(lists));
-}
-
-function writeNests(measured: NestReads): void {
-  for (const each of measured) {
-    if (!each?.[1]) {
-      continue;
-    }
-    const [nest, [list, vars]] = each;
-    for (const [name, value] of Object.entries(vars)) {
-      if (list.style.getPropertyValue(name) !== value) {
-        list.style.setProperty(name, value);
+  for (const el of group.els) {
+    const rows = [
+      ...(el.matches(ROW) ? [el] : []),
+      ...el.querySelectorAll<HTMLElement>(ROW),
+    ];
+    for (const row of rows) {
+      const list = row.parentElement;
+      if (!list) {
+        continue;
       }
+      const depth = depthOf(row);
+      const chain = chains.get(list) ?? [];
+      chains.set(list, chain);
+      chain.length = depth;
+      const strokes: GroupRow["strokes"] = [];
+      for (const span of row.querySelectorAll<HTMLElement>(
+        ":scope > [data-tree-line] > [data-line-level]"
+      )) {
+        const line = lineAt(list, Number(span.dataset.lineLevel) - 1);
+        if (line !== undefined) {
+          strokes.push({ line, span });
+        }
+      }
+      found.push({ row, hangs: lineAt(list, depth - 1) ?? null, strokes });
+      chain[depth] = row;
     }
-    if (nest.host) {
-      byHost.set(nest.host, vars);
+  }
+  return found;
+}
+
+/** The group's strokes, cut as the head passes (design.css `data-branch-cut`). */
+const CUT = "data-branch-cut";
+
+function markCuts(group: Group, on: boolean): void {
+  for (const { strokes } of rowsOf(group)) {
+    for (const { span } of strokes) {
+      span.toggleAttribute(CUT, on);
     }
-    byKind.set(nest.kind, vars);
   }
-}
-
-/**
- * The lists drawn in this update, but those a group holds out of the layout
- * (`open` measures them as it shows them) and those in a list that is not
- * rendered (`skippedAt`): measured there, each read laid out content nobody
- * is shown. Such a list keeps the insets it started out with, and the size
- * observer measures it when it is rendered.
- */
-function settleDrawn(): void {
-  const lists = [...drawnNow].filter(
-    (list) => list.isConnected && !isUnshown(list) && !skippedAt(list)
-  );
-  drawnNow.clear();
-  measureNests(lists);
-}
-
-/** A nesting list's hook (its markup's `data-nest`). */
-const NEST = "[data-nest]";
-
-/** Every list in a group just shown, the group's own included. */
-function measureNestsIn(group: HTMLElement): void {
-  measureNests(
-    [group, ...group.querySelectorAll(NEST)].filter((list) => nests.has(list))
-  );
-}
-
-/**
- * A group shown with only the first row of its own list laid out (app.css
- * `[data-branch-probe]`), for `measureFirst`.
- */
-const PROBE = "data-branch-probe";
-
-/**
- * A group just shown whose list started at the stylesheet's own insets (the
- * first tree of its kind opened on the page) takes its insets before its
- * rows are styled: read with only its first row laid out, which is all they
- * are read from, then written. Written once every row was styled, as a list
- * that starts out where another stood never needs, the insets (inherited by
- * every row) styled the tree's rows a second time in the task that showed
- * them: 32ms more for a tree of 140, the first time one opened.
- */
-function measureFirst(group: HTMLElement): void {
-  if (nests.get(group)?.seeded !== false) {
-    return;
-  }
-  const first = group.querySelector(":scope > li");
-  group.setAttribute(PROBE, "");
-  measureNests(
-    [group, ...(first?.querySelectorAll(NEST) ?? [])].filter((list) =>
-      nests.has(list)
-    )
-  );
-  group.removeAttribute(PROBE);
-}
-
-/** How many nested lists a list sits in. */
-function depthIn(node: Element): number {
-  let depth = 0;
-  for (
-    let at = node.parentElement?.closest(NEST);
-    at;
-    at = at.parentElement?.closest(NEST)
-  ) {
-    depth += 1;
-  }
-  return depth;
-}
-
-export function nestFrom(
-  glyph: string,
-  child = glyph
-): Attachment<HTMLElement> {
-  return (node) => {
-    const host = node.parentElement?.closest("li, [data-nest-host]") ?? null;
-    const kind = `${glyph}|${child}|${depthIn(node)}`;
-    const known = (host && byHost.get(host)) ?? byKind.get(kind);
-    nests.set(node, {
-      host,
-      kind,
-      measure: () => nestOf(node, glyph, child),
-      seeded: known !== undefined,
-    });
-    for (const [name, value] of Object.entries(known ?? {})) {
-      node.style.setProperty(name, value);
-    }
-    drawnNow.add(node);
-    beforeReflow(settleDrawn);
-    // The border box: the inset this sets (`--nest-pad`) resizes the
-    // content box, and watching that would hear its own write back as a
-    // second resize.
-    // A list's first measure is the draw's (`settleDrawn`, before rows are
-    // read); a resize after it is read inside the delivery, on the layout
-    // the frame has just done, and written in the next frame
-    // (frameObserver `read`): its insets lay the lists in it out again.
-    // Read in the next frame's callbacks instead, every frame of a rail
-    // drag laid the page out there for it (nightly 7148: 4ms a frame).
-    nestSizes ??= frameObserver(() => writeNests(nestReads.splice(0)), {
-      read: (entries) => {
-        nestReads.push(...readNests(entries.map((entry) => entry.target)));
-      },
-    });
-    nestSizes.observe(node, { box: "border-box" });
-    return () => {
-      nests.delete(node);
-      drawnNow.delete(node);
-      nestSizes?.unobserve(node);
-    };
-  };
-}
-
-/**
- * Every nesting list under `root` reads its rails again, read all then
- * written: a regroup's rows have landed (motion/share `regroup`), so each
- * line stands where its rows came to rest.
- */
-export function nestsLanded(root: Element): void {
-  measureNests(
-    [...root.querySelectorAll(NEST)].filter(
-      (list) => nests.has(list) && !isUnshown(list) && !skippedAt(list)
-    )
-  );
 }
 
 /* ── The fold's shape ──────────────────────────────────────────────── */
 
 /**
- * One stretch of line (app.css .kit-nest): a list item's elbow (`::before`:
- * down from the row above, round its corner, out along its arm to the
- * child's glyph) or the rail on past it (`::after`, straight down). `from`
- * is how far along the line its top is, from where the line leaves its
- * parent's glyph.
+ * One stretch of line (TreeLine): a row's elbow (down from the row above,
+ * round its corner, out along its arm to its glyph) or a straight rail (on
+ * past a row to its next sibling, or past a row deeper in). `from` is how
+ * far along the line its top is, from where the line leaves its parent's
+ * glyph.
  */
 interface Stretch {
   /** An elbow's corner radius; a straight stretch has none. */
   corner: number;
+  el: HTMLElement;
   from: number;
   height: number;
-  li: HTMLElement;
-  pseudo: "::before" | "::after";
   /** Laid out right to left: its rail is its right edge, its arm runs left. */
   rtl: boolean;
   /** In the group's frame. */
@@ -600,11 +438,13 @@ interface Item {
 }
 
 interface Shape {
-  /** The room's height: how far its parent's box grows. */
+  /** The room's height: how far the group's rows reach under the parent. */
   height: number;
   items: Item[];
   /** The whole line's length, to the furthest glyph. */
   length: number;
+  /** Each element of the group in its frame: what the room uncovers. */
+  rooms: { bottom: number; el: HTMLElement; top: number }[];
   /**
    * Whether a stretch of the group's frame is in the viewport where the
    * group is drawn now or where it is laid out (a slide carrying the group
@@ -619,9 +459,9 @@ interface Shape {
 }
 
 /**
- * A list's line: how far down the group its parent's glyph's centre is,
- * where it starts, and how far along the whole line that is; and the deck
- * the parent stands on, whose cards its first children start as.
+ * A line from a parent's glyph: how far down the group its parent's glyph's
+ * centre is, where it starts, and how far along the whole line that is; and
+ * the deck the parent stands on, whose cards its first children start as.
  */
 interface Line {
   at: number;
@@ -635,47 +475,35 @@ interface Line {
 }
 
 /**
- * The stretches of line a list item draws, in the group's frame. The fold's
- * heights are read to the subpixel: drawn boxes, against the group's own.
- * Nothing in or around a group but a glyph moves on its own transform while
- * it is measured (a glyph on its way is read less its ride, `restOf`, and a
- * slide that carries the parent's box carries the group with it), so the
- * differences are layout's,
- * without the rounding offsets carry; a head a pixel off a glyph is a frame
- * late at the slow end of the curve.
+ * A row's stroke on `line`, in the group's frame. The fold's heights are
+ * read to the subpixel: drawn boxes, against the group's own. Nothing in or
+ * around a group but a glyph moves on its own transform while it is
+ * measured (a glyph on its way is read less its ride, `restOf`, and a slide
+ * that carries the rows carries the group with them), so the differences
+ * are layout's, without the rounding offsets carry; a head a pixel off a
+ * glyph is a frame late at the slow end of the curve.
  */
-function railsOf(li: HTMLElement, frame: DOMRect, line: Line): Stretch[] {
-  const rails: Stretch[] = [];
-  const box = li.getBoundingClientRect();
-  for (const pseudo of ["::before", "::after"] as const) {
-    const style = getComputedStyle(li, pseudo);
-    if (style.content === "none" || style.display === "none") {
-      continue;
-    }
-    const y = box.top + Number.parseFloat(style.top);
-    const at = y - frame.top;
-    rails.push({
-      li,
-      pseudo,
-      top: at,
-      rtl: style.direction === "rtl",
-      x: box.left + Number.parseFloat(style.left),
-      y,
-      from: line.base + (at - line.at),
-      height: Number.parseFloat(style.height),
-      width: Number.parseFloat(style.width),
-      // The elbow's corner is its end-start one (app.css .kit-nest).
-      corner:
-        pseudo === "::before"
-          ? Number.parseFloat(
-              style.direction === "rtl"
-                ? style.borderBottomRightRadius
-                : style.borderBottomLeftRadius
-            ) || 0
-          : 0,
-    });
-  }
-  return rails;
+function stretchOf(span: HTMLElement, frame: DOMRect, line: Line): Stretch {
+  const box = span.getBoundingClientRect();
+  const style = getComputedStyle(span);
+  const rtl = style.direction === "rtl";
+  const top = box.top - frame.top;
+  return {
+    el: span,
+    top,
+    rtl,
+    x: box.left,
+    y: box.top,
+    from: line.base + (top - line.at),
+    height: box.height,
+    width: box.width,
+    // The elbow's corner is its end-start one (design.css .kit-tree-line).
+    corner: span.hasAttribute("data-line-elbow")
+      ? Number.parseFloat(
+          rtl ? style.borderBottomRightRadius : style.borderBottomLeftRadius
+        ) || 0
+      : 0,
+  };
 }
 
 /** A row, its glyph, and how far along its list's line the glyph is when the line runs straight down to it. */
@@ -748,7 +576,7 @@ function rideOf(
   const turn = centre.y - radius;
   const down = turn - elbow.y;
   // Right to left the rail is the elbow's right edge and the arm runs left
-  // (app.css .kit-nest, on the inline axis): every step across mirrored.
+  // (design.css .kit-tree-line, on the inline axis): every step across mirrored.
   const way = elbow.rtl ? -1 : 1;
   const start = elbow.rtl ? elbow.x + elbow.width : elbow.x;
   const rail = start + way * (corner - radius);
@@ -808,72 +636,151 @@ function lineFrom(
 }
 
 /** The nested list in a group that a list item is a row of, if it is one. */
-function nestOfItem(
-  group: HTMLElement,
-  li: HTMLLIElement | null
-): HTMLElement | null {
-  const list = li?.parentElement;
-  return list && group.contains(li) && list.matches(NEST) ? list : null;
+
+/**
+ * The group's frame: from the parent's foot (the gap above its first
+ * element is its room too) to its last element's foot, drawn.
+ */
+function frameOf(els: HTMLElement[]): DOMRect {
+  const first = els[0].getBoundingClientRect();
+  const last = (els.at(-1) ?? els[0]).getBoundingClientRect();
+  const gap = Number.parseFloat(getComputedStyle(els[0]).marginBlockStart) || 0;
+  const top = first.top - gap;
+  return new DOMRect(first.left, top, first.width, last.bottom - top);
 }
 
-function measure(group: HTMLElement, options: BranchOptions): Shape {
-  const frame = group.getBoundingClientRect();
-  // Each list's line. The group's own leaves the parent's glyph; a list
-  // open under a child leaves that child's glyph, as far along the whole
-  // line as the child is.
+/** Where the group's frame is laid out, down the page: its first element's layout box, less its gap. */
+function laidTop(els: HTMLElement[], boxOf = layoutBoxes()): number {
+  const gap = Number.parseFloat(getComputedStyle(els[0]).marginBlockStart) || 0;
+  return boxOf(els[0]).top - gap;
+}
+
+/** What a group's measure reads row by row. */
+interface Reading {
+  boxOf: (element: HTMLElement) => Box;
+  frame: DOMRect;
+  glyph: string;
+  items: Item[];
+  /** The line hanging from a row of the group's, or from its parent (null). */
+  lineOf: (from: HTMLElement | null) => Line;
+  /** Which child of its line a glyph is, 1 first. */
+  places: Map<Line, number>;
+  stretches: Stretch[];
+  /** How far along the line the group's own rail runs straight down. */
+  trunk: number;
+}
+
+/** A glyph's way along its line, and how far along the whole line it lands. */
+function wayOn(
+  reading: Reading,
+  item: Item,
+  line: Line,
+  elbow: Stretch | undefined
+): void {
+  if (item.centre) {
+    const place = (reading.places.get(line) ?? 0) + 1;
+    reading.places.set(line, place);
+    item.ride = rideOf(item, item.centre, elbow, line, reading.frame, place);
+    item.arrive = line.base + item.ride.length;
+  } else if (elbow) {
+    item.arrive = endOf(elbow);
+  }
+}
+
+/**
+ * One row of the group: each of its strokes on the line it is part of, and
+ * its glyph's way along the line it hangs from. Returns how far along the
+ * whole line its glyph lands, where a line from it starts.
+ */
+function readRow(reading: Reading, { row, hangs, strokes }: GroupRow): number {
+  let elbow: Stretch | undefined;
+  for (const { line, span } of strokes) {
+    const stretch = stretchOf(span, reading.frame, reading.lineOf(line));
+    reading.stretches.push(stretch);
+    if (span.hasAttribute("data-line-elbow")) {
+      elbow = stretch;
+      if (line === null) {
+        reading.trunk = Math.max(
+          reading.trunk,
+          stretch.from + cornerOf(stretch).down
+        );
+      }
+    }
+  }
+  let arrive = 0;
+  const line = reading.lineOf(hangs);
+  for (const el of row.querySelectorAll<HTMLElement>("[data-branch-item]")) {
+    if (el.closest(ROW) !== row) {
+      continue;
+    }
+    const item = itemOf(el, reading.glyph, reading.frame, line, reading.boxOf);
+    wayOn(reading, item, line, elbow);
+    ({ arrive } = item);
+    reading.items.push(item);
+  }
+  return arrive;
+}
+
+function measure(group: Group): Shape {
+  const { els, options } = group;
+  const frame = frameOf(els);
+  // Each row's line. The group's own leaves the parent's glyph; a row of
+  // the group with rows under it is the line they hang from, as far along
+  // the whole line as that row's glyph is.
   const own = lineFrom(
     frame,
-    group.parentElement?.closest("li, [data-nest-host]"),
+    group.parent,
     options.parent ?? options.glyph,
     0,
     0
   );
   const start = own.at;
-  const lines = new Map<Element, Line>([[group, own]]);
-  const arrived = new Map<Element, number>();
-  const lineOf = (list: Element): Line => {
-    let line = lines.get(list);
-    if (!line) {
-      const host = list.parentElement?.closest("li, [data-nest-host]");
-      line = lineFrom(
-        frame,
-        host,
-        options.glyph,
-        (host && arrived.get(host)) ?? 0,
-        start
-      );
-      lines.set(list, line);
-    }
-    return line;
-  };
-  /** Which child of its list a glyph is, 1 first. */
-  const places = new Map<Element, number>();
-  const items: Item[] = [];
-  const stretches: Stretch[] = [];
+  const lines = new Map<HTMLElement, Line>();
+  const arrived = new Map<HTMLElement, number>();
   const boxOf = layoutBoxes();
-  let trunk = 0;
-  for (const el of group.querySelectorAll<HTMLElement>("[data-branch-item]")) {
-    const li = el.closest("li");
-    const list = nestOfItem(group, li);
-    const line = lineOf(list ?? group);
-    const item = itemOf(el, options.glyph, frame, line, boxOf);
-    const drawn = list && li ? railsOf(li, frame, line) : [];
-    stretches.push(...drawn);
-    const elbow = drawn.find((stretch) => stretch.pseudo === "::before");
-    if (elbow && list === group) {
-      trunk = Math.max(trunk, elbow.from + cornerOf(elbow).down);
-    }
-    if (item.centre) {
-      const place = (places.get(list ?? group) ?? 0) + 1;
-      places.set(list ?? group, place);
-      item.ride = rideOf(item, item.centre, elbow, line, frame, place);
-      item.arrive = line.base + item.ride.length;
-    } else if (elbow) {
-      item.arrive = endOf(elbow);
-    }
-    arrived.set(li ?? el, item.arrive);
-    items.push(item);
+  const reading: Reading = {
+    boxOf,
+    frame,
+    glyph: options.glyph,
+    items: [],
+    places: new Map(),
+    stretches: [],
+    trunk: 0,
+    lineOf: (from) => {
+      if (!from) {
+        return own;
+      }
+      let line = lines.get(from);
+      if (!line) {
+        line = lineFrom(
+          frame,
+          from,
+          options.glyph,
+          arrived.get(from) ?? 0,
+          start
+        );
+        lines.set(from, line);
+      }
+      return line;
+    },
+  };
+  const rows = rowsOf(group);
+  for (const each of rows) {
+    arrived.set(each.row, readRow(reading, each));
   }
+  // A box with no tree rows of its own: its rows straight down the line.
+  if (rows.length === 0) {
+    for (const el of els) {
+      for (const item of el.querySelectorAll<HTMLElement>(
+        "[data-branch-item]"
+      )) {
+        const each = itemOf(item, options.glyph, frame, own, boxOf);
+        wayOn(reading, each, own, undefined);
+        reading.items.push(each);
+      }
+    }
+  }
+  const { items, stretches } = reading;
   const length = Math.max(
     0,
     ...items.map((item) => item.arrive),
@@ -885,8 +792,16 @@ function measure(group: HTMLElement, options: BranchOptions): Shape {
     items,
     length,
     stretches,
-    trunk: trunk || length,
-    seen: viewOf(group, frame, boxOf(group).top),
+    rooms: els.map((el) => {
+      const box = el.getBoundingClientRect();
+      return {
+        el,
+        top: box.top - frame.top,
+        bottom: box.bottom - frame.top,
+      };
+    }),
+    trunk: reading.trunk || length,
+    seen: viewOf(frame, laidTop(els, boxOf)),
   };
 }
 
@@ -894,11 +809,7 @@ function measure(group: HTMLElement, options: BranchOptions): Shape {
  * The viewport in the group's frame, where the group is drawn and where it
  * is laid out: it sits `shift` below its place while a slide carries it.
  */
-function viewOf(
-  group: HTMLElement,
-  frame = group.getBoundingClientRect(),
-  laidOut = layoutBox(group).top
-): Shape["seen"] {
+function viewOf(frame: DOMRect, laidOut: number): Shape["seen"] {
   const shift = frame.top - (laidOut - window.scrollY);
   const above = -frame.top + Math.min(0, shift);
   const below = window.innerHeight - frame.top + Math.max(0, shift);
@@ -1035,12 +946,43 @@ function reachOf(item: Item): { left: number; up: number } {
 }
 
 /**
- * A group cut `below` px up from its foot: the room it still has. Open
- * above as far as its line starts, `lead` px over its top at the foot of
- * its parent's glyph.
+ * An element of a folding group, `top` to `bottom` in the group's frame,
+ * cut where the room's edge is over the fold: the edge closes from `room`
+ * up to the parent's glyph's foot, `lead` px over the group's top, on the
+ * rows' curve over `exit`, and each element is cut at it, never below its
+ * own foot. Open above as far as the line starts, and on the other sides
+ * by `BLEED`. Sampled on the curve, linear between: one curve for the whole
+ * group's edge, which no element's own clip, eased, would keep to.
  */
-const shut = (lead: number, below: number): string =>
-  `inset(${px(-(BLEED + lead))} ${px(-BLEED)} ${px(Math.max(0, below))} ${px(-BLEED)})`;
+function shutFrames(
+  top: number,
+  bottom: number,
+  lead: number,
+  room: number,
+  exit: number
+): Span {
+  const count = Math.max(2, Math.ceil(exit / STEP));
+  const points = Array.from({ length: count + 1 }, (_, k): Sample => {
+    const at = (exit * k) / count;
+    const edge = room - (room + lead) * easeInOut(at / exit);
+    return {
+      at,
+      v: [Number(clamp(bottom - edge, 0, bottom + lead).toFixed(2))],
+    };
+  });
+  return cutAtEdge(points, BLEED + lead + top);
+}
+
+/**
+ * An element cut from its foot where the room's edge is: `points`, how far
+ * up from its foot over time, thinned to the frames it moves on; open
+ * `above` px over its top, and `BLEED` on its sides.
+ */
+function cutAtEdge(points: Sample[], above: number): Span {
+  return spanOf(thin(moving(points), [0.1]), ([below]) => ({
+    clipPath: `inset(${px(-above)} ${px(-BLEED)} ${px(below)} ${px(-BLEED)})`,
+  }));
+}
 
 /** A row's title `v` of the way wiped in: cut from the right, past its glyph. */
 const wiped = (item: Item, v: number): Keyframe => {
@@ -1398,13 +1340,14 @@ function piecesOf(shape: Shape, plan: Plan): Piece[] {
     easing: CURVE.out,
     fill: "both",
   });
-  /** An animation over the span of its own, linear: a glyph's ride, its skin's fade, a stretch's cuts. */
-  const along = (
-    { frames, delay, duration }: Span,
-    pseudoElement?: Stretch["pseudo"]
-  ): [Keyframe[], KeyframeAnimationOptions] => [
+  /** An animation over the span of its own, linear: a glyph's ride, its skin's fade, a stretch's cuts, a room's edge. */
+  const along = ({
     frames,
-    { delay, duration, easing: "linear", fill: "both", pseudoElement },
+    delay,
+    duration,
+  }: Span): [Keyframe[], KeyframeAnimationOptions] => [
+    frames,
+    { delay, duration, easing: "linear", fill: "both" },
   ];
   /** A glyph on its way, and the card it wears on it. */
   const ridden = ({ icon, ride }: Item): Animation[] => {
@@ -1449,12 +1392,45 @@ function piecesOf(shape: Shape, plan: Plan): Piece[] {
     pieces.push({
       top: stretch.top,
       bottom: stretch.top + stretch.height,
+      build: () => [stretch.el.animate(...along(railFrames(plan, stretch)))],
+    });
+  }
+  // What the room uncovers, element by element, at its edge: the rails of
+  // the levels above the parent's stand whole in each row, and grow with
+  // the room as the parent's own box once grew around its rows.
+  for (const room of shape.rooms) {
+    if (plan.edge(0) >= room.bottom) {
+      continue;
+    }
+    pieces.push({
+      top: room.top,
+      bottom: room.bottom,
       build: () => [
-        stretch.li.animate(...along(railFrames(plan, stretch), stretch.pseudo)),
+        room.el.animate(...along(roomFrames(shape, plan, room, times))),
       ],
     });
   }
   return pieces;
+}
+
+/**
+ * An element of the group cut at the room's edge at each of `times`: open
+ * above as far as the parent's glyph (the glyphs ride down from it, and a
+ * first child's elbow leaves it), and on the other sides by `BLEED`.
+ */
+function roomFrames(
+  shape: Shape,
+  plan: Plan,
+  room: Shape["rooms"][number],
+  times: number[]
+): Span {
+  return cutAtEdge(
+    times.map((at): Sample => ({
+      at,
+      v: [Number(Math.max(-BLEED, room.bottom - plan.edge(at)).toFixed(2))],
+    })),
+    BLEED + Math.max(0, room.top - shape.start)
+  );
 }
 
 /** The pieces now in view, built and taken off the list. */
@@ -1482,7 +1458,7 @@ function buildSeen(pieces: Piece[], seen: Shape["seen"]): Animation[] {
  * turned (`Flight.unwatch`).
  */
 function fly(
-  group: HTMLElement,
+  group: Group,
   flight: Flight,
   pieces: Piece[],
   landed: () => void
@@ -1491,11 +1467,13 @@ function fly(
   if (!plan || start === null) {
     return;
   }
+  const { els } = group;
   const options = { capture: true, passive: true } as const;
   const scrolled = ({ target }: Event) => {
     // Another pane scrolling moves nothing of the group.
-    if (target === document || (target as Node).contains(group)) {
-      for (const animation of buildSeen(pieces, viewOf(group))) {
+    if (target === document || (target as Node).contains(els[0])) {
+      const view = viewOf(frameOf(els), laidTop(els));
+      for (const animation of buildSeen(pieces, view)) {
         animation.startTime = start;
         flight.animations.push(animation);
       }
@@ -1524,6 +1502,8 @@ function fly(
 /** A fold in flight on a group: its plan, on the clock it started on. */
 interface Flight {
   animations: Animation[];
+  /** The elements it turns, for letting go of them. */
+  els: HTMLElement[];
   /** Drops its ask of the batch, or shows a group still waiting to be. */
   hold?: () => void;
   items: HTMLElement[];
@@ -1536,6 +1516,7 @@ interface Flight {
   unwatch?: () => void;
 }
 
+/** Each parent's fold in flight. */
 const flights = new WeakMap<HTMLElement, Flight>();
 
 /** Values read for one list of rows, by element, for another: a row new to it was nowhere. */
@@ -1553,18 +1534,18 @@ const resting = (items: HTMLElement[], room: number, value: number): State => ({
 });
 
 /**
- * Where the fold in flight on `group` stands now, held there (its pieces
- * paused, to be dropped once the next fold takes over), for `items`. With
- * none in flight, or one that has landed, it is at rest and `now` is null:
- * how tall its room is then is the caller's to read, once it has written
- * everything it writes (`fold`).
+ * Where the fold in flight under `parent` stands now, held there (its
+ * pieces paused, to be dropped once the next fold takes over), for `items`.
+ * With none in flight, or one that has landed, it is at rest and `now` is
+ * null: how tall its room is then is the caller's to read, once it has
+ * written everything it writes (`fold`).
  */
 function stopFlight(
-  group: HTMLElement,
+  parent: HTMLElement,
   items: HTMLElement[]
 ): { held: Animation[]; now: State | null } {
-  const flight = flights.get(group);
-  flights.delete(group);
+  const flight = flights.get(parent);
+  flights.delete(parent);
   if (!flight) {
     return { held: [], now: null };
   }
@@ -1616,7 +1597,7 @@ function stopFlight(
 }
 
 /**
- * Lets go of every animation a group's flight still holds. A paused
+ * Lets go of every animation a parent's flight still holds. A paused
  * animation is in play for as long as it exists: the document's timeline
  * keeps it, and it keeps its target and the whole tree that target was cut
  * out of. A fold holds the pieces of an opening it turned back where they
@@ -1624,9 +1605,9 @@ function stopFlight(
  * a tab switch away from a session whose rail tree was still drawing in —
  * stayed on the heap for good: 62MB over a hundred switches across twenty tabs.
  */
-function release(group: HTMLElement): void {
-  const flight = flights.get(group);
-  flights.delete(group);
+function release(parent: HTMLElement): void {
+  const flight = flights.get(parent);
+  flights.delete(parent);
   if (!flight) {
     return;
   }
@@ -1638,78 +1619,81 @@ function release(group: HTMLElement): void {
   flight.animations = [];
 }
 
-/** Groups whose fold lets go of its flight once Svelte has taken them out. */
+/** Elements whose fold lets go of its flight once Svelte has taken them out. */
 const leaving = new WeakSet<HTMLElement>();
 
 /**
- * Releases the group's flight once its fold has run and the group is out of
- * the page. Svelte says the fold is over (`outroend`) and takes the group out
- * once every outro of its block has ended, in that task at the soonest, so
- * the release waits behind it, a microtask and then a frame at a time. The
- * group is shut by then (the clip at its end), so nothing let go of is ever
- * drawn. A fold turned back by an opening never ends, and the opening takes
- * the flight over as before.
+ * Releases the parent's flight once its fold has run and every element of
+ * the group is out of the page. Svelte says each fold is over (`outroend`)
+ * and takes the element out once every outro of its block has ended, in
+ * that task at the soonest, so the release waits behind it, a microtask and
+ * then a frame at a time. The group is shut by then (its clips at their
+ * end), so nothing let go of is ever drawn. A fold turned back by an
+ * opening never ends, and the opening takes the flight over as before.
  */
-function releaseWhenGone(group: HTMLElement): void {
-  if (leaving.has(group)) {
-    return;
+function releaseWhenGone(group: Group): void {
+  const { parent, els } = group;
+  for (const el of els) {
+    if (leaving.has(el)) {
+      continue;
+    }
+    leaving.add(el);
+    el.addEventListener(
+      "outroend",
+      () => {
+        leaving.delete(el);
+        const ended = flights.get(parent);
+        const gone = () => {
+          // Taken over since (another turn holds the group): that turn's own.
+          if (flights.get(parent) !== ended || !ended) {
+            return;
+          }
+          if (ended.els.some((each) => each.isConnected)) {
+            requestAnimationFrame(gone);
+            return;
+          }
+          release(parent);
+        };
+        queueMicrotask(gone);
+      },
+      { once: true }
+    );
   }
-  leaving.add(group);
-  group.addEventListener(
-    "outroend",
-    () => {
-      leaving.delete(group);
-      const ended = flights.get(group);
-      const gone = () => {
-        // Taken over since (another turn holds the group): that turn's own.
-        if (flights.get(group) !== ended) {
-          return;
-        }
-        if (group.isConnected) {
-          requestAnimationFrame(gone);
-          return;
-        }
-        release(group);
-      };
-      queueMicrotask(gone);
-    },
-    { once: true }
-  );
 }
 
-/** Back in the flow, and out of it: the room the group takes. */
-function inFlow(group: HTMLElement): void {
-  group.style.position = "";
-  group.style.insetBlockStart = "";
-  group.style.insetInlineStart = "";
-  group.style.inlineSize = "";
+/** Back in the flow, and out of it: the room each element takes. */
+function inFlow(el: HTMLElement): void {
+  el.style.position = "";
+  el.style.insetBlockStart = "";
+  el.style.insetInlineStart = "";
+  el.style.inlineSize = "";
+  el.style.marginBlockStart = "";
 }
 /**
  * Where it stands in the flow, to the subpixel. Placed by its whole-pixel
  * offsets, a group whose rows start on a fraction of a pixel shifted by that
  * fraction as its fold began, its line's cuts with it, off the pixel grid.
  */
-function placeOf(group: HTMLElement): Box {
-  const parent = group.offsetParent;
-  const box = group.getBoundingClientRect();
+function placeOf(el: HTMLElement): Box {
+  const parent = el.offsetParent;
+  const box = el.getBoundingClientRect();
   const frame = parent?.getBoundingClientRect();
   return {
-    top: frame
-      ? box.top - frame.top - (parent?.clientTop ?? 0)
-      : group.offsetTop,
+    top: frame ? box.top - frame.top - (parent?.clientTop ?? 0) : el.offsetTop,
     left: frame
       ? box.left - frame.left - (parent?.clientLeft ?? 0)
-      : group.offsetLeft,
+      : el.offsetLeft,
     width: box.width,
     height: box.height,
   };
 }
-/** Out of the flow, where it stood in it (`placeOf`). */
-function outOfFlow(group: HTMLElement, place: Box): void {
-  group.style.position = "absolute";
-  group.style.insetBlockStart = `${place.top}px`;
-  group.style.insetInlineStart = `${place.left}px`;
-  group.style.inlineSize = `${place.width}px`;
+/** Out of the flow, where it stood in it (`placeOf`): its border box there, so no margin. */
+function outOfFlow(el: HTMLElement, place: Box): void {
+  el.style.position = "absolute";
+  el.style.marginBlockStart = "0px";
+  el.style.insetBlockStart = `${place.top}px`;
+  el.style.insetInlineStart = `${place.left}px`;
+  el.style.inlineSize = `${place.width}px`;
 }
 
 /**
@@ -1727,8 +1711,8 @@ interface Late {
  * the update has written its own, and before motion/rows reads where the
  * rows are (`beforeReflow`), or in the update's next microtask where no
  * `reflow` hears it. One tree is often open in two lists at once (the rail's
- * Sessions and its project, the home), and both fold in the one click: read
- * as each was asked, the second one's attributes went on after the first
+ * Recent and the phone home's), and both fold in the one click: read as
+ * each was asked, the second one's attributes went on after the first
  * one's read, and every row was styled twice, 24 then 18ms for a tree of
  * 140.
  */
@@ -1752,9 +1736,24 @@ function afterWrites(turn: Late): void {
   late.push(turn);
 }
 
-const itemsOf = (group: HTMLElement) => [
-  ...group.querySelectorAll<HTMLElement>("[data-branch-item]"),
-];
+const itemsOf = (group: Group) =>
+  group.els.flatMap((el) => [
+    ...(el.matches("[data-branch-item]") ? [el] : []),
+    ...el.querySelectorAll<HTMLElement>("[data-branch-item]"),
+  ]);
+
+/** Sets or takes an attribute off every element of the group. */
+const mark = (group: Group, name: string, on: boolean) => {
+  for (const el of group.els) {
+    el.toggleAttribute(name, on);
+  }
+};
+/** Sets `data-state` on every element of the group: reflow hears it. */
+const stateOf = (group: Group, state: "open" | "closing") => {
+  for (const el of group.els) {
+    el.dataset.state = state;
+  }
+};
 
 /**
  * A group just mounted is held hidden, its rows (by the clip their titles
@@ -1766,17 +1765,19 @@ const itemsOf = (group: HTMLElement) => [
 const HELD = "data-branch-hold";
 /**
  * A group whose line is drawing in or running back: its stretches take the
- * cuts their pieces move (app.css `[data-branch-draw]`). Off at rest, where
- * a stretch has no clip at all.
+ * cuts their pieces move (design.css `[data-branch-draw]`). Off at rest,
+ * where a stretch has no clip at all.
  */
 const DRAWN = "data-branch-draw";
 /**
- * A group just mounted whose line has not set off yet: its parent's deck
- * still stands (app.css). The deck goes on the frame the glyphs that were
- * its cards are first drawn, a task and two frames after the mount; gone
- * from the mount, the parent stood bare for those frames.
+ * On the parent, while its group is just mounted and its line has not set
+ * off yet: its deck still stands (app.css). The deck goes on the frame the
+ * glyphs that were its cards are first drawn, a task and two frames after
+ * the mount; gone from the mount, the parent stood bare for those frames.
  */
 const WAITS = "data-branch-wait";
+/** reflow's: what it neither slides, uncovers nor copies, while the group turns. */
+const ANCHOR = "data-flip-anchor";
 
 /** A state read for `from`, for the rows a shape has measured. */
 const stateFor = (shape: Shape, from: HTMLElement[], now: State): State => {
@@ -1797,51 +1798,70 @@ const stateFor = (shape: Shape, from: HTMLElement[], now: State): State => {
  * computed styles read in a board the page does not lay out, and 39
  * animations started on rows it does not draw; a fold, much the same.
  */
-function unseenTurn(group: HTMLElement, opening: boolean): TransitionConfig {
-  const { held } = stopFlight(group, itemsOf(group));
+function unseenTurn(group: Group, opening: boolean): void {
+  const { held } = stopFlight(group.parent, itemsOf(group));
   for (const animation of held) {
     animation.cancel();
   }
-  group.removeAttribute(HELD);
-  group.removeAttribute(DRAWN);
-  group.removeAttribute(WAITS);
+  mark(group, HELD, false);
+  mark(group, DRAWN, false);
+  group.parent.removeAttribute(WAITS);
+  markCuts(group, false);
   if (opening) {
-    inFlow(group);
-    group.dataset.state = "open";
+    for (const el of group.els) {
+      inFlow(el);
+    }
+    mark(group, ANCHOR, false);
+    stateOf(group, "open");
   }
-  return { duration: 0 };
 }
 
-function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
-  if (skippedAt(group)) {
-    return unseenTurn(group, true);
+/** Every element of the group back in the layout: shown, and in the flow. */
+function show(group: Group): void {
+  for (const el of group.els) {
+    unshown.delete(el);
+    el.style.display = "";
   }
+}
+
+function open(group: Group): void {
+  if (skippedAt(group.els[0])) {
+    unseenTurn(group, true);
+    return;
+  }
+  const { parent, options } = group;
   const items = itemsOf(group);
-  const turning = flights.has(group);
-  const stopped = stopFlight(group, items);
+  const turning = flights.has(parent);
+  const stopped = stopFlight(parent, items);
   const { held } = stopped;
   const now = stopped.now ?? resting(items, 0, 0);
-  inFlow(group);
+  for (const el of group.els) {
+    inFlow(el);
+  }
+  mark(group, ANCHOR, true);
   if (turning) {
     // reflow hears the group take its room again, in this update.
-    group.dataset.state = "open";
+    stateOf(group, "open");
   }
   const flight: Flight = {
     // Held where they are (turned back) or hidden (just mounted) until the
     // batch starts.
     animations: held,
+    els: group.els,
     items,
     plan: null,
     rest: now,
     start: null,
   };
   if (!turning) {
-    group.setAttribute(HELD, "");
+    mark(group, HELD, true);
   }
-  flights.set(group, flight);
+  flights.set(parent, flight);
   if (!motionOk.current) {
-    group.removeAttribute(HELD);
-    group.removeAttribute(DRAWN);
+    mark(group, HELD, false);
+    mark(group, DRAWN, false);
+    mark(group, ANCHOR, false);
+    stateOf(group, "open");
     for (const animation of flight.animations) {
       animation.cancel();
     }
@@ -1853,10 +1873,11 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
         })
       )
     );
-    return { duration: dur("--dur-pop") };
+    return;
   }
-  group.setAttribute(DRAWN, "");
-  group.toggleAttribute(WAITS, !turning);
+  markCuts(group, true);
+  mark(group, DRAWN, true);
+  parent.toggleAttribute(WAITS, !turning);
   /** The opening as it was last laid out, and its pieces still to build. */
   let laid: { plan: Plan; shape: Shape; speed: number } | null = null;
   let pieces: Piece[] = [];
@@ -1866,7 +1887,7 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
   // over --dur-panel. Returns the speed it asked for.
   const begin = (): number => {
     const pace = glideSpeed(
-      group.offsetHeight,
+      frameOf(group.els).height,
       items.filter((el) => el.querySelector(options.glyph)).length
     );
     // Turned back mid-fold, it carries on from where the fold left it in the
@@ -1880,7 +1901,7 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
   // Read: measured where every row and rail is placed, and planned at
   // `speed` from where every piece is held.
   const lay = (speed: number) => {
-    const shape = measure(group, options);
+    const shape = measure(group);
     laid = {
       shape,
       speed,
@@ -1908,12 +1929,12 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     // them have read (`afterWrites`).
     afterWrites({
       read: () => {
-        if (flights.get(group) === flight) {
+        if (flights.get(parent) === flight) {
           lay(begin());
         }
       },
       write: () => {
-        if (flights.get(group) === flight && laid) {
+        if (flights.get(parent) === flight && laid) {
           build(laid);
         }
       },
@@ -1922,46 +1943,40 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     // Just mounted, it is drawn in this update and laid out in a task of its
     // own: drawn and laid out in the click's task, a tree of forty in the
     // rail ran it to 19–27ms. Shown, it takes its room (reflow hears
-    // `data-state`, and holds the rows under it) and its lists are measured
-    // before reflow reads them. Out of the layout until then, it moves
-    // nothing, and the frame between shows the rail as it was.
-    group.style.display = "none";
-    unshown.add(group);
-    const show = () => {
-      unshown.delete(group);
-      group.style.display = "";
-    };
+    // `data-state`, and holds the rows under it) and its rows' lines are
+    // placed before reflow reads them. Out of the layout until then, it
+    // moves nothing, and the frame between shows the rail as it was.
+    for (const el of group.els) {
+      el.style.display = "none";
+      unshown.add(el);
+    }
     const shown = setTimeout(() => {
-      // Every write first, then the one layout its height, the lists'
-      // measure and its own shape are read in, and reflow reads it as it
-      // stands. A list never measured before takes its insets off its first
-      // row alone, ahead of that layout (`measureFirst`).
-      show();
-      group.dataset.state = "open";
-      measureFirst(group);
+      // Every write first, then the one layout its rows' lines and its own
+      // shape are read in, and reflow reads it as it stands.
+      show(group);
+      stateOf(group, "open");
+      settleLines(rowsOf(group).map(({ row }) => row));
       const speed = begin();
-      measureNestsIn(group);
       build(lay(speed));
     }, 0);
     flight.hold = () => {
       clearTimeout(shown);
-      show();
+      show(group);
     };
   }
-  return { duration: dur("--dur-cascade") + dur("--dur-rail") };
 
   /** On the batch's frame, at its speed (motion/rows `atTravel`). */
   function takeOff(at: number, speed: number): void {
-    // Its list unmounted since it asked (the rail giving way to the drawer
+    // Its rows unmounted since it asked (the rail giving way to the drawer
     // as the window narrows, a row leaving with live data): nothing is left
     // to open. Measured off the page, it has no length and no duration, and
     // `fly` asked for a frame on every frame from then on, never landing.
     // Its pieces, built and held for the batch, are let go of with it.
-    if (flights.get(group) !== flight) {
+    if (flights.get(parent) !== flight) {
       return;
     }
-    if (!group.isConnected) {
-      release(group);
+    if (!group.els[0].isConnected) {
+      release(parent);
       return;
     }
     // Laid out at the speed it asked for; another tree in its batch set a
@@ -1977,13 +1992,15 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     for (const animation of flight.animations) {
       animation.startTime = at;
     }
-    group.removeAttribute(WAITS);
+    parent.removeAttribute(WAITS);
     // Just mounted, a piece out of view is hidden under the hold until it is
     // built; the hold goes on the frame the opening lands, with the pieces,
     // each then at rest where it ends.
     fly(group, flight, pieces, () => {
-      group.removeAttribute(HELD);
-      group.removeAttribute(DRAWN);
+      mark(group, HELD, false);
+      mark(group, DRAWN, false);
+      mark(group, ANCHOR, false);
+      markCuts(group, false);
       for (const animation of flight.animations) {
         animation.cancel();
       }
@@ -1992,22 +2009,25 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
   }
 }
 
-function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
-  if (skippedAt(group)) {
-    return unseenTurn(group, false);
+function fold(group: Group): void {
+  if (skippedAt(group.els[0])) {
+    unseenTurn(group, false);
+    return;
   }
+  const { parent, options } = group;
   releaseWhenGone(group);
   const items = itemsOf(group);
   const exit = dur("--dur-exit");
+  parent.removeAttribute(WAITS);
   if (!motionOk.current) {
     // Still: they fade where they stand, then the room closes at once.
-    const { held, now } = stopFlight(group, items);
+    const { held, now } = stopFlight(parent, items);
     for (const animation of held) {
       animation.cancel();
     }
-    group.removeAttribute(HELD);
-    group.removeAttribute(DRAWN);
-    group.removeAttribute(WAITS);
+    mark(group, HELD, false);
+    mark(group, DRAWN, false);
+    markCuts(group, false);
     const fades = items.map((el) =>
       el.animate([{ opacity: 1 }, { opacity: 0 }], {
         duration: exit,
@@ -2015,107 +2035,248 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
         fill: "forwards",
       })
     );
-    flights.set(group, {
+    flights.set(parent, {
       animations: fades,
+      els: group.els,
       items,
       plan: null,
-      rest: now ?? resting(items, group.offsetHeight, 1),
+      rest: now ?? resting(items, frameOf(group.els).height, 1),
       start: null,
     });
-    return { duration: exit };
+    return;
   }
-  // The one attribute the fold sets goes on before anything is read, here
-  // and in every other group folding in this update (`afterWrites`). Svelte
-  // has made the group inert by now, which styles every row in it again at
-  // the first read; set between the reads, an attribute styled them once
-  // more. reflow hears `data-state` in the update's microtask, by when the
-  // group has left the flow (`place`), and holds its box and everything
-  // under it until the batch. Whatever an opening it turns back had drawn
-  // stays as it stood (`held`, and the group's hold over what was not built
-  // yet): the fold closes over it.
-  group.dataset.state = "closing";
-  const { held, now } = stopFlight(group, items);
-  let place: Box | null = null;
-  let shuts: Keyframe[] = [];
+  // The attributes the fold sets go on before anything is read, here and
+  // in every other group folding in this update (`afterWrites`). Svelte has
+  // made the rows inert by now, which styles every row in them again at the
+  // first read; set between the reads, an attribute styled them once more.
+  // reflow hears `data-state` in the update's microtask, by when the rows
+  // have left the flow (`place`), and holds everything under them until
+  // the batch. Whatever an opening it turns back had drawn stays as it
+  // stood (`held`, and the group's hold over what was not built yet): the
+  // fold closes over it.
+  mark(group, ANCHOR, true);
+  stateOf(group, "closing");
+  const { held, now } = stopFlight(parent, items);
+  let places: Box[] = [];
+  let shuts: Span[] = [];
   let folding: Flight | null = null;
-  let room: Animation | null = null;
+  let rooms: Animation[] = [];
   afterWrites({
     read: () => {
-      // Its box and its parent's glyph: all a fold reads of the tree.
-      const frame = group.getBoundingClientRect();
-      const mark = parentGlyph(group, options.parent ?? options.glyph);
+      // Its rows' boxes and its parent's glyph: all a fold reads of the tree.
+      const frame = frameOf(group.els);
+      const glyph = parentGlyph(group, options.parent ?? options.glyph);
       // How far over the group's top its line starts, at that glyph's foot.
-      const lead = mark
-        ? Math.max(0, frame.top - (restOf(mark).y + mark.offsetHeight / 2))
+      const lead = glyph
+        ? Math.max(0, frame.top - (restOf(glyph).y + glyph.offsetHeight / 2))
         : 0;
       const state = now ?? resting(items, frame.height, 1);
       const flight: Flight = {
         animations: held,
+        els: group.els,
         items,
         plan: null,
         rest: state,
         start: null,
       };
-      flights.set(group, flight);
+      flights.set(parent, flight);
       // The group closes from its foot with its room, on the room's curve,
-      // and on up its line to the parent's glyph; then it stays shut until
-      // it unmounts: out of the flow, it stands under the rows that slide
-      // up, and would show over them once its parent's box had closed.
-      shuts = [
-        { clipPath: shut(lead, frame.height - state.room) },
-        { clipPath: shut(lead, frame.height + lead) },
-      ];
+      // and on up its line to the parent's glyph: one edge across every
+      // element of it, each cut there. Then it stays shut until it
+      // unmounts: out of the flow, it stands under the rows that slide up,
+      // and would show over them once the room had closed.
+      shuts = group.els.map((el) => {
+        const box = el.getBoundingClientRect();
+        return shutFrames(
+          box.top - frame.top,
+          box.bottom - frame.top,
+          lead,
+          state.room,
+          exit
+        );
+      });
       // From the next frame, the batch the room and every row under it
       // close in.
       flight.hold = atTravel(
         (at) => {
-          if (flights.get(group) !== flight) {
+          if (flights.get(parent) !== flight) {
             return;
           }
           flight.plan = planFold(state, exit);
           flight.start = at;
-          // The clip alone: an opening's pieces stay held where they stood.
-          if (room) {
+          // The clips alone: an opening's pieces stay held where they stood.
+          for (const room of rooms) {
             room.startTime = at;
           }
         },
         { close: true, now: true }
       );
       folding = flight;
-      place = placeOf(group);
+      places = group.els.map(placeOf);
     },
-    // The fold's writes, after every read: its clip, held where the room
-    // stands until the batch starts, and the group out of the flow.
+    // The fold's writes, after every read: its clips, held where the room
+    // stands until the batch starts, and the rows out of the flow.
     write: () => {
-      if (!(place && folding)) {
+      if (!folding) {
         return;
       }
-      room = group.animate(shuts, {
-        duration: exit,
-        easing: CURVE.inOut,
-        fill: "both",
+      rooms = group.els.map((el, i) => {
+        const { frames, delay, duration } = shuts[i];
+        const room = el.animate(frames, {
+          delay,
+          duration,
+          easing: "linear",
+          fill: "both",
+        });
+        room.pause();
+        return room;
       });
-      room.pause();
-      folding.animations = [...held, room];
-      outOfFlow(group, place);
+      folding.animations = [...held, ...rooms];
+      group.els.forEach((el, i) => {
+        outOfFlow(el, places[i]);
+      });
     },
   });
-  // Unmounted once the last piece has gone: a frame for the batch, and a
-  // frame to spare. A fold takes --dur-exit whatever it measures (`planFold`).
-  return { duration: exit + FRAME + STEP * 2 };
+}
+
+/* ── Turns taken together ──────────────────────────────────────────── */
+
+/** A turn Svelte asked for, still to be taken with the rest of its update. */
+interface Asked {
+  el: HTMLElement;
+  options: BranchOptions;
+  out: boolean;
+}
+
+/** The turns of the update under way, taken together in its microtask (`takeTurns`). */
+let asked: Asked[] = [];
+/** The elements Svelte has mounted or unmounted with a branch in this update. */
+const turningNow = new Set<HTMLElement>();
+/** Elements a regroup mounts or unmounts: they simply come and go (motion/share). */
+const regrouped = new WeakSet<HTMLElement>();
+
+/** The nearest row above `el` that does not turn with it: its group's parent. */
+function rootOf(el: HTMLElement): HTMLElement | null {
+  let parent = parentOf(el);
+  while (parent && turningNow.has(parent) && parent.matches(ROW)) {
+    parent = parentOf(parent);
+  }
+  return parent;
 }
 
 /**
- * The fold as a Svelte transition: `in:branch={options}` opens, and
- * `out:branch={options}` folds the group and keeps it mounted until it has
- * gone. Each turn is planned when it happens, from where the last one left
- * every piece (a deferred config, which Svelte asks for afresh every time).
+ * Whether `el` turns as a fold, under a parent: a row of a parent that
+ * showed none before (all its rows turn now) or whose fold is in flight, or
+ * a box. A row that comes or goes beside rows that stay (a new delegate
+ * under an open session, one archived) is a row of the list, which reflow
+ * uncovers or closes; so is a row at the root, and anything a regroup moves.
+ */
+function foldsAs(el: HTMLElement): HTMLElement | null {
+  if (regrouped.has(el)) {
+    return null;
+  }
+  const parent = rootOf(el);
+  if (!parent) {
+    return null;
+  }
+  if (!el.matches(ROW) || flights.has(parent)) {
+    return parent;
+  }
+  return childrenOf(parent).every((row) => turningNow.has(row)) ? parent : null;
+}
+
+/** The update's turns are to be taken (`takeTurns`), in the microtask after Svelte asked for them all. */
+let taking = false;
+
+/** Every turn of the update, grouped under its parent and taken. */
+function takeTurns(): void {
+  taking = false;
+  const turns = asked;
+  asked = [];
+  const groups = new Map<string, Group>();
+  const order: [Group, boolean][] = [];
+  const keys = new WeakMap<HTMLElement, number>();
+  let next = 0;
+  for (const { el, options, out } of turns) {
+    const parent = foldsAs(el);
+    if (!parent) {
+      continue;
+    }
+    if (!keys.has(parent)) {
+      keys.set(parent, next);
+      next += 1;
+    }
+    const key = `${keys.get(parent)}:${out}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { parent, els: [], options };
+      groups.set(key, group);
+      order.push([group, out]);
+    }
+    group.els.push(el);
+  }
+  turningNow.clear();
+  for (const [group, out] of order) {
+    // In the page's order: Svelte asks in the order its blocks run.
+    // Rows of one list, or a box alone: siblings, each before or after.
+    group.els.sort((a, b) =>
+      a.compareDocumentPosition(b) === Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+    );
+    if (out) {
+      fold(group);
+    } else {
+      open(group);
+    }
+  }
+}
+
+/**
+ * The fold as a Svelte transition, on each row of a flat tree (or on a box
+ * of rows): `in:branch={options}` opens, and `out:branch={options}` folds
+ * and keeps the row mounted until it has gone. Every row that turns in one
+ * update is one group under the row above them that stays, taken together
+ * in the update's microtask (`takeTurns`). Each turn is planned when it
+ * happens, from where the last one left every piece (a deferred config,
+ * which Svelte asks for afresh every time).
  */
 export function branch(
-  group: HTMLElement,
+  el: HTMLElement,
   options: BranchOptions,
   { direction }: { direction?: "in" | "out" | "both" } = {}
 ): () => TransitionConfig {
-  return () =>
-    direction === "out" ? fold(group, options) : open(group, options);
+  const out = direction === "out";
+  turningNow.add(el);
+  if (regrouping()) {
+    regrouped.add(el);
+  }
+  return () => {
+    // Asked again without its outer call (a turn turned back), it turns
+    // with its parent's flight.
+    turningNow.add(el);
+    // Taken once Svelte has asked for every turn of the update: its deferred
+    // configs all run in one microtask, so the next one sees them all.
+    if (!taking) {
+      taking = true;
+      queueMicrotask(takeTurns);
+    }
+    if (!foldsAs(el)) {
+      regrouped.delete(el);
+      return { duration: 0 };
+    }
+    asked.push({ el, options, out });
+    if (skippedAt(el)) {
+      return { duration: 0 };
+    }
+    if (!motionOk.current) {
+      return { duration: out ? dur("--dur-exit") : dur("--dur-pop") };
+    }
+    // Unmounted once the last piece has gone: a frame for the batch, and a
+    // frame to spare. A fold takes --dur-exit whatever it measures
+    // (`planFold`).
+    return {
+      duration: out
+        ? dur("--dur-exit") + FRAME + STEP * 2
+        : dur("--dur-cascade") + dur("--dur-rail"),
+    };
+  };
 }

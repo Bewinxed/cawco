@@ -79,10 +79,22 @@
    * (PlanPane) and the board's peek draw a plan with it.
    */
   import { IconTick } from "#lib/icons.js";
-  import { branch, nestFrom } from "../motion/branch.svelte";
+  import { branch } from "../motion/branch.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import TreeLine from "../TreeLine.svelte";
+  import { flatTree, lineAttrs, treeLines } from "../tree-lines";
 
   let { nodes }: { nodes: PlanNode[] } = $props();
+
+  /** The plan as one flat tree on the nesting lines (tree-lines.ts). */
+  const rows = $derived(
+    flatTree(
+      nodes,
+      (node) => node.children,
+      (node) => node.id
+    )
+  );
+  const MARK = '[data-slot="plan-mark"]';
 </script>
 
 {#snippet mark(status: PlanNode["status"])}
@@ -106,46 +118,40 @@
   </span>
 {/snippet}
 
-{#snippet tree(nodes: PlanNode[], nested: boolean)}
-  <ul
-    data-slot="rows"
-    data-nest={nested || undefined}
-    class={nested
-      ? "kit-nest flex flex-col gap-space-1 m-0 list-none pbs-space-1 pbe-0 ps-(--rows-pad-start) pe-0"
-      : "flex flex-col gap-space-1 m-0 p-0 list-none"}
-    style:--rows-pad-start={nested
-      ? "var(--nest-pad, var(--space-5))"
-      : undefined}
-    in:branch={{ glyph: '[data-slot="plan-mark"]' }}
-    {@attach reflow()}
-    {@attach nested ? nestFrom('[data-slot="plan-mark"]') : undefined}
-  >
-    {#each nodes as node (node.id)}
-      <li
-        class="rounded-sm transition-[background-color] duration-(--dur-fade) ease-out data-linked:bg-selected-bg"
-        data-flip
-        data-plan-row={node.id}
-        data-status={node.status}
+<!-- One flat tree, every step keyed: a step's rows open from its mark as
+     every tree's do (motion/branch), and rows that arrive or move reflow. A
+     step brought to from elsewhere (`data-linked`) lights its own row. -->
+<ul
+  data-slot="rows"
+  class="kit-tree flex flex-col"
+  style:--line-gap="var(--space-1)"
+  {@attach reflow()}
+  {@attach treeLines(MARK)}
+>
+  {#each rows as { key, line, node } (key)}
+    <li
+      class="kit-tree-row"
+      {...lineAttrs(line)}
+      data-flip
+      data-plan-row={node.id}
+      data-status={node.status}
+      style:--line-depth={line.depth}
+      in:branch={{ glyph: MARK }}
+    >
+      <TreeLine {line} />
+      <span
+        data-slot="row"
+        class="flex items-start gap-space-2 min-w-0 rounded-sm type-label text-ink-strong transition-[background-color] duration-(--dur-fade) ease-out in-data-linked:bg-selected-bg"
       >
+        {@render mark(node.status)}
         <span
-          data-slot="row"
-          class="flex items-start gap-space-2 min-w-0 type-label text-ink-strong"
+          data-slot="text"
+          class={[
+            "min-w-0 wrap-anywhere",
+            node.status === "completed" && "text-ink-muted",
+          ]}>{node.text}</span
         >
-          {@render mark(node.status)}
-          <span
-            data-slot="text"
-            class={[
-              "min-w-0 wrap-anywhere",
-              node.status === "completed" && "text-ink-muted",
-            ]}>{node.text}</span
-          >
-        </span>
-        {#if node.children.length > 0}
-          {@render tree(node.children, true)}
-        {/if}
-      </li>
-    {/each}
-  </ul>
-{/snippet}
-
-{@render tree(nodes, false)}
+      </span>
+    </li>
+  {/each}
+</ul>

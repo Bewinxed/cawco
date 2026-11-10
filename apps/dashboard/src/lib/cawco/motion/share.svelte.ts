@@ -494,7 +494,9 @@ function flyMoves(): void {
     box: scrollBoxOf(move.node, boxes),
     rtl: getComputedStyle(move.node).direction === "rtl",
   }));
-  const timing = { duration: dur("--dur-panel"), easing: CURVE.drawer };
+  // The list's own travel (motion/rows `travel`): a regroup moves rows as
+  // a reflow would.
+  const timing = { duration: dur("--dur-panel"), easing: CURVE.inOut };
   // Then every flight. One whose old and new places are both out of its
   // box's sight lands with no flight: nobody sees it travel.
   const flights: Promise<unknown>[] = [];
@@ -532,16 +534,29 @@ function flyMoves(): void {
 /** Bumped by every regroup, so a box that stays mounted lands again. */
 let generation = $state(0);
 
+/** A regroup's own update is under way: what it mounts and unmounts simply comes and goes. */
+let regroupingNow = false;
+
+/**
+ * Whether the update under way is a regroup's: a tree's fold (motion/branch)
+ * never plays for the rows a regroup brings or takes away, which fade or
+ * move here instead.
+ */
+export const regrouping = (): boolean => regroupingNow;
+
 /** A group parent's own box: a copy fades out where one went. */
 const PARENT = "[data-regroup-parent]";
 
 /**
  * A regroup under `root`: every `[data-regroup]` box departs under its own
- * key, every `reflow` container around it is handed the change (none of its
- * rows' coming and going is a change for it to draw), and `change` regroups.
+ * key, every `reflow` container around it or around another list of
+ * `[data-regroup]` boxes is handed the change (none of its rows' coming and
+ * going is a change for it to draw), and `change` regroups.
  * Then a group parent that went fades out where it stood, one that is new
  * fades in where it stands, and once the flights have landed `settled`
- * runs (the nesting lines read again, motion/branch).
+ * runs. A tree keeps its rows as one flat list (tree-lines.ts), so a row
+ * that changes group is the same node, moved: its lines are its own and
+ * stand at its new place from the first frame, and only its box flies.
  */
 export function regroup(
   root: HTMLElement,
@@ -566,12 +581,27 @@ export function regroup(
       parents.push({ key, copy: box.cloneNode(true) as HTMLElement, rect });
     }
   }
-  for (const container of reflowsFrom(root)) {
+  // Every list a grouping draws regroups with it (the rail's Recent and the
+  // home board's read one grouping): each `reflow` around any of them is
+  // handed the change. Handed only the one around `root`, the home's list
+  // took the rail's regroup for rows leaving and arriving, and drew forty
+  // closing copies and thirty slides under it in the click's frame.
+  const lists = new Set<HTMLElement>(reflowsFrom(root));
+  for (const container of document.querySelectorAll<HTMLElement>(
+    "[data-reflow]"
+  )) {
+    if (container.querySelector("[data-regroup]")) {
+      lists.add(container);
+    }
+  }
+  for (const container of lists) {
     restReflow(container);
   }
   generation += 1;
+  regroupingNow = true;
   change();
   tick().then(() => {
+    regroupingNow = false;
     const now = new Set<string>();
     const fadeIn = {
       duration: dur("--dur-panel"),

@@ -30,10 +30,11 @@
  *    the renderer once a later move displaces such an effect
  *    (scripts/lint/design/clip-move.mjs, which holds scripts to the same).
  *    Read whole, not by line: a block spans lines.
- *  - a `kit-nest` list without `ps-(--nest-pad)`: a nested tree is inset by
- *    the house nesting pad, as home/NestList writes it;
- *    without it a child row stands flush with its parent. Read from each
- *    `class="…"` attribute whole, so it may span lines.
+ *  - a `kit-tree-row` without its depth (`style:--line-depth`): a tree's
+ *    row is set in a step a level by its depth (design.css `kit-tree-row`,
+ *    tree-lines.ts); without it a child row stands flush with its parent
+ *    and its lines stand at the root's. Read from each row's opening tag
+ *    whole, so it may span lines.
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
@@ -128,14 +129,26 @@ const keyframeHits = (
   )
 ).flat();
 
-/** Each class attribute in `text` naming kit-nest without the house inset. */
+/** Each tree row's opening tag in `text` that sets no depth. */
 const CLASS_ATTR = /\bclass="([^"]*)"/gu;
 const SPACES = /\s+/u;
+/** Where an opening tag ends: its `>` at a line's end. */
+const TAG_END = />\s*$/mu;
 function flushNests(text: string): number[] {
   const lines: number[] = [];
   for (const attr of text.matchAll(CLASS_ATTR)) {
     const names = (attr[1] as string).split(SPACES);
-    if (names.includes("kit-nest") && !names.includes("ps-(--nest-pad)")) {
+    if (!names.includes("kit-tree-row")) {
+      continue;
+    }
+    const start = text.lastIndexOf("<", attr.index);
+    const rest = text.slice(attr.index);
+    const end = rest.search(TAG_END);
+    const tag = text.slice(
+      start,
+      attr.index + (end === -1 ? rest.length : end)
+    );
+    if (!tag.includes("style:--line-depth")) {
       lines.push(text.slice(0, attr.index).split("\n").length);
     }
   }
@@ -157,7 +170,7 @@ let found = 0;
 if (nestHits.length > 0) {
   found += nestHits.length;
   console.log(
-    `a kit-nest list is inset by the house nesting pad: give it ps-(--nest-pad) (SessionTree's classes):\n${nestHits.map((hit) => `  ${hit}`).join("\n")}`
+    `a kit-tree-row is set in by its depth: give it style:--line-depth={line.depth} (tree-lines.ts):\n${nestHits.map((hit) => `  ${hit}`).join("\n")}`
   );
 }
 if (keyframeHits.length > 0) {
@@ -180,7 +193,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no @keyframes that cuts and moves, no kit-nest without ps-(--nest-pad)"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no per-element pointer cursor, no dur-* class, no failure toast, no @keyframes that cuts and moves, no kit-tree-row without its depth"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

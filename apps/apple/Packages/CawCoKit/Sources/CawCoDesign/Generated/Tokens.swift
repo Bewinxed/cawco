@@ -270,7 +270,7 @@ public enum Palette {
     public static let statusDoneGlyph = Palette.named("status-done-glyph")
     public static let statusFailGlyph = Palette.named("status-fail-glyph")
     public static let statusIdleGlyph = Palette.named("status-idle-glyph")
-    /// The nesting lines' ink (.kit-nest, the rails' nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.
+    /// The nesting lines' ink (.kit-tree-line, every tree's nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.
     public static let nestInk = Palette.named("nest-ink")
     /// Usage meters (DESIGN.md, Limit bar: a fill in the window's state colour): a window with room is the muted ink on the control-edge groove (a quiet reading is a healthy one, and coral is the action's, never data: DESIGN.md The Coral Is Where You Act Rule), spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. The calm fill holds about 4.7:1 on its track by day and 5:1 at night.
     public static let meterCalm = Palette.named("meter-calm")

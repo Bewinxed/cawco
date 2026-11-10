@@ -8,4 +8,3 @@ export { default as MenuBadge } from "./sidebar-menu-badge.svelte";
 export { default as MenuButton } from "./sidebar-menu-button.svelte";
 export { default as MenuItem } from "./sidebar-menu-item.svelte";
 export { default as MenuSubButton } from "./sidebar-menu-sub-button.svelte";
-export { default as MenuSubItem } from "./sidebar-menu-sub-item.svelte";

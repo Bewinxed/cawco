@@ -52,11 +52,10 @@
   } from "./home/grouping.svelte";
   import Home from "./home/Home.svelte";
   import { home, isDelegate, machineName } from "./home/home-state.svelte";
-  import { nestList } from "./home/NestList.svelte";
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { markHue } from "./mark";
-  import { nestsLanded } from "./motion/branch.svelte";
+  import { type BranchOptions, branch } from "./motion/branch.svelte";
   import { reflow } from "./motion/rows.svelte";
   import { landRegroup, regroup } from "./motion/share.svelte";
   import PresenceMenu from "./PresenceMenu.svelte";
@@ -69,6 +68,8 @@
   import { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
+  import TreeLine from "./TreeLine.svelte";
+  import { type FlatRow, flatTree, lineAttrs, treeLines } from "./tree-lines";
   import UsageMeter from "./UsageMeter.svelte";
   import { projectTab, tabOfPath } from "./workspace/tabs";
   import { workspace } from "./workspace/workspace.svelte";
@@ -321,13 +322,47 @@
       grouping.pickProjects(at, by);
       return;
     }
-    const root = content;
-    regroup(
-      root,
-      () => grouping.pickProjects(at, by),
-      () => nestsLanded(root)
-    );
+    regroup(content, () => grouping.pickProjects(at, by));
   }
+
+  /**
+   * Projects as one flat tree (tree-lines.ts): the groups and the projects
+   * in them, each a row keyed by what it is, so a regroup moves the same
+   * rows. Ungrouped, the projects are its roots.
+   */
+  type ProjectNode =
+    | { kind: "group"; group: ProjectGroup }
+    | { kind: "project"; project: ProjectRow };
+  const projectNode = (project: ProjectRow): ProjectNode => ({
+    kind: "project",
+    project,
+  });
+  const projectGroupNode = (group: ProjectGroup): ProjectNode => ({
+    kind: "group",
+    group,
+  });
+  const projectKids = (node: ProjectNode): ProjectNode[] => {
+    if (node.kind === "project" || grouping.folded(node.group.path)) {
+      return [];
+    }
+    return node.group.groups
+      ? node.group.groups.map(projectGroupNode)
+      : node.group.projects.map(projectNode);
+  };
+  const projectRows = $derived(
+    flatTree(
+      projectLevels.length === 0
+        ? orderedProjects.map(projectNode)
+        : groupedProjects.map(projectGroupNode),
+      projectKids,
+      (node) =>
+        node.kind === "group"
+          ? `group:${node.group.path}`
+          : `project:${node.project.id}`
+    )
+  );
+  /** How a group's projects open and fold: off each row's mark (motion/branch). */
+  const PROJECT_TREE: BranchOptions = { glyph: "[data-tree-mark]" };
 
   /**
    * The sessions waiting on you (core `waitingOnYou`), in the attention
@@ -374,91 +409,89 @@
   {@const here =
     (onWorkspace && workspace.activeTab === projectTab(project.id)) ||
     path.startsWith(`${href}/`)}
-  <li
-    class="group/menu-item relative"
-    data-flip="box"
-    data-sidebar="menu-item"
-    data-slot="sidebar-menu-item"
+  <FolderMenu
+    cwd={folderOf(project)}
+    onnew={() => newSession({ projectId: project.id })}
+    {project}
   >
-    <FolderMenu
-      cwd={folderOf(project)}
-      onnew={() => newSession({ projectId: project.id })}
-      {project}
-    >
-      <Sidebar.MenuButton isActive={here} row="list">
-        {#snippet child({ props })}
-          <!-- The row is the link to the project's page; its mark says how
+    <Sidebar.MenuButton isActive={here} row="list">
+      {#snippet child({ props })}
+        <!-- The row is the link to the project's page; its mark says how
                many of its sessions run now. Its sessions are in Recent. -->
-          <a
-            {href}
-            {...props}
-            id={railLinkId(project.id)}
-            aria-current={here ? "page" : undefined}
-            onclickcapture={(event) => openProjectTab(event, project.id)}
-            class="{props.class} mark-line coarse:h-c-btn-h-lg"
-            data-regroup="regroup:project:{project.id}"
-            {@attach landRegroup(() => `regroup:project:${project.id}`)}
+        <a
+          {href}
+          {...props}
+          id={railLinkId(project.id)}
+          aria-current={here ? "page" : undefined}
+          onclickcapture={(event) => openProjectTab(event, project.id)}
+          class="{props.class} mark-line coarse:h-c-btn-h-lg"
+          data-regroup="regroup:project:{project.id}"
+          {@attach landRegroup(() => `regroup:project:${project.id}`)}
+        >
+          <ProjectMark
+            count={runningCount}
+            hue={markHue(folderOf(project))}
+            name={project.name}
+          />
+          <span
+            class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
+            >{project.name}
+            {#if runningCount > 0}
+              <span class="sr-only">, {runningCount} running</span>
+            {/if}</span
           >
-            <ProjectMark
-              count={runningCount}
-              hue={markHue(folderOf(project))}
-              name={project.name}
-            />
-            <span
-              class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
-              >{project.name}
-              {#if runningCount > 0}
-                <span class="sr-only">, {runningCount} running</span>
-              {/if}</span
-            >
-          </a>
-        {/snippet}
-      </Sidebar.MenuButton>
-    </FolderMenu>
-    <!-- An end asked from this row's menu, under it. -->
-    <div
-      data-slot="sidebar-end"
-      class="contents"
-      style:--ask-indent="var(--space-1)"
-      style:--ask-end="var(--space-1)"
-      style:--fault-indent="var(--space-2)"
-      style:--fault-end="var(--space-2)"
-    >
-      <ProjectEndTray
-        at={endAtRail(project.id)}
-        opener={() => document.getElementById(railLinkId(project.id))}
-        parks
-        projectId={project.id}
-      />
-    </div>
-  </li>
+        </a>
+      {/snippet}
+    </Sidebar.MenuButton>
+  </FolderMenu>
+  <!-- An end asked from this row's menu, under it. -->
+  <div
+    data-slot="sidebar-end"
+    class="contents"
+    style:--ask-indent="var(--space-1)"
+    style:--ask-end="var(--space-1)"
+    style:--fault-indent="var(--space-2)"
+    style:--fault-end="var(--space-2)"
+  >
+    <ProjectEndTray
+      at={endAtRail(project.id)}
+      opener={() => document.getElementById(railLinkId(project.id))}
+      parks
+      projectId={project.id}
+    />
+  </div>
 {/snippet}
 
-{#snippet projectLevel(groups: ProjectGroup[])}
-  {#each groups as group (group.path)}
-    {@const open = !grouping.folded(group.path)}
-    <li class="relative">
+<!-- A row of Projects' tree: a group parent or a project, keyed in the one
+     list, its share of the lines its own (TreeLine). -->
+{#snippet projectTreeRow(item: FlatRow<ProjectNode>)}
+  {@const node = item.node}
+  <li
+    class="kit-tree-row group/menu-item"
+    {...lineAttrs(item.line)}
+    data-flip="box"
+    data-line-open={(node.kind === "group" &&
+      !grouping.folded(node.group.path)) ||
+      undefined}
+    data-sidebar="menu-item"
+    data-slot="sidebar-menu-item"
+    style:--line-depth={item.line.depth}
+    in:branch={PROJECT_TREE}
+    out:branch={PROJECT_TREE}
+  >
+    <TreeLine line={item.line} />
+    {#if node.kind === "group"}
       <GroupParent
-        by={group.by}
-        count={group.projects.length}
-        groupKey={group.key}
-        label={group.label}
-        path={group.path}
+        by={node.group.by}
+        count={node.group.projects.length}
+        groupKey={node.group.key}
+        label={node.group.label}
+        path={node.group.path}
       />
-      {#if open}
-        {#snippet held()}
-          {#if group.groups}
-            {@render projectLevel(group.groups)}
-          {:else}
-            {#each group.projects as project (project.id)}
-              {@render projectRow(project)}
-            {/each}
-          {/if}
-        {/snippet}
-        {@render nestList(held)}
-      {/if}
-    </li>
-  {/each}
+    {:else}
+      {@render projectRow(node.project)}
+    {/if}
+  </li>
 {/snippet}
 
 <div
@@ -717,17 +750,22 @@
           </p>
         {:else}
           <div {@attach highlight(PILL)}>
-            {#if projectLevels.length === 0}
-              <Sidebar.Menu gap="tight">
-                {#each orderedProjects as project (project.id)}
-                  {@render projectRow(project)}
-                {/each}
-              </Sidebar.Menu>
-            {:else}
-              <ul class="m-0 flex min-w-0 list-none flex-col gap-space-3 p-0">
-                {@render projectLevel(groupedProjects)}
-              </ul>
-            {/if}
+            <!-- One flat tree, every row keyed: grouped, a section's room
+                 between the groups at the root; ungrouped, the projects
+                 a list's two pixels apart. -->
+            <ul
+              class="kit-tree flex w-full flex-col"
+              data-sidebar="menu"
+              data-slot="sidebar-menu"
+              style:--line-root-gap={projectLevels.length > 0
+                ? "var(--space-3)"
+                : "var(--space-row)"}
+              {@attach treeLines("[data-tree-mark]")}
+            >
+              {#each projectRows as item (item.key)}
+                {@render projectTreeRow(item)}
+              {/each}
+            </ul>
           </div>
         {/if}
       </Sidebar.Group>

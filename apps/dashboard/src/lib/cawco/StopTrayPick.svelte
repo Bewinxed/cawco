@@ -80,11 +80,12 @@
   import { cn } from "#lib/utils.js";
   import { ACTIVITY_LABEL, STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { markHue, sessionSprite } from "./mark";
-  import { nestFrom } from "./motion/branch.svelte";
   import { unfold } from "./motion/fold.svelte";
   import { glyphIn, glyphOut } from "./motion/glyph";
   import RowFault from "./RowFault.svelte";
+  import TreeLine from "./TreeLine.svelte";
   import TreeMark from "./TreeMark.svelte";
+  import { flatTree, lineAttrs, treeLines } from "./tree-lines";
 
   let {
     class: className,
@@ -249,6 +250,15 @@
       ? []
       : rows.filter((row) => shown(row) && leadShown(row) === lead);
 
+  /** The rows as one flat tree on the nesting lines (tree-lines.ts). */
+  const tree = $derived(
+    flatTree(
+      branchOf(null),
+      (row) => branchOf(row.id),
+      (row) => row.id
+    )
+  );
+
   const fillOf = (row: PickRow) => `var(--mark-${markHue(row.cwd)})`;
 
   function statusOf(row: PickRow) {
@@ -313,12 +323,19 @@
     })[tone] ?? "text-ink-muted";
 </script>
 
-{#snippet branch(lead: string | null)}
-  {#each branchOf(lead) as row (row.id)}
+{#snippet branch()}
+  {#each tree as { key, line, node: row } (key)}
     {@const status = statusOf(row)}
     {@const kids = branchOf(row.id)}
     {@const Sprite = sessionSprite(row.id)}
-    <li class="relative" data-row={row.id} transition:unfold>
+    <li
+      class="kit-tree-row"
+      {...lineAttrs(line)}
+      data-row={row.id}
+      style:--line-depth={line.depth}
+      transition:unfold
+    >
+      <TreeLine {line} />
       <!-- Two lines: the title, whole, then what it is and what it is
            doing. The mark and the box stand on the title's first line. -->
       <svelte:element
@@ -407,15 +424,6 @@
         indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"}
         reason={row.stop === "failed" ? row.error : null}
       />
-      {#if kids.length > 0}
-        <ul
-          data-nest
-          class="kit-nest m-0 flex list-none flex-col gap-(--tree-gap) pt-(--tree-gap) pb-0 ps-(--nest-pad) pe-0"
-          {@attach nestFrom("[data-tree-mark]")}
-        >
-          {@render branch(row.id)}
-        </ul>
-      {/if}
     </li>
   {/each}
 {/snippet}
@@ -511,10 +519,11 @@
         <ul
           data-slot="sessions"
           aria-label={words.list}
-          class="kit-edge-fade-block m-0 flex max-h-(--list-cap) list-none flex-col gap-(--tree-gap) overflow-x-clip overflow-y-auto overscroll-contain p-0 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-tree kit-edge-fade-block flex flex-col max-h-(--list-cap) overflow-x-clip overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           style:--list-cap={"calc(10.5 * (2lh + 2 * var(--space-1) + var(--tree-gap)))"}
+          {@attach treeLines("[data-tree-mark]")}
         >
-          {@render branch(null)}
+          {@render branch()}
         </ul>
       </div>
     {/if}

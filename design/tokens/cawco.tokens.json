@@ -1466,7 +1466,7 @@
         "colorSpace": "oklch",
         "components": [0.70275, 0.01685, 77.7]
       },
-      "$description": "The nesting lines' ink (.kit-nest, the rails' nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.",
+      "$description": "The nesting lines' ink (.kit-tree-line, every tree's nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.",
       "$extensions": {
         "dev.cawco": {
           "css": "color-mix(in oklch, {color.neutral-8} 85%, {color.neutral-9})"

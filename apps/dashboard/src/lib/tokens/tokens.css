@@ -409,7 +409,7 @@
     --status-done-glyph: light-dark(oklch(52% 0.14 140), oklch(76% 0.15 135));
     --status-fail-glyph: light-dark(oklch(53% 0.19 22), oklch(71% 0.16 20));
     --status-idle-glyph: var(--neutral-11);
-    /* The nesting lines' ink (.kit-nest, the rails' nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one. */
+    /* The nesting lines' ink (.kit-tree-line, every tree's nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one. */
     --nest-ink: light-dark(
       color-mix(in oklch, var(--neutral-8) 85%, var(--neutral-9)),
       color-mix(in oklch, var(--neutral-7) 50%, var(--neutral-8))

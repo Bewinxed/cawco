@@ -1764,8 +1764,9 @@ const settling = new Set<() => void>();
  * frame's callbacks after the update that made it (`heard`), which come after
  * everything the update set off (Svelte starts a transition in a microtask
  * of its own). A
- * nested list's inset (motion/branch `nestFrom`) lands here: measured in a
- * microtask of its own, it ran before the transition that holds its list
+ * tree's new rows are read here (tree-lines.ts `treeLines`), so their lines
+ * stand in place in the frame that shows them: read in a microtask of
+ * their own, a fold's rows were read before the transition that holds them
  * out of the layout, and laid out a tree of forty in the click.
  */
 export function beforeReflow(settle: () => void): void {
