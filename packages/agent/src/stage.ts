@@ -72,10 +72,8 @@ import {
   type DesignQuery,
   HEALTH_PATH,
   REPORT_PATH,
-  type ReportAnswer,
   SERVE_COMMAND_LIMIT,
   type ServeSpec,
-  type SheetRead,
   type SheetWeight,
   type SheetWrite,
   type SheetWritten,
@@ -97,7 +95,14 @@ import {
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { readRecord, writeStateFileSync } from "@cawco/core/state-file";
-import { StageErrorSchema } from "@cawco/core/stored-shapes";
+import {
+  DesignMapSchema,
+  ReportAnswerSchema,
+  SheetReadSchema,
+  SheetWeightSchema,
+  SheetWrittenSchema,
+  StageErrorSchema,
+} from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { sheetWords } from "@cawco/core/words/sheet";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
@@ -126,13 +131,13 @@ import { userBun } from "./user-bun";
 import { keepPlace, workspaceRefs } from "./workspace-records";
 
 /** The package each framework a sheet mounts is installed as, in the order a project's are read. */
-const FRAMEWORK_PACKAGES: Record<StageFramework, string> = {
-  svelte: "svelte",
-  vue: "vue",
-  solid: "solid-js",
-  preact: "preact",
-  react: "react",
-};
+const FRAMEWORK_PACKAGES: readonly (readonly [StageFramework, string])[] = [
+  ["svelte", "svelte"],
+  ["vue", "vue"],
+  ["solid", "solid-js"],
+  ["preact", "preact"],
+  ["react", "react"],
+];
 
 /** Where the host is written, in the toolchain root: git-excluded, never the project's. */
 const HOST_DIR = ".cawco/stage";
@@ -175,7 +180,11 @@ const stagePort = (hash: number): number => {
       ports.push(port);
     }
   }
-  return ports[hash % ports.length] as number;
+  const port = ports[hash % ports.length];
+  if (port === undefined) {
+    throw new Error("No port is free for a stage.");
+  }
+  return port;
 };
 
 /** How long a health look waits for its answer. Ours. */
@@ -529,8 +538,31 @@ const readJson = (file: string): Record<string, unknown> | null => {
   }
 };
 
+/** The name of every package the `package.json` files from `root` up to `top` depend on, in any section. */
+const dependencyNames = (root: string, top: string): Set<string> => {
+  const names = new Set<string>();
+  for (const at of upFrom(root, top)) {
+    const pkg = readJson(join(at, "package.json"));
+    for (const section of [
+      pkg?.devDependencies,
+      pkg?.dependencies,
+      pkg?.peerDependencies,
+    ]) {
+      if (typeof section === "object" && section !== null) {
+        for (const name of Object.keys(section)) {
+          names.add(name);
+        }
+      }
+    }
+  }
+  return names;
+};
+
 /** The toolchain a dir names, by its files, among `named`. */
-const namedIn = (dir: string, named: [RegExp, string][]): string | null => {
+const namedIn = <Name extends string>(
+  dir: string,
+  named: [RegExp, Name][]
+): Name | null => {
   let entries: string[] = [];
   try {
     entries = readdirSync(dir);
@@ -585,7 +617,7 @@ const writtenFirst = (tree: Tree, stories: string[]): void => {
 
 /** The toolchain whose root `dir` is, by its config file; null when it is none's. */
 const toolchainAt = (dir: string): StageToolchain | null =>
-  namedIn(dir, TOOLCHAINS) as StageToolchain | null;
+  namedIn(dir, TOOLCHAINS);
 
 /** A package's `version` as the project installed it, from `root` up (a workspace's packages hoist); null when it isn't. */
 const installed = (name: string, root: string, top: string): string | null => {
@@ -633,6 +665,11 @@ type StagePlace = Omit<
   | "viewers"
 >;
 
+/** A preview server's place: the command it runs, known. */
+type ServedPlace = StagePlace & {
+  readonly runs: Extract<Runs, { kind: "serve" }>;
+};
+
 /** A stage at `found`, new and not yet started, kept in `stages`. */
 function newStage(found: StagePlace): Stage {
   const stage: Stage = {
@@ -677,21 +714,8 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
     );
   }
   const dir = relative(top, root) || ".";
-  const deps = Object.assign(
-    {},
-    ...upFrom(root, top)
-      .reverse()
-      .map((at) => readJson(join(at, "package.json")))
-      .flatMap((pkg) => [
-        pkg?.devDependencies,
-        pkg?.dependencies,
-        pkg?.peerDependencies,
-      ])
-      .filter(Boolean)
-  ) as Record<string, string>;
-  const framework = (Object.keys(FRAMEWORK_PACKAGES) as StageFramework[]).find(
-    (name) => FRAMEWORK_PACKAGES[name] in deps
-  );
+  const deps = dependencyNames(root, top);
+  const framework = FRAMEWORK_PACKAGES.find(([, name]) => deps.has(name))?.[0];
   if (!framework) {
     throw new StageRefusal(
       `${dir}'s package.json names none of Svelte, Vue, React, Solid or Preact, the frameworks a sheet mounts. ${AS_PAGE}`
@@ -713,7 +737,7 @@ function stageFor(tree: Tree, story: string, rootOnly = false): StagePlace {
   if (!runtime) {
     throw new StageRefusal(sheetWords.noBun);
   }
-  const kit = "@sveltejs/kit" in deps;
+  const kit = deps.has("@sveltejs/kit");
   // SvelteKit narrows Vite's served files to `src/` and its own folders: a
   // story file anywhere else would load as a 403 (the spike's LibProbe).
   if (!rootOnly && kit && relative(join(root, "src"), story).startsWith("..")) {
@@ -754,7 +778,7 @@ function servedFor(
   workspace: WorkspaceRef,
   serve: ServeSpec,
   ports: StagePorts
-): StagePlace {
+): ServedPlace {
   const command = serve.command.trim();
   if (command.length === 0 || command.length > SERVE_COMMAND_LIMIT) {
     throw new StageRefusal(
@@ -827,6 +851,15 @@ async function askStage<T>(
 /** How long a sheet's read or write may take on its stage: the first read of a component runs its docgen, under 2 s measured. Ours. */
 const READ_WAIT_MS = 15_000;
 
+/** The refusal in words a stage's failed answer carries (`{ error }`); none when it carries none. */
+const refusalIn = (answer: unknown): string | undefined =>
+  typeof answer === "object" &&
+  answer !== null &&
+  "error" in answer &&
+  typeof answer.error === "string"
+    ? answer.error
+    : undefined;
+
 /**
  * The stage's JSON answer to `path`, a refusal in its own words, or that it
  * did not answer within `waitMs`.
@@ -836,6 +869,7 @@ async function answerOf<T>(
   path: string,
   waitMs: number,
   what: string,
+  shape: z.ZodType<T>,
   body?: object
 ): Promise<T> {
   const read = await askStage(
@@ -843,13 +877,14 @@ async function answerOf<T>(
     path,
     waitMs,
     async (response) => {
-      const answer = (await response.json()) as T & { error?: string };
+      const answer: unknown = await response.json();
       if (!response.ok) {
         throw new StageRefusal(
-          answer.error ?? `The stage could not ${what} (${response.status}).`
+          refusalIn(answer) ??
+            `The stage could not ${what} (${response.status}).`
         );
       }
-      return answer as T;
+      return shape.parse(answer);
     },
     body
   );
@@ -1449,18 +1484,20 @@ export async function ensureStage(
   const rel = relative(stage.root, story);
   const all = stories.map((one) => relative(stage.root, one));
   const [sheet, weight, { errors, ...report }] = await Promise.all([
-    answerOf<SheetRead>(
+    answerOf(
       stage,
       `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
       READ_WAIT_MS,
-      `read ${rel}'s stories`
+      `read ${rel}'s stories`,
+      SheetReadSchema
     ),
     sheetWeight(stage, rel),
-    answerOf<ReportAnswer>(
+    answerOf(
       stage,
       `${REPORT_PATH}?${all.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`,
       READ_WAIT_MS,
-      "read what a browser drew"
+      "read what a browser drew",
+      ReportAnswerSchema
     ),
   ]);
   // The host's problems as of this answer (a states file it found missing
@@ -1486,11 +1523,12 @@ async function sheetWeight(
   stage: Stage,
   rel: string
 ): Promise<SheetWeight | null> {
-  const { weight } = await answerOf<{ weight: SheetWeight | null }>(
+  const { weight } = await answerOf(
     stage,
     `${WEIGHT_PATH}?file=${encodeURIComponent(rel)}`,
     READ_WAIT_MS,
-    `read what ${rel} loads`
+    `read what ${rel} loads`,
+    z.object({ weight: SheetWeightSchema.nullable() })
   );
   return weight;
 }
@@ -1514,10 +1552,17 @@ export async function writeSheet(
   const stage = await storyStage(tree, story, "a write");
   const rel = relative(stage.root, story);
   const written = () =>
-    answerOf<SheetWritten>(stage, WRITE_PATH, READ_WAIT_MS, `write ${rel}`, {
-      ...write,
-      file: rel,
-    });
+    answerOf(
+      stage,
+      WRITE_PATH,
+      READ_WAIT_MS,
+      `write ${rel}`,
+      SheetWrittenSchema,
+      {
+        ...write,
+        file: rel,
+      }
+    );
   const done = isPlace(workspace.id)
     ? await inCloneTurn(tree.boundary.id, async () => {
         const made = await written();
@@ -1542,10 +1587,11 @@ export async function renderStage(
 ): Promise<Rendered> {
   const tree = await treeOf(workspace, ports);
   const stories = ask.files.map((file) => storyPath(tree, file));
-  const stage = await stageAtRoot(
-    stageFor(tree, stories[0] as string),
-    "a render"
-  );
+  const [first] = stories;
+  if (first === undefined) {
+    throw new StageRefusal("A render names the states files to draw.");
+  }
+  const stage = await stageAtRoot(stageFor(tree, first), "a render");
   const files = stories.map((story) => relative(stage.root, story));
   const outside = files.find((file) => file.startsWith(".."));
   if (outside) {
@@ -1695,11 +1741,12 @@ export async function stageComponents(
       query.set(key, value);
     }
   }
-  const map = await answerOf<DesignMap>(
+  const map = await answerOf(
     stage,
     `${COMPONENTS_PATH}?${query}`,
     READ_WAIT_MS * 4,
-    "map its components"
+    "map its components",
+    DesignMapSchema
   );
   // Every file from the clone's root, as the session names them.
   const fromClone = (file: string) => join(stage.dir, file);
@@ -1831,8 +1878,7 @@ export async function ensureServed(
   let stage = stages.get(found.key);
   if (
     stage?.runs.kind === "serve" &&
-    (stage.runs.command !== (found.runs as { command: string }).command ||
-      stage.dir !== found.dir)
+    (stage.runs.command !== found.runs.command || stage.dir !== found.dir)
   ) {
     stopOne(stage);
     stage = undefined;
