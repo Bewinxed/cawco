@@ -26,7 +26,7 @@
  *   organization permission "Projects" (`organization_projects`, "read,
  *   write, admin": docs.github.com, fine-grained token permissions). A
  *   GitHub App reaches no user-owned Project: GitHub answers it "Resource not
- *   accessible by integration". A refusal is {@link TrackerRefusal} `scope`
+ *   accessible by integration". A refusal is a `tracker-scope` problem
  *   with GitHub's own words; tracker.ts then leaves Status alone and issues
  *   sync as before (CawCo's no-fallback rule: the piece does not start).
  */
@@ -39,8 +39,9 @@ import type {
   StatusOption,
 } from "@cawco/core/trackers";
 import type { Octokit } from "@octokit/rest";
-import { TrackerRefusal } from "./tracker-adapter";
-import { githubRefusal } from "./tracker-github";
+import { ElysiaStatus, problem } from "elysia";
+import type { TrackerProblem } from "./tracker-adapter";
+import { githubProblem, partsOf } from "./tracker-github";
 
 /** One request. Our choice, as tracker-github.ts's. */
 const REQUEST_MS = 30_000;
@@ -56,7 +57,6 @@ const REFUSED_TYPES: ReadonlySet<string> = new Set([
   "FORBIDDEN",
   "INSUFFICIENT_SCOPES",
 ]);
-const OWNER_REPO = /^([^/]+)\/([^/]+)$/u;
 
 /** GitHub's GraphQL error as Octokit's GraphqlResponseError carries it. */
 interface GraphqlFailure {
@@ -182,66 +182,52 @@ const keepItems = (
   }
 };
 
-/** GitHub's refusal of `what`, in its words: the GraphQL error a token or app may not pass, or the HTTP one. */
-const refusalOf = (
+/** What GitHub's error says of `what`, in its words: the GraphQL error a token or app may not pass, or the HTTP one. */
+const graphqlProblem = (
   error: unknown,
   what: string,
   on: string
-): TrackerRefusal => {
-  if (error instanceof TrackerRefusal) {
-    return error;
-  }
+): TrackerProblem => {
   const { errors } = error as GraphqlFailure;
   if (Array.isArray(errors) && errors.length > 0) {
     const refused = errors.find((one) => REFUSED_TYPES.has(one.type ?? ""));
     const said = (refused ?? errors[0])?.message ?? "";
     return refused
-      ? new TrackerRefusal(
-          "scope",
-          `GitHub refused to ${what} on ${on}: “${said}” The connection needs the organization permission Projects (read and write), or a classic token's project scope; GitHub lets no app reach a user's own Projects.`
-        )
-      : new TrackerRefusal(
-          "input",
-          `GitHub answered to ${what} on ${on}: “${said}”`
-        );
+      ? problem(400, {
+          code: "tracker-scope",
+          detail: `GitHub refused to ${what} on ${on}: “${said}” The connection needs the organization permission Projects (read and write), or a classic token's project scope; GitHub lets no app reach a user's own Projects.`,
+        })
+      : problem(400, {
+          code: "tracker-input",
+          detail: `GitHub answered to ${what} on ${on}: “${said}”`,
+        });
   }
-  return githubRefusal(error, what, on);
+  return githubProblem(error, what, on);
 };
 
-/** One GraphQL request within {@link REQUEST_MS}: its data, or GitHub's refusal in words. */
+/** One GraphQL request within {@link REQUEST_MS}: its data, or GitHub's problem in words. */
 const ask = async <T>(
   octokit: Octokit,
   what: string,
   on: string,
   query: string,
   variables: Record<string, unknown>
-): Promise<T> => {
+): Promise<T | TrackerProblem> => {
   let read: Awaited<ReturnType<typeof readWithin<T>>>;
   try {
     read = await readWithin(REQUEST_MS, (signal) =>
       octokit.graphql<T>(query, { ...variables, request: { signal } })
     );
   } catch (error) {
-    throw refusalOf(error, what, on);
+    return graphqlProblem(error, what, on);
   }
   if (read.kind === "unanswered") {
-    throw new TrackerRefusal(
-      "unreachable",
-      `GitHub did not answer to ${what} on ${on} within ${REQUEST_MS / 1000} s.`
-    );
+    return problem(400, {
+      code: "tracker-unreachable",
+      detail: `GitHub did not answer to ${what} on ${on} within ${REQUEST_MS / 1000} s.`,
+    });
   }
   return read.value;
-};
-
-const partsOf = (repo: string): { owner: string; repo: string } => {
-  const found = OWNER_REPO.exec(repo);
-  if (!found) {
-    throw new TrackerRefusal(
-      "input",
-      `“${repo}” is not a repository like owner/name.`
-    );
-  }
-  return { owner: found[1] as string, repo: found[2] as string };
 };
 
 const choiceOf = (raw: RawProject, linked: boolean): GithubProjectChoice => ({
@@ -262,31 +248,25 @@ const choiceOf = (raw: RawProject, linked: boolean): GithubProjectChoice => ({
 export const githubProjects = async (
   octokit: Octokit,
   repoName: string
-): Promise<GithubProjectsView> => {
+): Promise<GithubProjectsView | TrackerProblem> => {
   const target = partsOf(repoName);
-  let data: {
+  if (target instanceof ElysiaStatus) {
+    return target;
+  }
+  const data = await ask<{
     repository: {
       owner: { projectsV2?: { nodes: (RawProject | null)[] } } | null;
       projectsV2: { nodes: (RawProject | null)[] };
     } | null;
-  };
-  try {
-    data = await ask(
-      octokit,
-      "read the Projects",
-      target.owner,
-      PROJECTS_QUERY,
-      {
-        ...target,
-        field: STATUS_FIELD,
-        first: PROJECTS_FIRST,
-      }
-    );
-  } catch (error) {
-    if (error instanceof TrackerRefusal && error.kind === "scope") {
-      return { projects: [], refused: error.message };
-    }
-    throw error;
+  }>(octokit, "read the Projects", target.owner, PROJECTS_QUERY, {
+    ...target,
+    field: STATUS_FIELD,
+    first: PROJECTS_FIRST,
+  });
+  if (data instanceof ElysiaStatus) {
+    return data.response.code === "tracker-scope"
+      ? { projects: [], refused: data.response.detail }
+      : data;
   }
   const linked = (data.repository?.projectsV2.nodes ?? []).filter(
     (one): one is RawProject => one !== null && !one.closed
@@ -304,59 +284,68 @@ export const githubProjects = async (
   };
 };
 
-/** One Project's Status for one repository's issues, as the sync asks of it. */
+/** One Project's Status for one repository's issues, as the sync asks of it; a problem when the name is no `owner/repo`. */
 export const githubProjectStatus = (
   octokit: Octokit,
   repoName: string,
   project: Pick<GithubProject, "id" | "title">
 ) => {
   const target = partsOf(repoName);
+  if (target instanceof ElysiaStatus) {
+    return target;
+  }
   const repo = `${target.owner}/${target.repo}`;
   const on = `the Project “${project.title}”`;
 
   /** The issue's node id, which adding it to the Project names. */
-  const issueNode = async (number: string): Promise<string> => {
+  const issueNode = async (
+    number: string
+  ): Promise<string | TrackerProblem> => {
     const data = await ask<{
       repository: { issue: { id: string } | null } | null;
     }>(octokit, `read issue #${number}`, repo, ISSUE_QUERY, {
       ...target,
       number: Number(number),
     });
+    if (data instanceof ElysiaStatus) {
+      return data;
+    }
     const id = data.repository?.issue?.id;
     if (!id) {
-      throw new TrackerRefusal(
-        "input",
-        `GitHub has no issue #${number} on ${repo}.`
-      );
+      return problem(400, {
+        code: "tracker-github-issue-unknown",
+        detail: `GitHub has no issue #${number} on ${repo}.`,
+      });
     }
     return id;
   };
 
+  /** One page of the Project's items, after the cursor. */
+  const itemsPage = (after: string | null) =>
+    ask<ItemsAnswer>(octokit, "read the Status of its items", on, ITEMS_QUERY, {
+      id: project.id,
+      field: STATUS_FIELD,
+      first: PER_PAGE,
+      after,
+    });
+
   return {
     /** The Project's Status field, and each of the repository's issues on it with its Status. */
-    read: async (): Promise<ProjectRead> => {
+    read: async (): Promise<ProjectRead | TrackerProblem> => {
       const items = new Map<string, StatusItem>();
       let after: string | null = null;
       let head: Omit<ProjectRead, "complete" | "items"> | null = null;
       let complete = false;
       for (let page = 1; page <= MAX_PAGES; page += 1) {
-        const data: ItemsAnswer = await ask<ItemsAnswer>(
-          octokit,
-          "read the Status of its items",
-          on,
-          ITEMS_QUERY,
-          {
-            id: project.id,
-            field: STATUS_FIELD,
-            first: PER_PAGE,
-            after,
-          }
-        );
+        const data = await itemsPage(after);
+        if (data instanceof ElysiaStatus) {
+          return data;
+        }
         if (!data.node?.items) {
-          throw new TrackerRefusal(
-            "scope",
-            `GitHub answered no Project for “${project.title}”: deleted, or one the connection cannot see.`
-          );
+          return problem(400, {
+            code: "tracker-scope",
+            detail: `GitHub answered no Project for “${project.title}”: deleted, or one the connection cannot see.`,
+          });
         }
         head ??= {
           title: data.node.title ?? project.title,
@@ -389,33 +378,42 @@ export const githubProjectStatus = (
       item: StatusItem | undefined,
       fieldId: string,
       optionId: string
-    ): Promise<StatusItem> => {
+    ): Promise<StatusItem | TrackerProblem> => {
       let itemId = item?.itemId;
       if (!itemId) {
         const content = await issueNode(number);
+        if (content instanceof ElysiaStatus) {
+          return content;
+        }
         const added = await ask<{
           addProjectV2ItemById: { item: { id: string } };
         }>(octokit, `add issue #${number}`, on, ADD_MUTATION, {
           project: project.id,
           content,
         });
+        if (added instanceof ElysiaStatus) {
+          return added;
+        }
         itemId = added.addProjectV2ItemById.item.id;
       }
-      await ask(
-        octokit,
-        `set the Status of issue #${number}`,
-        on,
-        SET_MUTATION,
-        {
-          project: project.id,
-          item: itemId,
-          field: fieldId,
-          option: optionId,
-        }
-      );
+      const set = await ask<{
+        updateProjectV2ItemFieldValue: { projectV2Item: { id: string } };
+      }>(octokit, `set the Status of issue #${number}`, on, SET_MUTATION, {
+        project: project.id,
+        item: itemId,
+        field: fieldId,
+        option: optionId,
+      });
+      if (set instanceof ElysiaStatus) {
+        return set;
+      }
       return { itemId, optionId };
     },
   };
 };
 
-export type GithubProjectStatus = ReturnType<typeof githubProjectStatus>;
+/** A Project's Status client, as {@link githubProjectStatus} makes it for a repository named as `owner/repo`. */
+export type GithubProjectStatus = Exclude<
+  ReturnType<typeof githubProjectStatus>,
+  TrackerProblem
+>;
