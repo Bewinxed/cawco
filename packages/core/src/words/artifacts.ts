@@ -2,8 +2,8 @@ import { commonWords } from "./common";
 
 /**
  * The artifact panel's words (Projects spec §5.10; live components spec §5):
- * its title menu and a sheet's inspector, for the dashboard and the native
- * app alike (a sheet's stage says its own, words/sheet.ts).
+ * its title menu, and the native app's sheet inspector, for the dashboard
+ * and the native app alike (a sheet's stage says its own, words/sheet.ts).
  *
  * `bun run words` writes these into the app as `Words.Artifacts`
  * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
@@ -107,7 +107,7 @@ export const artifactWords = {
   /** …and a finger taps. */
   pinsNoneOpenTap: "Choose Comment, then tap the page to pin one.",
 
-  // ── A sheet's inspector (preview/SheetInspector.svelte) ──
+  // ── A sheet's inspector (the app's SheetInspector.swift) ──
   inspect: "Inspect",
   inspectTitle:
     "Inspect: change the story's props, then Save them into its file",

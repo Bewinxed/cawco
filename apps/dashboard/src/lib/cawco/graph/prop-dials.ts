@@ -166,8 +166,7 @@ function dialOf(prop: PropMeta, value: DialValue | undefined): PropDial | null {
     return { ...base, kind: "select", options };
   }
   switch (controlOf(prop)) {
-    case "segments":
-    case "select":
+    case "choice":
       // A set too long to stand in place names data (projects, people),
       // not looks: which one it holds changes the drawing only by its
       // length and script, so it is a line of words under the words'

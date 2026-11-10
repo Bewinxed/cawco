@@ -12,7 +12,8 @@
    * states list with its steps, the map of the whole set (WholeSet), where a
    * press on a card keeps its state, the Animation face (MoveFace), the move
    * into the kept state played, scrubbed and tuned on the page's own
-   * replays, and the agent's dials once it has any. Compare, a switch
+   * replays, and the Dials card: the agent's dials, then the props of the
+   * state on the stage, once it has either. Compare, a switch
    * that stays on, compares the kept state with the one before it
    * (`previousOf`), and a press on another state compares with that one
    * instead: the page draws it hidden under the kept one, reads what
@@ -40,7 +41,12 @@
    * surface holds both whole the room is the kit's bottom drawer, its stops
    * head, half and whole, the stage whole above it at the head stop.
    */
-  import { type CanvasSpec, STORY_FILE } from "@cawco/core/stage";
+  import { detach } from "@cawco/core/detach";
+  import {
+    type CanvasSpec,
+    type PropMeta,
+    STORY_FILE,
+  } from "@cawco/core/stage";
   import { type StateRef, storyWords } from "@cawco/core/stage-graph";
   import type { TunedRecord } from "@cawco/core/tuned";
   import { graphWords as words } from "@cawco/core/words/graph";
@@ -80,6 +86,7 @@
     IconWideLinear,
   } from "#lib/icons.js";
   import PreviewTools from "../preview/PreviewTools.svelte";
+  import type { SheetInspector } from "../preview/sheet-inspector.svelte";
   import ThreadSheet from "../preview/ThreadSheet.svelte";
   import Dials from "./Dials.svelte";
   import type { DialValue, DialValues, GraphDial } from "./dials";
@@ -99,12 +106,14 @@
     withTuned,
     withTuning,
   } from "./motion";
+  import { contentCases, propDials, savedOf } from "./prop-dials";
   import StagePane from "./StagePane.svelte";
   import type { StageLink } from "./stage-link.svelte";
   import WholeSet from "./WholeSet.svelte";
 
   let {
     link,
+    inspector = null,
     files,
     spec,
     ask = "",
@@ -124,6 +133,8 @@
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
     link: StageLink;
+    /** The props of the state on the stage, as its sheet's page says them, and their writes: the Dials card lists them under the agent's dials. */
+    inspector?: SheetInspector | null;
     /** The canvas's states files, in its order: the components under review. */
     files: readonly string[];
     /** The agent's canvas spec: its groups and edges. */
@@ -247,6 +258,16 @@
   /** His values of the controls, by name, on the face and the drawing; the values Reset all took, while nothing has changed since. */
   let dialValues = $state<DialValues>({});
   let dialsUndo = $state<DialValues | null>(null);
+  /** The state's unsaved props Reset all took, and the story they were on, while nothing has changed since. */
+  let propsUndo = $state<{
+    story: string;
+    values: Record<string, unknown>;
+  } | null>(null);
+  /** Anything changed on the card: Undo reset goes. */
+  const changedSince = () => {
+    dialsUndo = null;
+    propsUndo = null;
+  };
   /** The control whose layer stands open on the Controls face (a select's list, a colour's picker). */
   let dialOpen = $state<string | null>(null);
   // The drawing takes every turn: the whole set, each time it changes, and
@@ -260,9 +281,83 @@
   });
   const turnDial = (name: string, value: DialValue) => {
     dialValues = { ...dialValues, [name]: value };
-    dialsUndo = null;
+    changedSince();
     ondials?.(dialValues);
   };
+  /** A dial's value as its prop takes it: an enum's own option (a figure stays a figure), else the value itself. */
+  const argOf = (prop: PropMeta | undefined, value: DialValue): unknown =>
+    prop?.type.name === "enum"
+      ? (prop.options?.find((one) => String(one) === String(value)) ?? value)
+      : value;
+  /**
+   * The props of the state on the stage as the Dials card lists them (its
+   * `state`): each as the dial of its kind, its value as the state's file
+   * writes it, his unsaved values over them, and Save and Save as new state
+   * writing them through the sheet's inspector. None where the stage read
+   * no props, or where the file writes the story's args in code it can't
+   * write to (`readOnly`).
+   */
+  const stateProps = $derived.by(() => {
+    const held = inspector;
+    const component = held?.component;
+    if (!(held && component) || held.readOnly) {
+      return null;
+    }
+    const metas = held.props;
+    const saved = savedOf(metas, held.saved);
+    const props = propDials(metas, dials, saved);
+    if (props.length === 0) {
+      return null;
+    }
+    const { edited } = held;
+    const metaOf = (name: string) => metas.find((one) => one.name === name);
+    const cases = contentCases(props);
+    const reached = [...new Set(cases.flatMap((one) => Object.keys(one.fill)))];
+    return {
+      component: component.name,
+      props,
+      saved,
+      edits: savedOf(
+        metas.filter((one) => one.name in edited),
+        edited
+      ),
+      content: {
+        cases,
+        // A case's words over the text props it reaches; Saved (null) takes them back.
+        onpick: (fill: Record<string, string> | null) => {
+          const values = Object.fromEntries(
+            Object.entries(fill ?? {}).filter(
+              ([name, fillWords]) => fillWords !== saved[name]
+            )
+          );
+          changedSince();
+          held.change(
+            values,
+            reached.filter((name) => !(name in values))
+          );
+        },
+      },
+      onchange: (name: string, value: DialValue) => {
+        changedSince();
+        if (value === saved[name]) {
+          held.change({}, [name]);
+        } else {
+          held.change({ [name]: argOf(metaOf(name), value) });
+        }
+      },
+      onreset: (names: string[], all: boolean) => {
+        if (all && held.chosen) {
+          propsUndo = { story: held.chosen, values: { ...held.edited } };
+        }
+        held.change({}, names);
+      },
+      onsave: () => detach(held.save(), "save the state"),
+      onsavenew: () => detach(held.saveNew(), "save as new state"),
+      saving: held.writing,
+    };
+  });
+  /** The Dials card has rows: the agent's dials, or the props of the state on the stage. */
+  const tunable = $derived(dials.length > 0 || stateProps !== null);
   /** Dials back to as written: Reset all (`all`) leaves Undo reset; a row's restore glyph doesn't. */
   const resetDials = (names: string[], all: boolean) => {
     if (all) {
@@ -459,9 +554,9 @@
     }
     return null;
   };
-  // A story he picked in the inspector: its component in front and its
-  // state kept, so the stage stands at what the controls edit. One the
-  // states file doesn't hold yet (a story just added) waits for its sheet.
+  // A story he added on the Dials card (Save as new state): its component
+  // in front and its state kept, so the stage stands at what the props
+  // edit. One the states file doesn't hold yet waits for its sheet.
   $effect(() => {
     const wish = link.wanted;
     const all = reviews;
@@ -569,9 +664,9 @@
     const to = on && pick ? refOf(on, pick, width) : null;
     untrack(() => {
       // Every way a state comes to be kept (a row's press, a step, the
-      // ask's state, a new ask, the inspector's pick, a width's own story,
-      // another component in front) names it here: the inspector's
-      // controls follow it, so an edit lands on the drawing he sees.
+      // ask's state, a new ask, a state saved as new, a width's own story,
+      // another component in front) names it here: the Dials card's props
+      // follow it, so an edit lands on the drawing he sees.
       if (to && JSON.stringify(to) !== JSON.stringify(link.kept)) {
         link.kept = to;
       }
@@ -1042,11 +1137,18 @@
     onchange={turnDial}
     onreset={resetDials}
     onundo={() => {
-      dialValues = dialsUndo ?? {};
-      dialsUndo = null;
-      ondials?.(dialValues);
+      if (dialsUndo) {
+        dialValues = dialsUndo;
+        ondials?.(dialValues);
+      }
+      if (propsUndo && propsUndo.story === inspector?.chosen) {
+        inspector.change(propsUndo.values);
+      }
+      changedSince();
     }}
-    undoable={dialsUndo !== null}
+    state={stateProps}
+    undoable={dialsUndo !== null ||
+      (propsUndo !== null && propsUndo.story === inspector?.chosen)}
     values={dialValues}
     written={link.dialsWritten ?? {}}
   />
@@ -1303,7 +1405,7 @@
             ></DropdownMenu.CheckboxItem
           >
         {/if}
-        {#if dials.length > 0}
+        {#if tunable}
           <DropdownMenu.CheckboxItem
             checked={rising === "dials"}
             onCheckedChange={(on) => {
@@ -1357,7 +1459,7 @@
           scheme = scheme === "dark" ? "light" : "dark";
         }}
       />
-      {#if dials.length > 0}
+      {#if tunable}
         <BarItem
           icon={IconTuningLinear}
           label={words.dialsFace}

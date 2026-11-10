@@ -59,7 +59,7 @@ const CANVASES = [
   ["needs", "src/lib/cawco/home/NeedsCard.stories.ts", "Budget"],
   ["routine", "src/lib/cawco/routines/RoutineForm.stories.ts", "FilledIn"],
   ["suggest", "src/lib/cawco/suggestions/Suggestions.stories.ts", "List"],
-  ["sheet", "src/lib/cawco/preview/SheetInspector.stories.ts", "Desk"],
+  ["sheet", "src/lib/cawco/graph/DialsCard.stories.ts", "AtRest"],
   ["prompt", "src/lib/cawco/transcript/Prompt.stories.ts", "Connected"],
 ] as const;
 const idFor = (name: string) => idOf(`par-${name}`);

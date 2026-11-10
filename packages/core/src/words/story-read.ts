@@ -1,7 +1,7 @@
 /**
  * Why the inspector can't write a story's props (agent stage-host
- * story-file.ts): the one line it shows above the props
- * (SheetInspector), and the refusal a write to such a story meets. The
+ * story-file.ts): the one line the app's inspector shows above the props
+ * (SheetInspector.swift), and the refusal a write to such a story meets. The
  * story is named by its export; a part of the file's own code is set in
  * backticks. The way on is a pin: the agent it reaches edits the file.
  * The inspector calls them props, so these do too.

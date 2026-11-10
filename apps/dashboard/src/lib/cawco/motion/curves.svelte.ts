@@ -725,27 +725,3 @@ export function lifting(
     },
   };
 }
-
-/**
- * The sheet recipe's motion (DESIGN.md Dialog, sheet and drawer): its whole
- * size in from its edge along `axis` (X from the right, Y from the foot)
- * over `--dur-panel` on the drawer curve, out over `--dur-exit`; with less
- * motion a fade. A transform alone: nothing under it is told a size.
- */
-export function sheetSlide(
-  _node: Element,
-  { axis = "Y", leaving }: { axis?: "X" | "Y"; leaving: boolean }
-): TransitionConfig {
-  if (!motionOk.current) {
-    return {
-      duration: dur(leaving ? "--dur-exit" : "--dur-fade"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}`,
-    };
-  }
-  return {
-    duration: dur(leaving ? "--dur-exit" : "--dur-panel"),
-    easing: leaving ? easeOut : easeDrawer,
-    css: (t: number) => `transform: translate${axis}(${(1 - t) * 100}%)`,
-  };
-}

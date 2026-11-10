@@ -62,11 +62,11 @@ export class StageLink {
   scrolledDown = $state(false);
   /** Presses the page heard (`cawco:press`): each closes the graph's open layers, a press on the stage being outside them. */
   presses = $state(0);
-  /** The state the graph keeps, as the page names it: the inspector's controls follow its story. Null until the graph has a state. */
+  /** The state the graph keeps, as the page names it: the Dials card's props follow its story. Null until the graph has a state. */
   kept = $state<StateRef | null>(null);
   /** The states file of the component the graph has in front; null until it has one. The panel's other views (Canvas view's Map) stand on it. */
   front = $state<string | null>(null);
-  /** A story the person picked in the inspector, by its states file: the graph keeps its state, then lets it go. */
+  /** A story the person added on the Dials card (Save as new state), by its states file: the graph keeps its state, then lets it go. */
   wanted = $state<{ file: string; story: string } | null>(null);
   /** The Compare the graph last asked for; null while it doesn't compare. */
   comparing = $state<StageCompare | null>(null);
@@ -214,7 +214,7 @@ export class StageLink {
     });
   }
 
-  /** The person picked story `story` of `file` in the inspector: the graph keeps its state. */
+  /** The person added story `story` of `file` on the Dials card: the graph keeps its state. */
   want(file: string, story: string): void {
     this.wanted = { file, story };
   }
@@ -237,7 +237,7 @@ export class StageLink {
 }
 
 /**
- * The inspector's controls are for the story the stage stands at: the
+ * The Dials card's props are for the story the stage stands at: the
  * graph's kept state, in its states file's sheet as the page says it,
  * whichever way the state came to be kept. Called as a component sets up
  * (PreviewPane), so the effect lives as long as it does.

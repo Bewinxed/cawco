@@ -144,7 +144,6 @@
   import EmptyAsk from "../EmptyAsk.svelte";
   import { artifactReached } from "../files/reached";
   import { frameObserver, frameSize } from "../frame-observer";
-  import { besideLine, inspectorBesideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import type { GraphHead } from "../graph/graph-head";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
@@ -211,8 +210,7 @@
   import { artifactAddress } from "./page-source";
   import { paneFleet } from "./pane-fleet";
   import { enterPreviews, turnedAwayWords } from "./pass";
-  import SheetInspector from "./SheetInspector.svelte";
-  import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
+  import { SheetInspector } from "./sheet-inspector.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
   import {
     type ComposeTarget,
@@ -1504,7 +1502,7 @@
   const stageSaid = $derived(
     staged?.message ?? compileErrors[0]?.message.split("\n")[0] ?? null
   );
-  /** The never-drawn canvas's Remove: destructive, so asked in place under it (AskHere, The Open Page Rule), as the inspector's Remove is. */
+  /** The never-drawn canvas's Remove: destructive, so asked in place under it (AskHere, The Open Page Rule). */
   const removeAsks = new Asker<AskHereRequest>();
   function removeShown() {
     const shown = artifact;
@@ -1524,19 +1522,6 @@
       "ask"
     );
   }
-  /*
-   * A sheet's inspector (live components spec §5): the chosen story's props
-   * as controls, from the sheet its page says (`cawco:sheet`). Opened from
-   * the head's Inspect and kept per session, as Comments is; a right panel
-   * beside the page on a desk and a tablet, a sheet over the page's foot on
-   * a phone. One per sheet: another sheet starts with nothing unsaved.
-   */
-  let inspectOpen = $state(false);
-  const inspectKey = $derived(`cawco-preview-inspect:${instanceId}`);
-  function showInspector(open: boolean) {
-    inspectOpen = open;
-    store("local", inspectKey, open ? "open" : "shut");
-  }
   const isSheet = $derived(artifact?.kind === "component");
   /**
    * A page or a sheet draws in the dashboard's theme (the overlay's
@@ -1544,15 +1529,24 @@
    * styles dark by `prefers-color-scheme` hears it. A preview is its own app.
    */
   const themedFrame = $derived(artifact?.kind === "page" || isSheet);
+  /*
+   * The props of the state on a component canvas's stage (live components
+   * spec §5), from the sheet its page says (`cawco:sheet`): the design
+   * graph's Dials card lists them under the agent's dials. One per sheet:
+   * another sheet starts with nothing unsaved.
+   */
   const inspector = $derived.by(() => {
     const id = artifactId;
     const session = instanceId;
     return id && isSheet
-      ? new Inspector(
+      ? new SheetInspector(
           post,
           (change) => writeSheet(session, id, change),
-          // A story he picked in the inspector: the design graph keeps its state.
-          (file, story) => link?.want(file, story)
+          // A state saved as new: the design graph keeps it.
+          (file, story) => link?.want(file, story),
+          (why) => {
+            failure = { message: why, again: null };
+          }
         )
       : null;
   });
@@ -1560,23 +1554,6 @@
   const phone = new MediaQuery("(width < 640px)");
   /** The rail is the well's foot sheet on a phone; elsewhere a card hung from the head's glass, at every pane width. */
   const railSheet = $derived(sheet || phone.current);
-  /** The inspector stands: asked for, and no Comments card at the card's end (one card stands there at a time). */
-  const inspecting = $derived(
-    !!inspector && inspectOpen && !(listOpen && !railSheet)
-  );
-  /**
-   * The inspector: a right panel beside the page where the well holds the
-   * stage at its least and the inspector (graph/beside.ts), picked from the
-   * pane's own width, never the window's alone; else a sheet over the
-   * page's foot (the spec's §5), as on a phone, in the pane's sheet over the
-   * conversation, or in a narrow pane on a desk.
-   */
-  const inspectorLayout = $derived.by((): "panel" | "sheet" => {
-    if (sheet || phone.current) {
-      return "sheet";
-    }
-    return wellW > 0 && wellW < inspectorBesideLine() ? "sheet" : "panel";
-  });
   /** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
   const errorPlace = (error: {
     column: number | null;
@@ -1633,34 +1610,6 @@
           (entry) => !view?.sentAt || entry.at > view.sentAt
         ).length
       : 0
-  );
-  /** The well's width, px: where the design graph's room stands beside its stage (graph/beside.ts). */
-  let wellW = $state(0);
-  $effect(() => {
-    const node = well;
-    if (!node) {
-      return;
-    }
-    const read = () => {
-      wellW = node.clientWidth;
-    };
-    read();
-    const watch = frameObserver(read);
-    watch.observe(node);
-    return () => watch.disconnect();
-  });
-  /**
-   * The inspector stands in the design graph's room, under its states,
-   * where the room stands beside the stage (a desk's wide pane): the states
-   * and the props stand together, and the stage keeps its width. Elsewhere
-   * it is the pane's own panel or sheet.
-   */
-  const inspectorInRoom = $derived(
-    isSheet &&
-      inspecting &&
-      inspectorLayout === "panel" &&
-      wellW > 0 &&
-      wellW >= besideLine()
   );
   /** The pane's own width, px: the rail's room is the pane's, not the window's. */
   let paneW = $state(0);
@@ -2146,7 +2095,7 @@
   /**
    * How much of the well's foot a software keyboard covers, px: what stands
    * at the foot over the page (the Comments sheet, a thread's or the
-   * composer's foot sheet, the inspector's sheet) is lifted by it, so the
+   * composer's foot sheet) is lifted by it, so the
    * field being typed in stands over the keyboard while the page under them
    * keeps its box (a phone's preview sheet holds its place for a field of
    * its own: SideSheet). Written on the well as `--keyboard-lift`; 0 with
@@ -2154,7 +2103,7 @@
    * zoom (`floor.bottom` 0). Read as the visible area is published and as
    * the well resizes, in the frame after. With no keyboard up it is 0
    * wherever the well stands: read while a phone's sheet stood at its
-   * first stop, the well's foot below the screen, it lifted the inspector
+   * first stop, the well's foot below the screen, it lifted a foot sheet
    * 168px off the foot once the sheet stood at full, the sheet's move
    * resizing nothing.
    */
@@ -3614,7 +3563,7 @@
         }
         break;
       case "cawco:sheet": {
-        // A sheet's page said its stories and props: the inspector's controls, and the design graph's model.
+        // A sheet's page said its stories and props: the design graph's model, and the props on its Dials card.
         const said = previewSheet(message.sheet);
         if (said) {
           link?.heardSheet(said);
@@ -3957,7 +3906,7 @@
     const session = instanceId;
     return isSheet && session ? untrack(() => new StageLink(post)) : null;
   });
-  // The inspector's controls are for the story the stage stands at.
+  // The Dials card's props are for the story the stage stands at.
   inspectKept(
     () => link,
     () => inspector
@@ -4696,12 +4645,7 @@
     <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
     <iframe
       data-ready={!current || loaded || undefined}
-      data-panel-inspector={(!isSheet &&
-        inspecting &&
-        inspectorLayout === "panel") ||
-        undefined}
-      class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
-      style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
+      class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100"
       style:--page-top={headRoomTaken || inGraph
         ? "0px"
         : "var(--side-room, 0px)"}
@@ -4824,18 +4768,9 @@
   {:else}
     <!-- The frame loads once its origin answered the probe; the cover stands
          meanwhile. A component artifact's frame stands in its design graph's
-         stage (the graph's chrome round it, the panel's DOM), the inspector's
-         panel beside the graph. -->
+         stage (the graph's chrome round it, the panel's DOM). -->
     {#if inGraph && artifact && link && sheetCanvas}
-      <div
-        data-slot="graph-host"
-        data-panel-inspector={(inspecting &&
-          inspectorLayout === "panel" &&
-          !inspectorInRoom) ||
-          undefined}
-        class="absolute inset-0 data-panel-inspector:w-(--frame-w)"
-        style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
-      >
+      <div data-slot="graph-host" class="absolute inset-0">
         <!-- The graph runs to the card's top under the floating head and
              takes its room on its own page (DesignGraph). -->
         <DesignGraph
@@ -4846,6 +4781,7 @@
           ask={artifact.ask ?? ""}
           files={sheetCanvas.files}
           frame={frameTags}
+          {inspector}
           {link}
           {keptDials}
           memory={`cawco-graph-kept:${artifact.id}`}
@@ -5107,13 +5043,6 @@
         {/snippet}
       </EmptyState>
     </div>
-  {/if}
-  {#if inspector && inspecting && !unreached && !inspectorInRoom}
-    <SheetInspector
-      {inspector}
-      layout={inspectorLayout}
-      onclose={() => showInspector(false)}
-    />
   {/if}
   {#if picking}
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
