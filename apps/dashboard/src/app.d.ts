@@ -18,6 +18,8 @@ declare global {
   interface Window {
     /** Set once the touch long-press menus are installed (utils/longpress.ts); the probe reads it. */
     __longPressInstalled?: boolean;
+    /** The decision overlay's bridge, once its script has run (decisions/host/page.svelte.ts). */
+    cawco?: import("./lib/cawco/decisions/host/page.svelte.js").Bridge;
     /** Chromium's Idle Detection (wicg.github.io/idle-detection), where the browser has it (lib/cawco/presence.ts). */
     IdleDetector?: IdleDetectorClass;
     /** Replays the button clicks app.html held before hydration. */
@@ -43,6 +45,11 @@ declare global {
     }
     // interface Locals {}
     interface PageData {
+      /** The folder-tab strips' last measured boxes, read from the pref by the app layout (+layout.server.ts). */
+      foldBoxes?: Record<
+        string,
+        import("./lib/components/ui/fluid-tabs/fold-memory.js").FoldMeasure
+      >;
       /** The machines the hub holds, counted by the board's load. */
       machineCount?: number | null;
       /** The wide screen's resolved tabs, from the root layout load. */
