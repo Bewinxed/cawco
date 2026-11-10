@@ -1,7 +1,4 @@
 <script lang="ts">
-  import { bringIntoView } from "@cawco/core/bring-into-view";
-  import { questionsOf } from "@cawco/core/question";
-  import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
@@ -25,7 +22,7 @@
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
   import { provideSessionHere } from "../session-here";
   import { boardStore } from "../stores/board.svelte";
-  import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
+  import type { SessionState } from "../stores/sessions.svelte";
   import {
     faultMessage,
     readOlderPage,
@@ -40,7 +37,6 @@
   import CompactionDivider from "./CompactionDivider.svelte";
   import ConnectCard from "./ConnectCard.svelte";
   import { paneDrafts } from "./composer-draft.svelte";
-  import { connectReveal } from "./connect-sign-ins.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import { JumpToLatest } from "./jump-to-latest.svelte";
@@ -49,6 +45,7 @@
   import LiveRow from "./LiveRow.svelte";
   import { ListLanding } from "./list-landing.svelte";
   import { ListWhole } from "./list-whole.svelte";
+  import { LiveRegion } from "./live-region.svelte";
   import MessageRow from "./MessageRow.svelte";
   import { MountedRows } from "./mounted-rows.svelte";
   import NoticeRun from "./NoticeRun.svelte";
@@ -67,7 +64,6 @@
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
   import { TranscriptFind } from "./transcript-find.svelte";
-  import { trayNews, trayReveal } from "./tray.svelte";
 
   let {
     session,
@@ -187,11 +183,8 @@
     get active() {
       return active;
     },
-    get announcement() {
-      return announcement;
-    },
-    set announcement(value) {
-      announcement = value;
+    get agentName() {
+      return agentName;
     },
     get isFocused() {
       return isFocused;
@@ -258,6 +251,9 @@
     },
     get finder(): TranscriptFind {
       return finder;
+    },
+    get region(): LiveRegion {
+      return region;
     },
   };
 
@@ -340,226 +336,8 @@
 
   const finder = new TranscriptFind(host);
 
-  // ── The live region ─────────────────────────────────────────────────────
-  // The scroll container is NOT the live region. virtua mounts and unmounts
-  // rows as they cross the viewport, so `aria-live` on it re-reads history the
-  // moment the operator scrolls, and re-reads the streaming turn on every token.
-  // Instead: rows the transcript has not announced before, once it has landed
-  // and is being read, get one coarse sentence each.
+  const region = new LiveRegion(host);
 
-  /**
-   * What identifies a row for announcement purposes. The streaming rows are
-   * deliberately unannounceable — their text arrives token by token, and a live
-   * region fed from it is a stutter. The settled `single` row the turn becomes
-   * is what says "replied". The in-flight tool is keyed by its call id rather
-   * than its row key, which virtua reuses for every tool in turn.
-   */
-  function announceKeyOf(row: Row): string {
-    if (
-      row.kind === "stream" ||
-      row.kind === "thinking" ||
-      row.kind === "live"
-    ) {
-      return "";
-    }
-    // A harness notification is plumbing the operator never asked for. It is
-    // worth a line on the rail and nothing at all in the ear.
-    if (row.kind === "harness") {
-      return "";
-    }
-    // Nor a queued message: the operator just sent it. Reading their own words
-    // back to them, then again when the session starts on them, is noise.
-    if (row.kind === "queued") {
-      return "";
-    }
-    if (row.kind === "livetool") {
-      return `livetool:${row.glance.toolId}`;
-    }
-    return row.key;
-  }
-
-  /**
-   * The whole announceable vocabulary, and it is five phrases long. A row that
-   * maps to nothing says nothing — a settled tool run, a prepended history
-   * chunk and the operator's own message are all visible on a surface the
-   * operator is looking at.
-   */
-  function phraseOf(row: Row): string {
-    if (row.kind === "single") {
-      // The operator's own message needs no reading back to them.
-      return row.message.type === "user" ? "" : "Agent replied";
-    }
-    if (row.kind === "livetool") {
-      return `${row.glance.name} running`;
-    }
-    return "";
-  }
-
-  /** What the polite region currently holds. Replaced, never appended to. */
-  let announcement = $state("");
-  const announced = new Set<string>();
-
-  $effect(() => {
-    // Before the transcript lands, everything on it is history, not an arrival.
-    // A pane that is off screen is the same case twice over: it has no business
-    // speaking about a surface the reader cannot see, and its rows are frozen
-    // anyway. Both branches still SEED `announced`, so coming back to a tab
-    // announces what arrived while it was away exactly once, rather than
-    // re-reading the whole transcript. An older page put in front is history
-    // too, however long the pane has been read.
-    if (!(landed && active) || rowBuild.built.shifted) {
-      for (const r of rowBuild.rows) {
-        announced.add(announceKeyOf(r));
-      }
-      return;
-    }
-    let phrase = "";
-    for (const r of rowBuild.rows) {
-      const key = announceKeyOf(r);
-      if (!key || announced.has(key)) {
-        continue;
-      }
-      announced.add(key);
-      const said = phraseOf(r);
-      if (said) {
-        phrase = said;
-      }
-    }
-    // A batch that lands in one frame says only its last line: three sentences
-    // read back-to-back is the spam this region exists to stop.
-    if (phrase) {
-      announcement = phrase;
-    }
-  });
-
-  // The end of a turn is a state change, not a row: the last thing the agent
-  // said may have landed several frames before it stopped working. `busy`
-  // falling is the only honest signal for it.
-  // `busy` is still TRACKED off screen — it flips once a turn, not once a
-  // frame, so it costs nothing — but only a pane on screen says so out loud.
-  // Following it either way is what keeps `wasBusy` honest: dropping the
-  // bookkeeping while hidden would make the next switch announce a turn that
-  // finished minutes ago.
-  // A finished chip pressed while its delegate's report is off screen: the
-  // report comes into view (and the chip, seeing it, flies there).
-  $effect(() => {
-    const want = trayReveal.get(session.instanceId);
-    if (!(want && active)) {
-      return;
-    }
-    untrack(() => {
-      trayReveal.delete(session.instanceId);
-      const index = rowDraw.renderedRows.findIndex(
-        (row) => row.kind === "single" && row.message.id === want
-      );
-      if (index >= 0) {
-        pin.list?.scrollToIndex(index, { align: "center", smooth: true });
-      }
-    });
-  });
-
-  // A sign-in's row pressed in the list of what waits on the reader: the
-  // open connect card comes into view, and its Connect takes the keys once
-  // it is drawn there. A delegate's card stands after the rows.
-  $effect(() => {
-    if (!(connectReveal.has(session.instanceId) && active)) {
-      return;
-    }
-    untrack(() => {
-      connectReveal.delete(session.instanceId);
-      const index = rowDraw.renderedRows.findLastIndex(
-        (row) => row.kind === "connect" && row.answer === null
-      );
-      if (index < 0) {
-        // No open card of its own among the rows: a delegate's, after them.
-        const under = pin.scroller?.querySelector<HTMLElement>(
-          "[data-connect-stage]"
-        );
-        if (under) {
-          bringIntoView(under, { behavior: "smooth" });
-          under
-            .querySelector<HTMLElement>("button")
-            ?.focus({ preventScroll: true });
-        }
-        return;
-      }
-      pin.list?.scrollToIndex(index, { align: "center", smooth: true });
-      const { key } = rowDraw.renderedRows[index];
-      requestAnimationFrame(() => {
-        document
-          .querySelector(`[data-row="${CSS.escape(key)}"]`)
-          ?.querySelector<HTMLElement>("[data-connect]")
-          ?.focus({ preventScroll: true });
-      });
-    });
-  });
-
-  // The delegate tray's news: a delegate started, finished or failed (polite),
-  // or has a question for the reader (assertive, cleared once it is said).
-  let trayAlert = $state("");
-  $effect(() => {
-    const news = trayNews.get(session.instanceId);
-    if (!(news && active && landed)) {
-      return;
-    }
-    untrack(() => {
-      if (news.polite) {
-        announcement = news.polite;
-      }
-      trayAlert = news.assertive;
-    });
-    if (news.assertive) {
-      const clear = setTimeout(() => {
-        trayAlert = "";
-      }, 5000);
-      return () => clearTimeout(clear);
-    }
-  });
-
-  let wasBusy = false;
-  $effect(() => {
-    const { busy } = session;
-    if (active && landed && wasBusy && !busy) {
-      announcement = "Turn finished";
-    }
-    wasBusy = busy;
-  });
-
-  /**
-   * The blocked-on-you line, which interrupts: it is the one state where the
-   * run has stopped and only the operator can restart it. Empty otherwise, so
-   * clearing the block does not itself announce anything.
-   */
-  const blockedNote = $derived.by(() => {
-    if (!landed) {
-      return "";
-    }
-    const [parked] = session.pending;
-    if (parked) {
-      // Said as its card names it: a question is not a permission.
-      if (parked.browserAsk) {
-        return askWords.browserAskFrom(agentName);
-      }
-      return questionsOf(parked.toolName, parked.input)
-        ? askWords.questionFrom(agentName)
-        : askWords.permissionFrom(agentName);
-    }
-    if (rowBuild.rows.at(-1)?.kind === "question") {
-      return `Question from ${agentName}`;
-    }
-    return "";
-  });
-
-  /**
-   * Why a read again over these rows failed; null while the transcript is
-   * caught up. Only over rows drawn: with none, the pane says why in their
-   * place.
-   */
-  const behind = $derived(
-    rowDraw.renderedRows.length > 0
-      ? (sessionsStore.session(session.instanceId)?.behind ?? null)
-      : null
-  );
   /**
    * THE SERVER'S FIRST SCREEN IS PAINTED, AND STAYS UNTIL THE LIST TAKES IT.
    *
@@ -684,14 +462,14 @@
   class="sr-only border-none border-current"
   role="status"
 >
-  {announcement}
+  {region.announcement}
 </p>
 <p
   aria-atomic="true"
   aria-live="assertive"
   class="sr-only border-none border-current"
 >
-  {blockedNote || trayAlert}
+  {region.blockedNote || region.trayAlert}
 </p>
 
 <!-- Asymmetric content padding is the DESIGN.md ledger signature: inline
@@ -936,9 +714,9 @@
     style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--space-2) + var(--parked-room, 0px)))"}
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
-    {#if behind}
+    {#if region.behind}
       <Behind
-        fault={behind}
+        fault={region.behind}
         floating
         onretry={() => readTranscript(session.instanceId, "retry")}
       />
