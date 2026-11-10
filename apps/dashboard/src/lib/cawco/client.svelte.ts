@@ -12,7 +12,6 @@ import { detach } from "@cawco/core/detach";
 import type { FramePayload } from "@cawco/core/frames";
 import { hubRequest } from "@cawco/core/hub-request";
 import type { Envelope, InstanceRow } from "@cawco/core/protocol";
-import type { SessionStreamFrame } from "@cawco/core/stream";
 import { hub } from "#lib/platform/hub.js";
 import { hubData, hubJson } from "#lib/platform/hub-read.js";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
@@ -549,8 +548,7 @@ plugLedger({
   // A session's own changes arrive only here, sequenced: what the hub's builder
   // made of each frame, and its preview's state. Everything broadcast (the
   // board, pulses, permissions, replies) comes as an envelope (`bind`).
-  applyFrame: (sessionId, frame) => {
-    const payload = frame as SessionStreamFrame;
+  applyFrame: (sessionId, payload) => {
     if (payload.kind !== "transcript") {
       takeFrame(payload);
       return;
