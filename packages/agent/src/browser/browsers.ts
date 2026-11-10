@@ -540,7 +540,10 @@ const moveSlot = async (
 ): Promise<BrowserRecord> => {
   const from = portsOf(record);
   const { slot: taken, ...unslotted } = record;
-  const placed = await slotted(unslotted, new Set([...held, taken as number]));
+  const placed = await slotted(
+    unslotted,
+    new Set(taken === undefined ? held : [...held, taken])
+  );
   console.info(
     `[browser] ${record.key}: its ports (${Object.values(from).join(", ")}): ${said}; moved to ${Object.values(portsOf(placed)).join(", ")}`
   );

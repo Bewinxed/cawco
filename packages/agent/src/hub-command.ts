@@ -107,25 +107,34 @@ export function cancelCommand(runId: unknown): boolean {
 export const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
   typeof value === "object" &&
   value !== null &&
-  typeof (value as WorkspaceRef).id === "string" &&
-  typeof (value as WorkspaceRef).path === "string" &&
-  (value as WorkspaceRef).path.startsWith("/");
+  "id" in value &&
+  typeof value.id === "string" &&
+  "path" in value &&
+  typeof value.path === "string" &&
+  value.path.startsWith("/");
 
 /** Whether `value` names a run the hub follows: `{ id, queueMaxMs, gate?, moves? }` (core `CommandRun`). */
 const isCommandRun = (value: unknown): value is CommandRun =>
   typeof value === "object" &&
   value !== null &&
-  typeof (value as CommandRun).id === "string" &&
-  typeof (value as CommandRun).queueMaxMs === "number" &&
-  ["string", "undefined"].includes(typeof (value as CommandRun).gate) &&
-  ["string", "undefined"].includes(typeof (value as CommandRun).moves);
+  "id" in value &&
+  typeof value.id === "string" &&
+  "queueMaxMs" in value &&
+  typeof value.queueMaxMs === "number" &&
+  (!("gate" in value) || ["string", "undefined"].includes(typeof value.gate)) &&
+  (!("moves" in value) || ["string", "undefined"].includes(typeof value.moves));
+
+/** Whether `name` is one of the queue slots a marker can name. */
+const isQueueSlot = (name: string): name is QueueSlot =>
+  Object.hasOwn(QUEUE_SLOTS, name);
 
 /** The slots only the runner itself waits for: no command's marker opens them. */
 const RUNNER_SLOTS: ReadonlySet<QueueSlot> = new Set(["folder", "boundary"]);
 
 /** `CAWCO-QUEUE wait <slot>: <holders>` or `CAWCO-QUEUE held <slot>`. */
 const QUEUE_LINE = new RegExp(
-  `^${QUEUE_MARKER} (wait|held) (${(Object.keys(QUEUE_SLOTS) as QueueSlot[])
+  `^${QUEUE_MARKER} (wait|held) (${Object.keys(QUEUE_SLOTS)
+    .filter(isQueueSlot)
     .filter((slot) => !RUNNER_SLOTS.has(slot))
     .join("|")})(?:: (.*))?$`,
   "u"
@@ -296,15 +305,18 @@ const commandClock = (
       if (!marker) {
         return;
       }
-      const slot = marker[2] as QueueSlot;
-      if (marker[1] === "held" && !waits.has(slot)) {
+      const [, change, slot] = marker;
+      if (!(slot && isQueueSlot(slot))) {
+        return;
+      }
+      if (change === "held" && !waits.has(slot)) {
         return;
       }
       // What ran so far is spent from the phase it ran in; the timer then
       // runs for what is left of the phase the line leaves it in.
       spend();
       waits.delete(slot);
-      if (marker[1] === "wait") {
+      if (change === "wait") {
         // A repeat moves it last: the status shows its newest words.
         waits.set(slot, { slot, holders: marker[3] ?? "" });
       }

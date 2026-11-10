@@ -81,6 +81,7 @@ import {
   STREAM_RELAY_TLS_PORT,
 } from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
+import { z } from "zod";
 import type { AgentPorts } from "../agent-ports";
 import { browserRuntime } from "./browsers";
 import { pullImage } from "./image";
@@ -202,7 +203,10 @@ const serial = <T>(work: () => Promise<T>): Promise<T> => {
 
 /** The runtime's not-found answer. */
 const notFound = (error: unknown): boolean =>
-  (error as { statusCode?: number }).statusCode === 404;
+  typeof error === "object" &&
+  error !== null &&
+  "statusCode" in error &&
+  error.statusCode === 404;
 
 /* ------------------------------------------------------------------ */
 /* Who holds a port: the kernel's socket tables and each process's fds */
@@ -333,12 +337,12 @@ const logsOf = async (
   container: Docker.Container,
   window: { tail: number } | { since: number } = { tail: 60 }
 ): Promise<string> => {
-  const raw = (await container.logs({
+  const raw = await container.logs({
     stdout: true,
     stderr: true,
     follow: false,
     ...window,
-  })) as unknown as Buffer;
+  });
   // The Engine API's multiplexed stream: an 8-byte header (stream, 0, 0, 0,
   // size as uint32 big-endian) before each frame, while the container has no TTY.
   const parts: string[] = [];
@@ -350,6 +354,9 @@ const logsOf = async (
   }
   return at === 0 ? raw.toString("utf8") : parts.join("");
 };
+
+/** How a container ended, as the Engine API's wait answers it. */
+const EXIT_SHAPE = z.object({ StatusCode: z.number() });
 
 /**
  * `cmd` run to its end in a certbot container with the certificate volume,
@@ -375,9 +382,8 @@ const runCertbot = async (
   });
   try {
     await container.start();
-    const ended = await readWithin(
-      CERTBOT_MS,
-      () => container.wait() as Promise<{ StatusCode: number }>
+    const ended = await readWithin(CERTBOT_MS, async () =>
+      EXIT_SHAPE.parse(await container.wait())
     );
     if (ended.kind === "unanswered") {
       await container.kill().catch(() => undefined);
@@ -937,12 +943,13 @@ const listenerPublished = (
     tls: STREAM_RELAY_TLS_PORT,
   }
 ): { exposed: Record<string, object>; bindings: Docker.PortMap } => {
+  const secure: [string, number][] = tls
+    ? [[`${STREAM_RELAY_TLS_PORT}/tcp`, host.tls]]
+    : [];
   const ports: [string, number][] = [
     [`${STREAM_RELAY_PORT}/udp`, host.plain],
     [`${STREAM_RELAY_PORT}/tcp`, host.plain],
-    ...(tls
-      ? [[`${STREAM_RELAY_TLS_PORT}/tcp`, host.tls] as [string, number]]
-      : []),
+    ...secure,
   ];
   return {
     exposed: Object.fromEntries(ports.map(([one]) => [one, {}])),
