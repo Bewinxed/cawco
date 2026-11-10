@@ -113,7 +113,9 @@ export const LANDING_HOLD_MS = 1500;
  */
 const FILLED_HOLD_MS = 500;
 export interface KeptPlaceHost {
-  readonly findHere: ConversationFind;
+  readonly finder: {
+    readonly findHere: ConversationFind;
+  };
   readonly jumper: {
     readonly jumping: boolean;
   };
@@ -262,7 +264,7 @@ export class KeptPlace {
       : 0;
     let bottom =
       this.#host.pin.scroller.clientHeight - this.#host.whole.rooms.foot;
-    if (this.#host.findHere.open) {
+    if (this.#host.finder.findHere.open) {
       const view = this.#host.pin.scroller.getBoundingClientRect();
       const dock = document.querySelector<HTMLElement>(
         `[data-slot="dock"][data-find-view="${CSS.escape(this.#host.session.instanceId)}"]`

@@ -20,12 +20,9 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChat } from "#lib/icons.js";
   import { crossIn, rise } from "#lib/platform/motion/curves.svelte.js";
-  import { track } from "#lib/platform/track.js";
   import { stopWords } from "../accounts/switch.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
-  import { findIn } from "../find/conversation-find.svelte";
-  import { markFind, rangesOf } from "../find/find-marks";
   import { provideSessionHere } from "../session-here";
   import { boardStore } from "../stores/board.svelte";
   import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
@@ -56,7 +53,6 @@
   import { MountedRows } from "./mounted-rows.svelte";
   import NoticeRun from "./NoticeRun.svelte";
   import { OlderPages } from "./older-pages.svelte";
-  import { recordIn, rowHolding } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
   import { RecordSeek } from "./record-seek.svelte";
@@ -66,10 +62,11 @@
   import type { Row } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
-  import { SCROLL_KEYS, ScrollPin } from "./scroll-pin.svelte";
+  import { ScrollPin } from "./scroll-pin.svelte";
   import { SendSlides } from "./send-slides.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
+  import { TranscriptFind } from "./transcript-find.svelte";
   import { trayNews, trayReveal } from "./tray.svelte";
 
   let {
@@ -196,9 +193,6 @@
     set announcement(value) {
       announcement = value;
     },
-    get findHere() {
-      return findHere;
-    },
     get isFocused() {
       return isFocused;
     },
@@ -261,6 +255,9 @@
     },
     get jumper(): JumpToLatest {
       return jumper;
+    },
+    get finder(): TranscriptFind {
+      return finder;
     },
   };
 
@@ -341,165 +338,7 @@
   });
   const jumper = new JumpToLatest(host);
 
-  // ── Find in this conversation ───────────────────────────────────────────
-  // (find/conversation-find): the words marked where they are drawn, the
-  // place stepped to brought clear of the composer, and the way back to
-  // where the conversation was read as find opened.
-
-  const findHere = $derived(findIn(session.instanceId));
-
-  // Where the conversation is read: its tail, or the record at the view's top.
-  $effect(() =>
-    findHere.readFrom(() => {
-      if (pin.atBottom) {
-        return { tail: true };
-      }
-      const place = keeper.placeAt(pin.lastTop);
-      return place ? { tail: false, docId: place.block } : { tail: true };
-    })
-  );
-
-  $effect(() => {
-    // The live turn's place is the conversation's tail, being written.
-    if (findHere.stepped > 0 && untrack(() => findHere.current?.live)) {
-      untrack(jumper.jump);
-    }
-  });
-
-  /** Read the drawn rows for the words and mark them: every place washed, the one stepped to solid. */
-  function markWords(): void {
-    const words = findHere.words.trim();
-    if (!(pin.listing && words && (findHere.open || findHere.landed))) {
-      markFind(session.instanceId, [], null);
-      return;
-    }
-    const { current } = findHere;
-    /** Where a place is drawn: its record's own part of its row, else the row; the live turn's row for the live place. */
-    const drawnAt = (place: {
-      docId: string;
-      live: boolean;
-    }): Element | null => {
-      if (place.live) {
-        return pin.listing?.querySelector('[data-slot="live"]') ?? null;
-      }
-      const drawn =
-        rowDraw.renderedRows[rowHolding(rowDraw.renderedRows, place.docId)];
-      const row = drawn
-        ? pin.listing?.querySelector(`[data-row="${CSS.escape(drawn.key)}"]`)
-        : null;
-      const message = drawn ? recordIn(drawn, place.docId, [words]) : undefined;
-      return (
-        (message &&
-          row?.querySelector(`[data-message="${CSS.escape(message.id)}"]`)) ??
-        row ??
-        null
-      );
-    };
-    const within = current ? drawnAt(current) : null;
-    // Whose words the places keep reaches the transcript: with a filter
-    // pressed, only the places it keeps are washed.
-    const kept =
-      findHere.whose === "all"
-        ? null
-        : findHere.places.flatMap((place) => drawnAt(place) ?? []);
-    const all = rangesOf(pin.listing, words).filter(
-      (range) =>
-        kept === null || kept.some((at) => at.contains(range.startContainer))
-    );
-    const solid =
-      (within && all.find((range) => within.contains(range.startContainer))) ??
-      null;
-    if (!findHere.open) {
-      // Find closed here: the place keeps its wash until the reader moves on.
-      markFind(session.instanceId, solid ? [solid] : [], null);
-      return;
-    }
-    markFind(
-      session.instanceId,
-      all.filter((range) => range !== solid),
-      solid
-    );
-  }
-
-  // Marked once a frame at most while find stands, as rows mount and the
-  // live turn is written, never inside the mutation that asked.
-  $effect(() => {
-    const root = pin.listing;
-    if (!(root && (findHere.open || findHere.landed))) {
-      markFind(session.instanceId, [], null);
-      return;
-    }
-    track(
-      findHere.words,
-      findHere.at,
-      findHere.open,
-      findHere.whose,
-      rowDraw.renderedRows
-    );
-    let frame = 0;
-    const schedule = () => {
-      frame ||= requestAnimationFrame(() => {
-        frame = 0;
-        markWords();
-      });
-    };
-    schedule();
-    const observer = new MutationObserver(schedule);
-    observer.observe(root, {
-      characterData: true,
-      childList: true,
-      subtree: true,
-    });
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  });
-  $effect(() => () => markFind(session.instanceId, [], null));
-
-  /** The reader moves on from the place find closed at (a wheel, a touch, a scroll key): its wash goes, and the way back with it. */
-  function movedOn(event: Event): void {
-    if (
-      findHere.landed &&
-      (event.type !== "keydown" ||
-        SCROLL_KEYS.has((event as KeyboardEvent).key))
-    ) {
-      findHere.leave();
-    }
-  }
-
-  $effect(() => {
-    const node = pin.scroller;
-    if (!(node && findHere.landed)) {
-      return;
-    }
-    node.addEventListener("wheel", movedOn, { passive: true });
-    node.addEventListener("touchstart", movedOn, { passive: true });
-    node.addEventListener("keydown", movedOn);
-    return () => {
-      node.removeEventListener("wheel", movedOn);
-      node.removeEventListener("touchstart", movedOn);
-      node.removeEventListener("keydown", movedOn);
-    };
-  });
-
-  /** Back where you were: to the record read as find opened, or the tail. */
-  function backWhereYouWere(): void {
-    if (findHere.back().tail) {
-      jumper.jump();
-    }
-  }
-
-  const showBack = $derived(
-    findHere.landed && findHere.reading !== null && rowBuild.rows.length > 0
-  );
-  const showLatest = $derived(
-    landed &&
-      pin.farFromLatest &&
-      rowBuild.rows.length > 0 &&
-      !findHere.open &&
-      !showBack
-  );
+  const finder = new TranscriptFind(host);
 
   // ── The live region ─────────────────────────────────────────────────────
   // The scroll container is NOT the live region. virtua mounts and unmounts
@@ -1118,14 +957,14 @@
         {seek.unfoundWords}
       </p>
     {/if}
-    {#if rowBuild.catching || showLatest || showBack}
+    {#if rowBuild.catching || finder.showLatest || finder.showBack}
       <div class="flex justify-center items-box-end gap-space-2">
         {#if rowBuild.catching}
           <CatchUp />
         {/if}
-        {#if showBack}
-          <Latest back onjump={backWhereYouWere} />
-        {:else if showLatest}
+        {#if finder.showBack}
+          <Latest back onjump={finder.backWhereYouWere} />
+        {:else if finder.showLatest}
           <Latest onjump={jumper.jump} />
         {/if}
       </div>
