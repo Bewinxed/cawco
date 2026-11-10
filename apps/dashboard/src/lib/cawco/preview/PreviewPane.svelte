@@ -23,18 +23,10 @@
     type PreviewDown,
     type ShownFailure,
   } from "@cawco/core/preview/protocol";
-  import {
-    PAGE_SILENT_MS,
-    probePreview,
-    unreachedOf,
-  } from "@cawco/core/preview/reach";
+  import { PAGE_SILENT_MS, probePreview } from "@cawco/core/preview/reach";
   import {
     PAGE_TOUCHED_MESSAGE,
     PREVIEW_LOCKED_MESSAGE,
-    type PreviewAddress,
-    type PreviewSettings,
-    previewRoute,
-    projectPagePlace,
   } from "@cawco/core/preview/routes";
   import type { PaneKey } from "@cawco/core/shell-shortcuts";
   import {
@@ -62,10 +54,6 @@
   import { commentWords } from "@cawco/core/words/comments";
   import { commonWords } from "@cawco/core/words/common";
   import { previewWords } from "@cawco/core/words/preview";
-  import {
-    previewsNeedWords,
-    previewUnreachedWords,
-  } from "@cawco/core/words/preview-reach";
   import { sheetWords } from "@cawco/core/words/sheet";
   import { shellWords } from "@cawco/core/words/shell";
   import { type Snippet, untrack } from "svelte";
@@ -108,8 +96,7 @@
   } from "#lib/icons.js";
   import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
   import { graceWhile } from "#lib/platform/grace-while.svelte.js";
-  import { hub } from "#lib/platform/hub.js";
-  import { failureWords, hubData } from "#lib/platform/hub-read.js";
+  import { failureWords } from "#lib/platform/hub-read.js";
   import {
     appear,
     dur,
@@ -211,11 +198,15 @@
   import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
-  import { artifactAddress } from "./page-source";
   import { PaneLayout } from "./pane-layout.svelte";
   import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
   import { enterPreviews, turnedAwayWords } from "./pass";
+  import {
+    PROBE_FIRST_MS,
+    PROBE_MOST_MS,
+    PreviewReach,
+  } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
@@ -286,6 +277,11 @@
     paneSubject,
   });
   const paneLayout = new PaneLayout({ sheet: () => sheet });
+  const previewReach = new PreviewReach({
+    instanceId: () => instanceId,
+    onScreen: () => onScreen,
+    paneSubject,
+  });
   let iframe = $state<HTMLIFrameElement>();
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
@@ -337,147 +333,6 @@
   let headRoomTaken = $state(false);
   let loaded = $state(false);
   let reload = $state(0);
-  /**
-   * The preview's own origin, never the dashboard's, picked by where this
-   * tab reached the dashboard (core `previewRoute`): host mode's name when
-   * under the pattern's domain, else its port on this tab's host. The page
-   * runs at its root as on its own server.
-   */
-  /** The frame names an origin of its own: a port, or host mode's name. */
-  const namesOrigin = (address: { origin?: string; port?: number }): boolean =>
-    address.port !== undefined || !!address.origin;
-  /**
-   * What the hub said when this pane asked where its open frame is served,
-   * the frame naming no origin (the hub opened none for it as it told the
-   * frame: every preview port was in use): the address it opened then, or
-   * its refusal in its own words (page-source.ts `artifactAddress`), said
-   * over the well with Try again, never a cover that waits for nothing.
-   */
-  let hubSaid = $state<
-    | { id: string; address: PreviewAddress }
-    | { id: string; problem: string }
-    | null
-  >(null);
-  /** Try again's presses: each asks the hub again. */
-  let addressTries = $state(0);
-  let addressAsking = $state(false);
-  const unnamedId = $derived(
-    paneSubject.preview?.state === "open" &&
-      paneSubject.preview.artifact.kind !== "browser" &&
-      !namesOrigin(paneSubject.preview)
-      ? paneSubject.preview.artifact.id
-      : null
-  );
-  $effect(() => {
-    const id = unnamedId;
-    track(addressTries);
-    if (!id) {
-      hubSaid = null;
-      return;
-    }
-    let live = true;
-    addressAsking = true;
-    artifactAddress(id).then((found) => {
-      if (live) {
-        hubSaid = { id, ...found };
-        addressAsking = false;
-      }
-    });
-    return () => {
-      live = false;
-    };
-  });
-  /** The hub's refusal for this pane's frame, while it names no origin. */
-  const unopened = $derived(
-    hubSaid && "problem" in hubSaid && hubSaid.id === unnamedId
-      ? hubSaid.problem
-      : null
-  );
-  // A browser is drawn here from its stream (BrowserView), never framed from an origin.
-  const route = $derived.by(() => {
-    if (
-      !paneSubject.preview ||
-      paneSubject.preview.artifact.kind === "browser"
-    ) {
-      return null;
-    }
-    if (namesOrigin(paneSubject.preview)) {
-      return previewRoute(paneSubject.preview, location);
-    }
-    return hubSaid && "address" in hubSaid && hubSaid.id === unnamedId
-      ? previewRoute(hubSaid.address, location)
-      : null;
-  });
-  const paneOrigin = $derived(route?.origin ?? "");
-  /**
-   * Where the reader had gone inside this show, kept per session so a reload
-   * of the tab (by hand, or by itself once idle: reload.svelte.ts) opens the
-   * preview there again. A new show (another revision) starts at its root.
-   */
-  const keepKey = $derived(`cawco-preview-at:${instanceId}`);
-  function keptAt(): string | null {
-    const kept = readJson(
-      keepKey,
-      z
-        .object({
-          at: z.unknown().optional(),
-          revision: z.unknown().optional(),
-        })
-        .nullable(),
-      null
-    );
-    return kept?.revision === paneSubject.preview?.revision &&
-      typeof kept?.at === "string" &&
-      kept.at.startsWith("/")
-      ? kept.at
-      : null;
-  }
-  /** `at` is the page's own place on its origin (the overlay's `url`). */
-  function keepAt(at: URL): void {
-    const place = `${at.pathname}${at.search}${at.hash}`;
-    if (!(paneOrigin && paneSubject.preview)) {
-      return;
-    }
-    writeJson(keepKey, { revision: paneSubject.preview.revision, at: place });
-  }
-  /**
-   * Where a show starts: a page at its own place on the origin that serves
-   * it (core `projectPagePlace`: its project's, else its session's), which
-   * holds that page whatever the session's panel shows, so an artifact's
-   * own tab never loads another; else, on a machine artifact's own origin,
-   * the page the agent named (`path`), else the root.
-   */
-  const startAt = $derived.by(() => {
-    if (
-      paneSubject.preview?.project ||
-      paneSubject.preview?.artifact.kind === "page"
-    ) {
-      return projectPagePlace(paneSubject.preview.artifact.id);
-    }
-    return (
-      (paneSubject.source && "path" in paneSubject.source
-        ? paneSubject.source.path
-        : undefined) ?? "/"
-    );
-  });
-  /**
-   * The place the frame opens, a path on the preview's origin: the start
-   * page, or where the reader was in this show; read once per show, so their
-   * going on inside it never reloads the frame.
-   */
-  const framePlace = $derived.by(() => {
-    if (!(paneSubject.preview?.revision && paneOrigin)) {
-      return startAt;
-    }
-    return untrack(keptAt) ?? startAt;
-  });
-  /**
-   * Host mode's route, its names under the pattern's domain; else the
-   * preview's port on this tab's host. Either route is locked to the
-   * browser's pass (hub preview-access.ts), which the frame's own load
-   * carries, and loads the place straight.
-   */
-  const byHost = $derived(!!route?.byHost);
   /** How many entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
   let refusedEntries = 0;
   /**
@@ -486,119 +341,6 @@
    * let in. An entry that landed since stands for it (preview/pass.ts).
    */
   let frameSince = 0;
-  /**
-   * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
-   * which answers any page with no credentials, and with the hub's words,
-   * still a 200, when the session's machine listener doesn't answer the hub:
-   * core `PreviewPingDown`), before the frame loads. Unreached, the pane says
-   * what failed by its own cause (core preview-reach.ts: offline, refused at
-   * once, no answer in time, answered without its CORS header, the hub's
-   * word that it is down, another answerer's status, and whether the hub
-   * itself reaches the origin), the fix, and probes again by itself
-   * (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once when its tab
-   * is back in view) until one answers: never a fallback. Reached, the
-   * browser enters its previews (pass.ts), so the lock never sees this tab
-   * without a pass; an entry the hub won't give is unreached the same way,
-   * in the hub's words. Once reached and entered, the frame loads, once.
-   */
-  let reached = $state<
-    | { origin: string; ok: true }
-    | { origin: string; ok: false; said: string; tries: number }
-    | null
-  >(null);
-  /** Each one probes the origin again: Try again's press, the backoff's timer, the tab back in view. */
-  let probe = $state(0);
-  let probing = $state(false);
-  /** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
-  const PROBE_FIRST_MS = 2000;
-  const PROBE_MOST_MS = 30_000;
-  /** Why this tab can't load a frame of `origin` yet, or null once it reached it and entered its previews. */
-  async function unreachedWords(origin: string): Promise<string | null> {
-    // The preview's own server down is the origin reached (core
-    // `unreachedOf`): its load gets the proxy's page naming the hop
-    // (`heardDown`), so the pane draws that hop's down state and tells the
-    // hub (`artifactShown`).
-    const failed = unreachedOf(await probePreview(origin, hubReach));
-    if (failed) {
-      return previewUnreachedWords(
-        new URL(origin).host,
-        failed,
-        await previewsNeed(origin)
-      );
-    }
-    const refused = await enterPreviews(origin);
-    return refused && `The hub didn't give this preview a pass: ${refused}`;
-  }
-  $effect(() => {
-    const origin = paneOrigin;
-    track(probe);
-    if (!origin || untrack(() => reached?.origin === origin && reached.ok)) {
-      return;
-    }
-    let live = true;
-    probing = true;
-    unreachedWords(origin).then((said) => {
-      if (!live) {
-        return;
-      }
-      probing = false;
-      const was = untrack(() => reached);
-      reached = said
-        ? {
-            origin,
-            ok: false,
-            said,
-            tries: was?.origin === origin && !was.ok ? was.tries + 1 : 1,
-          }
-        : { origin, ok: true };
-    });
-    return () => {
-      live = false;
-      probing = false;
-    };
-  });
-  let seenBefore = true;
-  $effect(() => {
-    const failed = reached;
-    const seen = pageVisible.current && onScreen;
-    const back = seen && !seenBefore;
-    seenBefore = seen;
-    if (!(seen && failed && !failed.ok && failed.origin === paneOrigin)) {
-      return;
-    }
-    if (back) {
-      untrack(() => {
-        probe += 1;
-      });
-      return;
-    }
-    const timer = setTimeout(
-      () => {
-        probe += 1;
-      },
-      Math.min(PROBE_FIRST_MS * 2 ** (failed.tries - 1), PROBE_MOST_MS)
-    );
-    return () => clearTimeout(timer);
-  });
-  const unreachedBy = $derived(
-    reached && !reached.ok && reached.origin === paneOrigin ? reached : null
-  );
-  const unreached = $derived(!!paneOrigin && !!unreachedBy);
-  /** What previews need to be reached from this tab, by the route it took (core `previewsNeedWords`); the hub's port range read once. */
-  let portsRead: Promise<PreviewSettings | null> | null = null;
-  async function previewsNeed(origin: string): Promise<string> {
-    if (byHost) {
-      return previewsNeedWords({ byHost: true, host: new URL(origin).host });
-    }
-    portsRead ??= hubData(hub.api["preview-settings"].get()).catch(() => null);
-    const settings = await portsRead;
-    return previewsNeedWords({
-      byHost: false,
-      hostname: location.hostname,
-      ports: settings?.ports ?? null,
-      hostMode: settings?.mode === "host",
-    });
-  }
   const frameKey = $derived(`${paneSubject.preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
   let standing = $state<string | null>(null);
@@ -706,7 +448,7 @@
    * won't give is the failure band, with Try again.
    */
   async function turnedAway() {
-    const origin = paneOrigin;
+    const origin = previewReach.paneOrigin;
     if (!origin) {
       return;
     }
@@ -787,7 +529,7 @@
   let downProbe = $state(0);
   $effect(() => {
     const hop = down;
-    const origin = paneOrigin;
+    const origin = previewReach.paneOrigin;
     const seen = pageVisible.current && onScreen;
     track(downProbe);
     if (!(hop && origin && seen && COMES_BACK.has(hop))) {
@@ -874,14 +616,18 @@
       id,
       frameHand(
         () => iframe,
-        () => (readyFrom === paneOrigin ? paneOrigin : null)
+        () =>
+          readyFrom === previewReach.paneOrigin ? previewReach.paneOrigin : null
       )
     );
   });
   /** To the page, on its own origin alone, once that origin's page said it is ready (`hello`, the answer to it, goes at once). */
   function post(message: object, hello = false) {
-    if (paneOrigin && (hello || readyFrom === paneOrigin)) {
-      iframe?.contentWindow?.postMessage(message, paneOrigin);
+    if (
+      previewReach.paneOrigin &&
+      (hello || readyFrom === previewReach.paneOrigin)
+    ) {
+      iframe?.contentWindow?.postMessage(message, previewReach.paneOrigin);
     }
   }
   /*
@@ -1269,7 +1015,7 @@
    * (Try again), so an entry the hub won't give is the failure band.
    */
   async function enterAgain(said: boolean) {
-    const origin = paneOrigin;
+    const origin = previewReach.paneOrigin;
     if (!origin) {
       return;
     }
@@ -3129,9 +2875,9 @@
   function receive(event: MessageEvent) {
     // The page's own frame, from its own origin: nothing else is heard.
     if (
-      !paneOrigin ||
+      !previewReach.paneOrigin ||
       event.source !== iframe?.contentWindow ||
-      event.origin !== paneOrigin
+      event.origin !== previewReach.paneOrigin
     ) {
       return;
     }
@@ -3177,7 +2923,7 @@
     switch (message.type) {
       case "cawco:ready":
       case "cawco:navigated": {
-        const at = previewUrl(message.url, paneOrigin);
+        const at = previewUrl(message.url, previewReach.paneOrigin);
         if (!at) {
           return;
         }
@@ -3185,7 +2931,7 @@
         down = null;
         downWhy = null;
         const parsed = new URL(at);
-        keepAt(parsed);
+        previewReach.keepAt(parsed);
         if (paneSubject.preview) {
           paneSubject.preview.title = previewTitle(message.title) ?? "";
         }
@@ -3769,7 +3515,9 @@
     () => inspector
   );
   /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
-  const sheetCanvas = $derived(paneSubject.isSheet ? canvasOf(startAt) : null);
+  const sheetCanvas = $derived(
+    paneSubject.isSheet ? canvasOf(previewReach.startAt) : null
+  );
   /**
    * The frame stands in the design graph's stage, under the stage's own
    * head: the head's room is the graph page's, never the frame's.
@@ -4483,7 +4231,7 @@
 <!-- The page's frame (and, while a new one loads, the one it replaces): in
      the well, or in a component artifact's design graph's stage. -->
 {#snippet frameTags()}
-  {#each reached?.origin === paneOrigin ? frames : [] as key (key)}
+  {#each previewReach.reached?.origin === previewReach.paneOrigin ? frames : [] as key (key)}
     {@const current = key === frameKey}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
     <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
@@ -4509,7 +4257,7 @@
           announce();
         }
       }}
-      src={`${paneOrigin}${framePlace}`}
+      src={`${previewReach.paneOrigin}${previewReach.framePlace}`}
       data-scheme={paneSubject.themedFrame ? theme.resolved : undefined}
       title="Preview"
       {@attach (node) => {
@@ -4547,7 +4295,7 @@
       machine={browserMachine}
       bind:viewing={browserViewing}
     />
-  {:else if unopened}
+  {:else if previewReach.unopened}
     <!-- The hub opened no origin for it (every preview port in use): its
          words, and Try again asks it again. -->
     <div
@@ -4559,16 +4307,16 @@
     >
       <EmptyState icon={IconAlert} title={previewWords.notOpenedTitle}>
         {#snippet line()}
-          {unopened}
+          {previewReach.unopened}
         {/snippet}
         {#snippet action()}
           <Button
             icon={IconRefresh}
             label={commonWords.tryAgain}
             onclick={() => {
-              addressTries += 1;
+              previewReach.addressTries += 1;
             }}
-            pending={addressAsking}
+            pending={previewReach.addressAsking}
             pendingLabel="Trying again…"
             size="sm"
             variant="outline"
@@ -4576,7 +4324,7 @@
         {/snippet}
       </EmptyState>
     </div>
-  {:else if unreached}
+  {:else if previewReach.unreached}
     <!-- This tab can't reach the preview's own origin: what failed, by its
          own cause, its fix, and where to switch how previews are reached. -->
     <div
@@ -4587,7 +4335,7 @@
     >
       <EmptyState icon={IconAlert} title={previewWords.cantBeReached}>
         {#snippet line()}
-          {unreachedBy?.said}
+          {previewReach.unreachedBy?.said}
           {previewWords.tryingAgain}
         {/snippet}
         {#snippet action()}
@@ -4596,9 +4344,9 @@
               icon={IconRefresh}
               label={commonWords.tryAgain}
               onclick={() => {
-                probe += 1;
+                previewReach.probe += 1;
               }}
-              pending={probing}
+              pending={previewReach.probing}
               pendingLabel="Trying again…"
               size="sm"
               variant="outline"
@@ -4707,7 +4455,9 @@
     {#if canvasView?.map && paneSubject.artifact && paneSubject.isSheet}
       <!-- Map mode: the canvas's component among what renders it and what it renders, over the page, which stays loaded under it. -->
       <CanvasMap
-        address={paneOrigin ? `${paneOrigin}${startAt}` : null}
+        address={previewReach.paneOrigin
+          ? `${previewReach.paneOrigin}${previewReach.startAt}`
+          : null}
         artifactId={paneSubject.artifact.id}
         component={link?.front
           ? (link.sheets[link.front]?.meta.component ?? null)
@@ -4900,7 +4650,7 @@
       </EmptyState>
     </div>
   {/if}
-  {#if inspector && inspecting && !unreached && !inspectorInRoom}
+  {#if inspector && inspecting && !previewReach.unreached && !inspectorInRoom}
     <SheetInspector
       {inspector}
       layout={paneLayout.inspectorLayout}
