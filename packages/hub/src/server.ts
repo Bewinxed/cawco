@@ -8065,7 +8065,7 @@ export const createServer = (
       item: row.workItemId !== null && row.workItemId !== undefined,
     };
   };
-  /** Set once the design system exists (below, design-system.ts `approvalRefusal`). */
+  /** Set once the design system exists (below, design-system.ts `approvalHold`). */
   const designApprovalPort = portOf<NonNullable<TaskStore["approvalRefusal"]>>(
     "designApproval",
     () => Promise.resolve(undefined)
@@ -8710,14 +8710,21 @@ export const createServer = (
       return context;
     },
     // Its design system, read in the attempt's clone inside its boundary.
-    designSection: (clone) =>
-      designSection(
+    // A clone it could not read fails the attempt's brief in the problem's
+    // words, as the thrown one did (dispatch.ts reads a brief's words alone).
+    designSection: async (clone) => {
+      const section = await designSection(
         (machineId, cwd, cmd, timeoutMs, workspace) =>
           runOnMachine(machineId, cwd, cmd, timeoutMs, workspace, {
             what: "command",
           }),
         clone
-      ),
+      );
+      if (section instanceof ElysiaStatus) {
+        throw new Error(section.response.detail);
+      }
+      return section;
+    },
     db,
     lifetime,
     tasks,
@@ -9952,7 +9959,7 @@ export const createServer = (
     designTask: async (projectId, taskId) => {
       const task = await tasks.get(projectId, taskId);
       if (task instanceof ElysiaStatus) {
-        throw projectRefusalOf(task);
+        return task;
       }
       return (
         task.title === BUILD_TITLE ||
@@ -9962,7 +9969,7 @@ export const createServer = (
     taskOpen: async (projectId, taskId) => {
       const task = await tasks.get(projectId, taskId);
       if (task instanceof ElysiaStatus) {
-        throw projectRefusalOf(task);
+        return task;
       }
       return task.kind !== "done" && task.kind !== "dropped";
     },
@@ -9974,7 +9981,14 @@ export const createServer = (
     tellClosed: (instanceId, text, line) =>
       tellProposer(instanceId, text, line),
   });
-  designApprovalPort.fill(designSystem.approvalRefusal);
+  // The task store's hold is words: a task or folder the design system could
+  // not read holds the approval in the problem's own words.
+  designApprovalPort.fill(async (projectId, taskId) => {
+    const hold = await designSystem.approvalHold(projectId, taskId);
+    return hold === undefined || typeof hold === "string"
+      ? hold
+      : hold.response.detail;
+  });
   // A commit to a project's folder: the open proposals on the files it
   // changed (memory and delegate types, design/) are read again, and one
   // that no longer applies closes then.
