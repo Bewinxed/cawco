@@ -298,7 +298,10 @@ const fold = async (
   if (await hasProjectFolder(dup.id)) {
     // Marked folded, never listed as a forgotten project: its rows live on
     // in the kept one.
-    await trashFoldedFolder(dup.id, keep.id);
+    const trashed = await trashFoldedFolder(dup.id, keep.id);
+    if (trashed instanceof ElysiaStatus) {
+      return trashed;
+    }
     deps.folderMoved();
   }
   log(
