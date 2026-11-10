@@ -99,15 +99,11 @@ export const streamUrl = (
   return `${scheme}//${location.host}${path}?token=${encodeURIComponent(viewer)}`;
 };
 
-/** F1 to F12 by name. */
-const FUNCTION_KEYSYMS: Record<string, number> = Object.fromEntries(
-  Array.from({ length: 12 }, (_, n) => [`F${n + 1}`, 0xff_be + n])
-);
 /**
  * X11 keysyms for the keys a keyboard names (X.Org keysymdef.h): a
  * character is its Latin-1 code, else `0x01000000` plus its code point.
  */
-const NAMED_KEYSYMS = {
+const KEYSYMS: Record<string, number> = {
   Backspace: 0xff_08,
   Tab: 0xff_09,
   Enter: 0xff_0d,
@@ -130,10 +126,9 @@ const NAMED_KEYSYMS = {
   AltGraph: 0xfe_03,
   Meta: 0xff_eb,
 };
-const KEYSYMS: Record<string, number> = {
-  ...NAMED_KEYSYMS,
-  ...FUNCTION_KEYSYMS,
-};
+for (let n = 1; n <= 12; n += 1) {
+  KEYSYMS[`F${n}`] = 0xff_be + n - 1;
+}
 const LATIN1_LAST = 0xff;
 const UNICODE_KEYSYM = 0x01_00_00_00;
 
@@ -431,9 +426,9 @@ export const nekoStream = (
     press(keysym, true);
     press(keysym, false);
   };
-  const shift = NAMED_KEYSYMS.Shift;
-  const control = NAMED_KEYSYMS.Control;
-  const enter = NAMED_KEYSYMS.Enter;
+  const shift = KEYSYMS.Shift;
+  const control = KEYSYMS.Control;
+  const enter = KEYSYMS.Enter;
 
   /**
    * A character no key of neko's layout has, as GTK's Unicode entry:
@@ -568,7 +563,7 @@ export const nekoStream = (
     },
     type: ({ back, text }) => {
       for (let n = 0; n < back; n += 1) {
-        tap(NAMED_KEYSYMS.Backspace);
+        tap(KEYSYMS.Backspace);
       }
       for (const char of text) {
         typeChar(char);
