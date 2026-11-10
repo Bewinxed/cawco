@@ -40,6 +40,7 @@ import { stepLink, taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
 import { ElysiaStatus } from "elysia";
 import type { QuestionAnswer } from "./artifacts/questions";
+import type { Artifacts } from "./artifacts/service";
 import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { inboxNotes, Note } from "./memory";
@@ -360,8 +361,8 @@ export interface OpenItemsDeps {
   inbox: typeof inboxNotes;
   /** A session's plan as its followers hold it (plans.ts `read`), or its refusal. */
   plan: Plans["read"];
-  /** Every question a session's delegation tree put to the person (artifacts/service.ts `questions`). */
-  questions: (instanceId: string) => AskedOf[];
+  /** Every question a session's delegation tree put to the person (artifacts/service.ts `questions`), or the refusal of a session the hub does not have. */
+  questions: Artifacts["questions"];
   tasks: Pick<Tasks, "get" | "list">;
 }
 
@@ -425,6 +426,9 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     }
     const asks = deps.db.asks.openOf(instanceId).map(askLink);
     const questions = deps.questions(instanceId);
+    if (questions instanceof ElysiaStatus) {
+      return questions;
+    }
     if (!projectId) {
       const alone: OpenItemRows = {
         session: instanceId,

@@ -61,7 +61,7 @@ import {
   tokenize,
 } from "@openuidev/lang-core";
 import { ElysiaStatus } from "elysia";
-import { refusal } from "./refusal";
+import { type Refused, refusal } from "./refusal";
 
 process.env.OPENUI_TELEMETRY_DISABLED = "1";
 process.env.DO_NOT_TRACK = "1";
@@ -443,10 +443,23 @@ const afterProblems = (
 
 /**
  * The artifact an id names, whole: the artifacts service's resolver
- * (service.ts `whole`, handles.ts), throwing in words when it names none or
- * several.
+ * (access.ts `whole`, handles.ts), its refusal in words when it names none
+ * or several.
  */
-export type ArtifactNamed = (asked: string) => string;
+export type ArtifactNamed = (asked: string) => string | Refused;
+
+/** `artifact`'s whole id for `id`, or why it names none: its refusal's words, or what it threw. */
+const wholeOf = (
+  artifact: ArtifactNamed,
+  id: string
+): string | { why: string } => {
+  try {
+    const full = artifact(id);
+    return typeof full === "string" ? full : { why: full.response.detail };
+  } catch (error) {
+    return { why: error instanceof Error ? error.message : String(error) };
+  }
+};
 
 /** What its Images name: a file each. */
 const mediaProblems = (read: ProgramRead): string[] =>
@@ -472,13 +485,9 @@ const wholeArtifacts = (
   const problems: string[] = [];
   let whole = program;
   for (const { component, id } of artifact ? read.artifacts : []) {
-    let full: string;
-    try {
-      full = (artifact as ArtifactNamed)(id);
-    } catch (error) {
-      problems.push(
-        `${component}("${id}"): ${error instanceof Error ? error.message : String(error)}`
-      );
+    const full = artifact ? wholeOf(artifact, id) : id;
+    if (typeof full !== "string") {
+      problems.push(`${component}("${id}"): ${full.why}`);
       continue;
     }
     if (full !== id) {

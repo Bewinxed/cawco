@@ -307,7 +307,6 @@ import { titlesSaid, titleUntitledOnce } from "./artifact-titles";
 import { boardOf } from "./artifacts/access";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
-import { ArtifactRefusal } from "./artifacts/refusals";
 import { artifactRoutes } from "./artifacts/routes";
 import {
   type Artifacts,
@@ -566,7 +565,7 @@ import { createProjectStops } from "./project-stops";
 import { projectTrash } from "./project-trash";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
-import { type Refused, refusal } from "./refusal";
+import { type Refused, refusal, resaid } from "./refusal";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRelayControl, peekAnswer } from "./relay-control";
@@ -2008,14 +2007,8 @@ export const createServer = (
     summariserRun,
     unlocatedWords,
   } = createContextReads(ctx);
-  const {
-    browseAt,
-    embedAt,
-    keepPicture,
-    onPreviewPort,
-    openDiagramAsCanvas,
-    pictureOf,
-  } = createPreviewBrowse(ctx);
+  const { browseAt, embedAt, keepPicture, openDiagramAsCanvas, pictureOf } =
+    createPreviewBrowse(ctx);
   const {
     FORGET_CREDENTIALS_TIMEOUT_MS,
     asRead,
@@ -4449,25 +4442,16 @@ export const createServer = (
     seen: (artifactId, card) => push.decidedSeen(artifactId, card),
   });
   const artifacts: Artifacts = createArtifacts({
-    // Settling returns its refusals; the artifacts still throw theirs: a
-    // settler's 403 as the artifact's refusal, the folder's refusal of the
-    // table as the ProjectRefusal it was.
+    // Settling's refusals, said again across the import cycle
+    // (settling.ts imports work-items.ts, which imports the artifacts).
     decides: {
       routed: async (asker, row, cards, all, state) => {
         const routed = await settling.routed(asker, row, cards, all, state);
-        if (routed instanceof ElysiaStatus) {
-          throw projectRefusalOf(routed);
-        }
-        return routed;
+        return routed instanceof ElysiaStatus ? resaid(routed) : routed;
       },
       settler: async (settler, row, card) => {
         const signs = await settling.settler(settler, row, card);
-        if (!(signs instanceof ElysiaStatus)) {
-          return signs;
-        }
-        throw signs.status === 403
-          ? new ArtifactRefusal(signs.status, signs.response.detail)
-          : projectRefusalOf(signs);
+        return signs instanceof ElysiaStatus ? resaid(signs) : signs;
       },
       settled: (row, card, member, answer) =>
         settling.settled(row, card, member, answer),
@@ -4626,20 +4610,29 @@ export const createServer = (
       }
       return { ok: true, revision: opened.frame.revision };
     },
-    page: keptArtifactPage,
+    // The pages', the decisions' and the preview browse's refusals, said
+    // again across the import cycle (each reaches the artifacts' deps).
+    page: async (instance, name, from, keep, artifact) => {
+      const built = await keptArtifactPage(
+        instance,
+        name,
+        from,
+        keep,
+        artifact
+      );
+      return built instanceof ElysiaStatus ? resaid(built) : built;
+    },
     afterLinks: async (projectId, name, cards) => {
       const links = await decisions.linksOf(projectId, name, cards);
-      return links instanceof ElysiaStatus
-        ? { status: links.status, refused: links.response.detail }
-        : links;
+      return links instanceof ElysiaStatus ? resaid(links) : links;
     },
     keepPage: async (instance, name, page) => {
       const refused = await keepPage(instance, name, page);
-      return refused && { status: refused.code, refused: refused.refused };
+      return refused && resaid(refused);
     },
     dropPage: async (instance, projectId, name) => {
       const refused = await dropPage(instance, projectId, name);
-      return refused && { status: refused.code, refused: refused.refused };
+      return refused && resaid(refused);
     },
     sending: async (to, artifact, page) => {
       // A step of the session's plan that waited on a card picked here stops waiting.
@@ -4651,28 +4644,36 @@ export const createServer = (
         await decisions.decide(artifact.projectId, artifact.name, artifact.id);
       }
       // A project's setup page: its name, shape and account applied before
-      // whoever hears it reads the picks.
-      await applySetupPicks(artifact, page, {
-        // Its name field's, account's and area's refusals are the send's to answer.
-        name: (projectId, name) => setupEdit(projectId, { name }),
-        account: (projectId, account) => setupEdit(projectId, { account }),
-        area: async (projectId, area) => {
-          const placed = await projectAreas.place(projectId, area);
-          if (placed instanceof ElysiaStatus) {
-            throw new PlaceRefusal(placed.status, placed.response.detail);
-          }
-        },
-        shape: async (projectId, template) => {
-          const shaped = await tasks.applyTemplate(
-            projectId,
-            template,
-            YOU_ACTOR
-          );
-          if (shaped instanceof ElysiaStatus) {
-            throw projectRefusalOf(shaped);
-          }
-        },
-      });
+      // whoever hears it reads the picks. The setup throws a place's
+      // refusal (setup.ts): the Send answers it.
+      try {
+        await applySetupPicks(artifact, page, {
+          // Its name field's, account's and area's refusals are the send's to answer.
+          name: (projectId, name) => setupEdit(projectId, { name }),
+          account: (projectId, account) => setupEdit(projectId, { account }),
+          area: async (projectId, area) => {
+            const placed = await projectAreas.place(projectId, area);
+            if (placed instanceof ElysiaStatus) {
+              throw new PlaceRefusal(placed.status, placed.response.detail);
+            }
+          },
+          shape: async (projectId, template) => {
+            const shaped = await tasks.applyTemplate(
+              projectId,
+              template,
+              YOU_ACTOR
+            );
+            if (shaped instanceof ElysiaStatus) {
+              throw projectRefusalOf(shaped);
+            }
+          },
+        });
+      } catch (error) {
+        if (error instanceof PlaceRefusal) {
+          return refusal(error.status, "setup-place-refused", error.message);
+        }
+        throw error;
+      }
     },
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
     followed: (instanceId) => streams.followerCount(instanceId) > 0,
@@ -4729,8 +4730,7 @@ export const createServer = (
         )?.addresses ?? []
       );
     },
-    previewAddress: (instanceId) =>
-      onPreviewPort(previewListeners.address(instanceId)),
+    previewAddress: (instanceId) => previewListeners.address(instanceId),
     // Its parent's, or its project's conversation's, as stop_delegate decides.
     delegatesIn: (instance, workspaceId) =>
       db
@@ -4744,26 +4744,43 @@ export const createServer = (
     workspaces: (needle) => db.workspacesNamed(needle),
     // A sheet runs on its workspace's stage, on that workspace's machine.
     stage: async (at, file, files, opening) => {
-      const { machineId, workspace, result } = await onStage(
+      const staged = await onStage(
         at,
         STAGE_ENSURE,
         files ? { file, files, opening } : file
       );
+      if (staged instanceof ElysiaStatus) {
+        return staged;
+      }
+      const { machineId, workspace, result } = staged;
       return { machineId, workspace, opened: result as StageOpened };
     },
     // A design system round asked of a component canvas in a chat; its verdict reaches the asker.
     verify: (requester, artifact) => designVerify.ask(requester, artifact),
     // A component canvas drawn by its workspace's daemon in the machine's own Chromium.
-    stageRender: async (at, ask) =>
-      (await onStage(at, STAGE_RENDER, ask)).result as StageRendered,
-    stageWrite: async (at, write) =>
-      (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
+    stageRender: async (at, ask) => {
+      const staged = await onStage(at, STAGE_RENDER, ask);
+      return staged instanceof ElysiaStatus
+        ? staged
+        : (staged.result as StageRendered);
+    },
+    stageWrite: async (at, write) => {
+      const staged = await onStage(at, STAGE_WRITE, write);
+      return staged instanceof ElysiaStatus
+        ? staged
+        : (staged.result as SheetWritten);
+    },
     // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.
     warmStage: async (at, warm) => {
-      await onStage(at, STAGE_WARM, warm);
+      const staged = await onStage(at, STAGE_WARM, warm);
+      return staged instanceof ElysiaStatus ? staged : undefined;
     },
-    stageComponents: async (at, ask) =>
-      (await onStage(at, STAGE_COMPONENTS, ask)).result as DesignMap,
+    stageComponents: async (at, ask) => {
+      const staged = await onStage(at, STAGE_COMPONENTS, ask);
+      return staged instanceof ElysiaStatus
+        ? staged
+        : (staged.result as DesignMap);
+    },
     // A preview handed up, loaded once on its own origin as its parent will
     // open it: its listener is the one that origin keeps.
     reachable: (row) => previewService.reachable(row),
@@ -4773,8 +4790,9 @@ export const createServer = (
     screen: async (artifact, sync) => {
       const machineId = await ownMachineId;
       if (!registry.agent(machineId)) {
-        throw new ArtifactRefusal(
+        return refusal(
           503,
+          "artifact-screen-no-daemon",
           `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
         );
       }
@@ -4782,7 +4800,7 @@ export const createServer = (
       const owner = artifact.instanceId as string;
       const local = previewListeners.local(owner);
       if (local instanceof ElysiaStatus) {
-        throw new ArtifactRefusal(local.status, local.response.detail);
+        return local;
       }
       const token = crypto.randomUUID();
       const open = {
@@ -4814,8 +4832,9 @@ export const createServer = (
               "late canvas screen close"
             );
           }
-          throw new ArtifactRefusal(
+          return refusal(
             503,
+            "artifact-screen-unopened",
             `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`
           );
         case "answered":
@@ -4824,8 +4843,9 @@ export const createServer = (
           throw unreachable(asked);
       }
       if (!asked.value.ok) {
-        throw new ArtifactRefusal(
+        return refusal(
           503,
+          "artifact-screen-unopened",
           `The canvas ${artifact.name} wasn't drawn: ${asked.value.error ?? "the hub's machine couldn't open it."}`
         );
       }
@@ -4859,13 +4879,15 @@ export const createServer = (
       );
       switch (asked.kind) {
         case "unanswered":
-          throw asked.reason === "dead"
-            ? new ArtifactRefusal(
+          return asked.reason === "dead"
+            ? refusal(
                 503,
+                "artifact-serve-machine-away",
                 "The workspace's machine isn't connected to the hub, so its server can't start."
               )
-            : new ArtifactRefusal(
+            : refusal(
                 504,
+                "artifact-serve-machine-late",
                 `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`
               );
         case "answered":
@@ -4875,8 +4897,9 @@ export const createServer = (
       }
       const answer = asked.value;
       if (!answer.ok) {
-        throw new ArtifactRefusal(
+        return refusal(
           422,
+          "artifact-serve-unstarted",
           answer.error ?? "The server didn't start."
         );
       }
@@ -4892,13 +4915,15 @@ export const createServer = (
       );
       switch (asked.kind) {
         case "unanswered":
-          throw asked.reason === "dead"
-            ? new ArtifactRefusal(
+          return asked.reason === "dead"
+            ? refusal(
                 503,
+                "artifact-folder-machine-away",
                 "The folder's machine isn't connected to the hub, so its folder can't be read."
               )
-            : new ArtifactRefusal(
+            : refusal(
                 504,
+                "artifact-folder-machine-late",
                 `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`
               );
         case "answered":
@@ -4908,8 +4933,9 @@ export const createServer = (
       }
       const answer = asked.value;
       if (!answer.ok) {
-        throw new ArtifactRefusal(
+        return refusal(
           422,
+          "artifact-folder-unread",
           answer.error ?? "The folder couldn't be read."
         );
       }
@@ -5012,6 +5038,13 @@ export const createServer = (
           const left = await Promise.all(
             pageSourcesOf(name).map((path) => folderText(projectId, path))
           );
+          const refused = left.find((text) => text instanceof ElysiaStatus);
+          if (refused instanceof ElysiaStatus) {
+            console.warn(
+              `[a project page whose source left its folder] failed: ${refused.response.detail}`
+            );
+            return;
+          }
           if (left.every((text) => text === undefined)) {
             artifacts.sourceGone(projectId, name);
             decisionsChanged(projectId);
@@ -8710,7 +8743,14 @@ export const createServer = (
         throw projectRefusalOf(changed);
       }
     },
-    folderText,
+    // The decisions throw a folder's refusal on as the ProjectRefusal they took.
+    folderText: async (projectId, path) => {
+      const text = await folderText(projectId, path);
+      if (text instanceof ElysiaStatus) {
+        throw projectRefusalOf(text);
+      }
+      return text;
+    },
     folderNames: async (projectId, path) => {
       const names = await folderFileNames(projectId, path);
       if (names instanceof ElysiaStatus) {
@@ -8732,29 +8772,8 @@ export const createServer = (
       };
     },
     projectExists: (projectId) => db.project(projectId) !== undefined,
-    // The artifact's refusal ("Nothing new to send…"), as the tab's route says it.
-    send: async (artifactId, route, to) => {
-      const sent = await artifacts.sendPage(artifactId, route, to).then(
-        (heard) => ({ heard }),
-        (error: unknown) => {
-          if (error instanceof ArtifactRefusal) {
-            return { refusal: error };
-          }
-          throw error;
-        }
-      );
-      if ("refusal" in sent) {
-        const { refusal: refused } = sent;
-        return {
-          status:
-            refused.status === 409 || refused.status === 404
-              ? refused.status
-              : 503,
-          refused: refused.message,
-        };
-      }
-      return sent.heard;
-    },
+    // The artifact's refusal ("Nothing new to send…") passes up as the tab's route's.
+    send: (artifactId, route, to) => artifacts.sendPage(artifactId, route, to),
     takeWrites: (artifactId, writes) =>
       takeSentWrites(artifactDocs, artifactId, writes),
     tasks: async (projectId) => {
@@ -11741,7 +11760,17 @@ export const createServer = (
               return false;
             }
             try {
-              await artifacts.revise(owner, artifactId, statements);
+              const revised = await artifacts.revise(
+                owner,
+                artifactId,
+                statements
+              );
+              if (revised instanceof ElysiaStatus) {
+                console.warn(
+                  `[decides] ${artifactId}: its cards did not move to ${to}: ${revised.response.detail}`
+                );
+                return false;
+              }
               return true;
             } catch (error) {
               console.warn(
