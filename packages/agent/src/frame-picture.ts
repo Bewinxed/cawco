@@ -20,23 +20,16 @@ import { withPngScale } from "@cawco/core/picture-scale";
 import type { FramePictureRead, Interaction } from "@cawco/core/stage";
 import type { Page } from "playwright-core";
 import { holdTimeAnimations } from "./chromium";
+import {
+  pictureNow,
+  poseNow,
+  roomHeld,
+  settledNow,
+  stateNamedNow,
+} from "./in-page/page";
 
 /** Why a state's picture can't be taken as it is, in words a tool answers. */
 class FramePictureRefusal extends Error {}
-
-/** What the stage answers for its pictures (stage-host canvas runtime.ts `CanvasState`, stage.ts). */
-interface Pictures {
-  __cawcoCanvas?: {
-    lacks?: (key: string) => { h: number; w: number } | null;
-    picture?: (key: string) => FramePictureRead | null;
-    pose?: (key: string) => Promise<{ h: number; w: number } | null>;
-    settled?: (key: string) => boolean;
-    stateNamed?: (
-      name: string,
-      interaction?: Interaction
-    ) => Promise<{ key: string } | { refused: string }>;
-  };
-}
 
 /**
  * The key of the state story `name` (`Story`, or `file:Story` where two
@@ -47,14 +40,10 @@ export async function findState(
   name: string,
   interaction: Interaction = "rest"
 ): Promise<string> {
-  const found = await page.evaluate(
-    ([story, state]) =>
-      (globalThis as unknown as Pictures).__cawcoCanvas?.stateNamed?.(
-        story,
-        state
-      ) ?? null,
-    [name, interaction] as const
-  );
+  const found = await page.evaluate(stateNamedNow, [
+    name,
+    interaction,
+  ] as const);
   if (!found) {
     throw new FramePictureRefusal("The page holds no stage.");
   }
@@ -78,10 +67,7 @@ export async function poseState(
   deadline: number
 ): Promise<void> {
   const left = () => Math.max(1, deadline - Date.now());
-  const pose = async (one: string) =>
-    (await (globalThis as unknown as Pictures).__cawcoCanvas?.pose?.(one)) ??
-    null;
-  const lacks = await page.evaluate(pose, key);
+  const lacks = await page.evaluate(poseNow, key);
   if (!lacks) {
     throw new FramePictureRefusal(`The stage draws no state ${key}.`);
   }
@@ -93,37 +79,18 @@ export async function poseState(
     };
     await page.setViewportSize(grown);
     // The stage lays the drawing out in the window as it stands: it has its room first.
-    await page
-      .waitForFunction(
-        (one) => {
-          const room = (
-            globalThis as unknown as Pictures
-          ).__cawcoCanvas?.lacks?.(one);
-          return !!room && room.w === 0 && room.h === 0;
-        },
-        key,
-        { timeout: left() }
-      )
-      .catch(() => {
-        throw new FramePictureRefusal(
-          `The stage never had the room for state ${key} at its own size, in a ${grown.width}×${grown.height} window.`
-        );
-      });
-    await page.evaluate(pose, key);
-  }
-  await page
-    .waitForFunction(
-      (one) =>
-        (globalThis as unknown as Pictures).__cawcoCanvas?.settled?.(one) ??
-        false,
-      key,
-      { timeout: left() }
-    )
-    .catch(() => {
+    await page.waitForFunction(roomHeld, key, { timeout: left() }).catch(() => {
       throw new FramePictureRefusal(
-        `State ${key} did not settle within the render's time: its fonts or animations are still going.`
+        `The stage never had the room for state ${key} at its own size, in a ${grown.width}×${grown.height} window.`
       );
     });
+    await page.evaluate(poseNow, key);
+  }
+  await page.waitForFunction(settledNow, key, { timeout: left() }).catch(() => {
+    throw new FramePictureRefusal(
+      `State ${key} did not settle within the render's time: its fonts or animations are still going.`
+    );
+  });
 }
 
 /** Lengths that differ by less than this are one length: layout's float noise, never a zoom. */
@@ -152,11 +119,7 @@ export async function statePicture(
   png: Buffer;
   read: FramePictureRead;
 }> {
-  const read = await page.evaluate(
-    (one) =>
-      (globalThis as unknown as Pictures).__cawcoCanvas?.picture?.(one) ?? null,
-    key
-  );
+  const read = await page.evaluate(pictureNow, key);
   if (!read) {
     throw new FramePictureRefusal(`The stage draws no state ${key}.`);
   }

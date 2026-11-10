@@ -34,7 +34,6 @@ import {
   type SectionUndrawn,
   STAGE_RENDER_MS,
   type StageRendered,
-  type SweepAt,
   sectionPlansOf,
 } from "@cawco/core/stage";
 import { stageRenderWords as words } from "@cawco/core/words/stage-render";
@@ -43,6 +42,7 @@ import type { Page } from "playwright-core";
 import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
 import { findState, poseState, statePicture } from "./frame-picture";
+import { sweepNow } from "./in-page/page";
 
 /** How long a render may take, Chromium's launch to its answer: one limit, which every wait of the render shares (the hub waits this long on it). */
 const RENDER_WAIT_MS = STAGE_RENDER_MS;
@@ -97,14 +97,15 @@ const send = (socket: Socket<Pipe>, bytes: Uint8Array): void => {
 };
 
 const drain = (socket: Socket<Pipe>): void => {
-  while (socket.data.pending.length > 0) {
-    const next = socket.data.pending[0] as Uint8Array;
+  let [next] = socket.data.pending;
+  while (next) {
     const wrote = socket.write(next);
     if (wrote < next.length) {
       socket.data.pending[0] = next.subarray(Math.max(0, wrote));
       return;
     }
     socket.data.pending.shift();
+    [next] = socket.data.pending;
   }
 };
 
@@ -186,39 +187,17 @@ const pageUrl = (origin: string, ask: RenderAsk): string => {
   return `${origin}${CANVAS_PATH}?${query}`;
 };
 
-/** What the page says of its sweep (runtime.ts `CanvasState`): the sections it takes and has drawn, where it stands, whether it is done. */
-interface CanvasOnPage {
-  __cawcoCanvas?: {
-    drawn: string[];
-    reports: number;
-    swept: boolean;
-    sweepAt: SweepAt | null;
-    sweeps: string[];
-  };
-}
-
-/** The page's sweep as last read: none before its runtime has booted. */
-type SweepRead = NonNullable<CanvasOnPage["__cawcoCanvas"]>;
+/** The page's sweep as last read: none before its runtime has booted (runtime.ts `CanvasState`). */
+type SweepRead = NonNullable<ReturnType<typeof sweepNow>>;
 
 /** The page's sweep now, within `ms`: null when the page has no canvas yet; `stopped` when it did not answer. */
 async function sweepOf(
   page: Page,
   ms: number
 ): Promise<SweepRead | null | "stopped"> {
-  const said = await readWithin(ms, () =>
-    page.evaluate(() => {
-      const state = (globalThis as unknown as CanvasOnPage).__cawcoCanvas;
-      return state
-        ? {
-            drawn: [...state.drawn],
-            reports: state.reports,
-            swept: state.swept,
-            sweepAt: state.sweepAt,
-            sweeps: [...state.sweeps],
-          }
-        : null;
-    })
-  ).catch(() => null);
+  const said = await readWithin(ms, () => page.evaluate(sweepNow)).catch(
+    () => null
+  );
   return said?.kind === "answered" ? said.value : "stopped";
 }
 
