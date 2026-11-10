@@ -801,8 +801,8 @@ suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/c
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/preview/PinCard.svelte	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/grown.ts	2
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/list-whole.svelte.ts	1
+suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/older-pages.svelte.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/queued-edit.svelte.ts	1
-suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/components/ui/hang-card/hang-card.svelte	2
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/hooks/follow-tail.ts	1
 suppression	biome-ignore lint/style/noRestrictedGlobals	apps/dashboard/src/lib/platform/frame-observer.ts	1
