@@ -327,7 +327,6 @@ as-unknown-as	new ( url: string, options: { headers: Record<string, string> } ) 
 as-unknown-as	new ( url: string, options: { headers: Record<string, string> } ) => Web	scripts/probe-kit/specs/hub-loopback.ts	1
 as-unknown-as	new ( url: string, options?: { headers: Record<string, string> } ) => We	scripts/probe-kit/specs/hub-auth.ts	1
 as-unknown-as	new ( url: string, options?: { headers: Record<string, string> } ) => We	scripts/scratch-fleet.ts	1
-as-unknown-as	Node[]	packages/agent/src/stage-host/story-file.ts	1
 as-unknown-as	number	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
 as-unknown-as	Octokit["request"]	packages/hub/src/github.ts	1
 as-unknown-as	Parameters< typeof lfsOffers.createLfsOffers >[0]["db"]	scripts/probe-kit/specs/host-lfs.ts	1

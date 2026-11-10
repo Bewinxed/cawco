@@ -109,11 +109,7 @@ import {
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { transformCode } from "@code-inspector/core";
-import {
-  originalPositionFor,
-  type SourceMapInput,
-  TraceMap,
-} from "@jridgewell/trace-mapping";
+import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import { parse as lex, init as lexerReady } from "es-module-lexer";
 import type {
   Connect,
@@ -1246,7 +1242,7 @@ function sourced(error: PageError): PageError {
   }
   let traced: ReturnType<typeof originalPositionFor>;
   try {
-    traced = originalPositionFor(new TraceMap(map as SourceMapInput), {
+    traced = originalPositionFor(new TraceMap(JSON.stringify(map)), {
       line: error.line,
       column: error.column - 1,
     });
