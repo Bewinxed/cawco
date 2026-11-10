@@ -486,6 +486,11 @@ const folderLeg = async (kit: Kit, root: string): Promise<void> => {
       notice: (...args) => notice(...args),
     })
     .track(offerId)
+    .then((tracked) =>
+      "answer" in tracked
+        ? tracked
+        : { answer: `refused: ${tracked.response.detail}`, commit: null }
+    )
     .catch((error: Error) => ({
       answer: `refused: ${error.message}`,
       commit: null,
