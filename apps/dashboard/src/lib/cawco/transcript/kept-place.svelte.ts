@@ -113,22 +113,26 @@ export const LANDING_HOLD_MS = 1500;
  */
 const FILLED_HOLD_MS = 500;
 export interface KeptPlaceHost {
-  atBottom: boolean;
   readonly findHere: ConversationFind;
-  readonly headStrip: HTMLElement | undefined;
   readonly jumping: boolean;
   readonly landed: boolean;
-  readonly lastTop: number;
-  lastWrite: number | null;
-  readonly list: VirtualizerHandle | undefined;
-  readonly listing: HTMLElement | undefined;
-  readonly listStart: number;
   readonly mounted: {
     readonly buffer: number;
     readonly unseen: boolean;
   };
   readonly older: {
     readonly paged: () => SessionState | null;
+  };
+  readonly pin: {
+    atBottom: boolean;
+    readonly headStrip: HTMLElement | undefined;
+    readonly lastTop: number;
+    lastWrite: number | null;
+    readonly list: VirtualizerHandle | undefined;
+    readonly listing: HTMLElement | undefined;
+    readonly listStart: number;
+    readonly scroller: HTMLElement | undefined;
+    readonly viewHeight: number;
   };
   readonly rowBuild: {
     readonly built: Built;
@@ -137,11 +141,9 @@ export interface KeptPlaceHost {
     readonly presentation: { readonly shifted: boolean };
     readonly renderedRows: Row[];
   };
-  readonly scroller: HTMLElement | undefined;
   readonly seeking: string | null;
   readonly session: SessionState;
   readonly shown: boolean;
-  readonly viewHeight: number;
   readonly visible: boolean;
   readonly whole: {
     readonly rooms: { foot: number; measured: boolean };
@@ -171,19 +173,19 @@ export class KeptPlace {
    */
   saveLanding = (): void => {
     if (
-      !(this.#host.list && this.#host.shown) ||
+      !(this.#host.pin.list && this.#host.shown) ||
       this.#host.rowDraw.renderedRows.length === 0
     ) {
       return;
     }
     sizes.set(this.landingFor, {
-      cache: this.#host.list.getCache(),
+      cache: this.#host.pin.list.getCache(),
       first: placeOf(this.#host.rowDraw.renderedRows[0]),
       count: this.#host.rowDraw.renderedRows.length,
     });
-    const place = this.#host.atBottom
+    const place = this.#host.pin.atBottom
       ? null
-      : (this.keptPlace ?? this.placeAt(this.#host.lastTop));
+      : (this.keptPlace ?? this.placeAt(this.#host.pin.lastTop));
     const landing: Landing = place ? { tail: false, ...place } : { tail: true };
     writeJson(LANDING + this.landingFor, landing, "session");
   };
@@ -217,11 +219,11 @@ export class KeptPlace {
    * virtua's sizes, never the page.
    */
   placeAt(top: number): { block: string; into: number } | null {
-    if (!this.#host.list || this.#host.rowDraw.renderedRows.length === 0) {
+    if (!this.#host.pin.list || this.#host.rowDraw.renderedRows.length === 0) {
       return null;
     }
     for (
-      let index = this.#host.list.findItemIndex(top);
+      let index = this.#host.pin.list.findItemIndex(top);
       index >= 0;
       index -= 1
     ) {
@@ -230,7 +232,9 @@ export class KeptPlace {
         return {
           block,
           into:
-            top - this.#host.listStart - this.#host.list.getItemOffset(index),
+            top -
+            this.#host.pin.listStart -
+            this.#host.pin.list.getItemOffset(index),
         };
       }
     }
@@ -246,15 +250,16 @@ export class KeptPlace {
    * transcript without moving it (find/conversation-find).
    */
   band(): { top: number; bottom: number } {
-    if (!this.#host.scroller) {
+    if (!this.#host.pin.scroller) {
       return { top: 0, bottom: 0 };
     }
-    const top = this.#host.headStrip
-      ? Number.parseFloat(getComputedStyle(this.#host.headStrip).paddingTop)
+    const top = this.#host.pin.headStrip
+      ? Number.parseFloat(getComputedStyle(this.#host.pin.headStrip).paddingTop)
       : 0;
-    let bottom = this.#host.scroller.clientHeight - this.#host.whole.rooms.foot;
+    let bottom =
+      this.#host.pin.scroller.clientHeight - this.#host.whole.rooms.foot;
     if (this.#host.findHere.open) {
-      const view = this.#host.scroller.getBoundingClientRect();
+      const view = this.#host.pin.scroller.getBoundingClientRect();
       const dock = document.querySelector<HTMLElement>(
         `[data-slot="dock"][data-find-view="${CSS.escape(this.#host.session.instanceId)}"]`
       );
@@ -279,7 +284,7 @@ export class KeptPlace {
   wordsAwaited: boolean;
 
   seekInto(index: number, terms: readonly string[]): number {
-    if (!(this.#host.list && this.#host.scroller)) {
+    if (!(this.#host.pin.list && this.#host.pin.scroller)) {
       return 0;
     }
     const { top, bottom } = this.band();
@@ -287,7 +292,7 @@ export class KeptPlace {
     const drawn = this.recordDrawn(index);
     if (!drawn) {
       this.wordsAwaited = terms.length > 0;
-      const size = this.#host.list.getItemSize(index);
+      const size = this.#host.pin.list.getItemSize(index);
       return size < room ? -(top + (room - size) / 2) : -top;
     }
     const itemTop = drawn.item.getBoundingClientRect().top;
@@ -321,7 +326,9 @@ export class KeptPlace {
   } | null {
     const row = this.#host.rowDraw.renderedRows[index];
     const drawn = row
-      ? this.#host.listing?.querySelector(`[data-row="${CSS.escape(row.key)}"]`)
+      ? this.#host.pin.listing?.querySelector(
+          `[data-row="${CSS.escape(row.key)}"]`
+        )
       : null;
     if (!(row && drawn && this.resume && "at" in this.resume)) {
       return null;
@@ -352,7 +359,7 @@ export class KeptPlace {
     if (!(this.resume && !this.resume.tail) || index < 0) {
       return false;
     }
-    this.#host.atBottom = false;
+    this.#host.pin.atBottom = false;
     return this.scrollToRow(
       index,
       "at" in this.resume
@@ -377,13 +384,17 @@ export class KeptPlace {
    * below it that are shorter now than when it was left — is its end.
    */
   scrollToRow(index: number, into: number): boolean {
-    if (!(this.#host.list && this.#host.scroller && this.#host.listing)) {
+    if (!(
+      this.#host.pin.list &&
+      this.#host.pin.scroller &&
+      this.#host.pin.listing
+    )) {
       return false;
     }
     const start =
-      this.#host.listing.getBoundingClientRect().top -
-      this.#host.scroller.getBoundingClientRect().top +
-      this.#host.scroller.scrollTop;
+      this.#host.pin.listing.getBoundingClientRect().top -
+      this.#host.pin.scroller.getBoundingClientRect().top +
+      this.#host.pin.scroller.scrollTop;
     // Never past the row's own end as virtua has it sized: a row it has not
     // measured is `ROW_ESTIMATE` tall, and a place further into it than that
     // put the row above the view, where it is never drawn, never measured,
@@ -392,7 +403,7 @@ export class KeptPlace {
     // write goes as far into it as the place says.
     const reach = Math.min(
       into,
-      Math.max(0, this.#host.list.getItemSize(index) - 1)
+      Math.max(0, this.#host.pin.list.getItemSize(index) - 1)
     );
     // Rounded to a whole pixel: WebKit drops the fraction of a `scrollTop`
     // written to it, so 2075.72 landed at 2075, and with the row's own snap
@@ -401,11 +412,12 @@ export class KeptPlace {
     // at most.
     const target = Math.round(
       Math.min(
-        Math.max(0, start + this.#host.list.getItemOffset(index) + reach),
-        this.#host.scroller.scrollHeight - this.#host.scroller.clientHeight
+        Math.max(0, start + this.#host.pin.list.getItemOffset(index) + reach),
+        this.#host.pin.scroller.scrollHeight -
+          this.#host.pin.scroller.clientHeight
       )
     );
-    const now = this.#host.scroller.scrollTop;
+    const now = this.#host.pin.scroller.scrollTop;
     if (
       Math.abs(now - target) <= 0.5 ||
       (this.placeWrite !== null &&
@@ -414,9 +426,9 @@ export class KeptPlace {
     ) {
       return false;
     }
-    this.#host.scroller.scrollTop = target;
-    this.#host.lastWrite = this.#host.scroller.scrollTop;
-    this.placeWrite = { target, read: this.#host.lastWrite };
+    this.#host.pin.scroller.scrollTop = target;
+    this.#host.pin.lastWrite = this.#host.pin.scroller.scrollTop;
+    this.placeWrite = { target, read: this.#host.pin.lastWrite };
     return true;
   }
 
@@ -468,7 +480,7 @@ export class KeptPlace {
     if (
       now < this.holdUntil &&
       !this.#host.mounted.unseen &&
-      this.#host.mounted.buffer < this.#host.viewHeight * BUFFER_SCREENS
+      this.#host.mounted.buffer < this.#host.pin.viewHeight * BUFFER_SCREENS
     ) {
       this.holdUntil = Math.max(this.holdUntil, now + FILLED_HOLD_MS);
     }
@@ -480,7 +492,7 @@ export class KeptPlace {
     const place = this.keptPlace;
     if (
       !(place && this.#host.landed && this.#host.shown) ||
-      this.#host.atBottom ||
+      this.#host.pin.atBottom ||
       this.#host.jumping ||
       this.#host.seeking !== null ||
       (this.resume !== null && !this.resume.tail)
@@ -493,13 +505,13 @@ export class KeptPlace {
       this.keepFrame = requestAnimationFrame(() => {
         this.keepFrame = 0;
         // The reader moved since, or the view follows the tail again.
-        if (this.#host.atBottom || this.readerMoved !== moved) {
+        if (this.#host.pin.atBottom || this.readerMoved !== moved) {
           return;
         }
         // The row at the view's top first: it is the place's unless the list
         // moved under it, and the whole list is read for it only then.
-        const top = this.#host.list
-          ? this.#host.list.findItemIndex(this.#host.lastTop)
+        const top = this.#host.pin.list
+          ? this.#host.pin.list.findItemIndex(this.#host.pin.lastTop)
           : -1;
         const index =
           top >= 0 &&

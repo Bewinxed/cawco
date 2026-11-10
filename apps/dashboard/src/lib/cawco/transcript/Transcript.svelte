@@ -12,14 +12,7 @@
    * genuine arrivals — and blocked-on-you — through a dedicated live region
    * beside the log, never through the virtualized container itself.
    */
-  import {
-    flushSync,
-    onDestroy,
-    type Snippet,
-    setContext,
-    tick,
-    untrack,
-  } from "svelte";
+  import { type Snippet, setContext, tick, untrack } from "svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -28,26 +21,18 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconChat } from "#lib/icons.js";
   import {
-    type FrameObserver,
-    frameObserver,
-    frameSize,
-  } from "#lib/platform/frame-observer.js";
-  import {
     crossIn,
     dur,
     motionOk,
     rise,
   } from "#lib/platform/motion/curves.svelte.js";
   import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
-  import { carry } from "#lib/platform/motion/share.svelte.js";
   import { track } from "#lib/platform/track.js";
   import { stopWords } from "../accounts/switch.svelte";
-  import { devNote } from "../dev-debug";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
   import { findIn } from "../find/conversation-find.svelte";
   import { markFind, rangesOf } from "../find/find-marks";
-  import { noteChange } from "../repeated-keys";
   import { provideSessionHere } from "../session-here";
   import { boardStore } from "../stores/board.svelte";
   import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
@@ -92,6 +77,7 @@
   import type { Row } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
+  import { FAR_FROM_LATEST, SCROLL_KEYS, ScrollPin } from "./scroll-pin.svelte";
   import { SendSlides } from "./send-slides.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
@@ -215,20 +201,11 @@
     get active() {
       return active;
     },
-    get atBottom() {
-      return atBottom;
-    },
-    set atBottom(value) {
-      atBottom = value;
-    },
-    get endMoved() {
-      return endMoved;
-    },
     get findHere() {
       return findHere;
     },
-    get headStrip() {
-      return headStrip;
+    get followBottom() {
+      return followBottom;
     },
     get isFocused() {
       return isFocused;
@@ -236,41 +213,23 @@
     get jumping() {
       return jumping;
     },
+    get jumpScrolled() {
+      return jumpScrolled;
+    },
     get landed() {
       return landed;
     },
-    get landingAway() {
-      return landingAway;
+    get landingFrame() {
+      return landingFrame;
     },
-    get lastTop() {
-      return lastTop;
+    get letGo() {
+      return letGo;
     },
-    get lastWrite() {
-      return lastWrite;
+    get marked() {
+      return marked;
     },
-    set lastWrite(value) {
-      lastWrite = value;
-    },
-    get list() {
-      return list;
-    },
-    get listing() {
-      return listing;
-    },
-    get listStart() {
-      return listStart;
-    },
-    get pinBottom() {
-      return pinBottom;
-    },
-    get pinned() {
-      return pinned;
-    },
-    get pinNext() {
-      return pinNext;
-    },
-    get scroller() {
-      return scroller;
+    get parkedHeight() {
+      return parkedHeight;
     },
     get seeking() {
       return seeking;
@@ -281,8 +240,8 @@
     get shown() {
       return shown;
     },
-    get viewHeight() {
-      return viewHeight;
+    get unfound() {
+      return unfound;
     },
     get visible() {
       return visible;
@@ -305,8 +264,14 @@
     get whole(): ListWhole {
       return whole;
     },
+    get keeper(): KeptPlace {
+      return keeper;
+    },
     get older(): OlderPages {
       return older;
+    },
+    get pin(): ScrollPin {
+      return pin;
     },
   };
 
@@ -356,53 +321,8 @@
 
   const mounted = new MountedRows(host);
 
-  let scroller = $state<HTMLElement | undefined>();
-  /**
-   * The scroller's height: what sets how far past the view virtua mounts
-   * rows (its `bufferSize`, `BUFFER_SCREENS` of it), so a row is measured
-   * well before the reader reaches it.
-   * virtua takes up a row's change of size for the reader only while the row
-   * is wholly above the view; scrolling up, a row it had only estimated
-   * (`ROW_ESTIMATE`) that came into view unmeasured — any page put in front,
-   * met by a wheel longer than its default 200px — grew there and pushed
-   * the rows under it down by the difference. Read as the scroller mounts,
-   * and a change in the next frame (frameSize): the rows it mounts lay the
-   * list out again.
-   */
-  let viewHeight = $state(0);
-  const measureView = frameSize(
-    (node: HTMLElement) => node.clientHeight,
-    (value) => {
-      viewHeight = value;
-    }
-  );
-  /** virtua's imperative handle: its sizes, its cache, and `scrollToIndex` for
-      a row that is not the tail (the tray's reveal). */
-  let list = $state<VirtualizerHandle | undefined>();
-  /** The box around the list; its first child is virtua's container. */
-  let listing = $state<HTMLElement>();
-  /** The strip before the list: its top padding is the head's room (`headRoom`). */
-  let headStrip = $state<HTMLElement>();
-  /** The room past the end for what rises past the composer (the markup). */
-  let parkedRoom = $state<HTMLElement>();
   const whole = new ListWhole(host);
 
-  let atBottom = $state(true);
-  /** How many screens from the tail the reader goes before "Jump to latest"
-      shows; our own call, no source sets it. */
-  const FAR_FROM_LATEST = 0.75;
-  /** Past FAR_FROM_LATEST screens from the tail, and not back at it since. */
-  let farFromLatest = $state(false);
-
-  /**
-   * Where the reader was, as the scroll handler last saw it. A pane hides
-   * inside whatever task hid it — a finger lifting off a swipe between tabs
-   * — and reading the scroller there forced a layout into that task; what the
-   * landing keeps is already known without asking.
-   */
-  let lastTop = 0;
-  /** Where the list begins in the scroller, as the scroll handler last saw it. */
-  let listStart = 0;
   const keeper = new KeptPlace(host);
 
   // ── Opened at a record ────────────────────────────────────────────────
@@ -503,15 +423,16 @@
       ? null
       : { key: rowDraw.renderedRows[index].key, state: "on" };
     // The record opened at is the place now, as a reader's scroll to it is.
-    keeper.keptPlace = keeper.placeAt(lastTop);
+    keeper.keptPlace = keeper.placeAt(pin.lastTop);
     // The finder's own words for the key that brought the reader here
     // ("↵ open at that line", docs/tom/find-and-mention-chosen.md).
     if (!found) {
       announcement = "Opened at that line.";
     }
-    if (scroller) {
-      const distance = tailTop(scroller) - scroller.scrollTop;
-      farFromLatest = distance > FAR_FROM_LATEST * scroller.clientHeight;
+    if (pin.scroller) {
+      const distance = pin.tailTop(pin.scroller) - pin.scroller.scrollTop;
+      pin.farFromLatest =
+        distance > FAR_FROM_LATEST * pin.scroller.clientHeight;
     }
   }
 
@@ -546,9 +467,9 @@
       untrack(() => {
         keeper.resume = null;
         seeking = null;
-        atBottom = true;
-        farFromLatest = false;
-        pinBottom();
+        pin.atBottom = true;
+        pin.farFromLatest = false;
+        pin.pinBottom();
         arrived(docId);
       });
       return;
@@ -571,7 +492,7 @@
       });
     };
     untrack(() => {
-      stopFollow();
+      pin.stopFollow();
       arrivals.tickets.clear();
       step();
     });
@@ -600,7 +521,7 @@
   // A press or a key in the transcript is the reader's, as their scroll is
   // (`onscroll`).
   $effect(() => {
-    const node = scroller;
+    const node = pin.scroller;
     if (!(node && (marked?.state === "on" || unfound))) {
       return;
     }
@@ -613,652 +534,9 @@
   });
   const older = new OlderPages(host);
 
-  /** The scroll height the last scroll event saw — what tells a clamp from a reader. */
-  let lastHeight = 0;
-  /**
-   * THE READER'S SCROLL FOLLOWS THE READER'S INPUT. A scroll is theirs only
-   * while their own input is under way — a wheel, a finger, a key that moves
-   * the view, a mouse press (the scrollbar's, a selection dragged past an
-   * edge) — and for `FLING_MS` after it ends, so a
-   * fling's momentum and a key's smooth scroll are still theirs; each scroll
-   * of theirs in that time holds it on. Any other scroll is the list's own
-   * (virtua keeping the rows on screen where they stand while rows above
-   * them measure), and moves nothing of the reader's. Told by where the rows
-   * stand instead, an iPhone's landing let go of its place: virtua 0.53.4
-   * there holds back its correction for rows measured above the view while
-   * the view counts as scrolling, which the landing's own writes start
-   * (`p() && 0 !== I ? b += t : S += t`), and writes it with `scrollBy` when
-   * its 150ms scroll-end timer fires; while it is pending `getItemOffset`
-   * subtracts it and `findItemIndex` does not, so the row read at the view's
-   * top stood hundreds of pixels above it, and the correction's own scroll,
-   * 172–252ms after the landing's last write, read as the reader's in 14 of
-   * 20 landings (transcript-cold-load demo, WebKit at 390).
-   */
-  let inputOn = false;
-  /** The timer that ends `inputOn` once the input has ended. */
-  let inputOff: ReturnType<typeof setTimeout> | undefined;
-  /** How long a scroll is still the reader's once their input ends, ms: a fling's momentum. Our own call. */
-  const FLING_MS = 1000;
-  function inputBegins(): void {
-    clearTimeout(inputOff);
-    inputOff = undefined;
-    inputOn = true;
-  }
-  /** The input ended: what it scrolls is the reader's for `FLING_MS` more. */
-  function inputEnds(): void {
-    clearTimeout(inputOff);
-    inputOff = setTimeout(() => {
-      inputOn = false;
-      inputOff = undefined;
-    }, FLING_MS);
-  }
-  /** Keys that move the view: the scroll keys, and Tab bringing what it focuses into view. */
-  const movesView = (key: string): boolean =>
-    SCROLL_KEYS.has(key) || key === "Tab";
-  /** The reader's input on the scroller, and on the page for keys and a press let go anywhere. */
-  function readerInput(node: HTMLElement): () => void {
-    const options = { passive: true } as const;
-    const wheel = (): void => {
-      inputBegins();
-      inputEnds();
-    };
-    const touch = (): void => inputBegins();
-    const lift = (event: TouchEvent): void => {
-      if (event.touches.length === 0) {
-        inputEnds();
-      }
-    };
-    // A finger is read by its touch events: its pointer is cancelled as the
-    // scroll takes it over, ahead of the scroll it makes.
-    const press = (event: PointerEvent): void => {
-      if (event.pointerType === "mouse") {
-        inputBegins();
-      }
-    };
-    const release = (event: PointerEvent): void => {
-      if (event.pointerType === "mouse" && inputOn) {
-        inputEnds();
-      }
-    };
-    const key = (event: KeyboardEvent): void => {
-      const target = event.target as Node | null;
-      if (
-        movesView(event.key) &&
-        (target === document.body || node.contains(target))
-      ) {
-        inputBegins();
-      }
-    };
-    const keyUp = (event: KeyboardEvent): void => {
-      if (movesView(event.key) && inputOn) {
-        inputEnds();
-      }
-    };
-    node.addEventListener("wheel", wheel, options);
-    node.addEventListener("touchstart", touch, options);
-    node.addEventListener("touchmove", touch, options);
-    node.addEventListener("touchend", lift, options);
-    node.addEventListener("touchcancel", lift, options);
-    node.addEventListener("pointerdown", press, options);
-    addEventListener("pointerup", release, options);
-    addEventListener("pointercancel", release, options);
-    addEventListener("keydown", key, options);
-    addEventListener("keyup", keyUp, options);
-    return () => {
-      clearTimeout(inputOff);
-      node.removeEventListener("wheel", wheel);
-      node.removeEventListener("touchstart", touch);
-      node.removeEventListener("touchmove", touch);
-      node.removeEventListener("touchend", lift);
-      node.removeEventListener("touchcancel", lift);
-      node.removeEventListener("pointerdown", press);
-      removeEventListener("pointerup", release);
-      removeEventListener("pointercancel", release);
-      removeEventListener("keydown", key);
-      removeEventListener("keyup", keyUp);
-    };
-  }
-  /**
-   * The frame a pane is shown in, from `visible` rising to the task after
-   * that frame's rendering. The scroll event its scroller fires there (the
-   * offset it was put away at, taken back as it is drawn) is read after the
-   * frame, in that task (`onscroll`): read in the event, its offset, height
-   * and boxes forced a style pass of their own ahead of the frame's (two
-   * panes, a focus switch: "style 365 by" the handler before the frame's
-   * 1089), and a switch restyled past what it shows. Nobody is scrolling a
-   * pane in the frame it appears in, so every other scroll is read in its
-   * event, where the reader's own scroll is told from this component's
-   * writes before the next frame's follow can land over it.
-   */
-  let showing = false;
-  /** The frame and the task a scroll held in a pane's showing frame is read in. */
-  let heldFrame = 0;
-  let heldTask: ReturnType<typeof setTimeout> | undefined;
-  $effect(() => {
-    if (!visible) {
-      return;
-    }
-    showing = true;
-    let task: ReturnType<typeof setTimeout> | undefined;
-    const frame = requestAnimationFrame(() => {
-      task = setTimeout(() => {
-        showing = false;
-      });
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(task);
-      showing = false;
-    };
-  });
-  $effect(() => () => {
-    cancelAnimationFrame(heldFrame);
-    clearTimeout(heldTask);
-  });
-  /**
-   * A scroll, as virtua's own scroll handler hands it on (its `onscroll`):
-   * the offset it has just read off the scroller. That read is virtua's,
-   * and it lays out whatever the tasks before the event wrote; read here
-   * behind it, the scroller's height and boxes are that same layout, read
-   * again for nothing. Read as the event's own listener instead, ahead of
-   * virtua's, they were the read that laid it out (`readScroll`, Layout
-   * 17.1ms in a 107ms task: a reply's long frames).
-   */
-  function onListScroll(offset: number): void {
-    noteChange("transcript scroll");
-    mounted.awayScroll = 0;
-    if (mounted.aside.size > 0) {
-      mounted.liftInView(offset);
-    }
-    if (!showing) {
-      readScroll(offset);
-      return;
-    }
-    if (heldFrame === 0) {
-      heldFrame = requestAnimationFrame(() => {
-        heldTask = setTimeout(() => {
-          heldFrame = 0;
-          readScroll(list?.getScrollOffset() ?? offset);
-        });
-      });
-    }
-  }
-  /** What a scroll to `offset` did (`onListScroll`). */
-  function readScroll(offset: number): void {
-    if (!(scroller && list && landed)) {
-      return;
-    }
-    lastTop = offset;
-    giveRoomBack(scroller, offset);
-    // A far landing's scroll: what it left and the screen above follow.
-    if (mounted.narrow) {
-      mounted.catchUpRest();
-    }
-    const height = scroller.scrollHeight;
-    const shrank = height < lastHeight;
-    lastHeight = height;
-    listStart =
-      (listing?.getBoundingClientRect().top ?? 0) -
-      scroller.getBoundingClientRect().top +
-      offset;
-    // Until the reveal the list is laid out but not painted: nothing on it
-    // is the reader's to have scrolled. virtua's own writes land here while
-    // it measures the rows the store's read brings in — untagged, and at a
-    // cold load on a phone one of them left 5,400px of tail under the
-    // landing, read as the reader scrolling up, and the transcript opened
-    // stranded there with the follow let go.
-    if (!shown) {
-      return;
-    }
-    // Wherever the view now is, and whoever moved it: near the first rows
-    // held, the page before them is asked for.
-    older.askOlder(lastTop - listStart);
-    if (jumping) {
-      jumpScrolled(scroller);
-      return;
-    }
-    // Every write this component makes is tagged with the position it wrote.
-    // An event that matches the tag is our OWN motion — the paced follow, or
-    // the pin holding the bottom while a row opens — and says nothing about
-    // where the reader is looking, even under their finger. Neither does the
-    // browser clamping the offset because the content under it got shorter
-    // (a tail row folding shut): that event comes with a smaller scroll
-    // height and leaves the offset at its end. Nor does any scroll that
-    // follows none of the reader's input (`inputOn`): virtua keeping the rows
-    // on screen where they are while rows above them change size, measured
-    // as they mount under a ride to the tail or a landing, a history chunk
-    // put in front. Taken for the reader, one of those let go of the tail in
-    // the middle of a returning pane's catch-up and left it 2,800px short for
-    // good. A scroll their input makes is the READER: wheel, scrollbar drag,
-    // keyboard, a finger, its momentum and its bounce.
-    const clamped = shrank && offset >= height - scroller.clientHeight - 1;
+  const pin = new ScrollPin(host);
 
-    if (
-      (lastWrite !== null && Math.abs(offset - lastWrite) <= 1) ||
-      clamped ||
-      !inputOn
-    ) {
-      return;
-    }
-    // A fling goes on after the finger lifts: each scroll of it holds on.
-    if (inputOff !== undefined) {
-      inputEnds();
-    }
-    // Each scroll taken for the reader's, for a probe to count (dev only).
-    if (import.meta.env.DEV) {
-      devNote("readerScrolls", { view: session.instanceId, top: offset });
-    }
-    keeper.readerMoved += 1;
-    keeper.holdUntil = 0;
-    keeper.keptPlace = keeper.placeAt(lastTop);
-    stopFollow();
-    // A row the reader scrolls to is not arriving, whenever it came in: what
-    // is still waiting to mount is theirs to read, not ours to play.
-    arrivals.tickets.clear();
-    if (marked?.state === "on" || unfound) {
-      letGo();
-    }
-    // The reader's scroll has the screen until it comes to rest: nothing
-    // writes the scroll offset under a finger, its momentum or its bounce,
-    // however near the tail it moves. The tail is taken back at rest, and
-    // only there (`onscrollend`).
-    atBottom = false;
-    const tail = tailTop(scroller);
-    const distance = tail - offset;
-    // Reaching the end marks where it stood; the reader is at the tail for
-    // as long as they stay at or past that mark (into the parked room
-    // included). Rows arriving while the scroll bounces off the end move the
-    // end on, and the bounce settles short of it, at the end the reader
-    // reached.
-    if (distance <= TAIL_SLACK) {
-      tailMark = tail;
-    } else if (tailMark !== null && offset < tailMark - TAIL_SLACK) {
-      tailMark = null;
-    }
-    restsAtTail = tailMark !== null;
-    // Hysteresis: up past the far mark, and it stays until back at the tail.
-    farFromLatest =
-      !restsAtTail &&
-      (farFromLatest || distance > FAR_FROM_LATEST * scroller.clientHeight);
-  }
-
-  /**
-   * Where the reader's own scrolling last left the view, until it comes to
-   * rest: at the tail, or away from it. Null once a rest has read it, and
-   * while nothing of the reader's has moved the view since.
-   */
-  let restsAtTail: boolean | null = null;
-  /** The offset of the end as it stood when the reader's scroll last reached it. */
-  let tailMark: number | null = null;
-  /** How far off the bottom still counts as the tail: a pixel's rounding. */
-  const TAIL_SLACK = 1;
-
-  /**
-   * The scroll has come to rest. virtua says so 150ms after the last scroll
-   * event, and never while a finger is on the screen, so a drag, the
-   * momentum after it and the bounce at the end are one scroll. A reader
-   * who comes to rest at the tail is following it again; anywhere else,
-   * they stay where they are.
-   */
-  function onscrollend(): void {
-    if (restsAtTail === null || jumping) {
-      return;
-    }
-    const tail = restsAtTail;
-    restsAtTail = null;
-    tailMark = null;
-    if (tail) {
-      atBottom = true;
-      farFromLatest = false;
-      followBottom();
-    }
-  }
-
-  /**
-   * The tail is the scroller's own maximum, past the padding band under the
-   * list, which is exactly the height of the composer column: the last row
-   * fully in view, above the floating composer stack. (`scrollToIndex(…,
-   * 'end')` seats the last row's foot on the VIEWPORT's foot, behind the
-   * composer: virtua's box math stops at the list.)
-   */
-  /** The frame the next write to the tail is waiting for, and this
-   *  component's LAST WRITE — the tag that tells its own scroll events from
-   *  the reader's while their input is under way (`inputOn`). */
-  let following: number | null = null;
   let landingFrame: number | null = null;
-  // Null until the first write: a number here (it was -1) is within a pixel
-  // of the top, and the reader's scroll to 0 read as our own write.
-  let lastWrite: number | null = null;
-  function stopFollow(): void {
-    if (following !== null) {
-      cancelAnimationFrame(following);
-    }
-    following = null;
-  }
-
-  /**
-   * A PINNED TRANSCRIPT STAYS PINNED. While the reader is at the tail, the
-   * tail is where the view is, every frame: what arrives there moves by its
-   * own entrance (a row's reserve and cascade), not by the scroll. The
-   * follow used to ride to a new tail over --dur-panel, which left every
-   * landing up to 24px short for a quarter of a second — on 450 streamed
-   * frames, 16 of them more than a pixel off. It yields to the reader in
-   * `onscroll`: any scroll that moves what is on screen lets go.
-   */
-  /**
-   * WHILE A ROW OPENS, ITS EDGE IS THE SCROLL.
-   *
-   * A tool call opens its own height (`Row`'s `open`), a reasoning block
-   * folds, a failed send's reason unfolds: the bottom of the list moves on
-   * every frame of the motion. virtua measures the row on every one of those
-   * frames, so the pin (`onresize`, below) puts the view back in the frame
-   * the row grew: the row's growth is what moves it. One motion, at the row's
-   * own curve.
-   */
-
-  /**
-   * THE TAIL IS THE LIST'S END, NOT THE SCROLLER'S. The parked room past the
-   * end (an ask the composer grows into, an offer on its tray row) is room
-   * the reader may scroll into, never a place the view is taken: at the
-   * tail the last row stands on the foot whether a card is parked over it
-   * or not, so a card parking or leaving moves no row (owner, a7443251: "it
-   * shouldn't push the transcript up"; the composer's surface brief, The Composer Layer Rule).
-   * Read after the layout the scroll height has just forced, as laid out.
-   */
-  function tailTop(node: HTMLElement): number {
-    const parked = parkedRoom?.getBoundingClientRect().height ?? 0;
-    return node.scrollHeight - node.clientHeight - parked;
-  }
-
-  /**
-   * A CARD THAT LEAVES TAKES NO ROOM FROM UNDER THE READER. The reader who
-   * scrolled into the parked room (to read the last row over the card)
-   * stands that far into it; the card going shrinks the room, and the
-   * browser would clamp the view back up by the difference, moving every
-   * row. So the room is held at where they stand (`heldRoom`) as the card
-   * leaves, and given back only as they scroll out of it (`readScroll`): the
-   * end moves with them, and nothing clamps.
-   */
-  let heldRoom = $state(0);
-  const roomHeight = $derived(Math.max(parkedHeight, heldRoom));
-  $effect.pre(() => {
-    const next = parkedHeight;
-    untrack(() => {
-      if (!(scroller && parkedRoom)) {
-        return;
-      }
-      if (next >= parkedRoom.getBoundingClientRect().height) {
-        return;
-      }
-      const into = scroller.scrollTop - tailTop(scroller);
-      heldRoom = into > next ? into : 0;
-    });
-  });
-  /** A room held open under a reader gives itself back as they scroll out of it (to `offset`), never under them. */
-  function giveRoomBack(node: HTMLElement, offset: number): void {
-    if (heldRoom > 0) {
-      const into = offset - tailTop(node);
-      heldRoom = into > parkedHeight ? into : 0;
-    }
-  }
-
-  /**
-   * Pin the viewport to the bottom. Called from the list's own resize (see the
-   * pin below), after virtua has laid the list out and before the frame is
-   * painted, so the viewport and the opening row move on the same frame.
-   */
-  function pinBottom(): void {
-    if (!scroller) {
-      return;
-    }
-    const bottom = tailTop(scroller);
-    // At the tail already, or past it in the parked room: where the view
-    // stands is the pin's, and its scroll (the browser clamping a list that
-    // got shorter under it) is told from the reader's by it (`lastWrite`).
-    if (bottom - scroller.scrollTop <= 0.5) {
-      lastWrite = scroller.scrollTop;
-      return;
-    }
-    // Short of the tail, it is put there.
-    const was = scroller.scrollTop;
-    if (bottom - was > scroller.clientHeight) {
-      // Drawn already: its rows are built first (`stageFar`), and the
-      // pin lands once they are.
-      if (
-        list &&
-        shown &&
-        rowDraw.renderedRows.length > 0 &&
-        !mounted.stagedReady
-      ) {
-        mounted.stageFar();
-        return;
-      }
-      mounted.landFar(was);
-    }
-    scroller.scrollTop = bottom;
-    lastWrite = scroller.scrollTop;
-    // A send landing at the tail is carried through the pin. The pin runs
-    // once the list has measured the row it drew, a frame after that row
-    // was first drawn and its flight begun; lifted with the list in that
-    // one frame, the flight lost most of its way on a phone, where the tail
-    // sits right over the composer (33px of flight, 114px of jump on iOS).
-    if (listing) {
-      carry(listing, was - scroller.scrollTop);
-      slides.carrySlides(scroller.scrollTop - was);
-    }
-  }
-
-  /** A thinking row opening or closing on the kit's reveal. */
-  const isThinking = (event: Event): boolean =>
-    !!(event.target as Element).closest('[data-slot="thinking-steps-content"]');
-
-  /**
-   * A disclosure the READER opens — a tool's body, a branch, a note — holds
-   * its header where they clicked it and opens downward. Riding the bottom
-   * through it scrolled the header they had just clicked off the top of the
-   * view; so the transcript lets go of the tail instead, exactly as if they
-   * had scrolled. A reasoning block folding shut is the transcript's own
-   * motion, and keeps the pin.
-   */
-  function onrevealstart(event: Event): void {
-    if (
-      !isThinking(event) &&
-      (event.target as Element).getAttribute("data-state") === "open"
-    ) {
-      stopFollow();
-      arrivals.tickets.clear();
-      atBottom = false;
-    }
-  }
-
-  $effect(() => {
-    const node = scroller;
-    if (!node) {
-      return;
-    }
-    node.addEventListener("revealstart", onrevealstart);
-    return () => {
-      node.removeEventListener("revealstart", onrevealstart);
-      if (landingFrame !== null) {
-        cancelAnimationFrame(landingFrame);
-      }
-      clearTimeout(landingAway);
-      landingAway = undefined;
-      stopFollow();
-    };
-  });
-
-  /**
-   * Whether the tail is this transcript's to hold: landed at it, the reader
-   * still there, no jump gliding to it. A pane being worked in holds it for
-   * as long as the reader stays; a pane beside it (the grid) holds it only
-   * until its list is first drawn — its landing, which no scroll of virtua's
-   * chases for it any more — and from then on keeps where it stands while
-   * its rows come in on the scheduler's turns, as it always has.
-   */
-  const pinned = (): boolean =>
-    landed && atBottom && !jumping && (active || !shown);
-
-  /**
-   * A PANE PUT AWAY AT ITS TAIL IS LAID OUT AT ITS TAIL.
-   *
-   * Put away, a pane is skipped (PaneLeaf `.pane-hidden`): its rows are built
-   * on the scheduler's turns but never measured, so nothing moves its view,
-   * and minutes of a busy session leave the view it was put away at screens
-   * above its end (2,400px after 3 min, tab-return 1b). Started by the
-   * press, the far landing that distance makes (`stageFar`, `landFar`) ran
-   * in front of the reader: each step's measurement pinned again in virtua's
-   * observer, a layout forced behind the rows it had just flushed, 20ms a
-   * frame for 300ms, and the landing's own frame 35ms. The reach lays the
-   * pane out unseen first (warm.svelte.ts), and virtua measures its rows
-   * there: the landing starts then, its steps out of sight, so the press
-   * finds a pane at its tail holding the rows of that view. Only from
-   * virtua's observer,
-   * which a skipped pane never hears (Chromium delivers no ResizeObserver
-   * entry inside `content-visibility: hidden`, and a scroll write there lays
-   * the subtree out to land): a read of the page in a pane put away would lay
-   * it out. And in a task of its own behind the frame that measured: that
-   * frame already styles every element the pane holds.
-   */
-  const awayAtTail = (): boolean => landed && atBottom && !jumping && !visible;
-  let landingAway: ReturnType<typeof setTimeout> | undefined;
-  function landAway(): void {
-    landingAway ??= setTimeout(() => {
-      landingAway = undefined;
-      if (awayAtTail()) {
-        const was = scroller?.scrollTop;
-        if (whole.keepWhole()) {
-          flushSync();
-        }
-        pinBottom();
-        if (scroller && scroller.scrollTop !== was) {
-          mounted.awayScroll = 2;
-        }
-      }
-    });
-  }
-
-  /**
-   * THE PIN. While the reader is at the tail, the list getting taller is
-   * followed, by this and nothing else: one writer of the tail's offset, in
-   * the frame the list grew.
-   *
-   * A row growing (an answer streaming in, a row arriving, a row opening or
-   * settling taller) and the scroller's own box changing (the window, the
-   * composer column's clearance) are all measured by virtua's one
-   * ResizeObserver, and virtua says so through `onresize` (virtua 0.53.2,
-   * made for "stay at the bottom": inokawa/virtua#301, #408). That call comes
-   * inside virtua's observer, after the frame's layout and before its paint.
-   * The list's new height is still Svelte state there: the pin keeps the
-   * list whole (`keepWhole`) and asks for the delivery after the layout
-   * that state is written to (`pinNext`), where it reads the height the
-   * frame will paint off that layout and writes the tail before the paint.
-   * It used to flush the state into virtua's container in the call and read
-   * the height there, which laid the page out under that flush's writes:
-   * the rows it mounted styled inside the pin (`tailTop`, 10.1ms of style
-   * in one reply frame at 4x CPU throttle). A row that flush mounts (the
-   * range grown with the view) is observed at the next frame, not inside
-   * the delivery (virtua 0.54.0, inokawa/virtua#952): observed there, WebKit
-   * reported "ResizeObserver loop completed with undelivered notifications"
-   * as an ask left under a reader at the tail (composer-layers).
-   *
-   * It pins in the frame virtua measured in. It used to wait two microtasks: the landing
-   * asked virtua to `scrollToIndex` the last row, and virtua aims such a
-   * scroll again at every measurement, in a microtask it queues behind this
-   * call, at the row that was last when it was asked, for as long as rows
-   * measure under 150ms apart — the whole of a streamed reply. Pinned in the
-   * call, that aim wrote after it every frame (the reply grew 1,500px under
-   * the composer in 3 of 5 runs); pinned two microtasks later, the two wrote
-   * every frame and the pin won by ordering. The landing is the pin's now
-   * (`land`), so no scroll of virtua's is left aiming at the tail, and the
-   * pin is the last write of the frame by being the only one.
-   *
-   * Nothing else writes the tail while it streams. A row taken out at the end
-   * (a parked ask's call, a tail row that went) is the browser's: the list
-   * gets shorter, and the offset is clamped to the new end. What that leaves
-   * of a pixel is `keepWhole`'s (`wholeHeight`). The strip above the list is
-   * `keepPlace`'s.
-   */
-  function onresize(): void {
-    const view = list?.getViewportSize() ?? 0;
-    const shrank = viewSeen > 0 ? viewSeen - view : 0;
-    viewSeen = view;
-    if (!pinned()) {
-      if (awayAtTail()) {
-        landAway();
-      } else {
-        endMoved(shrank);
-      }
-      return;
-    }
-    whole.keepWhole();
-    pinNext();
-  }
-  /** The scroller's own height as `onresize` last read it. */
-  let viewSeen = 0;
-
-  /**
-   * THE COMPOSER'S ROOM MOVES THE END, NOT THE ROWS. The room a pane keeps
-   * for its composer changes as a tray chip comes or goes (SessionPane
-   * `trayStands`): a tab's foot grows or shrinks by the tray row, a docked
-   * pane's scroller by as much. A view standing at the end before that
-   * change stays at the end after it, in the delivery that saw it, before
-   * the frame paints: its last row stays clear of the chip. This holds for
-   * a pane that is not the one worked in too (Caw's column beside the work
-   * at 1440), which follows no row of its own (`pinned`): its rows coming
-   * in are content, the composer's room is not. A view anywhere else keeps
-   * its offset, so no row it reads moves.
-   */
-  function endMoved(shift: number): void {
-    if (!(scroller && landed) || jumping || Math.abs(shift) < 0.5) {
-      return;
-    }
-    const tail = tailTop(scroller);
-    if (Math.abs(tail - shift - scroller.scrollTop) > TAIL_SLACK) {
-      return;
-    }
-    scroller.scrollTop = tail;
-    lastWrite = scroller.scrollTop;
-  }
-
-  /**
-   * THE PIN READS ON THE FRAME'S OWN LAYOUT. What the pin has to follow is
-   * written by the flush behind the delivery that asked for it (virtua's
-   * sizes, the spare), and the frame lays it out before it delivers again,
-   * to every box deeper than the shallowest it has delivered. The pin's
-   * mark (the markup, under the foot) is deeper than any row of the list, so
-   * observed again here it is delivered in the frame's next round, on that
-   * layout: the pin reads the tail there, with nothing to lay out, and its
-   * write lands before the paint. Asked for outside a delivery (a flush in a
-   * task), it is delivered in the next frame's first round.
-   */
-  let pinMark = $state<HTMLElement>();
-  let pinSizes: FrameObserver | null = null;
-  let pinAsked = false;
-  function pinNext(): void {
-    const mark = pinMark;
-    if (!mark) {
-      return;
-    }
-    pinAsked = true;
-    pinSizes ??= frameObserver(null, {
-      read: () => {
-        if (!pinAsked) {
-          return;
-        }
-        pinAsked = false;
-        if (pinMark) {
-          pinSizes?.unobserve(pinMark);
-        }
-        if (pinned()) {
-          whole.keepWhole();
-          pinBottom();
-        }
-      },
-    });
-    pinSizes.observe(mark);
-  }
-  onDestroy(() => pinSizes?.disconnect());
 
   /**
    * THE REVEAL. A transcript opening draws its rows once, where they stay.
@@ -1282,8 +560,8 @@
    * two steps in `build`.
    */
   $effect(() => {
-    const node = scroller;
-    const container = listing?.firstElementChild;
+    const node = pin.scroller;
+    const container = pin.listing?.firstElementChild;
     // The newest page under way replaces these rows when they are the
     // server's stand-in for it (see `SessionPane`): the store's session takes
     // their place the moment its read is in, with the turn in flight on the
@@ -1447,13 +725,13 @@
    * anyway, before its layout.
    */
   function followBottom(): void {
-    if (!scroller || following !== null) {
+    if (!pin.scroller || pin.following !== null) {
       return;
     }
-    following = requestAnimationFrame(() => {
-      following = null;
-      if (atBottom) {
-        pinBottom();
+    pin.following = requestAnimationFrame(() => {
+      pin.following = null;
+      if (pin.atBottom) {
+        pin.pinBottom();
       }
     });
   }
@@ -1469,8 +747,8 @@
       if (keeper.anchorIndex() >= 0) {
         keeper.restore();
       } else {
-        atBottom = true;
-        pinBottom();
+        pin.atBottom = true;
+        pin.pinBottom();
       }
       settle();
       return;
@@ -1484,8 +762,8 @@
       cancelAnimationFrame(landingFrame);
     }
     landingFrame = requestAnimationFrame(landInFrame);
-    atBottom = true;
-    farFromLatest = false;
+    pin.atBottom = true;
+    pin.farFromLatest = false;
   }
 
   /** The already-landed half of `land`, in the frame after it was called for. */
@@ -1495,10 +773,10 @@
     // up — lands at the rows' estimated sizes; the rows it lands among are
     // measured in that frame's layout, and the pin puts the view back on the
     // true end before the frame is painted (`onresize`).
-    if (!(scroller && active && atBottom)) {
+    if (!(pin.scroller && active && pin.atBottom)) {
       return;
     }
-    pinBottom();
+    pin.pinBottom();
     settle();
   }
 
@@ -1537,10 +815,10 @@
   // stream: an off-screen pane re-runs nothing as its session streams.
   $effect(() => {
     if (landed) {
-      if (active && untrack(() => atBottom)) {
+      if (active && untrack(() => pin.atBottom)) {
         detach(
           tick().then(() => {
-            if (active && atBottom) {
+            if (active && pin.atBottom) {
               land();
             }
           }),
@@ -1582,16 +860,6 @@
   /** Within this many screens of the tail the jump scrolls there smoothly;
       past it, it lands at once. Our own call, no source sets it. */
   const JUMP_SMOOTH_SCREENS = 3;
-  /** Keys that scroll the transcript: pressed during a jump, they are the reader's. */
-  const SCROLL_KEYS = new Set([
-    "PageUp",
-    "PageDown",
-    "ArrowUp",
-    "ArrowDown",
-    "Home",
-    "End",
-    " ",
-  ]);
   /**
    * The jump's scroll is under way. Its scroll events are not the reader's,
    * and `atBottom` stays false until it ends so that no follow or landing
@@ -1609,22 +877,23 @@
    */
   function jump(): void {
     arrivals.tickets.clear();
-    farFromLatest = false;
-    const node = scroller;
+    pin.farFromLatest = false;
+    const node = pin.scroller;
     if (!(
       node &&
       motionOk.current &&
-      tailTop(node) - node.scrollTop <= JUMP_SMOOTH_SCREENS * node.clientHeight
+      pin.tailTop(node) - node.scrollTop <=
+        JUMP_SMOOTH_SCREENS * node.clientHeight
     )) {
       // Landed in the click itself, not in `land`'s next frame: a re-armed
       // `land` (the rows effect) can push that frame back one more.
-      atBottom = true;
+      pin.atBottom = true;
       landInFrame();
       return;
     }
-    stopFollow();
-    restsAtTail = null;
-    tailMark = null;
+    pin.stopFollow();
+    pin.restsAtTail = null;
+    pin.tailMark = null;
     jumping = true;
     node.addEventListener("wheel", yieldJump, { passive: true });
     node.addEventListener("touchstart", yieldJump, { passive: true });
@@ -1635,11 +904,11 @@
 
   /** One smooth scroll to the bottom as it stands now. */
   function glide(): void {
-    const node = scroller;
+    const node = pin.scroller;
     if (!(jumping && node)) {
       return;
     }
-    const bottom = tailTop(node);
+    const bottom = pin.tailTop(node);
     if (bottom - node.scrollTop <= 1) {
       arrive();
       return;
@@ -1657,7 +926,7 @@
     if (jumpTarget === null) {
       return;
     }
-    const bottom = tailTop(node);
+    const bottom = pin.tailTop(node);
     const top = node.scrollTop;
     if (Math.abs(top - jumpTarget) > 1 && top < bottom - 1) {
       return;
@@ -1672,18 +941,18 @@
   /** The jump is over: at the latest row, pinned there. */
   function arrive(): void {
     endJump();
-    atBottom = true;
-    farFromLatest = false;
-    pinBottom();
+    pin.atBottom = true;
+    pin.farFromLatest = false;
+    pin.pinBottom();
   }
 
   function endJump(): void {
     jumping = false;
     jumpTarget = null;
-    scroller?.removeEventListener("wheel", yieldJump);
-    scroller?.removeEventListener("touchstart", yieldJump);
-    scroller?.removeEventListener("pointerdown", yieldJump);
-    scroller?.removeEventListener("keydown", yieldKey);
+    pin.scroller?.removeEventListener("wheel", yieldJump);
+    pin.scroller?.removeEventListener("touchstart", yieldJump);
+    pin.scroller?.removeEventListener("pointerdown", yieldJump);
+    pin.scroller?.removeEventListener("keydown", yieldKey);
   }
 
   /**
@@ -1694,7 +963,10 @@
    */
   function yieldJump(): void {
     endJump();
-    scroller?.scrollTo({ top: scroller.scrollTop, behavior: "instant" });
+    pin.scroller?.scrollTo({
+      top: pin.scroller.scrollTop,
+      behavior: "instant",
+    });
   }
 
   function yieldKey(event: KeyboardEvent): void {
@@ -1713,10 +985,10 @@
   // Where the conversation is read: its tail, or the record at the view's top.
   $effect(() =>
     findHere.readFrom(() => {
-      if (atBottom) {
+      if (pin.atBottom) {
         return { tail: true };
       }
-      const place = keeper.placeAt(lastTop);
+      const place = keeper.placeAt(pin.lastTop);
       return place ? { tail: false, docId: place.block } : { tail: true };
     })
   );
@@ -1731,7 +1003,7 @@
   /** Read the drawn rows for the words and mark them: every place washed, the one stepped to solid. */
   function markWords(): void {
     const words = findHere.words.trim();
-    if (!(listing && words && (findHere.open || findHere.landed))) {
+    if (!(pin.listing && words && (findHere.open || findHere.landed))) {
       markFind(session.instanceId, [], null);
       return;
     }
@@ -1742,12 +1014,12 @@
       live: boolean;
     }): Element | null => {
       if (place.live) {
-        return listing?.querySelector('[data-slot="live"]') ?? null;
+        return pin.listing?.querySelector('[data-slot="live"]') ?? null;
       }
       const drawn =
         rowDraw.renderedRows[rowHolding(rowDraw.renderedRows, place.docId)];
       const row = drawn
-        ? listing?.querySelector(`[data-row="${CSS.escape(drawn.key)}"]`)
+        ? pin.listing?.querySelector(`[data-row="${CSS.escape(drawn.key)}"]`)
         : null;
       const message = drawn ? recordIn(drawn, place.docId, [words]) : undefined;
       return (
@@ -1764,7 +1036,7 @@
       findHere.whose === "all"
         ? null
         : findHere.places.flatMap((place) => drawnAt(place) ?? []);
-    const all = rangesOf(listing, words).filter(
+    const all = rangesOf(pin.listing, words).filter(
       (range) =>
         kept === null || kept.some((at) => at.contains(range.startContainer))
     );
@@ -1786,7 +1058,7 @@
   // Marked once a frame at most while find stands, as rows mount and the
   // live turn is written, never inside the mutation that asked.
   $effect(() => {
-    const root = listing;
+    const root = pin.listing;
     if (!(root && (findHere.open || findHere.landed))) {
       markFind(session.instanceId, [], null);
       return;
@@ -1831,7 +1103,7 @@
   }
 
   $effect(() => {
-    const node = scroller;
+    const node = pin.scroller;
     if (!(node && findHere.landed)) {
       return;
     }
@@ -1857,7 +1129,7 @@
   );
   const showLatest = $derived(
     landed &&
-      farFromLatest &&
+      pin.farFromLatest &&
       rowBuild.rows.length > 0 &&
       !findHere.open &&
       !showBack
@@ -1976,7 +1248,7 @@
         (row) => row.kind === "single" && row.message.id === want
       );
       if (index >= 0) {
-        list?.scrollToIndex(index, { align: "center", smooth: true });
+        pin.list?.scrollToIndex(index, { align: "center", smooth: true });
       }
     });
   });
@@ -1995,7 +1267,7 @@
       );
       if (index < 0) {
         // No open card of its own among the rows: a delegate's, after them.
-        const under = scroller?.querySelector<HTMLElement>(
+        const under = pin.scroller?.querySelector<HTMLElement>(
           "[data-connect-stage]"
         );
         if (under) {
@@ -2006,7 +1278,7 @@
         }
         return;
       }
-      list?.scrollToIndex(index, { align: "center", smooth: true });
+      pin.list?.scrollToIndex(index, { align: "center", smooth: true });
       const { key } = rowDraw.renderedRows[index];
       requestAnimationFrame(() => {
         document
@@ -2234,9 +1506,9 @@
   style:--foot-room={FOOT_ROOM}
   class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
   role="log"
-  bind:this={scroller}
-  {@attach measureView}
-  {@attach readerInput}
+  bind:this={pin.scroller}
+  {@attach pin.measureView}
+  {@attach pin.readerInput}
 >
   <!-- Empty is what is drawn: a conversation whose one row is folding away
        as its retry comes in is not empty for the frame between the two, and
@@ -2293,7 +1565,7 @@
   <div
     class="isolate pt-(--head-room,0px) has-data-retry:pb-space-5"
     style:--head-room={headRoom}
-    bind:this={headStrip}
+    bind:this={pin.headStrip}
     {@attach older.keepPlace}
   >
     {#if rowDraw.renderedRows.length > 0 && session.olderFault}
@@ -2346,7 +1618,7 @@
     data-slot="listing"
     data-shown={shown || undefined}
     class="isolate not-data-shown:invisible *:pointer-events-auto!"
-    bind:this={listing}
+    bind:this={pin.listing}
     style:padding-top={whole.spare ? `${whole.spare}px` : undefined}
     {@attach whole.wholeHeight}
     {@attach highlight({
@@ -2363,16 +1635,16 @@
       itemProps={mounted.itemAttrs}
       itemSize={ROW_ESTIMATE}
       keepMounted={mounted.keepMounted}
-      onscroll={onListScroll}
-      {onresize}
-      {onscrollend}
-      scrollRef={scroller}
+      onscroll={pin.onListScroll}
+      onresize={pin.onresize}
+      onscrollend={pin.onscrollend}
+      scrollRef={pin.scroller}
       shift={rowDraw.presentation.shifted}
       startMargin={older.olderRoom + whole.spare}
       bind:this={
-        () => list,
+        () => pin.list,
         (value) => {
-          list = value as unknown as VirtualizerHandle;
+          pin.list = value as unknown as VirtualizerHandle;
         }
       }
     >
@@ -2409,8 +1681,8 @@
   <div
     aria-hidden="true"
     class="isolate invisible h-(--parked-room) pointer-events-none"
-    style:--parked-room="{roomHeight}px"
-    bind:this={parkedRoom}
+    style:--parked-room="{pin.roomHeight}px"
+    bind:this={pin.parkedRoom}
   ></div>
   <!-- The foot clears the composer's standing box: the pill at one line, the
        delegate tray's row and the suggestion row on it. `--composer-clearance`
@@ -2431,7 +1703,7 @@
       ><span class="block size-px"
         ><span class="block size-px"
           ><span class="block size-px"
-            ><span class="block size-px" bind:this={pinMark}></span></span
+            ><span class="block size-px" bind:this={pin.pinMark}></span></span
           ></span
         ></span
       ></span
