@@ -2,7 +2,7 @@ import { posix } from "node:path";
 import { detach } from "@cawco/core/detach";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { projectWords } from "@cawco/core/words/project";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { HubContext } from "./hub-context";
@@ -12,7 +12,7 @@ import type { ProjectAsk, ProjectMade } from "./project-making";
 import { placesChanged } from "./project-placements";
 import { projectRootOf } from "./project-refusal";
 import { NOTHING_READ, readCheckout } from "./projects";
-import { refusal } from "./refusal";
+
 import type { WorkAsk, WorkPlace } from "./work-place";
 import { workPlace } from "./work-place";
 
@@ -117,11 +117,10 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
   const folderUnread = (machineId: string | undefined) => {
     const paused = machineId && ctx.machinePause.words(machineId);
     return paused
-      ? refusal(
-          409,
-          "project-machine-paused",
-          `${paused}, so its folder is not read until then. Add it after the pause, or resume the machine first.`
-        )
+      ? problem(409, {
+          code: "project-machine-paused",
+          detail: `${paused}, so its folder is not read until then. Add it after the pause, or resume the machine first.`,
+        })
       : undefined;
   };
 
@@ -202,7 +201,10 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
       asked.checkout &&
       ctx.db.machinePathOn(asked.checkout.machineId, asked.checkout.cwd);
     if (path instanceof MachinePathRefused) {
-      return refusal(400, "project-checkout-path-unfit", path.message);
+      return problem(400, {
+        code: "project-checkout-path-unfit",
+        detail: path.message,
+      });
     }
     const checkout = asked.checkout &&
       path && { machineId: asked.checkout.machineId, path };

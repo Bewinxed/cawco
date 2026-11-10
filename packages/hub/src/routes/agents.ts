@@ -2,11 +2,10 @@
  * The machines the hub knows: reading them, their media, and removing one.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
 import { machineOut } from "../machine-out";
-import { refusal } from "../refusal";
 
 /**
  * A file's bytes as an answer to a request that may ask for a range of them:
@@ -67,7 +66,10 @@ export const agentListRoutes = ({
       const row = machineRow(params.machineId);
       return row
         ? machineOut(row)
-        : refusal(404, "no-machine", machineFault(params.machineId, "unknown"));
+        : problem(404, {
+            code: "no-machine",
+            detail: machineFault(params.machineId, "unknown"),
+          });
     });
 
 export const agentMediaRoutes = ({
@@ -105,21 +107,22 @@ export const agentMediaRoutes = ({
       async ({ params, query, request }) => {
         const answer = await readMachineMedia(params.machineId, query.path);
         if (answer === "offline") {
-          return refusal(
-            503,
-            "machine-offline",
-            machineFault(params.machineId, "offline")
-          );
+          return problem(503, {
+            code: "machine-offline",
+            detail: machineFault(params.machineId, "offline"),
+          });
         }
         if (answer === "timeout") {
-          return refusal(
-            504,
-            "machine-silent",
-            machineFault(params.machineId, "silent")
-          );
+          return problem(504, {
+            code: "machine-silent",
+            detail: machineFault(params.machineId, "silent"),
+          });
         }
         if ("refused" in answer) {
-          return refusal(404, "agent-refused", answer.refused);
+          return problem(404, {
+            code: "agent-refused",
+            detail: answer.refused,
+          });
         }
         return rangedResponse(
           answer.bytes,
@@ -144,22 +147,20 @@ export const agentMediaRoutes = ({
           hubAuth.holdsMachine(params.machineId) ||
           sshTunnels.holds(params.machineId)
         )) {
-          return refusal(
-            404,
-            "no-machine",
-            "No machine with that id on this hub."
-          );
+          return problem(404, {
+            code: "no-machine",
+            detail: "No machine with that id on this hub.",
+          });
         }
         hubAuth.forgetMachine(params.machineId);
         sshTunnels.forget(params.machineId);
         return { sessions: 0 };
       }
       if (registry.agent(params.machineId)) {
-        return refusal(
-          409,
-          "online-stop-agent-first",
-          `${row.hostname} is online. Stop its agent first, then remove it.`
-        );
+        return problem(409, {
+          code: "online-stop-agent-first",
+          detail: `${row.hostname} is online. Stop its agent first, then remove it.`,
+        });
       }
       const gone = db.deleteMachine(params.machineId);
       forgetInstances(gone.instanceIds);

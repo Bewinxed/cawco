@@ -48,7 +48,7 @@ import {
   type RemoveFolder,
   type WorkspaceArchive,
 } from "@cawco/core/workspace/controls";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { Browsers } from "./browsers";
 import type { DbShape } from "./db";
 import type { HeldSession, HeldWorkspace } from "./db/project-work";
@@ -60,7 +60,6 @@ import {
   recordedPlaces,
   trashedProject,
 } from "./project-trash";
-import { refusal } from "./refusal";
 
 /** A failure's words: a refusal's detail, an error's message, else the value said. */
 const wordsOf = (error: unknown): string => {
@@ -303,21 +302,23 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
         const { error } = failed;
         const machine = deps.machineName(removal.machineId);
         return error instanceof AgentTooOld
-          ? refusal(
-              409,
-              "delete-agent-too-old",
-              projectTrashWords.agentTooOld(name, removal.what, machine)
-            )
-          : refusal(
-              502,
-              "delete-not-removed",
-              projectTrashWords.notRemoved(
+          ? problem(409, {
+              code: "delete-agent-too-old",
+              detail: projectTrashWords.agentTooOld(
+                name,
+                removal.what,
+                machine
+              ),
+            })
+          : problem(502, {
+              code: "delete-not-removed",
+              detail: projectTrashWords.notRemoved(
                 name,
                 removal.what,
                 machine,
                 wordsOf(error)
-              )
-            );
+              ),
+            });
       }
       on(removal.machineId)[removal.kind] += 1;
     }
@@ -357,10 +358,9 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
     if (shared?.refusedBy) {
       const { name: holder, path, same } = shared.refusedBy;
       const machine = deps.machineName(shared.machineId);
-      return refusal(
-        409,
-        "delete-place-held",
-        same
+      return problem(409, {
+        code: "delete-place-held",
+        detail: same
           ? projectTrashWords.placeShared(name, shared.path, machine, holder)
           : projectTrashWords.placeHolds(
               name,
@@ -368,18 +368,20 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
               machine,
               holder,
               path
-            )
-      );
+            ),
+      });
     }
     const away = [...needed(plan, fromDisk)].filter(
       (machineId) => !deps.online(machineId)
     );
     if (away.length > 0) {
-      return refusal(
-        409,
-        "delete-machines-away",
-        projectTrashWords.machinesAway(name, away.map(deps.machineName))
-      );
+      return problem(409, {
+        code: "delete-machines-away",
+        detail: projectTrashWords.machinesAway(
+          name,
+          away.map(deps.machineName)
+        ),
+      });
     }
   };
 
@@ -389,20 +391,18 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
       const live = db.project(id);
       const trashed = await trashedProject(id);
       if (!(live || trashed)) {
-        return refusal(
-          404,
-          "delete-project-unknown",
-          projectTrashWords.noProject(id)
-        );
+        return problem(404, {
+          code: "delete-project-unknown",
+          detail: projectTrashWords.noProject(id),
+        });
       }
       const name = live?.name ?? trashed?.name ?? id;
       const running = live ? deps.stillRunning(id) : 0;
       if (running > 0) {
-        return refusal(
-          409,
-          "delete-sessions-run",
-          projectTrashWords.stillRuns(name, running)
-        );
+        return problem(409, {
+          code: "delete-sessions-run",
+          detail: projectTrashWords.stillRuns(name, running),
+        });
       }
       const plan = planOf(id, trashed);
       const held = heldBack(name, plan, fromDisk);

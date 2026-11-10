@@ -29,12 +29,12 @@ import {
   STORY_FILE,
   type StoryOp,
 } from "@cawco/core/stage";
-import { Elysia, ElysiaStatus, t, ValidationError } from "elysia";
+import { Elysia, ElysiaStatus, problem, t, ValidationError } from "elysia";
 import type { Operation } from "rfc6902";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
-import { refusal } from "../refusal";
+
 import type { StateAsk } from "./component";
 import { COMPONENT_EXAMPLE, CREATE_SHAPE } from "./component";
 import { type Artifacts, THUMBNAIL_BYTES } from "./service";
@@ -70,7 +70,10 @@ const stateOf = (text: string) => {
   }
   const read = STATE_ASK.safeParse(value);
   if (!read.success) {
-    return refusal(400, "artifact-read-state-shape", SHAPES.read);
+    return problem(400, {
+      code: "artifact-read-state-shape",
+      detail: SHAPES.read,
+    });
   }
   const state: { state: StateAsk } = { state: read.data };
   return state;
@@ -88,7 +91,10 @@ const pngOf = (base64: string | null) => {
   }
   const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
   if (!PNG_SIGNATURE.every((byte, i) => bytes[i] === byte)) {
-    return refusal(422, "artifact-thumbnail-not-png", "A thumbnail is a PNG.");
+    return problem(422, {
+      code: "artifact-thumbnail-not-png",
+      detail: "A thumbnail is a PNG.",
+    });
   }
   return bytes;
 };
@@ -243,11 +249,10 @@ const sheetChangeOf = (body: {
     const story: SheetChange = { story: body.story };
     return story;
   }
-  return refusal(
-    400,
-    "artifact-sheet-change-one",
-    "A sheet takes exactly one of args or story."
-  );
+  return problem(400, {
+    code: "artifact-sheet-change-one",
+    detail: "A sheet takes exactly one of args or story.",
+  });
 };
 
 /** The one change an update names (a decision page's statements and a component canvas each have their own route): a page's html or patch, a canvas's elements, delete or mermaid. */
@@ -263,11 +268,11 @@ const changeOf = (body: {
   ).filter((key) => body[key] !== undefined);
   return named.length === 1
     ? oneChange(body)
-    : refusal(
-        400,
-        "artifact-update-change-one",
-        "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group or dials go through their own routes."
-      );
+    : problem(400, {
+        code: "artifact-update-change-one",
+        detail:
+          "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group or dials go through their own routes.",
+      });
 };
 
 /** The change a body naming exactly one ({@link changeOf}) names. */
@@ -334,11 +339,10 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       }
       // Files' own reads: the validator's word is enough there.
       if (path.endsWith("/search") || path.includes("/thumbnail")) {
-        return refusal(
-          422,
-          "files-asked-shape-hub",
-          "Files asked in a shape the hub doesn't take."
-        );
+        return problem(422, {
+          code: "files-asked-shape-hub",
+          detail: "Files asked in a shape the hub doesn't take.",
+        });
       }
       let shape = SHAPES.read;
       if (path.endsWith("/design-map")) {
@@ -351,7 +355,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       } else if (!(path.endsWith("/sheet") || path.endsWith("/view"))) {
         shape = SHAPES.update;
       }
-      return refusal(422, "artifact-shape", shape);
+      return problem(422, { code: "artifact-shape", detail: shape });
     })
     // Every artifact the session holds: its panel's menu.
     .get("/api/instances/:id/artifacts", ({ params }) =>
@@ -479,18 +483,16 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       async ({ params, body }) => {
         const { kind } = body;
         if (kind === "sheet") {
-          return refusal(
-            400,
-            "artifact-kind-sheet",
-            `A component's states are a component canvas now: kind "component", with does and ask. Example: ${COMPONENT_EXAMPLE}.`
-          );
+          return problem(400, {
+            code: "artifact-kind-sheet",
+            detail: `A component's states are a component canvas now: kind "component", with does and ask. Example: ${COMPONENT_EXAMPLE}.`,
+          });
         }
         if (body.draft && kind !== "canvas") {
-          return refusal(
-            400,
-            "artifact-draft-not-canvas",
-            "Only a canvas is a draft."
-          );
+          return problem(400, {
+            code: "artifact-draft-not-canvas",
+            detail: "Only a canvas is a draft.",
+          });
         }
         return await artifacts.create(params.id, { ...body, kind });
       }
@@ -561,11 +563,11 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         const { edges, group, dials, args, story } = body;
         const canvas = [edges, group, dials].some((one) => one !== undefined);
         if (canvas && (args !== undefined || story !== undefined)) {
-          return refusal(
-            400,
-            "artifact-component-change-mixed",
-            "edges, group and dials change the canvas itself: send them apart from a states file's args or story."
-          );
+          return problem(400, {
+            code: "artifact-component-change-mixed",
+            detail:
+              "edges, group and dials change the canvas itself: send them apart from a states file's args or story.",
+          });
         }
         if (canvas) {
           return await artifacts.canvasUpdate(params.id, params.artifact, {
@@ -853,7 +855,10 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           return png;
         }
         if (!png) {
-          return refusal(404, "no-picture-yet", "No picture yet.");
+          return problem(404, {
+            code: "no-picture-yet",
+            detail: "No picture yet.",
+          });
         }
         return new Response(new Uint8Array(png), {
           headers: {

@@ -61,7 +61,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import type { StageKind } from "@cawco/core/views";
 import { noticePartWords, reasonLine } from "@cawco/core/words/artifact-needs";
 import { artifactWords } from "@cawco/core/words/artifacts";
-import { ElysiaStatus, t } from "elysia";
+import { ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
 import {
@@ -82,7 +82,6 @@ import {
   taskEntry,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
-import { refusal } from "./refusal";
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
@@ -533,11 +532,10 @@ export const decodeCursor = (cursor: string | undefined) => {
   }
   const offset = Number(Buffer.from(cursor, "base64url").toString("utf8"));
   if (!Number.isInteger(offset) || offset < 0) {
-    return refusal(
-      400,
-      "find-cursor-unknown",
-      `"${cursor}" is not a cursor this hub gave.`
-    );
+    return problem(400, {
+      code: "find-cursor-unknown",
+      detail: `"${cursor}" is not a cursor this hub gave.`,
+    });
   }
   return offset;
 };
@@ -1582,11 +1580,10 @@ const kindsOf = (raw: string | undefined) => {
     (kind) => !(FIND_KINDS as readonly string[]).includes(kind)
   );
   if (unknown.length > 0) {
-    return refusal(
-      400,
-      "find-kind-unknown",
-      `${unknown.map((kind) => `"${kind}"`).join(", ")} is not a kind find answers with. Kinds: ${FIND_KINDS.join(", ")}.`
-    );
+    return problem(400, {
+      code: "find-kind-unknown",
+      detail: `${unknown.map((kind) => `"${kind}"`).join(", ")} is not a kind find answers with. Kinds: ${FIND_KINDS.join(", ")}.`,
+    });
   }
   return kinds as FindKind[];
 };

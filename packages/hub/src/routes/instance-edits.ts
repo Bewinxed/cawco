@@ -3,12 +3,12 @@ import { harnessesWith, traitsOf } from "@cawco/core/harness/traits";
 import type { SessionAttachments } from "@cawco/core/protocol";
 import type { TranscriptPage } from "@cawco/core/transcript-types";
 import { harnessWords } from "@cawco/core/words/harness";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { HubContext } from "../hub-context";
 import { instanceTimes } from "../instance-out";
 import type { MachineReadsContext } from "../machine-reads";
 import { awayStatus } from "../machine-reads";
-import { refusal } from "../refusal";
+
 import { attachmentsOfPages } from "../session-attachments";
 
 /** Why keep-alive is refused a session: its harness's prompt cache is one nothing times. */
@@ -82,11 +82,10 @@ export const instanceEditRoutes = (
           const id = db.instanceIdOf(params.id);
           const page = await transcripts.page(id, limit, query.before);
           if ("gone" in page) {
-            return refusal(
-              409,
-              "transcript-no-longer-holds",
-              `the transcript no longer holds block ${page.gone}`
-            );
+            return problem(409, {
+              code: "transcript-no-longer-holds",
+              detail: `the transcript no longer holds block ${page.gone}`,
+            });
           }
           if (!("fault" in page)) {
             // Where a continued session's work went rides its newest page,
@@ -104,13 +103,22 @@ export const instanceEditRoutes = (
             case "offline":
               return awayStatus(ctx, set, page.machineId ?? "", page.message);
             case "missing":
-              return refusal(404, "no-transcript", page.message);
+              return problem(404, {
+                code: "no-transcript",
+                detail: page.message,
+              });
             case "timeout":
-              return refusal(504, "machine-silent", page.message);
+              return problem(504, {
+                code: "machine-silent",
+                detail: page.message,
+              });
             case "failed":
               break;
           }
-          return refusal(500, "transcript-unread", page.message);
+          return problem(500, {
+            code: "transcript-unread",
+            detail: page.message,
+          });
         }
       )
       // Files' Attachments: every text, file and picture the session's
@@ -120,22 +128,30 @@ export const instanceEditRoutes = (
       .get("/api/instances/:id/attachments", async ({ params, set }) => {
         const read = await everyPage(params.id);
         if ("gone" in read) {
-          return refusal(
-            409,
-            "transcript-no-longer-holds",
-            `the transcript no longer holds block ${read.gone}`
-          );
+          return problem(409, {
+            code: "transcript-no-longer-holds",
+            detail: `the transcript no longer holds block ${read.gone}`,
+          });
         }
         if ("fault" in read) {
           switch (read.fault) {
             case "offline":
               return awayStatus(ctx, set, read.machineId ?? "", read.message);
             case "missing":
-              return refusal(404, "no-transcript", read.message);
+              return problem(404, {
+                code: "no-transcript",
+                detail: read.message,
+              });
             case "timeout":
-              return refusal(504, "machine-silent", read.message);
+              return problem(504, {
+                code: "machine-silent",
+                detail: read.message,
+              });
             case "failed":
-              return refusal(500, "transcript-unread", read.message);
+              return problem(500, {
+                code: "transcript-unread",
+                detail: read.message,
+              });
           }
         }
         const [first] = read.pages;
@@ -165,7 +181,10 @@ export const instanceEditRoutes = (
           const { kind, permissionMode, model } = body;
           const title = body.title?.trim();
           if (body.title !== undefined && !title) {
-            return refusal(400, "title-blank", "title is blank");
+            return problem(400, {
+              code: "title-blank",
+              detail: "title is blank",
+            });
           }
           if (
             kind === undefined &&
@@ -174,17 +193,26 @@ export const instanceEditRoutes = (
             title === undefined &&
             body.keepAlive === undefined
           ) {
-            return refusal(400, "name-field-change", "name a field to change");
+            return problem(400, {
+              code: "name-field-change",
+              detail: "name a field to change",
+            });
           }
           const [current] = db.getInstancesByIds([params.id]);
           if (!current) {
-            return refusal(404, "no-session", `no session ${params.id}`);
+            return problem(404, {
+              code: "no-session",
+              detail: `no session ${params.id}`,
+            });
           }
           if (
             body.keepAlive !== undefined &&
             traitsOf(current.harness).promptCacheMaxMs === null
           ) {
-            return refusal(409, "keep-alive-refused", keepAliveRefused);
+            return problem(409, {
+              code: "keep-alive-refused",
+              detail: keepAliveRefused,
+            });
           }
           if (body.keepAlive !== undefined) {
             db.updateKeepAlive(params.id, {
@@ -196,14 +224,20 @@ export const instanceEditRoutes = (
           if (permissionMode !== undefined) {
             const refused = await applyPermissionMode(current, permissionMode);
             if (refused) {
-              return refusal(refused.code, "mode-refused", refused.error);
+              return problem(refused.code, {
+                code: "mode-refused",
+                detail: refused.error,
+              });
             }
           }
           const named = title
             ? db.nameInstance(params.id, title, "owner")?.row
             : undefined;
           if (title && !named) {
-            return refusal(404, "no-session", `no session ${params.id}`);
+            return problem(404, {
+              code: "no-session",
+              detail: `no session ${params.id}`,
+            });
           }
           // A rename alone is not the session moving: its age stays.
           const row =
@@ -211,7 +245,10 @@ export const instanceEditRoutes = (
               ? (named ?? db.getInstancesByIds([params.id])[0])
               : db.patchInstance(params.id, { kind, model });
           if (!row) {
-            return refusal(404, "no-session", `no session ${params.id}`);
+            return problem(404, {
+              code: "no-session",
+              detail: `no session ${params.id}`,
+            });
           }
           publishInstances(row.machineId);
           // The stored toggle re-arms through the scheduler's one path.
