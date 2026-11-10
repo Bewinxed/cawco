@@ -73,7 +73,7 @@ export async function pageSource(
  * Where the hub serves what `route` names (a `preview-address` route), its
  * listener started when it has none; or why it can't, in the hub's own
  * words: every preview port in use is said as the hub says it (hub
- * preview.ts `everyPortTaken`), wherever a frame of it stands.
+ * preview-ports.ts `preview-ports-taken`), wherever a frame of it stands.
  */
 async function addressAt(
   request: HubRequest
