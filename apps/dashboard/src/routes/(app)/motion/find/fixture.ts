@@ -201,7 +201,7 @@ export const whenOf = (s: Said): number => Date.parse(ago(s.at));
 
 /** `said` as the transcript's messages, under conversation `id`. */
 export function history(id: string, said: Said[]): Message[] {
-  return said.map((s, n) => {
+  return said.map((s, n): Message => {
     const base = {
       instanceId: id,
       timestamp: ago(s.at),
@@ -218,7 +218,7 @@ export function history(id: string, said: Said[]): Message[] {
           peerName: s.peer,
           reportHeadline: s.headline,
         },
-      } as Message;
+      };
     }
     if (s.k === "tool") {
       return {
@@ -234,13 +234,13 @@ export function history(id: string, said: Said[]): Message[] {
           resultRecord: resultOf(id, n),
           toolStatus: "success",
         },
-      } as Message;
+      };
     }
     return {
       ...base,
       id: `${id}-${s.k}-${n}`,
       type: s.k,
       content: s.text,
-    } as Message;
+    };
   });
 }

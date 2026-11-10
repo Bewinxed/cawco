@@ -115,7 +115,7 @@
         type: "user",
         content: ask,
         timestamp: stamp(),
-      } as Message);
+      });
       for (const [name, arg] of tools) {
         n += 1;
         rows.push({
@@ -131,7 +131,7 @@
             toolResult: "ok",
             toolStatus: "success",
           },
-        } as Message);
+        });
       }
       n += 1;
       rows.push({
@@ -140,7 +140,7 @@
         type: "assistant",
         content: answer,
         timestamp: stamp(),
-      } as Message);
+      });
     }
     return rows;
   }

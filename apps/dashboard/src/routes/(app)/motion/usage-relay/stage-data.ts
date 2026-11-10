@@ -11,7 +11,7 @@ import type {
   ProviderForecast,
   ProviderRouting,
 } from "@cawco/core/accounts";
-import { pushCarry } from "@cawco/core/accounts";
+import { DEFAULT_AT_LIMIT, pushCarry } from "@cawco/core/accounts";
 import { ACCOUNT_HUES } from "@cawco/core/accounts/kinds";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -145,14 +145,17 @@ const SESSIONS = [
   },
 ];
 /** A session on opencode Go, so its row carries a count too. */
-const OPENCODE_SESSION = {
+const OPENCODE_SESSION: InstanceRow = {
   id: "bench-go",
   harness: "opencode",
+  kind: "mainline",
+  launchDir: "known",
+  sessionId: null,
   status: "running",
   title: "Port the bench to Go",
   cwd: "/home/omar/cockpit",
   machineId: "nixbox",
-} as unknown as InstanceRow;
+};
 
 /**
  * Who carries your new sessions, span by span, as the hub walks it
@@ -339,24 +342,25 @@ export function stagedData(
     yours,
   };
   // design@ carries a session and its delegate; bewinxed@ one session.
-  const instances = SESSIONS.map(
-    (one) =>
-      ({
-        id: one.id,
-        accountId: one.accountId,
-        status: "running",
-        harness: "claude",
-        title: one.title,
-        cwd: one.cwd,
-        machineId: "nixbox",
-        parentInstanceId: one.parent ?? null,
-      }) as unknown as InstanceRow
-  );
-  const routing = {
+  const instances = SESSIONS.map((one): InstanceRow => ({
+    id: one.id,
+    accountId: one.accountId,
+    kind: "mainline",
+    launchDir: "known",
+    sessionId: null,
+    status: "running",
+    harness: "claude",
+    title: one.title,
+    cwd: one.cwd,
+    machineId: "nixbox",
+    parentInstanceId: one.parent ?? null,
+  }));
+  const routing: ProviderRouting = {
+    atLimit: DEFAULT_AT_LIMIT,
     provider: "anthropic",
     delegates: { strategy: "spread" },
     yours: { strategy: "fill-first" },
-  } as ProviderRouting;
+  };
   const go: LimitWindow[] = [
     {
       group: "session",

@@ -101,14 +101,14 @@
         type: "user",
         content: ask,
         timestamp: at,
-      } as Message);
+      });
       rows.push({
         id: `${ID}-asst-${n}`,
         instanceId: ID,
         type: "assistant",
         content: answer,
         timestamp: at,
-      } as Message);
+      });
     }
     return rows;
   }
