@@ -6,7 +6,6 @@ as-unknown-as	{ __answers: unknown[] }	scripts/probe-kit/specs/graph-stage.ts	5
 as-unknown-as	{ __boot: { at: Record<string, number>; held: [number, number][]; styles	scripts/probe-kit/specs/canvas-cost.ts	1
 as-unknown-as	{ __boot: typeof clock }	scripts/probe-kit/specs/canvas-cost.ts	1
 as-unknown-as	{ __boot?: { at: Record<string, number> } }	scripts/probe-kit/specs/canvas-cost.ts	1
-as-unknown-as	{ __buttonBench: { start: () => void; stop: () => void }; }	apps/dashboard/src/routes/(app)/motion/button-pending/+page.svelte	1
 as-unknown-as	{ __calls?: number; __frames?: Clock["longFrames"]; __long?: [number, nu	scripts/probe-kit/specs/tab-return.ts	1
 as-unknown-as	{ __canvas: Element | null }	scripts/probe-kit/specs/composer-canvas.ts	5
 as-unknown-as	{ __cawcoCanvas: { reports: number } }	scripts/probe-kit/specs/web/stage-focus.ts	1
@@ -20,12 +19,6 @@ as-unknown-as	{ __cawcoCanvas?: { report?: { sections: { file: string; frames: F
 as-unknown-as	{ __cawcoCanvas?: { report?: { sections: { frames: { state: string }[] }	scripts/probe-kit/specs/canvas-preload.ts	1
 as-unknown-as	{ __cawcoCanvas?: { reports: number } }	scripts/probe-kit/specs/sheet-weight.ts	1
 as-unknown-as	{ __cawcoCanvas?: { swept?: boolean }; }	scripts/probe-kit/specs/web/stage-focus.ts	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void }; }	apps/dashboard/src/routes/(app)/motion/breath-floor/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; adoptInstances: (r	apps/dashboard/src/routes/(app)/motion/folder-proof/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; connectionState: {	apps/dashboard/src/routes/(app)/motion/delegate-tray/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; projectsState: { p	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
-as-unknown-as	{ __cawcoDebug: { frame: (frame: PulseFrame) => void; sessionsState: { s	apps/dashboard/src/routes/(app)/motion/tab-bench.ts	1
-as-unknown-as	{ __cawcoDebug: { sessionsState: { sessions: Record<string, SessionState	apps/dashboard/src/routes/(app)/motion/recall/+page.svelte	1
 as-unknown-as	{ __cawcoDeliver?: (data: unknown) => void }	scripts/probe-kit/specs/app-comment-mode.ts	1
 as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overlay/host-origin.ts	1
 as-unknown-as	{ __cawWell: Set<string> }	scripts/probe-kit/specs/setup-send.ts	2
@@ -47,7 +40,6 @@ as-unknown-as	{ __cost: Cost }	scripts/probe-kit/specs/two-pane-perf.ts	2
 as-unknown-as	{ __cost?: { drawnAt: number | null } }	scripts/probe-kit/specs/canvas-cost.ts	1
 as-unknown-as	{ __fade: { on: boolean; rafs: number[] } }	scripts/probe-kit/specs/web/edge-fade-perf.ts	1
 as-unknown-as	{ __fade: { on: boolean; rafs: number[] }; }	scripts/probe-kit/specs/web/edge-fade-perf.ts	2
-as-unknown-as	{ __find: unknown }	apps/dashboard/src/routes/(app)/motion/find/+page.svelte	1
 as-unknown-as	{ __firstFrame: object }	scripts/probe-kit/specs/artifacts.ts	1
 as-unknown-as	{ __firstFrame?: Record<string, string> }	scripts/probe-kit/specs/artifacts.ts	1
 as-unknown-as	{ __firstRows: FirstRows | null }	scripts/probe-kit/specs/live-perf.ts	1
@@ -145,7 +137,6 @@ as-unknown-as	{ __setAttribute: typeof set; __slowSets: typeof slow; }	scripts/p
 as-unknown-as	{ __sizes: typeof seen; __lastSize: (el: Element) => { px: number; text:	scripts/probe-kit/specs/tab-return.ts	1
 as-unknown-as	{ __sizes?: { at: number; key: string; pane: string; was: number | null;	scripts/probe-kit/specs/tab-return.ts	1
 as-unknown-as	{ __sizes?: { key: string; pane: string; px: number }[]; }	scripts/probe-kit/specs/tab-return.ts	1
-as-unknown-as	{ __skeletonBench: { load: () => void; wait: () => void }; }	apps/dashboard/src/routes/(app)/motion/skeleton/+page.svelte	1
 as-unknown-as	{ __skeletonBench: Record<"load" | "wait", () => void>; }	scripts/probe-kit/specs/web/safari-blurs.ts	1
 as-unknown-as	{ __snaps: { id?: string }[] }	scripts/probe-kit/specs/canvas.ts	2
 as-unknown-as	{ __stateShape?: { els: Element[]; rest: Map<Element, Map<string, string	scripts/probe-kit/rendered-checks.ts	1
@@ -336,7 +327,6 @@ as-unknown-as	Record<string, { prototype?: object } | undefined>	scripts/probe-k
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
 as-unknown-as	Record<string, unknown[]>	scripts/probe-kit/specs/graph-stage.ts	1
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
-as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	Record<string, unknown>	scripts/probe-kit/frames.ts	1
 as-unknown-as	Redraw	scripts/probe-kit/specs/comments.ts	3
@@ -806,7 +796,6 @@ suppression	biome-ignore lint/style/useFilenamingConvention	apps/dashboard/src/l
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/agent/src/redaction.ts	1
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/hooks.ts	2
 suppression	biome-ignore lint/style/useUnicodeRegex	packages/core/src/rules.ts	1
-suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/dev-debug.ts	1
 suppression	biome-ignore lint/style/useVarsOnTop	apps/dashboard/src/lib/cawco/hub/socket.svelte.ts	1
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/cawco/mark.ts	2
 suppression	biome-ignore lint/suspicious/noBitwiseOperators	apps/dashboard/src/lib/platform/id.ts	2

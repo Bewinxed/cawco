@@ -15,9 +15,49 @@ declare global {
     }) => Promise<void>;
     readonly userState: "active" | "idle" | null;
   }
+  /**
+   * What `__cawcoDebug` holds (dev-debug.ts): the client's stores and
+   * handles (client.svelte.ts), the staged usage a bench writes
+   * (usage/forecast.svelte.ts), and the lists `devNote` grows.
+   */
+  interface CawcoDebug {
+    adoptInstances: (
+      rows: import("@cawco/core/protocol").InstanceRow[]
+    ) => void;
+    connectionState: typeof import("#lib/cawco/hub/socket.svelte.js").connectionState;
+    frame: typeof import("#lib/cawco/hub/frames.js").takeFrame;
+    inflight: typeof import("#lib/cawco/hub/socket.svelte.js").inflight;
+    leaveHub: typeof import("#lib/cawco/hub/socket.svelte.js").leaveHub;
+    plansState: typeof import("#lib/cawco/stores/plans.svelte.js").plansState;
+    projectsState: typeof import("#lib/cawco/stores/projects.svelte.js").projectsState;
+    sessionsState: typeof import("#lib/cawco/stores/sessions.svelte.js").sessionsState;
+    standHub: (
+      answer: import("#lib/cawco/hub/socket.svelte.js").BenchHub
+    ) => void;
+    usage: {
+      staged: {
+        claude: import("#lib/cawco/usage/rings.js").ClaudeRings | null;
+        forecast: import("@cawco/core/accounts").ProviderForecast;
+        openCode: import("#lib/cawco/usage/rings.js").RingAccount | null;
+      } | null;
+    };
+    usageState: typeof import("#lib/cawco/stores/usage.svelte.js").usageState;
+    workItemsState: typeof import("#lib/cawco/stores/work-items.svelte.js").workItemsState;
+    [note: string]: unknown;
+  }
   interface Window {
+    /** The /motion/button-pending bench's work: `start`, then `stop` ends it well. */
+    __buttonBench: { start: () => void; stop: () => void };
+    /** Dev only: the client's stores and handles, set once client.svelte.ts has loaded. */
+    __cawcoDebug: CawcoDebug;
+    /** The /motion/find bench's finder. */
+    __find: ReturnType<
+      typeof import("#lib/cawco/find/conversation-find.svelte.js").findIn
+    >;
     /** Set once the touch long-press menus are installed (utils/longpress.ts); the probe reads it. */
     __longPressInstalled?: boolean;
+    /** The /motion/skeleton bench's two states, for the spec to drive. */
+    __skeletonBench: { load: () => void; wait: () => void };
     /** The decision overlay's bridge, once its script has run (decisions/host/page.svelte.ts). */
     cawco?: import("./lib/cawco/decisions/host/page.svelte.js").Bridge;
     /** Chromium's Idle Detection (wicg.github.io/idle-detection), where the browser has it (lib/cawco/presence.ts). */

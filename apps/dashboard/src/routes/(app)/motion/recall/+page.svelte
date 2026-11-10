@@ -15,10 +15,7 @@
    * was sent, in order.
    */
   import type { AvailableCommand } from "@cawco/core/fleet";
-  import {
-    blankSession,
-    type SessionState,
-  } from "#lib/cawco/stores/sessions.svelte.js";
+  import { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -39,13 +36,7 @@
     "Check the push probe on the Mac and report back",
   ];
 
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        sessionsState: { sessions: Record<string, SessionState> };
-      };
-    }
-  ).__cawcoDebug;
+  const debug = window.__cawcoDebug;
   const now = Date.now();
   const messages = Array.from(
     { length: SENT },
