@@ -86,7 +86,6 @@
   import { NOT_REACHING } from "./artifact-doc";
   import BrowserAddress from "./BrowserAddress.svelte";
   import BrowserView from "./BrowserView.svelte";
-  import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
   import { browserHead } from "./browser-head";
   import CanvasView from "./CanvasView.svelte";
   import ChangeLines from "./ChangeLines.svelte";
@@ -108,6 +107,7 @@
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { PageCover } from "./page-cover.svelte";
+  import { PaneBrowser } from "./pane-browser.svelte";
   import { PaneCanvas } from "./pane-canvas.svelte";
   import { lostWhy, PaneDoc, pageRepliesOf } from "./pane-doc.svelte";
   import { PaneKeys } from "./pane-keys.svelte";
@@ -316,6 +316,11 @@
     pinComposer,
     paneMode,
     pinThread,
+  });
+  const paneBrowser = new PaneBrowser({
+    instanceId: () => instanceId,
+    paneSubject,
+    paneNotice,
   });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
@@ -758,50 +763,6 @@
   async function backToSession() {
     await goto(paneSubject.fleet.sessionHref(instanceId));
   }
-  const browserRow = $derived(
-    paneSubject.isBrowser ? paneSubject.fleet.browser(instanceId) : null
-  );
-  const browserMachine = $derived.by(() => {
-    const machineId =
-      paneSubject.owner?.machineId ?? browserRow?.machineId ?? "";
-    const known = paneSubject.fleet.machines.find(
-      (one) => one.machineId === machineId
-    );
-    return {
-      machineId,
-      name: browserRow?.machineName ?? known?.hostname ?? machineId,
-      online: known?.online ?? false,
-    };
-  });
-  /** The browser's stream is drawn in the well (BrowserView): there is a page to take over. */
-  let browserViewing = $state(false);
-  let browserActing = $state(false);
-  /** Take over from the panel, or Hand back while the person holds it; a refusal on the pane's line. */
-  async function browserControl() {
-    const row = browserRow;
-    if (!row) {
-      return;
-    }
-    browserActing = true;
-    const holding = !!row.takeover;
-    const why = holding
-      ? await handBackFromPanel(row.key, row.machineId)
-      : await takeOverFromPanel(row.key, {
-          instanceId,
-          machineId: row.machineId,
-        });
-    browserActing = false;
-    paneNotice.say(
-      why
-        ? {
-            message: holding
-              ? browserWords.cantHandBack(why)
-              : browserWords.cantTakeOver(why),
-            again: null,
-          }
-        : null
-    );
-  }
   let closing = $state(false);
   async function close() {
     closing = true;
@@ -830,10 +791,10 @@
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
-    if (paneSubject.isBrowser && browserRow) {
-      const shows = browserHead(browserRow, {
-        online: browserMachine.online,
-        viewing: browserViewing,
+    if (paneSubject.isBrowser && paneBrowser.browserRow) {
+      const shows = browserHead(paneBrowser.browserRow, {
+        online: paneBrowser.browserMachine.online,
+        viewing: paneBrowser.browserViewing,
         sheet: !!sheet,
       });
       if (shows.control) {
@@ -1077,22 +1038,25 @@
 
 {#snippet controlBar()}
   <!-- A browser's Take over, or Hand back while the person holds it (core `words/browser.ts`). -->
-  {@const holding = !!browserRow?.takeover}
+  {@const holding = !!paneBrowser.browserRow?.takeover}
   <Button
     data-slot="browser-take"
     label={holding ? browserWords.handBack : browserWords.takeOver}
-    onclick={browserControl}
-    pending={browserActing}
+    onclick={paneBrowser.browserControl}
+    pending={paneBrowser.browserActing}
     pendingLabel={holding ? browserWords.handingBack : browserWords.takingOver}
     shape="capsule"
     variant={holding ? "outline" : "default"}
   />
 {/snippet}
 {#snippet controlMenu()}
-  {@const holding = !!browserRow?.takeover}
+  {@const holding = !!paneBrowser.browserRow?.takeover}
   <DropdownMenu.Item
-    disabled={browserActing}
-    onSelect={whileIdle(() => browserActing, browserControl)}
+    disabled={paneBrowser.browserActing}
+    onSelect={whileIdle(
+      () => paneBrowser.browserActing,
+      paneBrowser.browserControl
+    )}
   >
     {#if holding}<IconLock />{:else}<IconGlobe />{/if}<span
       >{holding ? browserWords.handBack : browserWords.takeOver}</span
@@ -1103,15 +1067,15 @@
 <!-- A browser's address, in the head's centre (BrowserAddress). -->
 {#snippet addressBar()}
   <BrowserAddress
-    mine={!!browserRow?.takeover}
-    origin={browserRow?.origin ?? null}
+    mine={!!paneBrowser.browserRow?.takeover}
+    origin={paneBrowser.browserRow?.origin ?? null}
   />
 {/snippet}
 {#snippet addressMenu()}
   <BrowserAddress
     as="menu"
-    mine={!!browserRow?.takeover}
-    origin={browserRow?.origin ?? null}
+    mine={!!paneBrowser.browserRow?.takeover}
+    origin={paneBrowser.browserRow?.origin ?? null}
   />
 {/snippet}
 
@@ -1567,10 +1531,10 @@
     <BrowserView
       addressAtFoot={!!sheet}
       artifactId={paneSubject.artifact.id}
-      browser={browserRow}
+      browser={paneBrowser.browserRow}
       {instanceId}
-      machine={browserMachine}
-      bind:viewing={browserViewing}
+      machine={paneBrowser.browserMachine}
+      bind:viewing={paneBrowser.browserViewing}
     />
   {:else if previewReach.unopened}
     <!-- The hub opened no origin for it (every preview port in use): its
