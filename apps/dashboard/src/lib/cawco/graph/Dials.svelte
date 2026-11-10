@@ -30,10 +30,18 @@
    */
   import { graphWords } from "@cawco/core/words/graph";
   import { MediaQuery } from "svelte/reactivity";
+  import { BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
-  import { IconChevronDown, IconReset } from "#lib/icons.js";
+  import {
+    IconReset,
+    IconTextEmojiLinear,
+    IconTextEmptyLinear,
+    IconTextLinear,
+    IconTextLongLinear,
+    IconTextNoSpacesLinear,
+    IconTextRightToLeftLinear,
+  } from "#lib/icons.js";
   import DialRow from "./DialRow.svelte";
   import {
     changedOf,
@@ -41,9 +49,22 @@
     type DialValues,
     type GraphDial,
   } from "./dials";
-  import { type ContentCase, wordsOf } from "./prop-dials";
+  import {
+    type ContentCase,
+    type ContentCaseName,
+    wordsOf,
+  } from "./prop-dials";
 
   const words = graphWords;
+  /** Each case's glyph in the switch: the saved words, then the cases. */
+  const CASE_ICON = {
+    saved: IconTextLinear,
+    empty: IconTextEmptyLinear,
+    long: IconTextLongLinear,
+    noSpaces: IconTextNoSpacesLinear,
+    emoji: IconTextEmojiLinear,
+    rightToLeft: IconTextRightToLeftLinear,
+  } satisfies Record<ContentCaseName | "saved", unknown>;
 
   /** The props of the state on the stage, as the face lists them. */
   interface StateProps {
@@ -113,12 +134,12 @@
   const propsChanged = $derived(
     state ? changedOf(state.props, state.saved, state.edits) : []
   );
-  /** The case the text props stand in now: Saved while all hold their saved words, a case while each it reaches holds its words and the rest their saved; none once he wrote his own. */
+  /** The case the text props stand in now: `saved` while all hold their saved words, a case while each it reaches holds its words and the rest their saved; none once he wrote his own. */
   const contentPicked = $derived.by(() => {
     const own = state;
     const cases = own?.content?.cases ?? [];
     if (!own) {
-      return "";
+      return "saved";
     }
     const names = [...new Set(cases.flatMap((one) => Object.keys(one.fill)))];
     const now = (name: string) => own.edits[name] ?? own.saved[name];
@@ -127,9 +148,9 @@
         name in fill ? now(name) === fill[name] : now(name) === own.saved[name]
       );
     if (at({})) {
-      return words.dials.cases.saved;
+      return "saved";
     }
-    return cases.find((one) => at(one.fill))?.label ?? "";
+    return cases.find((one) => at(one.fill))?.is ?? "";
   });
   /** Under the phone line a colour's picker unfolds under its row, across the face. */
   const phone = new MediaQuery("(width < 640px)");
@@ -302,47 +323,29 @@
               </h3>
               {#if own.content && own.content.cases.length > 0}
                 {@const pick = own.content}
-                <!-- A menu, as the last resort a dropdown is: six cases
-                     beside the part's title have no room on its line, and
-                     drawn in place they read as one more prop. -->
-                <DropdownMenu.Root>
-                  <DropdownMenu.Trigger>
-                    {#snippet child({ props })}
-                      <Button
-                        {...props}
-                        data-slot="dials-content"
-                        size="sm"
-                        variant="ghost"
-                        >{words.dials.contentNow(contentPicked)}<IconChevronDown
-                          data-icon="inline-end"
-                        /></Button
-                      >
-                    {/snippet}
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Content
-                    align="end"
-                    aria-label={words.dials.content}
-                    width="compact"
-                  >
-                    <DropdownMenu.Label
-                      >{words.dials.content}</DropdownMenu.Label
-                    >
-                    <DropdownMenu.RadioGroup
-                      onValueChange={(next: string) =>
-                        pick.onpick(
-                          pick.cases.find((one) => one.label === next)?.fill ??
-                            null
-                        )}
-                      value={contentPicked}
-                    >
-                      {#each [words.dials.cases.saved, ...pick.cases.map((one) => one.label)] as label (label)}
-                        <DropdownMenu.RadioItem value={label}
-                          >{label}</DropdownMenu.RadioItem
-                        >
-                      {/each}
-                    </DropdownMenu.RadioGroup>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Root>
+                <!-- The kit's segmented control in its glass (BarSegments):
+                     one glyph a case, its tooltip saying it, the chosen one
+                     washed; never a menu (the owner's pin 14). -->
+                <BarSegments
+                  label={words.dials.content}
+                  onValueChange={(next) =>
+                    pick.onpick(
+                      pick.cases.find((one) => one.is === next)?.fill ?? null
+                    )}
+                  segments={[
+                    {
+                      value: "saved",
+                      label: words.dials.cases.saved,
+                      icon: CASE_ICON.saved,
+                    },
+                    ...pick.cases.map((one) => ({
+                      value: one.is,
+                      label: one.label,
+                      icon: CASE_ICON[one.is],
+                    })),
+                  ]}
+                  value={contentPicked}
+                />
               {/if}
             </div>
             <div

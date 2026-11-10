@@ -419,3 +419,14 @@ export { default as IconArtifactSheet } from "~icons/solar/widget-4-bold-duotone
 // Menu rows among duotone glyphs: a new session, and folding the others away.
 export { default as IconSessionAdd } from "~icons/solar/widget-add-bold-duotone";
 export { default as IconWindow } from "~icons/solar/window-frame-bold-duotone";
+/*
+ * The Dials card's switch of the component's words (the owner's pin 14 on
+ * Dials with props: a glass, never a menu): Solar Linear's text glyphs, one
+ * a case, as a bar's glass draws its symbols.
+ */
+export { default as IconTextLinear } from "~icons/solar/text-linear";
+export { default as IconTextEmptyLinear } from "~icons/solar/text-cross-linear";
+export { default as IconTextLongLinear } from "~icons/solar/sort-horizontal-linear";
+export { default as IconTextNoSpacesLinear } from "~icons/solar/text-selection-linear";
+export { default as IconTextEmojiLinear } from "~icons/solar/smile-circle-linear";
+export { default as IconTextRightToLeftLinear } from "~icons/solar/align-right-linear";

@@ -60,9 +60,14 @@ const SAMPLE = {
   rightToLeft: "إصلاح شريحة CawCo tray على iOS 27 قبل الإصدار",
 };
 
-/** A case of the component's words: its name, and the words it fills each text prop it reaches with, by prop name. */
+/** Which case of the component's words. */
+export type ContentCaseName =
+  "empty" | "long" | "noSpaces" | "emoji" | "rightToLeft";
+
+/** A case of the component's words: which, its name, and the words it fills each text prop it reaches with, by prop name. */
 export interface ContentCase {
   fill: Record<string, string>;
+  is: ContentCaseName;
   label: string;
 }
 
@@ -94,11 +99,23 @@ export function contentCases(
     return IDENTIFIER.test(dial.name) ? SAMPLE.longIdentifier : SAMPLE.long;
   };
   return [
-    { label: cases.empty, fill: fill(text, () => "") },
-    { label: cases.long, fill: fill(text, long) },
-    { label: cases.noSpaces, fill: fill(prose, () => SAMPLE.noSpaces) },
-    { label: cases.emoji, fill: fill(prose, () => SAMPLE.emoji) },
-    { label: cases.rightToLeft, fill: fill(prose, () => SAMPLE.rightToLeft) },
+    { is: "empty" as const, label: cases.empty, fill: fill(text, () => "") },
+    { is: "long" as const, label: cases.long, fill: fill(text, long) },
+    {
+      is: "noSpaces" as const,
+      label: cases.noSpaces,
+      fill: fill(prose, () => SAMPLE.noSpaces),
+    },
+    {
+      is: "emoji" as const,
+      label: cases.emoji,
+      fill: fill(prose, () => SAMPLE.emoji),
+    },
+    {
+      is: "rightToLeft" as const,
+      label: cases.rightToLeft,
+      fill: fill(prose, () => SAMPLE.rightToLeft),
+    },
   ].filter((one) => Object.keys(one.fill).length > 0);
 }
 
