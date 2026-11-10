@@ -25,11 +25,10 @@ import {
 } from "@cawco/core/accounts";
 import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
 import { projectAccountWords } from "@cawco/core/words/project-account";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { Dispatcher } from "./dispatch";
-import { refusal } from "./refusal";
 
 /** As long as a name `POST /api/projects` takes. */
 const PROJECT_NAME_LIMIT = 200;
@@ -61,21 +60,22 @@ export interface ProjectEdit {
 export const projectName = (raw: string) => {
   const name = raw.trim();
   if (!name) {
-    return refusal(400, "name-needed", "A project needs a name.");
+    return problem(400, {
+      code: "name-needed",
+      detail: "A project needs a name.",
+    });
   }
   if (CONTROL.test(name)) {
-    return refusal(
-      400,
-      "name-one-line",
-      "A project's name is one line of text."
-    );
+    return problem(400, {
+      code: "name-one-line",
+      detail: "A project's name is one line of text.",
+    });
   }
   if (name.length > PROJECT_NAME_LIMIT) {
-    return refusal(
-      400,
-      "name-too-long",
-      `A project's name is at most ${PROJECT_NAME_LIMIT} characters; this one is ${name.length}.`
-    );
+    return problem(400, {
+      code: "name-too-long",
+      detail: `A project's name is at most ${PROJECT_NAME_LIMIT} characters; this one is ${name.length}.`,
+    });
   }
   return name;
 };
@@ -92,26 +92,26 @@ const TRAILING_SLASH = /\/+$/u;
  */
 const lfsEndpoint = (raw: string) => {
   if (!URL.canParse(raw.trim())) {
-    return refusal(
-      400,
-      "large-files-live-url",
-      "Large files live at a URL: the repository's, or its LFS endpoint (…/info/lfs)."
-    );
+    return problem(400, {
+      code: "large-files-live-url",
+      detail:
+        "Large files live at a URL: the repository's, or its LFS endpoint (…/info/lfs).",
+    });
   }
   const url = new URL(raw.trim());
   if (url.protocol !== "https:") {
-    return refusal(
-      400,
-      "large-files-live-https",
-      "Large files live at an https URL: a connection's key never goes over plain http."
-    );
+    return problem(400, {
+      code: "large-files-live-https",
+      detail:
+        "Large files live at an https URL: a connection's key never goes over plain http.",
+    });
   }
   if (url.username || url.password || url.search || url.hash) {
-    return refusal(
-      400,
-      "give-url-alone-connection",
-      "Give the URL alone: the connection signs in, so it carries no name, key or query."
-    );
+    return problem(400, {
+      code: "give-url-alone-connection",
+      detail:
+        "Give the URL alone: the connection signs in, so it carries no name, key or query.",
+    });
   }
   const plain = url.toString().replace(TRAILING_SLASH, "");
   if (LFS_PATH.test(url.pathname)) {
@@ -166,7 +166,7 @@ const lfsChange = (
     ? lfsProblem(lfsConnection)
     : "Name the connection that signs in there.";
   if (why) {
-    return refusal(400, "lfs-refused", why);
+    return problem(400, { code: "lfs-refused", detail: why });
   }
   return lfsUrl === project.lfsUrl && lfsConnection === project.lfsConnection
     ? undefined
@@ -207,24 +207,22 @@ export const accountChange = (
   const matches = accountsAsked(accounts, raw);
   const [account] = matches;
   if (!account) {
-    return refusal(
-      400,
-      "no-account",
-      projectAccountWords.noAccount(
+    return problem(400, {
+      code: "no-account",
+      detail: projectAccountWords.noAccount(
         raw,
         accounts.map((one) => accountNameAmong(one, accounts))
-      )
-    );
+      ),
+    });
   }
   if (matches.length > 1) {
-    return refusal(
-      400,
-      "ambiguous",
-      projectAccountWords.ambiguous(
+    return problem(400, {
+      code: "ambiguous",
+      detail: projectAccountWords.ambiguous(
         raw,
         matches.map((one) => one.id)
-      )
-    );
+      ),
+    });
   }
   // The project's list holds its providers' sessions alone (placement.ts `ofProvider`).
   const listed = project.accounts?.filter(
@@ -236,14 +234,13 @@ export const accountChange = (
       const one = accounts.find((each) => each.id === id);
       return one ? accountNameAmong(one, accounts) : id;
     };
-    return refusal(
-      400,
-      "not-allowed",
-      projectAccountWords.notAllowed(
+    return problem(400, {
+      code: "not-allowed",
+      detail: projectAccountWords.notAllowed(
         accountNameAmong(account, accounts),
         listed.map(named)
-      )
-    );
+      ),
+    });
   }
   return account.id === project.account ? undefined : { account: account.id };
 };
@@ -265,11 +262,10 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit) => {
   }
   if (asked.accountAtLimit !== undefined) {
     if (!PROJECT_AT_LIMIT.includes(asked.accountAtLimit)) {
-      return refusal(
-        400,
-        "at-limit-needs-account",
-        projectAccountWords.atLimit.needs
-      );
+      return problem(400, {
+        code: "at-limit-needs-account",
+        detail: projectAccountWords.atLimit.needs,
+      });
     }
     if (asked.accountAtLimit !== project.accountAtLimit) {
       change.accountAtLimit = asked.accountAtLimit;
@@ -277,11 +273,10 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit) => {
   }
   if (asked.lands !== undefined) {
     if (!LANDS_MODES.includes(asked.lands)) {
-      return refusal(
-        400,
-        "work-lands-none-them",
-        `Work lands on ${LANDS_MODES.join(", ")}; ${String(asked.lands)} is none of them.`
-      );
+      return problem(400, {
+        code: "work-lands-none-them",
+        detail: `Work lands on ${LANDS_MODES.join(", ")}; ${String(asked.lands)} is none of them.`,
+      });
     }
     if (asked.lands !== project.lands) {
       change.lands = asked.lands;
@@ -338,11 +333,10 @@ export const createProjectEdits = ({
   async edit(projectId: string, asked: ProjectEdit) {
     const project = db.project(projectId);
     if (!project) {
-      return refusal(
-        404,
-        "no-project",
-        "This project is no longer recorded. Refresh."
-      );
+      return problem(404, {
+        code: "no-project",
+        detail: "This project is no longer recorded. Refresh.",
+      });
     }
     const checked = checkedEdit(project, asked, lfsProblem, accounts());
     if (checked instanceof ElysiaStatus) {

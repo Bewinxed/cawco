@@ -107,6 +107,7 @@ import type {
 } from "@cawco/core/transcript-types";
 import type { UsageSpend } from "@cawco/core/usage/types";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
+import type { problem } from "elysia";
 import type { createAccountCarry } from "./account-carry";
 import type { createAccountProbes } from "./account-probes";
 import type { createAccountSignin } from "./account-signin";
@@ -217,7 +218,7 @@ import type { ProjectTrash } from "./project-trash";
 import type { createProviderRetries } from "./provider-retries";
 import type { createPush } from "./push";
 import type { ForecastRead } from "./rebalance";
-import type { RefusalOf, Refused } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import type { RegistryShape } from "./registry";
 import type { createRelayControl } from "./relay-control";
 import type { createRelayJourney } from "./relay-journey";
@@ -483,7 +484,7 @@ export interface HubContext {
   >["continuationsWhole"];
   continuationTable: () => ContinuationJob[];
   /** project-joining.ts `createOrJoinProject`, plain-typed: typing it from there closes project-joining → hub-context → project-joining. */
-  createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade | Refused>;
+  createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade | AnyProblem>;
   credentialTurns: Set<string>;
   cutTasksWords: (how: string, cut: readonly EndedTask[]) => string;
   cutTurn: (instanceId: string, cause: string) => void;
@@ -675,9 +676,15 @@ export interface HubContext {
     body: FolderSkillBody
   ) => Promise<
     | FleetSkillMeta
-    | RefusalOf<400, "skill-folder-unnamed">
-    | RefusalOf<400, "skill-folder-unread">
-    | RefusalOf<409, "skill-folder-changed">
+    | ReturnType<
+        typeof problem<400, { code: "skill-folder-unnamed"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<400, { code: "skill-folder-unread"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<409, { code: "skill-folder-changed"; detail: string }>
+      >
     | undefined
   >;
   installSessionIdentity: (instanceId: string) => Promise<
