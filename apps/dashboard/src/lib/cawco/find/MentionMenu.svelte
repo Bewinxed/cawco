@@ -25,7 +25,7 @@
   import type { FindResult } from "./find-client";
   import { rowOf } from "./find-rows";
   import { GRACE_MS } from "./finder-state.svelte";
-  import type { MentionState } from "./mention.svelte";
+  import type { Handled, MentionState } from "./mention.svelte";
 
   let {
     mention,
@@ -38,7 +38,7 @@
     /** The listbox's id; each row's is `${id}-${key}`. */
     id: string;
     phone?: boolean;
-    onpick: (result: FindResult) => void;
+    onpick: (result: Handled) => void;
     ondismiss: () => void;
   } = $props();
 
