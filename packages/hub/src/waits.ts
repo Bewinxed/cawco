@@ -21,8 +21,10 @@
  */
 
 import type { Stage } from "@cawco/core/task-views";
+import { ElysiaStatus } from "elysia";
 import type { HubLifetimeShape } from "./lifetime";
 import { hasProjectFolder } from "./project-folder";
+import { projectRefusalOf } from "./project-refusal";
 import { movesFrom, type Stages } from "./stages";
 import { routineActor, type TaskEvent, type Tasks } from "./tasks";
 
@@ -112,8 +114,11 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
       }
     }
     if (after && afterMs) {
-      const { events } = await tasks.history(projectId, task.id);
-      const entered = events.findLast(
+      const history = await tasks.history(projectId, task.id);
+      if (history instanceof ElysiaStatus) {
+        throw projectRefusalOf(history);
+      }
+      const entered = history.events.findLast(
         (event) => event.stage?.to === stage.name
       )?.at;
       if (entered !== undefined && entered + afterMs <= now) {
@@ -128,6 +133,9 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
       return;
     }
     const view = await tasks.stages(projectId);
+    if (view instanceof ElysiaStatus) {
+      throw projectRefusalOf(view);
+    }
     const holding = new Map(
       view.stages
         .filter((stage) => stage.hooks.until || stage.hooks.after)
@@ -136,9 +144,12 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     if (holding.size === 0) {
       return;
     }
-    const { tasks: rows } = await tasks.list(projectId);
+    const list = await tasks.list(projectId);
+    if (list instanceof ElysiaStatus) {
+      throw projectRefusalOf(list);
+    }
     const now = Date.now();
-    for (const task of rows) {
+    for (const task of list.tasks) {
       const stage = holding.get(task.stage);
       if (stage) {
         await wake(projectId, view, task, stage, now);
@@ -167,22 +178,28 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
       );
       return;
     }
+    const unmoved = (words: string) =>
+      warnOnce(
+        projectId,
+        `${task.id}\0${where.to}`,
+        `${task.id} could not move ${stage.name} → ${where.to}: ${words}`
+      );
     try {
-      await tasks.move(
+      const moved = await tasks.move(
         projectId,
         task.id,
         where.to,
         routineActor(ROUTINE, why)
       );
+      if (moved instanceof ElysiaStatus) {
+        unmoved(moved.response.detail);
+        return;
+      }
       console.info(
         `[waits] ${projectId} ${task.id}: ${why}; moved ${stage.name} → ${where.to}`
       );
     } catch (error) {
-      warnOnce(
-        projectId,
-        `${task.id}\0${where.to}`,
-        `${task.id} could not move ${stage.name} → ${where.to}: ${error instanceof Error ? error.message : String(error)}`
-      );
+      unmoved(error instanceof Error ? error.message : String(error));
     }
   };
 
