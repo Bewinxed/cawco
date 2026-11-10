@@ -357,5 +357,24 @@ export const graphWords = {
     notAColour: "Not a colour. Type one like #2a6df4.",
     on: "On",
     off: "Off",
+    /** Under the rows once a prop differs from the saved state: writes his values into it. */
+    save: "Save",
+    /** Beside Save: a new state from his values, the saved one kept. */
+    saveNew: "Save as new state",
+    saving: "Saving…",
+    /** The card's part that holds the dials the agent put on the drawing. */
+    agentHead: "Agent's dials",
+    /** The card's part that holds the props of the state on the stage, by its component's name in words. */
+    propsHead: (component: string) => `${component} props`,
+    /** The props' one switch of words, read out: each case fills every text prop it reaches at once. */
+    content: "Fill all text with",
+    cases: {
+      saved: "Saved",
+      empty: "Empty",
+      long: "Long",
+      noSpaces: "No spaces",
+      emoji: "Emoji",
+      rightToLeft: "Right to left",
+    },
   },
 } as const;

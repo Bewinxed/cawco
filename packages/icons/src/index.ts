@@ -39,6 +39,7 @@ export { default as IconAddLine } from "~icons/solar/add-line-duotone";
 /** Add machine, in Solar's linear cut among the popover's linear rows. */
 export { default as IconAddLinear } from "~icons/solar/add-linear";
 export { default as IconAlignLeft } from "~icons/solar/align-left-bold-duotone";
+export { default as IconTextRightToLeftLinear } from "~icons/solar/align-right-linear";
 /*
  * Glyphs, not marks: the chevrons and arrows stay in Solar's linear cut, as
  * do the dashboard's local Minus, Plus and Tick (its lib/icons.ts). Every
@@ -379,6 +380,7 @@ export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duoto
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
 /** The stage's widths as bare glass symbols (linear, as every glass item): a phone, a tablet, a desk, a wide screen. */
 export { default as IconPhoneLinear } from "~icons/solar/smartphone-linear";
+export { default as IconTextEmojiLinear } from "~icons/solar/smile-circle-linear";
 /*
  * Sort: Solar's bare cut of it, the bars and their arrow with no squircle
  * round them (the owner, 10-24: "u need to draw similar style icons that are
@@ -386,6 +388,7 @@ export { default as IconPhoneLinear } from "~icons/solar/smartphone-linear";
  */
 export { default as IconSort } from "~icons/solar/sort-from-top-to-bottom-bold-duotone";
 export { default as IconSortLinear } from "~icons/solar/sort-from-top-to-bottom-linear";
+export { default as IconTextLongLinear } from "~icons/solar/sort-horizontal-linear";
 export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
 /** A release's New section (ReleaseNotes). */
 export { default as IconStars } from "~icons/solar/stars-bold-duotone";
@@ -404,6 +407,14 @@ export { default as IconSunLinear } from "~icons/solar/sun-linear";
 export { default as IconTablet } from "~icons/solar/tablet-bold-duotone";
 export { default as IconTabletLinear } from "~icons/solar/tablet-linear";
 export { default as IconLab } from "~icons/solar/test-tube-bold-duotone";
+export { default as IconTextEmptyLinear } from "~icons/solar/text-cross-linear";
+/*
+ * The Dials card's switch of the component's words (the owner's pin 14 on
+ * Dials with props: a glass, never a menu): Solar Linear's text glyphs, one
+ * a case, as a bar's glass draws its symbols.
+ */
+export { default as IconTextLinear } from "~icons/solar/text-linear";
+export { default as IconTextNoSpacesLinear } from "~icons/solar/text-selection-linear";
 /** A transfer; a tab moved to another group (its menu's Move to group). */
 export {
   default as IconMoveTab,

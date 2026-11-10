@@ -1,62 +1,104 @@
 <script lang="ts">
   /**
-   * The agent's controls (its canvas spec's `dials`): the values it lets the
-   * person tune on the drawing, read down one inspector grid as a tool's
-   * properties panel is (Storybook's Controls, Framer's and Leva's panels):
-   * each control one row, its name in the leading column
+   * The agent's controls (its canvas spec's `dials`) and, under them, the
+   * props of the state on the stage (the owner's pick, 2026-11-10: the
+   * artifact panel's Inspect folds into Dials): the values the person tunes
+   * on the drawing, read down one inspector grid as a tool's properties
+   * panel is (Storybook's Controls, Framer's and Leva's panels): each
+   * control one row (DialRow), its name in the leading column
    * (`c-graph-move-name-w`, the Animation face's names' column, so the two
    * faces read down one edge), its control in the next from one start edge,
    * one field high, and the undo glyph's column last, held in every row so
    * no control changes width as its value changes. Controls the agent puts
-   * under a heading stand under it (the section head). A number is a field
-   * with its fill (DialNumber), a colour a swatch and its words with a
-   * maintained picker (DialColour), a select the kit's Select, a toggle the
-   * kit's Switch at the controls' start edge beside its name, a line of
-   * words the kit's Input, an action an outline button.
+   * under a heading stand under it (the section head); the props stand
+   * under the component's name, one more heading of the same grid, each as
+   * the dial of its kind (prop-dials.ts).
    *
    * A changed value keeps its own ink: the undo glyph after it, in the
-   * edit's ink, stands only while it differs from the agent's (the owner's
-   * pick, graph-dials-questions `changed-mark`), and takes it back. Under
-   * the rows, once anything changed, Reset all takes every value back and
-   * leaves Undo reset in its place until anything changes again: what comes
-   * and goes stands after the rows, so no row moves. His values are the
+   * edit's ink, stands only while it differs from what it was (the agent's
+   * value, a prop's saved one; the owner's pick, graph-dials-questions
+   * `changed-mark`), and takes it back. Under the rows, once anything
+   * changed, Reset all takes every value back and leaves Undo reset in its
+   * place until anything changes again; once a prop differs from the saved
+   * state, Save writes it into the state and Save as new state adds one
+   * from it. The foot stands under the scroller, so a long list keeps it in
+   * reach and no row moves as it comes and goes. His dial values are the
    * artifact's answer and go to the agent by themselves.
    *
    * Narrower than `--container-timeline` (the phone's drawer, a room at its
    * least) the name's column shares the row with its control, two to three.
    */
-  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords } from "@cawco/core/words/graph";
   import { MediaQuery } from "svelte/reactivity";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import * as Select from "#lib/components/ui/select/index.js";
-  import { Switch } from "#lib/components/ui/switch/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconReset } from "#lib/icons.js";
-  import ColourPicker from "./ColourPicker.svelte";
-  import DialColour from "./DialColour.svelte";
-  import DialNumber from "./DialNumber.svelte";
+  import {
+    IconReset,
+    IconTextEmojiLinear,
+    IconTextEmptyLinear,
+    IconTextLinear,
+    IconTextLongLinear,
+    IconTextNoSpacesLinear,
+    IconTextRightToLeftLinear,
+  } from "#lib/icons.js";
+  import DialRow from "./DialRow.svelte";
   import {
     changedOf,
     type DialValue,
     type DialValues,
     type GraphDial,
-    rangeOf,
   } from "./dials";
-  import { figureOf } from "./figures";
+  import {
+    type ContentCase,
+    type ContentCaseName,
+    wordsOf,
+  } from "./prop-dials";
 
   const words = graphWords;
-  /** A figure and a unit written together ("36px", "1.5rem", "250 ms"). */
-  const FIGURE_UNIT = /^(-?\d+(?:\.\d+)?)\s*([a-z%]+)$/iu;
+  /** Each case's glyph in the switch: the saved words, then the cases. */
+  const CASE_ICON = {
+    saved: IconTextLinear,
+    empty: IconTextEmptyLinear,
+    long: IconTextLongLinear,
+    noSpaces: IconTextNoSpacesLinear,
+    emoji: IconTextEmojiLinear,
+    rightToLeft: IconTextRightToLeftLinear,
+  } satisfies Record<ContentCaseName | "saved", unknown>;
+
+  /** The props of the state on the stage, as the face lists them. */
+  interface StateProps {
+    /** The component the state mounts: its name heads the props. */
+    component: string;
+    /**
+     * The cases its words can be put in, all its text props at once
+     * (prop-dials.ts `contentCases`), and his pick of one: its fill, or
+     * null for the saved words.
+     */
+    content?: {
+      cases: readonly ContentCase[];
+      onpick: (fill: Record<string, string> | null) => void;
+    };
+    /** His values not saved yet, by name. */
+    edits: DialValues;
+    onchange: (name: string, value: DialValue) => void;
+    /** These props back to as saved; `all`: Reset all, which Undo reset takes back. */
+    onreset: (names: string[], all: boolean) => void;
+    onsave: () => void;
+    onsavenew: () => void;
+    /** Its props, each as the dial of its kind (prop-dials.ts `propDials`). */
+    props: readonly GraphDial[];
+    /** Each prop's value as the state's file mounts it, by name. */
+    saved: DialValues;
+    /** Save, or Save as new state, under way. */
+    saving?: "save" | "new" | null;
+  }
 
   let {
     dials,
     written,
     values,
+    state: stateProps = null,
     undoable = false,
     open = $bindable(null),
     held = null,
@@ -70,9 +112,11 @@
     written: DialValues;
     /** His values, by name: each control he turned. */
     values: DialValues;
+    /** The state's props, under the dials; none where the stage read none. */
+    state?: StateProps | null;
     /** Reset all was just pressed, and nothing has changed since: Undo reset stands. */
     undoable?: boolean;
-    /** The control whose layer stands open (a select's list, a colour's picker), by name; null while none is. */
+    /** The control whose layer stands open (a select's list, a colour's picker), by name (a prop's as `prop:<name>`); null while none is. */
     open?: string | null;
     /** A number control held under the hand, by name: dragged across, or typed into with these words in it. */
     held?:
@@ -87,33 +131,44 @@
   } = $props();
 
   const changed = $derived(changedOf(dials, written, values));
-  /** What the face shows of a control: his value, else as written. */
-  const shownOf = (dial: GraphDial): DialValue | undefined =>
-    values[dial.name] ?? written[dial.name];
-  const nameOf = (dial: GraphDial) => dial.label ?? dial.name;
-  /** A select's option said as a figure and its unit, where it is one ("36px": "36" "px"), so every control writes a unit one way; else the words as they are. */
-  const splitUnit = (option: string): { figure: string; unit: string } => {
-    const match = FIGURE_UNIT.exec(option.trim());
-    return match
-      ? { figure: match[1] ?? option, unit: match[2] ?? "" }
-      : { figure: option, unit: "" };
-  };
-  /** A value said in words, one form everywhere: a figure, a space and its unit ("10 px", a select's "36px" too), a toggle on or off, words as they are. */
-  const said = (dial: GraphDial, value: DialValue | undefined): string => {
-    if (typeof value === "number") {
-      return `${figureOf(value, lang)}${dial.unit ? ` ${dial.unit}` : ""}`;
+  const propsChanged = $derived(
+    stateProps
+      ? changedOf(stateProps.props, stateProps.saved, stateProps.edits)
+      : []
+  );
+  /** The case the text props stand in now: `saved` while all hold their saved words, a case while each it reaches holds its words and the rest their saved; none once he wrote his own. */
+  const contentPicked = $derived.by(() => {
+    const own = stateProps;
+    const cases = own?.content?.cases ?? [];
+    if (!own) {
+      return "saved";
     }
-    if (typeof value === "boolean") {
-      return value ? words.dials.on : words.dials.off;
+    const names = [...new Set(cases.flatMap((one) => Object.keys(one.fill)))];
+    const now = (name: string) => own.edits[name] ?? own.saved[name];
+    const at = (fill: Record<string, string>) =>
+      names.every((name) =>
+        name in fill ? now(name) === fill[name] : now(name) === own.saved[name]
+      );
+    if (at({})) {
+      return "saved";
     }
-    const { figure, unit } = splitUnit(String(value ?? ""));
-    return unit ? `${figure} ${unit}` : figure;
-  };
-  /** A figure's control writes its value at its end (a number, a select of figures); the agent's stands under it there. */
-  const atEnd = (dial: GraphDial): boolean =>
-    dial.kind === "number" ||
-    (dial.kind === "select" &&
-      (dial.options ?? []).some((one) => splitUnit(one).unit !== ""));
+    return cases.find((one) => at(one.fill))?.is ?? "";
+  });
+  /** The case a resting pointer stands on in the text switch, null while none: its words stand in the text rows until it leaves (the owner's pick on pin 15, "Show it on hover"), nothing pressed or sent. */
+  let previewing = $state<string | null>(null);
+  /** The text rows' words while a case is previewed, by prop name: the case's where it reaches, the saved elsewhere. */
+  const previewed = $derived.by(() => {
+    const cases = stateProps?.content?.cases ?? [];
+    if (!stateProps || previewing === null) {
+      return null;
+    }
+    const fill = cases.find((one) => one.is === previewing)?.fill ?? {};
+    const names = new Set(cases.flatMap((one) => Object.keys(one.fill)));
+    const { saved } = stateProps;
+    return Object.fromEntries(
+      [...names].map((name) => [name, name in fill ? fill[name] : saved[name]])
+    );
+  });
   /** Under the phone line a colour's picker unfolds under its row, across the face. */
   const phone = new MediaQuery("(width < 640px)");
   /** The controls in their headings' order: those under none first, then each heading's. */
@@ -135,42 +190,75 @@
   });
 
   /**
-   * The inspector grid: the Animation face's names' column, the control
-   * (`c-graph-control-w` at most, the grid standing at the face's start, so
-   * on a wide room the undo glyph stays beside what it marks), and the undo
-   * glyph's column held in every row, so every control starts on one edge
-   * and ends on another.
+   * The inspector grid: the names' column as wide as its longest name (the
+   * Animation face's names' width at most, a longer one wrapping), the
+   * control in the rest, and the undo glyph's column held in every row, so
+   * every control starts on one edge and ends on another, no strip of air
+   * between a name and its control. The grid stands no wider than a name's
+   * column, a control's and the glyph's (`--grid-max`), so on a wide room
+   * the undo glyph stays beside what it marks.
    */
   const COLUMNS =
-    "minmax(0, var(--c-graph-move-name-w)) minmax(0, var(--c-graph-control-w)) var(--c-btn-h-xs)";
+    "fit-content(var(--c-graph-move-name-w)) minmax(0, 1fr) var(--c-btn-h-xs)";
   /** Narrow: the name takes what it needs up to two fifths, its control the rest. */
-  const NARROW_COLUMNS =
-    "fit-content(40%) minmax(0, var(--c-graph-control-w)) var(--c-btn-h-xs)";
-  /** Presses of each action so far, by name: what its arg is set to. */
-  let presses = $state<Record<string, number>>({});
-  const layer = (name: string) => ({
-    open: open === name,
-    onOpenChange: (next: boolean) => {
-      if (next) {
-        open = name;
-      } else if (open === name) {
-        open = null;
-      }
-    },
-  });
+  const NARROW_COLUMNS = "fit-content(40%) minmax(0, 1fr) var(--c-btn-h-xs)";
+  const GRID_MAX =
+    "calc(var(--c-graph-move-name-w) + var(--c-graph-control-w) + var(--c-btn-h-xs) + 2 * var(--space-3))";
+  /** A layer's open and close, for the control named `key`. */
+  const layerOf = (key: string) => (next: boolean) => {
+    if (next) {
+      open = key;
+    } else if (open === key) {
+      open = null;
+    }
+  };
+  function resetAll() {
+    if (changed.length > 0) {
+      onreset(changed, true);
+    }
+    if (stateProps && propsChanged.length > 0) {
+      stateProps.onreset(propsChanged, true);
+    }
+  }
 </script>
+
+<!-- The card's two parts each stand under a head that says what it is,
+     in the row role and strong ink: the agent's dials, the component's own
+     props. -->
+{#snippet partHead(text: string)}
+  <h3
+    class="col-span-full m-0 flex min-w-0 items-end text-ink-strong type-row text-pretty"
+  >
+    {text}
+  </h3>
+{/snippet}
+<!-- A heading the agent wrote over some of its dials: in the label role and
+     muted ink, under the part's head, set apart by the space above it. -->
+{#snippet groupHead(text: string)}
+  <h4
+    class="col-span-full m-0 flex min-h-c-btn-h-xs min-w-0 items-end text-ink-muted type-label"
+  >
+    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{text}</span
+    >
+  </h4>
+{/snippet}
 
 <TooltipProvider>
   <div
     class="@container/dials flex min-h-0 min-w-0 flex-1 flex-col"
     data-slot="dials"
+    style:--cols={COLUMNS}
+    style:--grid-max={GRID_MAX}
+    style:--narrow={NARROW_COLUMNS}
   >
     <!-- Its scroller clips: it stands a step out and pads the step back, so
          a focus ring on its edge is drawn whole (The One Ring Rule); under a
          finger its foot holds the last row's touch areas too (The 44 Touch
-         Rule's `::after` reaches past a switch), so nothing scrolls short. -->
+         Rule's `::after` reaches past a switch), so nothing scrolls short.
+         It takes its rows' height, up to what the face has. -->
     <div
-      class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-1 overflow-y-auto p-space-1 scroll-timeline-transcript-head coarse:pb-space-4"
+      class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-initial overflow-y-auto p-space-1 scroll-timeline-transcript-head coarse:pb-space-4"
       data-slot="dials-rows"
     >
       <!-- One grid for every section, so each control starts on one edge
@@ -180,274 +268,184 @@
       <!-- Under a floating head the rows clear it at rest (`--face-top`). -->
       <div aria-hidden="true" class="h-(--face-top,0px)"></div>
       <div
-        class="grid min-w-0 grid-cols-(--cols) justify-start gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
+        class="grid min-w-0 max-w-(--grid-max) grid-cols-(--cols) gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
         data-slot="dials-grid"
-        style:--cols={COLUMNS}
-        style:--narrow={NARROW_COLUMNS}
       >
-        {#each sections as section (section.head)}
+        {#if dials.length > 0}
           <section
-            aria-label={section.head ?? undefined}
-            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+            aria-label={stateProps ? words.dials.agentHead : undefined}
+            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3"
+            data-slot="dials-agent"
           >
-            {#if section.head}
-              <h3
-                class={sectionHeadVariants({
-                  inset: "flush",
-                  class: "col-span-full",
-                })}
-              >
-                <span
-                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                  >{section.head}</span
-                >
-              </h3>
+            {#if stateProps}
+              {@render partHead(words.dials.agentHead)}
             {/if}
-            {#each section.dials as dial (dial.name)}
-              {@const value = shownOf(dial)}
-              {@const edited = changed.includes(dial.name)}
-              {@const id = `dial-${dial.name}`}
-              <div
-                class="col-span-full grid min-w-0 grid-cols-subgrid items-start"
-                data-dial-row={dial.name}
-              >
-                {#if dial.kind === "action"}
-                  <!-- An action: its name is its button's, from the controls' edge. -->
-                  <Button
-                    class="col-start-2 justify-self-start"
-                    onclick={() => {
-                      const next = (presses[dial.name] ?? 0) + 1;
-                      presses = { ...presses, [dial.name]: next };
-                      onchange(dial.name, next);
-                    }}
-                    size="sm"
-                    variant="outline">{nameOf(dial)}</Button
-                  >
-                {:else}
-                  <label
-                    class="flex min-h-c-input-h min-w-0 items-center type-label text-ink-row text-pretty wrap-anywhere"
-                    for={id}>{nameOf(dial)}</label
-                  >
-                  <div
-                    class="flex min-h-c-input-h min-w-0 items-center"
-                    data-dial={dial.name}
-                  >
-                    {#if dial.kind === "number"}
-                      {@const start = Number(written[dial.name] ?? 0)}
-                      {@const hand = held?.name === dial.name ? held : null}
-                      <div class="min-w-0 flex-1" {id}>
-                        <DialNumber
-                          {dial}
-                          dragging={hand?.as === "dragging"}
-                          label={nameOf(dial)}
-                          {lang}
-                          onchange={(next) => onchange(dial.name, next)}
-                          range={rangeOf(dial, start)}
-                          typing={hand?.as === "typing" ? hand.text : null}
-                          value={Number(value ?? start)}
-                        />
-                      </div>
-                    {:else if dial.kind === "color"}
-                      <div class="min-w-0 flex-1" {id}>
-                        <DialColour
-                          inline={phone.current}
-                          label={nameOf(dial)}
-                          onchange={(next) => onchange(dial.name, next)}
-                          {...layer(dial.name)}
-                          value={String(value ?? "")}
-                          was={edited ? String(written[dial.name] ?? "") : null}
-                        />
-                      </div>
-                    {:else if dial.kind === "select"}
-                      {@const shown = splitUnit(String(value ?? ""))}
-                      <Select.Root
-                        onValueChange={(next: string) =>
-                          onchange(dial.name, next)}
-                        type="single"
-                        value={String(value ?? "")}
-                        {...layer(dial.name)}
-                      >
-                        <Select.Trigger
-                          align={shown.unit ? "end" : undefined}
-                          aria-label={nameOf(dial)}
-                          class="w-full min-w-0"
-                          {id}
-                        >
-                          <!-- Its value in the fields' own size, the 16px floor
-                               a field takes on a phone and under a finger
-                               (design.css), so every control's value reads alike;
-                               a figure at the field's end, as a number's is. -->
-                          <span
-                            class="min-w-0 truncate num max-phone:text-(length:--text-field-floor) coarse:text-(length:--text-field-floor)"
-                            >{shown.figure}{#if shown.unit}<span
-                                class="ms-space-1 text-ink-muted"
-                                >{shown.unit}</span
-                              >{/if}</span
-                          >
-                        </Select.Trigger>
-                        <Select.Content>
-                          {#each dial.options ?? [] as option (option)}
-                            {@const shownOption = splitUnit(option)}
-                            <!-- Each option as the field writes it: its figure, its unit
-                                 muted; while his differs, the agent's marked by the undo
-                                 glyph that takes it back. -->
-                            <Select.Item label={option} value={option}>
-                              {#snippet children()}
-                                {#if edited && option === written[dial.name]}
-                                  <IconReset
-                                    aria-hidden="true"
-                                    class="size-icon-sm text-ink-muted"
-                                  />
-                                  <span class="sr-only"
-                                    >{words.dials.agentsValue}</span
-                                  >
-                                {/if}
-                                <!-- At the edge the trigger writes it at. -->
-                                <span
-                                  class={[
-                                    "num",
-                                    shownOption.unit && "flex-1 text-end",
-                                  ]}
-                                  >{shownOption.figure}{#if shownOption.unit}<span
-                                      class="ms-space-1 text-ink-muted"
-                                      >{shownOption.unit}</span
-                                    >{/if}</span
-                                >
-                              {/snippet}
-                            </Select.Item>
-                          {/each}
-                        </Select.Content>
-                      </Select.Root>
-                    {:else if dial.kind === "toggle"}
-                      <Switch
-                        checked={value === true}
-                        {id}
-                        onCheckedChange={(next: boolean) =>
-                          onchange(dial.name, next)}
-                      />
-                    {:else}
-                      <Input
-                        {id}
-                        onchange={(event: Event) =>
-                          onchange(
-                            dial.name,
-                            (event.currentTarget as HTMLInputElement).value
-                          )}
-                        value={String(value ?? "")}
-                      />
-                    {/if}
-                  </div>
-                  <!-- The undo glyph's column, held in every row: a changed
-                       value's way back, in the edit's ink. -->
-                  <span
-                    class="flex h-c-input-h w-c-btn-h-xs items-center justify-center"
-                  >
-                    {#if edited}
-                      {@const was = said(dial, written[dial.name])}
-                      <Tip label={words.dials.resetTo(was)}>
-                        {#snippet children(tip)}
-                          <Button
-                            {...tip}
-                            aria-label={words.dials.resetSaid(
-                              nameOf(dial),
-                              was
-                            )}
-                            data-edited={dial.name}
-                            icon={IconReset}
-                            onclick={() => onreset([dial.name], false)}
-                            press="pressable"
-                            size="icon-xs"
-                            tone="edited"
-                            variant="ghost"
-                          />
-                        {/snippet}
-                      </Tip>
-                    {/if}
-                  </span>
-                  {#if edited}
-                    <!-- The agent's value, written under his where his
-                         stands (a figure under a figure, at the field's end),
-                         led by the glyph that puts it back. Its words are the
-                         undo glyph's name, so a reader hears them once. -->
-                    {@const was = written[dial.name]}
-                    <p
-                      aria-hidden="true"
-                      class={[
-                        "mark-line col-start-2 m-0 flex min-w-0 items-center gap-space-1 pt-space-1 type-meta text-ink-muted",
-                        atEnd(dial) && "justify-end",
-                      ]}
-                      data-slot="dial-was"
-                    >
-                      <IconReset class="size-icon-sm flex-none" data-box />
-                      {#if dial.kind === "color"}
-                        <span
-                          data-box
-                          class="checker block size-space-3 flex-none overflow-clip rounded-hair border border-border-control"
-                          ><span
-                            class="block size-full bg-(--was)"
-                            style:--was={String(was ?? "")}
-                          ></span></span
-                        >
-                      {/if}
-                      <span
-                        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap num"
-                        >{said(dial, was)}</span
-                      >
-                    </p>
+            <div
+              class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-5"
+            >
+              {#each sections as section (section.head)}
+                <section
+                  aria-label={section.head ?? undefined}
+                  class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+                >
+                  {#if section.head}
+                    {@render groupHead(section.head)}
                   {/if}
-                {/if}
-              </div>
-              {#if phone.current && dial.kind === "color" && open === dial.name}
-                <!-- On a phone the picker unfolds under its row across the
-                     face, and is brought into view once it stands. -->
-                <div
-                  class="col-span-full min-w-0 scroll-mb-space-5"
-                  data-vaul-no-drag
-                  onintroend={(event) =>
-                    bringIntoView(event.currentTarget as HTMLElement)}
-                  transition:unfold
-                >
-                  <ColourPicker
-                    onchange={(next) => onchange(dial.name, next)}
-                    onclose={() => {
-                      open = null;
-                    }}
-                    value={String(value ?? "")}
-                    wide
-                  />
-                </div>
-              {/if}
-            {/each}
+                  {#each section.dials as dial (dial.name)}
+                    {@const hand = held?.name === dial.name ? held : null}
+                    <DialRow
+                      {dial}
+                      edited={changed.includes(dial.name)}
+                      held={hand}
+                      {lang}
+                      onchange={(next) => onchange(dial.name, next)}
+                      onopenchange={layerOf(dial.name)}
+                      onreset={() => onreset([dial.name], false)}
+                      open={open === dial.name}
+                      phone={phone.current}
+                      value={values[dial.name] ?? written[dial.name]}
+                      was={written[dial.name]}
+                    />
+                  {/each}
+                </section>
+              {/each}
+            </div>
           </section>
-        {/each}
-        {#if changed.length > 0 || undoable}
-          <!-- After the rows, at the controls' end, so nothing above it moves
-             as it comes and goes. -->
-          <div
-            class="col-span-2 col-start-2 flex min-w-0 justify-end"
-            data-slot="dials-foot"
+        {/if}
+        {#if stateProps && stateProps.props.length > 0}
+          {@const own = stateProps}
+          {@const title = words.dials.propsHead(wordsOf(own.component))}
+          <!-- After the agent's part, a hairline across the card and the
+               space of a part's gap on each side of it: where one ends. -->
+          <section
+            aria-label={title}
+            class={[
+              "col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3",
+              dials.length > 0 &&
+                "border-t border-t-border-hairline pt-space-5",
+            ]}
+            data-slot="dials-props"
           >
-            {#if changed.length > 0}
-              <Button
-                aria-label={words.dials.resetAllSaid}
-                data-slot="reset-all"
-                icon={IconReset}
-                label={words.resetAll}
-                onclick={() => onreset(changed, true)}
-                size="sm"
-                variant="ghost"
-              />
-            {:else}
-              <Button
-                data-slot="undo-reset"
-                onclick={onundo}
-                size="sm"
-                variant="ghost">{words.undoReset}</Button
-              >
-            {/if}
-          </div>
+            <!-- The part's head carries the props' own control on its line,
+                 at its end, out of the props' columns: it acts on all of
+                 them, so it stands with what names them, not among them
+                 (the owner's pin 12: it read as "another option in the
+                 picker, not a feature of the picker"). -->
+            <div
+              class="col-span-full flex min-w-0 flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
+              data-slot="dials-props-head"
+            >
+              <h3 class="m-0 min-w-0 text-ink-strong type-row text-pretty">
+                {title}
+              </h3>
+              {#if own.content && own.content.cases.length > 0}
+                {@const pick = own.content}
+                <!-- The kit's segmented control in its glass (BarSegments):
+                     one glyph a case, the chosen one washed; never a menu
+                     (the owner's pin 14). Hovering a case shows it in the
+                     text rows (pin 15). -->
+                <BarSegments
+                  label={words.dials.content}
+                  onpreview={(next) => {
+                    previewing = next;
+                  }}
+                  onValueChange={(next) =>
+                    pick.onpick(
+                      pick.cases.find((one) => one.is === next)?.fill ?? null
+                    )}
+                  segments={[
+                    {
+                      value: "saved",
+                      label: words.dials.cases.saved,
+                      icon: CASE_ICON.saved,
+                    },
+                    ...pick.cases.map((one) => ({
+                      value: one.is,
+                      label: one.label,
+                      icon: CASE_ICON[one.is],
+                    })),
+                  ]}
+                  value={contentPicked}
+                />
+              {/if}
+            </div>
+            <div
+              class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+            >
+              {#each own.props as prop (prop.name)}
+                <DialRow
+                  dial={prop}
+                  edited={propsChanged.includes(prop.name)}
+                  idPrefix="prop"
+                  {lang}
+                  onchange={(next) => own.onchange(prop.name, next)}
+                  onopenchange={layerOf(`prop:${prop.name}`)}
+                  onreset={() => own.onreset([prop.name], false)}
+                  open={open === `prop:${prop.name}`}
+                  phone={phone.current}
+                  value={previewed && prop.name in previewed
+                    ? previewed[prop.name]
+                    : (own.edits[prop.name] ?? own.saved[prop.name])}
+                  was={own.saved[prop.name]}
+                />
+              {/each}
+            </div>
+          </section>
         {/if}
       </div>
     </div>
+    {#if changed.length > 0 || propsChanged.length > 0 || undoable}
+      <!-- Under the rows, on the grid's edges: the way back at the names'
+           start, the state's saves at the controls' end. -->
+      <div
+        class="grid min-w-0 max-w-(--grid-max) flex-none grid-cols-(--cols) gap-x-space-3 pt-space-3 @max-timeline/dials:grid-cols-(--narrow)"
+        data-slot="dials-foot"
+      >
+        <div class="col-span-full flex min-w-0 items-center gap-space-1">
+          {#if changed.length > 0 || propsChanged.length > 0}
+            <Button
+              aria-label={words.dials.resetAllSaid}
+              class="-ms-space-2"
+              data-slot="reset-all"
+              icon={IconReset}
+              label={words.resetAll}
+              onclick={resetAll}
+              size="sm"
+              variant="ghost"
+            />
+          {:else}
+            <Button
+              class="-ms-space-3"
+              data-slot="undo-reset"
+              onclick={onundo}
+              size="sm"
+              variant="ghost">{words.undoReset}</Button
+            >
+          {/if}
+          {#if stateProps && propsChanged.length > 0}
+            <Button
+              class="ms-auto"
+              data-slot="save-new"
+              disabled={!!stateProps.saving}
+              label={words.dials.saveNew}
+              onclick={stateProps.onsavenew}
+              pending={stateProps.saving === "new"}
+              pendingLabel={words.dials.saving}
+              size="sm"
+              variant="ghost"
+            />
+            <Button
+              data-slot="save"
+              disabled={!!stateProps.saving}
+              label={words.dials.save}
+              onclick={stateProps.onsave}
+              pending={stateProps.saving === "save"}
+              pendingLabel={words.dials.saving}
+              size="sm"
+            />
+          {/if}
+        </div>
+      </div>
+    {/if}
   </div>
 </TooltipProvider>

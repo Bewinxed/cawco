@@ -20,7 +20,11 @@
    * count after them: Open 4, Resolved 2), one or the other in one control.
    *
    * It follows `value` while mounted; a press asks for another through
-   * `onValueChange` (or `bind:value`).
+   * `onValueChange` (or `bind:value`). `onpreview` tells which segment a
+   * resting pointer stands on, and null once it leaves the switch (crossing
+   * from one segment to the next is one step, never a leave between), for a
+   * switch whose choice shows its result before it is pressed (a finger has
+   * no rest).
    */
   import { Tabs } from "bits-ui";
   import type { Component } from "svelte";
@@ -49,6 +53,7 @@
     segments,
     value = $bindable(),
     onValueChange,
+    onpreview,
     label,
   }: {
     /** The segments, in the order they stand. */
@@ -57,9 +62,24 @@
     value: T;
     /** A press chose another segment. */
     onValueChange?: (value: T) => void;
+    /** A resting pointer stands on this segment; null: it left. */
+    onpreview?: (value: T | null) => void;
     /** The switch's name, for the screen reader. */
     label: string;
   } = $props();
+
+  /** One pair of handlers for every segment, each reading which it stands on. */
+  const enter = (event: PointerEvent) => {
+    const at = segments.find(
+      (one) =>
+        one.value ===
+        (event.currentTarget as HTMLElement | null)?.dataset.segment
+    );
+    if (at && event.pointerType !== "touch") {
+      onpreview?.(at.value);
+    }
+  };
+  const leave = () => onpreview?.(null);
 
   const choose = (next: string) => {
     const chosen = segments.find((one) => one.value === next)?.value;
@@ -73,7 +93,11 @@
 <Tabs.Root class="contents" onValueChange={choose} {value}>
   <Tabs.List aria-label={label}>
     {#snippet child({ props })}
-      <BarGlass {...props} form="group">
+      <BarGlass
+        {...props}
+        form="group"
+        onpointerleave={onpreview ? leave : undefined}
+      >
         {#each segments as segment (segment.value)}
           <Tabs.Trigger value={segment.value}>
             {#snippet child({ props: trigger })}
@@ -84,6 +108,8 @@
                   keys={segment.keys}
                   label={segment.label}
                   marked={segment.value === value}
+                  data-segment={segment.value}
+                  onpointerenter={onpreview ? enter : undefined}
                   props={trigger}
                   tip={segment.tip}
                 />
@@ -96,6 +122,8 @@
                     ? `${segment.label}, ${segment.count}`
                     : segment.label}
                   marked={segment.value === value}
+                  data-segment={segment.value}
+                  onpointerenter={onpreview ? enter : undefined}
                   props={trigger}
                   tip={segment.tip ?? false}
                   >{segment.label}{#if segment.count}<span
