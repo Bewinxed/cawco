@@ -7,7 +7,6 @@
     pinHeld,
     previewMode,
   } from "@cawco/core/comments/model";
-  import { pinProblem } from "@cawco/core/comments/validate";
   import type { ChangedItem } from "@cawco/core/doc-meta";
   import { pinName } from "@cawco/core/pin-name";
   import {
@@ -38,8 +37,6 @@
   import { sheetWords } from "@cawco/core/words/sheet";
   import { shellWords } from "@cawco/core/words/shell";
   import { type Snippet, untrack } from "svelte";
-  import { z } from "zod";
-  import { ComposeTargetSchema } from "#lib/cawco/stored-shapes.js";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -82,7 +79,7 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { landKey } from "#lib/platform/motion/keyed.svelte.js";
   import { closeInto } from "#lib/platform/motion/share.svelte.js";
-  import { readJson, store, stored, writeJson } from "#lib/platform/storage.js";
+  import { store, stored } from "#lib/platform/storage.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
@@ -91,7 +88,6 @@
   import { openAsked, takeOpen } from "../artifact-names.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import DesignGraph from "../graph/DesignGraph.svelte";
-  import { pressOutside } from "../press-outside";
   import { refusals } from "../refusals.svelte";
   import { heardInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
@@ -125,13 +121,13 @@
   import { PaneSend } from "./pane-send.svelte";
   import { PaneSheet } from "./pane-sheet.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
+  import { PinComposer } from "./pin-composer.svelte";
   import { frameError, PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
   import { errorPlace, errorTitle, StageCover } from "./stage-cover.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
   import {
-    type ComposeTarget,
     type PreviewPinAt,
     pageMessage,
     previewBox,
@@ -263,6 +259,13 @@
     previewFrame,
     cardPin: () => cardPin,
   });
+  const pinComposer = new PinComposer({
+    paneSubject,
+    previewFrame,
+    paneDoc,
+    commentKit,
+    markFocused: (id: string) => markFocused(id),
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /**
@@ -359,7 +362,7 @@
   function setMode(next: PreviewMode, place: string | null = null) {
     // A mode switch leaves nothing of a comment being written.
     if (next !== mode) {
-      cancelComposer();
+      pinComposer.cancelComposer();
     }
     mode = next;
     placing = next === "comment" ? place : null;
@@ -444,40 +447,24 @@
   );
   /** The open thread's element's nearest parent, as the page names its chain (`cawco:pin-chain`). */
   let cardParent = $state<{ id: string; name: string | null } | null>(null);
-  /**
-   * The comment being written: what the press may stand on (innermost
-   * first, out to the whole page), the one chosen, where its hollow pill
-   * stands, and its words on their way. Nothing is written until Comment.
-   */
-  let composing = $state<{
-    at: PreviewPinAt | null;
-    chain: ComposeTarget[];
-    chosen: number;
-    error: string;
-    sending: boolean;
-  } | null>(null);
-  /** The composer's float, whose outside presses close it. */
-  let composerFloat = $state<HTMLElement>();
   /** The thread's or the composer's float: told to the page as what covers it on a phone. */
   let cardFloat = $state<HTMLElement>();
-  /** The comment being written was asked for the whole page from the rail's + (its composer then hangs from the rail's glass beside the page). */
-  let composingPage = $state(false);
-  $effect(() => {
-    if (!composing) {
-      composingPage = false;
-    }
-  });
   /** Changed since you looked, over the page at the well's foot: told to the page as what covers it. */
   let changesTag = $state<HTMLFieldSetElement>();
   /** How tall the page's own foot bar stands over its viewport's foot, px (`cawco:page-foot`): the tag stands above it. */
   let pageFoot = $state(0);
   /** A whole-page comment asked from the rail beside the page: its composer hangs from the rail's glass, not over the page. */
   const pageHung = $derived(
-    composingPage && !!composing && listOpen && !paneLayout.railSheet
+    pinComposer.composingPage &&
+      !!pinComposer.composing &&
+      listOpen &&
+      !paneLayout.railSheet
   );
   /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a composer or a place picker stands, so neither covers the other; a thread opens in it (`threadPushed`). */
   const railAway = $derived(
-    listOpen && paneLayout.railSheet && (!!composing || !!previewFrame.picking)
+    listOpen &&
+      paneLayout.railSheet &&
+      (!!pinComposer.composing || !!previewFrame.picking)
   );
   /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
   let listFilter = $state<RailList>("open");
@@ -496,7 +483,7 @@
   $effect(() => {
     const frame = previewFrame.iframe;
     const floating = paneLayout.floatSheet
-      ? (cardFloat ?? composerFloat ?? null)
+      ? (cardFloat ?? pinComposer.composerFloat ?? null)
       : null;
     const sheetCard = threadPushed ? (railSurface ?? null) : floating;
     if (!(frame && previewFrame.connected)) {
@@ -1014,8 +1001,8 @@
       }
       closingPin = null;
     }
-    if (composing) {
-      cancelComposer();
+    if (pinComposer.composing) {
+      pinComposer.cancelComposer();
     }
     if (openPin && openPin !== id) {
       closeCard(true);
@@ -1061,154 +1048,9 @@
     }
     previewFrame.post({ type: "cawco:track-pin", id: null });
   }
-  /**
-   * The composer closes with nothing written (Esc, a press outside it, a
-   * mode switch, a thread opened). Holding words or chips, it is parked
-   * (The Work Outlives Its Surface Rule): its hollow pill stays at its
-   * target saying it holds a draft, and one press on it opens the composer
-   * again with them; its words and chips stay as the next comment's draft,
-   * an upload in flight going on. Empty, its pill goes.
-   */
-  function cancelComposer() {
-    if (!composing) {
-      return;
-    }
-    composing = null;
-    if (commentKit.nextDraft?.hasContent) {
-      previewFrame.post({ type: "cawco:compose-park" });
-      keepDraftAt(keptDraft ? { ...keptDraft, parked: true } : null);
-    } else {
-      previewFrame.post({ type: "cawco:compose-cancel" });
-      keepDraftAt(null);
-    }
-  }
-  /**
-   * Where the next comment's draft stands, kept on this device per artifact
-   * beside its words (the draft store): its target as the page named it,
-   * the point on it, and whether its composer is open or parked. A reload
-   * brings it back at its target as it was.
-   */
-  const KeptDraftSchema = z.object({
-    inkId: z.string().optional(),
-    parked: z.boolean(),
-    point: z.object({ x: z.number(), y: z.number() }).optional(),
-    target: ComposeTargetSchema,
-  });
-  type KeptDraft = z.infer<typeof KeptDraftSchema>;
-  let keptDraft: KeptDraft | null = null;
-  const draftKey = $derived(
-    paneSubject.artifactId
-      ? `cawco-comment-draft:${paneSubject.artifactId}`
-      : null
-  );
-  function keepDraftAt(next: KeptDraft | null) {
-    keptDraft = next;
-    if (draftKey) {
-      writeJson(draftKey, next);
-    }
-  }
-  /** What the page said of a draft it opened (`cawco:compose`): kept, open. */
-  function keepComposed(
-    said: { chain: ComposeTarget[]; chosen: number },
-    message: Record<string, unknown>
-  ) {
-    const target = said.chain[said.chosen];
-    if (!target) {
-      return;
-    }
-    const point = message.point as { x?: unknown; y?: unknown } | undefined;
-    keepDraftAt({
-      target,
-      parked: false,
-      ...(typeof point?.x === "number" && typeof point.y === "number"
-        ? { point: { x: point.x, y: point.y } }
-        : {}),
-      ...(typeof message.inkId === "string" ? { inkId: message.inkId } : {}),
-    });
-  }
-  /** A page loaded again: the draft kept for it comes back at its target, parked or open, once per load. */
-  function restoreDraft() {
-    const key = draftKey;
-    const kept = key ? readJson(key, KeptDraftSchema.nullable(), null) : null;
-    keptDraft = kept;
-    if (!kept?.target?.anchor || composing) {
-      return;
-    }
-    if (!kept.parked) {
-      commentKit.loadKit();
-    }
-    previewFrame.post({
-      type: "cawco:compose-restore",
-      target: { ...kept.target, point: kept.point, inkId: kept.inkId },
-      parked: kept.parked,
-    });
-  }
-  /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once; `held`, kept to send with the others (core `ThreadEntry.held`). */
-  function comment(text: string, held = false) {
-    if (!(composing && commentKit.nextDraft)) {
-      return;
-    }
-    const said = saidIn(commentKit.nextDraft, text);
-    composing.error = "";
-    composing.sending = true;
-    previewFrame.post({ type: "cawco:comment", ...said, held });
-  }
-  /** The page's answer to Comment: written, the composer goes; refused, the words are back in it with why. */
-  function heardComment(message: Record<string, unknown>) {
-    // Written, it is heard whether or not its composer still stands: an Esc
-    // that came before the page's answer closed the composer, not the
-    // comment, which the page wrote.
-    if (message.ok === true) {
-      const { pin } = message;
-      const written = !!pin && pinProblem(pin) === null;
-      if (
-        written &&
-        !paneDoc.view?.pins.some((one) => one.id === (pin as Pin).id)
-      ) {
-        paneDoc.pageSays((pin as Pin).id, pin);
-      }
-      composing = null;
-      keepDraftAt(null);
-      // The newest comment is the one J and K step from.
-      if (written) {
-        markFocused((pin as Pin).id);
-      }
-      commentKit.drafts?.discard(NEXT_COMMENT);
-      return;
-    }
-    const draft = commentKit.nextDraft;
-    if (!(composing && draft)) {
-      return;
-    }
-    if (draft.unsent) {
-      draft.fill(draft.unsent);
-      draft.settle();
-    }
-    composing.sending = false;
-    composing.error =
-      typeof message.error === "string"
-        ? message.error
-        : "The page didn't keep that comment. Try again.";
-  }
   function markFocused(id: string) {
     focusedPin = id;
   }
-  // A press anywhere in the dashboard outside the composer closes it; one in a
-  // modal layer or a menu (its target chip's) is that layer's.
-  $effect(() => {
-    const float = composerFloat;
-    if (!float) {
-      return;
-    }
-    return pressOutside(float, (event) => {
-      if (!(
-        event.target instanceof Element &&
-        event.target.closest("[aria-modal='true'], dialog[open], [role='menu']")
-      )) {
-        cancelComposer();
-      }
-    });
-  });
   /** J and K: the next or the previous pin on the page, outlined and scrolled to. */
   function step(by: 1 | -1) {
     if (stepping.length === 0) {
@@ -1460,7 +1302,7 @@
     const id = previewPinId(message.id);
     const mark = previewBox(message.mark);
     // None under a finger, and none while a thread or a composer stands.
-    if (paneLayout.coarse.current || openPin || composing) {
+    if (paneLayout.coarse.current || openPin || pinComposer.composing) {
       dropPeek();
       return;
     }
@@ -1499,7 +1341,7 @@
   }
   /** No peek while a thread or a composer stands: the card is what the person reads then. */
   const peekPin = $derived(
-    peekAt && !openPin && !composing
+    peekAt && !openPin && !pinComposer.composing
       ? (paneDoc.pins.find((pin) => pin.id === peekAt?.id) ?? null)
       : null
   );
@@ -1536,8 +1378,8 @@
     } else if (name === "/" && listOpen) {
       rail?.focusSearch();
     } else if (name === "Escape") {
-      if (composing) {
-        cancelComposer();
+      if (pinComposer.composing) {
+        pinComposer.cancelComposer();
       } else if (openPin) {
         closeCard();
       } else {
@@ -1612,7 +1454,7 @@
     ) {
       return;
     }
-    if (composing || openPin || mode !== "interact") {
+    if (pinComposer.composing || openPin || mode !== "interact") {
       pressKey("Escape");
       event.preventDefault();
     }
@@ -1695,13 +1537,13 @@
             paneNotice.say(null);
           }
           // A page loaded again holds no comment being written.
-          composing = null;
+          pinComposer.composing = null;
           setMode(mode, placing);
           if (!pinsShown) {
             showPins(false);
           }
           openLinkedPin();
-          restoreDraft();
+          pinComposer.restoreDraft();
           if (openPin) {
             previewFrame.post({ type: "cawco:track-pin", id: openPin });
           }
@@ -1785,23 +1627,23 @@
         dropPeek();
         // The press was the page's, which the host never hears: the page's last input is it.
         lastInput.current = message.via === "key" ? "key" : "pointer";
-        composing = {
-          at: composing?.at ?? null,
+        pinComposer.composing = {
+          at: pinComposer.composing?.at ?? null,
           chain: said.chain,
           chosen: said.chosen,
           error: "",
           sending: false,
         };
-        keepComposed(said, message);
+        pinComposer.keepComposed(said, message);
         break;
       }
       case "cawco:compose-at":
-        if (composing) {
-          composing.at = previewPinAt(message);
+        if (pinComposer.composing) {
+          pinComposer.composing.at = previewPinAt(message);
         }
         break;
       case "cawco:comment-result":
-        heardComment(message);
+        pinComposer.heardComment(message);
         break;
       case "cawco:pin-chain": {
         const id = previewPinId(message.id);
@@ -1879,7 +1721,7 @@
         // heard from the page's own process. A thread stays: it closes by its
         // Close or Esc alone. The design graph's open layers close on it, a
         // press on its stage being outside them.
-        cancelComposer();
+        pinComposer.cancelComposer();
         if (paneSheet.link) {
           paneSheet.link.presses += 1;
         }
@@ -1907,7 +1749,7 @@
       }
       case "cawco:escape":
         // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
-        cancelComposer();
+        pinComposer.cancelComposer();
         setMode("interact");
         break;
       case SHORTCUT_MESSAGE: {
@@ -2612,27 +2454,27 @@
      comment asked from the rail beside the page, hung from the rail's glass
      (CommentRail `pageComposer`). -->
 {#snippet composerBody()}
-  {#if composing && commentKit.kit && commentKit.nextDraft}
+  {#if pinComposer.composing && commentKit.kit && commentKit.nextDraft}
     {@const Composer = commentKit.kit.CommentComposer}
     <Composer
       action="Comment"
-      chain={composing.chain.map((one) =>
+      chain={pinComposer.composing.chain.map((one) =>
         pinName({
           anchor: one.anchor,
           elements: one.elements,
         } as unknown as Pin)
       )}
-      chosen={composing.chosen}
+      chosen={pinComposer.composing.chosen}
       draft={commentKit.nextDraft}
       focus
       onchange={() => commentKit.drafts?.changed(NEXT_COMMENT)}
       onchoose={(index) =>
         previewFrame.post({ type: "cawco:compose-target", index })}
-      onhold={(text) => comment(text, true)}
-      onsubmit={(text) => comment(text)}
+      onhold={(text) => pinComposer.comment(text, true)}
+      onsubmit={(text) => pinComposer.comment(text)}
       placeholder={commentWords.composeHint}
-      sendError={composing.error}
-      sending={composing.sending}
+      sendError={pinComposer.composing.error}
+      sending={pinComposer.composing.sending}
     />
   {/if}
 {/snippet}
@@ -2761,10 +2603,10 @@
       if (openPin) {
         closeCard();
       }
-      composingPage = true;
+      pinComposer.composingPage = true;
       previewFrame.post({ type: "cawco:compose-page" });
     }}
-    onpageclose={cancelComposer}
+    onpageclose={pinComposer.cancelComposer}
     pageComposer={composerBody}
     pageOpen={pageHung}
     onresolve={(id, resolved) => resolvePin(resolved, id)}
@@ -3407,16 +3249,16 @@
     data-mode={mode !== "interact" && !paneSubject.isCanvas ? mode : undefined}
     {@attach measureRoom}
   >
-    {#if composing && commentKit.kit && commentKit.nextDraft && !pageHung}
+    {#if pinComposer.composing && commentKit.kit && commentKit.nextDraft && !pageHung}
       <PinFloat
         bare
-        box={composing.at?.box ?? null}
+        box={pinComposer.composing.at?.box ?? null}
         label={commentWords.comment}
-        mark={composing.at?.mark ?? null}
+        mark={pinComposer.composing.at?.mark ?? null}
         room={{ w: roomW, h: roomH }}
         sheet={paneLayout.floatSheet}
         slot="pin-composer"
-        bind:float={composerFloat}
+        bind:float={pinComposer.composerFloat}
       >
         {@render composerBody()}
       </PinFloat>
