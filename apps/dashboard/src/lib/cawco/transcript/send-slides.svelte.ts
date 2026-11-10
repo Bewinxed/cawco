@@ -37,7 +37,7 @@ import type { Fold, Row } from "./rows";
  * (`carrySlides`), so a slide starts where the row was and ends where it is,
  * whenever the list finishes placing it.
  */
-interface Box {
+export interface Box {
   /** Its list item's layout top and height, in the list. */
   height: number;
   /** How far the row is drawn off that top: a slide still in flight. */
@@ -48,12 +48,14 @@ interface Box {
 /** The name a slide's animation goes by, so a newer one can take it over. */
 const SLIDE = "send-slide";
 export interface SendSlidesHost {
-  readonly frozenSettled: Row[];
   readonly landed: boolean;
   readonly list: VirtualizerHandle | undefined;
   readonly listing: HTMLElement | undefined;
   readonly presentation: { readonly handed: ReadonlyMap<string, Handoff> };
   readonly renderedRows: Row[];
+  readonly rowBuild: {
+    readonly frozenSettled: Row[];
+  };
   readonly tickets: Map<string, Ticket>;
   readonly watched: boolean;
 }
@@ -125,7 +127,8 @@ export class SendSlides {
       return;
     }
     // Both begin with the same settled rows: those are in their places.
-    let from = settled === this.#host.frozenSettled ? settled.length : 0;
+    let from =
+      settled === this.#host.rowBuild.frozenSettled ? settled.length : 0;
     while (
       from < prior.length &&
       from < next.length &&
