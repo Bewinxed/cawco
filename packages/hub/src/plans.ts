@@ -52,11 +52,11 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactLink, stepLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { waitArtifact, waitTarget } from "@cawco/core/wait-targets";
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
-import { refusal } from "./refusal";
+
 import type { TaskEvent, Tasks } from "./tasks";
 
 export interface PlansDeps {
@@ -297,11 +297,10 @@ const placeOf = (steps: PlanStep[], id: string) => {
   const index = steps.findIndex((one) => one.id === id);
   const step = steps[index];
   if (!step) {
-    return refusal(
-      404,
-      "plan-step-missing",
-      `This plan has no step ${id}: it may have changed since you opened it.`
-    );
+    return problem(404, {
+      code: "plan-step-missing",
+      detail: `This plan has no step ${id}: it may have changed since you opened it.`,
+    });
   }
   return { index, step };
 };
@@ -320,7 +319,10 @@ const blockAt = (steps: PlanStep[], id: string) => {
 const wordsOf = (given: string, what: string) => {
   const words = given.trim();
   if (!words) {
-    return refusal(400, "plan-words-missing", `${what} needs words.`);
+    return problem(400, {
+      code: "plan-words-missing",
+      detail: `${what} needs words.`,
+    });
   }
   return words;
 };
@@ -339,11 +341,10 @@ const reword = (
     return words;
   }
   if (words === step.content) {
-    return refusal(
-      400,
-      "plan-step-unchanged",
-      "The step reads the same as before."
-    );
+    return problem(400, {
+      code: "plan-step-unchanged",
+      detail: "The step reads the same as before.",
+    });
   }
   const next = [...steps];
   next[index] = { ...step, content: words };
@@ -444,11 +445,10 @@ const tick = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "tick" }>) => {
   }
   const { index, step } = placed;
   if ((step.status === "completed") === edit.done) {
-    return refusal(
-      409,
-      "plan-step-ticked-already",
-      `“${step.content}” is ${edit.done ? "done" : "not done"} already.`
-    );
+    return problem(409, {
+      code: "plan-step-ticked-already",
+      detail: `“${step.content}” is ${edit.done ? "done" : "not done"} already.`,
+    });
   }
   const next = [...steps];
   next[index] = { ...step, status: edit.done ? "completed" : "pending" };
@@ -487,21 +487,19 @@ const move = (steps: PlanStep[], edit: Extract<PlanEdit, { kind: "move" }>) => {
   if (edit.by === -1) {
     const before = siblingBefore(steps, start, step.depth);
     if (before === undefined) {
-      return refusal(
-        409,
-        "plan-step-first-at-level",
-        `“${step.content}” is the first step at its level.`
-      );
+      return problem(409, {
+        code: "plan-step-first-at-level",
+        detail: `“${step.content}” is the first step at its level.`,
+      });
     }
     next.splice(start, block.length);
     next.splice(before, 0, ...block);
   } else {
     if (end >= steps.length || (steps[end]?.depth ?? 0) !== step.depth) {
-      return refusal(
-        409,
-        "plan-step-last-at-level",
-        `“${step.content}” is the last step at its level.`
-      );
+      return problem(409, {
+        code: "plan-step-last-at-level",
+        detail: `“${step.content}” is the last step at its level.`,
+      });
     }
     const [, nextEnd] = blockOf(steps, end);
     next.splice(start, nextEnd - start, ...steps.slice(end, nextEnd), ...block);
@@ -535,6 +533,21 @@ const applyEdit = (steps: PlanStep[], edit: PlanEdit, at: Date) => {
   }
 };
 
+/** The session `instanceId`, or its problem: the hub has none. */
+export const planSessionOf = (
+  db: Pick<DbShape, "getInstancesByIds">,
+  instanceId: string
+) => {
+  const [row] = db.getInstancesByIds([instanceId]);
+  if (!row) {
+    return problem(404, {
+      code: "plan-session-unknown",
+      detail: "No session with that id on this hub.",
+    });
+  }
+  return row;
+};
+
 export const createPlans = (deps: PlansDeps) => {
   const { db } = deps;
   /** The plan each session's followers last heard, by instance. */
@@ -560,17 +573,7 @@ export const createPlans = (deps: PlansDeps) => {
     return next;
   };
 
-  const rowOf = (instanceId: string) => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (!row) {
-      return refusal(
-        404,
-        "plan-session-unknown",
-        "No session with that id on this hub."
-      );
-    }
-    return row;
-  };
+  const rowOf = (instanceId: string) => planSessionOf(db, instanceId);
 
   /** An attempt's task and its to-dos, read for its plan; nothing for a session that is no attempt. */
   const attemptOf = async (row: InstanceRow) => {

@@ -31,7 +31,7 @@ import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
-import { Elysia, ElysiaStatus } from "elysia";
+import { Elysia, ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import type { ProjectOfferRow, ProjectRow } from "./db/projects";
@@ -39,7 +39,7 @@ import { leafOf, sessionLabel } from "./labels";
 import { machineName } from "./machine-name";
 import { tool } from "./mcp-tool";
 import { normaliseRemote } from "./projects";
-import { type Refused, refusal } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import type { TaskActor, Tasks } from "./tasks";
 
 /** Open plan items at a turn's end that make a plan worth a project. */
@@ -65,7 +65,7 @@ export interface ProjectOffersDeps {
     checkout: { machineId: string; cwd: string };
     caw: true;
   }) => Promise<
-    { project: ProjectRow; placeAdded: boolean; joined: boolean } | Refused
+    { project: ProjectRow; placeAdded: boolean; joined: boolean } | AnyProblem
   >;
   db: DbShape;
   /** Sessions moved into a project: their machines' rails are published again. */
@@ -75,7 +75,7 @@ export interface ProjectOffersDeps {
    * The session's plan steps as its plan panel reads them (plans.ts):
    * CawCo's list; or its refusal.
    */
-  planSteps: (instanceId: string) => Promise<PlanStep[] | Refused>;
+  planSteps: (instanceId: string) => Promise<PlanStep[] | AnyProblem>;
   /** To every dashboard: the session's standing offer, or null once answered. */
   publish: (row: InstanceShape, offer: ProjectOfferSummary | null) => void;
   run: (
@@ -325,35 +325,33 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
   /** The session `id`, or its refusal (project-offer-session-unknown). */
   const answerable = (id: string) =>
     rowOf(id) ??
-    refusal(
-      404,
-      "project-offer-session-unknown",
-      "No session with that id on this hub."
-    );
+    problem(404, {
+      code: "project-offer-session-unknown",
+      detail: "No session with that id on this hub.",
+    });
 
   /** Why session `row` can't be made a project, in the hub's words, or nothing. */
   const unmakeable = (row: InstanceShape) => {
     if (row.projectId) {
-      return refusal(
-        409,
-        "project-offer-in-project",
-        "This session is already in a project; there is nothing to make."
-      );
+      return problem(409, {
+        code: "project-offer-in-project",
+        detail:
+          "This session is already in a project; there is nothing to make.",
+      });
     }
     if (row.parentInstanceId || row.workItemId) {
-      return refusal(
-        409,
-        "project-offer-delegate",
-        "A delegate belongs to the session that started it. Make that session the project."
-      );
+      return problem(409, {
+        code: "project-offer-delegate",
+        detail:
+          "A delegate belongs to the session that started it. Make that session the project.",
+      });
     }
     // Its `cwd` may be a folder its CLI wandered into, not its checkout.
     if (row.launchDir === "unknown") {
-      return refusal(
-        409,
-        "project-offer-folder-unknown",
-        `${sessionLabel(row).name}'s conversation is no longer on its machine, so its folder is unknown and it can't be made a project.`
-      );
+      return problem(409, {
+        code: "project-offer-folder-unknown",
+        detail: `${sessionLabel(row).name}'s conversation is no longer on its machine, so its folder is unknown and it can't be made a project.`,
+      });
     }
   };
 
@@ -406,11 +404,10 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         caw: true,
       });
       if ("response" in made) {
-        return refusal(
-          made.status,
-          "project-offer-not-made",
-          made.response.detail
-        );
+        return problem(made.status, {
+          code: "project-offer-not-made",
+          detail: made.response.detail,
+        });
       }
       const { project, joined } = made;
       const moving = [row, ...descendants(row.id, db.listInstances())];

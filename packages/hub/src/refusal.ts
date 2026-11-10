@@ -1,55 +1,21 @@
-import { problem, type ValidationErrorResponse } from "elysia";
+import {
+  type ElysiaStatus,
+  problem,
+  type ValidationErrorResponse,
+} from "elysia";
 
 /**
- * A refusal a route answers: its status, a stable code naming the cause, and
- * the sentence the person or the session reads, as an RFC 9457 problem
- * (Elysia's `problem`: `{ type, title, status, code, detail }`, sent as
- * `application/problem+json`). Returned, never thrown: a helper that refuses
- * returns it, each caller passes it up (`if (x instanceof ElysiaStatus)
- * return x`), and the route answers it, so its status and body are in the
- * route's type, the dashboard's Eden client and openapi.json. Its sentence is
- * typed `string`, so one code is one body however its words are filled in.
+ * Any problem Elysia's `problem(status, { code, detail })` returns, read
+ * structurally: its status box holds one status apart from every other (its
+ * `Code` is `in out`), so code that passes any of them on without answering
+ * it as a route reads it (an approved write's run, a tool's dependency)
+ * reads these members of it. A route answers the problem itself, whose
+ * status and code its type keeps.
  */
-export const refusal = <const Status extends number, const Code extends string>(
-  answering: Status,
-  code: Code,
-  detail: string
-) => problem(answering, { code, detail });
-
-/**
- * The type of `refusal(status, code, …)`: what a dependency answers where
- * its implementation is no function to read the type off (a lambda of the
- * server's wiring), or lies across an import cycle, where the wiring says
- * it again with its status and code read as a number and a string.
- */
-export type RefusalOf<
-  Status extends number = number,
-  Code extends string = string,
-> = ReturnType<typeof refusal<Status, Code>>;
-
-/**
- * `refused` said again as {@link RefusalOf} a number and a string: its
- * status, code and words as they were, where its type cannot be read (a
- * dependency across an import cycle).
- */
-export const resaid = (refused: Refused) =>
-  refusal<number, string>(
-    refused.status,
-    refused.response.code,
-    refused.response.detail
-  );
-
-/**
- * Any refusal, as code that passes one on without answering it as a route
- * reads it (an approved write's run, a tool's dependency): Elysia's status
- * mark and the problem it carries. A route answers the {@link refusal}
- * itself, whose status and code its type keeps.
- */
-export interface Refused {
-  readonly "~status": true;
-  readonly response: { readonly code: string; readonly detail: string };
-  readonly status: number;
-}
+export interface AnyProblem extends Pick<
+  ElysiaStatus<number, { code: string; detail: string }>,
+  "~status" | "response" | "status"
+> {}
 
 /**
  * A schema's own refusal, as its `error` (`t.String({ …, error:
@@ -107,7 +73,7 @@ export const refusalAnswer =
   ) =>
   (error: unknown) =>
     error instanceof Kind
-      ? refusal(error.status, code, error.message)
+      ? problem(error.status, { code, detail: error.message })
       : otherwise(error);
 
 /** Runs a route's work, answering a thrown refusal of `Kind` as {@link refusalAnswer}. */

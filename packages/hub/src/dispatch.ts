@@ -137,7 +137,7 @@ import type {
 } from "@cawco/core/task-views";
 import type { StageKind, TaskMover } from "@cawco/core/views";
 import { judgedWords } from "@cawco/core/words/judged";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
@@ -159,7 +159,7 @@ import {
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
 import { ProjectRefusal } from "./project-refusal";
-import { refusal } from "./refusal";
+
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue } from "./runs-on";
 import { moveProblem, waitingStageOf } from "./stages";
@@ -866,11 +866,10 @@ export const createDispatcher = ({
     const project = db.project(projectId);
     return project
       ? project
-      : refusal(
-          404,
-          "dispatch-project-unknown",
-          `The hub keeps no project ${projectId}.`
-        );
+      : problem(404, {
+          code: "dispatch-project-unknown",
+          detail: `The hub keeps no project ${projectId}.`,
+        });
   };
 
   const instance = (id: string): InstanceRow | undefined =>
@@ -915,7 +914,7 @@ export const createDispatcher = ({
     if (place.kind === "none" && (runsOn || !previous)) {
       const message = `${capitalized(place.why)}, so this task's attempt starts nowhere: ${place.fix}.`;
       note(project.id, task, message);
-      return refusal(409, "dispatch-nowhere", message);
+      return problem(409, { code: "dispatch-nowhere", detail: message });
     }
     const placed: Pick<
       WorkItemRequest,
@@ -950,18 +949,16 @@ export const createDispatcher = ({
       (item) => item.taskId === task.id
     );
     if (live) {
-      return refusal(
-        409,
-        "dispatch-attempt-live",
-        `This task has a live attempt already: ${sessionLink(live.instanceId, task.title)} is ${live.state}. Message its session, or wait for its report.`
-      );
+      return problem(409, {
+        code: "dispatch-attempt-live",
+        detail: `This task has a live attempt already: ${sessionLink(live.instanceId, task.title)} is ${live.state}. Message its session, or wait for its report.`,
+      });
     }
     if (task.kind === "done" || task.kind === "dropped") {
-      return refusal(
-        409,
-        "dispatch-task-closed",
-        `This task is in ${task.stage}, a ${task.kind} stage; move it back before starting an attempt.`
-      );
+      return problem(409, {
+        code: "dispatch-task-closed",
+        detail: `This task is in ${task.stage}, a ${task.kind} stage; move it back before starting an attempt.`,
+      });
     }
   };
 
@@ -983,11 +980,10 @@ export const createDispatcher = ({
       return stages;
     }
     if (stages.problems.length > 0) {
-      return refusal(
-        409,
-        "dispatch-stages-unread",
-        `stages.md does not read, so the hub cannot tell where an attempt moves this task. ${stages.problems.join(" ")}`
-      );
+      return problem(409, {
+        code: "dispatch-stages-unread",
+        detail: `stages.md does not read, so the hub cannot tell where an attempt moves this task. ${stages.problems.join(" ")}`,
+      });
     }
     return task.kind === "active"
       ? stages.stages.find((each) => each.name === task.stage)
@@ -1013,15 +1009,15 @@ export const createDispatcher = ({
     if (stages instanceof ElysiaStatus) {
       return stages;
     }
-    const problem = moveProblem(
+    const misfit = moveProblem(
       stages,
       task.id,
       task.stage,
       active.name,
       "session"
     );
-    return problem
-      ? refusal(409, "dispatch-move-not-session", problem)
+    return misfit
+      ? problem(409, { code: "dispatch-move-not-session", detail: misfit })
       : undefined;
   };
 
@@ -1342,7 +1338,7 @@ export const createDispatcher = ({
       // as any delegate's does; no problem of the task's.
       const guide = asked ? briefing(request) : undefined;
       if (guide) {
-        return refusal(409, "dispatch-guidance-first", guide);
+        return problem(409, { code: "dispatch-guidance-first", detail: guide });
       }
       const started = await start(request);
       problems.delete(keyOf(project.id, task.id));
@@ -1406,7 +1402,7 @@ export const createDispatcher = ({
     }
     const unfit = parentProblem(parent, projectId, parent.id);
     if (unfit) {
-      return refusal(403, "dispatch-parent-unfit", unfit);
+      return problem(403, { code: "dispatch-parent-unfit", detail: unfit });
     }
     const task = await tasks.get(projectId, ref);
     if (task instanceof ElysiaStatus) {
@@ -1414,11 +1410,10 @@ export const createDispatcher = ({
     }
     const key = keyOf(projectId, task.id);
     if (starting.has(key)) {
-      return refusal(
-        409,
-        "dispatch-starting",
-        "An attempt at this task is starting already."
-      );
+      return problem(409, {
+        code: "dispatch-starting",
+        detail: "An attempt at this task is starting already.",
+      });
     }
     // From here to its work item being filed, the start holds the task.
     starting.add(key);
@@ -1569,19 +1564,17 @@ export const createDispatcher = ({
       .projectAttempts(projectId)
       .filter((item) => item.taskId === task.id);
     if (!previous) {
-      return refusal(
-        409,
-        "dispatch-retry-unattempted",
-        "This task has no attempt to retry; start one with task_start."
-      );
+      return problem(409, {
+        code: "dispatch-retry-unattempted",
+        detail: "This task has no attempt to retry; start one with task_start.",
+      });
     }
     return task.lastAttemptFailed || task.lastAttemptStopped
       ? previous
-      : refusal(
-          409,
-          "dispatch-retry-not-ended",
-          `This task's last attempt is ${previous.state}, not failed or stopped; start a new one with task_start.`
-        );
+      : problem(409, {
+          code: "dispatch-retry-not-ended",
+          detail: `This task's last attempt is ${previous.state}, not failed or stopped; start a new one with task_start.`,
+        });
   };
 
   /** What the dispatcher would do for a project now. */
@@ -2392,22 +2385,22 @@ export const createDispatcher = ({
       const conversation = await conversationOf(project, "you");
       return conversation
         ? conversation
-        : refusal(
-            409,
-            "dispatch-no-reporter",
-            `Nobody can take this attempt's report. ${NO_LEAD}`
-          );
+        : problem(409, {
+            code: "dispatch-no-reporter",
+            detail: `Nobody can take this attempt's report. ${NO_LEAD}`,
+          });
     }
     const parent = instance(parentInstanceId);
     const unfit = parentProblem(parent, projectId, parentInstanceId);
     if (!parent) {
-      return refusal(
-        404,
-        "dispatch-parent-unknown",
-        unfit ?? `No session ${parentInstanceId}.`
-      );
+      return problem(404, {
+        code: "dispatch-parent-unknown",
+        detail: unfit ?? `No session ${parentInstanceId}.`,
+      });
     }
-    return unfit ? refusal(409, "dispatch-parent-unfit", unfit) : parent;
+    return unfit
+      ? problem(409, { code: "dispatch-parent-unfit", detail: unfit })
+      : parent;
   };
 
   /**
@@ -2541,7 +2534,10 @@ export const createDispatcher = ({
     const checked = runsOnValue(runsOn, db.listAgents());
     return "value" in checked
       ? checked.value
-      : refusal(400, "dispatch-runs-on-unknown", checked.problem);
+      : problem(400, {
+          code: "dispatch-runs-on-unknown",
+          detail: checked.problem,
+        });
   };
 
   return {
@@ -2593,11 +2589,10 @@ export const createDispatcher = ({
         return stages;
       }
       if (stages.problems.length > 0) {
-        return refusal(
-          409,
-          "dispatch-merged-stages-unread",
-          `${url} merged, but stages.md does not read, so ${taskId} stays where it is. ${stages.problems.join(" ")}`
-        );
+        return problem(409, {
+          code: "dispatch-merged-stages-unread",
+          detail: `${url} merged, but stages.md does not read, so ${taskId} stays where it is. ${stages.problems.join(" ")}`,
+        });
       }
       const task = await tasks.get(projectId, taskId);
       if (task instanceof ElysiaStatus) {
@@ -2630,8 +2625,8 @@ export const createDispatcher = ({
       projectId: string,
       task: { hash: string; id: string }
     ): string | null {
-      const problem = problems.get(keyOf(projectId, task.id));
-      return problem?.hash === task.hash ? problem.message : null;
+      const misfit = problems.get(keyOf(projectId, task.id));
+      return misfit?.hash === task.hash ? misfit.message : null;
     },
 
     /**
@@ -2671,9 +2666,12 @@ export const createDispatcher = ({
       if (project instanceof ElysiaStatus) {
         return project;
       }
-      const problem = dispatchProblem(change);
-      if (problem) {
-        return refusal(400, "dispatch-settings-unfit", problem);
+      const misfit = dispatchProblem(change);
+      if (misfit) {
+        return problem(400, {
+          code: "dispatch-settings-unfit",
+          detail: misfit,
+        });
       }
       const runsOn = runsOnOf(change.runsOn);
       if (runsOn instanceof ElysiaStatus) {
@@ -2732,7 +2730,7 @@ const startAnswered = async <T>(work: () => Promise<T>) => {
     return await work();
   } catch (error) {
     const { code, message } = failure(error);
-    return refusal(code, "dispatch-start-failed", message);
+    return problem(code, { code: "dispatch-start-failed", detail: message });
   }
 };
 

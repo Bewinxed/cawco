@@ -1,6 +1,7 @@
 import { ANY_TYPE } from "@cawco/core/delegate-types";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import type { InstanceRow } from "@cawco/core/protocol";
+import { problem } from "elysia";
 import type { WorkItemRow } from "./db/project-work";
 
 /**
@@ -119,6 +120,13 @@ export class WorkItemRefusal extends Error {
     this.status = status;
   }
 }
+
+/** What a work-item route threw, as its problem: a {@link WorkItemRefusal} in its status, anything else as 502, in its words. */
+export const workItemProblem = (error: unknown) =>
+  problem(error instanceof WorkItemRefusal ? error.status : 502, {
+    code: "work-item-refused",
+    detail: error instanceof Error ? error.message : String(error),
+  });
 
 /**
  * The longest wait an item declares, in whole minutes: `wait_item`'s tool,

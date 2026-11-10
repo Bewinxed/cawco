@@ -23,9 +23,8 @@ import {
   writeStateFileSync,
 } from "@cawco/core/state-file";
 import { damagedHubRecordWords } from "@cawco/core/words/damaged";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
-import { refusal } from "./refusal";
 
 /**
  * Ids kept, newest last. An event's notice is over once a newer one of its
@@ -82,11 +81,10 @@ export function createNoticesSeen(options: {
         },
         ({ body }) => {
           if ("damaged" in record) {
-            return refusal(
-              409,
-              "damaged-hub-record-words",
-              damagedHubRecordWords("notices", record.damaged)
-            );
+            return problem(409, {
+              code: "damaged-hub-record-words",
+              detail: damagedHubRecordWords("notices", record.damaged),
+            });
           }
           const { seen } = record;
           const fresh = body.ids.filter((id) => !seen.includes(id));
@@ -103,11 +101,11 @@ export function createNoticesSeen(options: {
       // whole: it would only forget what the person acknowledged.
       .post("/api/notices/reset", () => {
         if (!("damaged" in record)) {
-          return refusal(
-            409,
-            "notices-record-reads-whole",
-            "The notices record reads whole, so there is nothing to reset."
-          );
+          return problem(409, {
+            code: "notices-record-reads-whole",
+            detail:
+              "The notices record reads whole, so there is nothing to reset.",
+          });
         }
         console.info(`[notices] ${record.damaged.file} reset: notices are on`);
         const seen: string[] = [];

@@ -11,7 +11,7 @@
 import type { PreviewNames } from "@cawco/core/browser";
 import { SEND_CONTROL_NAMES } from "@cawco/core/comments/model";
 import type { ServerWebSocket } from "bun";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { createArtifactPages } from "./artifact-pages";
 import type { ArtifactSocket } from "./artifacts/sync";
 import type { PreviewPassesDb } from "./db/preview-passes";
@@ -19,7 +19,6 @@ import { projectOrigin } from "./db/previews";
 import { hidden } from "./hidden";
 import type { PreviewListenerDeps, PreviewListeners } from "./preview";
 import { mintTicket, presentedPasses } from "./preview-access";
-import { refusal } from "./refusal";
 
 /** A panel asked for an artifact its session doesn't see. */
 const NO_SUCH_ARTIFACT = "This session has no such artifact.";
@@ -88,7 +87,10 @@ export const previewRoutes = (deps: {
       // A session's preview origin, its listener started when it has none.
       .post("/api/instances/:id/preview-address", ({ params }) => {
         if (!deps.hasInstance(params.id)) {
-          return refusal(404, "no-such-session", "No such session.");
+          return problem(404, {
+            code: "no-such-session",
+            detail: "No such session.",
+          });
         }
         return deps.listeners.address(params.id);
       })
@@ -130,17 +132,19 @@ export const previewRoutes = (deps: {
         hidden,
         ({ params }) =>
           deps.artifactAddress(params.artifact) ??
-          refusal(
-            404,
-            "no-session-project-holds",
-            "No session or project holds that artifact."
-          )
+          problem(404, {
+            code: "no-session-project-holds",
+            detail: "No session or project holds that artifact.",
+          })
       )
       // A project's preview origin, where its pages are served (Projects spec
       // §5.8): one for the project's life, its listener started when it has none.
       .post("/api/projects/:id/preview-address", ({ params }) => {
         if (!deps.hasProject(params.id)) {
-          return refusal(404, "no-such-project", "No such project.");
+          return problem(404, {
+            code: "no-such-project",
+            detail: "No such project.",
+          });
         }
         return deps.listeners.address(projectOrigin(params.id));
       })
@@ -173,7 +177,10 @@ export const previewRoutes = (deps: {
                 owner,
                 params.artifact
               )
-            : refusal(404, "no-such-artifact", NO_SUCH_ARTIFACT);
+            : problem(404, {
+                code: "no-such-artifact",
+                detail: NO_SUCH_ARTIFACT,
+              });
         }
       )
       // The pane's link to the artifact's document (artifact-doc.ts).

@@ -2,10 +2,10 @@
  * The hub's MCP endpoints: CawCo's own tools and each fleet server's relay.
  */
 
-import { Elysia } from "elysia";
+import { Elysia, problem } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
+
 import { mcpRefused } from "../tool-call-keys";
 
 export const mcpRoutes = ({
@@ -35,11 +35,10 @@ export const mcpRoutes = ({
         // CawCo's own endpoint refuses it, before any server is relayed.
         const caller = hubAuth.callerOf(request, null);
         if (caller.kind === "session" && caller.instanceId === null) {
-          return refusal(
-            401,
-            "invalid-session-credential",
-            "Invalid session credential"
-          );
+          return problem(401, {
+            code: "invalid-session-credential",
+            detail: "Invalid session credential",
+          });
         }
         server?.timeout(request, 0);
         return fleetMcp.forward(params.name, request);

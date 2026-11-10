@@ -38,14 +38,14 @@ import type { PlanStep, SessionPlan, TaskTodo } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { stepLink, taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { QuestionAnswer } from "./artifacts/questions";
 import type { Artifacts } from "./artifacts/service";
 import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { inboxNotes, Note } from "./memory";
 import type { Plans } from "./plans";
-import { refusal } from "./refusal";
+
 import type { Tasks } from "./tasks";
 
 /**
@@ -413,11 +413,10 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
   const rows = async (instanceId: string) => {
     const [row] = deps.db.getInstancesByIds([instanceId]);
     if (!row) {
-      return refusal(
-        404,
-        "open-items-session-unknown",
-        `No session ${instanceId} on this hub.`
-      );
+      return problem(404, {
+        code: "open-items-session-unknown",
+        detail: `No session ${instanceId} on this hub.`,
+      });
     }
     const projectId = projectOf(deps, row);
     const plan = await deps.plan(instanceId);

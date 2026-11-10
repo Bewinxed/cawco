@@ -97,7 +97,7 @@ import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import { routineToolWords } from "@cawco/core/words/routines";
 import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import { type Caw, isProjectConversation } from "./caw";
 import { HUB_DEBUG } from "./config";
@@ -122,7 +122,7 @@ import {
 } from "./presenters/project";
 import { handle } from "./presenters/words";
 import type { Push } from "./push";
-import { refusal } from "./refusal";
+
 import { budgetParameter } from "./task-tools";
 import { BUDGET, LANDS, MODE } from "./tasks";
 import { isRoutineParent, routineParent } from "./work-item-state";
@@ -346,7 +346,10 @@ export interface RoutineDeps {
 }
 
 /** Why a run of a routine in no project, which a conversation or curator run needs, does not start. */
-const noProject = refusal(409, "routine-no-project", "no project");
+const noProject = problem(409, {
+  code: "routine-no-project",
+  detail: "no project",
+});
 
 /** A schedule, parsed; refused with Effect's own words when it does not parse. */
 const parsedCache = new Map<string, Cron.Cron>();
@@ -357,19 +360,17 @@ const cronOf = (expression: string, timeZone: string) => {
     return cached;
   }
   if (Option.isNone(DateTime.zoneMakeNamed(timeZone))) {
-    return refusal(
-      400,
-      "routine-time-zone-unknown",
-      `“${timeZone}” is not an IANA time zone; name one like Europe/London or America/New_York.`
-    );
+    return problem(400, {
+      code: "routine-time-zone-unknown",
+      detail: `“${timeZone}” is not an IANA time zone; name one like Europe/London or America/New_York.`,
+    });
   }
   const parsed = Cron.parse(expression, timeZone);
   if (Result.isFailure(parsed)) {
-    return refusal(
-      400,
-      "routine-cron-unparsed",
-      `“${expression}” is not a cron schedule: ${parsed.failure.message}. Give five fields (minute hour day month weekday), or six with seconds first.`
-    );
+    return problem(400, {
+      code: "routine-cron-unparsed",
+      detail: `“${expression}” is not a cron schedule: ${parsed.failure.message}. Give five fields (minute hour day month weekday), or six with seconds first.`,
+    });
   }
   parsedCache.set(key, parsed.success);
   return parsed.success;
@@ -775,15 +776,17 @@ export const createRoutines = ({
 
   const routineOf = (id: string) =>
     store.get(id) ??
-    refusal(404, "routine-unknown", `The hub keeps no routine ${id}.`);
+    problem(404, {
+      code: "routine-unknown",
+      detail: `The hub keeps no routine ${id}.`,
+    });
 
   const projectOf = (projectId: string) =>
     db.project(projectId) ??
-    refusal(
-      404,
-      "routine-project-unknown",
-      `The hub keeps no project ${projectId}.`
-    );
+    problem(404, {
+      code: "routine-project-unknown",
+      detail: `The hub keeps no project ${projectId}.`,
+    });
 
   /** A routine as its readers see it; its stored schedule's refusal when it no longer parses. */
   const viewOf = (row: RoutineRow) => {
@@ -867,7 +870,7 @@ export const createRoutines = ({
       return project;
     }
     const cap = routine.dailyCapUsd;
-    const problem =
+    const misfit =
       titleProblem(routine.name)?.replace("title", "name") ??
       (routine.prompt.trim()
         ? undefined
@@ -881,7 +884,9 @@ export const createRoutines = ({
         : "dailyCapUsd is a number of dollars above 0.") ??
       targetProblem(routine) ??
       typeProblem(routine);
-    return problem ? refusal(400, "routine-unfit", problem) : cron;
+    return misfit
+      ? problem(400, { code: "routine-unfit", detail: misfit })
+      : cron;
   };
 
   /** The routine `id` as `actor` may touch it: refused when there is none, or it is not in its project. */
@@ -891,11 +896,10 @@ export const createRoutines = ({
       return row;
     }
     if (actor !== "owner" && (actor.projectId ?? null) !== row.projectId) {
-      return refusal(
-        403,
-        "routine-not-yours",
-        `Routine “${row.name}” is not one of this session's project's routines.`
-      );
+      return problem(403, {
+        code: "routine-not-yours",
+        detail: `Routine “${row.name}” is not one of this session's project's routines.`,
+      });
     }
     return row;
   };
@@ -1790,36 +1794,32 @@ export const createRoutines = ({
     const run = store.run(runId);
     const routine = run ? store.get(run.routineId) : undefined;
     if (!(run && routine) || routine.projectId !== (actor.projectId ?? null)) {
-      return refusal(
-        404,
-        "routine-run-unknown",
-        `Run ${runId} is not a run of this project's routines.`
-      );
+      return problem(404, {
+        code: "routine-run-unknown",
+        detail: `Run ${runId} is not a run of this project's routines.`,
+      });
     }
     if (routine.target !== "conversation") {
-      return refusal(
-        409,
-        "routine-run-delegate",
-        `Run ${runId} is a delegate run: its delegate answers with finish_item.`
-      );
+      return problem(409, {
+        code: "routine-run-delegate",
+        detail: `Run ${runId} is a delegate run: its delegate answers with finish_item.`,
+      });
     }
     const ended =
       run.state === "ended" || run.state === "skipped"
         ? `${run.outcome ?? run.state}`
         : isHeld(run.id) && run.state === "running" && "failed";
     if (ended) {
-      return refusal(
-        409,
-        "routine-run-ended",
-        `Run ${runId} has already ended ${ended}.`
-      );
+      return problem(409, {
+        code: "routine-run-ended",
+        detail: `Run ${runId} has already ended ${ended}.`,
+      });
     }
     if (run.state !== "running") {
-      return refusal(
-        409,
-        "routine-run-unreached",
-        `Run ${runId} has not reached you yet.`
-      );
+      return problem(409, {
+        code: "routine-run-unreached",
+        detail: `Run ${runId} has not reached you yet.`,
+      });
     }
     answered(
       run.id,
@@ -2318,7 +2318,10 @@ export const createRoutines = ({
   const curatorMoved = (row: RoutineRow, next: Fields) =>
     next.target !== row.target &&
     (row.target === "curator" || next.target === "curator")
-      ? refusal(400, "routine-curator-stays", routineToolWords.curatorStays)
+      ? problem(400, {
+          code: "routine-curator-stays",
+          detail: routineToolWords.curatorStays,
+        })
       : undefined;
 
   const update = (id: string, patch: RoutinePatch, by: RoutineActor) => {
@@ -2337,11 +2340,10 @@ export const createRoutines = ({
     const expired =
       !keep && row.expiresAt !== null && row.expiresAt.getTime() <= now;
     if (enabled && !row.enabled && expired) {
-      return refusal(
-        409,
-        "routine-expired",
-        `Routine “${row.name}” expired; keep it (keep: true) to turn it back on.`
-      );
+      return problem(409, {
+        code: "routine-expired",
+        detail: `Routine “${row.name}” expired; keep it (keep: true) to turn it back on.`,
+      });
     }
     // A new schedule, or a routine turned back on, starts from now: the
     // slots it was off for, or the old schedule's, never fire.
@@ -2396,7 +2398,10 @@ export const createRoutines = ({
     const run = fireExtra(row, `now:${new Date().toISOString()}`, 1);
     return run
       ? runView(run)
-      : refusal(409, "routine-run-asked", "That run was asked for already.");
+      : problem(409, {
+          code: "routine-run-asked",
+          detail: "That run was asked for already.",
+        });
   };
 
   /**
@@ -2535,7 +2540,10 @@ export const createRoutines = ({
   const tools = (actor: InstanceRow | undefined, toolUseId?: string) => {
     const me = () =>
       actor ??
-      refusal(409, "routine-tools-discovery", "Discovery cannot execute tools");
+      problem(409, {
+        code: "routine-tools-discovery",
+        detail: "Discovery cannot execute tools",
+      });
     return [
       tool(
         "routine_create",

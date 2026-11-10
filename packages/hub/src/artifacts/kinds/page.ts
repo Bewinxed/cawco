@@ -27,7 +27,7 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { changeLink } from "@cawco/core/references";
 import { pageHash } from "@cawco/preview/proxy";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { applyPatch } from "rfc6902";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../../db/artifacts";
@@ -37,7 +37,7 @@ import {
   readKept,
   type StatementChange,
 } from "../../decision-program";
-import { refusal } from "../../refusal";
+
 import { metaOf, stateOf } from "../facts";
 import { testedKeys } from "../overwrite";
 import {
@@ -137,13 +137,12 @@ const patchedEntries = (
       pageHash: given.pageHash ?? before[key]?.pageHash ?? hash,
       at,
     };
-    const problem = choiceEntryProblem(key, entry);
-    if (problem) {
-      return refusal(
-        422,
-        "artifact-patch-entry-unfit",
-        `${problem} Nothing was changed.`
-      );
+    const misfit = choiceEntryProblem(key, entry);
+    if (misfit) {
+      return problem(422, {
+        code: "artifact-patch-entry-unfit",
+        detail: `${misfit} Nothing was changed.`,
+      });
     }
     next[key] = entry;
   }
@@ -476,18 +475,17 @@ export const createPageKind = (ctx: PageKindContext) => {
       (one) => one !== undefined
     ).length;
     if (given > 1) {
-      return refusal(
-        400,
-        "artifact-page-sources",
-        "A page takes one of program, html or dir."
-      );
+      return problem(400, {
+        code: "artifact-page-sources",
+        detail: "A page takes one of program, html or dir.",
+      });
     }
     if (given === 0 && !instance.projectId) {
-      return refusal(
-        400,
-        "artifact-page-source-none",
-        "A page takes program (a decision page, decision-page skill), html, or dir with your work folder."
-      );
+      return problem(400, {
+        code: "artifact-page-source-none",
+        detail:
+          "A page takes program (a decision page, decision-page skill), html, or dir with your work folder.",
+      });
     }
     let from: PageFrom = { folder: true };
     if (input.program !== undefined) {
@@ -507,18 +505,16 @@ export const createPageKind = (ctx: PageKindContext) => {
   /** Refuses new HTML for what takes none: an artifact that is no page, or a decision page written as a program. */
   const takesHtml = (row: ArtifactRow) => {
     if (row.kind !== "page") {
-      return refusal(
-        409,
-        "artifact-html-not-page",
-        `${row.name} is a ${row.kind}: only a page takes new HTML.`
-      );
+      return problem(409, {
+        code: "artifact-html-not-page",
+        detail: `${row.name} is a ${row.kind}: only a page takes new HTML.`,
+      });
     }
     if (programOf(row) !== undefined) {
-      return refusal(
-        409,
-        "artifact-html-program",
-        `${row.name} is a decision page written as a program: revise it with statements.`
-      );
+      return problem(409, {
+        code: "artifact-html-program",
+        detail: `${row.name} is a decision page written as a program: revise it with statements.`,
+      });
     }
   };
   /**
@@ -658,19 +654,17 @@ export const createPageKind = (ctx: PageKindContext) => {
           )
       : [];
     if (carded.length > 0) {
-      return refusal(
-        409,
-        "artifact-patch-cards",
-        `${carded.join(", ")} ${carded.length === 1 ? "is a decision card" : "are decision cards"}: a card's pick is the person's, or settle's by the project's Who decides. Nothing was changed.`
-      );
+      return problem(409, {
+        code: "artifact-patch-cards",
+        detail: `${carded.join(", ")} ${carded.length === 1 ? "is a decision card" : "are decision cards"}: a card's pick is the person's, or settle's by the project's Who decides. Nothing was changed.`,
+      });
     }
     const failed = errors.findIndex((error) => error !== null);
     if (failed !== -1) {
-      return refusal(
-        422,
-        "artifact-patch-failed",
-        `Operation ${failed} of the patch failed: ${errors[failed]?.message ?? "it does not apply"}. Nothing was changed.`
-      );
+      return problem(422, {
+        code: "artifact-patch-failed",
+        detail: `Operation ${failed} of the patch failed: ${errors[failed]?.message ?? "it does not apply"}. Nothing was changed.`,
+      });
     }
     const replaced = ctx.answersHad(instance, row, {
       before,
@@ -727,7 +721,10 @@ export const createPageKind = (ctx: PageKindContext) => {
     }
     const { program } = page;
     if (!program) {
-      return refusal(400, "artifact-program-unbuilt", "A program is required.");
+      return problem(400, {
+        code: "artifact-program-unbuilt",
+        detail: "A program is required.",
+      });
     }
     const unheld = ctx.mediaHeld(holder(row) ?? instance, program);
     return unheld ?? { html: page.html, program, readOn };

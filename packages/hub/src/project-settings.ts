@@ -88,7 +88,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { projectSettingsWords } from "@cawco/core/words/project-settings";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { z } from "zod";
 import type { Areas } from "./areas";
 import type { Connections } from "./connections";
@@ -103,7 +103,7 @@ import { boardTitle } from "./labels";
 import { type McpTool, sentence, tool } from "./mcp-tool";
 import type { createProjectEdits } from "./project-edit";
 import { accountChange, projectName } from "./project-edit";
-import { refusal } from "./refusal";
+
 import type { RepoPublish } from "./repo-publish";
 import { runsOnValue } from "./runs-on";
 import { budgetParameter } from "./task-tools";
@@ -120,11 +120,10 @@ const renamed = (project: ProjectRow, asked: { name?: string }) => {
     return name;
   }
   if (name === project.name) {
-    return refusal(
-      400,
-      "project-called-already",
-      `This project is called ${name} already.`
-    );
+    return problem(400, {
+      code: "project-called-already",
+      detail: `This project is called ${name} already.`,
+    });
   }
   return { kind: "rename", name } satisfies ProjectSettingChange;
 };
@@ -133,18 +132,16 @@ const renamed = (project: ProjectRow, asked: { name?: string }) => {
 const reviewSet = (project: ProjectRow, asked: { review?: boolean }) => {
   const { review } = asked;
   if (review === null || review === undefined) {
-    return refusal(
-      400,
-      "set-review-says-true",
-      "set_review says on (true) or off (false)."
-    );
+    return problem(400, {
+      code: "set-review-says-true",
+      detail: "set_review says on (true) or off (false).",
+    });
   }
   if (review === project.review) {
-    return refusal(
-      400,
-      "review-before-done-project",
-      `Review before done is ${review ? "on" : "off"} for this project already.`
-    );
+    return problem(400, {
+      code: "review-before-done-project",
+      detail: `Review before done is ${review ? "on" : "off"} for this project already.`,
+    });
   }
   return { kind: "set_review", review } satisfies ProjectSettingChange;
 };
@@ -288,28 +285,34 @@ const dispatchAsked = (
   switch (asked.kind) {
     case "set_dispatch":
       return asked.dispatch === undefined
-        ? refusal(400, "dispatch-needed", needs.dispatch)
+        ? problem(400, { code: "dispatch-needed", detail: needs.dispatch })
         : ({
             kind: asked.kind,
             dispatch: asked.dispatch,
           } satisfies DispatchSetting);
     case "set_max_attempts":
       return asked.max_attempts === undefined
-        ? refusal(400, "max-attempts-needed", needs.maxAttempts)
+        ? problem(400, {
+            code: "max-attempts-needed",
+            detail: needs.maxAttempts,
+          })
         : ({
             kind: asked.kind,
             maxAttempts: asked.max_attempts,
           } satisfies DispatchSetting);
     case "set_review_limit":
       return asked.review_limit === undefined
-        ? refusal(400, "review-limit-needed", needs.reviewLimit)
+        ? problem(400, {
+            code: "review-limit-needed",
+            detail: needs.reviewLimit,
+          })
         : ({
             kind: asked.kind,
             reviewLimit: asked.review_limit,
           } satisfies DispatchSetting);
     case "set_budget": {
       if (asked.budget === undefined) {
-        return refusal(400, "budget", needs.budget);
+        return problem(400, { code: "budget", detail: needs.budget });
       }
       const { budget } = asked;
       // Empty clears it, as null does (dispatch.ts `columnsOf`).
@@ -422,11 +425,11 @@ export const createProjectSettings = ({
   const ownProject = (actor: InstanceRow, named?: string) => {
     const project = actor.projectId ? db.project(actor.projectId) : undefined;
     if (!project) {
-      return refusal(
-        400,
-        "project-settings-changes-sessions",
-        "project_settings changes this session's project, and this session is in none."
-      );
+      return problem(400, {
+        code: "project-settings-changes-sessions",
+        detail:
+          "project_settings changes this session's project, and this session is in none.",
+      });
     }
     const asked = named?.trim().toLowerCase();
     if (
@@ -434,11 +437,13 @@ export const createProjectSettings = ({
       asked !== project.id.toLowerCase() &&
       asked !== project.name.trim().toLowerCase()
     ) {
-      return refusal(
-        400,
-        "not-yours",
-        projectSettingsWords.notYours(named?.trim() ?? "", project.name)
-      );
+      return problem(400, {
+        code: "not-yours",
+        detail: projectSettingsWords.notYours(
+          named?.trim() ?? "",
+          project.name
+        ),
+      });
     }
     return project;
   };
@@ -453,19 +458,17 @@ export const createProjectSettings = ({
   /** A repository link, checked against the project as it stands. */
   const linkable = (project: ProjectRow, remote: string) => {
     if (project.links.includes(remote)) {
-      return refusal(
-        400,
-        "project-linked-already",
-        `This project is linked to ${remote} already.`
-      );
+      return problem(400, {
+        code: "project-linked-already",
+        detail: `This project is linked to ${remote} already.`,
+      });
     }
     const other = db.projectByRemote(remote);
     if (other && other.id !== project.id) {
-      return refusal(
-        400,
-        "project-repository",
-        `${remote} is the project “${other.name}”'s repository.`
-      );
+      return problem(400, {
+        code: "project-repository",
+        detail: `${remote} is the project “${other.name}”'s repository.`,
+      });
     }
   };
 
@@ -475,23 +478,22 @@ export const createProjectSettings = ({
     asked: string | null | undefined
   ) => {
     if (asked === undefined) {
-      return refusal(
-        400,
-        "set-runs-names-runs",
-        "set_runs_on names runs_on: apple, linux, a machine, or null."
-      );
+      return problem(400, {
+        code: "set-runs-names-runs",
+        detail: "set_runs_on names runs_on: apple, linux, a machine, or null.",
+      });
     }
     let to: string | null = null;
     if (asked?.trim()) {
       const value = runsOnValue(asked, db.listAgents());
       if (!("value" in value)) {
-        return refusal(400, "runs-on-unknown", value.problem);
+        return problem(400, { code: "runs-on-unknown", detail: value.problem });
       }
       to = value.value;
     }
     const change: DispatchSetting = { kind: "set_runs_on", runsOn: to };
     return project.runsOn === to
-      ? refusal(400, "already-words", alreadyWords(change))
+      ? problem(400, { code: "already-words", detail: alreadyWords(change) })
       : change;
   };
 
@@ -514,18 +516,26 @@ export const createProjectSettings = ({
         JSON.stringify(project[key as keyof DispatchChange] ?? null) ===
         JSON.stringify(value ?? null)
     );
-    const problem = same ? alreadyWords(change) : dispatchProblem(columns);
-    return problem ? refusal(400, "dispatch-set-refused", problem) : change;
+    const misfit = same ? alreadyWords(change) : dispatchProblem(columns);
+    return misfit
+      ? problem(400, { code: "dispatch-set-refused", detail: misfit })
+      : change;
   };
 
   /** Caw on or off, refused when he is that already. */
   const eventsSet = (project: ProjectRow, asked: AskedChange) => {
     const on = asked.events;
     if (on === null || on === undefined) {
-      return refusal(400, "events", projectSettingsWords.needs.events);
+      return problem(400, {
+        code: "events",
+        detail: projectSettingsWords.needs.events,
+      });
     }
     if (on === project.eventsOn) {
-      return refusal(400, "events", projectSettingsWords.already.events(on));
+      return problem(400, {
+        code: "events",
+        detail: projectSettingsWords.already.events(on),
+      });
     }
     return { kind: "set_events", events: on } satisfies ProjectSettingChange;
   };
@@ -541,10 +551,13 @@ export const createProjectSettings = ({
     if (asked.kind === "set_hears_tasks") {
       const on = asked.hears_tasks;
       if (on === null || on === undefined) {
-        return refusal(400, "hears-tasks", needs.hearsTasks);
+        return problem(400, { code: "hears-tasks", detail: needs.hearsTasks });
       }
       if (on === project.hearsTasks) {
-        return refusal(400, "hears-tasks", already.hearsTasks(on));
+        return problem(400, {
+          code: "hears-tasks",
+          detail: already.hearsTasks(on),
+        });
       }
       return {
         kind: asked.kind,
@@ -553,14 +566,16 @@ export const createProjectSettings = ({
     }
     const on = asked.attempts_hear_comments;
     if (on === null || on === undefined) {
-      return refusal(400, "attempts-hear-comments", needs.attemptsHearComments);
+      return problem(400, {
+        code: "attempts-hear-comments",
+        detail: needs.attemptsHearComments,
+      });
     }
     if (on === project.attemptsHearComments) {
-      return refusal(
-        400,
-        "attempts-hear-comments",
-        already.attemptsHearComments(on)
-      );
+      return problem(400, {
+        code: "attempts-hear-comments",
+        detail: already.attemptsHearComments(on),
+      });
     }
     return {
       kind: asked.kind,
@@ -581,18 +596,20 @@ export const createProjectSettings = ({
   /** The account its sessions start on, checked as the person's own edit is, refused when it is that already. */
   const accountSet = (project: ProjectRow, asked: AskedChange) => {
     if (asked.account === undefined) {
-      return refusal(400, "account-set-refused", projectAccountWords.needs);
+      return problem(400, {
+        code: "account-set-refused",
+        detail: projectAccountWords.needs,
+      });
     }
     const change = accountChange(project, asked.account, accounts());
     if (change instanceof ElysiaStatus) {
       return change;
     }
     if (!change) {
-      return refusal(
-        400,
-        "already",
-        projectAccountWords.already(accountName(project.account))
-      );
+      return problem(400, {
+        code: "already",
+        detail: projectAccountWords.already(accountName(project.account)),
+      });
     }
     return {
       kind: "set_account",
@@ -605,18 +622,16 @@ export const createProjectSettings = ({
   const atLimitSet = (project: ProjectRow, asked: AskedChange) => {
     const atLimit = asked.at_limit;
     if (atLimit === null || atLimit === undefined) {
-      return refusal(
-        400,
-        "at-limit-set-refused",
-        projectAccountWords.atLimit.needs
-      );
+      return problem(400, {
+        code: "at-limit-set-refused",
+        detail: projectAccountWords.atLimit.needs,
+      });
     }
     if (atLimit === project.accountAtLimit) {
-      return refusal(
-        400,
-        "already",
-        projectAccountWords.atLimit.already(atLimit)
-      );
+      return problem(400, {
+        code: "already",
+        detail: projectAccountWords.atLimit.already(atLimit),
+      });
     }
     return {
       kind: "set_account_at_limit",
@@ -628,19 +643,24 @@ export const createProjectSettings = ({
   const areaSet = (project: ProjectRow, asked: AskedChange) => {
     const { area: wanted } = asked;
     if (wanted === undefined) {
-      return refusal(400, "area-set-refused", areaWords.needs);
+      return problem(400, {
+        code: "area-set-refused",
+        detail: areaWords.needs,
+      });
     }
     const area = wanted === null ? null : areas.named(wanted);
     if (area === undefined && wanted !== null) {
-      return refusal(
-        400,
-        "unknown-area",
-        areaWords.unknown(wanted, areas.names())
-      );
+      return problem(400, {
+        code: "unknown-area",
+        detail: areaWords.unknown(wanted, areas.names()),
+      });
     }
     const id = area?.id ?? null;
     if (id === project.areaId) {
-      return refusal(400, "already", areaWords.already(area?.name ?? null));
+      return problem(400, {
+        code: "already",
+        detail: areaWords.already(area?.name ?? null),
+      });
     }
     return {
       kind: "set_area",
@@ -653,28 +673,25 @@ export const createProjectSettings = ({
   const grantChange = (project: ProjectRow, asked: AskedChange) => {
     const name = asked.connection?.trim();
     if (!name) {
-      return refusal(
-        400,
-        "grant-connection-names-connection",
-        "grant_connection names the connection."
-      );
+      return problem(400, {
+        code: "grant-connection-names-connection",
+        detail: "grant_connection names the connection.",
+      });
     }
     let view: ReturnType<Connections["get"]>;
     try {
       view = connections.get(name);
     } catch {
-      return refusal(
-        400,
-        "no-connection",
-        projectSettingsWords.noConnection(name, grantable(project))
-      );
+      return problem(400, {
+        code: "no-connection",
+        detail: projectSettingsWords.noConnection(name, grantable(project)),
+      });
     }
     if (view.projects.includes(project.id)) {
-      return refusal(
-        400,
-        "granted-project-already",
-        `${name} is granted to this project already.`
-      );
+      return problem(400, {
+        code: "granted-project-already",
+        detail: `${name} is granted to this project already.`,
+      });
     }
     return {
       kind: "grant_connection",
@@ -687,11 +704,10 @@ export const createProjectSettings = ({
   const linkChange = (project: ProjectRow, asked: AskedChange) => {
     const github = asked.github?.trim() ?? "";
     if (!GITHUB_REPO.test(github)) {
-      return refusal(
-        400,
-        "link-repo-takes-github",
-        "link_repo takes the GitHub repository as owner/name."
-      );
+      return problem(400, {
+        code: "link-repo-takes-github",
+        detail: "link_repo takes the GitHub repository as owner/name.",
+      });
     }
     const refused = linkable(project, `github.com/${github}`);
     if (refused instanceof ElysiaStatus) {
@@ -737,18 +753,16 @@ export const createProjectSettings = ({
     }
     const to = asked.lands;
     if (to === null || to === undefined) {
-      return refusal(
-        400,
-        "set-lands-names-main",
-        "set_lands names main, branch or pr."
-      );
+      return problem(400, {
+        code: "set-lands-names-main",
+        detail: "set_lands names main, branch or pr.",
+      });
     }
     if (project.lands === to) {
-      return refusal(
-        400,
-        "projects-work-lands-already",
-        `This project's work lands on ${to} already.`
-      );
+      return problem(400, {
+        code: "projects-work-lands-already",
+        detail: `This project's work lands on ${to} already.`,
+      });
     }
     return { kind: "set_lands", lands: to } satisfies ProjectSettingChange;
   };
@@ -759,7 +773,10 @@ export const createProjectSettings = ({
       asked.map((one) => `${one.kind}:${one.connection ?? ""}`)
     );
     if (kinds.size !== asked.length) {
-      return refusal(400, "name-each-change-once", "Name each change once.");
+      return problem(400, {
+        code: "name-each-change-once",
+        detail: "Name each change once.",
+      });
     }
     const out: ProjectSettingChange[] = [];
     for (const one of asked) {
@@ -901,14 +918,16 @@ export const createProjectSettings = ({
   const reasonOf = (raw: string | undefined) => {
     const reason = raw?.trim();
     if (!reason) {
-      return refusal(400, "say-why-one-sentence", "Say why, in one sentence.");
+      return problem(400, {
+        code: "say-why-one-sentence",
+        detail: "Say why, in one sentence.",
+      });
     }
     if (reason.length > REASON_LIMIT) {
-      return refusal(
-        400,
-        "say-why-one-sentence",
-        `Say why in one sentence, under ${REASON_LIMIT} characters.`
-      );
+      return problem(400, {
+        code: "say-why-one-sentence",
+        detail: `Say why in one sentence, under ${REASON_LIMIT} characters.`,
+      });
     }
     return reason;
   };

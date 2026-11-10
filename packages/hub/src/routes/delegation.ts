@@ -2,10 +2,10 @@
  * The delegation tools a session lists and calls through the hub's door.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
+
 import { toolResultRefused } from "../tool-call-keys";
 
 export const delegationRoutes = ({
@@ -27,11 +27,10 @@ export const delegationRoutes = ({
       },
       ({ query }) =>
         delegationMcp.list(query.instanceId, query.lister !== undefined) ??
-        refusal(
-          404,
-          "no-session",
-          `No session ${query.instanceId} on this hub.`
-        )
+        problem(404, {
+          code: "no-session",
+          detail: `No session ${query.instanceId} on this hub.`,
+        })
     )
     .post(
       "/api/delegation/call/:instanceId",
@@ -42,20 +41,20 @@ export const delegationRoutes = ({
         const authorization = request.headers.get("authorization");
         const identity = identities.resolve(authorization);
         if (!identity) {
-          return refusal(
-            401,
-            "cawco-tool-call-needs",
-            authorization === null
-              ? "A CawCo tool call needs its session credential"
-              : "Invalid session credential"
-          );
+          return problem(401, {
+            code: "cawco-tool-call-needs",
+            detail:
+              authorization === null
+                ? "A CawCo tool call needs its session credential"
+                : "Invalid session credential",
+          });
         }
         if (identity.instanceId !== params.instanceId) {
-          return refusal(
-            403,
-            "session-credential-does-not",
-            "Session credential does not belong to the named instanceId"
-          );
+          return problem(403, {
+            code: "session-credential-does-not",
+            detail:
+              "Session credential does not belong to the named instanceId",
+          });
         }
         if (
           typeof body !== "object" ||
@@ -68,11 +67,11 @@ export const delegationRoutes = ({
               body.arguments === null ||
               Array.isArray(body.arguments)))
         ) {
-          return refusal(
-            400,
-            "delegation-call-needs-non",
-            "delegation call needs a non-empty tool name and object arguments"
-          );
+          return problem(400, {
+            code: "delegation-call-needs-non",
+            detail:
+              "delegation call needs a non-empty tool name and object arguments",
+          });
         }
         const input = body as {
           name: string;
