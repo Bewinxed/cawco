@@ -17,7 +17,9 @@
    * keys move the choice.
    *
    * It follows `value` while mounted; a press asks for another through
-   * `onValueChange` (or `bind:value`).
+   * `onValueChange` (or `bind:value`). `onpreview` tells which segment a
+   * resting pointer stands on, and null as it leaves, for a switch whose
+   * choice shows its result before it is pressed (a finger has no rest).
    */
   import { Tabs } from "bits-ui";
   import type { Component } from "svelte";
@@ -39,6 +41,7 @@
     segments,
     value = $bindable(),
     onValueChange,
+    onpreview,
     label,
   }: {
     /** The segments, in the order they stand. */
@@ -47,6 +50,8 @@
     value: T;
     /** A press chose another segment. */
     onValueChange?: (value: T) => void;
+    /** A resting pointer stands on this segment; null: it left. */
+    onpreview?: (value: T | null) => void;
     /** The switch's name, for the screen reader. */
     label: string;
   } = $props();
@@ -73,6 +78,10 @@
                 keys={segment.keys}
                 label={segment.label}
                 marked={segment.value === value}
+                onpointerenter={onpreview &&
+                  ((event: PointerEvent) =>
+                    event.pointerType !== "touch" && onpreview(segment.value))}
+                onpointerleave={onpreview && (() => onpreview(null))}
                 props={trigger}
                 tip={segment.tip}
               />

@@ -98,7 +98,7 @@
     dials,
     written,
     values,
-    state = null,
+    state: stateProps = null,
     undoable = false,
     open = $bindable(null),
     held = null,
@@ -132,11 +132,13 @@
 
   const changed = $derived(changedOf(dials, written, values));
   const propsChanged = $derived(
-    state ? changedOf(state.props, state.saved, state.edits) : []
+    stateProps
+      ? changedOf(stateProps.props, stateProps.saved, stateProps.edits)
+      : []
   );
   /** The case the text props stand in now: `saved` while all hold their saved words, a case while each it reaches holds its words and the rest their saved; none once he wrote his own. */
   const contentPicked = $derived.by(() => {
-    const own = state;
+    const own = stateProps;
     const cases = own?.content?.cases ?? [];
     if (!own) {
       return "saved";
@@ -151,6 +153,21 @@
       return "saved";
     }
     return cases.find((one) => at(one.fill))?.is ?? "";
+  });
+  /** The case a resting pointer stands on in the text switch, null while none: its words stand in the text rows until it leaves (the owner's pick on pin 15, "Show it on hover"), nothing pressed or sent. */
+  let previewing = $state<string | null>(null);
+  /** The text rows' words while a case is previewed, by prop name: the case's where it reaches, the saved elsewhere. */
+  const previewed = $derived.by(() => {
+    const cases = stateProps?.content?.cases ?? [];
+    if (!stateProps || previewing === null) {
+      return null;
+    }
+    const fill = cases.find((one) => one.is === previewing)?.fill ?? {};
+    const names = new Set(cases.flatMap((one) => Object.keys(one.fill)));
+    const saved = stateProps.saved;
+    return Object.fromEntries(
+      [...names].map((name) => [name, name in fill ? fill[name] : saved[name]])
+    );
   });
   /** Under the phone line a colour's picker unfolds under its row, across the face. */
   const phone = new MediaQuery("(width < 640px)");
@@ -199,8 +216,8 @@
     if (changed.length > 0) {
       onreset(changed, true);
     }
-    if (state && propsChanged.length > 0) {
-      state.onreset(propsChanged, true);
+    if (stateProps && propsChanged.length > 0) {
+      stateProps.onreset(propsChanged, true);
     }
   }
 </script>
@@ -256,11 +273,11 @@
       >
         {#if dials.length > 0}
           <section
-            aria-label={state ? words.dials.agentHead : undefined}
+            aria-label={stateProps ? words.dials.agentHead : undefined}
             class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3"
             data-slot="dials-agent"
           >
-            {#if state}
+            {#if stateProps}
               {@render partHead(words.dials.agentHead)}
             {/if}
             <div
@@ -295,8 +312,8 @@
             </div>
           </section>
         {/if}
-        {#if state && state.props.length > 0}
-          {@const own = state}
+        {#if stateProps && stateProps.props.length > 0}
+          {@const own = stateProps}
           {@const title = words.dials.propsHead(wordsOf(own.component))}
           <!-- After the agent's part, a hairline across the card and the
                space of a part's gap on each side of it: where one ends. -->
@@ -328,6 +345,7 @@
                      washed; never a menu (the owner's pin 14). -->
                 <BarSegments
                   label={words.dials.content}
+                  onpreview={(next) => (previewing = next)}
                   onValueChange={(next) =>
                     pick.onpick(
                       pick.cases.find((one) => one.is === next)?.fill ?? null
@@ -362,7 +380,9 @@
                   onreset={() => own.onreset([prop.name], false)}
                   open={open === `prop:${prop.name}`}
                   phone={phone.current}
-                  value={own.edits[prop.name] ?? own.saved[prop.name]}
+                  value={previewed && prop.name in previewed
+                    ? previewed[prop.name]
+                    : (own.edits[prop.name] ?? own.saved[prop.name])}
                   was={own.saved[prop.name]}
                 />
               {/each}
@@ -399,24 +419,24 @@
               variant="ghost">{words.undoReset}</Button
             >
           {/if}
-          {#if state && propsChanged.length > 0}
+          {#if stateProps && propsChanged.length > 0}
             <Button
               class="ms-auto"
               data-slot="save-new"
-              disabled={!!state.saving}
+              disabled={!!stateProps.saving}
               label={words.dials.saveNew}
-              onclick={state.onsavenew}
-              pending={state.saving === "new"}
+              onclick={stateProps.onsavenew}
+              pending={stateProps.saving === "new"}
               pendingLabel={words.dials.saving}
               size="sm"
               variant="ghost"
             />
             <Button
               data-slot="save"
-              disabled={!!state.saving}
+              disabled={!!stateProps.saving}
               label={words.dials.save}
-              onclick={state.onsave}
-              pending={state.saving === "save"}
+              onclick={stateProps.onsave}
+              pending={stateProps.saving === "save"}
               pendingLabel={words.dials.saving}
               size="sm"
             />
