@@ -17,7 +17,23 @@ declare global {
       region?: boolean;
     }
     // interface Locals {}
-    // interface PageData {}
+    /** What a route's load hands the shell, read from `page.data` by the components that draw it. */
+    interface PageData {
+      /** Each tab's shape as last measured, from the layout's cookie. */
+      foldBoxes?: Record<
+        string,
+        import("./lib/components/ui/fluid-tabs/fold-memory").FoldMeasure
+      >;
+      /** The conversations' names the layout's server load read, by session. */
+      names?: Record<string, import("./lib/platform/hub-read").HubRead<string>>;
+      /** The hub's pulses as the layout's server load read them. */
+      pulses?: Record<string, import("@cawco/core/protocol").SessionPulse>;
+      /** A project page's server-read start, when the page is one. */
+      seed?: import("./lib/cawco/workspace/project-seed").ProjectSeed | null;
+      /** The transcript's server-read tail, when the page is a session's. */
+      tail?:
+        import("./lib/cawco/stores/transcript-reads.svelte").ServerTail | null;
+    }
     interface PageState {
       /** As `taskOpened`, for a project folder's file opened as its own page (`?file=`). */
       fileOpened?: boolean;
