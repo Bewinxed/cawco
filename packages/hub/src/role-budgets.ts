@@ -245,7 +245,7 @@ export const standIn = (
       facts: () => Promise.resolve(new Map()),
     },
     formerIds: () => ({}),
-    forward: () => Promise.resolve(),
+    forward: () => Promise.resolve(undefined),
     callKeys: { once: (_actor, _name, _key, run) => run() },
     spawn: () => Promise.reject(new Error("A budget read starts nothing")),
     deliver: () => Promise.reject(new Error("measuring")),

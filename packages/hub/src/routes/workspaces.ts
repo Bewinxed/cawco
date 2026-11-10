@@ -3,37 +3,30 @@
  */
 
 import { artifactLink } from "@cawco/core/references";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
 
-import { discardCall } from "../work-item-calls";
-import { workItemProblem } from "../work-item-state";
+import { type WorkItemCallsDeps, workItemCalls } from "../work-item-calls";
 import { workspaceOut } from "../work-out";
 import { sessionCallerRefusal } from "./session-caller";
 
-export const workspaceRoutes = ({
-  discardAsked,
-  discarded,
-  hubAuth,
-  identities,
-  workItems,
-  workspaceArchived,
-  workspaceRetire,
-}: Pick<
-  HubContext,
-  | "discardAsked"
-  | "discarded"
-  | "hubAuth"
-  | "identities"
-  | "workItems"
-  | "workspaceArchived"
-  | "workspaceRetire"
->) => {
+export const workspaceRoutes = (
+  ctx: Pick<
+    HubContext,
+    | "hubAuth"
+    | "identities"
+    | "workspaceArchived"
+    | "workspaceRetire"
+    | keyof WorkItemCallsDeps
+  >
+) => {
+  const { hubAuth, identities, workItems, workspaceArchived, workspaceRetire } =
+    ctx;
   // The same call `discard_workspace` makes (work-item-calls.ts), after this
   // door's checks of who calls and what the body holds.
-  const discard = discardCall({ discardAsked, discarded });
+  const { discard } = workItemCalls(ctx);
   return (
     new Elysia()
       // Archiving a workspace: its machine kills the boundary with every
@@ -52,13 +45,9 @@ export const workspaceRoutes = ({
       // What a held workspace's clone holds that is nowhere else, as its
       // machine read it once its boundary was closed: what a discard saves
       // to a carry before deleting.
-      .get("/api/workspaces/:id/held", ({ params }) => {
-        try {
-          return workItems.held(params.id);
-        } catch (error) {
-          return workItemProblem(error);
-        }
-      })
+      .get("/api/workspaces/:id/held", ({ params }) =>
+        workItems.held(params.id)
+      )
       // Refused (409, in words naming what and how big) when its clone holds
       // work that is nowhere else: nothing is deleted, and the workspace is
       // held. `discard: true` is a person letting that work go: its machine
@@ -83,32 +72,31 @@ export const workspaceRoutes = ({
         },
         async ({ params, body, request, server }) => {
           const caller = hubAuth.callerOf(request, addressOf(server, request));
-          try {
-            const { workspace, carry } = await workItems.archive(params.id, {
-              discard: body?.discard === true,
-              anyway: body?.anyway === true && caller.kind === "owner",
-            });
-            workspaceArchived(workspace);
-            return { ...workspaceOut(workspace), carry };
-          } catch (error) {
-            return workItemProblem(error);
+          const archived = await workItems.archive(params.id, {
+            discard: body?.discard === true,
+            anyway: body?.anyway === true && caller.kind === "owner",
+          });
+          if (archived instanceof ElysiaStatus) {
+            return archived;
           }
+          const { workspace, carry } = archived;
+          workspaceArchived(workspace);
+          return { ...workspaceOut(workspace), carry };
         }
       )
       // What a workspace serves that waits on the person, each by its id,
       // name and link: what an archive of it waits on, which the person's
       // confirm names (dashboard LiveSessionMenu).
       .get("/api/workspaces/:id/waiting", ({ params }) => {
-        try {
-          return {
-            waiting: workItems.waiting(params.id).map((one) => ({
-              ...one,
-              link: artifactLink(one.id, one.title),
-            })),
-          };
-        } catch (error) {
-          return workItemProblem(error);
-        }
+        const waiting = workItems.waiting(params.id);
+        return waiting instanceof ElysiaStatus
+          ? waiting
+          : {
+              waiting: waiting.map((one) => ({
+                ...one,
+                link: artifactLink(one.id, one.title),
+              })),
+            };
       })
       // `discard_workspace`: a workspace a session's delegates worked in,
       // archived with its unlanded work saved to a carry, by that session
@@ -136,16 +124,11 @@ export const workspaceRoutes = ({
           if (stranger !== undefined) {
             return stranger;
           }
-          try {
-            return {
-              text: await discard(body.from, params.id, {
-                ask: body.ask,
-                reason: body.reason,
-              }),
-            };
-          } catch (error) {
-            return workItemProblem(error);
-          }
+          const text = await discard(body.from, params.id, {
+            ask: body.ask,
+            reason: body.reason,
+          });
+          return text instanceof ElysiaStatus ? text : { text };
         }
       )
   );

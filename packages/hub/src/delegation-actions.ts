@@ -47,6 +47,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { contextWords } from "@cawco/core/words/context";
 import { pauseClock } from "@cawco/core/words/machine-pause";
 import { workWords } from "@cawco/core/words/work";
+import { ElysiaStatus } from "elysia";
 import type { Started } from "./call-cuts";
 import type {
   SendHold,
@@ -65,6 +66,7 @@ import { hubHttpUrl, selfFetch } from "./hub-self";
 import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
+import type { AnyProblem } from "./refusal";
 import {
   activeAt,
   pageOf,
@@ -569,6 +571,34 @@ const noneMatch = (peers: Peer[], target: string, what: string): Error =>
     `No ${what} matches "${target}". Running now: ${peers.map((peer) => peer.label).join(", ") || "none are running"}.`
   );
 
+/** What `start_session` answers of the session it started, in `folder`: where, on what, in which mode, and how to hand it more. */
+const startedText = ({
+  id,
+  title,
+  folder,
+  spinOff,
+  on,
+  harness,
+  model,
+  type,
+  permissionMode,
+}: {
+  folder: MachinePath;
+  harness: string;
+  id: string;
+  model: string;
+  on: string;
+  permissionMode: string | undefined;
+  spinOff: boolean;
+  title: string;
+  type: { effort?: string; name: string } | undefined;
+}): string =>
+  `Started ${sessionLink(id, title)} (${leafOf(folder)})${spinOff ? " as a spin-off" : ""}${on} in ${folder}, ` +
+  `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
+  `in ${permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
+  "It is in the sidebar now, under this session, and the user can open its transcript. " +
+  `Hand it more work later with handoff("${leafOf(folder)}#${id.slice(0, 8)}", ...).`;
+
 /** `body` from session `from` (called `name`) into session `to`. */
 const peerSend = (
   to: string,
@@ -770,9 +800,11 @@ export interface HandoffDeps {
   ) => Promise<DelegateList | DelegatePeek>;
   /**
    * Hands a send to the hub's one send path now, and answers what became of
-   * it: refused sends throw with the hub's reason.
+   * it: a send that does not go answers the hub's problem, in its reason.
    */
-  readonly deliver: (envelope: Envelope<SendPayload>) => Promise<SendDelivery>;
+  readonly deliver: (
+    envelope: Envelope<SendPayload>
+  ) => Promise<SendDelivery | AnyProblem>;
   /** Puts an envelope on the daemon's hub socket. */
   readonly emit: (envelope: Envelope) => void;
   /** The board and the machines, read in the hub's own process. */
@@ -793,13 +825,14 @@ export interface HandoffDeps {
    * A send with inputs (hub handed-input.ts) to session `target`, through
    * the hub's one step that writes them and sends (work-items.ts
    * `handOff`): `compose` makes the send once the hub knows where they
-   * landed. Refused, nothing sent, when an input cannot go or be written.
+   * landed. The hub's problem, nothing sent, when an input cannot go or be
+   * written.
    */
   readonly handOff: (
     target: string,
     inputs: unknown[],
     compose: (landed: HandoffInputs) => Envelope<SendPayload>
-  ) => Promise<SendDelivery>;
+  ) => Promise<SendDelivery | AnyProblem>;
   /** Exact-id lookup includes ended/archived rows outside the live roster. */
   readonly instanceById: (id: string) => InstanceRow | undefined;
   /** The session doing the handing over. */
@@ -834,13 +867,13 @@ export interface HandoffDeps {
   /**
    * Starts a session now and holds until its machine says it is in place
    * (spawns.ts `spawnSession`); answers the folder it runs in as the hub
-   * settled it. A refused or failed start throws the hub's words.
+   * settled it. A start that does not go answers the hub's problem.
    */
   readonly spawn: (
     envelope: Envelope<
       SpawnPayload & { fallbackPermissionMode?: PermissionMode }
     >
-  ) => Promise<MachinePath>;
+  ) => Promise<MachinePath | AnyProblem>;
   /**
    * Told what this call started (a delegate, a queued delegate, a session),
    * so the hub stops it if the call's harness cuts the call (call-cuts.ts).
@@ -950,7 +983,7 @@ export interface HandoffActions {
        */
       task?: string;
     }
-  ) => Promise<DelegateResult>;
+  ) => ReturnType<WorkItemCalls["delegate"]>;
   /**
    * This session's delegation tree: its delegates, theirs nested; the
    * delegates still queued; and the tree's held workspaces, whose items
@@ -968,12 +1001,14 @@ export interface HandoffActions {
     workspace: string,
     /** `ask`: the person decides, while what it serves waits on him; `reason`, which he reads first. */
     asked?: { ask?: boolean; reason?: string }
-  ) => Promise<string>;
+  ) => ReturnType<WorkItemCalls["discard"]>;
   /**
    * Finishes this session's work item: the hub runs its landing gate and
    * lands it, or fails it as blocked. Answers what the hub says of it.
    */
-  readonly finishItem: (request: WorkItemSubmission) => Promise<string>;
+  readonly finishItem: (
+    request: WorkItemSubmission
+  ) => ReturnType<WorkItemCalls["finishItem"]>;
   /**
    * One write on a repository's forge, made on this session's machine with
    * its own sign-in there (forge-posts.ts). Answers what came of it, in
@@ -997,7 +1032,7 @@ export interface HandoffActions {
     target: string,
     message: string,
     inputs?: unknown[]
-  ) => Promise<string>;
+  ) => Promise<string | AnyProblem>;
   interruptDelegate: (target: string) => string;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
   /** The fleet's sessions as `list_sessions` asks for them (session-list.ts). */
@@ -1050,9 +1085,12 @@ export interface HandoffActions {
       /** The machine it runs on, by hostname or machineId; the caller's by default. */
       machine?: string;
     }
-  ) => Promise<HandoffResult>;
-  stopDelegate: (target: string) => Promise<string>;
-  readonly waitItem: (minutes: number, reason: string) => Promise<string>;
+  ) => Promise<HandoffResult | AnyProblem>;
+  stopDelegate: (target: string) => Promise<string | AnyProblem>;
+  readonly waitItem: (
+    minutes: number,
+    reason: string
+  ) => Promise<ReturnType<WorkItemCalls["waitItem"]>>;
 }
 
 /**
@@ -1801,11 +1839,7 @@ export const handoffActions = ({
       };
     },
 
-    async handoff(
-      target: string,
-      message: string,
-      inputs?: unknown[]
-    ): Promise<string> {
+    async handoff(target: string, message: string, inputs?: unknown[]) {
       const { peers, asleep, own, hosts, rows } = roster(fleet, instanceId);
       // A session named by a former id is reached by its id now; one a
       // continuation took the work item of, by its continuation's.
@@ -1859,6 +1893,10 @@ export const handoffActions = ({
             envelopeOf(withInputsLine(said, landed.inputs, landed.folder))
           )
         : await deliver(envelopeOf(said));
+      // A delivery says whether its session is busy; anything else is the hub's problem.
+      if (!("busy" in delivery)) {
+        return delivery;
+      }
       const continues = continuesWords(followed);
       const handed = `Handed to ${sessionLink(peer.row.id, peer.title)}, ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
       return `${handed} ${deliveryWords(delivery)}`;
@@ -1876,7 +1914,7 @@ export const handoffActions = ({
         machine,
         ...opts
       }
-    ): Promise<HandoffResult> {
+    ) {
       // Named: that machine, which must be online. Unnamed: "" is the caller's
       // own, which the hub's forwarder fills in.
       const target = machine
@@ -1888,11 +1926,15 @@ export const handoffActions = ({
       // The caller's project's catalog: its own types shadow the fleet's.
       const types = await fetchDelegateTypes(projectId);
       const { rows } = fleetInstances(fleet);
-      const { type, harness, model } = resolveSpawnType(types, {
+      const resolved = resolveSpawnType(types, {
         type: typeName,
         harness: harnessName,
         model: modelName,
       });
+      if (resolved instanceof ElysiaStatus) {
+        return resolved;
+      }
+      const { type, harness, model } = resolved;
       const id = crypto.randomUUID();
       const from = senderName(
         rows.find((row) => row.id === instanceId),
@@ -1932,6 +1974,10 @@ export const handoffActions = ({
         instanceId: id,
         payload,
       });
+      // The folder is the settled path; anything else is the hub's problem.
+      if (typeof settled !== "string") {
+        return settled;
+      }
       startedBy?.({ kind: "session", instanceId: id });
       // The marker prefix survives SDK storage (which strips `origin`) so that
       // the transcript builder (`sentRow`, @cawco/core) can still detect the
@@ -1940,18 +1986,22 @@ export const handoffActions = ({
       const body = `${handoffMarker(from, instanceId)}${prompt}`;
       const opening = peerSend(id, instanceId, from, body);
       emit({ verb: "send", machineId, instanceId: id, payload: opening });
-      const on = target
-        ? ` on ${machineCalled(target.machineId, fleet.machines())}`
-        : "";
       return {
         id,
         title,
-        text:
-          `Started ${sessionLink(id, title)} (${leafOf(settled)})${spinOff ? " as a spin-off" : ""}${on} in ${settled}, ` +
-          `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
-          `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
-          "It is in the sidebar now, under this session, and the user can open its transcript. " +
-          `Hand it more work later with handoff("${leafOf(settled)}#${id.slice(0, 8)}", ...).`,
+        text: startedText({
+          id,
+          title,
+          folder: settled,
+          spinOff,
+          on: target
+            ? ` on ${machineCalled(target.machineId, fleet.machines())}`
+            : "",
+          harness,
+          model,
+          type,
+          permissionMode: opts.permissionMode,
+        }),
       };
     },
 
@@ -1973,6 +2023,9 @@ export const handoffActions = ({
           prompt,
         })
       );
+      if (started instanceof ElysiaStatus) {
+        return started;
+      }
       startedBy?.(startedOf(started));
       return target
         ? {
@@ -1992,11 +2045,11 @@ export const handoffActions = ({
     async discardWorkspace(
       workspace: string,
       asked: { ask?: boolean; reason?: string } = {}
-    ): Promise<string> {
+    ) {
       return await work.discard(instanceId, workspace.trim(), asked);
     },
 
-    async stopDelegate(asked: string): Promise<string> {
+    async stopDelegate(asked: string) {
       // A queued delegate has no session yet: it is withdrawn from the queue.
       const withdrawn = work.withdrawQueued(instanceId, asked);
       if (withdrawn !== undefined) {
@@ -2024,10 +2077,13 @@ export const handoffActions = ({
         forkOrigins()
       );
       // The hub walks its tree (tree-stops.ts): what is under it ends first.
-      const { under } = work.stop(instanceId, peer.row.id);
+      const stopped = work.stop(instanceId, peer.row.id);
+      if (stopped instanceof ElysiaStatus) {
+        return stopped;
+      }
       const stopping = workWords.stopAsked(
         `${peer.label}${continuesWords(followed)}`,
-        under
+        stopped.under
       );
       if (!peer.row.workItemId) {
         return stopping;

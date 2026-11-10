@@ -12,6 +12,7 @@ import type { Envelope, InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { configurePage } from "@cawco/core/words/configure";
+import { ElysiaStatus } from "elysia";
 import { claudeCredentialRefused, signOutRefused } from "./accounts";
 import { clientCopy } from "./ask-presentation";
 import { eventContext, isProjectConversation } from "./caw";
@@ -418,7 +419,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
       "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
       "answers are keyed by the exact question text and the value is the chosen option label " +
       "(pass deny=true to refuse it).";
-    ctx.deliverSend(
+    const sent = ctx.deliverSend(
       sessionWord(
         parent,
         withContext(
@@ -443,6 +444,11 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
         { shouldQuery: false }
       )
     );
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[asks] a delegate's question was not handed to its parent: ${sent.response.detail}`
+      );
+    }
     const toolName = peek(ask.payload, "toolName");
     ctx.publishDelegateEvent(
       delegate.machineId,
@@ -486,7 +492,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     body: string,
     about: DelegateWaitAbout
   ): void => {
-    ctx.deliverSend({
+    const sent = ctx.deliverSend({
       verb: "send",
       machineId: parent.machineId,
       instanceId: parent.id,
@@ -507,6 +513,11 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
         },
       },
     });
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[asks] a delegate's wait was not told to its parent: ${sent.response.detail}`
+      );
+    }
   };
 
   /**
@@ -537,7 +548,7 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
     { completion, notice = false, headline, outputs }: ReportTold
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
-    ctx.deliverSend(
+    const sent = ctx.deliverSend(
       sessionWord(
         parent,
         `${reportMarker(label, failed, notice, headline)}${conversationContext(parent, `${sessionLink(delegate.id, boardTitle(delegate))} ${failed ? "failed" : "reported"}`) ?? `From ${sessionLink(delegate.id, boardTitle(delegate))}.`}\n\n${body}`,
@@ -550,6 +561,11 @@ export const createAskRouting = (ctx: AskRoutingContext) => {
         { shouldQuery: false }
       )
     );
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[asks] a delegate's report was not handed to its parent: ${sent.response.detail}`
+      );
+    }
     ctx.publishDelegateEvent(
       delegate.machineId,
       ctx.db.recordDelegateEvent({

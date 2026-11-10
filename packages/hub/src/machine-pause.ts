@@ -18,7 +18,7 @@
  *   already running as the pause begins is cancelled on the machine (core
  *   `CONTROL_CANCEL_COMMAND`) and waits the same way, then runs again from
  *   the start: never a failed step or an attempt. The machine's row says how many were stopped;
- * - a new delegate for the machine (work-items.ts `MachinePaused`): queued
+ * - a new delegate for the machine (work-items.ts `notPaused`): queued
  *   in its parent's tray, and started once the pause ends;
  * - a preview's listener: not started, the pane saying why.
  * Turns already running there are interrupted as the pause begins, and each

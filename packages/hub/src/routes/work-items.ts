@@ -2,20 +2,14 @@
  * Work items and the landing gate: starting, waiting on, finishing and reading them.
  */
 
-import { Elysia, problem, t, ValidationError } from "elysia";
+import { Elysia, ElysiaStatus, problem, t, ValidationError } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { ProjectRefusal } from "../project-refusal";
 
 import { BUDGET, LANDS } from "../tasks";
 import { firstValidationIssue } from "../validation-issue";
 import { workItemCalls } from "../work-item-calls";
-import {
-  WAIT_ITEM_LIMIT,
-  WAIT_ITEM_MAX_MINUTES,
-  WorkItemRefusal,
-  workItemProblem,
-} from "../work-item-state";
+import { WAIT_ITEM_LIMIT, WAIT_ITEM_MAX_MINUTES } from "../work-item-state";
 import { SESSION_TITLE_DESCRIPTION } from "../work-items";
 import { workItemOut } from "../work-out";
 import { harnessSchema } from "./harness-schema";
@@ -83,21 +77,14 @@ export const workItemRoutes = (
               detail: "Say why it is no longer owed.",
             });
           }
-          try {
-            const item = workItems.dismiss(params.id, why);
-            return (
-              item ??
-              problem(404, {
-                code: "no-work-item",
-                detail: `no work item ${params.id}`,
-              })
-            );
-          } catch (error) {
-            return problem(409, {
-              code: "work-item-not-dismissed",
-              detail: error instanceof Error ? error.message : String(error),
-            });
-          }
+          const item = workItems.dismiss(params.id, why);
+          return (
+            item ??
+            problem(404, {
+              code: "no-work-item",
+              detail: `no work item ${params.id}`,
+            })
+          );
         }
       )
       // Retry from the tray: the reader's word to the failed delegate's own
@@ -184,21 +171,7 @@ export const workItemRoutes = (
           if (stranger !== undefined) {
             return stranger;
           }
-          try {
-            return await calls.delegate(body);
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            // Anything that is not the hub's own refusal is the machine's:
-            // offline, or git turning the checkout down.
-            return problem(
-              error instanceof WorkItemRefusal ||
-                error instanceof ProjectRefusal
-                ? error.status
-                : 502,
-              { code: "work-item-refused", detail: message }
-            );
-          }
+          return await calls.delegate(body);
         }
       )
       .post(
@@ -235,17 +208,12 @@ export const workItemRoutes = (
           if (stranger !== undefined) {
             return stranger;
           }
-          try {
-            return {
-              text: workItems.waitItem(
-                body.instanceId,
-                body.minutes,
-                body.reason
-              ),
-            };
-          } catch (error) {
-            return workItemProblem(error);
-          }
+          const text = workItems.waitItem(
+            body.instanceId,
+            body.minutes,
+            body.reason
+          );
+          return text instanceof ElysiaStatus ? text : { text };
         }
       )
       // `finish_item`: the hub runs the item's landing gate, lands it, and
@@ -280,11 +248,8 @@ export const workItemRoutes = (
           }
           server?.timeout(request, 0);
           const { instanceId, ...finished } = body;
-          try {
-            return { text: await workItems.finishItem(instanceId, finished) };
-          } catch (error) {
-            return workItemProblem(error);
-          }
+          const text = await workItems.finishItem(instanceId, finished);
+          return text instanceof ElysiaStatus ? text : { text };
         }
       )
       // `stop_delegate`: a delegate and its tree stopped by its parent or its
@@ -310,17 +275,7 @@ export const workItemRoutes = (
             return stranger;
           }
           // A delegate named by a former id is stopped by its id now.
-          try {
-            return calls.stop(body.from, body.instanceId);
-          } catch (error) {
-            if (error instanceof WorkItemRefusal) {
-              return problem(error.status, {
-                code: "work-item-refused",
-                detail: error.message,
-              });
-            }
-            throw error;
-          }
+          return calls.stop(body.from, body.instanceId);
         }
       )
       // `stop_delegate` on a queued delegate: withdrawn by its parent or its
@@ -344,17 +299,16 @@ export const workItemRoutes = (
           if (stranger !== undefined) {
             return stranger;
           }
-          try {
-            const text = workItems.withdrawQueued(body.from, body.target);
-            return text === undefined
-              ? problem(404, {
-                  code: "no-queued-delegate",
-                  detail: `no queued delegate ${body.target}`,
-                })
-              : { text };
-          } catch (error) {
-            return workItemProblem(error);
+          const text = workItems.withdrawQueued(body.from, body.target);
+          if (text instanceof ElysiaStatus) {
+            return text;
           }
+          return text === undefined
+            ? problem(404, {
+                code: "no-queued-delegate",
+                detail: `no queued delegate ${body.target}`,
+              })
+            : { text };
         }
       )
       .get("/api/work-items/:id", hidden, ({ params }) => {

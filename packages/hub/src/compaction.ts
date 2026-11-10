@@ -76,16 +76,6 @@ export type CompactionContext = Pick<
   | "unnoteAtLimit"
 >;
 
-/** A session's open-item rows as the records its filing counts (open-items.ts `recordsOf`); a refused read thrown on in its words, logged where a failed read is. */
-const heldRecords = (
-  rows: Awaited<ReturnType<CompactionContext["openItems"]["rows"]>>
-) => {
-  if (rows instanceof ElysiaStatus) {
-    throw new Error(rows.response.detail);
-  }
-  return recordsOf(rows);
-};
-
 export const createCompaction = (ctx: CompactionContext) => {
   /**
    * What a session is told when it may go on, in its own process, after
@@ -122,7 +112,7 @@ export const createCompaction = (ctx: CompactionContext) => {
     stopped: "limit" | "signin",
     quiet = false
   ): void => {
-    ctx.deliverSend(
+    const sent = ctx.deliverSend(
       sessionWord(
         row,
         CARRY_ON[stopped],
@@ -134,6 +124,11 @@ export const createCompaction = (ctx: CompactionContext) => {
         quiet ? { shouldQuery: false } : {}
       )
     );
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[context] a session's carry-on was not sent: ${sent.response.detail}`
+      );
+    }
   };
 
   /**
@@ -196,7 +191,7 @@ export const createCompaction = (ctx: CompactionContext) => {
     );
     // Refused as it was taken: the compaction ends now, stopped, and what
     // waited behind it goes, never held for a step that went nowhere.
-    if (sent?.state === "failed") {
+    if (sent instanceof ElysiaStatus || sent?.state === "failed") {
       queueMicrotask(() => advanceCompaction(row.id));
     }
   };
@@ -924,16 +919,21 @@ export const createCompaction = (ctx: CompactionContext) => {
   const sayFiled = async (
     plan: Extract<LimitCompaction, { move: null }>
   ): Promise<void> => {
+    const unread = (why: string) => {
+      console.warn(
+        `[context] ${plan.instanceId.slice(0, 8)}: what its filing wrote could not be read: ${why}`
+      );
+      return null;
+    };
     const after = plan.records
-      ? await ctx.openItems
-          .rows(plan.instanceId)
-          .then(heldRecords)
-          .catch((error: unknown) => {
-            console.warn(
-              `[context] ${plan.instanceId.slice(0, 8)}: what its filing wrote could not be read: ${error instanceof Error ? error.message : String(error)}`
-            );
-            return null;
-          })
+      ? await ctx.openItems.rows(plan.instanceId).then(
+          (rows) =>
+            rows instanceof ElysiaStatus
+              ? unread(rows.response.detail)
+              : recordsOf(rows),
+          (error: unknown) =>
+            unread(error instanceof Error ? error.message : String(error))
+        )
       : null;
     sayFiling(
       plan,
@@ -1025,15 +1025,20 @@ export const createCompaction = (ctx: CompactionContext) => {
       }
       // What its records hold before its filing turn, read before the idle
       // check, so the filing follows that check with no wait between.
-      const records = await ctx.openItems
-        .rows(instanceId)
-        .then(heldRecords)
-        .catch((error: unknown) => {
-          console.warn(
-            `[context] ${ctx.sessionName(row)}: its records could not be read before its filing, so its line will not say what it wrote: ${error instanceof Error ? error.message : String(error)}`
-          );
-          return null;
-        });
+      const unread = (why: string) => {
+        console.warn(
+          `[context] ${ctx.sessionName(row)}: its records could not be read before its filing, so its line will not say what it wrote: ${why}`
+        );
+        return null;
+      };
+      const records = await ctx.openItems.rows(instanceId).then(
+        (rows) =>
+          rows instanceof ElysiaStatus
+            ? unread(rows.response.detail)
+            : recordsOf(rows),
+        (error: unknown) =>
+          unread(error instanceof Error ? error.message : String(error))
+      );
       if (!(await ctx.sessionIdle(row))) {
         console.info(
           `[context] ${ctx.sessionName(row)} is within ${room} tokens of where its harness compacts it (${compactsAt}) but its machine says it is not between turns; it is asked again at its next turn's end.`

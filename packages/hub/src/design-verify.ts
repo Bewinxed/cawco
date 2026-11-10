@@ -73,7 +73,7 @@ import { designOnBase, ownLandings, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
 import { hubActor, type Tasks } from "./tasks";
 import { isLive, type Parent, verifierParent } from "./work-item-state";
-import type { WorkItemRequest, WorkItemStart } from "./work-items";
+import type { WorkItemRequest, WorkItems } from "./work-items";
 
 /** What the builder's chip says while a verifier works. */
 const CHECKING = "being checked against the design system";
@@ -162,7 +162,7 @@ export interface DesignVerifyDeps {
     finishItem: (
       instanceId: string,
       request: WorkItemSubmission
-    ) => Promise<string>;
+    ) => ReturnType<WorkItems["finishItem"]>;
     holdWords: (itemId: string, words: string | null) => void;
     startForHub: (
       request: Omit<
@@ -170,7 +170,7 @@ export interface DesignVerifyDeps {
         "parentInstanceId" | "workspace" | "fork" | "reuse"
       >,
       parent: Parent
-    ) => Promise<WorkItemStart>;
+    ) => ReturnType<WorkItems["startForHub"]>;
     stopForHub: (itemId: string, why: string) => void;
     tellSession: (instanceId: string, content: string) => void;
   };
@@ -404,6 +404,10 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
           cwd: workspace.path,
         })
       );
+      if (begun instanceof ElysiaStatus) {
+        db.designChecks.set(check.id, { state: "failed", endedAt: new Date() });
+        return begun.response.detail;
+      }
       db.designChecks.set(check.id, { verifierItemId: begun.item.id });
       return null;
     } catch (error) {
@@ -566,7 +570,12 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     workItems
       .finishItem(instanceId, check.submission)
       .then((text) => {
-        if (db.workItem(check.itemId)?.state !== "done") {
+        if (text instanceof ElysiaStatus) {
+          workItems.tellSession(
+            instanceId,
+            `Your result passed the design check, and its finish could not run: ${text.response.detail}. Call finish_item again.`
+          );
+        } else if (db.workItem(check.itemId)?.state !== "done") {
           workItems.tellSession(instanceId, text);
         }
       })
@@ -772,6 +781,9 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
           : `Found ${verdict.findings.length} must-fix against the design system.`,
         summary: verdict.summary,
       });
+      if (typeof finished !== "string") {
+        return finished;
+      }
       return { recorded: passed ? "passed" : "findings", finished };
     },
 

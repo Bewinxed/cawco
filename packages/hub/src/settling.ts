@@ -59,7 +59,7 @@ import { sessionLabel } from "./labels";
 import {
   SESSION_TITLE_MAX,
   type WorkItemRequest,
-  type WorkItemStart,
+  type WorkItems,
 } from "./work-items";
 
 /** A page's cards as a brief reads them: the page, the cards to settle, all its cards and its picks. */
@@ -112,7 +112,7 @@ export interface SettlingDeps {
   /** He wrote on card `card` of `artifactId`, which a member settled: its push is over (push.ts `decidedSeen`). */
   readonly seen: (artifactId: string, card: string) => void;
   /** Files and spawns a work item (work-items.ts `start`): what dispatch starts an attempt through. */
-  readonly start: (request: WorkItemRequest) => Promise<WorkItemStart>;
+  readonly start: (request: WorkItemRequest) => ReturnType<WorkItems["start"]>;
   /** Tells the project's conversation a `decision` event (caw.ts `tell`): its session, or why it didn't take it. */
   readonly tellCaw: (
     projectId: string,
@@ -494,7 +494,7 @@ export const createSettling = (deps: SettlingDeps) => {
     member: Member,
     asker: InstanceRow,
     pages: PageCards[]
-  ): Promise<RouteState> => {
+  ) => {
     const [page] = pages as [PageCards];
     const type = deps.delegateType(member.delegateType as string);
     const title = `Settle: ${page.cards[0]?.question ?? page.row.title}`;
@@ -516,9 +516,16 @@ export const createSettling = (deps: SettlingDeps) => {
       lands: "none",
       settlesCards: true,
     });
+    if (started instanceof ElysiaStatus) {
+      return started;
+    }
     const { instanceId } = started.item;
     if (!instanceId) {
-      return { state: "failed", why: "the hub started no session for it." };
+      const unstarted: RouteState = {
+        state: "failed",
+        why: "the hub started no session for it.",
+      };
+      return unstarted;
     }
     deps.db.putSettlings(
       pages.flatMap((one) =>
@@ -534,7 +541,8 @@ export const createSettling = (deps: SettlingDeps) => {
     console.log(
       `[settling] ${pages.map((one) => `${one.row.name}: ${one.cards.map((card) => card.id).join(", ")}`).join("; ")} to ${member.id} (${started.item.type ?? "default"}), item ${started.item.id} under ${asker.id}`
     );
-    return { state: "running" };
+    const running: RouteState = { state: "running" };
+    return running;
   };
 
   /**
@@ -550,16 +558,22 @@ export const createSettling = (deps: SettlingDeps) => {
   ): Promise<RouteState> => {
     const kept = deps.db.onProject(member.id, page.row.projectId);
     const session = warmSession(kept);
-    try {
-      return session
-        ? await handTo(fleet, member, session, asker, page)
-        : await startRun(fleet, member, asker, [page, ...stranded(page, kept)]);
-    } catch (error) {
-      const said = error instanceof Error ? error.message : String(error);
+    /** The member's cards went nowhere: the route fails in the words it got. */
+    const notStarted = (said: string): RouteState => {
       console.warn(
         `[settling] ${page.row.name}: ${member.id} did not start: ${said}`
       );
       return { state: "failed", why: said.endsWith(".") ? said : `${said}.` };
+    };
+    try {
+      const routed = session
+        ? await handTo(fleet, member, session, asker, page)
+        : await startRun(fleet, member, asker, [page, ...stranded(page, kept)]);
+      return routed instanceof ElysiaStatus
+        ? notStarted(routed.response.detail)
+        : routed;
+    } catch (error) {
+      return notStarted(error instanceof Error ? error.message : String(error));
     }
   };
 
