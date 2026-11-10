@@ -44,7 +44,7 @@ import {
   taskResultWords,
   todoWrittenWords,
 } from "./presenters/tasks";
-import { type Refused, refusal } from "./refusal";
+import { type RefusalOf, type Refused, refusal } from "./refusal";
 import { appleSuggestion } from "./runs-on";
 import { normaliseTaskRef } from "./task-file";
 import { sessionActor, type Tasks, type TaskView } from "./tasks";
@@ -69,8 +69,12 @@ export interface TaskToolContext {
   actor: InstanceRow;
   /** It changes tasks (roles.ts `changesAnyTask`): its todo_write and task_comment name any task, not only its own work item's. */
   anyTask: boolean;
-  /** The whole id of the artifact the actor names by its name, handle or id (artifacts/service.ts `named`). */
-  artifactNamed?: (asked: string) => string;
+  /**
+   * The whole id of the artifact the actor names by its name, handle or
+   * id (artifacts/service.ts `named`), or its refusal, said again across
+   * the import cycle (this file and the artifacts' deps).
+   */
+  artifactNamed?: (asked: string) => string | RefusalOf;
   /**
    * Files "Build the design system" in the hub's words (design-offers.ts
    * `fileBuild`): a `task_create` with that title gives only its stage.
@@ -134,7 +138,7 @@ const resultArtifact = (
     name?: string;
     primary?: boolean;
   },
-  artifactNamed: (asked: string) => string
+  artifactNamed: (asked: string) => string | RefusalOf
 ) => {
   const shown = {
     ...(written.name ? { name: written.name } : {}),
@@ -161,11 +165,11 @@ const resultArtifact = (
     if (named instanceof ElysiaStatus) {
       return named;
     }
-    const page: ResultArtifact = {
-      kind: "artifact",
-      artifactId: artifactNamed(named),
-      ...shown,
-    };
+    const artifactId = artifactNamed(named);
+    if (artifactId instanceof ElysiaStatus) {
+      return artifactId;
+    }
+    const page: ResultArtifact = { kind: "artifact", artifactId, ...shown };
     return page;
   }
   const path = need(written.path, "path");
@@ -179,7 +183,7 @@ const resultArtifact = (
 /** A result's artifacts as `task_result` takes them ({@link resultArtifact}); the first refusal when one names nothing. */
 const resultArtifacts = (
   written: Parameters<typeof resultArtifact>[0][],
-  artifactNamed: (asked: string) => string
+  artifactNamed: (asked: string) => string | RefusalOf
 ) => {
   const artifacts: ResultArtifact[] = [];
   for (const one of written) {
