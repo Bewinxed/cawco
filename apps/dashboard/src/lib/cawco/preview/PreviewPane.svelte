@@ -79,7 +79,6 @@
   } from "#lib/platform/motion/curves.svelte.js";
   import { landKey } from "#lib/platform/motion/keyed.svelte.js";
   import { closeInto } from "#lib/platform/motion/share.svelte.js";
-  import { store, stored } from "#lib/platform/storage.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
@@ -108,7 +107,7 @@
   import CommentsButton from "./CommentsButton.svelte";
   import CoverState from "./CoverState.svelte";
   import { CommentKit, saidIn } from "./comment-kit.svelte";
-  import { NEXT_COMMENT, type RailList, type RailSort } from "./comment-rows";
+  import { NEXT_COMMENT, type RailList } from "./comment-rows";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
@@ -117,6 +116,7 @@
   import { PaneCanvas } from "./pane-canvas.svelte";
   import { lostWhy, PaneDoc, pageRepliesOf } from "./pane-doc.svelte";
   import { PaneLayout } from "./pane-layout.svelte";
+  import { PaneMode } from "./pane-mode.svelte";
   import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
   import { PaneSend } from "./pane-send.svelte";
   import { PaneSheet } from "./pane-sheet.svelte";
@@ -266,43 +266,15 @@
     commentKit,
     markFocused: (id: string) => markFocused(id),
   });
+  const paneMode = new PaneMode({
+    instanceId: () => instanceId,
+    previewFrame,
+    paneDoc,
+    pinComposer,
+    openPin: () => openPin,
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
-  /**
-   * The pane's mode, its head's segmented control, kept per session (core
-   * `PreviewMode`): Interact (V), the page gets every press and its pins
-   * stay pressable; Comment (C), a tap pins a comment to what it lands on;
-   * Draw (D), any pointer inks. Esc goes back to Interact. A pen inks in
-   * every mode.
-   */
-  let mode = $state<PreviewMode>("interact");
-  const modeKey = $derived(`cawco-preview-mode:${instanceId}`);
-  /**
-   * The Comments rail beside the page, from the head's Comments, its pressed
-   * toggle; shut until opened, then kept per session as the mode is, with
-   * its order. It closes only by its Close or by Comments.
-   */
-  let listOpen = $state(false);
-  let railSort = $state<RailSort>("newest");
-  const listKey = $derived(`cawco-preview-comments:${instanceId}`);
-  const sortKey = $derived(`cawco-preview-comments-sort:${instanceId}`);
-  $effect.pre(() => {
-    const keys = { mode: modeKey, list: listKey, sort: sortKey };
-    untrack(() => {
-      mode = previewMode(stored("local", keys.mode)) ?? "interact";
-      listOpen = stored("local", keys.list) === "open";
-      railSort = stored("local", keys.sort) === "top" ? "top" : "newest";
-    });
-  });
-  $effect(() => {
-    store("local", sortKey, railSort);
-  });
-  function showList(open: boolean) {
-    listOpen = open;
-    store("local", listKey, open ? "open" : "shut");
-  }
-  /** ⇧C: every pin on the page hidden, or shown (Figma's own key). */
-  let pinsShown = $state(true);
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
   /**
@@ -343,37 +315,12 @@
           : "The page didn't keep that, so nothing changed. Try again.";
     }
   }
-  /** The Comments control's title: why the comments aren't reaching the agent, else what ⇧C does. */
-  const commentsTitle = $derived.by(() => {
-    if (paneDoc.linkDown) {
-      return `${NOT_REACHING}. Open them to try again.`;
-    }
-    return pinsShown
-      ? "Comments (⇧C hides the pins)"
-      : "Comments (⇧C shows the pins)";
-  });
   /**
    * What the sheet covers told again as it comes to rest (ThreadSheet
    * `onmoved`): measured as it mounts it stood below the well, covering
    * nothing, so no pin was lifted clear of it.
    */
   let sayCovered: (() => void) | null = null;
-  /** The pane's mode, kept for the session and told to the page; `place` is the moved pin the next tap in Comment places again. */
-  function setMode(next: PreviewMode, place: string | null = null) {
-    // A mode switch leaves nothing of a comment being written.
-    if (next !== mode) {
-      pinComposer.cancelComposer();
-    }
-    mode = next;
-    placing = next === "comment" ? place : null;
-    store("local", modeKey, next);
-    previewFrame.post({ type: "cawco:mode", mode: next, place: placing });
-  }
-  /** ⇧C: every pin shown on the page, or hidden. */
-  function showPins(visible: boolean) {
-    pinsShown = visible;
-    previewFrame.post({ type: "cawco:pins-shown", shown: visible });
-  }
   /*
    * The comments (Projects spec §5.7; the artifact panel's surface brief, Placing a comment, The
    * Comments rail, A thread beside its pin): the composer beside the pill
@@ -400,9 +347,6 @@
   let closingPin = $state<string | null>(null);
   /** The pin J and K stand on. */
   let focusedPin = $state<string | null>(null);
-  /** The moved pin a tap places again, and the mode the pane goes back to once it is placed. */
-  let placing = $state<string | null>(null);
-  let placingFrom: PreviewMode | null = null;
   /** What went wrong with the open thread's reply, resolve or delete. */
   let cardError = $state<string | null>(null);
   /** The open thread's reply is on its way. */
@@ -457,12 +401,12 @@
   const pageHung = $derived(
     pinComposer.composingPage &&
       !!pinComposer.composing &&
-      listOpen &&
+      paneMode.listOpen &&
       !paneLayout.railSheet
   );
   /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a composer or a place picker stands, so neither covers the other; a thread opens in it (`threadPushed`). */
   const railAway = $derived(
-    listOpen &&
+    paneMode.listOpen &&
       paneLayout.railSheet &&
       (!!pinComposer.composing || !!previewFrame.picking)
   );
@@ -968,7 +912,7 @@
     if (!paneLayout.railSheet && untrack(() => checkCount) > 0) {
       untrack(() => {
         listFilter = "check";
-        showList(true);
+        paneMode.showList(true);
       });
     }
   });
@@ -1043,8 +987,8 @@
     cardError = null;
     replying = false;
     cardParent = null;
-    if (id && id === placing) {
-      placeElsewhere(false);
+    if (id && id === paneMode.placing) {
+      paneMode.placeElsewhere(false);
     }
     previewFrame.post({ type: "cawco:track-pin", id: null });
   }
@@ -1114,7 +1058,7 @@
     if (pin.resolvedAt || pin.movedAt) {
       // Off the page: its thread opens from its row, in Resolved or Open.
       listFilter = pin.resolvedAt ? "resolved" : "open";
-      showList(true);
+      paneMode.showList(true);
     }
     openCard(pin.id);
     return true;
@@ -1149,24 +1093,6 @@
       }
     });
   });
-  /**
-   * The open thread's Pin it somewhere else: Comment mode, its thread still
-   * open, until the next tap on the page pins the gone pin anew; Cancel
-   * (or the thread closing) puts the mode back as it was.
-   */
-  function placeElsewhere(on: boolean) {
-    if (on && openPin) {
-      placingFrom = mode;
-      setMode("comment", openPin);
-      return;
-    }
-    if (placingFrom && placingFrom !== "comment") {
-      setMode(placingFrom);
-    } else {
-      setMode(mode);
-    }
-    placingFrom = null;
-  }
   /** The person's words in the open thread; a resolved pin's reply reopens it ("Reply to reopen"). */
   function reply(text: string, held = false) {
     const draft = commentKit.replyDraft;
@@ -1361,9 +1287,9 @@
       (name === "v" || name === "c" || name === "d") &&
       !paneSubject.isCanvas
     ) {
-      setMode(MODE_KEYS[name]);
+      paneMode.setMode(MODE_KEYS[name]);
     } else if (name === "C" && !paneSubject.isCanvas) {
-      showPins(!pinsShown);
+      paneMode.showPins(!paneMode.pinsShown);
     } else if (name === "j") {
       step(1);
     } else if (name === "k") {
@@ -1375,7 +1301,7 @@
     ) {
       // Only a pin of this page: one J and K stood on elsewhere opens nothing.
       openCard(focusedPin, "key");
-    } else if (name === "/" && listOpen) {
+    } else if (name === "/" && paneMode.listOpen) {
       rail?.focusSearch();
     } else if (name === "Escape") {
       if (pinComposer.composing) {
@@ -1383,7 +1309,7 @@
       } else if (openPin) {
         closeCard();
       } else {
-        setMode("interact");
+        paneMode.setMode("interact");
       }
     }
   }
@@ -1454,7 +1380,7 @@
     ) {
       return;
     }
-    if (pinComposer.composing || openPin || mode !== "interact") {
+    if (pinComposer.composing || openPin || paneMode.mode !== "interact") {
       pressKey("Escape");
       event.preventDefault();
     }
@@ -1538,9 +1464,9 @@
           }
           // A page loaded again holds no comment being written.
           pinComposer.composing = null;
-          setMode(mode, placing);
-          if (!pinsShown) {
-            showPins(false);
+          paneMode.setMode(paneMode.mode, paneMode.placing);
+          if (!paneMode.pinsShown) {
+            paneMode.showPins(false);
           }
           openLinkedPin();
           pinComposer.restoreDraft();
@@ -1595,14 +1521,14 @@
         if (!id) {
           return;
         }
-        if (id === placing || placing) {
+        if (id === paneMode.placing || paneMode.placing) {
           // Placed again: the mode goes back to how it was before.
-          if (placingFrom && placingFrom !== "comment") {
-            setMode(placingFrom);
+          if (paneMode.placingFrom && paneMode.placingFrom !== "comment") {
+            paneMode.setMode(paneMode.placingFrom);
           } else {
-            placing = null;
+            paneMode.placing = null;
           }
-          placingFrom = null;
+          paneMode.placingFrom = null;
         }
         // The pin as the page holds it: the card draws from it while the pane's doc doesn't hold it yet.
         if (
@@ -1750,7 +1676,7 @@
       case "cawco:escape":
         // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
         pinComposer.cancelComposer();
-        setMode("interact");
+        paneMode.setMode("interact");
         break;
       case SHORTCUT_MESSAGE: {
         // A shell combo the page left unhandled: the shell's, as from its own keys.
@@ -1892,7 +1818,7 @@
   }
   /** The rail's bottom sheet stands up (ThreadSheet `open`). */
   const railSheetOpen = $derived(
-    listOpen &&
+    paneMode.listOpen &&
       paneLayout.railPlaced &&
       !paneSubject.isCanvas &&
       paneLayout.railSheet &&
@@ -1908,7 +1834,7 @@
    * time"), never as a second sheet after the list's goes.
    */
   const threadPushed = $derived(
-    listOpen &&
+    paneMode.listOpen &&
       paneLayout.railPlaced &&
       !paneSubject.isCanvas &&
       paneLayout.railSheet &&
@@ -1919,7 +1845,9 @@
    * sheet holding it drops to its low stop, so the page above it takes the
    * tap while the card's bar and its Cancel stay in view.
    */
-  const placingThread = $derived(placing !== null && placing === openPin);
+  const placingThread = $derived(
+    paneMode.placing !== null && paneMode.placing === openPin
+  );
   /** The list in front holds nothing: the sheet stands low, never half its room empty (ThreadSheet `short`). */
   const railEmpty = $derived.by(() => {
     switch (listFilter) {
@@ -1947,7 +1875,7 @@
     if (threadPushed) {
       backToList();
     }
-    showList(false);
+    paneMode.showList(false);
   }
   $effect(() => {
     if (railSheetOpen) {
@@ -2120,7 +2048,7 @@
         menu: commentsMenu,
         count: {
           glyph: IconChat,
-          n: listOpen ? 0 : paneDoc.openCount,
+          n: paneMode.listOpen ? 0 : paneDoc.openCount,
           of: "Comments",
         },
       });
@@ -2411,14 +2339,15 @@
 {/snippet}
 
 {#snippet modeBar()}
-  <ModeSwitch onchange={setMode} {mode} />
+  <ModeSwitch onchange={paneMode.setMode} mode={paneMode.mode} />
 {/snippet}
 {#snippet modeMenu()}
   <DropdownMenu.Group>
     <DropdownMenu.GroupHeading>Mode</DropdownMenu.GroupHeading>
     <DropdownMenu.RadioGroup
-      onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
-      value={mode}
+      onValueChange={(next) =>
+        paneMode.setMode(previewMode(next) ?? "interact")}
+      value={paneMode.mode}
     >
       <DropdownMenu.RadioItem value="interact"
         ><IconInteract /><span>Interact</span><DropdownMenu.Shortcut
@@ -2443,10 +2372,10 @@
      segments: the chosen mode's glyph, opening the three. -->
 {#snippet modeCompact()}
   <ModeButton
-    glyph={MODE_GLYPHS[mode]}
+    glyph={MODE_GLYPHS[paneMode.mode]}
     keys="V, C, D"
     menu={modeMenu}
-    word={MODE_WORDS[mode]}
+    word={MODE_WORDS[paneMode.mode]}
   />
 {/snippet}
 
@@ -2483,16 +2412,16 @@
   <CommentsButton
     count={paneDoc.openCount}
     down={paneDoc.linkDown ? NOT_REACHING : null}
-    label={commentsTitle}
-    onclick={() => showList(!listOpen)}
-    open={paneLayout.railSheet ? railSheetOpen : listOpen}
+    label={paneMode.commentsTitle}
+    onclick={() => paneMode.showList(!paneMode.listOpen)}
+    open={paneLayout.railSheet ? railSheetOpen : paneMode.listOpen}
     held={paneDoc.heldCount}
-    {pinsShown}
+    pinsShown={paneMode.pinsShown}
     toCheck={checkCount}
   />
 {/snippet}
 {#snippet commentsMenu()}
-  <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
+  <DropdownMenu.Item onSelect={() => paneMode.showList(!paneMode.listOpen)}>
     <IconChat /><span>Comments</span>{#if paneDoc.openCount > 0}<span
         class="ms-auto text-ink-muted num"
         data-slot="count">{paneDoc.openCount}</span
@@ -2587,7 +2516,7 @@
     hold={paneDoc.listHold}
     {layout}
     {live}
-    onclose={() => showList(false)}
+    onclose={() => paneMode.showList(false)}
     onhover={(id) => previewFrame.post({ type: "cawco:hover-pin", id })}
     onopen={(id, via) =>
       listFilter === "check" ? openChecked(id, via) : openCard(id, via)}
@@ -2622,7 +2551,7 @@
     {unread}
     bind:filter={listFilter}
     bind:scroll={listScroll}
-    bind:sort={railSort}
+    bind:sort={paneMode.railSort}
   />
 {/snippet}
 
@@ -2630,7 +2559,7 @@
      the page's mode seam (the artifact panel's surface brief, The Comments
      rail; the owner's pick "Beside the page"). -->
 {#snippet railBeside()}
-  {#if listOpen && paneLayout.railPlaced && !paneSubject.isCanvas && !paneLayout.railSheet}
+  {#if paneMode.listOpen && paneLayout.railPlaced && !paneSubject.isCanvas && !paneLayout.railSheet}
     <RailFloat>
       {@render railOf("beside")}
     </RailFloat>
@@ -2656,7 +2585,9 @@
 {:else}
   <SideSurface
     of="preview"
-    mode={paneSubject.isCanvas || paneSubject.isBrowser ? undefined : mode}
+    mode={paneSubject.isCanvas || paneSubject.isBrowser
+      ? undefined
+      : paneMode.mode}
     closeFailed={paneNotice.failure?.again === "close"}
     {closing}
     items={headItems}
@@ -3164,7 +3095,7 @@
         ondelete={deleteOpenPin}
         ondraft={() => commentKit.drafts?.changed(pin.id)}
         onfind={() => focusPin(pin.id, true)}
-        onplace={placeElsewhere}
+        onplace={paneMode.placeElsewhere}
         onhold={(text) => reply(text, true)}
         onreply={(text) => reply(text)}
         onresolve={(resolved) => resolvePin(resolved)}
@@ -3172,7 +3103,7 @@
         parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
         {peek}
         {pin}
-        placing={placing === pin.id}
+        placing={paneMode.placing === pin.id}
         problem={peek ? null : cardError}
         sending={!peek && replying}
         retrying={paneSend.pinsRetrying.has(pin.id)}
@@ -3246,7 +3177,9 @@
     style:--frame-h={previewFrame.frameBox
       ? `${previewFrame.frameBox.h}px`
       : undefined}
-    data-mode={mode !== "interact" && !paneSubject.isCanvas ? mode : undefined}
+    data-mode={paneMode.mode !== "interact" && !paneSubject.isCanvas
+      ? paneMode.mode
+      : undefined}
     {@attach measureRoom}
   >
     {#if pinComposer.composing && commentKit.kit && commentKit.nextDraft && !pageHung}
