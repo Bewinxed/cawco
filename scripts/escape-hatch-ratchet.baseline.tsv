@@ -159,7 +159,6 @@ as-unknown-as	{ __traffic: { landed: () => boolean } }	scripts/probe-kit/specs/w
 as-unknown-as	{ __traffic: { load: (blocks: unknown[]) => void; patch: (next: Record<s	scripts/probe-kit/specs/web/traffic-longtask.ts	1
 as-unknown-as	{ __traffic: Bench }	scripts/probe-kit/specs/web/seek-words.ts	3
 as-unknown-as	{ __traffic: Record<string, never> }	scripts/probe-kit/specs/web/safari-blurs.ts	1
-as-unknown-as	{ __transcriptBuilds?: Record<string, number>; }	apps/dashboard/src/lib/cawco/transcript/row-build.svelte.ts	1
 as-unknown-as	{ __warmWatch?: MutationObserver }	scripts/probe-kit/specs/tab-return.ts	1
 as-unknown-as	{ $defs: { Decision: { properties: Record<string, unknown> } }; }	packages/hub/src/decision-program.ts	1
 as-unknown-as	{ addEventListener: ( type: "message", listener: (event: MessageEvent<To	packages/preview/src/overlay/doc-worker.ts	1
