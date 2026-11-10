@@ -607,11 +607,11 @@ export interface CawDeps {
     ) => Omit<CawRunning, "kind" | "taskId" | "taskTitle">[];
     stop: (projectId: string, ids: string[]) => void;
   };
-  /** A task as its project's files have it. */
+  /** A task as its project's files have it, or the problem of its read. */
   readonly task: (
     projectId: string,
     id: string
-  ) => Promise<Pick<TaskView, "id" | "kind" | "stage" | "title">>;
+  ) => Promise<Pick<TaskView, "id" | "kind" | "stage" | "title"> | AnyProblem>;
   /**
    * A session's turn ended (routines.ts `turnEnded`): the conversation runs
    * whose wake it read and that it gave no result fail, `why` when it is
@@ -1828,7 +1828,8 @@ export const createCaw = ({
       const { projectId, id } = event;
       task(projectId, id)
         .then((waiting) => {
-          if (waiting.kind === "you") {
+          // A task that does not read sends nothing, as a failed read did.
+          if ("kind" in waiting && waiting.kind === "you") {
             tellQuietly(projectId, {
               by: "event",
               kind: "task-move",
