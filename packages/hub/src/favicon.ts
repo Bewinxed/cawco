@@ -28,10 +28,9 @@ import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { faviconReachable } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { z } from "zod";
 import { DB_PATH } from "./config";
-import { refusal } from "./refusal";
 
 const DIR = join(dirname(DB_PATH), "favicons");
 
@@ -401,11 +400,10 @@ export const faviconRoutes = () =>
     async ({ query }) => {
       const host = query.host.trim().toLowerCase().replace(TRAILING_DOT, "");
       if (!publicName(host)) {
-        return refusal(
-          400,
-          "host-not-public-site",
-          "That host is not a public site name."
-        );
+        return problem(400, {
+          code: "host-not-public-site",
+          detail: "That host is not a public site name.",
+        });
       }
       const read = await iconFor(host);
       let icon: Icon | null | undefined;
@@ -417,22 +415,20 @@ export const faviconRoutes = () =>
           // The last icon kept for it stands, however old.
           icon = await cached(host, true);
           if (icon === undefined) {
-            return refusal(
-              504,
-              "site-did-not-answer",
-              `That site did not answer within ${secondsOf(read.after)} s.`
-            );
+            return problem(504, {
+              code: "site-did-not-answer",
+              detail: `That site did not answer within ${secondsOf(read.after)} s.`,
+            });
           }
           break;
         default:
           unhandled("read", read);
       }
       if (!icon) {
-        return refusal(
-          404,
-          "site-has-no-icon",
-          "That site has no icon this hub could read."
-        );
+        return problem(404, {
+          code: "site-has-no-icon",
+          detail: "That site has no icon this hub could read.",
+        });
       }
       return new Response(new Uint8Array(icon.bytes), {
         headers: {

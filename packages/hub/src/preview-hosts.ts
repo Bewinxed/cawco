@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
+import { problem } from "elysia";
 import { passDomainRefusal } from "./pass-domain";
-import { refusal } from "./refusal";
 
 /**
  * `https://` (how the proxy in front of the names serves them, never how a
@@ -64,24 +64,25 @@ export const labelOf = (key: string): string =>
 export const parsePattern = (pattern: string) => {
   const parts = pattern.match(PATTERN_SHAPE);
   if (!parts) {
-    return refusal(422, "preview-pattern-unfit", PATTERN_REFUSAL);
+    return problem(422, {
+      code: "preview-pattern-unfit",
+      detail: PATTERN_REFUSAL,
+    });
   }
   const [, before = "", placeholder, name = "", domain = "", port = ""] = parts;
   const key: HostPattern["key"] = placeholder === "port" ? "port" : "session";
   const unpassed = passDomainRefusal(domain);
   if (unpassed?.kind === "public") {
-    return refusal(
-      422,
-      "preview-pattern-public-suffix",
-      `The pattern's names stand under ${domain}, a public suffix, where no browser keeps a cookie, so the hub can't give them a pass. Use names under a domain of your own, like https://p-{port}.previews.example.com, then save again.`
-    );
+    return problem(422, {
+      code: "preview-pattern-public-suffix",
+      detail: `The pattern's names stand under ${domain}, a public suffix, where no browser keeps a cookie, so the hub can't give them a pass. Use names under a domain of your own, like https://p-{port}.previews.example.com, then save again.`,
+    });
   }
   if (unpassed) {
-    return refusal(
-      422,
-      "preview-pattern-unregistered",
-      `The pattern's names stand under ${domain}, whose ending .${unpassed.suffix} no public registry holds, so a browser takes each name for a site of its own and no frame of the dashboard carries their pass. Use names under a domain registered on the internet, like https://p-{port}.previews.example.com, then save again.`
-    );
+    return problem(422, {
+      code: "preview-pattern-unregistered",
+      detail: `The pattern's names stand under ${domain}, whose ending .${unpassed.suffix} no public registry holds, so a browser takes each name for a site of its own and no frame of the dashboard carries their pass. Use names under a domain registered on the internet, like https://p-{port}.previews.example.com, then save again.`,
+    });
   }
   const after = `${name}${port}`;
   // The Host header names the port only when it is not the scheme's own.

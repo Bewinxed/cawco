@@ -5,10 +5,9 @@ import type { DelegateType } from "@cawco/core/delegate-types";
 import { delegateTypeProblem } from "@cawco/core/delegate-types";
 import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness/kinds";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { DelegateTypesShape } from "./db/delegate-types";
 import { undoable } from "./db/trash";
-import { refusal } from "./refusal";
 
 /**
  * The three routes: `GET /api/delegate-types`, `PUT /api/delegate-types/:name`,
@@ -41,16 +40,18 @@ export const delegateTypesRoutes = (
       },
       ({ params, body }) => {
         const draft = { ...(body as Partial<DelegateType>), name: params.name };
-        const problem = delegateTypeProblem(draft);
-        if (problem) {
-          return refusal(400, "delegate-type-invalid", problem);
+        const misfit = delegateTypeProblem(draft);
+        if (misfit) {
+          return problem(400, {
+            code: "delegate-type-invalid",
+            detail: misfit,
+          });
         }
         if (draft.account !== undefined && !accountKnown(draft.account)) {
-          return refusal(
-            400,
-            "no-account",
-            delegateTypesWords.noAccount(draft.account)
-          );
+          return problem(400, {
+            code: "no-account",
+            detail: delegateTypesWords.noAccount(draft.account),
+          });
         }
         return store.put(draft as DelegateType);
       }
@@ -58,11 +59,10 @@ export const delegateTypesRoutes = (
     .delete("/api/delegate-types/:name", ({ params }) => {
       const restore = trash(params.name);
       if (restore === undefined) {
-        return refusal(
-          404,
-          "no-delegate",
-          `the fleet keeps no delegate type ${params.name}`
-        );
+        return problem(404, {
+          code: "no-delegate",
+          detail: `the fleet keeps no delegate type ${params.name}`,
+        });
       }
       return undoable(restore);
     });

@@ -3,10 +3,10 @@
  */
 
 import { type FleetMcpConfig, MCP_PLATFORMS } from "@cawco/core/fleet";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
+
 import { boundFields } from "./bound-fields";
 
 /**
@@ -83,7 +83,7 @@ export const fleetMcpRoutes = ({
         }),
       },
       async ({ params, body }) => {
-        const problem =
+        const misfit =
           mcpProblem(params.name, body.config) ??
           boundProblem(body) ??
           sharedProblem(
@@ -95,8 +95,8 @@ export const fleetMcpRoutes = ({
               : (body.projectId ?? body.areaId),
             body.shared ?? db.getMcpServer(params.name)?.shared ?? false
           );
-        if (problem) {
-          return refusal(400, "mcp-server-invalid", problem);
+        if (misfit) {
+          return problem(400, { code: "mcp-server-invalid", detail: misfit });
         }
 
         db.putMcpServer({
@@ -114,11 +114,10 @@ export const fleetMcpRoutes = ({
           .fleetConfig()
           .mcp.find((row) => row.name === params.name);
         if (!saved) {
-          return refusal(
-            404,
-            "mcp-server-was-removed",
-            "MCP server was removed while probing."
-          );
+          return problem(404, {
+            code: "mcp-server-was-removed",
+            detail: "MCP server was removed while probing.",
+          });
         }
         return saved;
       }
@@ -130,11 +129,10 @@ export const fleetMcpRoutes = ({
         Date.now()
       );
       if (trashed === undefined) {
-        return refusal(
-          404,
-          "no-mcp",
-          `the fleet keeps no MCP server ${params.name}`
-        );
+        return problem(404, {
+          code: "no-mcp",
+          detail: `the fleet keeps no MCP server ${params.name}`,
+        });
       }
       fleetMcp.forget(params.name);
       announceMcp();
@@ -160,13 +158,13 @@ export const fleetMcpRoutes = ({
         try {
           return await fleetMcp.start(params.name, body?.access);
         } catch (error) {
-          return refusal(
-            400,
-            "mcp-server-not-saved",
-            error instanceof Error
-              ? error.message
-              : "Sign-in could not start. Save this server and retry sign-in."
-          );
+          return problem(400, {
+            code: "mcp-server-not-saved",
+            detail:
+              error instanceof Error
+                ? error.message
+                : "Sign-in could not start. Save this server and retry sign-in.",
+          });
         }
       }
     )
@@ -183,13 +181,13 @@ export const fleetMcpRoutes = ({
         try {
           return await fleetMcp.complete(body.code, body.state, body.iss);
         } catch (error) {
-          return refusal(
-            400,
-            "mcp-server-not-saved",
-            error instanceof Error
-              ? error.message
-              : "Sign-in could not finish. Start sign-in again."
-          );
+          return problem(400, {
+            code: "mcp-server-not-saved",
+            detail:
+              error instanceof Error
+                ? error.message
+                : "Sign-in could not finish. Start sign-in again.",
+          });
         }
       }
     );

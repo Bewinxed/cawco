@@ -14,6 +14,7 @@ import type {
 } from "@cawco/core/protocol";
 import { CONTROL_ABANDON } from "@cawco/core/session/controls";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
+import { problem } from "elysia";
 import { SPAWN_START_TIMEOUT_MS } from "./config";
 import { peek } from "./cut-turns";
 import type { HubContext } from "./hub-context";
@@ -21,7 +22,7 @@ import type { FolderSkillBody, SessionLocation } from "./hub-shapes";
 import type { ControlResult } from "./machine-answers";
 import { machineSkillFiles } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { refusal } from "./refusal";
+
 import { sessionControl } from "./session-word";
 import type { CheckedFolder, SkillFolderReader } from "./skills";
 import {
@@ -403,11 +404,10 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     }
     const folder = folderOf(body.source);
     if (!folder) {
-      return refusal(
-        400,
-        "skill-folder-unnamed",
-        `${body.source} names no machine: write it as file://<machine>/<path>`
-      );
+      return problem(400, {
+        code: "skill-folder-unnamed",
+        detail: `${body.source} names no machine: write it as file://<machine>/<path>`,
+      });
     }
     let read: CheckedFolder;
     try {
@@ -417,14 +417,16 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         readSkillFolder
       );
     } catch (error) {
-      return refusal(
-        400,
-        "skill-folder-unread",
-        error instanceof Error ? error.message : String(error)
-      );
+      return problem(400, {
+        code: "skill-folder-unread",
+        detail: error instanceof Error ? error.message : String(error),
+      });
     }
     if (body.contentHash !== undefined && body.contentHash !== read.hash) {
-      return refusal(409, "skill-folder-changed", FOLDER_CHANGED);
+      return problem(409, {
+        code: "skill-folder-changed",
+        detail: FOLDER_CHANGED,
+      });
     }
     const skill = ctx.db.putSkill({
       name,
