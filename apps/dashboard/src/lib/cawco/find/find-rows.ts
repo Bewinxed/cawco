@@ -163,8 +163,8 @@ function withSecrets(
     }
     const edges = [...cuts].sort((a, b) => a - b);
     for (let i = 0; i + 1 < edges.length; i += 1) {
-      const from = edges[i] as number;
-      const to = edges[i + 1] as number;
+      const from = edges[i];
+      const to = edges[i + 1];
       const secret = spans.findIndex(
         ([start, stop]) => from >= start && to <= stop
       );
@@ -529,6 +529,7 @@ const changeRow = (r: FindChange): Drawn => ({
 });
 
 function drawnOf(result: FindResult, reason: Reason): Drawn {
+  const { kind } = result;
   switch (result.kind) {
     case "conversation":
       return conversationRow(result, reason);
@@ -547,9 +548,7 @@ function drawnOf(result: FindResult, reason: Reason): Drawn {
     case "file":
       return changeRow(result);
     default:
-      throw new Error(
-        `a find result of an unknown kind: ${(result as FindResult).kind}`
-      );
+      throw new Error(`a find result of an unknown kind: ${kind}`);
   }
 }
 

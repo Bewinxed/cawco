@@ -1,9 +1,7 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
 as-unknown-as	[ string, string, Command, string, string | undefined, ]	scripts/probe-kit/specs/machine-pause.ts	1
-as-unknown-as	[ string, string, string, ]	apps/dashboard/src/lib/cawco/find/MentionField.svelte	1
 as-unknown-as	[ string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	[ string, string, string, string, string, ]	packages/core/src/external-items.ts	1
-as-unknown-as	[string, string, string]	apps/dashboard/src/lib/cawco/find/mention.svelte.ts	1
 as-unknown-as	{ __answers: unknown[] }	scripts/probe-kit/specs/graph-stage.ts	5
 as-unknown-as	{ __boot: { at: Record<string, number>; held: [number, number][]; styles	scripts/probe-kit/specs/canvas-cost.ts	1
 as-unknown-as	{ __boot: typeof clock }	scripts/probe-kit/specs/canvas-cost.ts	1
