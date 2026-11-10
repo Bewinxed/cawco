@@ -94,7 +94,6 @@ import type {
 import type { ExternalItems } from "./external-items";
 import type { HubLifetimeShape } from "./lifetime";
 import { turnTaker } from "./project-folder";
-import { projectRefusalOf } from "./project-refusal";
 import { refusal } from "./refusal";
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
 import {
@@ -982,7 +981,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
     const task = await tasks.get(sync.projectId, link.taskId);
     if (task instanceof ElysiaStatus) {
-      throw projectRefusalOf(task);
+      throw new TrackerRefusal("input", task.response.detail);
     }
     const round: Round = {
       sync,
@@ -1280,7 +1279,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   const fileOrRelink = async (sync: Sync, taskId: string): Promise<void> => {
     const task = await tasks.get(sync.projectId, taskId);
     if (task instanceof ElysiaStatus) {
-      throw projectRefusalOf(task);
+      throw new TrackerRefusal("input", task.response.detail);
     }
     try {
       const named = task.links.find((link) => link.mode === "record")?.url;
@@ -1383,7 +1382,12 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
   };
 
-  /** A sync's adapter, states and stages; stages that do not read refuse it. */
+  /**
+   * A sync's adapter, states and stages; stages that do not read refuse it.
+   * A refused read of the project's folder here and in the sync's other
+   * steps is thrown on as the sync's own input refusal, as its other
+   * failures are: the binding says it in its words.
+   */
   const openSync = async (binding: TrackerBindingRow): Promise<Sync> => {
     const adapter = await adapterOf(binding);
     const [states, stagesView] = await Promise.all([
@@ -1391,7 +1395,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       tasks.stages(binding.projectId),
     ]);
     if (stagesView instanceof ElysiaStatus) {
-      throw projectRefusalOf(stagesView);
+      throw new TrackerRefusal("input", stagesView.response.detail);
     }
     if (stagesView.problems.length > 0) {
       throw new TrackerRefusal(
@@ -1625,7 +1629,7 @@ export const createTrackers = (deps: TrackersDeps) => {
         const comments = await carryIn(sync, cursor);
         const list = await tasks.list(projectId);
         if (list instanceof ElysiaStatus) {
-          throw projectRefusalOf(list);
+          throw new TrackerRefusal("input", list.response.detail);
         }
         const board = list.tasks;
         await reconcileLinks(sync, board, moved, marked);
