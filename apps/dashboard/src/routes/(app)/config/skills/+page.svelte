@@ -218,10 +218,10 @@
   }
 
   /** The row a press came from, which the popover opens beside. */
-  const rowAt = (event: MouseEvent) =>
-    (event.currentTarget as HTMLElement).closest<HTMLElement>(
-      "[data-row-name]"
-    );
+  const rowAt = (event: MouseEvent & { currentTarget: HTMLElement }) => {
+    const row = event.currentTarget.closest("[data-row-name]");
+    return row instanceof HTMLElement ? row : null;
+  };
 
   /** Why letting a refused link go was itself refused, by source. */
   let dropFailed = $state<Record<string, string>>({});
@@ -653,7 +653,7 @@
                   aria-label="{words.openFetch} {row.name}"
                   data-open-fetch
                   label={words.openFetch}
-                  onclick={(event: MouseEvent) => reopenFetch(rowAt(event))}
+                  onclick={(event) => reopenFetch(rowAt(event))}
                   size="sm"
                   variant="outline"
                 />
@@ -764,8 +764,7 @@
                 aria-label="{words.openLink} {link.source}"
                 data-open-link
                 label={words.openLink}
-                onclick={(event: MouseEvent) =>
-                  reopenLink(link.source, rowAt(event))}
+                onclick={(event) => reopenLink(link.source, rowAt(event))}
                 size="sm"
                 variant="outline"
               />
