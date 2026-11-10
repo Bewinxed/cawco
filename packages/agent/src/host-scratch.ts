@@ -23,17 +23,12 @@ import {
   OUTPUTS_DIR,
   type WorkspaceOutputs,
 } from "@cawco/core/workspace/controls";
+import { fieldOf } from "./json-field";
 import { removeTree } from "./remove-tree";
 
 /** A workspace id as the hub makes one (`crypto.randomUUID()`): nothing else names a folder under the scratch root. */
 const WORKSPACE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
-
-/** What `value` holds under `key`, when it is an object that has one. */
-const fieldOf = (value: unknown, key: string): unknown =>
-  typeof value === "object" && value !== null
-    ? Reflect.get(value, key)
-    : undefined;
 
 /** The host workspace id `asked` names, as a control's `{ id }` or a spawn's string; refused for anything else. */
 const hostId = (asked: unknown): string => {

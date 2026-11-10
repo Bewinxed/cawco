@@ -359,11 +359,14 @@ const sessionLabels = (
   ...(named ? { [NAMED_LABEL]: "true" } : {}),
 });
 
+/** A JSON object, as a body or a label map holds one. */
+const OBJECT = z.record(z.string(), z.unknown());
+
 /** A labels map as a body holds it, or an empty one. */
-const labelsIn = (held: unknown): Record<string, string> =>
-  held && typeof held === "object" && !Array.isArray(held)
-    ? (held as Record<string, string>)
-    : {};
+const labelsIn = (held: unknown): Record<string, unknown> => {
+  const labels = OBJECT.safeParse(held);
+  return labels.success ? labels.data : {};
+};
 
 /**
  * A container's or pod's create with the session's labels on it: Docker's
@@ -382,10 +385,11 @@ const stampedSpec = (
   } catch {
     return body;
   }
-  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+  const asked = OBJECT.safeParse(spec);
+  if (!asked.success) {
     return body;
   }
-  const fields = spec as Record<string, unknown>;
+  const fields = asked.data;
   const key = docker ? "Labels" : "labels";
   const labels = labelsIn(fields[key]);
   if (labels[SESSION_LABEL]) {
@@ -845,25 +849,27 @@ export const containersUntrackedWords = (
 const NAME_SLASH = /^\//u;
 
 /** A container as the Engine API lists it (`GET /containers/json`), Docker's and Podman's alike. */
-interface ListedContainer {
-  Id: string;
-  Image: string;
-  Labels?: Record<string, string> | null;
-  Names: string[];
-  State: string;
-}
+const ListedContainer = z.object({
+  Id: z.string(),
+  Image: z.string(),
+  Labels: z.record(z.string(), z.string()).nullish(),
+  Names: z.array(z.string()),
+  State: z.string(),
+});
+type ListedContainer = z.infer<typeof ListedContainer>;
 
 /** One container a session's end reached, in words: `` `name` (image) ``. */
 const namedContainer = (container: ListedContainer): string =>
   `\`${container.Names[0]?.replace(NAME_SLASH, "") ?? container.Id.slice(0, 12)}\` (${container.Image})`;
 
 /** A pod as libpod lists it (`GET /libpod/pods/json`). */
-interface ListedPod {
-  Id: string;
-  Labels?: Record<string, string> | null;
-  Name: string;
-  Status: string;
-}
+const ListedPod = z.object({
+  Id: z.string(),
+  Labels: z.record(z.string(), z.string()).nullish(),
+  Name: z.string(),
+  Status: z.string(),
+});
+type ListedPod = z.infer<typeof ListedPod>;
 
 /** One pod a session's end reached, in words: `` `name` (pod) ``. */
 const namedPod = (pod: ListedPod): string => `\`${pod.Name}\` (pod)`;
@@ -904,7 +910,7 @@ const engine = async (
   const answer = await fetch(`http://d${path}`, {
     method,
     unix: socketPath,
-  } as RequestInit);
+  });
   const text = await answer.text();
   let body: unknown = text;
   try {
@@ -945,10 +951,11 @@ const podsWith = async (
   if (status === 404) {
     return [];
   }
-  if (status !== 200 || !Array.isArray(body)) {
+  const pods = z.array(ListedPod).safeParse(body);
+  if (status !== 200 || !pods.success) {
     throw new Error(`listing pods answered ${status}: ${String(body)}`);
   }
-  return body as ListedPod[];
+  return pods.data;
 };
 
 /** The containers on `socketPath` with every one of `labels`, stopped ones too. */
@@ -961,12 +968,13 @@ const containersWith = async (
     "GET",
     `/containers/json?all=true&${filterQuery(labels)}`
   );
-  if (status !== 200 || !Array.isArray(body)) {
+  const containers = z.array(ListedContainer).safeParse(body);
+  if (status !== 200 || !containers.success) {
     throw new Error(
       `listing containers answered ${status}: ${JSON.stringify(body)}`
     );
   }
-  return body as ListedContainer[];
+  return containers.data;
 };
 
 /**
@@ -1210,7 +1218,7 @@ export const finishEnding = async (
 export const sessionsOwedEnding = async (
   instances: readonly string[]
 ): Promise<{ gone: string[]; unfinished: string[] }> => {
-  const unfinished = await readdir(ENDING_DIR()).catch(() => [] as string[]);
+  const unfinished = await readdir(ENDING_DIR()).catch((): string[] => []);
   const labels = ownFilter(await owner());
   const had = new Set(instances);
   const gone = new Set<string>();

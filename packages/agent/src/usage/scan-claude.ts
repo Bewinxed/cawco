@@ -1,7 +1,8 @@
 import { costForUsage } from "@cawco/core/usage/pricing";
 import { cacheCreationCount } from "@cawco/core/usage/tokens";
-import type { RawClaudeUsage, UsageTokens } from "@cawco/core/usage/types";
+import type { UsageTokens } from "@cawco/core/usage/types";
 import { lineRecords } from "@cawco/jsonl-parser";
+import { z } from "zod";
 import type { ScannedRecord } from "./types";
 
 /**
@@ -12,18 +13,34 @@ import type { ScannedRecord } from "./types";
  */
 
 /** A transcript line, as written by Claude Code. */
-interface TranscriptLine {
-  isSidechain?: boolean;
-  message?: {
-    id?: string;
-    model?: string;
-    usage?: RawClaudeUsage;
-  };
-  requestId?: string;
-  sessionId?: string;
-  timestamp?: string;
-  type?: string;
-}
+const TranscriptLine = z.object({
+  isSidechain: z.boolean().optional(),
+  message: z
+    .object({
+      id: z.string().optional(),
+      model: z.string().optional(),
+      usage: z
+        .object({
+          cache_creation: z
+            .object({
+              ephemeral_5m_input_tokens: z.number().optional(),
+              ephemeral_1h_input_tokens: z.number().optional(),
+            })
+            .optional(),
+          cache_creation_input_tokens: z.number().optional(),
+          cache_read_input_tokens: z.number().optional(),
+          input_tokens: z.number(),
+          output_tokens: z.number(),
+          service_tier: z.string().optional(),
+          speed: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  requestId: z.string().optional(),
+  sessionId: z.string().optional(),
+  timestamp: z.string().optional(),
+});
 
 const parseTs = (raw: string | undefined): number => {
   if (!raw) {
@@ -42,7 +59,11 @@ const parseClaudeRecord = (
   raw: unknown,
   project: string
 ): ScannedRecord | null => {
-  const line = raw as TranscriptLine;
+  const parsed = TranscriptLine.safeParse(raw);
+  if (!parsed.success) {
+    return null;
+  }
+  const line = parsed.data;
   const { sessionId, requestId, message } = line;
   if (!(sessionId && requestId)) {
     return null;
