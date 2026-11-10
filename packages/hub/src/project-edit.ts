@@ -28,6 +28,7 @@ import { projectAccountWords } from "@cawco/core/words/project-account";
 import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
+import type { Dispatcher } from "./dispatch";
 import { refusal } from "./refusal";
 
 /** As long as a name `POST /api/projects` takes. */
@@ -130,7 +131,10 @@ export interface ProjectEditsDeps {
   readonly conversationTo: (project: ProjectRow) => Promise<string | undefined>;
   readonly db: Pick<DbShape, "project" | "setProjectDetails">;
   /** Where its work lands, through the dispatch settings' own path (dispatch.ts `configure`). */
-  readonly lands: (projectId: string, lands: LandsMode) => Promise<unknown>;
+  readonly lands: (
+    projectId: string,
+    lands: LandsMode
+  ) => ReturnType<Dispatcher["configure"]>;
   /** Why a connection cannot sign in to a declared LFS endpoint; none when it can (connections.ts `lfsProblem`). */
   readonly lfsProblem: (connection: string) => string | undefined;
   /** Every dashboard and the app read the projects again. */
@@ -351,8 +355,10 @@ export const createProjectEdits = ({
     if (Object.keys(details).length > 0) {
       db.setProjectDetails(projectId, details);
     }
-    if (landsTo !== undefined) {
-      await lands(projectId, landsTo);
+    const landed =
+      landsTo === undefined ? undefined : await lands(projectId, landsTo);
+    if (landed instanceof ElysiaStatus) {
+      return landed;
     }
     projectsChanged();
     if (details.review !== undefined) {
