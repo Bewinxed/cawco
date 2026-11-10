@@ -270,9 +270,11 @@
   let focusedRow: string | undefined;
   const keepFocus: Attachment<HTMLElement> = (node) => {
     const into = (event: FocusEvent) => {
-      focusedRow = (event.target as Element).closest<HTMLElement>(
-        "[data-artifact]"
-      )?.dataset.artifact;
+      focusedRow =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>("[data-artifact]")?.dataset
+              .artifact
+          : undefined;
     };
     // Focus the reader moved out of the menu is no longer the menu's to keep.
     const out = (event: FocusEvent) => {

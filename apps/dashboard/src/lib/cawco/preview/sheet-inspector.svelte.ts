@@ -329,13 +329,15 @@ export class SheetInspector {
   moveBy(by: -1 | 1): StoryOp | null {
     const names = this.sheet?.stories.map((one) => one.name) ?? [];
     const at = names.indexOf(this.chosen ?? "");
-    if (at === -1 || at + by < 0 || at + by >= names.length) {
+    const name = names[at];
+    if (name === undefined || at + by < 0 || at + by >= names.length) {
       return null;
     }
-    const name = names[at] as string;
-    return by === -1
-      ? { move: name, before: names[at - 1] as string }
-      : { move: name, before: names[at + 2] ?? null };
+    if (by === -1) {
+      const above = names[at - 1];
+      return above === undefined ? null : { move: name, before: above };
+    }
+    return { move: name, before: names[at + 2] ?? null };
   }
 
   #forget(name: string): void {

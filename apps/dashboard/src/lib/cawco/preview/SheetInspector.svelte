@@ -285,10 +285,7 @@
             class="w-full"
             id={`${id}-story`}
             measure="shrink"
-            onchange={(event) =>
-              inspector.choose(
-                (event.currentTarget as HTMLSelectElement).value
-              )}
+            onchange={(event) => inspector.choose(event.currentTarget.value)}
             value={inspector.chosen ?? ""}
           >
             {#each sheet.stories as one (one.name)}
@@ -416,8 +413,7 @@
                     id={fieldId(prop)}
                     name={prop.name}
                     onchange={(event) => {
-                      const next = (event.currentTarget as HTMLSelectElement)
-                        .value;
+                      const next = event.currentTarget.value;
                       const option = prop.options?.find(
                         (one) => String(one) === next
                       );
@@ -451,8 +447,7 @@
                     list={listOf(prop)}
                     name={prop.name}
                     oninput={(event) => {
-                      const raw = (event.currentTarget as HTMLInputElement)
-                        .value;
+                      const raw = event.currentTarget.value;
                       const number = Number(raw);
                       const asNumber =
                         control === "number" ||
