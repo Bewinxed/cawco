@@ -135,11 +135,10 @@ export const fleetSkillRoutes = (
             );
           }
 
-          const fromFolder = await installFromFolder(
-            params.name,
-            { ...body, source: body.source },
-            (code, refused) => refusal(code, "skill-refused", refused)
-          );
+          const fromFolder = await installFromFolder(params.name, {
+            ...body,
+            source: body.source,
+          });
           if (fromFolder) {
             return fromFolder;
           }
