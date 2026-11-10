@@ -19,6 +19,7 @@ import type {
 import type { FolderWeight } from "@cawco/preview/proxy";
 import type { problem } from "elysia";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
+import type { FolderProblem } from "../decision-page";
 import type { ArtifactNamed, BuiltProgram } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
 import type { HubLifetimeShape } from "../lifetime";
@@ -401,7 +402,8 @@ export interface ArtifactServiceDeps {
   /**
    * What a send applies before the session hears it (setup.ts
    * `applySetupPicks`): the page as it stands ({@link SentPage}); a place's
-   * refusal (place-refusal.ts) is answered and nothing is sent.
+   * refusal (place-refusal.ts) or the folder's problem reading the decided
+   * page (decisions.ts `decide`) is answered and nothing is sent.
    */
   sending: (
     to: PageHearer,
@@ -414,6 +416,7 @@ export interface ArtifactServiceDeps {
           { code: "setup-place-refused"; detail: string }
         >
       >
+    | FolderProblem
     | undefined
   >;
   /**

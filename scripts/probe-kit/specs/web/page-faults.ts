@@ -93,7 +93,11 @@ const run = async (kit: Kit) => {
     mockup: async () => undefined,
   });
   if (!("html" in built)) {
-    kit.check("the page builds", false, built.problem);
+    kit.check(
+      "the page builds",
+      false,
+      "problem" in built ? built.problem : built.response.detail
+    );
     return;
   }
   const docs = createArtifactDocs({
