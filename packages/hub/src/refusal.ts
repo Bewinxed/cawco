@@ -40,19 +40,3 @@ export const schemaRefusal =
     on,
     detail,
   });
-
-/** The statuses a refusal answers with. */
-type RefusalCode = 400 | 403 | 404 | 409;
-
-/**
- * A refusal, with the status a route answers and the words a tool returns.
- * Each module subclasses it, so its routes answer its own refusals and let
- * anything else through.
- */
-export class StatusRefusal<Code extends number = RefusalCode> extends Error {
-  readonly status: Code;
-  constructor(code: Code, message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.status = code;
-  }
-}
