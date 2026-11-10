@@ -9,7 +9,7 @@
    * beside the log, never through the virtualized container itself.
    */
   import { type Snippet, setContext, untrack } from "svelte";
-  import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
+  import { Virtualizer } from "virtua/svelte";
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -321,7 +321,8 @@
       if (ticket && ticket.kind !== "arrive") {
         arrivals.tickets.delete(id);
       } else if (ticket && ticket.start === null) {
-        ticket.start = document.timeline.currentTime as number;
+        const { currentTime } = document.timeline;
+        ticket.start = typeof currentTime === "number" ? currentTime : null;
       }
       return ticket;
     },
@@ -624,12 +625,7 @@
       scrollRef={pin.scroller}
       shift={rowDraw.presentation.shifted}
       startMargin={older.olderRoom + whole.spare}
-      bind:this={
-        () => pin.list,
-        (value) => {
-          pin.list = value as unknown as VirtualizerHandle;
-        }
-      }
+      bind:this={pin.list}
     >
       {#snippet children(row)}
         <TranscriptRow
