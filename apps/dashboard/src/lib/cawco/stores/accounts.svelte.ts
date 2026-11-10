@@ -36,19 +36,23 @@ import {
 import { load } from "../hub/load";
 import { equal } from "./same";
 
-export const accountsState = $state({
+export const accountsState = $state<{
   /**
    * The hub's accounts (`/api/accounts`): who they are, where each is signed
    * in, and each one's model catalog. Read on connect and after every
    * `kind: 'usage'` frame, which the hub sends when any of it moves.
    */
-  accounts: null as AccountsView | null,
+  accounts: AccountsView | null;
+
   /**
    * The account picker's rows (`/api/accounts/providers`): every provider
    * the fleet's machines know, each with how it signs in. Read with the
    * accounts; null until read.
    */
-  accountProviders: null as ProviderChoice[] | null,
+  accountProviders: ProviderChoice[] | null;
+}>({
+  accounts: null,
+  accountProviders: null,
 });
 
 /** What `/api/accounts` answers. */
