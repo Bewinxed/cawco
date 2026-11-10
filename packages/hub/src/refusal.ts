@@ -65,7 +65,7 @@ const rethrow = (error: unknown): never => {
 };
 
 /** A thrown refusal of `Kind` as the route's {@link refusal}, under `code`; anything else goes to `otherwise`, thrown on by default. */
-export const refusalAnswer =
+const refusalAnswer =
   <const Code extends string, R = never>(
     Kind: RefusalKind,
     code: Code,
