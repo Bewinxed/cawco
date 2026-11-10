@@ -4,7 +4,9 @@
    * the drawing's foot, with no store read: the kit's floating surface at
    * the reading measure, no taller than half the stage, holding the agent's
    * dials and the props of the state on the stage (props as docgen reads
-   * them, the state's args as its file writes them).
+   * them, the state's args as its file writes them). It answers his hand as
+   * the panel does, its args where each story starts: a turned dial, a typed
+   * prop and a picked case of the words stand until he takes them back.
    */
   import type { PropMeta } from "@cawco/core/stage";
   import { MediaQuery } from "svelte/reactivity";
@@ -50,11 +52,22 @@
   const saved = $derived(savedOf(props, args));
   const shown = $derived(propDials(props, dials, saved));
   const cases = $derived(contentCases(shown, longest));
-  /** His edits with the picked case's words over the text props it reaches. */
-  const held = $derived({
+  /** His dial values: the story's, then each one he turns. */
+  let turned = $derived(values);
+  /** His prop edits: the story's with its picked case's words over the text props it reaches, then each he makes. */
+  let held = $derived({
     ...edits,
     ...(cases.find((one) => one.label === content)?.fill ?? {}),
   });
+  const without = (from: DialValues, names: string[]): DialValues =>
+    Object.fromEntries(
+      Object.entries(from).filter(([name]) => !names.includes(name))
+    );
+  /** A case picked: its words over the text props it reaches, the saved words back where it reaches none (Saved: all of them). */
+  const pick = (fill: Record<string, string> | null) => {
+    const reached = [...new Set(cases.flatMap((one) => Object.keys(one.fill)))];
+    held = { ...without(held, reached), ...fill };
+  };
   /**
    * The card hugs the controls' grid (Dials' columns, their two gaps, its
    * pad and edge), never past the reading measure, so no strip of the card
@@ -79,20 +92,20 @@
     <Dials
       {dials}
       {lang}
-      onchange={nothing}
-      onreset={nothing}
+      onchange={(name, value) => (turned = { ...turned, [name]: value })}
+      onreset={(names) => (turned = without(turned, names))}
       state={{
         component,
         props: shown,
-        content: { cases, onpick: nothing },
+        content: { cases, onpick: pick },
         saved,
         edits: held,
-        onchange: nothing,
-        onreset: nothing,
+        onchange: (name, value) => (held = { ...held, [name]: value }),
+        onreset: (names) => (held = without(held, names)),
         onsave: nothing,
         onsavenew: nothing,
       }}
-      {values}
+      values={turned}
       {written}
     />
   </div>
