@@ -3661,16 +3661,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       projectId: string,
       asked: string
     ): { id: string; name: string } | string => {
-      const id = instanceId
-        ? namedIn(instanceId, asked)
-        : artifactNamed(asked, db.ofProject(projectId));
-      if (id instanceof ElysiaStatus) {
-        return id.response.detail;
+      try {
+        const id = instanceId
+          ? namedIn(instanceId, asked)
+          : artifactNamed(asked, () => db.ofProject(projectId));
+        if (id instanceof ElysiaStatus) {
+          return id.response.detail;
+        }
+        const page = db.get(id);
+        return page
+          ? { id: page.id, name: page.name }
+          : `No page ${asked} is in the project.`;
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
       }
-      const page = db.get(id);
-      return page
-        ? { id: page.id, name: page.name }
-        : `No page ${asked} is in the project.`;
     },
 
     /**
