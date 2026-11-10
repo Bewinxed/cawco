@@ -27,6 +27,7 @@ import {
 import type { InstanceRow } from "@cawco/core/protocol";
 import { changeLink } from "@cawco/core/references";
 import { pageHash } from "@cawco/preview/proxy";
+import { ElysiaStatus } from "elysia";
 import { applyPatch } from "rfc6902";
 import type { Doc } from "yjs";
 import type { ArtifactRow } from "../../db/artifacts";
@@ -36,6 +37,7 @@ import {
   readKept,
   type StatementChange,
 } from "../../decision-program";
+import { refusal } from "../../refusal";
 import { metaOf, stateOf } from "../facts";
 import { testedKeys } from "../overwrite";
 import {
@@ -44,7 +46,6 @@ import {
   htmlChanges,
   pictureChanges,
 } from "../page-changes";
-import { ArtifactRefusal } from "../refusals";
 import type {
   ArtifactInput,
   ArtifactRead,
@@ -122,7 +123,7 @@ const patchedEntries = (
   after: Record<string, unknown>,
   hash: string,
   at: string
-): Record<string, ChoiceEntry> => {
+) => {
   const next: Record<string, ChoiceEntry> = {};
   for (const [key, value] of Object.entries(after)) {
     if (JSON.stringify(value) === JSON.stringify(before[key])) {
@@ -138,7 +139,11 @@ const patchedEntries = (
     };
     const problem = choiceEntryProblem(key, entry);
     if (problem) {
-      throw new ArtifactRefusal(422, `${problem} Nothing was changed.`);
+      return refusal(
+        422,
+        "artifact-patch-entry-unfit",
+        `${problem} Nothing was changed.`
+      );
     }
     next[key] = entry;
   }
@@ -466,19 +471,21 @@ export const createPageKind = (ctx: PageKindContext) => {
     input: Pick<ArtifactInput, "name" | "html" | "dir" | "program">,
     owner: InstanceRow,
     keep: boolean
-  ): Promise<{ html: string; program?: BuiltProgram }> => {
+  ) => {
     const given = [input.program, input.html, input.dir].filter(
       (one) => one !== undefined
     ).length;
     if (given > 1) {
-      throw new ArtifactRefusal(
+      return refusal(
         400,
+        "artifact-page-sources",
         "A page takes one of program, html or dir."
       );
     }
     if (given === 0 && !instance.projectId) {
-      throw new ArtifactRefusal(
+      return refusal(
         400,
+        "artifact-page-source-none",
         "A page takes program (a decision page, decision-page skill), html, or dir with your work folder."
       );
     }
@@ -491,22 +498,25 @@ export const createPageKind = (ctx: PageKindContext) => {
       from = { dir: input.dir };
     }
     const page = await built(instance, input.name, from, keep);
-    if (page.program) {
-      ctx.mediaHeld(owner, page.program);
+    if (page instanceof ElysiaStatus) {
+      return page;
     }
-    return page;
+    const unheld = page.program && ctx.mediaHeld(owner, page.program);
+    return unheld ?? page;
   };
   /** Refuses new HTML for what takes none: an artifact that is no page, or a decision page written as a program. */
-  const takesHtml = (row: ArtifactRow): void => {
+  const takesHtml = (row: ArtifactRow) => {
     if (row.kind !== "page") {
-      throw new ArtifactRefusal(
+      return refusal(
         409,
+        "artifact-html-not-page",
         `${row.name} is a ${row.kind}: only a page takes new HTML.`
       );
     }
     if (programOf(row) !== undefined) {
-      throw new ArtifactRefusal(
+      return refusal(
         409,
+        "artifact-html-program",
         `${row.name} is a decision page written as a program: revise it with statements.`
       );
     }
@@ -519,11 +529,7 @@ export const createPageKind = (ctx: PageKindContext) => {
   const createdPage = async (
     { maker, owner }: Making,
     input: ArtifactInput
-  ): Promise<{
-    broken: PageBroken | undefined;
-    html: string;
-    program?: BuiltProgram;
-  }> => {
+  ) => {
     const was = namedFor(owner, "page", input.name);
     // Another session's page of the project's is the owner's once made again (placed).
     const page = await pageBuilt(
@@ -532,33 +538,36 @@ export const createPageKind = (ctx: PageKindContext) => {
       owner,
       !(was && holdsChange(maker, { ...was, instanceId: owner.id }))
     );
+    if (page instanceof ElysiaStatus) {
+      return page;
+    }
     const broken = page.program
       ? await ctx.brokenBy(
           { id: was?.id, name: input.name, projectId: owner.projectId ?? null },
           page.program.read.cards
         )
       : undefined;
-    return { ...page, broken };
+    if (broken instanceof ElysiaStatus) {
+      return broken;
+    }
+    const made: {
+      broken: PageBroken | undefined;
+      html: string;
+      program?: BuiltProgram;
+    } = { ...page, broken };
+    return made;
   };
   /**
-   * `deps.page`'s build, its refusal (a program's among them) thrown as the
-   * artifact's; kept in the project's folder unless it is a held next
-   * version's (`keep` false), which ../versions.ts `promote` keeps there.
+   * `deps.page`'s build, or its refusal (a program's among them); kept in
+   * the project's folder unless it is a held next version's (`keep` false),
+   * which ../versions.ts `promote` keeps there.
    */
-  const built = async (
+  const built = (
     instance: InstanceRow,
     name: string,
     from: PageFrom,
     keep = true
-  ): Promise<{ html: string; program?: BuiltProgram }> => {
-    const page = await deps.page(instance, name, from, keep, (asked) =>
-      whole(instance, asked)
-    );
-    if ("refused" in page) {
-      throw new ArtifactRefusal(page.status, page.refused);
-    }
-    return page;
-  };
+  ) => deps.page(instance, name, from, keep, (asked) => whole(instance, asked));
   /**
    * Page or preview `row` as `artifact_read` reads it: the person's picks,
    * notes and Sends on the version they have before them, the server and
@@ -584,6 +593,43 @@ export const createPageKind = (ctx: PageKindContext) => {
       held: now.id,
     };
   };
+  /** New HTML `given` for page `row` ({@link pageChanged}): built, written, what it changed marked; its read after, as `ownersRead` says. */
+  const htmlChanged = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    given: string,
+    ownersRead: boolean
+  ) => {
+    const untaken = takesHtml(row);
+    if (untaken) {
+      return untaken;
+    }
+    const page = await built(
+      instance,
+      row.name,
+      { html: given },
+      row.heldFor === null
+    );
+    if (page instanceof ElysiaStatus) {
+      return page;
+    }
+    const { html } = page;
+    const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
+    const was = store.revision(moved.id);
+    writePage(moved.id, html);
+    // Every page open on it hears the new revision in the doc and morphs
+    // in place (the overlay); nothing reloads.
+    ctx.stampMeta(moved, pageHash(html));
+    const fresh = markChanges(
+      moved,
+      was ? pageChanges(moved.id, was, { html }) : []
+    );
+    const read: ArtifactRead = {
+      ...ctx.read(moved, undefined, ownersRead),
+      ...markedLinks(moved.heldFor ?? moved.id, fresh),
+    };
+    return read;
+  };
   /**
    * New HTML for page `row` (its revision moves and every open view morphs
    * to it, its state kept), or a JSON Patch (RFC 6902) over its `state`
@@ -594,29 +640,9 @@ export const createPageKind = (ctx: PageKindContext) => {
     row: ArtifactRow,
     change: Exclude<PageChange, { statements: string }>,
     ownersRead: boolean
-  ): Promise<ArtifactRead> => {
+  ) => {
     if ("html" in change) {
-      takesHtml(row);
-      const { html } = await built(
-        instance,
-        row.name,
-        { html: change.html },
-        row.heldFor === null
-      );
-      const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
-      const was = store.revision(moved.id);
-      writePage(moved.id, html);
-      // Every page open on it hears the new revision in the doc and morphs
-      // in place (the overlay); nothing reloads.
-      ctx.stampMeta(moved, pageHash(html));
-      const fresh = markChanges(
-        moved,
-        was ? pageChanges(moved.id, was, { html }) : []
-      );
-      return {
-        ...ctx.read(moved, undefined, ownersRead),
-        ...markedLinks(moved.heldFor ?? moved.id, fresh),
-      };
+      return await htmlChanged(instance, row, change.html, ownersRead);
     }
     const doc = docs.doc(row.id);
     const before = stateOf(doc);
@@ -632,29 +658,37 @@ export const createPageKind = (ctx: PageKindContext) => {
           )
       : [];
     if (carded.length > 0) {
-      throw new ArtifactRefusal(
+      return refusal(
         409,
+        "artifact-patch-cards",
         `${carded.join(", ")} ${carded.length === 1 ? "is a decision card" : "are decision cards"}: a card's pick is the person's, or settle's by the project's Who decides. Nothing was changed.`
       );
     }
     const failed = errors.findIndex((error) => error !== null);
     if (failed !== -1) {
-      throw new ArtifactRefusal(
+      return refusal(
         422,
+        "artifact-patch-failed",
         `Operation ${failed} of the patch failed: ${errors[failed]?.message ?? "it does not apply"}. Nothing was changed.`
       );
     }
-    ctx.answersHad(instance, row, {
+    const replaced = ctx.answersHad(instance, row, {
       before,
       after,
       tested: testedKeys(change.patch, before),
     });
+    if (replaced) {
+      return replaced;
+    }
     const next = patchedEntries(
       before,
       after,
       metaOf(doc).pageHash ?? newestHash(before) ?? "0".repeat(64),
       new Date().toISOString()
     );
+    if (next instanceof ElysiaStatus) {
+      return next;
+    }
     const gone = Object.keys(before).filter((key) => !(key in after));
     docs.transact(row.id, "agent", (live) => {
       const state = live.getMap("state");
@@ -667,15 +701,13 @@ export const createPageKind = (ctx: PageKindContext) => {
     });
     return ctx.read(db.get(row.id) as ArtifactRow, undefined, ownersRead);
   };
-  /** Decision page `row`'s program `existing` revised as `merged`, built, checked and written; what changed. */
-  const programRevised = async (
+  /** Decision page `row`'s program `existing` revised as `merged`, built on the folder and machines its pictures were read from, its media checked against its holder's panel. */
+  const revisionBuilt = async (
     instance: InstanceRow,
     row: ArtifactRow,
     existing: string,
-    merged: { change: StatementChange; merged: string }
-  ): Promise<Revised> => {
-    // Said before anything is written: the merged program's cards against the person's picks and the project's pages.
-    const broken = await ctx.brokenBy(row, readKept(merged.merged).cards);
+    merged: string
+  ) => {
     const dir = getMeta(docs.doc(row.id), "programDir");
     const shown = store.shownPictures(row.id, existing);
     const readOn = revisionReadsOn(row, instance, shown);
@@ -683,15 +715,40 @@ export const createPageKind = (ctx: PageKindContext) => {
       instance,
       row.name,
       {
-        program: merged.merged,
+        program: merged,
         dir: typeof dir === "string" ? dir : undefined,
         shown,
         readOn,
       },
       row.heldFor === null
     );
-    const program = page.program as BuiltProgram;
-    ctx.mediaHeld(holder(row) ?? instance, program);
+    if (page instanceof ElysiaStatus) {
+      return page;
+    }
+    const { program } = page;
+    if (!program) {
+      return refusal(400, "artifact-program-unbuilt", "A program is required.");
+    }
+    const unheld = ctx.mediaHeld(holder(row) ?? instance, program);
+    return unheld ?? { html: page.html, program, readOn };
+  };
+  /** Decision page `row`'s program `existing` revised as `merged`, built, checked and written; what changed. */
+  const programRevised = async (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    existing: string,
+    merged: { change: StatementChange; merged: string }
+  ) => {
+    // Said before anything is written: the merged program's cards against the person's picks and the project's pages.
+    const broken = await ctx.brokenBy(row, readKept(merged.merged).cards);
+    if (broken instanceof ElysiaStatus) {
+      return broken;
+    }
+    const page = await revisionBuilt(instance, row, existing, merged.merged);
+    if (page instanceof ElysiaStatus) {
+      return page;
+    }
+    const { program, readOn } = page;
     const kept = readKept(existing).cards;
     const before = new Set(kept.map((card) => card.id));
     const after = program.read.cards.map((card) => card.id);
@@ -717,7 +774,10 @@ export const createPageKind = (ctx: PageKindContext) => {
       ),
       program.read.cards
     );
-    return {
+    if (routes instanceof ElysiaStatus) {
+      return routes;
+    }
+    const revised: Revised = {
       ...(Object.keys(routes).length > 0 ? { routes } : {}),
       id: moved.id,
       revision: moved.revision,
@@ -739,6 +799,7 @@ export const createPageKind = (ctx: PageKindContext) => {
       ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
       ...(broken ? { broken } : {}),
     };
+    return revised;
   };
 
   return {

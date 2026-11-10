@@ -9,7 +9,9 @@ import { type ChangedItem, docMeta, setMeta } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
+import { ElysiaStatus } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
+import { refusal } from "../../refusal";
 import {
   canvasEntries,
   clearDrawing,
@@ -22,12 +24,10 @@ import {
 } from "../canvas";
 import { stateOf } from "../facts";
 import { sceneChanges } from "../page-changes";
-import { ArtifactRefusal } from "../refusals";
 import type {
   ArtifactInput,
   ArtifactRead,
   CanvasChange,
-  CanvasScreen,
   Created,
   Making,
   Opened,
@@ -177,8 +177,28 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
    */
   const headless = new Map<
     string,
-    { joined: Promise<CanvasScreen>; settle?: () => void; writing: number }
+    {
+      joined: ReturnType<typeof joinedScreen>;
+      settle?: () => void;
+      writing: number;
+    }
   >();
+  /** The hub machine's screen opened on canvas `row`, once its page joined the doc; the refusal of its open, or of a page that didn't join in time. */
+  const joinedScreen = async (row: ArtifactRow) => {
+    const one = await deps.screen(row, routeOf(row.id));
+    if (one instanceof ElysiaStatus) {
+      return one;
+    }
+    if (await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)) {
+      return one;
+    }
+    one.release();
+    return refusal(
+      504,
+      "artifact-canvas-screen-unjoined",
+      `The canvas ${row.name} wasn't drawn: the hub's machine opened it, but its page didn't join the canvas within ${Math.round(CANVAS_LIMITS.convertMs / 1000)} s.`
+    );
+  };
   /**
    * The canvas's headless screen, opened when it has none and held on when
    * it has: a write on it counted, any let-go that waited called off.
@@ -187,27 +207,28 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     let screen = headless.get(row.id);
     if (screen) {
       screen.joined.then(
-        (one) => one.hold(),
+        (one) => {
+          if (!(one instanceof ElysiaStatus)) {
+            one.hold();
+          }
+        },
         () => undefined
       );
     } else {
-      const joined = deps.screen(row, routeOf(row.id)).then(async (one) => {
-        if (await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs)) {
-          return one;
-        }
-        one.release();
-        throw new ArtifactRefusal(
-          504,
-          `The canvas ${row.name} wasn't drawn: the hub's machine opened it, but its page didn't join the canvas within ${Math.round(CANVAS_LIMITS.convertMs / 1000)} s.`
-        );
-      });
+      const joined = joinedScreen(row);
       const opened = { joined, writing: 0 };
       headless.set(row.id, opened);
-      joined.catch(() => {
+      // One that refused or failed is let go: the next write opens another.
+      const forget = () => {
         if (headless.get(row.id) === opened) {
           headless.delete(row.id);
         }
-      });
+      };
+      joined.then((one) => {
+        if (one instanceof ElysiaStatus) {
+          forget();
+        }
+      }, forget);
       screen = opened;
     }
     screen.settle?.();
@@ -223,7 +244,11 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     screen.settle?.();
     headless.delete(id);
     screen.joined.then(
-      (one) => one.release(),
+      (one) => {
+        if (!(one instanceof ElysiaStatus)) {
+          one.release();
+        }
+      },
       () => undefined
     );
   };
@@ -266,17 +291,19 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     row: ArtifactRow,
     change: { elements: SkeletonElement[] } | { mermaid: string },
     replace = false
-  ): Promise<string[]> => {
+  ) => {
     if ("elements" in change) {
       if (change.elements.length > CANVAS_LIMITS.elementsPerCall) {
-        throw new ArtifactRefusal(
+        return refusal(
           413,
+          "artifact-canvas-elements-many",
           `One call writes at most ${CANVAS_LIMITS.elementsPerCall} elements; send the rest in another.`
         );
       }
     } else if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
-      throw new ArtifactRefusal(
+      return refusal(
         413,
+        "artifact-canvas-mermaid-long",
         `Mermaid is at most ${CANVAS_LIMITS.mermaid} characters; split the diagram.`
       );
     }
@@ -295,8 +322,8 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       return await convert();
     }
     try {
-      await headlessScreen(row).joined;
-      return await convert();
+      const joined = await headlessScreen(row).joined;
+      return joined instanceof ElysiaStatus ? joined : await convert();
     } finally {
       wroteHeadless(row.id);
     }
@@ -306,13 +333,11 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
    * named `name`, or `name-2`, `name-3`… when the session has that one,
    * marked `draft` until its first send, and not shown in the panel.
    */
-  const createDraft = (
-    instance: InstanceRow,
-    input: ArtifactInput
-  ): Created => {
+  const createDraft = (instance: InstanceRow, input: ArtifactInput) => {
     if (input.elements !== undefined || input.mermaid !== undefined) {
-      throw new ArtifactRefusal(
+      return refusal(
         400,
+        "artifact-draft-drawn",
         "A draft canvas starts empty: it takes no elements or mermaid."
       );
     }
@@ -350,7 +375,11 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     });
     ctx.stampMeta(row, null);
     docs.transact(row.id, "hub", (doc) => setMeta(doc, "draft", true));
-    return {
+    const address = deps.previewAddress(instance.id);
+    if (address instanceof ElysiaStatus) {
+      return address;
+    }
+    const made: Created = {
       id: row.id,
       kind: row.kind,
       name: row.name,
@@ -358,25 +387,22 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       route: routeOf(row.id),
       opened: false,
       why: "It stands in the composer until it is docked.",
-      ...deps.previewAddress(instance.id),
+      ...address,
     };
+    return made;
   };
   /**
    * The owner's canvas of that name, its maker now `maker` and its ask the
    * input's, or a new one; and what was there. A maker's re-create of one
    * its parent opened goes to its next version (`holding`, {@link holdNext}).
    */
-  const canvasPlaced = (
-    { owner, maker }: Making,
-    input: ArtifactInput
-  ): {
-    before: ArtifactRow | undefined;
-    holding: ReturnType<typeof holdNext>;
-    row: ArtifactRow;
-  } => {
+  const canvasPlaced = ({ owner, maker }: Making, input: ArtifactInput) => {
+    const asked = ctx.askedOf(input);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
     const now = new Date();
     const before = db.byName(owner.id, "canvas", input.name);
-    const asked = ctx.askedOf(input);
     const holding = before ? holdNext(maker, before) : null;
     const target = holding?.next ?? before;
     const row =
@@ -403,7 +429,12 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
         updatedAt: now,
         shownAt: null,
       });
-    return { before, holding, row };
+    const placed: {
+      before: ArtifactRow | undefined;
+      holding: ReturnType<typeof holdNext>;
+      row: ArtifactRow;
+    } = { before, holding, row };
+    return placed;
   };
   /** What a canvas's create draws: its elements, its Mermaid, or nothing. */
   const drawingOf = ({
@@ -423,17 +454,22 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
   const unhanded = (
     before: ArtifactRow | undefined,
     row: ArtifactRow,
-    error: ArtifactRefusal
-  ): ArtifactRefusal => {
+    { status, response }: Unhanded
+  ) => {
     if (!before) {
       discard(row);
     }
-    return new ArtifactRefusal(
-      error.status,
-      `${error.message} ${before ? "Your parent wasn't told." : "Nothing was handed to your parent."}`,
-      { cause: error }
+    return refusal(
+      status,
+      response.code,
+      `${response.detail} ${before ? "Your parent wasn't told." : "Nothing was handed to your parent."}`
     );
   };
+  /** Why a canvas's drawing refused: its draw's refusal ({@link draw}). */
+  type Unhanded = Extract<
+    Awaited<ReturnType<typeof draw>>,
+    { response: unknown }
+  >;
   /**
    * Makes a canvas in `owner`'s panel, or makes the one of that name
    * again: its drawing replaced by this one's elements or Mermaid
@@ -442,44 +478,48 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
    * hands it to its parent unopened ({@link handOver}), drawn before the
    * parent hears of it. `maker` is whose call it was.
    */
-  const createCanvas = async (
-    making: Making,
-    input: ArtifactInput
-  ): Promise<Created> => {
+  const createCanvas = async (making: Making, input: ArtifactInput) => {
     if (input.elements !== undefined && input.mermaid !== undefined) {
-      throw new ArtifactRefusal(
+      return refusal(
         400,
+        "artifact-canvas-sources",
         "A canvas takes elements or mermaid, not both."
       );
     }
-    await openNextFirst(making, "canvas", input.name);
-    const { before, holding, row } = canvasPlaced(making, input);
+    const unopened = await openNextFirst(making, "canvas", input.name);
+    if (unopened) {
+      return unopened;
+    }
+    const placed = canvasPlaced(making, input);
+    if (placed instanceof ElysiaStatus) {
+      return placed;
+    }
+    const { before, holding, row } = placed;
     ctx.stampMeta(row, null);
     const change = drawingOf(input);
     const was = canvasEntries(docs, row.id);
     let wrote: string[] | undefined;
-    let shown: Opened;
-    try {
-      shown = ctx.openedOf(
-        await handOver(
-          making,
-          before,
-          row,
-          async () => {
-            if (change) {
-              wrote = await draw(row, change, true);
-            } else {
-              clearDrawing(docs, row.id);
-            }
-          },
-          holding
-        )
-      );
-    } catch (error) {
-      throw handing(making) && error instanceof ArtifactRefusal
-        ? unhanded(before, row, error)
-        : error;
+    const handed = await handOver(
+      making,
+      before,
+      row,
+      async () => {
+        if (!change) {
+          clearDrawing(docs, row.id);
+          return;
+        }
+        const drawn = await draw(row, change, true);
+        if (drawn instanceof ElysiaStatus) {
+          return drawn;
+        }
+        wrote = drawn;
+      },
+      holding
+    );
+    if (handed instanceof ElysiaStatus) {
+      return handing(making) ? unhanded(before, row, handed) : handed;
     }
+    const shown: Opened = ctx.openedOf(handed);
     // Its outline as it stands, read as the owner's read only when the owner made it.
     const { outline } = readCanvas(
       db.get(row.id) as ArtifactRow,
@@ -519,11 +559,12 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     row: ArtifactRow,
     change: CanvasChange,
     ownersRead: boolean
-  ): Promise<ArtifactRead> => {
+  ) => {
     if ("delete" in change) {
       if (change.delete.length > CANVAS_LIMITS.deletePerCall) {
-        throw new ArtifactRefusal(
+        return refusal(
           413,
+          "artifact-canvas-deletes-many",
           `One call deletes at most ${CANVAS_LIMITS.deletePerCall} elements.`
         );
       }
@@ -554,8 +595,11 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
             )
         : [];
     const wrote = await draw(row, change);
+    if (wrote instanceof ElysiaStatus) {
+      return wrote;
+    }
     const fresh = markSceneChanges(row, before);
-    return {
+    const read: ArtifactRead = {
       ...readCanvas(
         db.get(row.id) as ArtifactRow,
         undefined,
@@ -568,6 +612,7 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
         ? { changedUnderYou: underYou.map((id) => `${id} changed under you`) }
         : {}),
     };
+    return read;
   };
   /**
    * Canvas `row` as `artifact_read` reads it: the person's strokes on the
