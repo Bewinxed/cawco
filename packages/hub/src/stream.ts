@@ -365,7 +365,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   };
 
   /** A stream message too malformed to act on: logged, and the sender told which field. */
-  const refuse = (socket: HubSocket, raw: unknown, fault: string): void => {
+  const malformed = (socket: HubSocket, raw: unknown, fault: string): void => {
     console.warn(`[hub] ${fault}`, raw);
     deliver(socket, refusalFrame(raw, fault));
   };
@@ -683,7 +683,11 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     raw: Record<string, unknown>
   ): void => {
     if (!nonEmpty(raw.sessionId)) {
-      refuse(socket, raw, "stream.subscribe refused: `sessionId` is missing");
+      malformed(
+        socket,
+        raw,
+        "stream.subscribe refused: `sessionId` is missing"
+      );
       return;
     }
     subscribe(socket, {
@@ -709,7 +713,11 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   ): void => {
     const { sessionId } = raw;
     if (!nonEmpty(sessionId)) {
-      refuse(socket, raw, "stream.unsubscribe refused: `sessionId` is missing");
+      malformed(
+        socket,
+        raw,
+        "stream.unsubscribe refused: `sessionId` is missing"
+      );
       return;
     }
     sockets.get(socket.id)?.sessions.delete(sessionId);
@@ -731,7 +739,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   ): void => {
     const { instanceIds } = raw;
     if (!(Array.isArray(instanceIds) && instanceIds.every(nonEmpty))) {
-      refuse(
+      malformed(
         socket,
         raw,
         "plan.follow refused: `instanceIds` is not a list of session ids"
@@ -755,7 +763,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   ): void => {
     const { instanceId } = raw;
     if (!nonEmpty(instanceId)) {
-      refuse(socket, raw, "plan.resync refused: `instanceId` is missing");
+      malformed(socket, raw, "plan.resync refused: `instanceId` is missing");
       return;
     }
     ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
@@ -794,7 +802,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
 
     if (raw.type === "command") {
       if (!nonEmpty(raw.commandId)) {
-        refuse(socket, raw, "command refused: `commandId` is missing");
+        malformed(socket, raw, "command refused: `commandId` is missing");
         return true;
       }
       if (!COMMAND_KINDS.has(raw.kind as string)) {
@@ -807,7 +815,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
 
     // An envelope carries no `type`: one that names a type this protocol
     // does not have is this protocol's to refuse, by that name.
-    refuse(
+    malformed(
       socket,
       raw,
       `unknown stream message type "${raw.type}": the stream takes heartbeat, stream.subscribe, stream.unsubscribe, plan.follow, plan.resync or command`
