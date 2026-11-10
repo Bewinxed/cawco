@@ -300,7 +300,16 @@ export interface HubContext {
     projectId: string,
     machineId: string,
     asked: string
-  ) => Promise<ReturnType<typeof placeAddedOf>>;
+  ) => Promise<
+    | ReturnType<typeof placeAddedOf>
+    | ReturnType<
+        typeof problem<404, { code: "place-project-unknown"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<404, { code: "place-machine-unknown"; detail: string }>
+      >
+    | Exclude<ReturnType<HubContext["askedMachinePath"]>, MachinePath>
+  >;
   admission: ReturnType<typeof createAdmission>;
   advanceCompaction: (instanceId: string) => void;
   advanceContinuation: ReturnType<
@@ -332,9 +341,12 @@ export interface HubContext {
   artifacts: Artifacts;
   askedMachinePath: (
     machineId: string,
-    raw: string,
-    refuse: (message: string, cause: Error) => Error
-  ) => MachinePath;
+    raw: string
+  ) =>
+    | MachinePath
+    | ReturnType<
+        typeof problem<400, { code: "machine-path-unfit"; detail: string }>
+      >;
   askedProjectName: (body: {
     name?: string;
     prompt?: string;

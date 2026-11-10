@@ -332,11 +332,7 @@ import { blockRoutes, createBlocks } from "./blocks";
 import { createBoard } from "./board";
 import { bodyLimitRefusal } from "./body-limits";
 import { portOf, runBootSteps } from "./boot";
-import {
-  browserStreamRoutes,
-  browserUnreached,
-  createBrowserStream,
-} from "./browser-routes";
+import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
 import {
   BROWSER_CALL_MS,
@@ -515,7 +511,6 @@ import {
   outlivesSession,
   type PendingShape,
 } from "./pending";
-import { PlaceRefusal } from "./place-refusal";
 import { createPlaceRepos } from "./place-repo";
 import {
   createPlanChanges,
@@ -657,7 +652,7 @@ import { createSessionRuntime } from "./session-runtime";
 import { sessionWord } from "./session-word";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
-import { applySetupPicks, isSetupPage } from "./setup";
+import { isSetupPage, type SetupPicks, setupPicksOf } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import { FOLDER_CHANGED, folderOf, readCheckedFolder } from "./skills";
 import { sourceFacts } from "./source-facts";
@@ -2251,17 +2246,16 @@ export const createServer = (
   /**
    * `raw` as a path on `machineId` (db `machinePathOn`, core `machinePath`):
    * how every path a person, a client or a session names for a machine
-   * enters the hub. Its refusal, a sentence, is thrown as the caller's own
-   * error from `refuse`: a 400 at a route, a tool's error at a tool.
+   * enters the hub. A path that is none on that machine is the problem its
+   * sentence says: a 400 at a route, a tool's error at a tool.
    */
-  const askedMachinePath = (
-    machineId: string,
-    raw: string,
-    refuse: (message: string, cause: Error) => Error
-  ): MachinePath => {
+  const askedMachinePath = (machineId: string, raw: string) => {
     const path = db.machinePathOn(machineId, raw);
     if (path instanceof MachinePathRefused) {
-      throw refuse(path.message, path);
+      return problem(400, {
+        code: "machine-path-unfit",
+        detail: path.message,
+      });
     }
     return path;
   };
@@ -2401,12 +2395,10 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
     lifetime,
     notifications,
+    // A task the folder does not read is none to push about.
     task: async (projectId, id) => {
       const task = await tasks.get(projectId, id);
-      if (task instanceof ElysiaStatus) {
-        throw projectRefusalOf(task);
-      }
-      return task;
+      return task instanceof ElysiaStatus ? undefined : task;
     },
   });
   /**
@@ -2763,7 +2755,10 @@ export const createServer = (
     reach: async (machineId, port) => {
       const address = registry.address(machineId);
       if (!address) {
-        return browserUnreached(machineName(machineId));
+        return problem(503, {
+          code: "browser-machine-unreached",
+          detail: `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`,
+        });
       }
       return sshTunnels.holds(machineId)
         ? {
@@ -2777,7 +2772,7 @@ export const createServer = (
     browserFor: (actor) => browsers.browserFor(actor),
     // The asking door's page on the asked origin, on the browser's machine
     // (agent shield.ts `askedPage`), its browser woken first if it sleeps,
-    // so it waits as long as a start does; its refusal is the agent's
+    // so it waits as long as a start does; its problem is the agent's
     // sentence.
     pageOf: async (actor, key, machineId, origin) => {
       const page: BrowserPageArgs = {
@@ -2790,9 +2785,8 @@ export const createServer = (
         machineName(machineId),
         `say which page of yours is open on ${origin}`
       );
-      // The browser ask throws its refusals: the agent reads the sentence.
       if (asked instanceof ElysiaStatus) {
-        throw new Error(asked.response.detail);
+        return asked;
       }
       return asked.targetId;
     },
@@ -4257,8 +4251,9 @@ export const createServer = (
 
   /**
    * Another checkout of a project's repository: named by hand
-   * (`POST /api/projects/:id/places`) or picked on its setup page. A
-   * refusal throws a {@link PlaceRefusal}.
+   * (`POST /api/projects/:id/places`) or picked on its setup page. A project
+   * or machine the hub does not have, or a path that is none on the machine,
+   * is the problem it answers.
    */
   const addProjectPlace = async (
     projectId: string,
@@ -4267,16 +4262,21 @@ export const createServer = (
   ) => {
     const project = db.project(projectId);
     if (!project) {
-      throw new PlaceRefusal(404, "No project with that id on this hub.");
+      return problem(404, {
+        code: "place-project-unknown",
+        detail: "No project with that id on this hub.",
+      });
     }
     if (!db.listAgents().some((row) => row.machineId === machineId)) {
-      throw new PlaceRefusal(404, "No machine with that id on this hub.");
+      return problem(404, {
+        code: "place-machine-unknown",
+        detail: "No machine with that id on this hub.",
+      });
     }
-    const path = askedMachinePath(
-      machineId,
-      asked,
-      (message, cause) => new PlaceRefusal(400, message, { cause })
-    );
+    const path = askedMachinePath(machineId, asked);
+    if (path instanceof ElysiaStatus) {
+      return path;
+    }
     const { place, added } = db.addPlace({
       projectId: project.id,
       machineId,
@@ -4736,10 +4736,14 @@ export const createServer = (
       if ("session" in to) {
         plans.waitsMoved(to.session.id);
       }
+      const { projectId } = artifact;
+      if (!projectId) {
+        return;
+      }
       // His Send of a project's decision page decides it: its record and log are written from these picks.
-      if (isDecisionPage(artifact) && artifact.projectId) {
+      if (isDecisionPage(artifact)) {
         const decided = await decisions.decide(
-          artifact.projectId,
+          projectId,
           artifact.name,
           artifact.id
         );
@@ -4747,40 +4751,9 @@ export const createServer = (
           return decided;
         }
       }
-      // A project's setup page: its name, shape and account applied before
-      // whoever hears it reads the picks. The setup throws a place's
-      // refusal (setup.ts): the Send answers it.
-      try {
-        await applySetupPicks(artifact, page, {
-          // Its name field's, account's and area's refusals are the send's to answer.
-          name: (projectId, name) => setupEdit(projectId, { name }),
-          account: (projectId, account) => setupEdit(projectId, { account }),
-          area: async (projectId, area) => {
-            const placed = await projectAreas.place(projectId, area);
-            if (placed instanceof ElysiaStatus) {
-              throw new PlaceRefusal(placed.status, placed.response.detail);
-            }
-          },
-          shape: async (projectId, template) => {
-            const shaped = await tasks.applyTemplate(
-              projectId,
-              template,
-              YOU_ACTOR
-            );
-            if (shaped instanceof ElysiaStatus) {
-              throw projectRefusalOf(shaped);
-            }
-          },
-        });
-      } catch (error) {
-        if (error instanceof PlaceRefusal) {
-          return problem(error.status, {
-            code: "setup-place-refused",
-            detail: error.message,
-          });
-        }
-        throw error;
-      }
+      // A project's setup page: its picks applied before whoever hears it
+      // reads them (setup.ts `setupPicksOf`).
+      return await applySetupPicks(projectId, setupPicksOf(artifact, page));
     },
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
     followed: (instanceId) => streams.followerCount(instanceId) > 0,
@@ -8664,7 +8637,7 @@ export const createServer = (
     stageKinds: async (projectId) => {
       const view = await tasks.stages(projectId);
       if (view instanceof ElysiaStatus) {
-        throw projectRefusalOf(view);
+        return view;
       }
       return new Map(view.stages.map((stage) => [stage.name, stage.kind]));
     },
@@ -8906,18 +8879,11 @@ export const createServer = (
         message,
       });
       if (changed instanceof ElysiaStatus) {
-        throw projectRefusalOf(changed);
+        return changed;
       }
     },
     folderText,
-    // The commit and the names still throw a folder's refusal on as the ProjectRefusal they took.
-    folderNames: async (projectId, path) => {
-      const names = await folderFileNames(projectId, path);
-      if (names instanceof ElysiaStatus) {
-        throw projectRefusalOf(names);
-      }
-      return names;
-    },
+    folderNames: folderFileNames,
     instance: (id) => db.getInstancesByIds([id])[0],
     page: (artifactId) => {
       const doc = artifactDocs.doc(artifactId);
@@ -8938,10 +8904,7 @@ export const createServer = (
       takeSentWrites(artifactDocs, artifactId, writes),
     tasks: async (projectId) => {
       const list = await tasks.list(projectId);
-      if (list instanceof ElysiaStatus) {
-        throw projectRefusalOf(list);
-      }
-      return decidedTasks(list.tasks);
+      return list instanceof ElysiaStatus ? list : decidedTasks(list.tasks);
     },
     // The person's note, their words alone with the page beside them for
     // the agent; or their act, CawCo's notice of it.
@@ -9178,13 +9141,26 @@ export const createServer = (
       };
     }
   };
-  /** `opening` and `row`'s records (open-items.ts), the session going on from it reads first; a refused read thrown on in its words, as plan-changes reads a failure. */
+  /** `opening` and `row`'s records (open-items.ts), the session going on from it reads first; the problem of a read that fails. */
   const goOnOpening = async (row: InstanceRow, opening: string) => {
     const open = await openItems.read(row.id);
     if (open instanceof ElysiaStatus) {
-      throw new Error(open.response.detail);
+      return open;
     }
     return `${opening}\n\n${open}`;
+  };
+  /** The folder a session goes on in from `row`: its own, or its project's checkout on its machine once its workspace is archived. */
+  const goOnCwd = (row: InstanceRow) => {
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+    return workspace?.state === "archived"
+      ? db
+          .project(row.projectId ?? "")
+          ?.places.find(
+            (place) =>
+              place.kind === "checkout" && place.machineId === row.machineId
+          )?.path
+      : row.cwd;
   };
   /**
    * The session that goes on from one that cannot (plan-changes.ts): in its
@@ -9193,17 +9169,7 @@ export const createServer = (
    * its plan copied, opening on `opening` and the old session's records.
    */
   const goOnFrom = async (row: InstanceRow, opening: string) => {
-    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
-    const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
-    const cwd =
-      workspace?.state === "archived"
-        ? db
-            .project(row.projectId ?? "")
-            ?.places.find(
-              (place) =>
-                place.kind === "checkout" && place.machineId === row.machineId
-            )?.path
-        : row.cwd;
+    const cwd = goOnCwd(row);
     if (!cwd) {
       throw new Error(
         `its workspace is gone, and its project has no checkout on ${machineName(row.machineId)}`
@@ -9232,7 +9198,11 @@ export const createServer = (
       row
     );
     plans.copySteps(row.id, instanceId);
-    const told = tellPlan(instanceId, await goOnOpening(row, opening));
+    const opened = await goOnOpening(row, opening);
+    if (typeof opened !== "string") {
+      return opened;
+    }
+    const told = tellPlan(instanceId, opened);
     if (told.kind !== "taken") {
       throw new Error(told.reason);
     }
@@ -9989,17 +9959,12 @@ export const createServer = (
   // Areas (areas.ts): every reader of a project's settings reads them in
   // effect with its row, so a change here reaches each at once; what is
   // told of it is told here.
-  /** A project's Who decides table in effect (decides-file.ts), a refused read of its decides.md thrown on. */
-  const decidesOf = async (project: { areaId: string | null; id: string }) => {
-    const table = await decidesTable(
+  /** A project's Who decides table in effect (decides-file.ts); the folder's problem when its decides.md does not read. */
+  const decidesOf = (project: { areaId: string | null; id: string }) =>
+    decidesTable(
       { projectId: project.id, areaId: project.areaId },
       db.decides.fleet()
     );
-    if (table instanceof ElysiaStatus) {
-      throw projectRefusalOf(table);
-    }
-    return table;
-  };
   const projectAreas = createAreas({
     accountMoved: conversationToAccount,
     changed: () => {
@@ -10011,6 +9976,9 @@ export const createServer = (
     db,
     folderSources: async (project) => {
       const table = await decidesOf(project);
+      if (table instanceof ElysiaStatus) {
+        return table;
+      }
       return {
         decides: Object.values(table.from),
         types: projectTypes.typesFor(project.id).map((type) => type.source),
@@ -10026,21 +9994,43 @@ export const createServer = (
     projectsChanged,
     stagesChanged: (projectId) => tasks.touched(projectId),
   });
-  /** A setup page's pick applied as the person's own edit, its refusal the send's to answer as a place's is. */
-  const setupEdit = async (
-    projectId: string,
-    change: Parameters<typeof projectEdits.edit>[1]
-  ): Promise<void> => {
-    const edited = await projectEdits.edit(projectId, change);
-    if (!(edited instanceof ElysiaStatus)) {
-      return;
+  /**
+   * A setup page's picks applied as the person's own edits: its name, shape,
+   * area (before the account, which an account of its own is then set over)
+   * and account. A pick that cannot be applied is the problem the send
+   * answers: the picks after it are not applied.
+   */
+  const applySetupPicks = async (projectId: string, picks: SetupPicks) => {
+    if (picks.name !== undefined) {
+      const named = await projectEdits.edit(projectId, { name: picks.name });
+      if (named instanceof ElysiaStatus) {
+        return named;
+      }
     }
-    // The folder's failure behind a landing's dispatch read is no place's
-    // refusal: it goes on as the ProjectRefusal it was thrown as.
-    const { status, response } = edited;
-    throw status === 415 || status === 500
-      ? projectRefusalOf(edited)
-      : new PlaceRefusal(status, response.detail);
+    if (picks.shape !== undefined) {
+      const shaped = await tasks.applyTemplate(
+        projectId,
+        picks.shape,
+        YOU_ACTOR
+      );
+      if (shaped instanceof ElysiaStatus) {
+        return shaped;
+      }
+    }
+    if (picks.area !== undefined) {
+      const placed = await projectAreas.place(projectId, picks.area);
+      if (placed instanceof ElysiaStatus) {
+        return placed;
+      }
+    }
+    if (picks.account !== undefined) {
+      const moved = await projectEdits.edit(projectId, {
+        account: picks.account,
+      });
+      if (moved instanceof ElysiaStatus) {
+        return moved;
+      }
+    }
   };
 
   // Caw's own project settings, applied through the settings' own paths, or
@@ -10054,6 +10044,9 @@ export const createServer = (
     },
     inEffect: async (project) => {
       const table = await decidesOf(project);
+      if (table instanceof ElysiaStatus) {
+        return table;
+      }
       return {
         decides: Object.entries(table.routes).map(([kind, member]) => ({
           kind,
@@ -10670,16 +10663,24 @@ export const createServer = (
         }
         // Its refusal says which delegate the target named: an ask that is
         // no longer pending reads the same for every session otherwise.
-        try {
-          await answerPermission(pending, row.id, answer.requestId, result, {
-            via: "session",
-            name: sessionName(requester),
-          });
-        } catch (error) {
+        const said = (why: string) =>
+          `Your delegate ${sessionLabel(row).tag}, ask ${answer.requestId}: ${why}`;
+        const answered = await answerPermission(
+          pending,
+          row.id,
+          answer.requestId,
+          result,
+          { via: "session", name: sessionName(requester) }
+        ).catch((error: unknown) => {
           throw new Error(
-            `Your delegate ${sessionLabel(row).tag}, ask ${answer.requestId}: ${error instanceof Error ? error.message : String(error)}`,
+            said(error instanceof Error ? error.message : String(error)),
             { cause: error }
           );
+        });
+        // This call's failures are thrown (WorkItemRefusal's family): the
+        // answer's problem goes on in the same words.
+        if (answered) {
+          throw new Error(said(answered.response.detail));
         }
         return;
       }
