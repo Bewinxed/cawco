@@ -52,7 +52,6 @@ export interface ScrollPinHost {
   readonly arrivals: {
     readonly tickets: Map<string, Ticket>;
   };
-  readonly followBottom: () => void;
   readonly jumping: boolean;
   readonly jumpScrolled: (node: HTMLElement) => void;
   readonly keeper: {
@@ -62,7 +61,10 @@ export interface ScrollPinHost {
     readerMoved: number;
   };
   readonly landed: boolean;
-  readonly landingFrame: number | null;
+  readonly landing: {
+    readonly followBottom: () => void;
+    readonly landingFrame: number | null;
+  };
   readonly mounted: {
     readonly aside: ReadonlyMap<string, number>;
     awayScroll: number;
@@ -435,7 +437,7 @@ export class ScrollPin {
     if (tail) {
       this.atBottom = true;
       this.farFromLatest = false;
-      this.#host.followBottom();
+      this.#host.landing.followBottom();
     }
   };
 
@@ -823,8 +825,8 @@ export class ScrollPin {
       node.addEventListener("revealstart", this.onrevealstart);
       return () => {
         node.removeEventListener("revealstart", this.onrevealstart);
-        if (this.#host.landingFrame !== null) {
-          cancelAnimationFrame(this.#host.landingFrame);
+        if (this.#host.landing.landingFrame !== null) {
+          cancelAnimationFrame(this.#host.landing.landingFrame);
         }
         clearTimeout(this.landingAway);
         this.landingAway = undefined;
