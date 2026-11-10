@@ -1,14 +1,16 @@
 import type { VirtualizerHandle } from "virtua/svelte";
 
 export interface ListWholeHost {
-  readonly endMoved: (shift: number) => void;
-  readonly list: VirtualizerHandle | undefined;
-  readonly listing: HTMLElement | undefined;
   readonly older: {
     readonly olderRoom: number;
   };
-  readonly pinNext: () => void;
-  readonly pinned: () => boolean;
+  readonly pin: {
+    readonly endMoved: (shift: number) => void;
+    readonly list: VirtualizerHandle | undefined;
+    readonly listing: HTMLElement | undefined;
+    readonly pinned: () => boolean;
+    readonly pinNext: () => void;
+  };
 }
 
 export class ListWhole {
@@ -48,11 +50,11 @@ export class ListWhole {
    * thousandth at that size.
    */
   listHeight(): number {
-    const size = this.#host.list?.getScrollSize() ?? 0;
-    if (size > (this.#host.list?.getViewportSize() ?? 0)) {
+    const size = this.#host.pin.list?.getScrollSize() ?? 0;
+    if (size > (this.#host.pin.list?.getViewportSize() ?? 0)) {
       return size;
     }
-    const inner = this.#host.listing?.firstElementChild as
+    const inner = this.#host.pin.listing?.firstElementChild as
       HTMLElement | null | undefined;
     return Number.parseFloat(inner?.style.height ?? "");
   }
@@ -77,7 +79,7 @@ export class ListWhole {
    */
   keepWhole(): boolean {
     const height = this.listHeight();
-    const viewport = this.#host.list?.getViewportSize() ?? 0;
+    const viewport = this.#host.pin.list?.getViewportSize() ?? 0;
     if (!(viewport > 0 && this.rooms.measured && Number.isFinite(height))) {
       return false;
     }
@@ -135,9 +137,9 @@ export class ListWhole {
       return;
     }
     this.keepWhole();
-    let size = this.#host.list?.getScrollSize() ?? 0;
+    let size = this.#host.pin.list?.getScrollSize() ?? 0;
     const watch = new MutationObserver(() => {
-      const now = this.#host.list?.getScrollSize() ?? 0;
+      const now = this.#host.pin.list?.getScrollSize() ?? 0;
       const shrank = now < size;
       size = now;
       // A list that got shorter under a view pinned at its end is the
@@ -147,8 +149,8 @@ export class ListWhole {
       // Transcript.svelte:2417 compiled, a reply's long frames); a view the
       // reader holds is told from a clamp by the scroll that comes
       // (`readScroll`).
-      if ((this.keepWhole() || shrank) && this.#host.pinned()) {
-        this.#host.pinNext();
+      if ((this.keepWhole() || shrank) && this.#host.pin.pinned()) {
+        this.#host.pin.pinNext();
       }
     });
     watch.observe(inner, { attributes: true, attributeFilter: ["style"] });
@@ -175,10 +177,10 @@ export class ListWhole {
         // and a pinned tail gated on the spare stayed where it was, its last
         // row under the chip.
         this.keepWhole();
-        if (this.#host.pinned()) {
-          this.#host.pinNext();
+        if (this.#host.pin.pinned()) {
+          this.#host.pin.pinNext();
         } else if (was !== null) {
-          this.#host.endMoved(this.rooms.foot - was);
+          this.#host.pin.endMoved(this.rooms.foot - was);
         }
       });
       sizes.observe(footNode);

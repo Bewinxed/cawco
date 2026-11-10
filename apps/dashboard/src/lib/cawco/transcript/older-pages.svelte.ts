@@ -17,17 +17,19 @@ import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
 import { readOlderPage } from "../stores/transcript-reads.svelte";
 
 export interface OlderPagesHost {
-  readonly atBottom: boolean;
   readonly jumping: boolean;
   readonly landed: boolean;
-  lastWrite: number | null;
-  readonly list: VirtualizerHandle | undefined;
-  readonly listing: HTMLElement | undefined;
-  readonly pinBottom: () => void;
+  readonly pin: {
+    readonly atBottom: boolean;
+    lastWrite: number | null;
+    readonly list: VirtualizerHandle | undefined;
+    readonly listing: HTMLElement | undefined;
+    readonly pinBottom: () => void;
+    readonly scroller: HTMLElement | undefined;
+  };
   readonly rowBuild: {
     readonly rowCount: number;
   };
-  readonly scroller: HTMLElement | undefined;
   readonly session: SessionState;
   readonly shown: boolean;
   readonly visible: boolean;
@@ -70,7 +72,7 @@ export class OlderPages {
     const store = this.paged();
     if (
       !(
-        this.#host.list &&
+        this.#host.pin.list &&
         this.#host.shown &&
         this.#host.visible &&
         store?.cursor
@@ -84,8 +86,8 @@ export class OlderPages {
     // A front shift virtua is holding until a touch scroll comes to rest is
     // not in the scroll offset yet: it stands in the first row's own offset.
     if (
-      above - this.#host.list.getItemOffset(0) <
-      this.#host.list.getViewportSize()
+      above - this.#host.pin.list.getItemOffset(0) <
+      this.#host.pin.list.getViewportSize()
     ) {
       detach(readOlderPage(store.instanceId), "readOlderPage");
     }
@@ -109,7 +111,7 @@ export class OlderPages {
     cancelAnimationFrame(this.nearFrame);
     this.nearFrame = requestAnimationFrame(() => {
       this.nearFrame = 0;
-      const node = this.#host.listing;
+      const node = this.#host.pin.listing;
       if (!node) {
         return;
       }
@@ -117,9 +119,9 @@ export class OlderPages {
         read: (entries) => {
           const target = entries.at(-1)?.target;
           this.nearStart?.unobserve(target as Element);
-          if (target && this.#host.scroller) {
+          if (target && this.#host.pin.scroller) {
             this.askOlder(
-              this.#host.scroller.getBoundingClientRect().top -
+              this.#host.pin.scroller.getBoundingClientRect().top -
                 target.getBoundingClientRect().top
             );
           }
@@ -157,15 +159,18 @@ export class OlderPages {
       }
       this.olderRoom = node.offsetHeight;
       flushSync();
-      if (!(this.#host.landed && this.#host.scroller) || this.#host.jumping) {
+      if (
+        !(this.#host.landed && this.#host.pin.scroller) ||
+        this.#host.jumping
+      ) {
         return;
       }
-      if (this.#host.atBottom) {
-        this.#host.pinBottom();
+      if (this.#host.pin.atBottom) {
+        this.#host.pin.pinBottom();
         return;
       }
-      this.#host.scroller.scrollTop += grew;
-      this.#host.lastWrite = this.#host.scroller.scrollTop;
+      this.#host.pin.scroller.scrollTop += grew;
+      this.#host.pin.lastWrite = this.#host.pin.scroller.scrollTop;
     });
     watch.observe(node);
     return () => watch.disconnect();
