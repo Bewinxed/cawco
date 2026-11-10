@@ -98,8 +98,9 @@ import {
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, ToolCalls, toolReply } from "../../tool-calls";
-import { type Kit, open, pressAt, pressIn, type Spec, settle } from "../kit";
+import { open, pressAt, pressIn, settle } from "../kit";
 import { writePagePins } from "../pins";
+import type { Kit, Spec } from "../spec";
 import { shaped } from "../words";
 import {
   docOf,

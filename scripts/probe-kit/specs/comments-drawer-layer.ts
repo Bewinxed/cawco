@@ -48,16 +48,13 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import {
   COMPOSER,
-  type Engine,
-  type Kit,
   kitsOwnMessage,
   open,
   readMotion,
-  type Spec,
   settle,
   stillWithin,
-  type View,
 } from "../kit";
+import type { Engine, Kit, Spec, View } from "../spec";
 
 /**
  * Where an open thread stands in both views: the well's bottom sheet

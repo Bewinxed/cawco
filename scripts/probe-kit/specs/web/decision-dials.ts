@@ -27,7 +27,7 @@ import { REPLAY_ID } from "../../../../packages/agent/src/stage-host/canvas/repl
 import { DIALS_ROOT } from "../../../../packages/core/src/dials-root";
 import { buildDecisionPage } from "../../../../packages/hub/src/decision-page";
 import { APP, startDecisionStage } from "../../decision-embeds";
-import type { Kit, Spec } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 /** The page's own look, on bare elements. */
 const BARE_STYLES = `html { scrollbar-gutter: stable; }

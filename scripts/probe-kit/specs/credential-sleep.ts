@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { CONTROL_SLEEP } from "../../../packages/core/src/session/controls";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** What the person says to wake it; its model answers with {@link WOKE}. */
 const WAKE = "PROBE-CREDENTIAL-SLEEP-WAKE";

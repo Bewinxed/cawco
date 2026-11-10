@@ -17,8 +17,9 @@
  *
  *   bun scripts/probe-kit/run.ts web button-pending-inset
  */
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { open, settle } from "../../kit";
 import { type CheckName, RenderedChecks, RULES } from "../../rendered-checks";
+import type { Kit, Spec } from "../../spec";
 
 const READ: CheckName = "uneven-inset";
 const BENCH = "/motion/button-pending";

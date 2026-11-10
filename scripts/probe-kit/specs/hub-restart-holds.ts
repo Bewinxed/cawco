@@ -53,9 +53,9 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls, toolReply } from "../../tool-calls";
 import { declareGate } from "../gate";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
 import { passedFetch } from "../preview-pass";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 const WAIT = "mcp__cawco__wait_item";
@@ -790,9 +790,11 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "hub-restart-holds",
   host: "legs (c), (d) and (e) delegate, so its fleet cuts workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

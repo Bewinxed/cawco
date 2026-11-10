@@ -66,8 +66,8 @@ import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-RECUT-GATE-([LNSMK])/u;
@@ -680,9 +680,11 @@ const run = async (kit: Kit) => {
   await moveLeg(kit, fleet, "K");
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "landing-recut",
   host: "it delegates, so its fleet cuts workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

@@ -24,7 +24,7 @@
 import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -134,8 +134,10 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Previews, pages and comments",
   name: "view-args",
   run,
-} satisfies Spec;
+};
+
+export default spec;

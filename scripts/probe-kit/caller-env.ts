@@ -21,7 +21,7 @@
  *   `claudeConfigDirs` reads as one of the machine's Claude dirs, its
  *   credentials included.
  *
- * A spec that runs inside a workspace's boundary (kit.ts `Spec.workspace`)
+ * A spec that runs inside a workspace's boundary (spec.ts `Spec.workspace`)
  * keeps them: its subject is that session's own boundary, tool door and
  * identity included (boundary-proxy calls `artifact_browse` as the session).
  *
@@ -31,7 +31,7 @@
  * session's container doors (`DOCKER_HOST`, `CONTAINER_HOST`), and
  * `CAWCO_WORKSPACE`, by which the kit runs a spec where it can run. The
  * workspace's git and gh settings go for a spec that stands up its own git
- * (kit.ts `ENCLOSING_GIT_ENV`).
+ * (spec.ts `ENCLOSING_GIT_ENV`).
  *
  * Bun starts a child (`Bun.spawn`, `Bun.spawnSync`) with no `env` given in
  * the environment its process started with, whatever `process.env` was

@@ -61,7 +61,8 @@ import {
   SLOW_SHOW_STEP_MS,
 } from "../../../packages/hub/src/artifacts/service";
 import { type Reply, until } from "../../scratch-fleet";
-import { type Engine, type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Engine, Kit, Spec } from "../spec";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
 const FRAME = 'iframe[title="Preview"]';

@@ -40,7 +40,8 @@ import type {
   TranscriptBlock,
   TranscriptPage,
 } from "../../../../packages/core/src/transcript-types";
-import { type Kit, SCRATCH, type Spec } from "../../kit";
+import { SCRATCH } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 const SESSION = "5e5a1c0d-7b2e-4f6a-9c1d-2b3a4c5d6e7f";
 const MACHINE = "ssr-machine";

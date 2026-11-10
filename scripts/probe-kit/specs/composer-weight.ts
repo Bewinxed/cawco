@@ -41,7 +41,8 @@ import {
 } from "../../../packages/agent/src/stage-host/build";
 import type { SheetWeight } from "../../../packages/core/src/stage";
 import { until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const APP = join(ROOT, "apps/dashboard");
 /** The scratch states files' folder, under `src/` (SvelteKit serves only that); gone when the spec ends. */

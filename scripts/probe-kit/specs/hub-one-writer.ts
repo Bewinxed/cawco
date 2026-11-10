@@ -30,7 +30,7 @@ import { dirname, join } from "node:path";
 import { dataOf } from "../../../packages/agent/src/hub-client";
 import { databaseHolder } from "../../../packages/core/src/db-lock";
 import { hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const REPAIR = join(ROOT, "scripts", "repair-account-history.ts");

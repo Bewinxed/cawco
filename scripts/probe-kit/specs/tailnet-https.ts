@@ -52,14 +52,8 @@ import { leasePortRange, until } from "../../scratch-fleet";
 import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
 import { hubAt, pageHub } from "../hub";
-import {
-  type Kit,
-  type KitFleet,
-  open,
-  pagesOf,
-  type Spec,
-  settle,
-} from "../kit";
+import { open, pagesOf, settle } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 export const NAME = "probe-box.tail0000.ts.net";
 /** How long a state takes to be read: the hub reads Tailscale every 5 s while a step stands, else every 30 s. */
@@ -987,8 +981,10 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "tailnet-https",
   run,
-} satisfies Spec;
+};
+
+export default spec;

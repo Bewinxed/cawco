@@ -40,7 +40,7 @@ import {
   HUB_SILENT_TRIALS,
   rolledBack,
 } from "../../../packages/core/src/binary-updates";
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 
 const VERSION = "0.0.1-test.6688";
 const MACHINE = "b106e1516d863601";

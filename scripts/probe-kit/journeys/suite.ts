@@ -34,14 +34,8 @@ import { unhandled } from "../../../packages/core/src/unhandled";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import type { SpecGroup } from "../groups";
 import { hubAt, payloadOf } from "../hub";
-import {
-  type Engine,
-  type Kit,
-  type KitFleet,
-  type Spec,
-  settle,
-  type View,
-} from "../kit";
+import { settle } from "../kit";
+import type { Engine, Kit, KitFleet, Spec, View } from "../spec";
 import { scan } from "./scan";
 
 const ENGINES = ["chromium", "webkit", "firefox"] as const;

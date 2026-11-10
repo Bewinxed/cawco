@@ -70,7 +70,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { envOf, MACHINE, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The account's provider: OpenCode Go, as models.dev and pi-ai name it. */
 const PROVIDER = "opencode-go";

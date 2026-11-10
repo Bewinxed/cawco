@@ -31,7 +31,7 @@ import { excludeStandIns } from "../../../packages/agent/src/checkout-exclude";
 import { placePush } from "../../../packages/agent/src/place-push";
 import { placeRepo } from "../../../packages/agent/src/place-repo";
 import { readWithin } from "../../../packages/core/src/bounded";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 

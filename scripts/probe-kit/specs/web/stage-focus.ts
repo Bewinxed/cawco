@@ -35,7 +35,8 @@ import type { Frame, Page } from "playwright-core";
 import { CANVAS_PATH } from "../../../../packages/core/src/stage";
 import { until } from "../../../scratch-fleet";
 import { APP, STAGE_START_MS, startDecisionStage } from "../../decision-embeds";
-import { type Kit, type Spec, settle } from "../../kit";
+import { settle } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 const SCRATCH = "src/lib/cawco/probe-stage-focus";
 const FILE = `${SCRATCH}/Field.stories.ts`;

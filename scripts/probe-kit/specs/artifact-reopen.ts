@@ -19,7 +19,8 @@ import type { Page } from "playwright-core";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import { open, settle } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;

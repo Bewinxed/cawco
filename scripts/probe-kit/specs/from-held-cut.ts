@@ -53,8 +53,8 @@ import type { ToolArgs, ToolName } from "../../../packages/hub/src/tool-args";
 import { welcomed } from "../../lib/keeper-dial";
 import { toolCall, toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const AHEAD = "PROBE-FROMHELD-AHEAD";
 const AHEAD_MADE = "PROBE-FROMHELD-AHEAD-MADE";

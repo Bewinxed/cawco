@@ -70,7 +70,8 @@ import { connectWords } from "../../../packages/core/src/words/connect";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 import {
   HELD,
   keyAccepted,
@@ -699,8 +700,10 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "ssh-password-join",
   run,
-} satisfies Spec;
+};
+
+export default spec;

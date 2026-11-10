@@ -34,16 +34,8 @@ import type { Page, WebSocketRoute } from "playwright-core";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { updatesWords } from "../../../packages/core/src/words/updates";
 import { until } from "../../scratch-fleet";
-import {
-  COMPOSER,
-  type Engine,
-  type Kit,
-  type KitFleet,
-  open,
-  type Spec,
-  settle,
-  type View,
-} from "../kit";
+import { COMPOSER, open, settle } from "../kit";
+import type { Engine, Kit, KitFleet, Spec, View } from "../spec";
 
 /** What a reload takes: a reconnect's first delay, the draft's write, the load's start. */
 const SLACK_MS = 5000;

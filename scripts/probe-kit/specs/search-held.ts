@@ -46,8 +46,8 @@ import { listedPid, signal } from "../../../packages/core/src/signal";
 import { searchWords } from "../../../packages/core/src/words/search";
 import { delay, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { running, theProcess } from "../search-processes";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const args = process.argv.slice(2);
 const INDEX = args[args.indexOf("--index") + 1];
@@ -100,7 +100,7 @@ const probing = (fleet: KitFleet) => {
 
 const worst = (times: number[]) => Math.round(Math.max(0, ...times));
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "search-held",
   run: async (kit: Kit) => {
@@ -271,4 +271,6 @@ export default {
       `${probes.times.busy.length} busy probes, the worst ${worst(probes.times.busy)} ms; ${probes.times.listing.length} listings, the worst ${worst(probes.times.listing)} ms; ${probes.failed.slice(0, 3).join("; ") || "none failed"}`
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

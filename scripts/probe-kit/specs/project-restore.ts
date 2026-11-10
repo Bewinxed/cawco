@@ -59,7 +59,7 @@ import {
 import { projectTrashWords } from "../../../packages/core/src/words/project-trash";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import { type HubAsk, handled, said } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-restore-machine";
 const PRESENCE = "probe-presence-4f2a";
@@ -924,7 +924,7 @@ const twoTasksLeg = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "project-restore",
   ownProcess:
@@ -1012,4 +1012,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

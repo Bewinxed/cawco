@@ -53,7 +53,8 @@ import { loadavg } from "node:os";
 import { join } from "node:path";
 import type { CDPSession, Page } from "playwright-core";
 import { MACHINE } from "../../../scratch-fleet";
-import { frames, type Kit, open, type Spec, settle } from "../../kit";
+import { frames, open, settle } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 /** Tasks in the project: a list many screens long at either width. */
 const ROWS = 400;

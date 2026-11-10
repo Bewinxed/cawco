@@ -33,7 +33,7 @@
  *   bun scripts/probe-kit/run.ts web scan-control-box
  */
 import { scan } from "../../journeys/scan";
-import type { Spec } from "../../kit";
+import type { Spec } from "../../spec";
 
 const BASE = `<!doctype html>
 <meta name="viewport" content="width=device-width">

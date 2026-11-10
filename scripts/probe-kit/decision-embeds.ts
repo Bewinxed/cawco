@@ -35,7 +35,8 @@ import {
   overlayResponse,
 } from "../../packages/preview/src/proxy";
 import { until } from "../scratch-fleet";
-import { ROOT, type Theme } from "./kit";
+import { ROOT } from "./kit";
+import type { Theme } from "./spec";
 
 /** The dashboard, whose states files the stage draws. */
 export const APP = join(ROOT, "apps/dashboard");

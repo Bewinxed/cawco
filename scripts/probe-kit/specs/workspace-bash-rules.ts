@@ -58,9 +58,9 @@ import {
   until,
 } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
 import { legacyClaudeOptions } from "../legacy-claude";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const MCP_VERSION = "1.11.0";
 const ASK_COMMAND = "echo probe-ask-rule";

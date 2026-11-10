@@ -27,8 +27,8 @@
 import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { machineGauge } from "../../../packages/agent/src/machine-room";
-import type { Kit, Spec } from "../kit";
 import { machineQuiet, quietLeg } from "../quiet";
+import type { Kit, Spec } from "../spec";
 
 /** The CPU reading at which the gate calls a leg contended. */
 const QUIET_LIMIT = machineGauge().limit.cpu;

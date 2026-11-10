@@ -34,7 +34,7 @@ import { probeToolStatus } from "../../../packages/agent/src/tools";
 import { TOOL_CATALOG, toolSpec } from "../../../packages/core/src/tools";
 import { toolWords } from "../../../packages/core/src/words/tools";
 import { fakeAgy } from "../fake-agy";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /**
  * How long a signed-out read may take: agy says it is signed out at once and

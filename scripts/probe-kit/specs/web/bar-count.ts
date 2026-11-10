@@ -20,8 +20,8 @@
  *   bun scripts/probe-kit/run.ts web bar-count
  */
 import { STAGE_START_MS, startDecisionStage } from "../../decision-embeds";
-import type { Spec } from "../../kit";
 import { RenderedChecks } from "../../rendered-checks";
+import type { Spec } from "../../spec";
 
 const FILE = "src/lib/components/ui/bar-glass/bar-glass.stories.ts";
 const COUNTS = [4, 42, 100, 4812] as const;

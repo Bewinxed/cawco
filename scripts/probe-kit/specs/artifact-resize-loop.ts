@@ -77,17 +77,14 @@ import { ToolCalls } from "../../tool-calls";
 import { pageHub } from "../hub";
 import {
   COMPOSER,
-  type Kit,
-  type KitFleet,
   kitsOwnMessage,
   open,
   pressAt,
   readMotion,
-  type Spec,
   settle,
-  type Theme,
 } from "../kit";
 import { pagePins, writePagePins } from "../pins";
+import type { Kit, KitFleet, Spec, Theme } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 /** The id in artifact_create's answer, as the tool result carries it. */

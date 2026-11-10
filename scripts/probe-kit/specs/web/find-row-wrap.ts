@@ -19,7 +19,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { APP, STAGE_START_MS, startDecisionStage } from "../../decision-embeds";
-import type { Spec } from "../../kit";
+import type { Spec } from "../../spec";
 
 const FILE = "src/lib/cawco/find/FindRow.stories.ts";
 /** Every story the states file exports, by its name. */

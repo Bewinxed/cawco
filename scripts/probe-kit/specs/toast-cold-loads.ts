@@ -44,7 +44,8 @@ import {
 } from "../../../packages/core/src/notifications";
 import { until } from "../../scratch-fleet";
 import { seeded } from "../claude-transcripts";
-import { type Engine, type Kit, open, type Spec, type View } from "../kit";
+import { open } from "../kit";
+import type { Engine, Kit, Spec, View } from "../spec";
 import { announce, wire } from "./update-toast";
 
 /** The routes a cold load enters by, one per family of pages. */

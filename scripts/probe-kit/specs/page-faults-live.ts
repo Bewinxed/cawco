@@ -40,7 +40,7 @@ import {
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";

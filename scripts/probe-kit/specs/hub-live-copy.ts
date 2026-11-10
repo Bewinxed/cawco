@@ -41,7 +41,7 @@ import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE } from "../../scratch-fleet";
 import { type HubAsk, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The trial's probe: once a second, each request given 3 s (cli binary-health.ts). */
 const PROBE_EVERY_MS = 1000;
@@ -149,8 +149,10 @@ async function run(kit: Kit): Promise<void> {
   );
 }
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "hub-live-copy",
   run,
-} satisfies Spec;
+};
+
+export default spec;

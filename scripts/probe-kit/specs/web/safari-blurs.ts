@@ -41,17 +41,14 @@ import { seedDecisions } from "../../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
 import { framesText } from "../../crash-watch";
+import { COMPOSER, COMPOSER_FIELD, open, settle } from "../../kit";
 import {
-  COMPOSER,
-  COMPOSER_FIELD,
   type Kit,
   type KitFleet,
-  open,
   type Spec,
-  settle,
   THEMES,
   type Theme,
-} from "../../kit";
+} from "../../spec";
 
 const SLOW = "PROBE-SLOW";
 const QUESTION = "PROBE-QUESTION";

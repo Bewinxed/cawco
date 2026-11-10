@@ -56,14 +56,9 @@ import { downOf } from "../../../packages/preview/src/proxy";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { answerText, hubAt, payloadOf } from "../hub";
-import {
-  delegateStarted,
-  type Kit,
-  type KitFleet,
-  open,
-  type Spec,
-} from "../kit";
+import { delegateStarted, open } from "../kit";
 import { passedFetch } from "../preview-pass";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
 const FRAME = 'iframe[title="Preview"]';

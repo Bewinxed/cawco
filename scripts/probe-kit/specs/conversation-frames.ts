@@ -43,7 +43,8 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { asReader, SCROLLER } from "../frames";
-import { type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** Calls in the long session: the owner's "hundreds of turns". */
 const TURNS = 400;

@@ -23,7 +23,7 @@
  *   bun scripts/probe-kit/run.ts browser-cap
  */
 import { join } from "node:path";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CHILD = join(import.meta.dir, "..", "browser-cap-child.ts");
 const CAP_GIB = 1.5;

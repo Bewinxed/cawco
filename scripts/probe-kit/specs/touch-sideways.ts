@@ -27,8 +27,9 @@
 import type { Frame, Page } from "playwright-core";
 import { until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { open, settle } from "../kit";
 import { type SidewaysRead, sideways, sidewaysHolds } from "../sideways";
+import type { Kit, Spec } from "../spec";
 import { fleetUp, made, planOn } from "./artifact-resize-loop";
 
 /** A decision page of one card: its options' chips are `touch-hit` controls in the panel's frame. */

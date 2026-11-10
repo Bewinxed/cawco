@@ -109,7 +109,7 @@ import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { LIVE_ASLEEP, LIVE_ROWS, scaleFleet } from "../fleet-scale";
 import { type MainThread, OWN_PASS, traceMain } from "../frames";
 import { pageHub } from "../hub";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
 import {
   attributeOn,
   busyMeter,
@@ -135,6 +135,7 @@ import {
   sourceAt,
 } from "../live-read";
 import { machineQuiet, quietWords } from "../quiet";
+import type { Kit, Spec } from "../spec";
 
 /** A long task: the frame budget a steady wheel stays inside. */
 const LONG_TASK_MS = 50;

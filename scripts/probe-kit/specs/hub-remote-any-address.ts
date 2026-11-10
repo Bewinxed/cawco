@@ -13,7 +13,7 @@
  *   never refused as a remote that takes a CawCo credential.
  *
  * Each workspace stops at its boundary where this runs inside a workspace,
- * which cannot start one (kit.ts `BOUNDARY_INSIDE`), after its clone; on
+ * which cannot start one (spec.ts `BOUNDARY_INSIDE`), after its clone; on
  * the host each delegate starts. Either way the refusal it ends on is read.
  *
  *   bun scripts/probe-kit/run.ts hub-remote-any-address
@@ -21,8 +21,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { relay } from "../relay";
+import type { Kit, Spec } from "../spec";
 
 const OTHER = "hub-remote-other";
 /** The hub's git remote refusing a request with no credential (hub git-remote.ts). */

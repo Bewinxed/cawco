@@ -21,12 +21,12 @@
 
 import { typedOffered } from "../../../apps/dashboard/src/lib/cawco/model-catalog";
 import { modelListingOn } from "../../../packages/core/src/model-names";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The id the owner typed and lost a session to. */
 const UNLISTED = "opencode/deepseek-v4.1-flash";
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "model-picker-admits",
   run: async (kit: Kit) => {
@@ -67,4 +67,6 @@ export default {
     );
     await Promise.resolve();
   },
-} satisfies Spec;
+};
+
+export default spec;

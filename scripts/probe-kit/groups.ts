@@ -1,7 +1,7 @@
 /**
  * The groups a probe-kit spec stands in, as the owner's test page of
  * 2026-10-16 grouped the suite, and the groups he cut. Every spec names its
- * group (kit.ts `Spec.group`); `bun run check` refuses one that names no
+ * group (spec.ts `Spec.group`); `bun run check` refuses one that names no
  * group or a cut one (scripts/probe-groups-check.ts). The groups he cut
  * whole filled up again after 10-16 because nothing stopped a new spec
  * landing in them: a spec of a cut group goes to him, not into the kit.

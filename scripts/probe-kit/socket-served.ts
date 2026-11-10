@@ -8,7 +8,6 @@ import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { $ } from "bun";
-import type { KitFleet } from "./kit";
 import {
   ADAPTER_OUTPUT,
   builtKey,
@@ -16,6 +15,7 @@ import {
   publishedKey,
   ROOT,
 } from "./kit";
+import type { KitFleet } from "./spec";
 
 /** A loopback port free now. */
 export const freePort = async (): Promise<number> => {

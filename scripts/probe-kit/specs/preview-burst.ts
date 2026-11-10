@@ -75,8 +75,9 @@ import {
 import { ToolCalls } from "../../tool-calls";
 import { CLOUDFLARE, scratchCertificate } from "../cloudflare-front";
 import { hubAt } from "../hub";
-import { BOUNDARY_INSIDE, type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
 import { passedFetch, passInto } from "../preview-pass";
+import { BOUNDARY_INSIDE, type Kit, type Spec } from "../spec";
 
 const OPENS = 20;
 /**

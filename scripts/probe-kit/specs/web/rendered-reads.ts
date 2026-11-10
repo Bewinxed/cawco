@@ -54,8 +54,8 @@
  *   bun scripts/probe-kit/run.ts web rendered-reads
  */
 import type { Page } from "playwright-core";
-import type { Spec } from "../../kit";
 import { type CheckName, RenderedChecks, RULES } from "../../rendered-checks";
+import type { Spec } from "../../spec";
 
 const BASE = `<!doctype html>
 <meta name="viewport" content="width=device-width">

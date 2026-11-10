@@ -43,7 +43,7 @@ import {
   streamsOnce,
   under,
 } from "../fsevents";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const BROWSERS_CHILD = join(
   import.meta.dir,

@@ -85,7 +85,7 @@ import {
   unitInvocation,
   unitState,
 } from "../keeper-unit";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The container's PID 1: a shell that exits on SIGTERM and otherwise stays. */
 const PID1 = 'trap "exit 0" TERM; while :; do sleep 1; done';

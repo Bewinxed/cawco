@@ -16,7 +16,7 @@ import type {
   ListedBrowser,
 } from "../../packages/core/src/browser";
 import { until } from "../scratch-fleet";
-import type { KitFleet } from "./kit";
+import type { KitFleet } from "./spec";
 
 /** How long the project's browser has to go live: the local host's Chromium starts in seconds. */
 const LIVE_MS = 120_000;

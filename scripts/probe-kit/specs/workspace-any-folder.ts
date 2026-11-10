@@ -78,8 +78,8 @@ import {
   until,
 } from "../../scratch-fleet";
 import { declareGate } from "../gate";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-FOLDER-(A|B|C1|C2|C3|E|F|P)\b/u;
@@ -1044,9 +1044,11 @@ const worktreeLeg = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "workspace-any-folder",
   host: "it delegates, so its fleet makes workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

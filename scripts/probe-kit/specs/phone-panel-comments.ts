@@ -41,16 +41,8 @@ import type { Page } from "playwright-core";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import {
-  COMPOSER,
-  type Kit,
-  kitsOwnMessage,
-  open,
-  type Spec,
-  settle,
-  stillWithin,
-  type View,
-} from "../kit";
+import { COMPOSER, kitsOwnMessage, open, settle, stillWithin } from "../kit";
+import type { Kit, Spec, View } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const SHEET = "[data-preview-sheet]";

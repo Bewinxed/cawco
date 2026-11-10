@@ -33,8 +33,8 @@
 import { join } from "node:path";
 import { $ } from "bun";
 import { type Reply, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { freePort, publishBuild, serveUnder } from "../socket-served";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const SPACES = /\s+/u;
 const NOT_WORD = /\W/gu;

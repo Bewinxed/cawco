@@ -46,7 +46,7 @@ import {
   until,
 } from "../../scratch-fleet";
 import { putFakeAgy } from "../fake-agy";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** How soon after the agent starts its tools read must land. */
 const TOOLS_READ_MS = 5000;

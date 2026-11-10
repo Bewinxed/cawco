@@ -44,8 +44,9 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { COMPOSER, type Kit, open, type Spec, settle } from "../kit";
+import { COMPOSER, open, settle } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
+import type { Kit, Spec } from "../spec";
 
 const SHEET = "[data-caw-float-sheet]";
 const SEAT = '[data-slot="caw-seat"]';

@@ -45,8 +45,8 @@
  *   bun scripts/probe-kit/run.ts web drawn-contour
  */
 import type { Page } from "playwright-core";
-import type { Spec } from "../../kit";
 import { type CheckName, RenderedChecks, RULES } from "../../rendered-checks";
+import type { Spec } from "../../spec";
 
 /** The two rules this spec proves; every other is not read here. */
 const READ: CheckName[] = ["decoration-spill", "nested-radius"];

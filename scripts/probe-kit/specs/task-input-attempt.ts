@@ -26,7 +26,7 @@
 
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The attempt's note beside the person's comment (jev-tasks.ts `commented`). */
 const ATTEMPT_NOTE = "your task.";

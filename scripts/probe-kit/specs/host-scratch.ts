@@ -40,7 +40,7 @@ import type {
   WorkspaceOutputs,
 } from "../../../packages/core/src/workspace/controls";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** What a refusal said, or "accepted". */
 const said = (run: () => Promise<unknown>): Promise<string> =>

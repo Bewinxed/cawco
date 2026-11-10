@@ -35,15 +35,8 @@ import { connectionWords } from "../../../../packages/core/src/words/connection"
 import { bezierAt, sameCurve } from "../../anim";
 import { hubAt } from "../../hub";
 import { scan } from "../../journeys/scan";
-import {
-  frames,
-  type Kit,
-  open,
-  readMotion,
-  type Spec,
-  settle,
-  type View,
-} from "../../kit";
+import { frames, open, readMotion, settle } from "../../kit";
+import type { Kit, Spec, View } from "../../spec";
 import { literal } from "../../words";
 
 const BAND = '[data-slot="hub-band"]';

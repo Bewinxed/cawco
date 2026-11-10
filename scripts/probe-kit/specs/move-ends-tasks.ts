@@ -61,8 +61,8 @@ import {
   until,
 } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The account the delegate moves to, beside the fleet's own (R). */
 const W = "acct-move-ends-w";

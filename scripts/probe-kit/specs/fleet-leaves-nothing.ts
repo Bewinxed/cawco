@@ -37,7 +37,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { carrying, until } from "../../scratch-fleet";
-import { ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Spec } from "../spec";
 
 /** The checkout's server, as its `.mcp.json` names it to `npx`. */
 const PLAYWRITER = "playwriter@latest";

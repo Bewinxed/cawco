@@ -32,8 +32,8 @@ import { dirname, join } from "node:path";
 import { workWords } from "../../../packages/core/src/words/work";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const TAG = "PROBE-DELEGATE-INPUTS";
 const FINISH = "mcp__cawco__finish_item";

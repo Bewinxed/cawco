@@ -55,8 +55,8 @@
  *   bun scripts/probe-kit/run.ts web state-shape
  */
 import type { Page } from "playwright-core";
-import type { Spec } from "../../kit";
 import { type CheckName, RenderedChecks, RULES } from "../../rendered-checks";
+import type { Spec } from "../../spec";
 
 const READ: CheckName = "state-shape";
 

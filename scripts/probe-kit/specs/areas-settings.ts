@@ -46,7 +46,7 @@ import { join } from "node:path";
 import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
 import { type HubAsk, handled, type Said, said as saidOf } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-areas-machine";
 
@@ -811,7 +811,7 @@ const deleteLeg = async (rig: Rig, m: Made): Promise<void> => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "areas-settings",
   ownProcess:
@@ -846,4 +846,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

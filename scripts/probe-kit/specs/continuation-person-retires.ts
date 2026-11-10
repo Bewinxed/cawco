@@ -44,7 +44,7 @@ import {
 } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 /** The artifact id in artifact_create's detailed answer. */
@@ -104,7 +104,7 @@ const stored = (fleet: KitFleet, id: string) =>
     id
   )[0];
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "continuation-person-retires",
   run: async (kit: Kit) => {
@@ -264,4 +264,6 @@ export default {
       `to target ${JSON.stringify(delivered)}; to source ${JSON.stringify(toSource)}; source ${JSON.stringify(sourceNow)}`
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

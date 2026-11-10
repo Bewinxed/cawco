@@ -90,14 +90,9 @@ import {
   until,
 } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import {
-  delegateStarted,
-  type Kit,
-  type KitFleet,
-  open,
-  type Spec,
-} from "../kit";
+import { delegateStarted, open } from "../kit";
 import { writePagePins } from "../pins";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const RUN = crypto.randomUUID().slice(0, 8);
 const TAG_A = `PROBE-HANDED-A-${RUN}`;

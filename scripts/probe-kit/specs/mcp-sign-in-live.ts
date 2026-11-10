@@ -37,7 +37,7 @@ import { CAWCO_OAUTH_URL } from "../../../packages/core/src/fleet";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The fleet's OAuth MCP server, as the person named it. */
 const SERVER = "ProbeOAuth";

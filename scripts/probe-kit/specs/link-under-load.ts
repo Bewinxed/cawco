@@ -44,8 +44,8 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { relay } from "../relay";
+import type { Kit, Spec } from "../spec";
 
 const TAG = "PROBE-LINK-LOAD";
 const FINISH = "mcp__cawco__finish_item";

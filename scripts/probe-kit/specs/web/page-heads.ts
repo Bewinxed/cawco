@@ -24,8 +24,9 @@
  *   bun scripts/probe-kit/run.ts web page-heads
  */
 import { join } from "node:path";
-import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
+import { open, settle } from "../../kit";
 import { RenderedChecks } from "../../rendered-checks";
+import type { Engine, Kit, Spec } from "../../spec";
 
 const ENGINES: Engine[] = ["chromium", "webkit"];
 const BENCH = "/motion/page-heads";

@@ -44,8 +44,8 @@ import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
 import { answerText, type HubAsk, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const WAIT = "mcp__cawco__wait_item";
 /** How long D's foreground command runs: three syncs and their converges fit well inside it. */

@@ -74,8 +74,8 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { doorOf, liveBrowser, servedSite } from "../gated-pages";
 import { answerText, hubAt, payloadOf } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { type Phone, standInPhone } from "../phone";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** Every request the mock was asked with a tool list, in order. */
 const heard: Seen[] = [];

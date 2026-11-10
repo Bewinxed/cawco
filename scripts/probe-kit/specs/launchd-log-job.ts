@@ -32,8 +32,8 @@ import {
   launchdLogsDir,
   launchdProgram,
 } from "../../../packages/core/src/launchd";
-import { type Kit, OWN_HOME_ENV, type Spec } from "../kit";
 import { checkRotation, pastCap, WRITER } from "../log-writer";
+import { type Kit, OWN_HOME_ENV, type Spec } from "../spec";
 
 const xml = (value: string): string =>
   value.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");

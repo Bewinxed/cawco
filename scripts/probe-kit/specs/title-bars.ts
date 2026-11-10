@@ -21,8 +21,9 @@ import type { Page } from "playwright-core";
 import { BAR_ITEM } from "../../../apps/dashboard/src/lib/components/ui/bar-glass/marks";
 import { cawPanelWords } from "../../../packages/core/src/words/onboarding";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
-import { type Kit, open, type Spec, type View } from "../kit";
+import { open } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
+import type { Kit, Spec, View } from "../spec";
 
 /** A long answer: the conversation scrolls under the bar. */
 const ANSWER = Array.from(

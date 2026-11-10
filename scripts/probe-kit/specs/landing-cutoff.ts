@@ -98,8 +98,8 @@ import { readRecord } from "../../../packages/core/src/state-file";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-CUTOFF-([ABCDEFG])/u;
@@ -1029,9 +1029,11 @@ const run = async (kit: Kit) => {
   }
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "landing-cutoff",
   host: "it delegates, so its fleet cuts workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

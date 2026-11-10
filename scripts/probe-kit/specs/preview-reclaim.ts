@@ -44,7 +44,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The range this spec gives its hub: our pick, clear of a hub's default range and of preview-query's. */
 const FIRST = 47_490;

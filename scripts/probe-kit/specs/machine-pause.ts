@@ -61,7 +61,7 @@ import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { APPLE_GATE, declareGate, MAC_ONLINE, NO_MAC } from "../gate";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const B = "probe-b";
 const PAUSE_MS = 120_000;
@@ -833,9 +833,11 @@ const runningBuild = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "machine-pause",
   host: "its delegates cut workspaces on both machines",
   run,
-} satisfies Spec;
+};
+
+export default spec;

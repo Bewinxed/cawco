@@ -58,8 +58,9 @@ import { NO_REPLY_OWED } from "../../../packages/core/src/no-reply";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { open } from "../kit";
 import { atRest } from "../phone";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const NO_REPLY = "mcp__cawco__no_reply_needed";
 /** A message the mock calls no_reply_needed on; refused, it ends its turn with no words. */

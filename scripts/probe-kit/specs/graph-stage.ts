@@ -146,8 +146,9 @@ import {
 import { graphWords } from "../../../packages/core/src/words/graph";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { type Kit, open, ROOT, type Spec, settle } from "../kit";
+import { open, ROOT, settle } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
+import type { Kit, Spec } from "../spec";
 
 const STORY = "src/Card.stories.js";
 /** The canvas's second states file: a component of its own (legs 9). */

@@ -49,7 +49,7 @@ import type {
 } from "../../../packages/agent/src/hub-client";
 import { lfsCheckout } from "../../../packages/agent/src/workspace";
 import { answerText, handled } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FILTERS = [
   "-c",

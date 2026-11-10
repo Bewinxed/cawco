@@ -38,7 +38,7 @@ import {
 } from "../../../packages/core/src/notifications";
 import { type Reply, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -143,8 +143,10 @@ const run = async (kit: Kit): Promise<void> => {
   kit.check("(d) fresh input on the tab: here again", back === "here", back);
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "lapsed-lock",
   run,
-} satisfies Spec;
+};
+
+export default spec;

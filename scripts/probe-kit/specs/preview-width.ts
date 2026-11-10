@@ -26,7 +26,7 @@ import {
   idOf,
   startDecisionStage,
 } from "../decision-embeds";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FILE = "src/lib/cawco/transcript/SystemLine.stories.ts";
 const STORY = "Filed";

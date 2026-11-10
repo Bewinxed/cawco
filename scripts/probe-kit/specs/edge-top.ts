@@ -35,15 +35,8 @@ import type { Page } from "playwright-core";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { at, capture, colours, off, type Raster, type Rgb } from "../ink";
 import { asking, sessionAsking } from "../journeys/asks";
-import {
-  type Kit,
-  open,
-  type Spec,
-  settle,
-  THEMES,
-  type Theme,
-  type View,
-} from "../kit";
+import { open, settle } from "../kit";
+import { type Kit, type Spec, THEMES, type Theme, type View } from "../spec";
 
 const STRIP = '[data-slot="edge-top"]';
 /** Caw's head side, px, as NeedsCaw.svelte `head` draws it: 24 on a phone, 20 in the wide bar's group. */

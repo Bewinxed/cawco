@@ -31,7 +31,7 @@ import { dirname, join } from "node:path";
 import { DAY_MS, HOUR_MS } from "../../packages/core/src/time";
 import { MACHINE, type Reply, type Seen, until } from "../scratch-fleet";
 import { writeClaudeTranscript } from "./claude-transcripts";
-import type { Kit, KitFleet } from "./kit";
+import type { Kit, KitFleet } from "./spec";
 
 /** The live board the audit read (0d8f70d1): rows, and how many slept. */
 export const LIVE_ROWS = 1763;

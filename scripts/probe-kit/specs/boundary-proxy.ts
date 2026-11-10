@@ -69,7 +69,8 @@ import type {
 import { until } from "../../scratch-fleet";
 import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
-import { type Kit, pagesOf, ROOT, type Spec } from "../kit";
+import { pagesOf, ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 type Env = Record<string, string | undefined>;
 

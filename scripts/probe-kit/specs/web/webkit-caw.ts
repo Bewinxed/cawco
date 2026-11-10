@@ -58,7 +58,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pageCpu } from "../../cpu";
 import { attribute, ourWork, tell, watch, watched } from "../../frames";
-import { open, type Spec } from "../../kit";
+import { open } from "../../kit";
+import type { Spec } from "../../spec";
 
 const RUNS = 20;
 const DROPPED_MS = 25;

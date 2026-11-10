@@ -38,7 +38,8 @@ import {
   HOST_RUNTIME_ENV,
 } from "../../../packages/agent/src/stage-host/build";
 import { until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 import { PIN_STORY } from "./composer-weight";
 
 const APP = join(ROOT, "apps/dashboard");

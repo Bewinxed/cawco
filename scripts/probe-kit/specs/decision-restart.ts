@@ -43,7 +43,7 @@
 import type { Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
 import {
   PASS_DOMAIN,
   PASS_HOSTS,
@@ -51,6 +51,7 @@ import {
   passTunnel,
   storeHostMode,
 } from "../pass-legs";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
