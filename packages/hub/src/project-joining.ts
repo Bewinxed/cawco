@@ -109,7 +109,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * (New project: its place is picked once it is set up) its one place is
    * its folder on the hub. Nothing is written into a new project here: the
    * template tapped on New project is kept as `tapped`, and its setup page's
-   * Send applies the shape picked (setup.ts `applySetupPicks`). Given `setup`
+   * Send applies the shape picked (setup.ts `setupPicksOf`). Given `setup`
    * (your prompt), its conversation starts with it and sets it up, on or off
    * (caw.ts `setup`). The dashboard's "New project" and an accepted project
    * offer come here.

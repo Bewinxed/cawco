@@ -10,7 +10,7 @@
  * Nothing is written into a new project before its setup page is sent: the
  * template tapped on New project is kept as what was tapped
  * (`projects.tapped`), and the shape picked on the page is applied on Send
- * ({@link applySetupPicks}), with the name, the area and the account. Caw writes the
+ * ({@link setupPicksOf}), with the name, the area and the account. Caw writes the
  * rest (stages.md, delegates/, AGENTS.md) after it.
  *
  * The page has no place card: a program's cards are choices between
@@ -191,16 +191,19 @@ export const setupFactsWords = (facts: SetupFacts): string =>
     ...facts.cards.map((card) => `- ${card.id}: ${card.send}`),
   ].join("\n");
 
-/** What a sent setup page changes beyond the project's files, which Caw writes. */
-export interface SetupApply {
-  /** Sets the account its sessions start on (project-edit.ts); null: the fleet's routing; a refusal throws. */
-  account: (projectId: string, account: string | null) => Promise<void>;
-  /** Puts the project in an area by its id, or in none (null) (areas.ts); a refusal throws. */
-  area: (projectId: string, area: string | null) => Promise<void>;
-  /** Renames the project (project-edit.ts, the dashboard's rename); a refusal throws. */
-  name: (projectId: string, name: string) => Promise<void>;
-  /** Applies a shipped template: its files, its starter skills, the project's template (tasks.ts `applyTemplate`). */
-  shape: (projectId: string, template: StagesTemplate) => Promise<void>;
+/**
+ * What a sent setup page changes beyond the project's files, which Caw
+ * writes: each pick not made is left out ({@link setupPicksOf}).
+ */
+export interface SetupPicks {
+  /** The account its sessions start on; null: the fleet's routing. */
+  account?: string | null;
+  /** The area by its id; null: none. */
+  area?: string | null;
+  /** The project's name. */
+  name?: string;
+  /** The shipped template applied: its files, its starter skills, the project's template. */
+  shape?: OfferedTemplate;
 }
 
 const nameOf = (state: Record<string, ChoiceEntry>): string | undefined => {
@@ -271,21 +274,19 @@ export interface SentPage {
  * holds beside its Setup: the name in its `name` field, the shipped
  * template the Setup's shape starts from (the person's pick, else as Caw
  * drew it), the area picked on `area` and the account picked on `account`
- * are applied before Caw hears the page, so he writes only the project's
- * files. Only what is new since the last Send (`sentAt`) applies: a pick
- * made since, or, for a part the person left as drawn, the page drawn
- * again since; so a Send again for one pick leaves the stages Caw wrote
- * alone. Any other artifact is left
- * alone.
+ * are what the hub applies before Caw hears the page (server.ts
+ * `sending`), so he writes only the project's files. Only what is new
+ * since the last Send (`sentAt`) is among them: a pick made since, or, for
+ * a part the person left as drawn, the page drawn again since; so a Send
+ * again for one pick leaves the stages Caw wrote alone. Any other artifact
+ * has none.
  */
-export const applySetupPicks = async (
+export const setupPicksOf = (
   artifact: { kind: string; name: string; projectId: string | null },
-  page: SentPage,
-  apply: SetupApply
-): Promise<void> => {
-  const { projectId } = artifact;
-  if (!(projectId && isSetupPage(artifact))) {
-    return;
+  page: SentPage
+): SetupPicks => {
+  if (!(artifact.projectId && isSetupPage(artifact))) {
+    return {};
   }
   const { revisedAt, sentAt } = page;
   const state = Object.fromEntries(
@@ -298,23 +299,16 @@ export const applySetupPicks = async (
     page.setup && (!sentAt || (revisedAt !== null && revisedAt > sentAt))
       ? page.setup
       : undefined;
-  const name = nameOf(state);
-  if (name) {
-    await apply.name(projectId, name);
-  }
   // A shape the person kept before the last Send went with it: it stands over what Caw drew.
   const kept: ChoiceEntry | undefined = page.state.shape;
+  const name = nameOf(state);
   const shape = shapeOf(state, kept ? undefined : drawn);
-  if (shape) {
-    await apply.shape(projectId, shape);
-  }
-  // The area before the account: an account of its own is then set over it.
   const area = areaOf(state);
-  if (area !== undefined) {
-    await apply.area(projectId, area);
-  }
   const account = accountOf(state);
-  if (account !== undefined) {
-    await apply.account(projectId, account);
-  }
+  return {
+    ...(name ? { name } : {}),
+    ...(shape ? { shape } : {}),
+    ...(area === undefined ? {} : { area }),
+    ...(account === undefined ? {} : { account }),
+  };
 };
