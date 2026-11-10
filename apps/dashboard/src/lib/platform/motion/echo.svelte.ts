@@ -181,12 +181,12 @@ export function echoBeat(): Attachment<HTMLElement> {
       }
       const loop = dur("--duration-loop");
       const gap = loop / BEATS;
-      const echoes = [
+      const echoes: Element[] = [
         ...container.querySelectorAll<HTMLElement>("[data-echo]"),
       ];
       const cycle = Math.max(2 * loop, echoes.length * gap);
       for (const echo of [...beats.keys()]) {
-        if (!echoes.includes(echo as HTMLElement)) {
+        if (!echoes.includes(echo)) {
           stop(echo);
         }
       }
