@@ -391,31 +391,31 @@ export const recordDecision = (id: string, entry: Deciding): Promise<void> => {
   return settled;
 };
 
-/** Workspace `id`'s decisions as recorded ({@link DECISIONS_FILE}), oldest first; none when there are none or they do not parse. */
-export const readDecisions = async (
-  id: string
-): Promise<BoundaryDecision[]> => {
+/** Every entry of workspace `id`'s {@link DECISIONS_FILE} as stored, of whatever shape; none when there are none or the file does not parse. */
+const storedDecisions = async (id: string): Promise<unknown[]> => {
   const text = await readFile(join(stateDir(id), DECISIONS_FILE), "utf8").catch(
     () => "[]"
   );
   try {
     const read: unknown = JSON.parse(text);
-    return Array.isArray(read)
-      ? read.flatMap((entry) => {
-          const decision = BoundaryDecisionSchema.safeParse(entry);
-          return decision.success ? [decision.data] : [];
-        })
-      : [];
+    return Array.isArray(read) ? read : [];
   } catch {
     return [];
   }
 };
 
-/** {@link recordDecision}'s write itself: the list read, `entry` added, written whole. */
+/** Workspace `id`'s decisions as recorded ({@link DECISIONS_FILE}), oldest first, those of a shape this build reads; none when there are none or they do not parse. */
+export const readDecisions = async (id: string): Promise<BoundaryDecision[]> =>
+  (await storedDecisions(id)).flatMap((entry) => {
+    const decision = BoundaryDecisionSchema.safeParse(entry);
+    return decision.success ? [decision.data] : [];
+  });
+
+/** {@link recordDecision}'s write itself: every stored entry (an entry of another shape is kept as it is), `entry` added, written whole. */
 const appendDecision = async (id: string, entry: Deciding): Promise<void> => {
   const path = join(stateDir(id), DECISIONS_FILE);
   const all = [
-    ...(await readDecisions(id)),
+    ...(await storedDecisions(id)),
     { ...entry, agent: process.pid, at: Date.now() },
   ].slice(-DECISIONS_KEPT);
   await writeWhole(path, `${JSON.stringify(all)}\n`, 0o644);
