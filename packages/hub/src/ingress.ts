@@ -790,14 +790,15 @@ export const createIngress = ({
       ),
       "route an inbound event"
     );
+    const unlinked = (why: string) =>
+      console.warn(
+        `[ingress] ${row.source} ${row.deliveryKey} did not reach its task links: ${why}`
+      );
     detach(
-      externalItems
-        .applyEvent(projectId, event)
-        .catch((error: unknown) =>
-          console.warn(
-            `[ingress] ${row.source} ${row.deliveryKey} did not reach its task links: ${wordsOf(error)}`
-          )
-        ),
+      externalItems.applyEvent(projectId, event).then(
+        (refused) => refused && unlinked(refused.response.detail),
+        (error: unknown) => unlinked(wordsOf(error))
+      ),
       "apply an inbound event to task links"
     );
     const { url } = event;
