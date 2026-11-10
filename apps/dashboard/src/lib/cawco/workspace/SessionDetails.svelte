@@ -131,8 +131,7 @@
     boardStore.machines.find((item) => item.machineId === machineId)
   );
   const harness = $derived(
-    (kept?.harness || session?.harness || row?.harness || context?.harness) as
-      HarnessKind | undefined
+    kept?.harness || session?.harness || row?.harness || context?.harness
   );
   const report = $derived(
     machine?.harnesses?.find((item) => item.harness === harness)

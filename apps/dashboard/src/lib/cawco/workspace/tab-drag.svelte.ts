@@ -217,8 +217,8 @@ function carry(
   const arrange = (to: number) => {
     const lefts = layout(to);
     tabs.forEach((el, i) => {
-      const id = ids[i] as string;
-      if (id === drag.sessionId) {
+      const id = ids[i];
+      if (id === undefined || id === drag.sessionId) {
         return;
       }
       const shift = (lefts.get(id) ?? 0) - at(id).left;

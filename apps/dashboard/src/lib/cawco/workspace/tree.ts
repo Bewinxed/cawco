@@ -66,17 +66,20 @@ export function isTree(node: unknown): node is PaneNode {
   if (!node || typeof node !== "object") {
     return false;
   }
-  const n = node as Partial<BranchNode> & Partial<LeafNode>;
-  if (n.t === "l") {
-    return typeof n.id === "string" && Array.isArray(n.tabs);
+  const t: unknown = Reflect.get(node, "t");
+  const id: unknown = Reflect.get(node, "id");
+  if (t === "l") {
+    return typeof id === "string" && Array.isArray(Reflect.get(node, "tabs"));
   }
-  if (n.t === "b") {
+  if (t === "b") {
+    const dir: unknown = Reflect.get(node, "dir");
+    const kids: unknown = Reflect.get(node, "kids");
     return (
-      typeof n.id === "string" &&
-      (n.dir === "h" || n.dir === "v") &&
-      Array.isArray(n.kids) &&
-      n.kids.length > 0 &&
-      n.kids.every(isTree)
+      typeof id === "string" &&
+      (dir === "h" || dir === "v") &&
+      Array.isArray(kids) &&
+      kids.length > 0 &&
+      kids.every(isTree)
     );
   }
   return false;

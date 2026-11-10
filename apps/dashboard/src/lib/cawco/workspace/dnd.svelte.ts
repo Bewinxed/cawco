@@ -40,16 +40,20 @@ export interface SessionDrag {
   sessionId: string;
 }
 
-const isSessionDrag = (data: Record<string | symbol, unknown>): boolean =>
-  data.kind === "cawco/session" && typeof data.sessionId === "string";
+const isSessionDrag = (
+  data: Record<string | symbol, unknown>
+): data is Record<string | symbol, unknown> & {
+  kind: "cawco/session";
+  sessionId: string;
+} => data.kind === "cawco/session" && typeof data.sessionId === "string";
 
 /** The payload as we wrote it, read back off pdnd's loose record. */
 const asDrag = (data: Record<string | symbol, unknown>): SessionDrag | null =>
   isSessionDrag(data)
     ? {
         kind: "cawco/session",
-        sessionId: data.sessionId as string,
-        from: (data.from as string | null) ?? null,
+        sessionId: data.sessionId,
+        from: typeof data.from === "string" ? data.from : null,
       }
     : null;
 
