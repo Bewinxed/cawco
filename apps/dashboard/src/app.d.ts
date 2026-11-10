@@ -3,6 +3,8 @@
 // for information about these interfaces
 declare global {
   interface Window {
+    /** The decision overlay's bridge, once its script has run (decisions/host/page.svelte.ts). */
+    cawco?: import("./lib/cawco/decisions/host/page.svelte.js").Bridge;
     /** Replays the button clicks app.html held before hydration. */
     releaseHeldTaps: () => void;
   }
@@ -17,7 +19,13 @@ declare global {
       region?: boolean;
     }
     // interface Locals {}
-    // interface PageData {}
+    interface PageData {
+      /** The folder-tab strips' last measured boxes, read from the pref by the app layout (+layout.server.ts). */
+      foldBoxes?: Record<
+        string,
+        import("./lib/components/ui/fluid-tabs/fold-memory.js").FoldMeasure
+      >;
+    }
     interface PageState {
       /** As `taskOpened`, for a project folder's file opened as its own page (`?file=`). */
       fileOpened?: boolean;

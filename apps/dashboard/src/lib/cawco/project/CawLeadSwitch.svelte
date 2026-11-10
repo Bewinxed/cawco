@@ -30,7 +30,10 @@
     projectName,
     label = "Events reach a conversation",
   }: {
-    lead: CawLead;
+    lead: Pick<
+      CawLead,
+      "configure" | "moving" | "on" | "read" | "refused" | "view"
+    >;
     projectId: string;
     projectName: string;
     /** The switch's words beside it. */
