@@ -27,8 +27,14 @@ export interface CanvasHold extends ArtifactHold {
 /** The origin of what the overlay hands the replica: never sent back. */
 const OVERLAY = Symbol("overlay");
 
-const shared = (window as unknown as { cawcoArtifact: ArtifactGlobal })
-  .cawcoArtifact;
+declare global {
+  interface Window {
+    /** The overlay's link to the artifact's doc, put on the page before this module runs (preview overlay/artifact.ts). */
+    readonly cawcoArtifact: ArtifactGlobal;
+  }
+}
+
+const shared = window.cawcoArtifact;
 
 let doc = new Doc();
 let generation = 0;

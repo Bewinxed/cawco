@@ -21,7 +21,6 @@ import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
   AppState,
-  BinaryFiles,
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
 import {
@@ -34,8 +33,8 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createRoot } from "react-dom/client";
-import type { Map as YMap } from "yjs";
 import { Changes } from "./changes";
+import { type Entry, posOf, theElement } from "./entry";
 import { Icon } from "./icons";
 import { guardImages } from "./images";
 import { tokenMs } from "./motion";
@@ -144,6 +143,18 @@ const holdStore = {
 };
 
 /** A word to the dashboard that hosts the canvas (the rail's Dock, Undock, Done and Remove post their own). */
+/** The tools Excalidraw's pen swap puts back: every one but a custom tool. */
+type Tool = Exclude<AppState["activeTool"]["type"], "custom">;
+
+/** The canvas's hold, which a binding is only made once the page has. */
+const heldNow = (): CanvasHold => {
+  const held = holdStore.now();
+  if (!held) {
+    throw new Error("The canvas has no doc yet.");
+  }
+  return held;
+};
+
 const toHost = (what: "dock" | "done" | "pictured") =>
   postToHost({ type: `cawco:${what}` });
 
@@ -218,18 +229,16 @@ const byPos = (a: { pos: string }, b: { pos: string }) => {
  */
 const firstLook = (hold: CanvasHold | null) => {
   const meta = hold ? docMeta(hold.doc) : undefined;
-  const elements = (
-    hold?.doc.getArray<YMap<unknown>>("elements").toArray() ?? []
-  )
+  const elements = (hold?.doc.getArray<Entry>("elements").toArray() ?? [])
     .map((map) => ({
-      el: map.get("el") as ExcalidrawElement,
-      pos: map.get("pos") as string,
+      el: theElement(map),
+      pos: posOf(map) ?? "",
     }))
     .sort(byPos)
     .map((entry) => entry.el);
   return {
     elements,
-    files: (hold?.doc.getMap("files").toJSON() ?? {}) as BinaryFiles,
+    files: hold?.doc.getMap("files").toJSON() ?? {},
     empty: elements.every((el) => el.isDeleted),
     penMode: meta?.get("penMode") === true,
     penDetected: meta?.get("penDetected") === true,
@@ -443,7 +452,7 @@ function Host() {
       if (gone) {
         return;
       }
-      bound = bindScene(api, () => holdStore.now() as CanvasHold, {
+      bound = bindScene(api, heldNow, {
         ink,
         dark: () => schemeStore.now() === "dark",
       });
@@ -470,7 +479,7 @@ function Host() {
    * goes back to that tool. Any other way to a tool ends the swap.
    */
   const [swappedFrom, setSwappedFrom] = useState<string | null>(null);
-  const swapped = useRef<string | null>(null);
+  const swapped = useRef<Tool | null>(null);
   const endSwap = useCallback(() => {
     swapped.current = null;
     setSwappedFrom(null);
@@ -479,7 +488,6 @@ function Host() {
     if (!api) {
       return;
     }
-    type Tool = Exclude<AppState["activeTool"]["type"], "custom">;
     let left: Tool = "freedraw";
     const tapped = (event: MessageEvent) => {
       // The app's host script posts on this window; the dashboard from its own origin.
@@ -493,7 +501,7 @@ function Host() {
       }
       const now = api.getAppState().activeTool.type;
       if (now === "eraser") {
-        api.setActiveTool({ type: (swapped.current as Tool | null) ?? left });
+        api.setActiveTool({ type: swapped.current ?? left });
         return;
       }
       left = now === "custom" ? left : now;

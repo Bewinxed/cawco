@@ -245,11 +245,10 @@ const stopsOf = (
 ): Stop[] => {
   const byId = new Map(api.getSceneElements().map((el) => [el.id, el]));
   const placed = unseen
-    .filter((item) => item.kind === "canvas" && byId.has(item.anchor))
-    .map((item) => ({
-      item,
-      box: sceneBoxOf(byId.get(item.anchor) as ExcalidrawElement),
-    }))
+    .flatMap((item) => {
+      const el = item.kind === "canvas" ? byId.get(item.anchor) : undefined;
+      return el ? [{ item, box: sceneBoxOf(el) }] : [];
+    })
     .sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x)
     .map(({ item }) => item);
   const rest = unseen.filter((item) => !placed.includes(item));

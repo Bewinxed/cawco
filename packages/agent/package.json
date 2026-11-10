@@ -56,6 +56,7 @@
     "turn-server": "0.8.0",
     "wayland-client": "3.0.0",
     "y-excalidraw": "2.0.12",
+    "y-protocols": "1.0.7",
     "yaml": "^2.9.1",
     "yjs": "13.6.33",
     "zod": "4.6.5"

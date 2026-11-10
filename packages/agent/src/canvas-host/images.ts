@@ -13,14 +13,14 @@ import { CANVAS_IMAGE_TYPES, CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
+  getDataURL,
+  MIME_TYPES,
   viewportCoordsToSceneCoords,
 } from "@excalidraw/excalidraw";
 import type { FileId } from "@excalidraw/excalidraw/element/types";
-import type {
-  BinaryFileData,
-  DataURL,
-  ExcalidrawImperativeAPI,
-} from "@excalidraw/excalidraw/types";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+
+import { heardFirst } from "./window-events";
 
 const MB = 1024 * 1024;
 
@@ -210,30 +210,28 @@ export const guardImages = (
       }, 100);
     }
   };
-  const listeners: [string, (event: never) => void][] = [
-    ["paste", pasted],
-    ["drop", dropped],
-    ["pointermove", moved],
-    ["pointerdown", dismiss],
-    ["keydown", keyed],
+  const stops = [
+    heardFirst("paste", pasted),
+    heardFirst("drop", dropped),
+    heardFirst("pointermove", moved),
+    heardFirst("pointerdown", dismiss),
+    heardFirst("keydown", keyed),
   ];
-  for (const [type, listener] of listeners) {
-    window.addEventListener(type, listener as EventListener, true);
-  }
   return () => {
-    for (const [type, listener] of listeners) {
-      window.removeEventListener(type, listener as EventListener, true);
+    for (const stop of stops) {
+      stop();
     }
   };
 };
 
-const readURL = (file: File) =>
-  new Promise<DataURL>((done, fail) => {
-    const reader = new FileReader();
-    reader.onload = () => done(reader.result as DataURL);
-    reader.onerror = () => fail(reader.error);
-    reader.readAsDataURL(file);
-  });
+/** The image types the canvas takes (core `CANVAS_IMAGE_TYPES`), as Excalidraw names them. */
+const IMAGE_TYPES = [
+  MIME_TYPES.png,
+  MIME_TYPES.jpg,
+  MIME_TYPES.webp,
+  MIME_TYPES.svg,
+  MIME_TYPES.gif,
+] as const;
 
 /** A file's id in the doc's `files`: 40 hex digits, as Excalidraw's own are. */
 const newFileId = () =>
@@ -256,7 +254,7 @@ export const placeImage = async (
   at: At | null = null,
   under: { x: number; top: number } | null = null
 ): Promise<{ x: number; bottom: number }> => {
-  const dataURL = await readURL(file);
+  const dataURL = await getDataURL(file);
   const image = new Image();
   image.src = dataURL;
   await image.decode();
@@ -291,11 +289,15 @@ export const placeImage = async (
       }
     });
   });
+  const mimeType = IMAGE_TYPES.find((type) => type === file.type);
+  if (!mimeType) {
+    throw new Error(`${file.type || "That file"} is not an image type.`);
+  }
   api.addFiles([
     {
       id,
       dataURL,
-      mimeType: file.type as BinaryFileData["mimeType"],
+      mimeType,
       created: Date.now(),
     },
   ]);
