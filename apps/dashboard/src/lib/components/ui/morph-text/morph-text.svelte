@@ -10,8 +10,8 @@
 
   /** `text` with a "\n" wherever it wraps in `probe`, laid out already. */
   function linesIn(probe: HTMLElement, text: string): string {
-    const node = probe.firstChild as Text | null;
-    if (!node) {
+    const node = probe.firstChild;
+    if (!(node instanceof Text)) {
       return text;
     }
     const range = document.createRange();
@@ -41,18 +41,21 @@
     if (!parent) {
       return texts;
     }
-    const probes = texts.map((text) => {
-      const probe = host.cloneNode(false) as HTMLElement;
+    const probes = texts.flatMap((text) => {
+      const probe = host.cloneNode(false);
+      if (!(probe instanceof HTMLElement)) {
+        return [];
+      }
       // Its width to the subpixel: rounded down, a line that just fits at
       // rest wrapped in the copy, and the morph broke it where it never
       // breaks.
       probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;inset-inline-start:0;inset-block-start:0;inline-size:${width}px`;
       probe.textContent = text;
-      return probe;
+      return [{ probe, text }];
     });
-    parent.append(...probes);
-    const out = texts.map((text, i) => linesIn(probes[i], text));
-    for (const probe of probes) {
+    parent.append(...probes.map(({ probe }) => probe));
+    const out = probes.map(({ probe, text }) => linesIn(probe, text));
+    for (const { probe } of probes) {
       probe.remove();
     }
     return out;

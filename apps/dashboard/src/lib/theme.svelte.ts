@@ -8,8 +8,8 @@ type Scheme = "light" | "dark";
 
 /** No stored choice follows the OS: neither scheme is the default. */
 function getInitialTheme(): Theme {
-  const kept = stored("local", "cawco-theme") as Theme | null;
-  return kept || "system";
+  const kept = stored("local", "cawco-theme");
+  return kept === "light" || kept === "dark" ? kept : "system";
 }
 
 function resolve(themeValue: Theme): Scheme {
