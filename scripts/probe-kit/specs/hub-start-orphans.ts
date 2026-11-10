@@ -80,14 +80,7 @@ const cleanupStatements = (): string[] | undefined => {
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const dir = `${fleet.sandbox}/orphans-site`;
   await Bun.$`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
   const { id: projectId } = await fleet.api((hub) =>

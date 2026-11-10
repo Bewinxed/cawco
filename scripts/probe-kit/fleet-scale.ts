@@ -341,14 +341,7 @@ export async function scaleFleet(
   sleeping = LIVE_ASLEEP
 ): Promise<ScaleFleet> {
   const fleet = await kit.fleet(scaleRespond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const project = await fleet.api((hub) =>
     hub.api.projects.post({
       name: "Scale",

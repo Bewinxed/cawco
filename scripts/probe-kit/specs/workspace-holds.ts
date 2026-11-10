@@ -987,14 +987,7 @@ const spec: Spec = {
     }
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     await writeFile(
       join(home, ".gitconfig"),
       "[user]\n\tname = Owner\n\temail = owner@probe.test\n"

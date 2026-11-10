@@ -293,14 +293,7 @@ const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
 const run = async (kit: Kit) => {
   const { check } = kit;
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const cwd = join(fleet.sandbox, "full-send");
   await mkdir(cwd, { recursive: true });
 

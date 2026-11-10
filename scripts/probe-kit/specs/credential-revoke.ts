@@ -96,14 +96,7 @@ const installed = (fleet: KitFleet, instanceId: string) =>
 
 const run = async (kit: Kit): Promise<void> => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
 
   const a = await fleet.spawn("claude", "Credential A");
   const b = await fleet.spawn("claude", "Credential B");

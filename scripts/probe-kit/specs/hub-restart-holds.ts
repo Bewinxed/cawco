@@ -727,14 +727,7 @@ const legF = async (legs: Legs) => {
 /** The fleet up, its project on a repository of its own, and its parent session. */
 const standUp = async (kit: Kit): Promise<Legs> => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const home = fleet.env.HOME as string;
   await writeFile(
     join(home, ".gitconfig"),

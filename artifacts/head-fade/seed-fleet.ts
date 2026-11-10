@@ -44,14 +44,7 @@ process.on("SIGINT", () => shut(0));
 process.on("SIGTERM", () => shut(0));
 
 try {
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const id = await fleet.spawn("claude", "Head fade captures");
   for (let n = 1; n <= SENDS; n += 1) {
     await fleet.send(id, `Run step ${n} and report.`);

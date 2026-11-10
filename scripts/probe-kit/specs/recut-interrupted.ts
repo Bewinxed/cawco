@@ -594,14 +594,7 @@ const setUp = async (kit: Kit): Promise<Scene> => {
   const arm = join(fleet.sandbox, "hold-armed");
   const hit = join(fleet.sandbox, "hold-hit");
 
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
 
   // The fleet's own git config: its smudge holds a checkout while armed.
   await writeFile(

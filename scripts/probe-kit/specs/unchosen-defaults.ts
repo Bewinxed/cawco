@@ -797,11 +797,6 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   await server(kit);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
   // The agent's OpenCode is installed and will not start: the machine cannot
   // read its catalog (check 0). `opencode2`, the name the tool catalog finds
   // OpenCode by (core tools.ts), first on the agent's PATH.
@@ -812,11 +807,9 @@ const run = async (kit: Kit) => {
     `#!${systemProgram("sh")}\necho "${OPENCODE_REFUSES}" >&2\nexit 1\n`
   );
   await $`chmod +x ${fake}`.quiet();
-  fleet.launch("agent", [], {
-    PATH: `${bin}:${fleet.env.PATH ?? process.env.PATH ?? ""}`,
+  await fleet.up({
+    agent: { PATH: `${bin}:${fleet.env.PATH ?? process.env.PATH ?? ""}` },
   });
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
   const base = await fleet.dashboard();
   await form(kit, fleet, base);
   await modes(kit, fleet);
@@ -835,11 +828,6 @@ const run = async (kit: Kit) => {
  */
 const claudeModels = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
   const path = fleet.env.PATH ?? process.env.PATH ?? "";
   const real = Bun.which("claude", { PATH: path });
   if (!real) {
@@ -853,9 +841,7 @@ const claudeModels = async (kit: Kit) => {
     `#!${systemProgram("sh")}\ncase "$1" in\n  auth|--version|-v) exec "${real}" "$@" ;;\nesac\necho "${CLAUDE_REFUSES}" >&2\nexit 1\n`
   );
   await $`chmod +x ${wrapper}`.quiet();
-  fleet.launch("agent", [], { PATH: `${bin}:${path}` });
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up({ agent: { PATH: `${bin}:${path}` } });
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
   const dialog = await dialogWith(page, base, {
