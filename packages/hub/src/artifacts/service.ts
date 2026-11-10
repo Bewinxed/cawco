@@ -605,13 +605,6 @@ const createdExtras = ({
   ...(broken ? { broken } : {}),
 });
 
-/** No artifact `id` on this hub at all. */
-const notOnHub = (id: string) =>
-  problem(404, {
-    code: "artifact-not-on-hub",
-    detail: `No artifact ${id} on this hub.`,
-  });
-
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
   const store = createPageStore(deps.root);
@@ -3761,7 +3754,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     thumbnailFile: (id: string, scheme: "light" | "dark") => {
       const row = db.get(id);
       if (!row) {
-        return notOnHub(id);
+        return problem(404, {
+          code: "artifact-not-on-hub",
+          detail: `No artifact ${id} on this hub.`,
+        });
       }
       if (row.kind === "canvas") {
         return pictureBytes(id);
@@ -3830,7 +3826,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     find: (id: string) => {
       const row = db.get(id);
       if (!row) {
-        return notOnHub(id);
+        return problem(404, {
+          code: "artifact-not-on-hub",
+          detail: `No artifact ${id} on this hub.`,
+        });
       }
       if (row.instanceId === null) {
         return problem(404, {
@@ -4665,7 +4664,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     export: (id: string) => {
       const row = db.get(id);
       if (!row) {
-        return notOnHub(id);
+        return problem(404, {
+          code: "artifact-not-on-hub",
+          detail: `No artifact ${id} on this hub.`,
+        });
       }
       if (row.kind !== "canvas") {
         return problem(409, {
