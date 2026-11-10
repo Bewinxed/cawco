@@ -245,7 +245,12 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     const template = project?.template ?? null;
     const [{ tasks: all }, agents, knowledge, drafts, landed] =
       await Promise.all([
-        tasks.list(projectId),
+        tasks.list(projectId).then((list) => {
+          if (list instanceof ElysiaStatus) {
+            throw projectRefusalOf(list);
+          }
+          return list;
+        }),
         fileOr(projectId, AGENTS_FILE).then((text) => {
           if (text instanceof ElysiaStatus) {
             throw projectRefusalOf(text);
