@@ -135,10 +135,10 @@ import {
   listFolder,
   MEDIA_TYPES,
   moveFolderFile,
-  projectRoot,
   readFolderFile,
   readFolderFileAt,
   servedFile,
+  storedProjectRoot,
   turnTaker,
   writeFolderFile,
   writeFolderFiles,
@@ -709,26 +709,19 @@ export const stagesFileOf = async (projectId: string) => {
 const DEFAULT_TEMPLATE: StagesTemplate = "code";
 
 /**
- * Whether project `projectId` is set up, read at once where a read can't
- * wait (Needs you's href, a show of its setup page: core `setupLanding`):
- * its folder holds stages.md, or its row a template. {@link stagesOf}
- * answers source `none` for the rest, but for a project whose task files
- * stand in for a template, which it records at its first read. The
- * folder's refusal of an unfit project id.
+ * Whether `project`, one the hub keeps, is set up, read at once where a
+ * read can't wait (Needs you's href, a show of its setup page: core
+ * `setupLanding`): its folder holds stages.md, or its row a template.
+ * {@link stagesOf} answers source `none` for the rest, but for a project
+ * whose task files stand in for a template, which it records at its first
+ * read. A project the hub does not keep (undefined) is not set up.
  */
 export const isSetUp = (
-  projectId: string,
-  project: { template: string | null } | undefined
-) => {
-  if (project?.template) {
-    return true;
-  }
-  const root = projectRoot(projectId);
-  if (root instanceof ElysiaStatus) {
-    return root;
-  }
-  return existsSync(join(root, STAGES_FILE));
-};
+  project: { id: string; template: string | null } | undefined
+): boolean =>
+  project !== undefined &&
+  (!!project.template ||
+    existsSync(join(storedProjectRoot(project), STAGES_FILE)));
 
 /** A project not set up yet reads as stages.md with no stages ({@link stagesOf}). */
 const NOT_SET_UP: StagesReading = {
