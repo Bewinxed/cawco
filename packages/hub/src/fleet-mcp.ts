@@ -159,7 +159,7 @@ class Unreachable extends Error {}
 
 const unreachable = (error: unknown): boolean => error instanceof Unreachable;
 
-/** The hub holds no sign-in for the server: answered as {@link signedOut}. */
+/** The hub holds no sign-in for the server: answered as the 503 `mcp-signed-out`. */
 class SignedOut extends Error {}
 
 /** A request the sign-in could not serve now, the sign-in kept: answered 502, to retry. */
@@ -302,25 +302,6 @@ const reachHead = (
   reachWithin(input, init, async (response) => {
     await response.body?.cancel();
     return response;
-  });
-
-/**
- * The hub's sign-in is missing: 503, never 401. The proxy is the upstream's
- * OAuth client and asks its own callers for no authorization, so a harness is
- * never told to authorize. A 401 sends every harness's MCP client into
- * discovery and Dynamic Client Registration against the proxy's origin (the
- * machine's gateway or the hub), where no `/register` exists; Claude Code then
- * reports "Dynamic Client Registration rejected (HTTP 404)" and keeps the
- * server in its needs-auth cache for 15 minutes, past the hub's sign-in.
- *
- * Its words are what a session reads in its harness's notice of a server that
- * failed to connect, so they say the sign-in reaches it where it runs: the
- * hub hands every live session the change (`sendMcpChanges` in server.ts).
- */
-const signedOut = () =>
-  problem(503, {
-    code: "mcp-signed-out",
-    detail: `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`,
   });
 
 export class FleetMcp {
@@ -1196,8 +1177,22 @@ export class FleetMcp {
       });
     }
     const row = this.#db.getMcpOauth(name);
+    // The hub's sign-in is missing: 503, never 401. The proxy is the
+    // upstream's OAuth client and asks its own callers for no authorization,
+    // so a harness is never told to authorize. A 401 sends every harness's
+    // MCP client into discovery and Dynamic Client Registration against the
+    // proxy's origin (the machine's gateway or the hub), where no `/register`
+    // exists; Claude Code then reports "Dynamic Client Registration rejected
+    // (HTTP 404)" and keeps the server in its needs-auth cache for 15
+    // minutes, past the hub's sign-in. Its words are what a session reads in
+    // its harness's notice of a server that failed to connect, so they say
+    // the sign-in reaches it where it runs: the hub hands every live session
+    // the change (`sendMcpChanges` in server.ts).
     if (!(row?.tokens && server.authMode === "oauth")) {
-      return signedOut();
+      return problem(503, {
+        code: "mcp-signed-out",
+        detail: `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`,
+      });
     }
     try {
       return await this.#relay.handle(
@@ -1208,7 +1203,10 @@ export class FleetMcp {
       );
     } catch (error) {
       if (!this.#db.getMcpOauth(name)?.tokens) {
-        return signedOut();
+        return problem(503, {
+          code: "mcp-signed-out",
+          detail: `Sign in to this server from ${configurePage("mcp")}. Its tools then arrive in sessions already running, within seconds; no new session is needed.`,
+        });
       }
       return problem(502, {
         code: "mcp-upstream-failed",

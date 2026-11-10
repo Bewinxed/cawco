@@ -37,6 +37,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { AreaDeleted, AreaSettingsChange } from "./db/areas";
 import type { ProjectRow } from "./db/projects";
+import type { decidesTable } from "./decides-file";
 import {
   areaFolder,
   deleteAsked,
@@ -88,8 +89,16 @@ export interface AreasDeps {
     | "project"
     | "trash"
   >;
-  /** Where a project's Who decides and delegate types come from now (decides-file.ts, project-delegate-types.ts). */
-  readonly folderSources: (project: ProjectRow) => Promise<FolderSources>;
+  /** Where a project's Who decides and delegate types come from now (decides-file.ts, project-delegate-types.ts); the folder's problem when its decides.md does not read. */
+  readonly folderSources: (
+    project: ProjectRow
+  ) => Promise<
+    | FolderSources
+    | Extract<
+        Awaited<ReturnType<typeof decidesTable>>,
+        { readonly "~status": true }
+      >
+  >;
 }
 
 /**
@@ -154,8 +163,11 @@ export const createAreas = ({
   const views = () => db.areas.list().map(viewOf);
 
   /** Where each setting of a project comes from now. */
-  const sourcesOf = async (project: ProjectRow): Promise<Sources> => {
+  const sourcesOf = async (project: ProjectRow) => {
     const folder = await folderSources(project);
+    if (folder instanceof ElysiaStatus) {
+      return folder;
+    }
     const sources = {} as Sources;
     for (const [field, name] of ROW_SETTINGS) {
       sources[name] = project.inEffect[field].from;
@@ -256,10 +268,16 @@ export const createAreas = ({
       return { project: before, said: [areaWords.already(area?.name ?? null)] };
     }
     const was = await sourcesOf(before);
+    if (was instanceof ElysiaStatus) {
+      return was;
+    }
     db.areas.place(projectId, areaId);
     changed();
     const now = db.project(projectId) ?? before;
     const is = await sourcesOf(now);
+    if (is instanceof ElysiaStatus) {
+      return is;
+    }
     const said = (Object.keys(is) as AreaSettingName[]).flatMap((setting) =>
       is[setting] === "area" || was[setting] === "area"
         ? [
@@ -288,6 +306,9 @@ export const createAreas = ({
     const counts = new Map<AreaSettingName, number>();
     for (const project of inIt) {
       const sources = await sourcesOf(project);
+      if (sources instanceof ElysiaStatus) {
+        return sources;
+      }
       for (const [setting, from] of Object.entries(sources)) {
         if (from === "area") {
           const name = setting as AreaSettingName;
@@ -305,6 +326,9 @@ export const createAreas = ({
       return area;
     }
     const counts = await fallingBack(id);
+    if (counts instanceof ElysiaStatus) {
+      return counts;
+    }
     // A document it alone narrowed would read as every project's once its
     // link went: it goes to the trash (its Undo) before the area does.
     const docs = db

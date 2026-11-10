@@ -82,6 +82,7 @@ import {
   taskEntry,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
+import type { AnyProblem } from "./refusal";
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions
@@ -314,8 +315,10 @@ export interface FindDeps {
   purged: () => ReadonlySet<string>;
   /** Runs the instance change log, which hands the changed ids to {@link Find.instancesChanged}. */
   refreshInstances: () => void;
-  /** A project's stages by name, each with its kind, as its stages.md reads (tasks.ts `stages`). */
-  stageKinds: (projectId: string) => Promise<Map<string, StageKind>>;
+  /** A project's stages by name, each with its kind, as its stages.md reads (tasks.ts `stages`); the folder's problem when it does not read. */
+  stageKinds: (
+    projectId: string
+  ) => Promise<Map<string, StageKind> | AnyProblem>;
   /**
    * The projects' tasks waiting in a stage of yours, read as the board reads
    * them, and a sentence for each project whose tasks could not be read.
@@ -645,6 +648,12 @@ export const createFind = (deps: FindDeps) => {
         deps
           .stageKinds(projectId)
           .then((kinds) => {
+            if (!(kinds instanceof Map)) {
+              console.warn(
+                `[find: ${projectId}'s stages] failed: ${kinds.response.detail}`
+              );
+              return;
+            }
             stageKinds.set(projectId, { at: Date.now(), kinds });
             // The names hold the kinds they were built with: built again next.
             stale = true;

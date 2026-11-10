@@ -6,6 +6,7 @@ import { EnvelopeShape } from "@cawco/core/stored-shapes";
 import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";
 import { parkedToolAsk } from "./parked-ask";
+import type { AnyProblem } from "./refusal";
 import { received } from "./stored-json";
 
 /**
@@ -159,7 +160,7 @@ type AnswerHandler = (
   requestId: string,
   result: PermissionResult,
   from: AnswerFrom
-) => Promise<void>;
+) => Promise<AnyProblem | undefined>;
 /** Where an answer was given: an {@link AskAnswer} without its behaviour, which the answer itself carries. */
 export type AnswerFrom = Omit<AskAnswer, "behavior">;
 const permissionAnswers = new WeakMap<PendingShape, AnswerHandler>();
@@ -174,7 +175,7 @@ export const answerPermission = (
   requestId: string,
   result: PermissionResult,
   from: AnswerFrom
-): Promise<void> => {
+): Promise<AnyProblem | undefined> => {
   const handler = permissionAnswers.get(pending);
   if (!handler) {
     return Promise.reject(new Error("Permission answering is not ready."));

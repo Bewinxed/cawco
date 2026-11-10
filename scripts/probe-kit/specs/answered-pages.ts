@@ -742,7 +742,7 @@ const run = async ({ check }: Kit) => {
   const decisionDeps: DecisionsDeps = {
     artifacts: () => [projectPage],
     changed: () => undefined,
-    commit: () => Promise.resolve(),
+    commit: () => Promise.resolve(undefined),
     folderNames: () => Promise.resolve([]),
     folderText: (_project, path) =>
       Promise.resolve(
