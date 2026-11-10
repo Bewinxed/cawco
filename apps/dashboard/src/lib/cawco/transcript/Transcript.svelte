@@ -22,7 +22,6 @@
   import { IconChat } from "#lib/icons.js";
   import {
     crossIn,
-    dur,
     motionOk,
     rise,
   } from "#lib/platform/motion/curves.svelte.js";
@@ -62,22 +61,17 @@
   import { MountedRows } from "./mounted-rows.svelte";
   import NoticeRun from "./NoticeRun.svelte";
   import { OlderPages } from "./older-pages.svelte";
-  import {
-    type OpenAsk,
-    openAt,
-    recordIn,
-    rowAt,
-    rowHolding,
-  } from "./open-at.svelte";
+  import { recordIn, rowHolding } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
+  import { RecordSeek } from "./record-seek.svelte";
   import { RowBuild } from "./row-build.svelte";
   import { RowPresentation } from "./row-presentation.svelte";
   import { RowRails } from "./row-rails.svelte";
   import type { Row } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
-  import { FAR_FROM_LATEST, SCROLL_KEYS, ScrollPin } from "./scroll-pin.svelte";
+  import { SCROLL_KEYS, ScrollPin } from "./scroll-pin.svelte";
   import { SendSlides } from "./send-slides.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
@@ -201,6 +195,12 @@
     get active() {
       return active;
     },
+    get announcement() {
+      return announcement;
+    },
+    set announcement(value) {
+      announcement = value;
+    },
     get findHere() {
       return findHere;
     },
@@ -222,26 +222,14 @@
     get landingFrame() {
       return landingFrame;
     },
-    get letGo() {
-      return letGo;
-    },
-    get marked() {
-      return marked;
-    },
     get parkedHeight() {
       return parkedHeight;
-    },
-    get seeking() {
-      return seeking;
     },
     get session() {
       return session;
     },
     get shown() {
       return shown;
-    },
-    get unfound() {
-      return unfound;
     },
     get visible() {
       return visible;
@@ -272,6 +260,9 @@
     },
     get pin(): ScrollPin {
       return pin;
+    },
+    get seek(): RecordSeek {
+      return seek;
     },
   };
 
@@ -325,213 +316,8 @@
 
   const keeper = new KeptPlace(host);
 
-  // ── Opened at a record ────────────────────────────────────────────────
-  /**
-   * THE RECORD ASKED FOR IS READ BACK TO, ITS WORDS IN VIEW, AND MARKED.
-   *
-   * `?at=` names a record of this conversation, or a time in it: the first
-   * record stored at or after it (open-at.svelte.ts `rowAt`), and the words
-   * it matched on, if any (`&match=`). It is a landing like a kept place
-   * (`resume`), at those words or the record rather than at the view's top
-   * (`seekInto`): before the list is drawn, the reveal reads the pages
-   * before the rows held, one at a time, until one holds it, and draws the
-   * list there; once drawn, `seeking` does the same in place. Either way the
-   * view then stands off the tail, so nothing that arrives there moves it,
-   * until the reader scrolls. A record the whole conversation does not hold opens at
-   * the latest row, and the dock says so.
-   */
-  /** Bumped by each ask: what re-runs a reveal under way to read back to it. */
-  let asked = $state(0);
-  /** The record sought in a list already drawn. */
-  let seeking = $state<string | null>(null);
-  /** The row opened at, by key: `on` until the reader moves on, then fading. */
-  let marked = $state<{ key: string; state: "on" | "off" } | null>(null);
-  /** The record asked for is not here (`gone`), or the pages before could not be read (`unread`). */
-  let unfound = $state<"gone" | "unread" | null>(null);
-  /** What the dock says, and the live region says once, of a record not reached. */
-  const unfoundWords = $derived(
-    unfound === "unread"
-      ? "That moment couldn't be reached: the turns before these couldn't be read."
-      : "That moment isn't in this session any more."
-  );
-  /** The most frames a seek re-centres for while rows around it measure: our own call. */
-  const SEEK_FRAMES = 30;
+  const seek = new RecordSeek(host);
 
-  function seek({ at, terms }: OpenAsk): void {
-    marked = null;
-    unfound = null;
-    // A landing's place still held (`holdPlace`) is let go, as the reader's
-    // own scroll lets it go: put back each frame, it undid the seek's writes
-    // until the hold ran out (seek-words, its stored-uuid leg).
-    keeper.holdUntil = 0;
-    cancelAnimationFrame(keeper.keepFrame);
-    keeper.keepFrame = 0;
-    keeper.resume = { tail: false, at, terms };
-    keeper.standsAtTail = false;
-    if (shown) {
-      seeking = at;
-    } else {
-      asked += 1;
-    }
-  }
-
-  /** The ask this transcript is seeking, until it has arrived. */
-  let taking: string | null = null;
-  // An ask is the view's until a transcript of it has arrived at it: one
-  // unmounted mid-seek (its pane's state changing under it while the newest
-  // page is read) leaves it to the next.
-  $effect(() => {
-    const ask = openAt.get(session.instanceId);
-    if (ask === undefined || ask.at === taking) {
-      return;
-    }
-    taking = ask.at;
-    untrack(() => seek(ask));
-  });
-
-  /** The seek is over: the record is in view and marked, or it is said not to be. */
-  function arrived(docId: string): void {
-    taking = null;
-    if (openAt.get(session.instanceId)?.at === docId) {
-      openAt.delete(session.instanceId);
-    }
-    // Said once, here, where the seek ends: a landing is a state change and
-    // a record not held is a refusal (PRODUCT.md, screen readers), and
-    // nothing after it (a scroll, a live row) says it again.
-    const index = rowAt(
-      rowDraw.renderedRows,
-      docId,
-      older.paged()?.cursor === null
-    );
-    if (index < 0) {
-      marked = null;
-      unfound = older.paged()?.olderFault ? "unread" : "gone";
-      announcement = unfoundWords;
-      return;
-    }
-    // Find's own seek marks the words, not the row, and its place is said
-    // by its count (find/FindLine).
-    const found = findHere.sought?.docId === docId;
-    if (found) {
-      const { back } = findHere.sought ?? { back: false };
-      findHere.sought = null;
-      if (!back) {
-        findHere.arrived();
-      }
-    }
-    marked = found
-      ? null
-      : { key: rowDraw.renderedRows[index].key, state: "on" };
-    // The record opened at is the place now, as a reader's scroll to it is.
-    keeper.keptPlace = keeper.placeAt(pin.lastTop);
-    // The finder's own words for the key that brought the reader here
-    // ("↵ open at that line", docs/tom/find-and-mention-chosen.md).
-    if (!found) {
-      announcement = "Opened at that line.";
-    }
-    if (pin.scroller) {
-      const distance = pin.tailTop(pin.scroller) - pin.scroller.scrollTop;
-      pin.farFromLatest =
-        distance > FAR_FROM_LATEST * pin.scroller.clientHeight;
-    }
-  }
-
-  // In a list already drawn: the pages before are read until one holds the
-  // record, then the view is put at it (`seekInto`) over the frames the rows
-  // around it take to measure (`restore`, as the reveal does).
-  $effect(() => {
-    const docId = seeking;
-    if (!(docId && shown && visible)) {
-      return;
-    }
-    track(rowBuild.rowCount);
-    const own = older.paged();
-    if (session.loading || own?.loading) {
-      return;
-    }
-    if (untrack(keeper.anchorIndex) < 0) {
-      if (own?.cursor && !own.olderFault) {
-        if (
-          !own.hydrating &&
-          untrack(rowBuild.printOf) === rowBuild.builtPrint
-        ) {
-          detach(
-            untrack(() => readOlderPage(own.instanceId)),
-            "untrack"
-          );
-        }
-        return;
-      }
-      // The conversation's start is in hand, or a page would not read: the
-      // latest row, and why not the one asked for.
-      untrack(() => {
-        keeper.resume = null;
-        seeking = null;
-        pin.atBottom = true;
-        pin.farFromLatest = false;
-        pin.pinBottom();
-        arrived(docId);
-      });
-      return;
-    }
-    let frame: number | null = null;
-    let frames = 0;
-    const step = (): void => {
-      frame = requestAnimationFrame(() => {
-        frame = null;
-        // Moved, or its words are not drawn yet (their fold opening): it
-        // reads them again next frame.
-        if ((keeper.restore() || keeper.wordsAwaited) && frames < SEEK_FRAMES) {
-          frames += 1;
-          step();
-          return;
-        }
-        keeper.resume = null;
-        seeking = null;
-        arrived(docId);
-      });
-    };
-    untrack(() => {
-      pin.stopFollow();
-      arrivals.tickets.clear();
-      step();
-    });
-    return () => {
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-      }
-    };
-  });
-
-  /** The reader has moved on: the mark fades where it stands, and the note goes. */
-  function letGo(): void {
-    unfound = null;
-    if (marked?.state !== "on") {
-      return;
-    }
-    const { key } = marked;
-    marked = { key, state: "off" };
-    setTimeout(() => {
-      if (marked?.key === key && marked.state === "off") {
-        marked = null;
-      }
-    }, dur("--dur-panel"));
-  }
-
-  // A press or a key in the transcript is the reader's, as their scroll is
-  // (`onscroll`).
-  $effect(() => {
-    const node = pin.scroller;
-    if (!(node && (marked?.state === "on" || unfound))) {
-      return;
-    }
-    node.addEventListener("pointerdown", letGo);
-    node.addEventListener("keydown", letGo);
-    return () => {
-      node.removeEventListener("pointerdown", letGo);
-      node.removeEventListener("keydown", letGo);
-    };
-  });
   const older = new OlderPages(host);
 
   const pin = new ScrollPin(host);
@@ -570,7 +356,7 @@
 
     const reading =
       session.loading || (store !== null && store !== session && store.loading);
-    track(asked);
+    track(seek.asked);
 
     if (shown || reading || !(landed && node && container)) {
       return;
@@ -709,7 +495,7 @@
     keeper.resume = null;
     shown = true;
     if (sought !== null) {
-      arrived(sought);
+      seek.arrived(sought);
     }
     if (kept) {
       keeper.keptPlace = kept;
@@ -1655,7 +1441,7 @@
           heightOf={rowDraw.heightOfRow}
           id={row.kind === "tools" ? undefined : row.key}
           leaving={rowDraw.presentation.leaving.has(row.key)}
-          marked={marked?.key === row.key ? marked.state : undefined}
+          marked={seek.marked?.key === row.key ? seek.marked.state : undefined}
           measured={rowDraw.measureRow}
           motion={arrivals.motionOf(row)}
           onleft={rowDraw.leaver(row.key)}
@@ -1741,15 +1527,15 @@
     <!-- The record this was opened at is not here: shown where the reader
          landed instead, until they move on. Heard once through the polite
          region above (`arrived`), so this line is no live region itself. -->
-    {#if unfound}
+    {#if seek.unfound}
       <!-- The dock's raised line, as the not-caught-up line floats (Behind). -->
       <p
         class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-meta font-normal text-ink-muted text-center text-balance"
-        data-open-at={unfound}
+        data-open-at={seek.unfound}
         in:rise={"--dur-panel"}
         out:rise={"--dur-exit"}
       >
-        {unfoundWords}
+        {seek.unfoundWords}
       </p>
     {/if}
     {#if rowBuild.catching || showLatest || showBack}

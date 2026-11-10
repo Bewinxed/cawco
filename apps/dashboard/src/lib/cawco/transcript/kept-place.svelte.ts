@@ -141,7 +141,9 @@ export interface KeptPlaceHost {
     readonly presentation: { readonly shifted: boolean };
     readonly renderedRows: Row[];
   };
-  readonly seeking: string | null;
+  readonly seek: {
+    readonly seeking: string | null;
+  };
   readonly session: SessionState;
   readonly shown: boolean;
   readonly visible: boolean;
@@ -494,7 +496,7 @@ export class KeptPlace {
       !(place && this.#host.landed && this.#host.shown) ||
       this.#host.pin.atBottom ||
       this.#host.jumping ||
-      this.#host.seeking !== null ||
+      this.#host.seek.seeking !== null ||
       (this.resume !== null && !this.resume.tail)
     ) {
       return;
