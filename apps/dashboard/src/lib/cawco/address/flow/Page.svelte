@@ -21,7 +21,7 @@
     type Axes,
     mountStateSwitcher,
   } from "../../../../../../../design-previews/state-switcher.js";
-  import type { Network } from "../tray.svelte";
+  import { NETWORK_IDS, type Network } from "../tray.svelte";
   import DeskNeeds from "./DeskNeeds.svelte";
   import DeskSettings from "./DeskSettings.svelte";
   import {
@@ -54,6 +54,16 @@
     netbird: "NetBird",
   };
 
+  const SURFACES = ["needs", "settings", "phone"] as const;
+  /** The moment the switcher names by `value`, if it names one. */
+  const momentOf = (value: string | undefined): MomentId | undefined => {
+    const failure = CAUSES.find((one) => `failed:${one.id}` === value);
+    return (
+      MOMENTS.find((one) => one.id === value)?.id ??
+      (failure ? `failed:${failure.id}` : undefined)
+    );
+  };
+
   /** Where the flow stands, as the switcher's axes name it. */
   const axesOf = (): Axes => ({
     network: flow.network,
@@ -67,13 +77,14 @@
    * real forks, day or night, and every step and failure to jump to, one
    * axis. The page's own stage is #preview, which it moves into its stage.
    */
+  const preview = document.getElementById("preview");
   const switcher = mountStateSwitcher({
     // Needs you (380), Configure › Devices and the phone (390) side by
     // side, as a 1440 window draws them.
     width: 1392,
     axes: true,
     label: "Word address states",
-    stage: [document.getElementById("preview") as HTMLElement],
+    stage: preview ? [preview] : [],
     groups: (state) => [
       {
         key: "network",
@@ -127,7 +138,10 @@
         theme.set(next.theme === "night" ? "dark" : "light");
       }
       if (next.network !== previous.network) {
-        flow.switchNetwork(next.network as Network, flow.moment);
+        const network = NETWORK_IDS.find((one) => one === next.network);
+        if (network) {
+          flow.switchNetwork(network, flow.moment);
+        }
         return;
       }
       if (next.certs !== previous.certs && next.certs !== undefined) {
@@ -137,7 +151,10 @@
       }
       // A moment picked, or picked again: the flow stands in it afresh.
       if (next.moment !== previous.moment || next.theme === previous.theme) {
-        flow.jump(next.moment as MomentId);
+        const moment = momentOf(next.moment);
+        if (moment) {
+          flow.jump(moment);
+        }
       }
     },
   });
@@ -154,8 +171,14 @@
     if (named.certs !== undefined) {
       flow.certsAtJoin = named.certs === "on";
     }
-    flow.network = named.network as Network;
-    flow.jump(named.moment as MomentId);
+    const network = NETWORK_IDS.find((one) => one === named.network);
+    const moment = momentOf(named.moment);
+    if (network) {
+      flow.network = network;
+    }
+    if (moment) {
+      flow.jump(moment);
+    }
   }
   if (switcher.named && named.theme !== kept.theme) {
     theme.set(named.theme === "night" ? "dark" : "light");
@@ -178,8 +201,10 @@
     if (event.key !== "Escape") {
       return;
     }
-    const at = document.activeElement?.closest<HTMLElement>("[data-frame]")
-      ?.dataset.frame as Surface | undefined;
+    const frame = document.activeElement?.closest("[data-frame]");
+    const at = SURFACES.find(
+      (one) => frame instanceof HTMLElement && one === frame.dataset.frame
+    );
     const parks: Record<Surface, (() => void) | undefined> = {
       needs: needs?.park,
       settings: settings?.park,
@@ -189,7 +214,7 @@
       parks[at]?.();
       return;
     }
-    for (const surface of ["needs", "settings", "phone"] as const) {
+    for (const surface of SURFACES) {
       if (flow.open[surface]) {
         parks[surface]?.();
       }
@@ -197,7 +222,7 @@
   }
 
   onMount(() => {
-    (window as unknown as { preview: unknown }).preview = {
+    window.preview = {
       flow,
       jump: (moment: MomentId) => flow.jump(moment),
       manual: (on: boolean) => flow.holdHub(on),

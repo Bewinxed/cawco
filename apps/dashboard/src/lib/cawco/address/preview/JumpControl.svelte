@@ -17,10 +17,8 @@
   import {
     type AddressTray,
     CAUSES,
-    type Cause,
-    type Network,
+    NETWORK_IDS,
     VIEWS,
-    type ViewId,
     viewsOn,
   } from "../tray.svelte";
 
@@ -57,8 +55,14 @@
         id="{ids}-state"
         data-jump="state"
         measure="shrink"
-        onchange={(event: Event) =>
-          tray.jump((event.currentTarget as HTMLSelectElement).value as ViewId)}
+        onchange={(event) => {
+          const view = VIEWS.find(
+            (one) => one.id === event.currentTarget.value
+          );
+          if (view) {
+            tray.jump(view.id);
+          }
+        }}
         value={tray.view}
       >
         {#each VIEWS as view (view.id)}
@@ -79,10 +83,14 @@
         id="{ids}-network"
         data-jump="network"
         measure="shrink"
-        onchange={(event: Event) =>
-          tray.switchNetwork(
-            (event.currentTarget as HTMLSelectElement).value as Network
-          )}
+        onchange={(event) => {
+          const network = NETWORK_IDS.find(
+            (one) => one === event.currentTarget.value
+          );
+          if (network) {
+            tray.switchNetwork(network);
+          }
+        }}
         value={tray.network}
       >
         <NativeSelectOption value="tailscale">Tailscale</NativeSelectOption>
@@ -99,10 +107,14 @@
         id="{ids}-cause"
         data-jump="cause"
         measure="shrink"
-        onchange={(event: Event) =>
-          tray.switchCause(
-            (event.currentTarget as HTMLSelectElement).value as Cause
-          )}
+        onchange={(event) => {
+          const cause = causes.find(
+            (one) => one.id === event.currentTarget.value
+          );
+          if (cause) {
+            tray.switchCause(cause.id);
+          }
+        }}
         value={tray.cause}
       >
         {#each causes as cause (cause.id)}
@@ -120,10 +132,12 @@
         id="{ids}-from"
         data-jump="from"
         measure="shrink"
-        onchange={(event: Event) => {
+        onchange={(event) => {
           tray.park();
-          tray.source = (event.currentTarget as HTMLSelectElement).value as
-            "needs" | "settings";
+          const { value } = event.currentTarget;
+          if (value === "needs" || value === "settings") {
+            tray.source = value;
+          }
           if (tray.step === "unsupported") {
             tray.jump("found");
           }

@@ -61,8 +61,9 @@ export class DeskTray {
   };
 
   onpointerdown = (event: PointerEvent): void => {
-    const target = event.target as Node;
+    const { target } = event;
     if (
+      target instanceof Node &&
       this.#open &&
       this.tray &&
       this.frame?.contains(target) &&

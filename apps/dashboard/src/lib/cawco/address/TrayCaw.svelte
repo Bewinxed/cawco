@@ -177,7 +177,7 @@
             style:--artboard="{(side * ARTBOARD) / BOX.side}px"
             style:--left="{(-side * BOX.x) / BOX.side}px"
             style:--top="{(-side * BOX.y) / BOX.side}px"
-            {@attach stage(file as CawFile, side, theme.resolved === "dark")}
+            {@attach stage(file, side, theme.resolved === "dark")}
           ></canvas>
         </div>
       {/if}

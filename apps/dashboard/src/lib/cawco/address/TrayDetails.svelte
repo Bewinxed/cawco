@@ -91,7 +91,9 @@
     >
       <Tabs
         onValueChange={(next) => {
-          tab = next as "facts" | "raw";
+          if (next === "facts" || next === "raw") {
+            tab = next;
+          }
         }}
         size="compact"
         value={tab}

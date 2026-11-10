@@ -3,6 +3,8 @@
 // for information about these interfaces
 declare global {
   interface Window {
+    /** The address preview's handle for the probe (address/flow/Page.svelte). */
+    preview: unknown;
     /** Replays the button clicks app.html held before hydration. */
     releaseHeldTaps: () => void;
   }
@@ -17,7 +19,10 @@ declare global {
       region?: boolean;
     }
     // interface Locals {}
-    // interface PageData {}
+    interface PageData {
+      /** Configure's card heights, as its layout reads them off the cookie (routes/(app)/config/+layout.server.ts). */
+      cards?: import("#lib/cawco/config/cards.js").Cards;
+    }
     interface PageState {
       /** As `taskOpened`, for a project folder's file opened as its own page (`?file=`). */
       fileOpened?: boolean;
