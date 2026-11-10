@@ -1007,9 +1007,12 @@
     if (!on) {
       return null;
     }
-    return submitCommand(request.instanceId, on, "permission.answer", {
-      requestId: request.requestId,
-      result,
+    return submitCommand(request.instanceId, on, {
+      kind: "permission.answer",
+      intent: {
+        requestId: request.requestId,
+        result,
+      },
     });
   }
 
@@ -1225,7 +1228,12 @@
     // send takes, so this tab sends and nothing else. The hub's own refusal
     // ("machine X is not connected") becomes the command's failed stage — the
     // ledger is the report, which is why there is nothing to catch here.
-    return await submitCommand(viewId, machineId, "send", { text, extras }, id);
+    return await submitCommand(
+      viewId,
+      machineId,
+      { kind: "send", intent: { text, extras } },
+      id
+    );
   }
 
   function onstop(): void {
@@ -1233,7 +1241,7 @@
     // how the transcript recognises the coming `result.error` as the receipt
     // of THIS stop and renders "Interrupted" instead of a failure card.
     if (machineId) {
-      submitCommand(viewId, machineId, "interrupt", {});
+      submitCommand(viewId, machineId, { kind: "interrupt", intent: {} });
     }
   }
 
