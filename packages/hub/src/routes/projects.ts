@@ -10,7 +10,6 @@ import type { HubContext } from "../hub-context";
 import { PlaceRefusal } from "../place-refusal";
 import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
-import { ProjectRefusal } from "../project-refusal";
 import { refusal, schemaRefusal } from "../refusal";
 import { LANDS } from "../tasks";
 
@@ -115,14 +114,9 @@ export const projectRoutes = ({
                 },
               }
             : {}),
-        }).catch((error: unknown) => {
-          if (error instanceof ProjectRefusal && error.status === 400) {
-            return error;
-          }
-          throw error;
         });
-        if (made instanceof ProjectRefusal) {
-          return refusal(400, "project-not-made", made.message);
+        if ("response" in made) {
+          return refusal(made.status, "project-not-made", made.response.detail);
         }
         return {
           ...projectOut(made.project),
