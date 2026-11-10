@@ -2,7 +2,6 @@
  * Projects: making, editing, stopping, deleting them, and their places.
  */
 
-import type { ForgottenProject } from "@cawco/core/forgotten-project";
 import { STAGES_TEMPLATES } from "@cawco/core/views";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { Elysia, ElysiaStatus, t } from "elysia";
@@ -13,7 +12,6 @@ import { DeleteRefusal } from "../project-delete";
 import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
 import { ProjectRefusal } from "../project-refusal";
-import { RestoreRefusal } from "../project-trash";
 import { refusal, schemaRefusal } from "../refusal";
 import { LANDS } from "../tasks";
 
@@ -233,9 +231,7 @@ export const projectRoutes = ({
     )
     // Every project forgotten that the trash can bring back, newest
     // first, with what each brings (project-trash.ts).
-    .get("/api/projects/forgotten", (): Promise<ForgottenProject[]> =>
-      forgottenProjects.forgotten()
-    )
+    .get("/api/projects/forgotten", () => forgottenProjects.forgotten())
     .delete("/api/projects/:id", async ({ params, request }) => {
       const asked = askerOf(request);
       const said = (outcome: string) =>
@@ -355,46 +351,31 @@ export const projectRoutes = ({
       },
       async ({ params, body, request }) => {
         const asked = askerOf(request);
-        try {
-          const restored = await forgottenProjects.restore(
-            params.id,
-            body ?? {}
-          );
-          // Its folder's task files, read into the index again.
-          const caught = await tasks.catchUp(params.id);
-          if (caught) {
-            const { status, response } = caught;
-            console.log(
-              `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=refused status=${status}: ${response.detail}`
-            );
-            return refusal(status, "project-restore-refused", response.detail);
-          }
+        const refused = (status: number, detail: string) =>
           console.log(
-            `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=restored name=${JSON.stringify(restored.name)} rows=${restored.brought.rows} sessions=${restored.brought.sessions} left=${JSON.stringify(restored.left)}`
+            `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=refused status=${status}: ${detail}`
           );
-          // Its hooks go back to every place it has.
-          projectMoved(
-            params.id,
-            db.project(params.id)?.places.map((place) => place.machineId) ?? [],
-            restored.brought.folder
-          );
+        const restored = await forgottenProjects.restore(params.id, body ?? {});
+        if (restored instanceof ElysiaStatus) {
+          refused(restored.status, restored.response.detail);
           return restored;
-        } catch (error) {
-          if (
-            error instanceof RestoreRefusal ||
-            error instanceof ProjectRefusal
-          ) {
-            console.log(
-              `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=refused status=${error.status}: ${error.message}`
-            );
-            return refusal(
-              error.status,
-              "project-restore-refused",
-              error.message
-            );
-          }
-          throw error;
         }
+        // Its folder's task files, read into the index again.
+        const caught = await tasks.catchUp(params.id);
+        if (caught) {
+          refused(caught.status, caught.response.detail);
+          return caught;
+        }
+        console.log(
+          `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=restored name=${JSON.stringify(restored.name)} rows=${restored.brought.rows} sessions=${restored.brought.sessions} left=${JSON.stringify(restored.left)}`
+        );
+        // Its hooks go back to every place it has.
+        projectMoved(
+          params.id,
+          db.project(params.id)?.places.map((place) => place.machineId) ?? [],
+          restored.brought.folder
+        );
+        return restored;
       }
     )
     // Another checkout of the project's repository, named by hand.
