@@ -127,12 +127,9 @@
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
   import { RowBuild } from "./row-build.svelte";
-  import {
-    type Keys,
-    perSettled,
-    RowPresentation,
-  } from "./row-presentation.svelte";
-  import { type Row, wellRunsFrom } from "./rows";
+  import { RowPresentation } from "./row-presentation.svelte";
+  import { RowRails } from "./row-rails.svelte";
+  import type { Row } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
   import { SendSlides } from "./send-slides.svelte";
@@ -449,27 +446,7 @@
   const servedRows = $derived(
     firstScreen && standsAtTail && !shown && rowDraw.renderedRows.length > 0
   );
-  /**
-   * The reader's rows whose well runs on into the next. A row folding away is
-   * already out of its run: the rows either side close or join over its fold.
-   */
-  const runsOn = $derived.by((): Keys => {
-    const drawn = rowDraw.renderedRows;
-    const { leaving: gone, settled } = rowDraw.presentation;
-    return untrack(() => {
-      // No row folding away stands among the settled rows (`withLeaving`).
-      const before = settledRuns(settled);
-      const after = wellRunsFrom(
-        drawn.slice(settled.length),
-        (key) => gone.has(key),
-        before.above
-      ).runs;
-      return { has: (key) => before.runs.has(key) || after.has(key) };
-    });
-  });
-  const settledRuns = perSettled((settled) =>
-    wellRunsFrom(settled, () => false, null)
-  );
+  const rails = new RowRails(host);
 
   /**
    * THE TAIL STAYS MOUNTED.
@@ -3036,108 +3013,6 @@
     }
   });
 
-  /**
-   * Which rows draw a rail, and which of them continue the one above.
-   *
-   * The rail is painted per row, because rows are virtualised siblings and
-   * there is no element spanning a run to hang one line on. Consecutive rail
-   * rows therefore have to abut and paint the continuation weight rather than
-   * each restarting the head gradient — otherwise a run reads as a stack of
-   * stubs, which is exactly how the in-flight tool looked against the
-   * completed calls above it.
-   */
-  const NO_RAIL = new Set<Extract<Row, { kind: "single" }>["message"]["type"]>([
-    "user",
-    "assistant",
-    "user.peer",
-    "user.rule",
-    "user.delegate_ask",
-    "ui.command_output",
-    "ui.error",
-    "ui.session_error",
-    "result.error",
-  ]);
-
-  /**
-   * Read off what the row draws. The live row draws its reasoning block —
-   * the rail's own head — for as long as it has no answer, the indicator
-   * before any reasoning included: reading it off `thinking` flipped the
-   * row's gap 14px in one frame as the first reasoning arrived, and every row
-   * above jumped.
-   */
-  function railLed(row: Row): boolean {
-    if (row.kind === "single") {
-      return !NO_RAIL.has(row.message.type);
-    }
-
-    return (
-      row.kind === "tools" ||
-      row.kind === "harness" ||
-      row.kind === "thinking" ||
-      (row.kind === "live" && !row.text) ||
-      row.kind === "livetool" ||
-      row.kind === "subagent" ||
-      row.kind === "delegate" ||
-      row.kind === "connect"
-    );
-  }
-
-  /**
-   * A row the ledger emits but never paints: a successful result, an assistant
-   * frame that carried nothing but a tool call, a thinking block with no text.
-   * `MessageRow` renders nothing for these, so they stand between two rail rows
-   * at zero height — adjacent on screen, one apart in the list. Reading the
-   * list literally is why a run of tool calls kept drawing its line in
-   * disconnected stubs.
-   */
-  function unpainted(row: Row): boolean {
-    if (row.kind !== "single") {
-      return false;
-    }
-    const m = row.message;
-    if (m.type === "result.success") {
-      return true;
-    }
-
-    return (
-      (m.type === "assistant" || m.type === "thinking") && !m.content.trim()
-    );
-  }
-
-  /**
-   * Keys of rows whose line is the same line as the row above them ON SCREEN
-   * — read off the rows drawn, so a row folding shut keeps its gap, and the
-   * rows around it theirs, until it is gone.
-   */
-  const continued = $derived.by((): Keys => {
-    const rowList = rowDraw.renderedRows;
-    const { settled } = rowDraw.presentation;
-    return untrack(() => {
-      const before = settledContinued(settled);
-      const after = continuesAbove(rowList, settled.length);
-      return { has: (key) => before.has(key) || after.has(key) };
-    });
-  });
-  const settledContinued = perSettled((settled) => continuesAbove(settled, 1));
-
-  /** The keys of `rowList`'s rows from `from` on that continue the line above them. */
-  function continuesAbove(rowList: Row[], from: number): Set<string> {
-    const keys = new Set<string>();
-    for (let i = Math.max(1, from); i < rowList.length; i += 1) {
-      if (!railLed(rowList[i])) {
-        continue;
-      }
-      let above = i - 1;
-      while (above >= 0 && unpainted(rowList[above])) {
-        above -= 1;
-      }
-      if (above >= 0 && railLed(rowList[above])) {
-        keys.add(rowList[i].key);
-      }
-    }
-    return keys;
-  }
-
   provideLedger({
     take(id) {
       const ticket = arrivals.tickets.get(id) ?? null;
@@ -3679,7 +3554,7 @@
       folding={ticket?.kind === "fold"}
       grouped={row.grouped}
       message={row.message}
-      runsOn={runsOn.has(row.key)}
+      runsOn={rails.runsOn.has(row.key)}
     />
   {:else if row.kind === "tools"}
     <ToolGroup messages={row.messages} />
@@ -3931,7 +3806,7 @@
     >
       {#snippet children(row)}
         <TranscriptRow
-          continues={continued.has(row.key)}
+          continues={rails.continued.has(row.key)}
           handoff={rowDraw.presentation.handed.get(row.key)}
           heightOf={rowDraw.heightOfRow}
           id={row.kind === "tools" ? undefined : row.key}
@@ -4075,7 +3950,7 @@
       {/if}
       <div class="isolate">
         {#each rowDraw.renderedRows as row (row.key)}
-          <TranscriptRow continues={continued.has(row.key)}>
+          <TranscriptRow continues={rails.continued.has(row.key)}>
             {#snippet children()}
               {@render rowBody(row, null, false)}
             {/snippet}
