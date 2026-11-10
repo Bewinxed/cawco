@@ -354,5 +354,10 @@ export const graphWords = {
     notAColour: "Not a colour. Type one like #2a6df4.",
     on: "On",
     off: "Off",
+    /** Under the rows once a prop differs from the saved state: writes his values into it. */
+    save: "Save",
+    /** Beside Save: a new state from his values, the saved one kept. */
+    saveNew: "Save as new state",
+    saving: "Saving…",
   },
 } as const;
