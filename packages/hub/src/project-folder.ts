@@ -49,8 +49,8 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
-import { Elysia, ElysiaStatus, t, type UnwrapSchema } from "elysia";
-import { type Refused, refusal } from "./refusal";
+import { Elysia, ElysiaStatus, problem, t, type UnwrapSchema } from "elysia";
+import type { AnyProblem } from "./refusal";
 
 /**
  * Where every project's folder lives: `projects/` beside the database, by
@@ -102,11 +102,11 @@ export const folderContent = (
   }
   const compact = content.replace(WHITESPACE, "");
   if (compact.length % 4 !== 0 || !BASE64.test(compact)) {
-    return refusal(
-      400,
-      "folder-content-not-base64",
-      "The content is not base64: give the file's bytes as standard base64 (A–Z, a–z, 0–9, + and /, padded with =)."
-    );
+    return problem(400, {
+      code: "folder-content-not-base64",
+      detail:
+        "The content is not base64: give the file's bytes as standard base64 (A–Z, a–z, 0–9, + and /, padded with =).",
+    });
   }
   return new Uint8Array(Buffer.from(compact, "base64"));
 };
@@ -180,11 +180,10 @@ export interface FolderHistory {
 
 /** An exclusive write refused: a file in its folder already holds its place (FolderWriteOptions.exclusive). */
 const taken = (rel: string, holder: string) =>
-  refusal(
-    409,
-    "folder-place-taken",
-    `${rel} was not written: ${holder} already holds its place in the folder.`
-  );
+  problem(409, {
+    code: "folder-place-taken",
+    detail: `${rel} was not written: ${holder} already holds its place in the folder.`,
+  });
 
 const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
 const DRIVE = /^[A-Za-z]:/u;
@@ -223,47 +222,42 @@ const size = (bytes: number): string =>
  */
 export const folderPath = (raw: string) => {
   if (raw.length > PATH_LIMIT) {
-    return refusal(
-      400,
-      "folder-path-too-long",
-      `The path is ${raw.length} characters long; paths stop at ${PATH_LIMIT}.`
-    );
+    return problem(400, {
+      code: "folder-path-too-long",
+      detail: `The path is ${raw.length} characters long; paths stop at ${PATH_LIMIT}.`,
+    });
   }
   if (hasControl(raw)) {
-    return refusal(
-      400,
-      "folder-path-control",
-      "The path holds a control character; name files with printable characters."
-    );
+    return problem(400, {
+      code: "folder-path-control",
+      detail:
+        "The path holds a control character; name files with printable characters.",
+    });
   }
   if (raw.includes("\\")) {
-    return refusal(
-      400,
-      "folder-path-backslash",
-      `${raw} uses a backslash; separate folders with "/".`
-    );
+    return problem(400, {
+      code: "folder-path-backslash",
+      detail: `${raw} uses a backslash; separate folders with "/".`,
+    });
   }
   if (isAbsolute(raw) || DRIVE.test(raw)) {
-    return refusal(
-      400,
-      "folder-path-absolute",
-      `${raw} is an absolute path; name a path inside the project folder, like tasks/T-1.md.`
-    );
+    return problem(400, {
+      code: "folder-path-absolute",
+      detail: `${raw} is an absolute path; name a path inside the project folder, like tasks/T-1.md.`,
+    });
   }
   const parts = raw.split("/").filter((part) => part !== "" && part !== ".");
   if (parts.includes("..")) {
-    return refusal(
-      400,
-      "folder-path-outside",
-      `${raw} climbs out of the project folder with ".."; name a path inside it.`
-    );
+    return problem(400, {
+      code: "folder-path-outside",
+      detail: `${raw} climbs out of the project folder with ".."; name a path inside it.`,
+    });
   }
   if (parts.some((part) => part.toLowerCase() === ".git")) {
-    return refusal(
-      400,
-      "folder-path-in-git",
-      `${raw} reaches into .git, the folder's history; only the hub writes there.`
-    );
+    return problem(400, {
+      code: "folder-path-in-git",
+      detail: `${raw} reaches into .git, the folder's history; only the hub writes there.`,
+    });
   }
   return parts.join("/");
 };
@@ -330,11 +324,10 @@ const guarded = (rel: string, bytes: Uint8Array) => {
   const check = guards.get(rel);
   const problems = check ? check(new TextDecoder().decode(bytes)) : [];
   return problems.length > 0
-    ? refusal(
-        422,
-        "folder-write-unfit",
-        `${rel} was not written: ${problems.join(" ")}`
-      )
+    ? problem(422, {
+        code: "folder-write-unfit",
+        detail: `${rel} was not written: ${problems.join(" ")}`,
+      })
     : undefined;
 };
 
@@ -343,20 +336,18 @@ export const projectRoot = (projectId: string) => {
   if (projectId.startsWith(AREA_KEY)) {
     const areaId = projectId.slice(AREA_KEY.length);
     if (!PROJECT_ID.test(areaId)) {
-      return refusal(
-        400,
-        "folder-area-id-unfit",
-        `${areaId} is not an area id.`
-      );
+      return problem(400, {
+        code: "folder-area-id-unfit",
+        detail: `${areaId} is not an area id.`,
+      });
     }
     return join(AREAS_DIR, areaId);
   }
   if (!PROJECT_ID.test(projectId)) {
-    return refusal(
-      400,
-      "folder-project-id-unfit",
-      `${projectId} is not a project id.`
-    );
+    return problem(400, {
+      code: "folder-project-id-unfit",
+      detail: `${projectId} is not a project id.`,
+    });
   }
   return join(PROJECTS_DIR, projectId);
 };
@@ -389,11 +380,11 @@ const gitEnv = (): Record<string, string> => {
 /** One git command against a project folder; answers its exit code and output. */
 const run = async (root: string, args: string[]) => {
   if (!Bun.which("git")) {
-    return refusal(
-      503,
-      "folder-git-missing",
-      "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again."
-    );
+    return problem(503, {
+      code: "folder-git-missing",
+      detail:
+        "git is not installed on the hub's machine, so project folders cannot keep their history. Install git there, then try again.",
+    });
   }
   const ran = await readWithin(GIT_TIMEOUT_MS, (signal) =>
     runCaptured(
@@ -422,11 +413,10 @@ const run = async (root: string, args: string[]) => {
       return ran.value;
     case "unanswered":
       // Not a git answer: never read as a failed or empty one.
-      return refusal(
-        504,
-        "folder-git-unanswered",
-        `git ${args[0]} did not finish within ${secondsOf(ran.after)} s in the project folder.`
-      );
+      return problem(504, {
+        code: "folder-git-unanswered",
+        detail: `git ${args[0]} did not finish within ${secondsOf(ran.after)} s in the project folder.`,
+      });
     default:
       unhandled("read", ran);
   }
@@ -440,19 +430,21 @@ const git = async (root: string, args: string[]) => {
   }
   if (result.code !== 0) {
     const said = result.stderr.trim().split("\n")[0]?.replace(TRAILING_DOT, "");
-    return refusal(
-      500,
-      "folder-git-failed",
-      `git ${args[0]} failed in the project folder: ${said || `exit ${result.code}`}.`
-    );
+    return problem(500, {
+      code: "folder-git-failed",
+      detail: `git ${args[0]} failed in the project folder: ${said || `exit ${result.code}`}.`,
+    });
   }
   return result.stdout;
 };
 
 /** A failed commit's refusal, saying (in `asWas`) the files were put back as they were. */
-const putBack = <R extends Refused>(refused: R, asWas: string) =>
+const putBack = <R extends AnyProblem>(refused: R, asWas: string) =>
   refused.status === 500
-    ? refusal(500, "folder-git-failed", `${refused.response.detail} ${asWas}`)
+    ? problem(500, {
+        code: "folder-git-failed",
+        detail: `${refused.response.detail} ${asWas}`,
+      })
     : refused;
 
 const head = async (root: string) => {
@@ -476,11 +468,10 @@ const signature = (author: FolderAuthor): string => {
 const askedMessage = (message: string | undefined) => {
   const trimmed = message?.trim();
   if (trimmed && trimmed.length > MESSAGE_LIMIT) {
-    return refusal(
-      400,
-      "folder-message-too-long",
-      `The commit message is ${trimmed.length} characters long; messages stop at ${MESSAGE_LIMIT}.`
-    );
+    return problem(400, {
+      code: "folder-message-too-long",
+      detail: `The commit message is ${trimmed.length} characters long; messages stop at ${MESSAGE_LIMIT}.`,
+    });
   }
   return trimmed || undefined;
 };
@@ -511,11 +502,10 @@ const commitPaths = async (
     return staged;
   }
   if (staged.code !== 0 && staged.code !== 1) {
-    return refusal(
-      500,
-      "folder-git-failed",
-      `git diff failed in the project folder: ${staged.stderr.trim()}`
-    );
+    return problem(500, {
+      code: "folder-git-failed",
+      detail: `git diff failed in the project folder: ${staged.stderr.trim()}`,
+    });
   }
   if (staged.code === 1) {
     const committed = await git(root, [
@@ -605,11 +595,10 @@ const prepare = async (projectId: string, root: string) => {
   // A read that outlived its project's forget (a task's triage, a waits
   // read) would make a new empty folder in the place its own goes back to.
   if (forgotten.has(projectId)) {
-    return refusal(
-      404,
-      "folder-forgotten",
-      projectTrashWords.forgottenFolder(projectId)
-    );
+    return problem(404, {
+      code: "folder-forgotten",
+      detail: projectTrashWords.forgottenFolder(projectId),
+    });
   }
   await mkdir(root, { recursive: true });
   if (!(await exists(join(root, ".git")))) {
@@ -713,18 +702,16 @@ const readable = async (root: string, rel: string) => {
   const realRoot = await realpath(root);
   const real = await landing(join(root, rel));
   if (!within(realRoot, real)) {
-    return refusal(
-      400,
-      "folder-link-outside",
-      `${rel} is a link that leads outside the project folder.`
-    );
+    return problem(400, {
+      code: "folder-link-outside",
+      detail: `${rel} is a link that leads outside the project folder.`,
+    });
   }
   if (within(join(realRoot, ".git"), real)) {
-    return refusal(
-      400,
-      "folder-link-in-git",
-      `${rel} is a link into .git, the folder's history.`
-    );
+    return problem(400, {
+      code: "folder-link-in-git",
+      detail: `${rel} is a link into .git, the folder's history.`,
+    });
   }
   return real;
 };
@@ -739,11 +726,10 @@ const writable = async (root: string, rel: string) => {
   const abs = join(root, rel);
   const parent = await landing(dirname(abs));
   if (parent !== dirname(join(realRoot, rel))) {
-    return refusal(
-      400,
-      "folder-path-through-link",
-      `${rel} passes through a link; name the path it leads to inside the project folder.`
-    );
+    return problem(400, {
+      code: "folder-path-through-link",
+      detail: `${rel} passes through a link; name the path it leads to inside the project folder.`,
+    });
   }
   return abs;
 };
@@ -751,11 +737,10 @@ const writable = async (root: string, rel: string) => {
 /** A missing path as the 404 it is; any other failure is thrown on. */
 const notFound = (rel: string) => (error: unknown) => {
   if (isMissing(error)) {
-    return refusal(
-      404,
-      "folder-file-missing",
-      `${rel || "The folder"} is not in the project folder.`
-    );
+    return problem(404, {
+      code: "folder-file-missing",
+      detail: `${rel || "The folder"} is not in the project folder.`,
+    });
   }
   throw error;
 };
@@ -806,11 +791,10 @@ export const listFolder = async (
   }
   const { real, info } = found;
   if (!info.isDirectory()) {
-    return refusal(
-      409,
-      "folder-listed-file",
-      `${rel} is a file; read it instead of listing it.`
-    );
+    return problem(409, {
+      code: "folder-listed-file",
+      detail: `${rel} is a file; read it instead of listing it.`,
+    });
   }
   const entries: FolderEntry[] = [];
   const complete = await walk(real, rel, recursive, entries);
@@ -887,7 +871,7 @@ const statToRead = async (
     return rel;
   }
   if (!rel) {
-    return refusal(400, "folder-file-unnamed", unnamed);
+    return problem(400, { code: "folder-file-unnamed", detail: unnamed });
   }
   const found = await statIn(projectId, rel);
   return found instanceof ElysiaStatus ? found : { rel, ...found };
@@ -905,27 +889,24 @@ export const readFolderFile = async (projectId: string, rawPath: string) => {
   }
   const { rel, real, info } = found;
   if (info.isDirectory()) {
-    return refusal(
-      409,
-      "folder-read-folder",
-      `${rel} is a folder; list it instead of reading it.`
-    );
+    return problem(409, {
+      code: "folder-read-folder",
+      detail: `${rel} is a folder; list it instead of reading it.`,
+    });
   }
   if (info.size > FOLDER_FILE_LIMIT) {
-    return refusal(
-      413,
-      "folder-file-too-large",
-      `${rel} is ${size(info.size)}; reads stop at ${size(FOLDER_FILE_LIMIT)}.`
-    );
+    return problem(413, {
+      code: "folder-file-too-large",
+      detail: `${rel} is ${size(info.size)}; reads stop at ${size(FOLDER_FILE_LIMIT)}.`,
+    });
   }
   const bytes = await readFile(real);
   const content = asText(bytes);
   if (content === undefined) {
-    return refusal(
-      415,
-      "folder-file-binary",
-      `${rel} is a binary file, so it cannot be read as text.`
-    );
+    return problem(415, {
+      code: "folder-file-binary",
+      detail: `${rel} is a binary file, so it cannot be read as text.`,
+    });
   }
   const file: FolderFile = { path: rel, content, size: bytes.byteLength };
   return file;
@@ -1007,18 +988,16 @@ export const folderFileRaw = async (
   }
   const { rel, real, info } = found;
   if (info.isDirectory()) {
-    return refusal(
-      409,
-      "folder-read-folder",
-      `${rel} is a folder, not a file.`
-    );
+    return problem(409, {
+      code: "folder-read-folder",
+      detail: `${rel} is a folder, not a file.`,
+    });
   }
   if (info.size > limit) {
-    return refusal(
-      413,
-      "folder-file-too-large",
-      `${rel} is ${size(info.size)}; files open up to ${size(limit)}.`
-    );
+    return problem(413, {
+      code: "folder-file-too-large",
+      detail: `${rel} is ${size(info.size)}; files open up to ${size(limit)}.`,
+    });
   }
   return { path: rel, real, size: info.size };
 };
@@ -1058,11 +1037,10 @@ export const readFolderFileAt = async (
     return rel;
   }
   if (!(rel && COMMIT_SHA.test(sha))) {
-    return refusal(
-      400,
-      "folder-commit-unnamed",
-      "Name a commit's full sha and a file in it."
-    );
+    return problem(400, {
+      code: "folder-commit-unnamed",
+      detail: "Name a commit's full sha and a file in it.",
+    });
   }
   const key = `${projectId}\0${sha}\0${rel}`;
   if (readAt.has(key)) {
@@ -1238,19 +1216,17 @@ export const writeFolderFile = async (
     return rel;
   }
   if (!rel) {
-    return refusal(
-      400,
-      "folder-file-unnamed",
-      "Name a file to write, like tasks/T-1.md."
-    );
+    return problem(400, {
+      code: "folder-file-unnamed",
+      detail: "Name a file to write, like tasks/T-1.md.",
+    });
   }
   const bytes = typeof content === "string" ? Buffer.from(content) : content;
   if (bytes.byteLength > FOLDER_FILE_LIMIT) {
-    return refusal(
-      413,
-      "folder-write-too-large",
-      `The file is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`
-    );
+    return problem(413, {
+      code: "folder-write-too-large",
+      detail: `The file is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`,
+    });
   }
   const unfit = guarded(rel, bytes);
   if (unfit) {
@@ -1328,19 +1304,17 @@ const toWrite = (files: { path: string; content: string | Uint8Array }[]) => {
       return rel;
     }
     if (!rel) {
-      return refusal(
-        400,
-        "folder-file-unnamed",
-        "Name each file to write, like assets/a.md."
-      );
+      return problem(400, {
+        code: "folder-file-unnamed",
+        detail: "Name each file to write, like assets/a.md.",
+      });
     }
     const bytes = typeof content === "string" ? Buffer.from(content) : content;
     if (bytes.byteLength > FOLDER_FILE_LIMIT) {
-      return refusal(
-        413,
-        "folder-write-too-large",
-        `${rel} is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`
-      );
+      return problem(413, {
+        code: "folder-write-too-large",
+        detail: `${rel} is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`,
+      });
     }
     const unfit = guarded(rel, bytes);
     if (unfit) {
@@ -1349,11 +1323,10 @@ const toWrite = (files: { path: string; content: string | Uint8Array }[]) => {
     writes.push({ rel, bytes });
   }
   if (writes.length === 0) {
-    return refusal(
-      400,
-      "folder-write-none",
-      "Name at least one file to write."
-    );
+    return problem(400, {
+      code: "folder-write-none",
+      detail: "Name at least one file to write.",
+    });
   }
   return writes;
 };
@@ -1366,11 +1339,10 @@ const fileToWrite = async (root: string, rel: string) => {
   }
   const there = await lstatIfThere(abs);
   if (there?.isDirectory()) {
-    return refusal(
-      409,
-      "folder-write-onto-folder",
-      `${rel} is a folder, so a file cannot be written there.`
-    );
+    return problem(409, {
+      code: "folder-write-onto-folder",
+      detail: `${rel} is a folder, so a file cannot be written there.`,
+    });
   }
   return { abs, there };
 };
@@ -1389,11 +1361,10 @@ const fileToTake = async (root: string, rel: string) => {
 const fileToDelete = async (root: string, rel: string) => {
   const target = await fileToTake(root, rel);
   if (!(target instanceof ElysiaStatus) && target.info.isDirectory()) {
-    return refusal(
-      409,
-      "folder-delete-folder",
-      `${rel} is a folder; delete the files in it one by one.`
-    );
+    return problem(409, {
+      code: "folder-delete-folder",
+      detail: `${rel} is a folder; delete the files in it one by one.`,
+    });
   }
   return target;
 };
@@ -1403,11 +1374,10 @@ const parentFolder = (abs: string, rel: string) =>
   mkdir(dirname(abs), { recursive: true }).catch((error: unknown) => {
     const { code } = error as NodeJS.ErrnoException;
     if (code === "EEXIST" || code === "ENOTDIR") {
-      return refusal(
-        409,
-        "folder-write-under-file",
-        `A file sits where ${dirname(rel)} would be a folder, so ${rel} cannot be written.`
-      );
+      return problem(409, {
+        code: "folder-write-under-file",
+        detail: `A file sits where ${dirname(rel)} would be a folder, so ${rel} cannot be written.`,
+      });
     }
     throw error;
   });
@@ -1549,7 +1519,10 @@ const toDelete = (paths: string[]) => {
     named.push(rel);
   }
   return named.some((rel) => !rel)
-    ? refusal(400, "folder-file-unnamed", "Name each file to delete.")
+    ? problem(400, {
+        code: "folder-file-unnamed",
+        detail: "Name each file to delete.",
+      })
     : [...new Set(named)];
 };
 
@@ -1573,11 +1546,10 @@ export const changeFolderFiles = async (
     return asked;
   }
   if (!asked) {
-    return refusal(
-      400,
-      "folder-message-missing",
-      "Say what the files are in a commit message."
-    );
+    return problem(400, {
+      code: "folder-message-missing",
+      detail: "Say what the files are in a commit message.",
+    });
   }
   const writes = change.writes.length > 0 ? toWrite(change.writes) : [];
   if (writes instanceof ElysiaStatus) {
@@ -1588,20 +1560,18 @@ export const changeFolderFiles = async (
     return deletes;
   }
   if (writes.length + deletes.length === 0) {
-    return refusal(
-      400,
-      "folder-change-none",
-      "Name at least one file to change."
-    );
+    return problem(400, {
+      code: "folder-change-none",
+      detail: "Name at least one file to change.",
+    });
   }
   const written = new Set(writes.map((write) => write.rel));
   const both = deletes.find((rel) => written.has(rel));
   if (both) {
-    return refusal(
-      400,
-      "folder-change-twice",
-      `${both} is both written and deleted; name it once.`
-    );
+    return problem(400, {
+      code: "folder-change-twice",
+      detail: `${both} is both written and deleted; name it once.`,
+    });
   }
   const rels = [...written, ...deletes];
   const root = projectRoot(projectId);
@@ -1676,11 +1646,11 @@ export const deleteFolderFile = async (
     return rel;
   }
   if (!rel) {
-    return refusal(
-      400,
-      "folder-file-unnamed",
-      "Name a file to delete; the folder itself goes when its project does."
-    );
+    return problem(400, {
+      code: "folder-file-unnamed",
+      detail:
+        "Name a file to delete; the folder itself goes when its project does.",
+    });
   }
   const to = writeTo(projectId, options.message);
   if (to instanceof ElysiaStatus) {
@@ -1744,11 +1714,10 @@ export const moveFolderFile = async (
     return to;
   }
   if (!(from && to)) {
-    return refusal(
-      400,
-      "folder-move-unnamed",
-      "Name the file to move and where it goes."
-    );
+    return problem(400, {
+      code: "folder-move-unnamed",
+      detail: "Name the file to move and where it goes.",
+    });
   }
   const into = writeTo(projectId, options.message);
   if (into instanceof ElysiaStatus) {
@@ -1761,11 +1730,10 @@ export const moveFolderFile = async (
       return target;
     }
     if (!target.info.isFile()) {
-      return refusal(
-        409,
-        "folder-move-not-file",
-        `${from} is not a file, so it cannot be moved.`
-      );
+      return problem(409, {
+        code: "folder-move-not-file",
+        detail: `${from} is not a file, so it cannot be moved.`,
+      });
     }
     const source = target.abs;
     const before = new Map<string, Buffer | undefined>();
@@ -2408,11 +2376,10 @@ export const untrashProjectFolder = async (
       return;
     }
     if (await exists(root)) {
-      return refusal(
-        409,
-        "folder-trash-place-taken",
-        projectTrashWords.folderTaken(projectId, root)
-      );
+      return problem(409, {
+        code: "folder-trash-place-taken",
+        detail: projectTrashWords.folderTaken(projectId, root),
+      });
     }
     await mkdir(PROJECTS_DIR, { recursive: true });
     await rename(join(PROJECT_TRASH_DIR, entry), root);
@@ -2486,11 +2453,10 @@ export const projectFolderRoutes = (
   const unknown = (id: string) =>
     projectExists(id)
       ? undefined
-      : refusal(
-          404,
-          "folder-project-unknown",
-          `The hub keeps no project ${id}.`
-        );
+      : problem(404, {
+          code: "folder-project-unknown",
+          detail: `The hub keeps no project ${id}.`,
+        });
   return new Elysia()
     .get(
       "/api/projects/:id/folder",

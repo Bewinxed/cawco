@@ -90,7 +90,7 @@ import { tool as mcpTool, sentence } from "./mcp-tool";
 import { uuidOf } from "./named-uuid";
 import type { AnswerFrom } from "./pending";
 import { askEnvelope } from "./pending";
-import type { Refused } from "./refusal";
+import type { AnyProblem } from "./refusal";
 
 /** The session tools asks give, by name: what a call is routed by (delegation-mcp.ts). */
 export const ASK_TOOLS: ReadonlySet<string> = new Set(["ask"]);
@@ -194,7 +194,7 @@ export interface AsksDeps {
     name: string,
     input: Record<string, unknown>,
     asker: InstanceRow
-  ) => Promise<string | Refused>;
+  ) => Promise<string | AnyProblem>;
   /**
    * Takes an ask off every screen (pending.ts `resolve`): answered, with who
    * answered, or withdrawn, with why.

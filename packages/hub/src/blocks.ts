@@ -32,9 +32,8 @@ import {
   viewBlock,
   viewOfBlock,
 } from "@cawco/core/blocks";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { DbShape } from "./db";
-import { refusal } from "./refusal";
 
 /** The most blocks one page holds: its built-ins and the views placed on it. */
 const MOST = 64;
@@ -56,11 +55,10 @@ export const createBlocks = ({
 }: BlocksDeps) => {
   /** The refusal of a project the hub does not keep. */
   const noProject = (projectId: string) =>
-    refusal(
-      404,
-      "block-project-unknown",
-      `The hub keeps no project ${projectId}.`
-    );
+    problem(404, {
+      code: "block-project-unknown",
+      detail: `The hub keeps no project ${projectId}.`,
+    });
   /** The refusal of a project the hub does not keep; none for one it does. */
   const unknownProject = (projectId: string) =>
     projectName(projectId) === undefined ? noProject(projectId) : undefined;
@@ -120,11 +118,10 @@ export const createBlocks = ({
       const seen = new Set<string>();
       for (const { block } of blocks) {
         if (seen.has(block)) {
-          return refusal(
-            400,
-            "block-named-twice",
-            `The ${page} page names the block “${block}” twice; each block stands once.`
-          );
+          return problem(400, {
+            code: "block-named-twice",
+            detail: `The ${page} page names the block “${block}” twice; each block stands once.`,
+          });
         }
         seen.add(block);
       }
@@ -139,11 +136,10 @@ export const createBlocks = ({
         const kept = new Set(views);
         const missing = placed.filter((name) => !kept.has(name));
         if (missing.length > 0) {
-          return refusal(
-            400,
-            "block-view-not-kept",
-            `Only a kept view stands as a block, and ${missing.map((name) => `“${name}”`).join(", ")} ${missing.length > 1 ? "are" : "is"} not one of this project's kept views.`
-          );
+          return problem(400, {
+            code: "block-view-not-kept",
+            detail: `Only a kept view stands as a block, and ${missing.map((name) => `“${name}”`).join(", ")} ${missing.length > 1 ? "are" : "is"} not one of this project's kept views.`,
+          });
         }
       }
       db.blocks.setPage(projectId, page, blocks);

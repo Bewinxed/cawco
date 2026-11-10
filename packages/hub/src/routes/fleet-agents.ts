@@ -3,10 +3,9 @@
  */
 
 import { agentProblem, parseAgentFrontMatter } from "@cawco/core/fleet";
-import { Elysia, status, t } from "elysia";
+import { Elysia, problem, status, t } from "elysia";
 import { undoable } from "../db/trash";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
 
 /**
  * Why a write naming `expectedHash` may not land on subagent `name`: the
@@ -26,7 +25,10 @@ const agentMoved = (
   if (!current) {
     return expectedHash === ""
       ? undefined
-      : refusal(404, "no-subagent", `the fleet keeps no subagent ${name}`);
+      : problem(404, {
+          code: "no-subagent",
+          detail: `the fleet keeps no subagent ${name}`,
+        });
   }
   return current.hash === expectedHash ? undefined : status(409, current);
 };
@@ -59,12 +61,12 @@ export const fleetAgentRoutes = ({
         }),
       },
       ({ params, body }) => {
-        const problem = agentProblem(
+        const misfit = agentProblem(
           parseAgentFrontMatter(body.content),
           params.name
         );
-        if (problem) {
-          return refusal(400, "agent-invalid", problem);
+        if (misfit) {
+          return problem(400, { code: "agent-invalid", detail: misfit });
         }
         const moved = agentMoved(db, params.name, body.expectedHash);
         if (moved) {
@@ -96,11 +98,10 @@ export const fleetAgentRoutes = ({
           Date.now()
         );
         if (trashed === undefined) {
-          return refusal(
-            404,
-            "no-subagent",
-            `the fleet keeps no subagent ${params.name}`
-          );
+          return problem(404, {
+            code: "no-subagent",
+            detail: `the fleet keeps no subagent ${params.name}`,
+          });
         }
         return undoable(trashed);
       }

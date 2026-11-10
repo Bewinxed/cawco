@@ -9,9 +9,9 @@ import { type ChangedItem, docMeta, setMeta } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
 import { artifactWords } from "@cawco/core/words/artifacts";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
-import { refusal } from "../../refusal";
+
 import {
   canvasEntries,
   clearDrawing,
@@ -193,11 +193,10 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
       return one;
     }
     one.release();
-    return refusal(
-      504,
-      "artifact-canvas-screen-unjoined",
-      `The canvas ${row.name} wasn't drawn: the hub's machine opened it, but its page didn't join the canvas within ${Math.round(CANVAS_LIMITS.convertMs / 1000)} s.`
-    );
+    return problem(504, {
+      code: "artifact-canvas-screen-unjoined",
+      detail: `The canvas ${row.name} wasn't drawn: the hub's machine opened it, but its page didn't join the canvas within ${Math.round(CANVAS_LIMITS.convertMs / 1000)} s.`,
+    });
   };
   /**
    * The canvas's headless screen, opened when it has none and held on when
@@ -294,18 +293,16 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
   ) => {
     if ("elements" in change) {
       if (change.elements.length > CANVAS_LIMITS.elementsPerCall) {
-        return refusal(
-          413,
-          "artifact-canvas-elements-many",
-          `One call writes at most ${CANVAS_LIMITS.elementsPerCall} elements; send the rest in another.`
-        );
+        return problem(413, {
+          code: "artifact-canvas-elements-many",
+          detail: `One call writes at most ${CANVAS_LIMITS.elementsPerCall} elements; send the rest in another.`,
+        });
       }
     } else if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
-      return refusal(
-        413,
-        "artifact-canvas-mermaid-long",
-        `Mermaid is at most ${CANVAS_LIMITS.mermaid} characters; split the diagram.`
-      );
+      return problem(413, {
+        code: "artifact-canvas-mermaid-long",
+        detail: `Mermaid is at most ${CANVAS_LIMITS.mermaid} characters; split the diagram.`,
+      });
     }
     const replacing = replace ? { replace: true as const } : {};
     const convert = () =>
@@ -335,11 +332,10 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
    */
   const createDraft = (instance: InstanceRow, input: ArtifactInput) => {
     if (input.elements !== undefined || input.mermaid !== undefined) {
-      return refusal(
-        400,
-        "artifact-draft-drawn",
-        "A draft canvas starts empty: it takes no elements or mermaid."
-      );
+      return problem(400, {
+        code: "artifact-draft-drawn",
+        detail: "A draft canvas starts empty: it takes no elements or mermaid.",
+      });
     }
     const { name } = input;
     let free = name;
@@ -459,11 +455,10 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
     if (!before) {
       discard(row);
     }
-    return refusal(
-      status,
-      response.code,
-      `${response.detail} ${before ? "Your parent wasn't told." : "Nothing was handed to your parent."}`
-    );
+    return problem(status, {
+      code: response.code,
+      detail: `${response.detail} ${before ? "Your parent wasn't told." : "Nothing was handed to your parent."}`,
+    });
   };
   /** Why a canvas's drawing refused: its draw's refusal ({@link draw}). */
   type Unhanded = Extract<
@@ -480,11 +475,10 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
    */
   const createCanvas = async (making: Making, input: ArtifactInput) => {
     if (input.elements !== undefined && input.mermaid !== undefined) {
-      return refusal(
-        400,
-        "artifact-canvas-sources",
-        "A canvas takes elements or mermaid, not both."
-      );
+      return problem(400, {
+        code: "artifact-canvas-sources",
+        detail: "A canvas takes elements or mermaid, not both.",
+      });
     }
     const unopened = await openNextFirst(making, "canvas", input.name);
     if (unopened) {
@@ -562,11 +556,10 @@ export const createCanvasKind = (ctx: CanvasKindContext) => {
   ) => {
     if ("delete" in change) {
       if (change.delete.length > CANVAS_LIMITS.deletePerCall) {
-        return refusal(
-          413,
-          "artifact-canvas-deletes-many",
-          `One call deletes at most ${CANVAS_LIMITS.deletePerCall} elements.`
-        );
+        return problem(413, {
+          code: "artifact-canvas-deletes-many",
+          detail: `One call deletes at most ${CANVAS_LIMITS.deletePerCall} elements.`,
+        });
       }
       const before = canvasEntries(docs, row.id);
       const { deleted, missing } = deleteElements(docs, row.id, change.delete);

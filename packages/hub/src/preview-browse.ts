@@ -9,7 +9,7 @@ import { secondsOf } from "@cawco/core/time";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import type { WorkspaceSaved } from "@cawco/core/workspace/controls";
 import { CONTROL_WORKSPACE_SAVE } from "@cawco/core/workspace/controls";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { problemResponse } from "elysia/error";
 import type { Browsed } from "./artifacts/shapes";
 import { dashboardUrl } from "./dashboard-url";
@@ -18,7 +18,7 @@ import type { HubContext } from "./hub-context";
 import { servedByMachine } from "./preview";
 import { mintSessionTicket } from "./preview-access";
 import { embedKey } from "./preview-origin";
-import { type Refused, refusal } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { unreachable } from "./unreachable";
 
 const NOT_NAME = /[^a-z0-9]+/gu;
@@ -125,7 +125,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
   const browsedOrigin = (row: ArtifactRow) => {
     const owner = ctx.originKeyOf(row.id);
     if (!owner) {
-      return refusal(404, "browse-unheld", `No session holds ${row.name} now.`);
+      return problem(404, {
+        code: "browse-unheld",
+        detail: `No session holds ${row.name} now.`,
+      });
     }
     if (row.kind === "page" || row.kind === "canvas") {
       const address = ctx.previewListeners.address(owner);
@@ -135,11 +138,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     }
     const key = ctx.embedKeyOf(row.id);
     if (!servedByMachine(row) || key === undefined) {
-      return refusal(
-        409,
-        "browse-unserved",
-        `${row.name} is served by no machine now, so it has no address to open.`
-      );
+      return problem(409, {
+        code: "browse-unserved",
+        detail: `${row.name} is served by no machine now, so it has no address to open.`,
+      });
     }
     const address = ctx.previewListeners.embed(key, owner);
     return address instanceof ElysiaStatus
@@ -198,11 +200,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       address.origin ??
       previewRoute(address, new URL(dashboardUrl(ctx.registry)))?.origin;
     if (!origin) {
-      return refusal(
-        503,
-        "browse-unnamed",
-        `${row.name}'s preview origin has no address this hub can name.`
-      );
+      return problem(503, {
+        code: "browse-unnamed",
+        detail: `${row.name}'s preview origin has no address this hub can name.`,
+      });
     }
     const browsed: Browsed = {
       url: previewEnterUrl(origin, entry.ticket, path),
@@ -228,11 +229,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
   ) => {
     const machineId = await ctx.ownMachineId;
     if (!ctx.registry.agent(machineId)) {
-      return refusal(
-        503,
-        "picture-no-daemon",
-        `${row.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
-      );
+      return problem(503, {
+        code: "picture-no-daemon",
+        detail: `${row.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`,
+      });
     }
     const entered = enteredAt(instance, row);
     if (entered instanceof ElysiaStatus) {
@@ -258,11 +258,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        return refusal(
-          503,
-          "picture-undrawn",
-          `${row.name} wasn't drawn: the hub's machine didn't draw it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`
-        );
+        return problem(503, {
+          code: "picture-undrawn",
+          detail: `${row.name} wasn't drawn: the hub's machine didn't draw it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`,
+        });
       case "answered":
         break;
       default:
@@ -270,12 +269,12 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     }
     const png = (asked.value.result as { png?: unknown } | undefined)?.png;
     if (!asked.value.ok || typeof png !== "string") {
-      return refusal(
-        503,
-        "picture-none",
-        asked.value.error ??
-          `${row.name} wasn't drawn: the hub's machine answered no picture.`
-      );
+      return problem(503, {
+        code: "picture-none",
+        detail:
+          asked.value.error ??
+          `${row.name} wasn't drawn: the hub's machine answered no picture.`,
+      });
     }
     return png;
   };
@@ -294,11 +293,11 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
   ) => {
     const workspace = ctx.sessionWorkspace(instance);
     if (!workspace) {
-      return refusal(
-        409,
-        "picture-save-no-workspace",
-        "save keeps a picture in your workspace, and this session runs in none; read it without save."
-      );
+      return problem(409, {
+        code: "picture-save-no-workspace",
+        detail:
+          "save keeps a picture in your workspace, and this session runs in none; read it without save.",
+      });
     }
     const asked = await ctx.callAgent(
       instance.machineId,
@@ -308,11 +307,10 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     );
     switch (asked.kind) {
       case "unanswered":
-        return refusal(
-          503,
-          "picture-save-unanswered",
-          `The picture wasn't saved: ${ctx.machineName(instance.machineId)} ${asked.reason === "dead" ? "isn't connected" : `didn't answer within ${secondsOf(asked.after)} s`}.`
-        );
+        return problem(503, {
+          code: "picture-save-unanswered",
+          detail: `The picture wasn't saved: ${ctx.machineName(instance.machineId)} ${asked.reason === "dead" ? "isn't connected" : `didn't answer within ${secondsOf(asked.after)} s`}.`,
+        });
       case "answered":
         break;
       default:
@@ -320,14 +318,16 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
     }
     const saved = asked.value.result as WorkspaceSaved | undefined;
     if (!(asked.value.ok && saved)) {
-      return refusal(
-        503,
-        "picture-save-failed",
-        `The picture wasn't saved: ${asked.value.error ?? "its machine answered nothing"}.`
-      );
+      return problem(503, {
+        code: "picture-save-failed",
+        detail: `The picture wasn't saved: ${asked.value.error ?? "its machine answered nothing"}.`,
+      });
     }
     if ("refused" in saved) {
-      return refusal(400, "picture-save-refused", saved.refused);
+      return problem(400, {
+        code: "picture-save-refused",
+        detail: saved.refused,
+      });
     }
     return saved.path;
   };
@@ -361,7 +361,7 @@ export const createPreviewBrowse = (ctx: PreviewBrowseContext) => {
       return {};
     }
     const key = embedKey(row.origin);
-    const unopened = ({ response }: Refused) => {
+    const unopened = ({ response }: AnyProblem) => {
       console.warn(`[preview] ${response.detail}`);
       return { unopened: response.detail };
     };
