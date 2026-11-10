@@ -20,7 +20,11 @@ import type { PreviewDown } from "./preview/protocol";
  * host (agent stage.ts, `CAWCO_STAGE_FRAMEWORK`), each with its own adapter
  * there (stage-host host.ts).
  */
-export type StageFramework = "svelte" | "vue" | "react" | "solid" | "preact";
+const STAGE_FRAMEWORKS = ["svelte", "vue", "react", "solid", "preact"] as const;
+export type StageFramework = (typeof STAGE_FRAMEWORKS)[number];
+/** `value` as one of the {@link StageFramework}s, or undefined when it is none. */
+export const stageFrameworkOf = (value: unknown): StageFramework | undefined =>
+  STAGE_FRAMEWORKS.find((one) => one === value);
 
 /**
  * Where a stage serves a component canvas: `?file=<states file, from the
@@ -975,7 +979,11 @@ export const STAGE_RESTARTS = 3;
  * Astro's or Nuxt's, each started by its programmatic API with the stage's
  * plugins added.
  */
-export type StageToolchain = "vite" | "astro" | "nuxt";
+export const STAGE_TOOLCHAINS = ["vite", "astro", "nuxt"] as const;
+export type StageToolchain = (typeof STAGE_TOOLCHAINS)[number];
+/** `value` as one of the {@link StageToolchain}s, or undefined when it is none. */
+export const stageToolchainOf = (value: unknown): StageToolchain | undefined =>
+  STAGE_TOOLCHAINS.find((one) => one === value);
 
 /** The words for a project or component no stage shows: the owner's decision, an HTML page on the project's CSS (spec §10). */
 export const AS_PAGE =
