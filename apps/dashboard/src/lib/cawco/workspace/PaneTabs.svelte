@@ -544,8 +544,9 @@
     if (!card) {
       return;
     }
-    card.addEventListener("pointerdown", swipeCardShut);
-    return () => card.removeEventListener("pointerdown", swipeCardShut);
+    const shut = (event: PointerEvent) => swipeCardShut(card, event);
+    card.addEventListener("pointerdown", shut);
+    return () => card.removeEventListener("pointerdown", shut);
   });
   // The morph mark changes as the surface retargets. It is set on the
   // element: as a prop of the popover's content the change re-mounts
@@ -560,7 +561,10 @@
     wrapper?.setAttribute("data-session-details", "");
     wrapper?.toggleAttribute("data-details-morph", morphing);
   });
-  function hoverTab(id: string, event: PointerEvent) {
+  function hoverTab(
+    id: string,
+    event: PointerEvent & { currentTarget: HTMLElement }
+  ) {
     // A project's tab has no session card: its page is the project's details.
     if (
       projectOfTab(id) ||
@@ -574,7 +578,7 @@
     clearTimeout(timer);
     // The handlers sit on the whole tab, its buttons included, so moving onto
     // them is not leaving it; the card hangs from the whole tab.
-    const anchor = event.currentTarget as HTMLElement;
+    const anchor = event.currentTarget;
     if (detailsOpen) {
       showDetails(id, anchor, false);
       return;
@@ -1099,13 +1103,13 @@
    * under the row, where a pull brings it, never over the row at the
    * pointer. A long press's and a right click's menu are moved there.
    */
-  function anchorMenu(event: MouseEvent) {
+  function anchorMenu(event: MouseEvent & { currentTarget: HTMLElement }) {
     if (anchored.has(event)) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    openMenu(event.currentTarget as HTMLElement);
+    openMenu(event.currentTarget);
   }
 
   /** The open menu's surface, once bits-ui has mounted it. */
@@ -1199,11 +1203,14 @@
       : 0;
   }
 
-  function pullMenu(id: string, event: PointerEvent) {
+  function pullMenu(
+    id: string,
+    event: PointerEvent & { currentTarget: HTMLElement }
+  ) {
     if (event.pointerType === "mouse" || !event.isPrimary) {
       return;
     }
-    const node = event.currentTarget as HTMLElement;
+    const node = event.currentTarget;
     const x0 = event.clientX;
     const y0 = event.clientY;
     let pulling = false;
@@ -1289,7 +1296,7 @@
    * of it, it comes back down. The pull of the tab's menu, the other way.
    * With less motion a swipe past PULL_OPEN closes it.
    */
-  function swipeCardShut(event: PointerEvent) {
+  function swipeCardShut(el: HTMLElement, event: PointerEvent) {
     if (
       event.pointerType === "mouse" ||
       !event.isPrimary ||
@@ -1300,7 +1307,6 @@
     ) {
       return;
     }
-    const el = event.currentTarget as HTMLElement;
     const x0 = event.clientX;
     const y0 = event.clientY;
     let swiping = false;
@@ -1636,7 +1642,7 @@
                 // (warm.svelte.ts). A pressed tab is focused too, and its
                 // pointer reached for it by hovering: its neighbours stay held.
                 warm.besides(
-                  (event.currentTarget as HTMLElement).matches(":focus-visible")
+                  event.currentTarget.matches(":focus-visible")
                     ? besideOf(tab.id)
                     : []
                 );
