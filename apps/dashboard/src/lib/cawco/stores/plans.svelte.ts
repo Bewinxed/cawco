@@ -3,12 +3,14 @@
 import type { SessionPlan } from "@cawco/core/plan";
 import type { HeldPlan } from "../plan";
 
-export const plansState = $state({
+export const plansState = $state<{
   /**
    * Each followed session's plan (plan.ts): its steps, its spec, an
    * attempt's to-dos, as the hub's `plan.snapshot` and `plan.delta` keep it.
    */
-  plans: {} as Record<string, HeldPlan>,
+  plans: Record<string, HeldPlan>;
+}>({
+  plans: {},
 });
 
 /** Each followed session's plan. */

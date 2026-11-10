@@ -6,38 +6,49 @@
 import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
 import type { FrameOf } from "../hub/frames";
 
-const tickersState = $state({
+const tickersState = $state<{
   /**
    * How many times each project's tasks have changed since this page
    * connected, by project id (`tasks.changed` frames): what shows its tasks
    * reads them again when it moves.
    */
-  tasksChanged: {} as Record<string, number>,
+  tasksChanged: Record<string, number>;
+
   /**
    * How many `tasks.changed` frames have named each task, by
    * `projectId/taskId`, and how many named none, by project id: an open
    * task reads itself again when either moves (`taskChangedOf`).
    */
-  taskChanged: {} as Record<string, number>,
-  tasksChangedUnnamed: {} as Record<string, number>,
+  taskChanged: Record<string, number>;
+  tasksChangedUnnamed: Record<string, number>;
+
   /**
    * How many times each project's decision pages have changed since this
    * page connected (`decisions.changed` frames): the Decisions tab reads them
    * again when it moves.
    */
-  decisionsChanged: {} as Record<string, number>,
+  decisionsChanged: Record<string, number>;
+
   /**
    * How many times each project's arrangement of blocks has changed since
    * this page connected (`blocks.changed` frames): its pages read it again
    * when it moves.
    */
-  blocksChanged: {} as Record<string, number>,
+  blocksChanged: Record<string, number>;
+
   /**
    * Each project's starters for each place as the hub last wrote them while
    * this page was connected (`starters.changed` frames), by
    * `<place>:<project id>`: newer than the set its stages read carried.
    */
-  starters: {} as Record<string, ProjectStarter[]>,
+  starters: Record<string, ProjectStarter[]>;
+}>({
+  tasksChanged: {},
+  taskChanged: {},
+  tasksChangedUnnamed: {},
+  decisionsChanged: {},
+  blocksChanged: {},
+  starters: {},
 });
 
 export function takeTasksChanged(frame: FrameOf<"tasks.changed">): void {

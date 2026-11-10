@@ -6,19 +6,23 @@ import type { ContinuationJob } from "@cawco/core/protocol";
 import type { BoardFrame } from "../hub/frames";
 import { equal } from "./same";
 
-const continuationsState = $state({
+const continuationsState = $state<{
   /**
    * The continuations the hub is carrying, as it publishes them: what the
    * Continue dialog follows, and what opens the new session of one this tab
    * started after its dialog was dismissed.
    */
-  continuations: [] as ContinuationJob[],
+  continuations: ContinuationJob[];
+
   /**
    * The ids sessions had before the hub folded each one's continuations at
    * its account's limit into it: former id → its id now. A tab on a former
    * id is that session's.
    */
-  formerIds: {} as Record<string, string>,
+  formerIds: Record<string, string>;
+}>({
+  continuations: [],
+  formerIds: {},
 });
 
 /** Who hears the continuation table each time it moves (see {@link followContinuations}). */
