@@ -346,7 +346,6 @@ as-unknown-as	TraceEvent[]	scripts/probe-kit/specs/web/edge-fade-perf.ts	1
 as-unknown-as	typeof RTCPeerConnection	apps/dashboard/src/routes/dev/browser-panel/+page.svelte	1
 as-unknown-as	typeof WebSocket	packages/preview/src/overlay/doc-worker.ts	1
 as-unknown-as	typeof WebSocket	scripts/probe-kit/specs/composer-canvas.ts	1
-as-unknown-as	VirtualizerHandle	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	1
 as-unknown-as	W[]	packages/core/src/usage/windows.ts	1
 as-unknown-as	WebSocketHandler<ListenerSocket>	packages/hub/src/preview.ts	1
 catch-drops-reason	ArrayLiteralExpression	scripts/probe-kit/specs/account-refused.ts	1
