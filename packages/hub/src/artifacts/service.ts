@@ -1888,6 +1888,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const hearer = tell
       ? await deps.signal(to, row, { since: row.deliveredSeq })
       : null;
+    if (hearer instanceof ElysiaStatus) {
+      return hearer;
+    }
     const at = new Date().toISOString();
     docs.transact(row.id, "hub", (live) => {
       const meta = docMeta(live);
