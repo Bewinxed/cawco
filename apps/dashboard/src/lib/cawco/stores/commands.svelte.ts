@@ -8,7 +8,12 @@
 import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { detach } from "@cawco/core/detach";
-import type { EffortLevel, PermissionMode } from "@cawco/core/harness/kinds";
+import {
+  EFFORT_LEVELS,
+  type EffortLevel,
+  type PermissionMode,
+  WIRE_PERMISSION_MODES,
+} from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
 import type { ControlPayload, SendPayload } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
@@ -17,6 +22,7 @@ import type { CommandKind } from "@cawco/core/stream";
 import type { TranscriptBlock } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { SvelteMap } from "svelte/reactivity";
+import { z } from "zod";
 import { failureWords as messageOf } from "#lib/platform/hub-read.js";
 import { newId } from "#lib/platform/id.js";
 import { currentClientId } from "../client-id";
@@ -150,14 +156,29 @@ function failureNotice(record: CommandRecord): string {
 }
 
 /** What a refused command asked, kept with its words, so Try again asks again after a reload. */
-interface CommandAsked {
+const CommandAskedSchema = z.object({
   /** The control's argument: the model, the effort, the mode. */
-  arg?: unknown;
+  arg: z.unknown().optional(),
   /** When it was refused: the composer says the latest. */
-  at: number;
-  kind: CommandKind;
-  machineId?: string;
-}
+  at: z.number(),
+  kind: z.union([
+    z.literal("send"),
+    z.literal("send.withdraw"),
+    z.literal("permission.answer"),
+    z.literal("interrupt"),
+    z.literal("set-model"),
+    z.literal("set-permission-mode"),
+    z.literal("set-effort"),
+  ]),
+  machineId: z.string().optional(),
+});
+type CommandAsked = z.output<typeof CommandAskedSchema>;
+
+/** What a refusal kept of the command it came from, when it is still the shape this writes. */
+const askedOf = (said: CommandRefusal): CommandAsked | null => {
+  const parsed = CommandAskedSchema.safeParse(said.asked);
+  return parsed.success ? parsed.data : null;
+};
 
 /** Where a session's refused command of `kind` is kept. */
 const commandKey = (sessionId: string, kind: CommandKind | "") =>
@@ -181,33 +202,44 @@ function againOf(
       return () => {
         submitCommand(sessionId, machineId, { kind: "interrupt", intent: {} });
       };
-    case "set-model":
+    case "set-model": {
+      const model = arg;
+      if (typeof model !== "string") {
+        return;
+      }
       return () => {
         submitCommand(sessionId, machineId, {
           kind: "set-model",
           intent: {
-            model: arg as string,
+            model,
           },
         });
       };
-    case "set-effort":
+    }
+    case "set-effort": {
+      const effort = EFFORT_LEVELS.find((level) => level === arg);
+      if (!effort) {
+        return;
+      }
       return () => {
         submitCommand(sessionId, machineId, {
           kind: "set-effort",
-          intent: {
-            effort: arg as EffortLevel,
-          },
+          intent: { effort },
         });
       };
-    case "set-permission-mode":
+    }
+    case "set-permission-mode": {
+      const mode = WIRE_PERMISSION_MODES.find((one) => one === arg);
+      if (!mode) {
+        return;
+      }
       return () => {
         submitCommand(sessionId, machineId, {
           kind: "set-permission-mode",
-          intent: {
-            mode: arg as PermissionMode,
-          },
+          intent: { mode },
         });
       };
+    }
     // An answer's ask has gone; a send says itself on its row and composer.
     case "permission.answer":
     case "send.withdraw":
@@ -225,14 +257,15 @@ export interface CommandFault {
   words: string;
 }
 
-const faultOf = (sessionId: string, said: CommandRefusal): CommandFault => {
-  const asked = said.asked as CommandAsked;
-  return {
-    kind: asked.kind,
-    words: said.reason,
-    again: againOf(sessionId, asked),
-  };
-};
+const faultOf = (
+  sessionId: string,
+  said: CommandRefusal,
+  asked: CommandAsked
+): CommandFault => ({
+  kind: asked.kind,
+  words: said.reason,
+  again: againOf(sessionId, asked),
+});
 
 /**
  * What `instanceId`'s composer says of a refused command: the latest one
@@ -243,15 +276,14 @@ export function commandFault(instanceId: string): CommandFault | null {
   const shown = detailsOpen.has(instanceId);
   const [latest] = refusals
     .under(commandKey(instanceId, ""))
-    .filter(
-      ([, said]) =>
-        !(shown && SETTINGS_KINDS.has((said.asked as CommandAsked).kind))
-    )
-    .toSorted(
-      ([, a], [, b]) =>
-        (b.asked as CommandAsked).at - (a.asked as CommandAsked).at
-    );
-  return latest ? faultOf(instanceId, latest[1]) : null;
+    .flatMap(([, said]) => {
+      const asked = askedOf(said);
+      return asked && !(shown && SETTINGS_KINDS.has(asked.kind))
+        ? [{ asked, said }]
+        : [];
+    })
+    .toSorted((a, b) => b.asked.at - a.asked.at);
+  return latest ? faultOf(instanceId, latest.said, latest.asked) : null;
 }
 
 /** What a session's details card says of its refused `kind` change, under that control. */
@@ -260,7 +292,8 @@ export function settingFault(
   kind: CommandKind
 ): CommandFault | null {
   const said = refusals.get(commandKey(instanceId, kind));
-  return said ? faultOf(instanceId, said) : null;
+  const asked = said && askedOf(said);
+  return said && asked ? faultOf(instanceId, said, asked) : null;
 }
 
 /**
