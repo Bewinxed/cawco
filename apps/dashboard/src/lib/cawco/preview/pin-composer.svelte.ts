@@ -1,8 +1,6 @@
 /**
  * The comment being written: its composer beside the pill the press put down, its draft kept per artifact, and the page's answer to Comment.
  */
-
-import type { Pin } from "@cawco/core/comments/model";
 import { pinProblem } from "@cawco/core/comments/validate";
 import type { FrameSays } from "@cawco/core/page-wire";
 import { z } from "zod";
@@ -148,11 +146,16 @@ export class PinComposer {
     if (!target) {
       return;
     }
-    const point = message.point as { x?: unknown; y?: unknown } | undefined;
+    const { point } = message;
     this.keepDraftAt({
       target,
       parked: false,
-      ...(typeof point?.x === "number" && typeof point.y === "number"
+      ...(typeof point === "object" &&
+      point !== null &&
+      "x" in point &&
+      typeof point.x === "number" &&
+      "y" in point &&
+      typeof point.y === "number"
         ? { point: { x: point.x, y: point.y } }
         : {}),
       ...(typeof message.inkId === "string" ? { inkId: message.inkId } : {}),
@@ -195,18 +198,25 @@ export class PinComposer {
     // comment, which the page wrote.
     if (message.ok === true) {
       const { pin } = message;
-      const written = !!pin && pinProblem(pin) === null;
+      const id =
+        typeof pin === "object" &&
+        pin !== null &&
+        "id" in pin &&
+        typeof pin.id === "string"
+          ? pin.id
+          : null;
+      const written = id !== null && pinProblem(pin) === null;
       if (
         written &&
-        !this.#deps.paneDoc.view?.pins.some((one) => one.id === (pin as Pin).id)
+        !this.#deps.paneDoc.view?.pins.some((one) => one.id === id)
       ) {
-        this.#deps.paneDoc.pageSays((pin as Pin).id, pin);
+        this.#deps.paneDoc.pageSays(id, pin);
       }
       this.composing = null;
       this.keepDraftAt(null);
       // The newest comment is the one J and K step from.
       if (written) {
-        this.#deps.markFocused((pin as Pin).id);
+        this.#deps.markFocused(id);
       }
       this.#deps.commentKit.drafts?.discard(NEXT_COMMENT);
       return;
