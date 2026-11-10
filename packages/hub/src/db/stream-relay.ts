@@ -15,7 +15,6 @@ import {
   streamRelayProofs,
   supervisorConfig,
 } from "./schema";
-import { singleton, singletonColumn } from "./singleton";
 
 /** The fleet's stream relay as stored; its secret opened (null when the hub's key does not open it). */
 export interface StoredRelay {
@@ -113,7 +112,11 @@ const toDate = (ms: number | null): Date | null =>
 
 export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
   read: () => {
-    const row = singleton(db, streamRelay, STREAM_RELAY_ID);
+    const row = db
+      .select()
+      .from(streamRelay)
+      .where(eq(streamRelay.id, STREAM_RELAY_ID))
+      .get();
     return row
       ? {
           machineId: row.machineId,
@@ -170,7 +173,11 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
     db.delete(streamRelay).where(eq(streamRelay.id, STREAM_RELAY_ID)).run();
   },
   journey: () => {
-    const row = singleton(db, streamRelayJourney, STREAM_JOURNEY_ID);
+    const row = db
+      .select()
+      .from(streamRelayJourney)
+      .where(eq(streamRelayJourney.id, STREAM_JOURNEY_ID))
+      .get();
     return row
       ? {
           machineId: row.machineId,
@@ -239,12 +246,11 @@ export const streamRelayDb = (db: BunSQLiteDatabase): StreamRelayDb => ({
   },
   askedAt: () =>
     time(
-      singletonColumn(
-        db,
-        supervisorConfig,
-        SUPERVISOR_CONFIG_ID,
-        supervisorConfig.relayAskedAt
-      ) ?? null
+      db
+        .select({ value: supervisorConfig.relayAskedAt })
+        .from(supervisorConfig)
+        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+        .get()?.value ?? null
     ),
   asked: () => {
     const at = new Date();
