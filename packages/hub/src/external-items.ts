@@ -45,9 +45,11 @@ import {
 import type { WaitTarget } from "@cawco/core/wait-targets";
 import { externalItemWords } from "@cawco/core/words/external-items";
 import type { Octokit } from "@octokit/rest";
+import { ElysiaStatus } from "elysia";
 import type { TaskLinkRow, TaskLinksDb } from "./db/task-links";
 import type { TrackersDb } from "./db/trackers";
 import type { InboundEvent } from "./ingress";
+import { projectRefusalOf } from "./project-refusal";
 import type { GitHubWaitState } from "./task-waits";
 import type { TaskActor, Tasks, TaskView } from "./tasks";
 import { intoFile } from "./tracker-adapter";
@@ -399,6 +401,9 @@ export const createExternalItems = ({
         text,
         actor
       );
+      if (task instanceof ElysiaStatus) {
+        throw projectRefusalOf(task);
+      }
       db.taskLinks.updateComment(
         projectId,
         comment.source,
@@ -415,6 +420,9 @@ export const createExternalItems = ({
       undefined,
       comment
     );
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
     db.taskLinks.putComment({
       projectId,
       taskId,
