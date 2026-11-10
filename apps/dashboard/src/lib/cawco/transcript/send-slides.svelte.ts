@@ -48,6 +48,10 @@ export interface Box {
 /** The name a slide's animation goes by, so a newer one can take it over. */
 const SLIDE = "send-slide";
 export interface SendSlidesHost {
+  readonly arrivals: {
+    readonly tickets: Map<string, Ticket>;
+    readonly watched: boolean;
+  };
   readonly landed: boolean;
   readonly list: VirtualizerHandle | undefined;
   readonly listing: HTMLElement | undefined;
@@ -56,8 +60,6 @@ export interface SendSlidesHost {
   readonly rowBuild: {
     readonly frozenSettled: Row[];
   };
-  readonly tickets: Map<string, Ticket>;
-  readonly watched: boolean;
 }
 
 export class SendSlides {
@@ -121,7 +123,8 @@ export class SendSlides {
   ): void {
     if (
       !untrack(
-        () => this.#host.landed && this.#host.watched && motionOk.current
+        () =>
+          this.#host.landed && this.#host.arrivals.watched && motionOk.current
       )
     ) {
       return;
@@ -164,7 +167,8 @@ export class SendSlides {
   noteFold(key: string): void {
     if (
       !untrack(
-        () => this.#host.landed && this.#host.watched && motionOk.current
+        () =>
+          this.#host.landed && this.#host.arrivals.watched && motionOk.current
       )
     ) {
       return;
@@ -230,7 +234,7 @@ export class SendSlides {
           opening > 0
         );
       } else if (
-        this.#host.tickets.get(row.key)?.kind === "arrive" &&
+        this.#host.arrivals.tickets.get(row.key)?.kind === "arrive" &&
         !this.#host.presentation.handed.has(row.key)
       ) {
         arrivedAt = now.top;

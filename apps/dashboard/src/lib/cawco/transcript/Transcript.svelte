@@ -79,10 +79,9 @@
     rise,
   } from "#lib/platform/motion/curves.svelte.js";
   import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
-  import { carry, waiting } from "#lib/platform/motion/share.svelte.js";
+  import { carry } from "#lib/platform/motion/share.svelte.js";
   import { readJson, writeJson } from "#lib/platform/storage.js";
   import { track } from "#lib/platform/track.js";
-  import { browser } from "$app/env";
   import { stopWords } from "../accounts/switch.svelte";
   import { devNote } from "../dev-debug";
   import EmptyAsk from "../EmptyAsk.svelte";
@@ -102,13 +101,8 @@
   import type { Message } from "../types";
   import { warm } from "../workspace/warm.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
-  import {
-    type Handoff,
-    type Motion,
-    provideLedger,
-    type Ticket,
-    watchedSessions,
-  } from "./arrivals.svelte";
+  import { ArrivalLedger, callId } from "./arrival-ledger.svelte";
+  import { type Handoff, provideLedger, type Ticket } from "./arrivals.svelte";
   import Behind from "./Behind.svelte";
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
@@ -133,13 +127,7 @@
   } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
-  import {
-    type Built,
-    LIVE_KINDS,
-    NO_ROWS,
-    RowBuild,
-    tailStart,
-  } from "./row-build.svelte";
+  import { type Built, NO_ROWS, RowBuild } from "./row-build.svelte";
   import { called, type Fold, type Row, rowSaid, wellRunsFrom } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
@@ -292,77 +280,15 @@
     untrack(() => onshown?.(drawn));
     return () => untrack(() => onshown?.(false));
   });
-  // ── The arrival ledger's state. Read by every build, so declared before
-  // the first one (the server evaluates the rows during init).
-  /** Every id this view has held: rows, the calls inside runs, the live tail's rows. */
-  const known = new Set<string>();
-  /**
-   * The rows whose ids are all in `known`. A build keeps every row it did
-   * not fold again as the same object, and a row's ids never change, so a
-   * row seen once is never read for its ids again: a long transcript's every
-   * row was, on every streamed frame. Declared here with the rest of the
-   * ledger: a transcript mounting on a session whose sizes it kept builds
-   * during init (`cache`), and read further down it was not yet initialised.
-   */
-  const recorded = new WeakSet<Row>();
-  /** Arrivals decided and not yet mounted. A row takes its own, once. */
-  const tickets = new Map<string, Ticket>();
-  /** The array the last build folded. Live frames push onto it; history replaces it. */
-  let lastArray: unknown = null;
-  /** Whether the ledger has seen a build: the first one is everything already there. */
-  let seeded = false;
-  /** Rows that land together cascade --dur-stagger apart, and no more than five deep. */
-  const STAGGER_ROWS = 5;
-
-  /** Whether the page is visible. Tracked, so the ledger and the rows can read it. */
-  let pageHidden = $state(browser && document.hidden);
-  $effect(() => {
-    const seen = (): void => {
-      pageHidden = document.hidden;
-      tickets.clear();
-    };
-    document.addEventListener("visibilitychange", seen);
-    return () => document.removeEventListener("visibilitychange", seen);
-  });
-
-  $effect(() => {
-    const id = session.instanceId;
-    if (!watched) {
-      tickets.clear();
-      return;
-    }
-    watchedSessions.add(id);
-    return () => watchedSessions.delete(id);
-  });
-
-  const idsOf = (row: Row): string[] =>
-    row.kind === "tools" ? row.messages.map(callId) : [row.key];
-
-  /**
-   * A row's key as any later mount of this pane will fold it: a message's
-   * row by the message, since an answer streamed in this view goes by the
-   * live row's key (rows.ts `keepLive`) and a new fold never sees that one.
-   */
-  const placeOf = (row: Row): string =>
-    row.kind === "single" ? row.message.id : row.key;
-
-  /** A tool call's id to the ledger: the run it sits in is not what arrives. */
-  const callId = (m: { id?: string; toolCallId?: string | null }): string =>
-    `call:${m.id ?? m.toolCallId}`;
-  /**
-   * The rows mounted as a page in front is handed over, by key, kept
-   * mounted while the buffer steps back up (`keepMounted`). Handed over
-   * with virtua's buffer, the screen above the view filled at once with
-   * rows it had never measured, at `ROW_ESTIMATE` each: 40 rows mounted in
-   * the hand-over's task, 80ms of its 185 (transcript-holds' wheel).
-   */
-  let frontHeld = $state<string[]>([]);
   /**
    * What the engines below are handed to read of this component and of one
    * another: its props and flags, and each engine as a getter, so an engine
    * constructed later is there by the time one reads it.
    */
   const host = {
+    get active() {
+      return active;
+    },
     get atBottom() {
       return atBottom;
     },
@@ -389,9 +315,6 @@
     },
     set lastWrite(value) {
       lastWrite = value;
-    },
-    get ledger() {
-      return ledger;
     },
     get list() {
       return list;
@@ -420,14 +343,11 @@
     get session() {
       return session;
     },
-    get tickets() {
-      return tickets;
+    get shown() {
+      return shown;
     },
     get visible() {
       return visible;
-    },
-    get watched() {
-      return watched;
     },
     get slides(): SendSlides {
       return slides;
@@ -435,8 +355,28 @@
     get rowBuild(): RowBuild {
       return rowBuild;
     },
+    get arrivals(): ArrivalLedger {
+      return arrivals;
+    },
   };
 
+  const arrivals = new ArrivalLedger(host);
+
+  /**
+   * A row's key as any later mount of this pane will fold it: a message's
+   * row by the message, since an answer streamed in this view goes by the
+   * live row's key (rows.ts `keepLive`) and a new fold never sees that one.
+   */
+  const placeOf = (row: Row): string =>
+    row.kind === "single" ? row.message.id : row.key;
+  /**
+   * The rows mounted as a page in front is handed over, by key, kept
+   * mounted while the buffer steps back up (`keepMounted`). Handed over
+   * with virtua's buffer, the screen above the view filled at once with
+   * rows it had never measured, at `ROW_ESTIMATE` each: 40 rows mounted in
+   * the hand-over's task, 80ms of its 185 (transcript-holds' wheel).
+   */
+  let frontHeld = $state<string[]>([]);
   const rowBuild = new RowBuild(host);
 
   const slides = new SendSlides(host);
@@ -712,7 +652,7 @@
     const own = holder ? drawnHeights.get(holder) : undefined;
     if (
       own !== undefined &&
-      untrack(() => landed && watched && motionOk.current)
+      untrack(() => landed && arrivals.watched && motionOk.current)
     ) {
       // The run's place grows out of the one it took over, under it: the
       // ghost stands where the row stood, below the run's own lines.
@@ -864,7 +804,9 @@
       turns &&
       runAbove?.kind === "tools" &&
       drawnKeys.has(runAbove.key) &&
-      runAbove.messages.some((m) => tickets.get(callId(m))?.kind === "arrive")
+      runAbove.messages.some(
+        (m) => arrivals.tickets.get(callId(m))?.kind === "arrive"
+      )
     ) {
       return { key: runAbove.key, absorbs: true, replaces: true };
     }
@@ -2449,7 +2391,7 @@
     };
     untrack(() => {
       stopFollow();
-      tickets.clear();
+      arrivals.tickets.clear();
       step();
     });
     return () => {
@@ -2870,7 +2812,7 @@
     stopFollow();
     // A row the reader scrolls to is not arriving, whenever it came in: what
     // is still waiting to mount is theirs to read, not ours to play.
-    tickets.clear();
+    arrivals.tickets.clear();
     if (marked?.state === "on" || unfound) {
       letGo();
     }
@@ -3077,7 +3019,7 @@
       (event.target as Element).getAttribute("data-state") === "open"
     ) {
       stopFollow();
-      tickets.clear();
+      arrivals.tickets.clear();
       atBottom = false;
     }
   }
@@ -3673,122 +3615,21 @@
     return keys;
   }
 
-  // ── Arrivals ────────────────────────────────────────────────────────────
-  // The rule and why it is read from data live in `arrivals.svelte.ts`. This
-  // is where it runs: once per build, over every id the build holds.
-
-  function ledger(fold: Fold): void {
-    const live = session.messages === lastArray;
-    lastArray = session.messages;
-    const open = seeded && untrack(() => watched);
-    seeded = true;
-    const fresh = unheld(fold.rows);
-    if (!open) {
-      tickets.clear();
-      return;
-    }
-    let slot = 0;
-    // The calls whose glance the last build drew: each is that glance, landed.
-    // A glance is a tail row (`tailStart`): only the tail is read.
-    const glanced = new Set(
-      rowBuild.frozen
-        .slice(tailStart(rowBuild.frozen))
-        .flatMap((row) => (row.kind === "livetool" ? [row.glance.toolId] : []))
-    );
-    for (const { id, row } of fresh) {
-      if (!(live || LIVE_KINDS.has(row.kind))) {
-        continue;
-      }
-      if (row.kind === "tools" && wasGlanced(row, id, glanced)) {
-        continue;
-      }
-      const ticket = ticketFor(row, fold.ended, slot);
-      tickets.set(id, ticket);
-      slot += ticket.kind === "arrive" ? 1 : 0;
-    }
-  }
-
-  /**
-   * Whether the call `id` in this run is one the reader already had on screen
-   * as its glance: its line opened then, and this is that line settling.
-   */
-  function wasGlanced(
-    row: Extract<Row, { kind: "tools" }>,
-    id: string,
-    glanced: Set<string>
-  ): boolean {
-    return row.messages.some(
-      (m) =>
-        callId(m) === id &&
-        glanced.has(m.metadata?.toolId ?? m.toolCallId ?? "")
-    );
-  }
-
-  /** The ids this build holds that this view never has — recorded as held now. */
-  function unheld(candidates: Row[]): { id: string; row: Row }[] {
-    const fresh: { id: string; row: Row }[] = [];
-    for (const row of candidates) {
-      if (recorded.has(row)) {
-        continue;
-      }
-      recorded.add(row);
-      for (const id of idsOf(row)) {
-        if (!known.has(id)) {
-          known.add(id);
-          fresh.push({ id, row });
-        }
-      }
-    }
-    return fresh;
-  }
-
-  /**
-   * What a new row gets. Reasoning settling into its own row is the same
-   * object, so it does not arrive: it folds shut from where it was open. An
-   * answer settles under the live row's own key, so it is never new.
-   * Everything else arrives in its place in the burst.
-   */
-  function ticketFor(row: Row, ended: Fold["ended"], slot: number): Ticket {
-    if (row.key === ended?.into) {
-      return { kind: "fold" };
-    }
-    return {
-      kind: "arrive",
-      lead: Math.min(slot, STAGGER_ROWS - 1) * dur("--dur-stagger"),
-      start: null,
-    };
-  }
-
-  /** How a row arrives, by what it is. */
-  function motionOf(row: Row): Motion {
-    // The reader's own message, sent from the composer below, is its text
-    // landing from the field in the one row the send drew, keyed by the
-    // message's id: no entrance of the row's own.
-    if (
-      ((row.kind === "single" && row.message.type === "user") ||
-        row.kind === "queued") &&
-      waiting(`sent:${row.message.id}`)
-    ) {
-      return "emerge";
-    }
-    return "draw";
-  }
-
   provideLedger({
     take(id) {
-      const ticket = tickets.get(id) ?? null;
+      const ticket = arrivals.tickets.get(id) ?? null;
       if (ticket && ticket.kind !== "arrive") {
-        tickets.delete(id);
+        arrivals.tickets.delete(id);
       } else if (ticket && ticket.start === null) {
         ticket.start = document.timeline.currentTime as number;
       }
       return ticket;
     },
     done(id) {
-      tickets.delete(id);
+      arrivals.tickets.delete(id);
     },
     get watched() {
-      return watched;
+      return arrivals.watched;
     },
   });
 
@@ -3821,7 +3662,7 @@
    * tail (`jumpScrolled`). The reader's own input takes the scroll back.
    */
   function jump(): void {
-    tickets.clear();
+    arrivals.tickets.clear();
     farFromLatest = false;
     const node = scroller;
     if (!(
@@ -4295,16 +4136,6 @@
       ? (sessionsStore.session(session.instanceId)?.behind ?? null)
       : null
   );
-
-  /**
-   * Whether this view is being watched: landed and drawn, the transcript
-   * being worked in, on screen, not replaying a catch-up, on a visible page.
-   * A build outside this window is history for this view, whatever it
-   * contains.
-   */
-  const watched = $derived(
-    landed && shown && active && visible && !rowBuild.catching && !pageHidden
-  );
 </script>
 
 <!-- One row's content, as the list draws it and as the server's first
@@ -4583,7 +4414,7 @@
           leaving={presentation.leaving.has(row.key)}
           marked={marked?.key === row.key ? marked.state : undefined}
           measured={measureRow}
-          motion={motionOf(row)}
+          motion={arrivals.motionOf(row)}
           onleft={leaver(row.key)}
           rowKey={row.key}
         >
