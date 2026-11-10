@@ -92,11 +92,6 @@
   import { openAsked, takeOpen } from "../artifact-names.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import DesignGraph from "../graph/DesignGraph.svelte";
-  import {
-    type MarkdownFleet,
-    markdownFleetAbove,
-    provideMarkdownFleet,
-  } from "../markdown-fleet";
   import { pressOutside } from "../press-outside";
   import { refusals } from "../refusals.svelte";
   import { heardInput } from "../reload.svelte";
@@ -105,7 +100,6 @@
   import RailFloat from "../side/RailFloat.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
-  import { afterPaint } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import { askAgain, NOT_REACHING } from "./artifact-doc";
   import BrowserAddress from "./BrowserAddress.svelte";
@@ -118,13 +112,8 @@
   import CommentRail from "./CommentRail.svelte";
   import CommentsButton from "./CommentsButton.svelte";
   import CoverState from "./CoverState.svelte";
-  import type { CommentDrafts } from "./comment-drafts.svelte";
-  import {
-    commentAttachments,
-    NEXT_COMMENT,
-    type RailList,
-    type RailSort,
-  } from "./comment-rows";
+  import { CommentKit, saidIn } from "./comment-kit.svelte";
+  import { NEXT_COMMENT, type RailList, type RailSort } from "./comment-rows";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
@@ -270,6 +259,11 @@
     previewFrame,
     paneDoc,
   });
+  const commentKit = new CommentKit({
+    paneSubject,
+    previewFrame,
+    cardPin: () => cardPin,
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /**
@@ -330,11 +324,12 @@
     }
     if (message.ok === true) {
       if (words !== undefined) {
-        drafts?.discard(id);
+        commentKit.drafts?.discard(id);
       }
       return;
     }
-    const draft = words === undefined ? null : (drafts?.draft(id) ?? null);
+    const draft =
+      words === undefined ? null : (commentKit.drafts?.draft(id) ?? null);
     if (draft?.unsent) {
       draft.fill(draft.unsent);
       draft.settle();
@@ -1000,80 +995,6 @@
     paneDoc.pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
   );
   /**
-   * The comment kit: the composer, the thread and their drafts, loaded once
-   * the page in the pane is up, or as soon as a composer or a thread is
-   * asked for. They are the conversation's code (the chat composer, the
-   * transcript's pieces), which an artifact's own tab never loads at first
-   * paint (scripts/page-imports-check.ts).
-   */
-  let kit = $state.raw<{
-    CommentComposer: typeof import("./CommentComposer.svelte").default;
-    PinCard: typeof import("./PinCard.svelte").default;
-    commentDrafts: typeof import("./comment-drafts.svelte").commentDrafts;
-  } | null>(null);
-  let kitLoading: Promise<void> | null = null;
-  /**
-   * What a thread's markdown reads of the fleet (markdown-fleet.ts): the
-   * app's, under the app; on an artifact's own tab, the live one, loaded
-   * with the kit, so a thread's references draw as they do in the app from
-   * its first frame.
-   */
-  const markdownAbove = markdownFleetAbove();
-  let ownMarkdown = $state.raw<MarkdownFleet | undefined>(undefined);
-  if (!markdownAbove) {
-    provideMarkdownFleet(() => ownMarkdown);
-  }
-  function loadKit(): Promise<void> {
-    kitLoading ??= Promise.all([
-      import("./CommentComposer.svelte"),
-      import("./PinCard.svelte"),
-      import("./comment-drafts.svelte"),
-      markdownAbove ? null : import("../markdown-live"),
-    ]).then(([composer, card, kept, markdown]) => {
-      ownMarkdown = markdown?.liveMarkdown;
-      kit = {
-        CommentComposer: composer.default,
-        PinCard: card.default,
-        commentDrafts: kept.commentDrafts,
-      };
-    });
-    return kitLoading;
-  }
-  $effect(() => {
-    if (previewFrame.connected) {
-      return untrack(() => afterPaint(loadKit));
-    }
-  });
-  /** What the person has half-written: the next comment's, and each thread's reply, kept across a reload. */
-  let drafts = $state.raw<CommentDrafts | null>(null);
-  $effect(() => {
-    const ready = kit;
-    if (!ready) {
-      return;
-    }
-    const held = ready.commentDrafts(() => paneSubject.artifactId);
-    drafts = held;
-    return () => {
-      held.release();
-      drafts = null;
-    };
-  });
-  /** The next comment's draft: its words and chips stay for the next composer. */
-  const nextDraft = $derived(
-    drafts && paneSubject.artifactId ? drafts.draft(NEXT_COMMENT) : null
-  );
-  /** The open thread's reply. */
-  const replyDraft = $derived(
-    drafts && cardPin ? drafts.draft(cardPin.id) : null
-  );
-  /** What the person said in a draft just taken by its composer: its words, and its files by reference. */
-  const saidIn = (
-    draft: {
-      unsent: { files: Parameters<typeof commentAttachments>[0] } | null;
-    },
-    text: string
-  ) => ({ text, attachments: commentAttachments(draft.unsent?.files ?? []) });
-  /**
    * Pin `id` focused on the page, with `scroll` brought into view (`instant`
    * in one step). Its pill wears the focus ring only when the keyboard got
    * it there (`keyed`, by default the last input): an open or stepped-to pin
@@ -1089,7 +1010,7 @@
   }
   /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
   function openCard(id: string, via: "key" | "pointer" = "pointer") {
-    loadKit();
+    commentKit.loadKit();
     dropPeek();
     if (closingPin) {
       // Another pin's card going back into its pill goes at once; its own turns back.
@@ -1158,7 +1079,7 @@
       return;
     }
     composing = null;
-    if (nextDraft?.hasContent) {
+    if (commentKit.nextDraft?.hasContent) {
       previewFrame.post({ type: "cawco:compose-park" });
       keepDraftAt(keptDraft ? { ...keptDraft, parked: true } : null);
     } else {
@@ -1219,7 +1140,7 @@
       return;
     }
     if (!kept.parked) {
-      loadKit();
+      commentKit.loadKit();
     }
     previewFrame.post({
       type: "cawco:compose-restore",
@@ -1229,10 +1150,10 @@
   }
   /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once; `held`, kept to send with the others (core `ThreadEntry.held`). */
   function comment(text: string, held = false) {
-    if (!(composing && nextDraft)) {
+    if (!(composing && commentKit.nextDraft)) {
       return;
     }
-    const said = saidIn(nextDraft, text);
+    const said = saidIn(commentKit.nextDraft, text);
     composing.error = "";
     composing.sending = true;
     previewFrame.post({ type: "cawco:comment", ...said, held });
@@ -1257,10 +1178,10 @@
       if (written) {
         markFocused((pin as Pin).id);
       }
-      drafts?.discard(NEXT_COMMENT);
+      commentKit.drafts?.discard(NEXT_COMMENT);
       return;
     }
-    const draft = nextDraft;
+    const draft = commentKit.nextDraft;
     if (!(composing && draft)) {
       return;
     }
@@ -1411,7 +1332,7 @@
   }
   /** The person's words in the open thread; a resolved pin's reply reopens it ("Reply to reopen"). */
   function reply(text: string, held = false) {
-    const draft = replyDraft;
+    const draft = commentKit.replyDraft;
     if (!(openPin && draft)) {
       return;
     }
@@ -1442,7 +1363,7 @@
     }
     if (cardError === null) {
       // Said: the words are in the thread, so no draft is left to keep.
-      drafts?.discard(openPin);
+      commentKit.drafts?.discard(openPin);
     } else if (draft.unsent) {
       draft.fill(draft.unsent);
       draft.settle();
@@ -1522,7 +1443,7 @@
     if (focusedPin === id) {
       focusedPin = null;
     }
-    drafts?.discard(id);
+    commentKit.drafts?.discard(id);
     closeCard();
     return Promise.resolve();
   }
@@ -1865,7 +1786,7 @@
         if (openPin) {
           closeCard();
         }
-        loadKit();
+        commentKit.loadKit();
         dropPeek();
         // The press was the page's, which the host never hears: the page's last input is it.
         lastInput.current = message.via === "key" ? "key" : "pointer";
@@ -2696,8 +2617,8 @@
      comment asked from the rail beside the page, hung from the rail's glass
      (CommentRail `pageComposer`). -->
 {#snippet composerBody()}
-  {#if composing && kit && nextDraft}
-    {@const Composer = kit.CommentComposer}
+  {#if composing && commentKit.kit && commentKit.nextDraft}
+    {@const Composer = commentKit.kit.CommentComposer}
     <Composer
       action="Comment"
       chain={composing.chain.map((one) =>
@@ -2707,9 +2628,9 @@
         } as unknown as Pin)
       )}
       chosen={composing.chosen}
-      draft={nextDraft}
+      draft={commentKit.nextDraft}
       focus
-      onchange={() => drafts?.changed(NEXT_COMMENT)}
+      onchange={() => commentKit.drafts?.changed(NEXT_COMMENT)}
       onchoose={(index) =>
         previewFrame.post({ type: "cawco:compose-target", index })}
       onhold={(text) => comment(text, true)}
@@ -3385,8 +3306,8 @@
     pushed = false,
     sheet = false
   )}
-    {#if kit}
-      {@const Card = kit.PinCard}
+    {#if commentKit.kit}
+      {@const Card = commentKit.kit.PinCard}
       <Card
         agentName={paneSubject.owner ? paneSubject.ownerName : "The session"}
         changes={(paneDoc.view?.activity[pin.id]?.length ?? 0) > 0
@@ -3404,7 +3325,7 @@
         onclose={pushed ? closeSheet : () => closeCard()}
         sheet={pushed || sheet}
         ondelete={deleteOpenPin}
-        ondraft={() => drafts?.changed(pin.id)}
+        ondraft={() => commentKit.drafts?.changed(pin.id)}
         onfind={() => focusPin(pin.id, true)}
         onplace={placeElsewhere}
         onhold={(text) => reply(text, true)}
@@ -3454,9 +3375,9 @@
       tall={sheet && !railShort}
       bind:surface={railSurface}
     >
-      {#if threadPushed && cardPin && kit && replyDraft}
+      {#if threadPushed && cardPin && commentKit.kit && commentKit.replyDraft}
         {#key cardPin.id}
-          {@render thread(cardPin, replyDraft, false, true, true)}
+          {@render thread(cardPin, commentKit.replyDraft, false, true, true)}
         {/key}
       {:else}
         {@render railOf("sheet")}
@@ -3491,7 +3412,7 @@
     data-mode={mode !== "interact" && !paneSubject.isCanvas ? mode : undefined}
     {@attach measureRoom}
   >
-    {#if composing && kit && nextDraft && !pageHung}
+    {#if composing && commentKit.kit && commentKit.nextDraft && !pageHung}
       <PinFloat
         bare
         box={composing.at?.box ?? null}
@@ -3507,7 +3428,7 @@
     {/if}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
          another's never moves to it. -->
-    {#if cardPin && kit && replyDraft && !threadPushed}
+    {#if cardPin && commentKit.kit && commentKit.replyDraft && !threadPushed}
       {#key cardPin.id}
         {#if paneLayout.floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
@@ -3528,7 +3449,7 @@
             short={placingThread}
             bind:surface={cardFloat}
           >
-            {@render thread(cardPin, replyDraft, false, false, true)}
+            {@render thread(cardPin, commentKit.replyDraft, false, false, true)}
           </ThreadSheet>
         {:else}
           <PinFloat
@@ -3546,14 +3467,14 @@
             slot="pin-card"
             bind:float={cardFloat}
           >
-            {@render thread(cardPin, replyDraft, false)}
+            {@render thread(cardPin, commentKit.replyDraft, false)}
           </PinFloat>
         {/if}
       {/key}
     {/if}
     <!-- The rested-on pin's peek: the same card beside its pill, his words
          and the latest reply alone; a press on it opens the whole thread. -->
-    {#if peekPin && peekAt && drafts}
+    {#if peekPin && peekAt && commentKit.drafts}
       {#key peekPin.id}
         <PinFloat
           label={`Comment ${peekPin.number}`}
@@ -3569,7 +3490,7 @@
           room={{ w: roomW, h: roomH }}
           slot="pin-peek"
         >
-          {@render thread(peekPin, drafts.draft(peekPin.id), true)}
+          {@render thread(peekPin, commentKit.drafts.draft(peekPin.id), true)}
         </PinFloat>
       {/key}
     {/if}
