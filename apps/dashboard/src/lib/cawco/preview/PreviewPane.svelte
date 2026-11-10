@@ -20,12 +20,6 @@
   import type { FrameSays } from "@cawco/core/page-wire";
   import { pinName } from "@cawco/core/pin-name";
   import {
-    PREVIEW_DOWNS,
-    type PreviewDown,
-    type ShownFailure,
-  } from "@cawco/core/preview/protocol";
-  import { PAGE_SILENT_MS, probePreview } from "@cawco/core/preview/reach";
-  import {
     PAGE_TOUCHED_MESSAGE,
     PREVIEW_LOCKED_MESSAGE,
   } from "@cawco/core/preview/routes";
@@ -105,7 +99,6 @@
     revealOn,
   } from "#lib/platform/motion/curves.svelte.js";
   import { landKey } from "#lib/platform/motion/keyed.svelte.js";
-  import { settleAway } from "#lib/platform/motion/rest.js";
   import { closeInto } from "#lib/platform/motion/share.svelte.js";
   import {
     readJson,
@@ -114,17 +107,11 @@
     unstore,
     writeJson,
   } from "#lib/platform/storage.js";
-  import { track } from "#lib/platform/track.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
-  import {
-    artifactShown,
-    keepThumbnail,
-    removeArtifact,
-    writeSheet,
-  } from "../artifact-api";
+  import { keepThumbnail, removeArtifact, writeSheet } from "../artifact-api";
   import {
     holdArtifact,
     noteArtifact,
@@ -134,7 +121,6 @@
   } from "../artifact-names.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
-  import { artifactReached } from "../files/reached";
   import { besideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
@@ -143,7 +129,6 @@
     markdownFleetAbove,
     provideMarkdownFleet,
   } from "../markdown-fleet";
-  import { pageVisible } from "../page-visible.svelte";
   import { pressOutside } from "../press-outside";
   import { refusals } from "../refusals.svelte";
   import { heardInput } from "../reload.svelte";
@@ -152,12 +137,11 @@
   import RailFloat from "../side/RailFloat.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
-  import { afterPaint, warm } from "../workspace/warm.svelte";
+  import { afterPaint } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
     type ArtifactDoc,
     type ArtifactView,
-    artifactSyncPath,
     askAgain,
     type DocSync,
     joinArtifact,
@@ -185,24 +169,18 @@
     type RailList,
     type RailSort,
   } from "./comment-rows";
-  import { hubReach } from "./hub-reach";
-  import { loadedPanes } from "./loaded.svelte";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
-  import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { PaneCanvas } from "./pane-canvas.svelte";
   import { PaneLayout } from "./pane-layout.svelte";
   import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
-  import { enterPreviews, turnedAwayWords } from "./pass";
-  import {
-    PROBE_FIRST_MS,
-    PROBE_MOST_MS,
-    PreviewReach,
-  } from "./preview-reach.svelte";
+  import { enterPreviews } from "./pass";
+  import { frameError, PreviewFrame } from "./preview-frame.svelte";
+  import { PreviewReach } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
@@ -264,6 +242,14 @@
     /** Where the switch stands in the bar (SideSurface `switcherAt`). */
     switcherAt?: "start" | "end";
   } = $props();
+  /*
+   * Off screen, the page is held (the overlay's hold.ts: no frames, timers
+   * or animations run) and kept, up to the owner's bound of panes off
+   * screen (loaded.svelte.ts); past it, the one hidden longest unloads. A
+   * pane that mounts off screen loads nothing until its tab is shown, and
+   * then only once the switch has painted (`afterPaint`).
+   */
+  const paneId = $props.id();
   const paneSubject = new PaneSubject({
     instanceId: () => instanceId,
     ownTab: () => ownTab,
@@ -284,7 +270,18 @@
     ownTab: () => ownTab,
     paneSubject,
   });
-  let iframe = $state<HTMLIFrameElement>();
+  const previewFrame = new PreviewFrame({
+    inset: () => inset,
+    instanceId: () => instanceId,
+    onScreen: () => onScreen,
+    ownTab: () => ownTab,
+    paneId: () => paneId,
+    paneSubject,
+    paneNotice,
+    paneLayout,
+    previewReach,
+    paneCanvas,
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /**
@@ -324,246 +321,6 @@
   let pinsShown = $state(true);
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
-  let connected = $state(false);
-  /**
-   * The page in the frame takes the head's room itself (overlay
-   * `cawco:head-room`): a document CawCo draws (a decision page, a canvas)
-   * whose own scroller pads its top by it, so the frame runs to the card's
-   * top beneath the head. Any other page stands under the room: its layout
-   * is not ours to push down.
-   */
-  let headRoomTaken = $state(false);
-  let loaded = $state(false);
-  let reload = $state(0);
-  /** How many entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
-  let refusedEntries = 0;
-  /**
-   * When the current frame last stood without the pass it may hold now
-   * (`performance.now()`): its mount, or its page's last word that it was
-   * let in. An entry that landed since stands for it (preview/pass.ts).
-   */
-  let frameSince = 0;
-  const frameKey = $derived(`${paneSubject.preview?.revision}:${reload}`);
-  // The old paint bridges navigation only until the replacement finishes loading.
-  let standing = $state<string | null>(null);
-  /*
-   * Off screen, the page is held (the overlay's hold.ts: no frames, timers
-   * or animations run) and kept, up to the owner's bound of panes off
-   * screen (loaded.svelte.ts); past it, the one hidden longest unloads. A
-   * pane that mounts off screen loads nothing until its tab is shown, and
-   * then only once the switch has painted (`afterPaint`).
-   */
-  const paneId = $props.id();
-  /** No page: mounted off screen, or let go past the bound; the cover waits for the next load. */
-  let unloaded = $state(untrack(() => !onScreen));
-  /** The page said it is held (`cawco:held`). */
-  let pageHeld = $state(false);
-  /** The hold's pass over the pane its page was let go from, while it is still away (motion/rest.ts `settleAway`). */
-  let settling: (() => void) | null = null;
-  function unload() {
-    unloaded = true;
-    standing = null;
-    loaded = false;
-    connected = false;
-    pageHeld = false;
-    // Let go off screen, the cover stands waiting again in a pane put away:
-    // what that starts is finished there, as the put-away's own pass does.
-    settling?.();
-    settling = paneLayout.section ? settleAway(paneLayout.section) : null;
-  }
-  $effect(() => {
-    if (paneSubject.isCanvas) {
-      return;
-    }
-    const id = paneId;
-    // Entered once per pane, never again as its tab comes and goes: the
-    // registry reads `onScreen` as the bound is applied, not as it was here.
-    untrack(() => loadedPanes.enter({ id, onScreen: () => onScreen, unload }));
-    return () => loadedPanes.leave(id);
-  });
-  $effect(() => {
-    if (paneSubject.isCanvas) {
-      return;
-    }
-    if (!onScreen) {
-      untrack(() => post({ type: "cawco:hold" }));
-      loadedPanes.hidden(paneId);
-      return;
-    }
-    loadedPanes.shown(paneId);
-    settling?.();
-    settling = null;
-    untrack(() => post({ type: "cawco:release" }));
-    if (untrack(() => unloaded)) {
-      return afterPaint(() => {
-        unloaded = false;
-      });
-    }
-  });
-  /**
-   * Its conversation's tab reached for (warm.svelte.ts `reached`: the
-   * pointer onto it or pressing it, the focus on it), whichever tab of its
-   * group's slot holds it: read off the slot it is docked in (PaneLeaf's
-   * `data-pane`).
-   */
-  const tabReached = $derived.by(() => {
-    const docked = paneLayout.section
-      ?.closest<HTMLElement>('[data-slot="pane"][data-pane]')
-      ?.getAttribute("data-pane");
-    return !!docked && warm.reached(docked);
-  });
-  /*
-   * Off screen and reached for, the page is let go in the reach's own task,
-   * well before the switch's frame: posted from the switch, its release
-   * raced that frame on WebKit and lost, and the page's first frame came a
-   * frame later, 112-134ms after the press (warm.svelte.ts). Its tab chosen,
-   * the switch's own release is a second one, which the page keeps as a
-   * no-op (the overlay's `holdPage`). The reach over with its tab still off
-   * screen, it is held again.
-   */
-  $effect(() => {
-    if (paneSubject.isCanvas || onScreen) {
-      return;
-    }
-    const message = tabReached ? "cawco:release" : "cawco:hold";
-    untrack(() => post({ type: message }));
-  });
-  const frames = $derived.by(() => {
-    if (unloaded) {
-      return [];
-    }
-    return standing === null || standing === frameKey
-      ? [frameKey]
-      : [standing, frameKey];
-  });
-  function arrived(key: string) {
-    if (key !== frameKey) {
-      return;
-    }
-    loaded = true;
-    standing = key;
-  }
-  /**
-   * The page turned the frame away (`cawco:locked`: the pass entered before
-   * its first load ran out or was revoked since): the browser enters its
-   * previews again and the frame loads again, once in a row. An entry the hub
-   * won't give is the failure band, with Try again.
-   */
-  async function turnedAway() {
-    const origin = previewReach.paneOrigin;
-    if (!origin) {
-      return;
-    }
-    refusedEntries += 1;
-    if (refusedEntries > 1) {
-      paneNotice.say({
-        message: turnedAwayWords(origin),
-        again: "reload",
-      });
-      return;
-    }
-    const refused = await enterPreviews(origin, frameSince);
-    if (refused) {
-      paneNotice.say({
-        message: `The hub didn't give this preview a pass: ${refused}`,
-        again: "reload",
-      });
-      return;
-    }
-    reload += 1;
-  }
-  /**
-   * Try again after a frame failure: reload the frame. Pending until the
-   * reloaded page says it is ready, which clears the failure, or states a
-   * new one.
-   */
-  let retrying = $state(false);
-  function retry() {
-    retrying = true;
-    refusedEntries = 0;
-    reload += 1;
-  }
-  const frameError = (message: string | null) =>
-    message ? { message, again: "reload" as const } : null;
-  /*
-   * Nothing serves the page: the proxy answered with its own page, which
-   * names the hop that did not answer (core `PreviewDown`). The pane draws
-   * what happened over the well, in the kit's empty state, with Try again
-   * (a reload of the frame) as its way back; it stands until a load serves
-   * the page again.
-   */
-  let down = $state<PreviewDown | null>(null);
-  /** The machine's own words for a `reach` failure, from the proxy's page. */
-  let downWhy = $state<string | null>(null);
-  /** The proxy's page says which hop failed (`cawco:down`): the pane cannot read a preview origin's document. */
-  function heardDown(message: { down?: unknown; why?: unknown }) {
-    const said = PREVIEW_DOWNS.find((kind) => kind === message.down);
-    if (!said) {
-      return;
-    }
-    down = said;
-    downWhy = typeof message.why === "string" ? message.why : null;
-    retrying = false;
-  }
-  /*
-   * A down page comes back by itself: while the frame stands on the proxy's
-   * down page (any hop but `closed`, which only a show reopens; `gone`,
-   * whose workspace no longer is: only its session making it again brings
-   * it back, as a new open; and `error` and `crashed`, whose server answers:
-   * its page is what is broken, and Try again loads it once its session fixed it) in a pane
-   * someone has on screen, the origin's ping is probed on the unreached
-   * state's backoff (`PROBE_FIRST_MS` doubling to `PROBE_MOST_MS`), and once
-   * it answers the frame loads again. Only a pane on screen asks, so a
-   * machine coming back starts a listener for the previews being looked at
-   * alone (the hub's register starts none). The tries count across the
-   * loads, so a hop that stays down is asked ever less often; a page that
-   * says it is ready starts the count again.
-   */
-  let downTries = 0;
-  /** The hops that come back by themselves once what didn't answer does. */
-  const COMES_BACK: ReadonlySet<PreviewDown> = new Set([
-    "server",
-    "machine",
-    "workspace",
-    "reach",
-  ]);
-  /** Each one probes the down page's origin again: a probe that failed, waiting out its backoff. */
-  let downProbe = $state(0);
-  $effect(() => {
-    const hop = down;
-    const origin = previewReach.paneOrigin;
-    const seen = pageVisible.current && onScreen;
-    track(downProbe);
-    if (!(hop && origin && seen && COMES_BACK.has(hop))) {
-      return;
-    }
-    let live = true;
-    const timer = setTimeout(
-      () => {
-        downTries += 1;
-        probePreview(origin, hubReach).then((failed) => {
-          if (!live) {
-            return;
-          }
-          if (failed) {
-            downProbe += 1;
-            return;
-          }
-          reload += 1;
-        });
-      },
-      Math.min(PROBE_FIRST_MS * 2 ** downTries, PROBE_MOST_MS)
-    );
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  });
-  $effect(() => {
-    if (connected) {
-      downTries = 0;
-    }
-  });
   const downTitle = $derived.by(() => {
     switch (shownDown) {
       case "server":
@@ -585,178 +342,6 @@
         break;
     }
     return previewWords.machineNotAnswering(paneSubject.ownerMachine);
-  });
-  $effect(() => {
-    if (frameKey) {
-      connected = false;
-      loaded = false;
-      pageHeld = false;
-      // A new load says again whether it is served.
-      down = null;
-      downWhy = null;
-      // A pick the old page asked for has no page left to answer.
-      picking = null;
-    }
-  });
-  /**
-   * The origin whose page last said it is ready in the frame. While the
-   * frame still holds another origin's page (the panel moving to another
-   * artifact, served on its own origin), nothing is posted into it: the
-   * engine refuses a post whose target origin is not the page's, and logs
-   * it. The new page's ready says everything again.
-   */
-  let readyFrom = "";
-  // While its page stands ready here, a Send the dashboard makes elsewhere
-  // (the head's, a Needs you row's) carries what this page shows
-  // (open-pages.ts).
-  $effect(() => {
-    const id = connected ? paneSubject.artifact?.id : undefined;
-    if (!id) {
-      return;
-    }
-    return holdOpen(
-      id,
-      frameHand(
-        () => iframe,
-        () =>
-          readyFrom === previewReach.paneOrigin ? previewReach.paneOrigin : null
-      )
-    );
-  });
-  /** To the page, on its own origin alone, once that origin's page said it is ready (`hello`, the answer to it, goes at once). */
-  function post(message: object, hello = false) {
-    if (
-      previewReach.paneOrigin &&
-      (hello || readyFrom === previewReach.paneOrigin)
-    ) {
-      iframe?.contentWindow?.postMessage(message, previewReach.paneOrigin);
-    }
-  }
-  /*
-   * This view's word to the hub that the artifact is on screen at the open
-   * frame's revision, or why it could not be: the agent's artifact_create and
-   * artifact_show answer `opened` from it (Projects spec §5.10). On screen is
-   * a page whose overlay said it was ready, or a canvas whose stage stands in
-   * this pane and said so, in a tab the person has in view. Could not be is
-   * the proxy's own page naming the hop that failed, or a load no overlay
-   * answered within PAGE_SILENT_MS (core preview-reach). Said once per revision.
-   */
-  /** The frame that last finished loading, and whether it then said nothing. */
-  let loadedKey = $state<string | null>(null);
-  let silentKey = $state<string | null>(null);
-  /** The frame whose page last said anything at all to the pane (its overlay, the proxy's down page, the lock's turn-away). */
-  let heardKey = $state<string | null>(null);
-  /**
-   * The frame finished loading and its page never said a word: no overlay
-   * answered in PAGE_SILENT_MS and no proxy's page named a hop, though the
-   * proxy puts one or the other in every page it serves. So the browser
-   * drew its own error page (a connection closed with no answer, a refused
-   * one) or the answer was no page at all: said where the page would be,
-   * with Try again, never Chromium's grey page left standing.
-   */
-  const notLoaded = $derived(
-    !unloaded &&
-      silentKey === frameKey &&
-      heardKey !== frameKey &&
-      !connected &&
-      !down
-  );
-  let saidFor: string | null = null;
-  function loadedFrame(key: string) {
-    loadedKey = key;
-    silentKey = null;
-    setTimeout(() => {
-      if (key === frameKey && loadedKey === key && !connected && !down) {
-        silentKey = key;
-        // A Try again that loaded nothing again is over: its state says so.
-        retrying = false;
-      }
-    }, PAGE_SILENT_MS);
-  }
-  $effect(() => {
-    const revision =
-      paneSubject.preview?.state === "open"
-        ? paneSubject.preview.revision
-        : undefined;
-    const id = paneSubject.artifact?.id;
-    if (!(revision && id && pageVisible.current) || saidFor === revision) {
-      return;
-    }
-    const current = loadedKey === frameKey;
-    let word: { ok: true } | { ok: false; error: ShownFailure } | null = null;
-    if (paneSubject.isCanvas) {
-      word =
-        paneCanvas.stage?.connected && paneCanvas.stage.at === "panel"
-          ? { ok: true }
-          : null;
-    } else if (current && down) {
-      word = { ok: false, error: down };
-    } else if (current && connected) {
-      word = { ok: true };
-    } else if (silentKey === frameKey) {
-      word = { ok: false, error: "page" };
-    }
-    if (!word) {
-      return;
-    }
-    saidFor = revision;
-    const sawIt = word.ok;
-    artifactShown(instanceId, id, { revision, ...word }).then(
-      () => {
-        // On screen and heard: it reached the person, and Files lists it.
-        if (sawIt) {
-          artifactReached(instanceId, id);
-        }
-      },
-      () => {
-        // Unheard: the next change of state says it again.
-        saidFor = null;
-      }
-    );
-  });
-  /**
-   * How long the page has said ready and its frame's size has stood still
-   * before its thumbnail is taken: its first paints and fonts land, and the
-   * pane opening around it settles its width. Our call.
-   */
-  const CAPTURE_AFTER_MS = 1000;
-  /*
-   * The thumbnail, on demand: taken once per revision, when the transcript
-   * card that shows it is on screen (ToolGroup sets `thumbnailWanted`) and
-   * the page stands in view, loaded and not held. A page nobody's card shows
-   * is never drawn for one; a whole-page capture costs the page 80-150 ms.
-   * The page is drawn at its frame's width, so a frame still resizing (the
-   * pane opening) is waited for: a capture taken mid-open drew the page at
-   * 467, 422 and 479 px on three walks.
-   */
-  $effect(() => {
-    const record = paneSubject.preview;
-    const frame = iframe;
-    if (!(
-      frame &&
-      record?.thumbnailWanted &&
-      record.thumbnailRevision !== record.revision &&
-      onScreen &&
-      connected &&
-      !pageHeld &&
-      !ownTab
-    )) {
-      return;
-    }
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // Its first report is the frame's size now: every report starts the wait again.
-    const settled = frameObserver(() => {
-      clearTimeout(timer);
-      timer = setTimeout(
-        () => post({ type: "cawco:capture" }),
-        CAPTURE_AFTER_MS
-      );
-    });
-    settled.observe(frame);
-    return () => {
-      clearTimeout(timer);
-      settled.disconnect();
-    };
   });
   /*
    * The page keeps its own state (Projects spec §5.10): the overlay joins
@@ -1031,7 +616,7 @@
         again: null,
       });
     }
-    post({ type: "cawco:reconnect" });
+    previewFrame.post({ type: "cawco:reconnect" });
   }
   /** Try again on the comments' links: the pane's socket opened again now, and the page's through a new entry. */
   function relink() {
@@ -1071,7 +656,7 @@
    * answered is the stage serving. One that answered and then went silent is
    * the proxy's `down` and the doc's `docDown`, never a wait again.
    */
-  const awaited = $derived(connected ? null : staged);
+  const awaited = $derived(previewFrame.connected ? null : staged);
   /**
    * The hub's last read couldn't reach the stage (the doc's `meta.unreached`,
    * which the agent's read says too): said as the proxy's own down is, with
@@ -1082,12 +667,17 @@
    * doc's word (hub artifacts `stageAnswered`).
    */
   const docDown = $derived(
-    staged && !connected && silentKey === frameKey && view?.unreached
+    staged &&
+      !previewFrame.connected &&
+      previewFrame.silentKey === previewFrame.frameKey &&
+      view?.unreached
       ? view.unreached
       : null
   );
-  const shownDown = $derived(down ?? docDown?.down ?? null);
-  const shownWhy = $derived(down ? downWhy : (docDown?.why ?? null));
+  const shownDown = $derived(previewFrame.down ?? docDown?.down ?? null);
+  const shownWhy = $derived(
+    previewFrame.down ? previewFrame.downWhy : (docDown?.why ?? null)
+  );
   /** A down stage's own words stand unfolded (Show details). */
   let stageDetails = $state(false);
   const stageDetailsId = `${paneId}-stage-details`;
@@ -1136,7 +726,7 @@
    */
   const waitingFor = $derived.by(() => {
     // A failure the proxy named says its own words (`down`).
-    if (down) {
+    if (previewFrame.down) {
       return null;
     }
     switch (awaited?.status) {
@@ -1156,7 +746,11 @@
   $effect(() => {
     const budget = waitingFor;
     // Read so that a Try again (`reload`) or another artifact starts the wait over.
-    if (budget === null || reload < 0 || paneSubject.artifactId === undefined) {
+    if (
+      budget === null ||
+      previewFrame.reload < 0 ||
+      paneSubject.artifactId === undefined
+    ) {
       neverDrawn = false;
       return;
     }
@@ -1216,7 +810,7 @@
     const session = instanceId;
     return id && paneSubject.isSheet
       ? new Inspector(
-          post,
+          previewFrame.post,
           (change) => writeSheet(session, id, change),
           // A story he picked in the inspector: the design graph keeps its state.
           (file, story) => link?.want(file, story)
@@ -1462,14 +1056,14 @@
       if (refusedReplies[id] || pageReplies[id]) {
         // The page's are written into its doc again, which tells what it still keeps; the pane's into the pane's.
         if (pageReplies[id]) {
-          post({ type: "cawco:resend-pin", id });
+          previewFrame.post({ type: "cawco:resend-pin", id });
         }
         if (refusedReplies[id]) {
           retryRefused(paneSubject.artifact.id, id);
         }
       } else if (onlyOnPage(id)) {
         // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
-        post({ type: "cawco:resend-pin", id });
+        previewFrame.post({ type: "cawco:resend-pin", id });
         relink();
         await reachedHub(id);
       } else {
@@ -1500,71 +1094,6 @@
       throw new Error(why);
     }
   }
-  /** A page's `cawco.pickPlace()` waiting on the person: the request it answers. */
-  let picking = $state<{ id: number | string } | null>(null);
-  /** The place picked goes back to the page, which keeps it in its state. */
-  function pickedPlace(place: {
-    label: string;
-    machineId: string;
-    path: string;
-  }): Promise<void> {
-    const asked = picking;
-    picking = null;
-    if (asked) {
-      post({ jsonrpc: "2.0", id: asked.id, result: place });
-    }
-    return Promise.resolve();
-  }
-  function cancelPick() {
-    const asked = picking;
-    picking = null;
-    if (asked) {
-      post({ jsonrpc: "2.0", id: asked.id, result: null });
-    }
-  }
-  /** Tells the page which artifact it is, where its doc is synced, and the dashboard's theme. */
-  function announce() {
-    connected = false;
-    post(
-      {
-        type: "cawco:hello",
-        theme: theme.resolved,
-        // The head names the page by its title: a page that says it too (a
-        // decision page's own title) leaves it out (overlay `data-cawco-headed`).
-        headed: !inset,
-        // The panel draws no scrollbar beside the page: the page's own is
-        // left undrawn (overlay `data-cawco-bare-scroll`), as its rail's is.
-        bareScroll: !inset,
-        // The head's room over the page's top, px: a document CawCo draws
-        // takes it on its own scroller and says so (`cawco:head-room`).
-        headRoom: inset ? 0 : paneLayout.headRoomPx(),
-        ...(paneSubject.artifact
-          ? {
-              artifact: {
-                id: paneSubject.artifact.id,
-                kind: paneSubject.artifact.kind,
-                name: paneSubject.artifact.name,
-                title: paneSubject.artifact.title,
-              },
-              sync: artifactSyncPath(paneSubject.artifact.id),
-            }
-          : {}),
-      } satisfies FrameSays,
-      true
-    );
-  }
-  // The dashboard's theme turning tells the page: a page artifact draws in it
-  // (the overlay), never in the OS's; a preview is its own app and keeps its
-  // own. Only a page that said ready hears it: one still loading takes the
-  // theme from its hello.
-  $effect(() => {
-    const scheme = theme.resolved;
-    untrack(() => {
-      if (connected) {
-        post({ type: "cawco:theme", theme: scheme } satisfies FrameSays);
-      }
-    });
-  });
   /** The pane's mode, kept for the session and told to the page; `place` is the moved pin the next tap in Comment places again. */
   function setMode(next: PreviewMode, place: string | null = null) {
     // A mode switch leaves nothing of a comment being written.
@@ -1574,7 +1103,7 @@
     mode = next;
     placing = next === "comment" ? place : null;
     store("local", modeKey, next);
-    post({
+    previewFrame.post({
       type: "cawco:mode",
       mode: next,
       place: placing,
@@ -1583,7 +1112,7 @@
   /** ⇧C: every pin shown on the page, or hidden. */
   function showPins(visible: boolean) {
     pinsShown = visible;
-    post({ type: "cawco:pins-shown", shown: visible });
+    previewFrame.post({ type: "cawco:pins-shown", shown: visible });
   }
   /*
    * The comments (Projects spec §5.7; the artifact panel's surface brief, Placing a comment, The
@@ -1646,7 +1175,7 @@
     } else if (
       paneLayout.floatSheet ||
       threadPushed ||
-      !connected ||
+      !previewFrame.connected ||
       pinHeard === openPin
     ) {
       lastDrawn = openPin;
@@ -1689,7 +1218,7 @@
   );
   /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a composer or a place picker stands, so neither covers the other; a thread opens in it (`threadPushed`). */
   const railAway = $derived(
-    listOpen && paneLayout.railSheet && (!!composing || !!picking)
+    listOpen && paneLayout.railSheet && (!!composing || !!previewFrame.picking)
   );
   /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
   let listFilter = $state<RailList>("open");
@@ -1706,19 +1235,19 @@
    * thread's pin is.
    */
   $effect(() => {
-    const frame = iframe;
+    const frame = previewFrame.iframe;
     const floating = paneLayout.floatSheet
       ? (cardFloat ?? composerFloat ?? null)
       : null;
     const sheetCard = threadPushed ? (railSurface ?? null) : floating;
-    if (!(frame && connected)) {
+    if (!(frame && previewFrame.connected)) {
       return;
     }
     const covering = [sheetCard, changesTag].filter(
       (el): el is HTMLElement => !!el
     );
     if (covering.length === 0) {
-      post({ type: "cawco:covered", boxes: [] });
+      previewFrame.post({ type: "cawco:covered", boxes: [] });
       return;
     }
     // Said in the next frame (frameObserver), whatever moved it.
@@ -1726,7 +1255,7 @@
       const framed = frame.getBoundingClientRect();
       const left = framed.left + frame.clientLeft;
       const top = framed.top + frame.clientTop;
-      post({
+      previewFrame.post({
         type: "cawco:covered",
         boxes: covering.map((el) => {
           const r = el.getBoundingClientRect();
@@ -1753,19 +1282,19 @@
    * the tag goes.
    */
   $effect(() => {
-    const frame = iframe;
+    const frame = previewFrame.iframe;
     const tag = changesTag;
-    if (!(frame && connected)) {
+    if (!(frame && previewFrame.connected)) {
       return;
     }
     if (!tag) {
-      post({ type: "cawco:foot-room", px: 0 });
+      previewFrame.post({ type: "cawco:foot-room", px: 0 });
       return;
     }
     const gap = numberOf("--space-2");
     const sayNow = () => {
       const foot = frame.getBoundingClientRect().bottom - frame.clientTop;
-      post({
+      previewFrame.post({
         type: "cawco:foot-room",
         px: Math.max(
           0,
@@ -1788,11 +1317,11 @@
     const head = paneLayout.section?.querySelector<HTMLElement>(
       '[data-slot="side-head"]'
     );
-    if (!(iframe && connected && head && !inset)) {
+    if (!(previewFrame.iframe && previewFrame.connected && head && !inset)) {
       return;
     }
     const sized = frameObserver(() =>
-      post({ type: "cawco:head-room", px: head.offsetHeight })
+      previewFrame.post({ type: "cawco:head-room", px: head.offsetHeight })
     );
     sized.observe(head);
     sized.request();
@@ -1844,9 +1373,13 @@
   $effect(() => {
     const working = [...live];
     const answered = [...unread];
-    if (connected) {
+    if (previewFrame.connected) {
       untrack(() =>
-        post({ type: "cawco:pin-marks", live: working, unread: answered })
+        previewFrame.post({
+          type: "cawco:pin-marks",
+          live: working,
+          unread: answered,
+        })
       );
     }
   });
@@ -1878,8 +1411,10 @@
       .filter((item) => item.kind === "element" || item.kind === "card")
       .map((item) => item.anchor);
     const answered = [...unread];
-    if (connected) {
-      untrack(() => post({ type: "cawco:changes", anchors, pins: answered }));
+    if (previewFrame.connected) {
+      untrack(() =>
+        previewFrame.post({ type: "cawco:changes", anchors, pins: answered })
+      );
     }
   });
   /** One stop of the tag: what changed there, the pin standing with it, and its words. */
@@ -1979,7 +1514,11 @@
     }
     const [anchor] = stop.anchors;
     if (anchor && !anchor.startsWith("removed:")) {
-      post({ type: "cawco:show-element", selector: anchor, outline: "chosen" });
+      previewFrame.post({
+        type: "cawco:show-element",
+        selector: anchor,
+        outline: "chosen",
+      });
     }
     seeSoon(stop.anchors);
     if (stop.pin) {
@@ -2128,7 +1667,11 @@
       openCard(its, "pointer");
     }
     if (!anchor.startsWith("removed:")) {
-      post({ type: "cawco:show-element", selector: anchor, outline: "chosen" });
+      previewFrame.post({
+        type: "cawco:show-element",
+        selector: anchor,
+        outline: "chosen",
+      });
     }
     seeSoon([anchor]);
   }
@@ -2137,7 +1680,7 @@
     const [first] = checking.byPin.get(id) ?? [];
     openCard(id, via);
     if (first && !first.anchor.startsWith("removed:")) {
-      post({
+      previewFrame.post({
         type: "cawco:show-element",
         selector: first.anchor,
         outline: "chosen",
@@ -2226,7 +1769,7 @@
     return kitLoading;
   }
   $effect(() => {
-    if (connected) {
+    if (previewFrame.connected) {
       return untrack(() => afterPaint(loadKit));
     }
   });
@@ -2271,7 +1814,7 @@
     scroll: boolean,
     { instant = false, keyed = lastInput.current === "key" } = {}
   ) {
-    post({ type: "cawco:focus-pin", id, scroll, instant, keyed });
+    previewFrame.post({ type: "cawco:focus-pin", id, scroll, instant, keyed });
   }
   /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
   function openCard(id: string, via: "key" | "pointer" = "pointer") {
@@ -2300,7 +1843,7 @@
     focusedPin = id;
     cardError = null;
     cardParent = null;
-    post({ type: "cawco:track-pin", id });
+    previewFrame.post({ type: "cawco:track-pin", id });
     // Brought into view in one step, not a glide: its card stands where its
     // pill lands, and the page tells that place once.
     focusPin(id, true, { instant: true, keyed: via === "key" });
@@ -2329,7 +1872,7 @@
     if (id && id === placing) {
       placeElsewhere(false);
     }
-    post({ type: "cawco:track-pin", id: null });
+    previewFrame.post({ type: "cawco:track-pin", id: null });
   }
   /**
    * The composer closes with nothing written (Esc, a press outside it, a
@@ -2345,10 +1888,10 @@
     }
     composing = null;
     if (nextDraft?.hasContent) {
-      post({ type: "cawco:compose-park" });
+      previewFrame.post({ type: "cawco:compose-park" });
       keepDraftAt(keptDraft ? { ...keptDraft, parked: true } : null);
     } else {
-      post({ type: "cawco:compose-cancel" });
+      previewFrame.post({ type: "cawco:compose-cancel" });
       keepDraftAt(null);
     }
   }
@@ -2407,7 +1950,7 @@
     if (!kept.parked) {
       loadKit();
     }
-    post({
+    previewFrame.post({
       type: "cawco:compose-restore",
       target: { ...kept.target, point: kept.point, inkId: kept.inkId },
       parked: kept.parked,
@@ -2421,7 +1964,7 @@
     const said = saidIn(nextDraft, text);
     composing.error = "";
     composing.sending = true;
-    post({ type: "cawco:comment", ...said, held });
+    previewFrame.post({ type: "cawco:comment", ...said, held });
   }
   /** The page's answer to Comment: written, the composer goes; refused, the words are back in it with why. */
   function heardComment(message: Record<string, unknown>) {
@@ -2524,7 +2067,7 @@
     }
   }
   $effect(() => {
-    if (connected && view) {
+    if (previewFrame.connected && view) {
       untrack(openLinkedPin);
     }
   });
@@ -2546,7 +2089,7 @@
   }
   /** Decision card `card` brought into view and outlined for a moment. */
   function showCard(card: string) {
-    post({
+    previewFrame.post({
       type: "cawco:show-element",
       selector: `#decision-${CSS.escape(card)}`,
       outline: "flash",
@@ -2560,7 +2103,7 @@
   $effect(() => {
     const id = paneSubject.artifactId;
     const at = id ? openAsked(id) : null;
-    if (!(id && at && connected && view)) {
+    if (!(id && at && previewFrame.connected && view)) {
       return;
     }
     untrack(() => {
@@ -2606,9 +2149,13 @@
       // them back in the field with why.
       pageWords.set(openPin, text);
       replying = true;
-      post({ type: "cawco:reply", pin: openPin, ...said });
+      previewFrame.post({ type: "cawco:reply", pin: openPin, ...said });
       if (reopens) {
-        post({ type: "cawco:resolve", pin: openPin, resolved: false });
+        previewFrame.post({
+          type: "cawco:resolve",
+          pin: openPin,
+          resolved: false,
+        });
       }
       cardError = null;
       return;
@@ -2635,7 +2182,7 @@
     focusPast(id, resolved);
     if (onlyOnPage(id)) {
       cardError = null;
-      post({ type: "cawco:resolve", pin: id, resolved });
+      previewFrame.post({ type: "cawco:resolve", pin: id, resolved });
       return;
     }
     const refused = doc
@@ -2688,7 +2235,7 @@
     let refused: string | null = null;
     if (onlyOnPage(id)) {
       // The page holds it alone: deleted there, its answer saying any refusal.
-      post({ type: "cawco:delete", pin: id });
+      previewFrame.post({ type: "cawco:delete", pin: id });
       pageSays(id, null);
     } else {
       refused = doc
@@ -2857,7 +2404,7 @@
    * Full size (Shell).
    */
   function escapeFromPage() {
-    iframe?.dispatchEvent(
+    previewFrame.iframe?.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Escape",
         code: "Escape",
@@ -2885,22 +2432,22 @@
     // The page's own frame, from its own origin: nothing else is heard.
     if (
       !previewReach.paneOrigin ||
-      event.source !== iframe?.contentWindow ||
+      event.source !== previewFrame.iframe?.contentWindow ||
       event.origin !== previewReach.paneOrigin
     ) {
       return;
     }
-    heardKey = frameKey;
+    previewFrame.heardKey = previewFrame.frameKey;
     if (event.data?.type === PAGE_TOUCHED_MESSAGE) {
       heardInput();
       return;
     }
     if (event.data?.type === "cawco:down") {
-      heardDown(event.data);
+      previewFrame.heardDown(event.data);
       return;
     }
     if (event.data?.type === PREVIEW_LOCKED_MESSAGE) {
-      turnedAway();
+      previewFrame.turnedAway();
       return;
     }
     // A decision page's Open to draw or Open full: the artifact opens where
@@ -2914,15 +2461,15 @@
           openReference(opening.artifact, { top: true }, instanceId)
         )
         .then((refused) =>
-          post({ jsonrpc: "2.0", id: opening.id, result: refused })
+          previewFrame.post({ jsonrpc: "2.0", id: opening.id, result: refused })
         );
       return;
     }
     const ask = previewPickPlace(event.data);
     if (ask !== null) {
       // A second ask replaces one still open: the page asked again.
-      cancelPick();
-      picking = { id: ask };
+      previewFrame.cancelPick();
+      previewFrame.picking = { id: ask };
       return;
     }
     const message = pageMessage(event.data);
@@ -2937,23 +2484,23 @@
           return;
         }
         // The page answers: whatever the proxy said of an earlier load is over.
-        down = null;
-        downWhy = null;
+        previewFrame.down = null;
+        previewFrame.downWhy = null;
         const parsed = new URL(at);
         previewReach.keepAt(parsed);
         if (paneSubject.preview) {
           paneSubject.preview.title = previewTitle(message.title) ?? "";
         }
         if (message.type === "cawco:ready") {
-          readyFrom = event.origin;
-          connected = true;
+          previewFrame.readyFrom = event.origin;
+          previewFrame.connected = true;
           // A new page holds no drawing: the design graph reaches its state again.
           link?.loaded();
-          refusedEntries = 0;
+          previewFrame.refusedEntries = 0;
           // It was let in: a later turn-away is a pass lost since, which a new entry answers.
-          frameSince = performance.now();
+          previewFrame.frameSince = performance.now();
           // The frame Try again reloaded answered: what it was tried for is over.
-          retrying = false;
+          previewFrame.retrying = false;
           if (paneNotice.failure?.again === "reload") {
             paneNotice.say(null);
           }
@@ -2966,25 +2513,25 @@
           openLinkedPin();
           restoreDraft();
           if (openPin) {
-            post({ type: "cawco:track-pin", id: openPin });
+            previewFrame.post({ type: "cawco:track-pin", id: openPin });
           }
-          post({
+          previewFrame.post({
             type: "cawco:pin-marks",
             live: [...live],
             unread: [...unread],
           });
           if (!onScreen) {
             // Loaded while its tab is off screen: held from the start.
-            post({ type: "cawco:hold" });
+            previewFrame.post({ type: "cawco:hold" });
           }
         }
         break;
       }
       case "cawco:held":
-        pageHeld = message.held === true;
+        previewFrame.pageHeld = message.held === true;
         break;
       case "cawco:head-room":
-        headRoomTaken = message.taken === true;
+        previewFrame.headRoomTaken = message.taken === true;
         break;
       case "cawco:captured": {
         // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
@@ -3008,7 +2555,7 @@
           }
         }
         paneNotice.say(frameError(previewError(message.error)));
-        retrying = false;
+        previewFrame.retrying = false;
         break;
       }
       case "cawco:pin-open": {
@@ -3187,7 +2734,7 @@
           // field's problem is the page's to show under the field.
           paneNotice.say({ message: said, again: of ? null : "reload" });
         }
-        retrying = false;
+        previewFrame.retrying = false;
         break;
       }
       case "cawco:resolved":
@@ -3449,7 +2996,7 @@
   const link = $derived.by(() => {
     const session = instanceId;
     return paneSubject.isSheet && session
-      ? untrack(() => new StageLink(post))
+      ? untrack(() => new StageLink(previewFrame.post))
       : null;
   });
   // The inspector's controls are for the story the stage stands at.
@@ -3468,38 +3015,6 @@
   const inGraph = $derived(
     paneSubject.isSheet && !!paneSubject.artifact && !!link && !!sheetCanvas
   );
-  /**
-   * Where the frame stands in the well: in the design graph's stage, or
-   * under the floating head's room (`--page-top`) beside a side card's
-   * head. The pins' room takes that box, so a place the page says is a
-   * place on the page.
-   */
-  let frameBox = $state<{ h: number; w: number; x: number; y: number } | null>(
-    null
-  );
-  $effect(() => {
-    const frameNode = iframe;
-    const wellNode = paneLayout.well;
-    if (!(frameNode && wellNode)) {
-      frameBox = null;
-      return;
-    }
-    const measure = () => {
-      const box = frameNode.getBoundingClientRect();
-      const origin = wellNode.getBoundingClientRect();
-      frameBox = {
-        x: box.left - origin.left,
-        y: box.top - origin.top,
-        w: box.width,
-        h: box.height,
-      };
-    };
-    const watch = frameObserver(measure);
-    watch.observe(frameNode);
-    watch.observe(wellNode);
-    measure();
-    return () => watch.disconnect();
-  });
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
     interact: IconInteractLinear,
@@ -3511,14 +3026,6 @@
     comment: "Comment",
     draw: "Draw",
   };
-  /** Reload: a canvas's stage frame from its address, any other page by a new frame. */
-  function reloadPage() {
-    if (paneSubject.isCanvas && paneCanvas.stage?.frame) {
-      paneCanvas.stage.frame.src = paneCanvas.stage.src;
-    } else {
-      reload += 1;
-    }
-  }
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
@@ -3640,8 +3147,8 @@
     <Button
       icon={IconRefresh}
       label={commonWords.tryAgain}
-      onclick={retry}
-      pending={retrying}
+      onclick={previewFrame.retry}
+      pending={previewFrame.retrying}
       pendingLabel={previewWords.reloading}
       size="sm"
       variant="outline"
@@ -3689,8 +3196,8 @@
   <Button
     icon={IconRefresh}
     label={sheetWords.tryAgain}
-    onclick={retry}
-    pending={retrying}
+    onclick={previewFrame.retry}
+    pending={previewFrame.retrying}
     pendingLabel={sheetWords.tryingAgain}
     size="sm"
     variant="outline"
@@ -3954,7 +3461,8 @@
       draft={nextDraft}
       focus
       onchange={() => drafts?.changed(NEXT_COMMENT)}
-      onchoose={(index) => post({ type: "cawco:compose-target", index })}
+      onchoose={(index) =>
+        previewFrame.post({ type: "cawco:compose-target", index })}
       onhold={(text) => comment(text, true)}
       onsubmit={(text) => comment(text)}
       placeholder={commentWords.composeHint}
@@ -3990,11 +3498,11 @@
     data-slot="other"
     icon={IconRefreshLinear}
     label="Reload"
-    onclick={reloadPage}
+    onclick={previewFrame.reloadPage}
   />
 {/snippet}
 {#snippet reloadMenu()}
-  <DropdownMenu.Item onSelect={reloadPage}>
+  <DropdownMenu.Item onSelect={previewFrame.reloadPage}>
     <IconRefresh /><span>Reload</span>
   </DropdownMenu.Item>
 {/snippet}
@@ -4073,7 +3581,7 @@
     {layout}
     {live}
     onclose={() => showList(false)}
-    onhover={(id) => post({ type: "cawco:hover-pin", id })}
+    onhover={(id) => previewFrame.post({ type: "cawco:hover-pin", id })}
     onopen={(id, via) =>
       listFilter === "check" ? openChecked(id, via) : openCard(id, via)}
     checks={paneSubject.isCanvas
@@ -4089,7 +3597,7 @@
         closeCard();
       }
       composingPage = true;
-      post({ type: "cawco:compose-page" });
+      previewFrame.post({ type: "cawco:compose-page" });
     }}
     onpageclose={cancelComposer}
     pageComposer={composerBody}
@@ -4177,39 +3685,39 @@
 <!-- The page's frame (and, while a new one loads, the one it replaces): in
      the well, or in a component artifact's design graph's stage. -->
 {#snippet frameTags()}
-  {#each previewReach.reached?.origin === previewReach.paneOrigin ? frames : [] as key (key)}
-    {@const current = key === frameKey}
+  {#each previewReach.reached?.origin === previewReach.paneOrigin ? previewFrame.frames : [] as key (key)}
+    {@const current = key === previewFrame.frameKey}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
     <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
     <iframe
-      data-ready={!current || loaded || undefined}
+      data-ready={!current || previewFrame.loaded || undefined}
       data-panel-inspector={(!paneSubject.isSheet &&
         inspecting &&
         paneLayout.inspectorLayout === "panel") ||
         undefined}
       class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
       style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
-      style:--page-top={headRoomTaken || inGraph
+      style:--page-top={previewFrame.headRoomTaken || inGraph
         ? "0px"
         : "var(--side-room, 0px)"}
       style:--page-h="calc(100% - var(--page-top))"
       allow="clipboard-write"
       inert={!current}
-      onerror={() => arrived(key)}
+      onerror={() => previewFrame.arrived(key)}
       onload={() => {
-        arrived(key);
-        if (key === frameKey) {
-          loadedFrame(key);
-          announce();
+        previewFrame.arrived(key);
+        if (key === previewFrame.frameKey) {
+          previewFrame.loadedFrame(key);
+          previewFrame.announce();
         }
       }}
       src={`${previewReach.paneOrigin}${previewReach.framePlace}`}
       data-scheme={paneSubject.themedFrame ? theme.resolved : undefined}
       title="Preview"
       {@attach (node) => {
-        if (key === frameKey) {
-          iframe = node;
-          frameSince = performance.now();
+        if (key === previewFrame.frameKey) {
+          previewFrame.iframe = node;
+          previewFrame.frameSince = performance.now();
         }
       }}
     ></iframe>
@@ -4360,7 +3868,9 @@
       {@render frameTags()}
     {/if}
     <div
-      data-ready={((loaded || standing !== null) && !stageWaiting) || undefined}
+      data-ready={((previewFrame.loaded || previewFrame.standing !== null) &&
+        !stageWaiting) ||
+        undefined}
       data-slot="cover"
       aria-hidden={stageWaiting ? undefined : "true"}
       class="group/cover absolute inset-x-0 top-(--side-room,0px) bottom-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
@@ -4368,13 +3878,16 @@
       {@attach (node) => {
         // Ready, the cover and its skeleton go in the skeleton's reveal and
         // the frame comes out of its blur on the same clock (motion/curves).
-        if (!((loaded || standing !== null) && !stageWaiting)) {
+        if (!(
+          (previewFrame.loaded || previewFrame.standing !== null) &&
+          !stageWaiting
+        )) {
           coverStood = true;
         } else if (coverStood) {
           coverStood = false;
           revealOn(node, "out");
-          if (iframe) {
-            revealOn(iframe, "in");
+          if (previewFrame.iframe) {
+            revealOn(previewFrame.iframe, "in");
           }
         }
       }}
@@ -4409,7 +3922,7 @@
           ? (link.sheets[link.front]?.meta.component ?? null)
           : null}
         {instanceId}
-        ready={loaded}
+        ready={previewFrame.loaded}
         revision={paneSubject.preview?.revision ?? ""}
       />
     {/if}
@@ -4563,7 +4076,7 @@
             answering the hub{shownWhy ? `: ${shownWhy}` : "."} Once it answers, try
             again.
           {/if}
-          {#if !down && docDown}
+          {#if !previewFrame.down && docDown}
             <span
               class="block mt-space-2 text-ink-muted type-meta"
               data-slot="unreached"
@@ -4577,7 +4090,7 @@
       </EmptyState>
     </div>
   {/if}
-  {#if notLoaded && !shownDown && staged?.status !== "error" && !neverDrawn}
+  {#if previewFrame.notLoaded && !shownDown && staged?.status !== "error" && !neverDrawn}
     <!-- The browser's own error page stands in the frame: said in words, with the way back. -->
     <div
       data-slot="down"
@@ -4603,8 +4116,11 @@
       onclose={() => showInspector(false)}
     />
   {/if}
-  {#if picking}
-    <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
+  {#if previewFrame.picking}
+    <PlacePick
+      oncancel={previewFrame.cancelPick}
+      onpick={previewFrame.pickedPlace}
+    />
   {/if}
   <!-- A pin's thread as its card holds it: the drawn pin's whole, or the
        rested-on pin's as its peek (`peek`), the same card; `pushed`, opened
@@ -4703,14 +4219,22 @@
     data-slot="pin-room"
     class={[
       "@container absolute pointer-events-none",
-      frameBox
+      previewFrame.frameBox
         ? "start-(--frame-x) top-(--frame-y) w-(--frame-w) h-(--frame-h)"
         : "inset-0",
     ]}
-    style:--frame-x={frameBox ? `${frameBox.x}px` : undefined}
-    style:--frame-y={frameBox ? `${frameBox.y}px` : undefined}
-    style:--frame-w={frameBox ? `${frameBox.w}px` : undefined}
-    style:--frame-h={frameBox ? `${frameBox.h}px` : undefined}
+    style:--frame-x={previewFrame.frameBox
+      ? `${previewFrame.frameBox.x}px`
+      : undefined}
+    style:--frame-y={previewFrame.frameBox
+      ? `${previewFrame.frameBox.y}px`
+      : undefined}
+    style:--frame-w={previewFrame.frameBox
+      ? `${previewFrame.frameBox.w}px`
+      : undefined}
+    style:--frame-h={previewFrame.frameBox
+      ? `${previewFrame.frameBox.h}px`
+      : undefined}
     data-mode={mode !== "interact" && !paneSubject.isCanvas ? mode : undefined}
     {@attach measureRoom}
   >
@@ -4817,8 +4341,8 @@
       {#if paneNotice.failure?.again === "reload"}
         <Button
           label={commonWords.tryAgain}
-          onclick={retry}
-          pending={retrying}
+          onclick={previewFrame.retry}
+          pending={previewFrame.retrying}
           pendingLabel="Reloading…"
           size="sm"
           variant="outline"
