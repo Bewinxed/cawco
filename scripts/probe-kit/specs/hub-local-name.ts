@@ -91,10 +91,6 @@ const HELD = /^cawco(?:-(\d+))?\.local$/u;
 /** How long a query waits for answers: mDNS responders answer within 500 ms. */
 const LISTEN_MS = 2000;
 
-interface Health {
-  localName?: string | null;
-}
-
 /** Connect a machine's rows that name no interface (hub join.ts). */
 const OWN_ROWS = new Set([
   "Tailscale",
@@ -232,7 +228,14 @@ const askFromLan = async (
     ? `curl said "${said.slice(0, 200)}"`
     : "no IPv4 address heard";
   try {
-    opened = String((JSON.parse(said) as Health).localName);
+    const health: unknown = JSON.parse(said);
+    if (
+      typeof health === "object" &&
+      health !== null &&
+      "localName" in health
+    ) {
+      opened = String(health.localName);
+    }
   } catch {
     // Not the hub's JSON: what curl said stands.
   }
@@ -428,9 +431,9 @@ const localNameRead = async (
   dashboardPort: string
 ): Promise<string> => {
   const url = `http://${name}:${dashboardPort}`;
-  const read = (await hubAt(base)
+  const read = await hubAt(base)
     .api["local-name"].get()
-    .then((r) => dataOf(r))) as Record<string, unknown>;
+    .then((r) => dataOf(r));
   kit.check(
     `6: /api/local-name on ${base} says ${name} is held, the dashboard at ${url}, and carries no command`,
     read.state === "held" &&
@@ -610,9 +613,9 @@ const heldBy = (base: string) =>
     `${base} holding its .local name`,
     async () =>
       (
-        (await hubAt(base)
+        await hubAt(base)
           .health.get()
-          .then((r) => dataOf(r))) as Health
+          .then((r) => dataOf(r))
       ).localName ?? undefined,
     (name) => HELD.test(name),
     60_000
@@ -659,11 +662,9 @@ const nameChecks = async (
     const port = Number(new URL(base).port);
     const answered = await asker.ask<string>({ name, type: "A" }, "A");
     const listed = (
-      (await hubAt(base)
+      await hubAt(base)
         .api.join.get()
-        .then((r) => dataOf(r))) as {
-        addresses: { label: string; url: string }[];
-      }
+        .then((r) => dataOf(r))
     ).addresses;
     const named = (ips: string[]) =>
       ips
