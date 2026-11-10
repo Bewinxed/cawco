@@ -7724,7 +7724,14 @@ export const createServer = (
     startHeld: startHeldWords,
     // The design check (design-verify.ts), made further down; nothing
     // finishes an item before the hub is up.
-    designHold: (item, submission) => designVerify.hold(item, submission),
+    // A refused task read fails the finish_item, as a thrown one did.
+    designHold: async (item, submission) => {
+      const held = await designVerify.hold(item, submission);
+      if (held instanceof ElysiaStatus) {
+        throw new Error(held.response.detail);
+      }
+      return held;
+    },
     designHeld: (itemId) => designVerify.held(itemId),
     lifetime,
     modelRefusal,
