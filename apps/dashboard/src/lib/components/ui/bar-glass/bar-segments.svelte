@@ -32,8 +32,8 @@
     keys?: string;
     /** Its name, for the screen reader and in its tooltip. */
     label: string;
-    /** Its tooltip's words, where they say more than its name. */
-    tip?: string;
+    /** Its tooltip's words, where they say more than its name; `false`: none, where hovering it shows what it does (`onpreview`). */
+    tip?: string | false;
     value: T;
   }
 
@@ -55,6 +55,19 @@
     /** The switch's name, for the screen reader. */
     label: string;
   } = $props();
+
+  /** One pair of handlers for every segment, each reading which it stands on. */
+  const enter = (event: PointerEvent) => {
+    const at = segments.find(
+      (one) =>
+        one.value ===
+        (event.currentTarget as HTMLElement | null)?.dataset.segment
+    );
+    if (at && event.pointerType !== "touch") {
+      onpreview?.(at.value);
+    }
+  };
+  const leave = () => onpreview?.(null);
 
   const choose = (next: string) => {
     const chosen = segments.find((one) => one.value === next)?.value;
@@ -78,10 +91,9 @@
                 keys={segment.keys}
                 label={segment.label}
                 marked={segment.value === value}
-                onpointerenter={onpreview &&
-                  ((event: PointerEvent) =>
-                    event.pointerType !== "touch" && onpreview(segment.value))}
-                onpointerleave={onpreview && (() => onpreview(null))}
+                data-segment={segment.value}
+                onpointerenter={onpreview ? enter : undefined}
+                onpointerleave={onpreview ? leave : undefined}
                 props={trigger}
                 tip={segment.tip}
               />
