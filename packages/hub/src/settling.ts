@@ -1,4 +1,4 @@
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { PICKED_TAKEN_BACK } from "./db/migration-names";
 /**
  * Who decides, at the hub (PRD §5.8, core decides.ts): each card a session
@@ -54,7 +54,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
 import { decidesTable } from "./decides-file";
 import { sessionLabel } from "./labels";
-import { refusal } from "./refusal";
+
 import {
   SESSION_TITLE_MAX,
   type WorkItemRequest,
@@ -618,14 +618,13 @@ export const createSettling = (deps: SettlingDeps) => {
     }
     const writerId = row.madeBy ?? row.instanceId;
     const writer = writerId ? deps.instance(writerId) : undefined;
-    return refusal(
-      403,
-      "settle-asker-writer-only",
-      decidesWords.settleAsker(
+    return problem(403, {
+      code: "settle-asker-writer-only",
+      detail: decidesWords.settleAsker(
         name,
         writer ? sessionLink(writer.id, sessionLabel(writer).name) : ""
-      )
-    );
+      ),
+    });
   };
 
   /** Whether `settler` is `member`'s session for the card: the ledger's, or Caw's conversation. */
@@ -773,11 +772,13 @@ export const createSettling = (deps: SettlingDeps) => {
         runs: runsOf(member, settler, row.projectId),
       };
       if (member.type === "you" || kept?.route === "you") {
-        return refusal(
-          403,
-          "settle-yours-only",
-          decidesWords.settleYours(name, decidesWords.here(where === "project"))
-        );
+        return problem(403, {
+          code: "settle-yours-only",
+          detail: decidesWords.settleYours(
+            name,
+            decidesWords.here(where === "project")
+          ),
+        });
       }
       if (member.type === "asker") {
         return writerOnly(settler, row, name) ?? signed;
@@ -785,11 +786,10 @@ export const createSettling = (deps: SettlingDeps) => {
       if (mayRun(settler, row, member, kept)) {
         return signed;
       }
-      return refusal(
-        403,
-        "settle-member-only",
-        decidesWords.settleMember(name, member.name)
-      );
+      return problem(403, {
+        code: "settle-member-only",
+        detail: decidesWords.settleMember(name, member.name),
+      });
     },
 
     /** Card `card` of `row` was settled by `member`: the ledger stamps it, and he hears of it as the member says. */

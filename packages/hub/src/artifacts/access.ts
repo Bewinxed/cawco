@@ -6,11 +6,11 @@ import { readPins } from "@cawco/core/comments/model";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { sessionLink } from "@cawco/core/references";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow } from "../db/artifacts";
 import { byHandle, type Handled, namesAny } from "../handles";
 import { sessionLabel } from "../labels";
-import { refusal } from "../refusal";
+
 import { isSetupPage } from "../setup";
 import type { ArtifactServiceDeps } from "./deps";
 
@@ -44,11 +44,10 @@ export const artifactNamed = (
   try {
     return artifactByHandle(asked, rows());
   } catch (error) {
-    return refusal(
-      404,
-      "artifact-unnamed",
-      error instanceof Error ? error.message : String(error)
-    );
+    return problem(404, {
+      code: "artifact-unnamed",
+      detail: error instanceof Error ? error.message : String(error),
+    });
   }
 };
 
@@ -80,7 +79,10 @@ export interface AccessContext {
 /** Who may do what to an artifact: a session's relationship to it (holder, maker, its delegation tree above or beside, the project it leads, the one it left the artifact in) and each act's rule over those. */
 /** Artifact `id` is not there for the session that asks: one it has not, or may not reach. */
 const noArtifact = (id: string) =>
-  refusal(404, "artifact-unknown", artifactToolWords.noArtifact(id));
+  problem(404, {
+    code: "artifact-unknown",
+    detail: artifactToolWords.noArtifact(id),
+  });
 
 export const createAccess = (ctx: AccessContext) => {
   const { db, deps, docs } = ctx;
@@ -104,7 +106,10 @@ export const createAccess = (ctx: AccessContext) => {
       : undefined) ?? db.byName(owner.id, kind, name);
   const sessionOf = (id: string) =>
     deps.instance(id) ??
-    refusal(404, "artifact-session-unknown", "Session not found.");
+    problem(404, {
+      code: "artifact-session-unknown",
+      detail: "Session not found.",
+    });
   /**
    * Whether `row` is another session's of `instance`'s delegation tree in
    * the same project ({@link ArtifactServiceDeps.tree}): the tree reads it,
@@ -210,14 +215,13 @@ export const createAccess = (ctx: AccessContext) => {
     }
     const row = db.get(id);
     if (row && row.instanceId !== instance.id && inTree(instance, row)) {
-      return refusal(
-        403,
-        "artifact-others",
-        artifactToolWords.othersArtifact(
+      return problem(403, {
+        code: "artifact-others",
+        detail: artifactToolWords.othersArtifact(
           `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`,
           row.instanceId?.slice(0, 8) ?? ""
-        )
-      );
+        ),
+      });
     }
     if (!row || row.instanceId !== instance.id) {
       return noArtifact(id);
@@ -412,23 +416,20 @@ export const createAccess = (ctx: AccessContext) => {
       if (open === 0) {
         return row;
       }
-      return refusal(
-        409,
-        "artifact-pins-open",
-        artifactToolWords.pinsOpenFirst(whose, open)
-      );
+      return problem(409, {
+        code: "artifact-pins-open",
+        detail: artifactToolWords.pinsOpenFirst(whose, open),
+      });
     }
     return up
-      ? refusal(
-          403,
-          "artifact-maker-deletes",
-          artifactToolWords.makerDeletes(whose)
-        )
-      : refusal(
-          403,
-          "artifact-not-in-tree",
-          artifactToolWords.notInTree(whose)
-        );
+      ? problem(403, {
+          code: "artifact-maker-deletes",
+          detail: artifactToolWords.makerDeletes(whose),
+        })
+      : problem(403, {
+          code: "artifact-not-in-tree",
+          detail: artifactToolWords.notInTree(whose),
+        });
   };
   /**
    * Artifact `id` for a change: the session owns it or made it (a delegate

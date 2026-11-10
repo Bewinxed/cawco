@@ -1,6 +1,6 @@
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { projectRoot } from "./project-folder";
-import { refusal, StatusRefusal } from "./refusal";
+import { StatusRefusal } from "./refusal";
 
 /**
  * A refusal still thrown by the families that threw the project folder's own
@@ -20,7 +20,10 @@ export const projectAttempt = async <T>(work: () => T | Promise<T>) => {
     return await work();
   } catch (error) {
     if (error instanceof ProjectRefusal) {
-      return refusal(error.status, "project-refused", error.message);
+      return problem(error.status, {
+        code: "project-refused",
+        detail: error.message,
+      });
     }
     throw error;
   }

@@ -12,12 +12,12 @@ import {
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
 } from "@cawco/core/fleet";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { HubContext } from "./hub-context";
 import type { MachineMemory, RouteSet, Unanswered } from "./machine-answers";
 import { machineSkillFiles } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
-import { refusal } from "./refusal";
+
 import { unreachable } from "./unreachable";
 
 /** What a machine read reads of the hub. */
@@ -109,11 +109,10 @@ export const awayStatus = (
   words?: string
 ) => {
   Object.assign(set.headers, awayHeaders(ctx, machineId));
-  return refusal(
-    503,
-    "machine-away",
-    words ?? ctx.machineFault(machineId, "offline")
-  );
+  return problem(503, {
+    code: "machine-away",
+    detail: words ?? ctx.machineFault(machineId, "offline"),
+  });
 };
 
 /**
@@ -129,7 +128,10 @@ export const unansweredStatus = (
 ) =>
   answer.reason === "dead"
     ? awayStatus(ctx, set, machineId)
-    : refusal(504, "machine-silent", ctx.machineFault(machineId, "silent"));
+    : problem(504, {
+        code: "machine-silent",
+        detail: ctx.machineFault(machineId, "silent"),
+      });
 
 /** A skill's files read off `machineId`, or what the route answers when it could not read them. */
 export const skillFilesOff = async (
@@ -154,11 +156,10 @@ export const skillFilesOff = async (
   }
   const answer = asked.value;
   if (!answer.ok) {
-    return refusal(
-      400,
-      "skill-unread",
-      answer.error ?? "the machine could not read the skill"
-    );
+    return problem(400, {
+      code: "skill-unread",
+      detail: answer.error ?? "the machine could not read the skill",
+    });
   }
   return { files: machineSkillFiles(answer.result) };
 };
@@ -171,7 +172,10 @@ export const hookCopyOff = async (
 ) => {
   const current = ctx.db.getFleetHook(body.id);
   if (!current) {
-    return refusal(404, "no-hook", `the fleet keeps no hook ${body.id}`);
+    return problem(404, {
+      code: "no-hook",
+      detail: `the fleet keeps no hook ${body.id}`,
+    });
   }
   const read = await readMachineHookScript(ctx, body.machineId, body.id, set);
   if (read instanceof ElysiaStatus) {
@@ -187,11 +191,10 @@ export const pushTarget = (
 ) =>
   ctx.registry.agent(body.machineId)
     ? { config: ctx.db.fleetConfig() }
-    : refusal(
-        404,
-        "machine-offline",
-        ctx.machineFault(body.machineId, "offline")
-      );
+    : problem(404, {
+        code: "machine-offline",
+        detail: ctx.machineFault(body.machineId, "offline"),
+      });
 
 /**
  * One machine's own user CLAUDE.md, whoever wrote it. A peek is this alone,
@@ -216,7 +219,10 @@ const readOffMachine = async <Copy>(
     case "answered":
       return answer.value.ok
         ? { copy: copyOf(answer.value.result) }
-        : refusal(500, "machine-read-failed", answer.value.error ?? failed);
+        : problem(500, {
+            code: "machine-read-failed",
+            detail: answer.value.error ?? failed,
+          });
     default:
       throw unreachable(answer);
   }

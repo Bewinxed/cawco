@@ -5,7 +5,7 @@ import { detach } from "@cawco/core/detach";
 import type { PreviewDown, PreviewSource } from "@cawco/core/preview/protocol";
 import { PREVIEW_FOLDERS } from "@cawco/core/preview/protocol";
 import type { InstanceRow } from "@cawco/core/protocol";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { timedShowStep } from "./artifacts/service";
 import type { PageFrom } from "./artifacts/shapes";
 import type { ArtifactRow } from "./db/artifacts";
@@ -30,7 +30,7 @@ import {
 } from "./preview";
 import { embedKey } from "./preview-origin";
 import { changeFolderFiles, readFolderFile } from "./project-folder";
-import { refusal } from "./refusal";
+
 import { unreachable } from "./unreachable";
 
 /**
@@ -45,13 +45,6 @@ import { unreachable } from "./unreachable";
 /** Where page.html and what it names are read: the session's machine, or the project folder. */
 type PageOrigin =
   { dir: string; machineId: string } | { projectId: string; folder: string };
-
-/** The machine that holds a page's work folder is not connected. */
-const pageMachineAway = () =>
-  refusal(503, "page-machine-away", "Machine is not connected");
-/** The machine that holds a page's work folder did not answer. */
-const pageMachineLate = () =>
-  refusal(504, "page-machine-late", "Machine did not answer");
 
 /** Where a program's Images are read from: its work folder, the project's folder, and on a revision the pictures its page shows and the machine each is read on. */
 interface ImageAt {
@@ -149,11 +142,10 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     }
     const key = embedKeyOf(target.artifact.id);
     if (key === undefined) {
-      return refusal(
-        409,
-        "preview-artifact-gone",
-        `${target.artifact.name} is gone, so no origin serves it.`
-      );
+      return problem(409, {
+        code: "preview-artifact-gone",
+        detail: `${target.artifact.name} is gone, so no origin serves it.`,
+      });
     }
     return ctx.previewListeners.embed(
       key,
@@ -433,7 +425,10 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     }
     const agent = ctx.registry.agent(origin.machineId);
     if (!agent) {
-      return pageMachineAway();
+      return problem(503, {
+        code: "page-machine-away",
+        detail: "Machine is not connected",
+      });
     }
     const readText = async (path: string) => {
       const read = await ctx.callFs(origin.machineId, agent, {
@@ -452,14 +447,16 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     const file = posix.join(origin.dir, "page.html");
     const source = await readText(file).catch(() => null);
     if (source === null) {
-      return pageMachineLate();
+      return problem(504, {
+        code: "page-machine-late",
+        detail: "Machine did not answer",
+      });
     }
     if (source === undefined) {
-      return refusal(
-        404,
-        "page-source-missing",
-        `${file} is not there; write the page as page.html in that folder, from the skill's kit/page.html.`
-      );
+      return problem(404, {
+        code: "page-source-missing",
+        detail: `${file} is not there; write the page as page.html in that folder, from the skill's kit/page.html.`,
+      });
     }
     const found: { source: string; sources: PageSources } = {
       source,
@@ -528,16 +525,15 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       return kept;
     }
     return row.projectId && "folder" in from
-      ? refusal(
-          404,
-          "page-unpublished",
-          `${folder}/ has no page.html or published page yet; pass dir with your work folder, or write ${folder}/page.html into the project's folder.`
-        )
-      : refusal(
-          400,
-          "page-source-unnamed",
-          "A page takes html, or dir with your work folder that holds page.html."
-        );
+      ? problem(404, {
+          code: "page-unpublished",
+          detail: `${folder}/ has no page.html or published page yet; pass dir with your work folder, or write ${folder}/page.html into the project's folder.`,
+        })
+      : problem(400, {
+          code: "page-source-unnamed",
+          detail:
+            "A page takes html, or dir with your work folder that holds page.html.",
+        });
   };
 
   /** The most one Image's file may hold. Our bound: a page's pictures load with it. */
@@ -619,14 +615,20 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     if ("dir" in from) {
       const agent = ctx.registry.agent(row.machineId);
       if (!agent) {
-        return pageMachineAway();
+        return problem(503, {
+          code: "page-machine-away",
+          detail: "Machine is not connected",
+        });
       }
       const read = await ctx.callFs(row.machineId, agent, {
         op: "read",
         path: posix.join(from.dir, PROGRAM_FILE),
       });
       if (read.kind === "unanswered") {
-        return pageMachineLate();
+        return problem(504, {
+          code: "page-machine-late",
+          detail: "Machine did not answer",
+        });
       }
       const inDir: (ImageAt & { text: string }) | undefined = read.value.ok
         ? { text: read.value.result as string, dir: from.dir }
@@ -811,7 +813,10 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
       return page;
     }
     if ("program" in from) {
-      return refusal(400, "page-program-missing", "A program is required.");
+      return problem(400, {
+        code: "page-program-missing",
+        detail: "A program is required.",
+      });
     }
     const read = await artifactPageSources(row, folder, from);
     if (read instanceof ElysiaStatus || !("source" in read)) {
@@ -819,7 +824,7 @@ export const createArtifactPages = (ctx: ArtifactPagesContext) => {
     }
     const built = await buildDecisionPage(read.source, read.sources);
     if ("problem" in built) {
-      return refusal(422, "page-unbuilt", built.problem);
+      return problem(422, { code: "page-unbuilt", detail: built.problem });
     }
     const page: { html: string; program?: BuiltProgram } = {
       html: built.html,

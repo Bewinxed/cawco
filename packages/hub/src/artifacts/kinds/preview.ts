@@ -5,9 +5,9 @@ import type { PreviewSource } from "@cawco/core/preview/protocol";
 import type { AgentRow, InstanceRow } from "@cawco/core/protocol";
 import type { StageWarm } from "@cawco/core/stage";
 import { artifactToolWords } from "@cawco/core/words/artifact-tools";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { ArtifactRow, ArtifactServed } from "../../db/artifacts";
-import { refusal } from "../../refusal";
+
 import type { ArtifactInput, Making, Placed } from "../shapes";
 import { sheetOf } from "./component";
 import type { KindContext } from "./context";
@@ -66,7 +66,10 @@ const machineNamed = (
 /** A workspace port's source: refused without what serves it ({@link NOT_SERVED}). */
 const servedSource = (input: ArtifactInput, workspace: string) => {
   if (!input.serve || input.port === undefined) {
-    return refusal(400, "artifact-preview-unserved", NOT_SERVED);
+    return problem(400, {
+      code: "artifact-preview-unserved",
+      detail: NOT_SERVED,
+    });
   }
   const source: PreviewSource = {
     port: input.port,
@@ -320,9 +323,9 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
    * folder on the machine `machine` names, else the session's.
    */
   const previewSource = (instance: InstanceRow, input: ArtifactInput) => {
-    const problem = previewProblem(input);
-    if (problem) {
-      return refusal(400, "artifact-preview-fields", problem);
+    const misfit = previewProblem(input);
+    if (misfit) {
+      return problem(400, { code: "artifact-preview-fields", detail: misfit });
     }
     const at = input.path === undefined ? {} : { path: input.path };
     const inWorkspace = workspaceSource(instance, input);
@@ -330,22 +333,21 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
       return inWorkspace;
     }
     if (input.serve) {
-      return refusal(
-        400,
-        "artifact-preview-serve-outside",
-        "serve runs in a workspace, and this session runs in none: show a server on this machine's host by its port alone, which you keep running."
-      );
+      return problem(400, {
+        code: "artifact-preview-serve-outside",
+        detail:
+          "serve runs in a workspace, and this session runs in none: show a server on this machine's host by its port alone, which you keep running.",
+      });
     }
     const machineId =
       input.machine === undefined
         ? instance.machineId
         : machineNamed(deps.machines(), input.machine);
     if (!machineId) {
-      return refusal(
-        404,
-        "artifact-preview-machine-unknown",
-        `No machine named ${input.machine} is known to this hub.`
-      );
+      return problem(404, {
+        code: "artifact-preview-machine-unknown",
+        detail: `No machine named ${input.machine} is known to this hub.`,
+      });
     }
     const source: PreviewSource =
       input.port === undefined
@@ -386,23 +388,20 @@ export const createPreviewKind = (ctx: PreviewKindContext) => {
     const [workspace] = found;
     if (found.length !== 1 || !workspace) {
       return found.length === 0
-        ? refusal(
-            404,
-            "artifact-workspace-unknown",
-            `No workspace ${asked} on this hub.`
-          )
-        : refusal(
-            404,
-            "artifact-workspace-ambiguous",
-            `${asked} names ${found.length} workspaces; pass the full workspace id.`
-          );
+        ? problem(404, {
+            code: "artifact-workspace-unknown",
+            detail: `No workspace ${asked} on this hub.`,
+          })
+        : problem(404, {
+            code: "artifact-workspace-ambiguous",
+            detail: `${asked} names ${found.length} workspaces; pass the full workspace id.`,
+          });
     }
     if (workspace.id !== mine && !deps.delegatesIn(instance, workspace.id)) {
-      return refusal(
-        403,
-        "artifact-workspace-not-delegates",
-        artifactToolWords.notYourDelegate(String(needle))
-      );
+      return problem(403, {
+        code: "artifact-workspace-not-delegates",
+        detail: artifactToolWords.notYourDelegate(String(needle)),
+      });
     }
     const own: { id: string; machineId: string } = workspace;
     return own;
