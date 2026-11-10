@@ -24,7 +24,6 @@ import type { Stage } from "@cawco/core/task-views";
 import { ElysiaStatus } from "elysia";
 import type { HubLifetimeShape } from "./lifetime";
 import { hasProjectFolder } from "./project-folder";
-import { projectRefusalOf } from "./project-refusal";
 import { movesFrom, type Stages } from "./stages";
 import { routineActor, type TaskEvent, type Tasks } from "./tasks";
 
@@ -99,13 +98,13 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     }
   };
 
-  /** Why a task held in `stage` may go now; undefined while it is still held. */
+  /** Why a task held in `stage` may go now; undefined while it is still held; its history's refused read. */
   const due = async (
     projectId: string,
     task: { fields: Record<string, string>; id: string; stage: string },
     stage: Stage,
     now: number
-  ): Promise<string | undefined> => {
+  ) => {
     const { until, after, afterMs } = stage.hooks;
     if (until) {
       const at = dateOf(task.fields[until]);
@@ -116,7 +115,7 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     if (after && afterMs) {
       const history = await tasks.history(projectId, task.id);
       if (history instanceof ElysiaStatus) {
-        throw projectRefusalOf(history);
+        return history;
       }
       const entered = history.events.findLast(
         (event) => event.stage?.to === stage.name
@@ -127,14 +126,14 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     }
   };
 
-  /** Moves every task of one project whose hold in its stage is over. */
-  const lookAt = async (projectId: string): Promise<void> => {
+  /** Moves every task of one project whose hold in its stage is over; the first refused read, which ends the look. */
+  const lookAt = async (projectId: string) => {
     if (!(await hasProjectFolder(projectId))) {
       return;
     }
     const view = await tasks.stages(projectId);
     if (view instanceof ElysiaStatus) {
-      throw projectRefusalOf(view);
+      return view;
     }
     const holding = new Map(
       view.stages
@@ -146,26 +145,30 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     }
     const list = await tasks.list(projectId);
     if (list instanceof ElysiaStatus) {
-      throw projectRefusalOf(list);
+      return list;
     }
     const now = Date.now();
     for (const task of list.tasks) {
       const stage = holding.get(task.stage);
-      if (stage) {
-        await wake(projectId, view, task, stage, now);
+      const refused = stage && (await wake(projectId, view, task, stage, now));
+      if (refused) {
+        return refused;
       }
     }
   };
 
-  /** Moves one task on when its hold in `stage` is over and the moves say where. */
+  /** Moves one task on when its hold in `stage` is over and the moves say where; its history's refused read. */
   const wake = async (
     projectId: string,
     stages: Stages,
     task: { fields: Record<string, string>; id: string; stage: string },
     stage: Stage,
     now: number
-  ): Promise<void> => {
+  ) => {
     const why = await due(projectId, task, stage, now);
+    if (why instanceof ElysiaStatus) {
+      return why;
+    }
     if (!why) {
       return;
     }
@@ -210,11 +213,13 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
       return;
     }
     looking.add(projectId);
+    const failed = (words: string) =>
+      console.warn(`[waits] ${projectId}: ${words}`);
     lookAt(projectId)
-      .catch((error: unknown) =>
-        console.warn(
-          `[waits] ${projectId}: ${error instanceof Error ? error.message : String(error)}`
-        )
+      .then(
+        (refused) => refused && failed(refused.response.detail),
+        (error: unknown) =>
+          failed(error instanceof Error ? error.message : String(error))
       )
       .finally(() => {
         looking.delete(projectId);
