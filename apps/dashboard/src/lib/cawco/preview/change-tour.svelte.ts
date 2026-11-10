@@ -5,6 +5,7 @@ import type { ActivityLine, Pin } from "@cawco/core/comments/model";
 import type { ChangedItem } from "@cawco/core/doc-meta";
 import { pinName } from "@cawco/core/pin-name";
 import { untrack } from "svelte";
+import { z } from "zod";
 import { failureWords } from "#lib/platform/hub-read.js";
 import { dur } from "#lib/platform/motion/curves.svelte.js";
 import { askAgain } from "./artifact-doc";
@@ -14,10 +15,11 @@ import type { PaneNotice } from "./pane-notice.svelte";
 import type { PaneSubject } from "./pane-subject.svelte";
 import type { PreviewFrame } from "./preview-frame.svelte";
 
-interface PageStop {
-  anchors: string[];
-  pin: string | null;
-}
+const PageStopSchema = z.object({
+  anchors: z.array(z.string()),
+  pin: z.string().nullable(),
+});
+type PageStop = z.infer<typeof PageStopSchema>;
 /** One stop of the tag: what changed there, the pin standing with it, and its words. */
 interface ChangeStop {
   anchors: string[];
@@ -28,13 +30,8 @@ interface ChangeStop {
 const changeStopsOf = (value: unknown): PageStop[] =>
   Array.isArray(value)
     ? value.flatMap((one: unknown) => {
-        const stop = one as { anchors?: unknown; pin?: unknown } | null;
-        return stop &&
-          Array.isArray(stop.anchors) &&
-          stop.anchors.every((anchor) => typeof anchor === "string") &&
-          (stop.pin === null || typeof stop.pin === "string")
-          ? [{ anchors: stop.anchors as string[], pin: stop.pin }]
-          : [];
+        const stop = PageStopSchema.safeParse(one);
+        return stop.success ? [stop.data] : [];
       })
     : [];
 /** A changed thing as a line: what it is, its words then and now, its move, its revision, how often. */
@@ -357,15 +354,11 @@ export class ChangeTour {
     if (revision === undefined || anchors.length === 0) {
       return;
     }
-    const look = {
-      revision,
-      anchors,
-      timer: 0 as unknown as ReturnType<typeof setTimeout>,
-    };
-    look.timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       this.looks.delete(look);
       this.#deps.paneDoc.doc?.seeChanges(revision, anchors);
     }, after);
+    const look = { revision, anchors, timer };
     this.looks.add(look);
   }
 
