@@ -149,11 +149,6 @@ export async function deleteTranscript(
 }
 
 /**
- * Removes a session that never started: no transcript, no process. The hub
- * refuses any other kind and says why; that answer is thrown as it is, for
- * the confirm dialog to show under its question.
- */
-/**
  * Reads what a held workspace's clone holds that is nowhere else, as its
  * machine read it once its boundary was closed (hub workspaces.ts
  * `HeldWork`); the hub's refusal (one not held) is the error.
