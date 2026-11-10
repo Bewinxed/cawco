@@ -56,7 +56,6 @@ import { Elysia, ElysiaStatus } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
 import type { PlanChangeRow } from "./db/session-plans";
-import { projectAttempt } from "./project-refusal";
 import { refusal } from "./refusal";
 import type { TaskEvent, Tasks } from "./tasks";
 
@@ -573,22 +572,30 @@ export const createPlans = (deps: PlansDeps) => {
     return row;
   };
 
-  /** The plan as it stands now: the session's own steps and spec, and an attempt's to-dos. */
-  const compute = async (row: InstanceRow): Promise<SessionPlan> => {
-    const own = db.sessionPlan(row.id);
+  /** An attempt's task and its to-dos, read for its plan; nothing for a session that is no attempt. */
+  const attemptOf = async (row: InstanceRow) => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
-    const attempt =
-      item?.taskId && item.projectId
-        ? {
-            taskId: item.taskId,
-            todos: (await deps.tasks.get(item.projectId, item.taskId)).todos,
-          }
-        : {};
+    if (!(item?.taskId && item.projectId)) {
+      return {};
+    }
+    const task = await deps.tasks.get(item.projectId, item.taskId);
+    return task instanceof ElysiaStatus
+      ? task
+      : { taskId: item.taskId, todos: task.todos };
+  };
+
+  /** The plan as it stands now: the session's own steps and spec, and an attempt's to-dos. */
+  const compute = async (row: InstanceRow) => {
+    const own = db.sessionPlan(row.id);
+    const attempt = await attemptOf(row);
+    if (attempt instanceof ElysiaStatus) {
+      return attempt;
+    }
     const changes = db.planChangesOf(row.id, CHANGES_SHOWN).map(changeOf);
     const away = awayNotesOf(own?.spec ?? undefined);
     const steps = own?.steps ?? [];
     const needs = planNeedsOf(row.id, steps, deps.needs());
-    return {
+    const plan: SessionPlan = {
       ...(away && away.notes !== own?.awaySeen
         ? { awayUnseen: { since: away.since } }
         : {}),
@@ -604,6 +611,7 @@ export const createPlans = (deps: PlansDeps) => {
         : {}),
       ...attempt,
     };
+    return plan;
   };
 
   const snapshotOf = (
@@ -625,7 +633,7 @@ export const createPlans = (deps: PlansDeps) => {
    * `settled`, read in the session's project): what stopped a step waiting
    * on a card once its page's Send carried a pick, for every kind of wait.
    */
-  const dropSettled = async (row: InstanceRow): Promise<void> => {
+  const dropSettled = async (row: InstanceRow) => {
     const own = db.sessionPlan(row.id);
     const waits = [
       ...new Set(own?.steps.flatMap((step) => step.waitsOn ?? []) ?? []),
@@ -635,7 +643,11 @@ export const createPlans = (deps: PlansDeps) => {
     }
     const settled = new Set<string>();
     for (const handle of waits) {
-      if ((await deps.tasks.waitState(row.projectId ?? null, handle)).settled) {
+      const state = await deps.tasks.waitState(row.projectId ?? null, handle);
+      if (state instanceof ElysiaStatus) {
+        return state;
+      }
+      if (state.settled) {
         settled.add(handle);
       }
     }
@@ -655,8 +667,14 @@ export const createPlans = (deps: PlansDeps) => {
       if (row instanceof ElysiaStatus) {
         return row;
       }
-      await dropSettled(row);
+      const dropped = await dropSettled(row);
+      if (dropped) {
+        return dropped;
+      }
       const plan = await compute(row);
+      if (plan instanceof ElysiaStatus) {
+        return plan;
+      }
       const before = held.get(instanceId);
       if (!before) {
         const first: Held = { plan, rev: 1 };
@@ -723,7 +741,11 @@ export const createPlans = (deps: PlansDeps) => {
         if (row instanceof ElysiaStatus) {
           return row;
         }
-        const first = { plan: await compute(row), rev: 1 };
+        const plan = await compute(row);
+        if (plan instanceof ElysiaStatus) {
+          return plan;
+        }
+        const first = { plan, rev: 1 };
         held.set(instanceId, first);
         send(snapshotOf(instanceId, first));
       }).then(
@@ -938,12 +960,8 @@ export type Plans = ReturnType<typeof createPlans>;
  */
 export const planRoutes = (plans: Plans) =>
   new Elysia()
-    .get("/api/instances/:id/plan", ({ params }) =>
-      projectAttempt(() => plans.read(params.id))
-    )
-    .post("/api/instances/:id/plan/seen", ({ params }) =>
-      projectAttempt(async () => {
-        const seen = await plans.seeAway(params.id);
-        return typeof seen === "boolean" ? { seen } : seen;
-      })
-    );
+    .get("/api/instances/:id/plan", ({ params }) => plans.read(params.id))
+    .post("/api/instances/:id/plan/seen", async ({ params }) => {
+      const seen = await plans.seeAway(params.id);
+      return typeof seen === "boolean" ? { seen } : seen;
+    });

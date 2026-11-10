@@ -12,7 +12,7 @@ import { PlaceRefusal } from "../place-refusal";
 import { DeleteRefusal } from "../project-delete";
 import { placeOut } from "../project-out";
 import { placesChanged } from "../project-placements";
-import { ProjectRefusal } from "../project-refusal";
+import { ProjectRefusal, projectRefusalOf } from "../project-refusal";
 import { RestoreRefusal } from "../project-trash";
 import { refusal, schemaRefusal } from "../refusal";
 import { LANDS } from "../tasks";
@@ -361,7 +361,10 @@ export const projectRoutes = ({
             body ?? {}
           );
           // Its folder's task files, read into the index again.
-          await tasks.catchUp(params.id);
+          const caught = await tasks.catchUp(params.id);
+          if (caught) {
+            throw projectRefusalOf(caught);
+          }
           console.log(
             `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=restored name=${JSON.stringify(restored.name)} rows=${restored.brought.rows} sessions=${restored.brought.sessions} left=${JSON.stringify(restored.left)}`
           );

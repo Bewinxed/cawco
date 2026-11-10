@@ -245,11 +245,16 @@ const fold = async (
     hubActor(`${dup.name} shares ${shared} with this project`),
     dup.name
   );
+  if (ids instanceof ElysiaStatus) {
+    throw projectRefusalOf(ids);
+  }
   await copyOthers(keep, dup, folder.others);
   // A task in a stage the kept project does not have is said, to be moved.
-  const named = new Set(
-    (await deps.tasks.stages(keep.id)).stages.map((stage) => stage.name)
-  );
+  const stages = await deps.tasks.stages(keep.id);
+  if (stages instanceof ElysiaStatus) {
+    throw projectRefusalOf(stages);
+  }
+  const named = new Set(stages.stages.map((stage) => stage.name));
   for (const [was, now] of ids) {
     const file = folder.tasks.find(
       (task) => `tsk-${fileTaskNumber(task.path)}` === was
