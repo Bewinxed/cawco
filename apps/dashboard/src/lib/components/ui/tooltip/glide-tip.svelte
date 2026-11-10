@@ -5,7 +5,8 @@
    * every tooltip does (tooltip-content); while it stays open and the
    * pointer moves to another item, its floating wrapper slides to that item
    * over `--dur-control` on the drawer's curve (`data-gliding`, set a frame
-   * after it opens, so its first placing is never a slide in from nowhere).
+   * after it opens, so its first placing is never a slide in from nowhere;
+   * the rule is app.css's, on bits-ui's floating wrapper).
    */
   import type { Glide } from "./glide";
   import Root from "./tooltip.svelte";
@@ -52,23 +53,3 @@
     {/if}
   {/snippet}
 </Root>
-
-<style>
-  /* tailwind: a rule on bits-ui's floating wrapper, an element this component does not render and cannot class — https://tailwindcss.com/docs/adding-custom-styles */
-  /* residual: foreign-dom — bits-ui's floating wrapper, which the tooltip's
-     content cannot pass a class to. The wrapper floating-ui places (bits-ui's `data-bits-floating-content-wrapper`)
-     slides to the next item rather than jumping, once it has stood. */
-  :global(
-    [data-bits-floating-content-wrapper]:has(> [data-glide-tip][data-gliding])
-  ) {
-    transition: transform var(--dur-control) var(--ease-drawer);
-  }
-  /* residual: foreign-dom — the same wrapper, with reduced motion. */
-  @media (prefers-reduced-motion: reduce) {
-    :global(
-      [data-bits-floating-content-wrapper]:has(> [data-glide-tip][data-gliding])
-    ) {
-      transition: none;
-    }
-  }
-</style>
