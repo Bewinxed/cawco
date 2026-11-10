@@ -29,7 +29,6 @@ import {
   WouldWait,
   whenStopped,
 } from "./machine-pause";
-import { projectRefusalOf } from "./project-refusal";
 import type { WorkspacesDeps } from "./workspaces";
 import { GIT_TIMEOUT_MS, refOf, type Workspaces } from "./workspaces";
 
@@ -761,11 +760,11 @@ export const createGate = ({
       pick(capable)
     );
   };
-  /** The project's gate ({@link projectGate}), the folder's refusal thrown on as the landing's ProjectRefusal (project-refusal.ts). */
+  /** The project's gate ({@link projectGate}), the folder's refusal thrown on in its words, as the landing's failures are: finish_item answers them. */
   const gateOf = async (projectId: string) => {
     const declared = await projectGate(projectId);
     if (declared instanceof ElysiaStatus) {
-      throw projectRefusalOf(declared);
+      throw new Error(declared.response.detail);
     }
     return declared;
   };
