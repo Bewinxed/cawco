@@ -1,9 +1,7 @@
 <script lang="ts">
   import {
-    newAnswer,
     type Pin,
     type PreviewMode,
-    pinHeld,
     previewMode,
   } from "@cawco/core/comments/model";
   import { pinName } from "@cawco/core/pin-name";
@@ -34,7 +32,7 @@
   import { previewWords } from "@cawco/core/words/preview";
   import { sheetWords } from "@cawco/core/words/sheet";
   import { shellWords } from "@cawco/core/words/shell";
-  import { type Snippet, untrack } from "svelte";
+  import type { Snippet } from "svelte";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -67,7 +65,7 @@
     IconUndock,
     IconUndockLinear,
   } from "#lib/icons.js";
-  import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
+  import { frameObserver } from "#lib/platform/frame-observer.js";
   import { failureWords } from "#lib/platform/hub-read.js";
   import {
     appear,
@@ -82,7 +80,6 @@
   import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
   import { keepThumbnail } from "../artifact-api";
-  import { openAsked, takeOpen } from "../artifact-names.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import { refusals } from "../refusals.svelte";
@@ -110,8 +107,8 @@
     lineOf,
     lineOfActivity,
   } from "./change-tour.svelte";
-  import { CommentKit, saidIn } from "./comment-kit.svelte";
-  import { NEXT_COMMENT, type RailList } from "./comment-rows";
+  import { CommentKit } from "./comment-kit.svelte";
+  import { NEXT_COMMENT } from "./comment-rows";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
@@ -127,13 +124,13 @@
   import { PaneSubject } from "./pane-subject.svelte";
   import { PinComposer } from "./pin-composer.svelte";
   import { PinPeek } from "./pin-peek.svelte";
+  import { PinThread } from "./pin-thread.svelte";
   import { frameError, PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
   import { errorPlace, errorTitle, StageCover } from "./stage-cover.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
   import {
-    type PreviewPinAt,
     pageMessage,
     previewCompose,
     previewError,
@@ -261,27 +258,27 @@
   const commentKit = new CommentKit({
     paneSubject,
     previewFrame,
-    cardPin: () => cardPin,
+    cardPin: () => pinThread.cardPin,
   });
   const pinComposer = new PinComposer({
     paneSubject,
     previewFrame,
     paneDoc,
     commentKit,
-    markFocused: (id: string) => markFocused(id),
+    markFocused: (id: string) => pinThread.markFocused(id),
   });
   const paneMode = new PaneMode({
     instanceId: () => instanceId,
     previewFrame,
     paneDoc,
     pinComposer,
-    openPin: () => openPin,
+    openPin: () => pinThread.openPin,
   });
   const pinPeek = new PinPeek({
     paneLayout,
     paneDoc,
     pinComposer,
-    openPin: () => openPin,
+    openPin: () => pinThread.openPin,
   });
   const changeTour = new ChangeTour({
     instanceId: () => instanceId,
@@ -289,146 +286,34 @@
     paneNotice,
     previewFrame,
     paneDoc,
-    cardPin: () => cardPin,
-    openCard: (id: string, via?: "key" | "pointer") => openCard(id, via),
-    unread: () => unread,
+    cardPin: () => pinThread.cardPin,
+    openCard: (id: string, via?: "key" | "pointer") =>
+      pinThread.openCard(id, via),
+    unread: () => pinThread.unread,
+  });
+  const pinThread = new PinThread({
+    instanceId: () => instanceId,
+    paneSubject,
+    paneNotice,
+    paneLayout,
+    previewFrame,
+    paneDoc,
+    commentKit,
+    pinComposer,
+    paneMode,
+    pinPeek,
+    changeTour,
   });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
   /**
-   * The page's answer to a write the pane sent it: the pin as the page now
-   * holds it, drawn again; a refusal under the open card, a reply's words
-   * back in its field.
-   */
-  function heardPageWrite(type: string, message: Record<string, unknown>) {
-    const id = typeof message.pin === "string" ? message.pin : null;
-    if (!(id && (id in paneDoc.pagePins || paneDoc.pageWords.has(id)))) {
-      return;
-    }
-    if ("now" in message && !paneDoc.view?.pins.some((one) => one.id === id)) {
-      paneDoc.pageSays(id, message.now);
-    }
-    const words =
-      type === "cawco:reply-result" ? paneDoc.pageWords.get(id) : undefined;
-    if (type === "cawco:reply-result") {
-      paneDoc.pageWords.delete(id);
-      replying = false;
-    }
-    if (message.ok === true) {
-      if (words !== undefined) {
-        commentKit.drafts?.discard(id);
-      }
-      return;
-    }
-    const draft =
-      words === undefined ? null : (commentKit.drafts?.draft(id) ?? null);
-    if (draft?.unsent) {
-      draft.fill(draft.unsent);
-      draft.settle();
-    }
-    if (id === openPin) {
-      cardError =
-        typeof message.error === "string"
-          ? message.error
-          : "The page didn't keep that, so nothing changed. Try again.";
-    }
-  }
-  /**
    * What the sheet covers told again as it comes to rest (ThreadSheet
    * `onmoved`): measured as it mounts it stood below the well, covering
    * nothing, so no pin was lifted clear of it.
    */
   let sayCovered: (() => void) | null = null;
-  /*
-   * The comments (Projects spec §5.7; the artifact panel's surface brief, Placing a comment, The
-   * Comments rail, A thread beside its pin): the composer beside the pill
-   * the press put down, the thread as a card beside its pin, the rail beside
-   * the page, J and K stepping through them.
-   */
-  /** The pin whose thread is open. */
-  let openPin = $state<string | null>(null);
-  /** Its pill in the page's viewport, as the page tells it while it scrolls. */
-  let pinAt = $state<PreviewPinAt | null>(null);
-  /**
-   * The pin the page has told where it stands since its thread opened (its
-   * pill, or that it stands nowhere on the page). Beside its pill, a card
-   * stands only once this is its own, so its first frame is where it stays,
-   * never the last pin's place nor the well's corner.
-   */
-  let pinHeard = $state<string | null>(null);
-  /**
-   * The pin whose card is going back into its pill, or whose sheet is
-   * sliding down, closed: it stays drawn until it has (PinFloat and
-   * ThreadSheet `onclosed`), so its pin opened again before then turns the
-   * same card or sheet back (their `open`).
-   */
-  let closingPin = $state<string | null>(null);
-  /** The pin J and K stand on. */
-  let focusedPin = $state<string | null>(null);
-  /** What went wrong with the open thread's reply, resolve or delete. */
-  let cardError = $state<string | null>(null);
-  /** The open thread's reply is on its way. */
-  let replying = $state(false);
-  /**
-   * The room over the page a pin's card stands in: read as it mounts, and a
-   * change in the next frame (frameSize).
-   */
-  let roomW = $state(0);
-  let roomH = $state(0);
-  const measureRoom = frameSize(
-    (node: HTMLElement) => [node.clientWidth, node.clientHeight] as const,
-    ([width, height]) => {
-      roomW = width;
-      roomH = height;
-    }
-  );
-  /**
-   * The pin whose card is drawn: the open one, beside its pill once the
-   * page has said where that stands (`pinHeard`; at once as the foot sheet,
-   * or with no page to answer). While another pin's place is still on its
-   * way, the last card stays where it stood, so the swap is one frame: no
-   * frame without a card, none with the new card anywhere but its place.
-   * Closed, it is the one going back into its pill (`closingPin`), if any.
-   */
-  let lastDrawn: string | null = null;
-  const drawnPin = $derived.by(() => {
-    if (!openPin) {
-      lastDrawn = closingPin;
-    } else if (
-      paneLayout.floatSheet ||
-      threadPushed ||
-      !previewFrame.connected ||
-      pinHeard === openPin
-    ) {
-      lastDrawn = openPin;
-    }
-    return lastDrawn;
-  });
-  const cardPin = $derived(
-    paneDoc.pins.find((pin) => pin.id === drawnPin) ?? null
-  );
-  /** The open thread's element's nearest parent, as the page names its chain (`cawco:pin-chain`). */
-  let cardParent = $state<{ id: string; name: string | null } | null>(null);
-  /** The thread's or the composer's float: told to the page as what covers it on a phone. */
-  let cardFloat = $state<HTMLElement>();
-  /** A whole-page comment asked from the rail beside the page: its composer hangs from the rail's glass, not over the page. */
-  const pageHung = $derived(
-    pinComposer.composingPage &&
-      !!pinComposer.composing &&
-      paneMode.listOpen &&
-      !paneLayout.railSheet
-  );
-  /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a composer or a place picker stands, so neither covers the other; a thread opens in it (`threadPushed`). */
-  const railAway = $derived(
-    paneMode.listOpen &&
-      paneLayout.railSheet &&
-      (!!pinComposer.composing || !!previewFrame.picking)
-  );
-  /** The rail's tab and its rows' scroll, kept while it is shut or stands aside. */
-  let listFilter = $state<RailList>("open");
-  let listScroll = $state(0);
   /**
    * What the host's chrome covers of the page, told to its overlay
    * (`cawco:covered`, the page's viewport px): on a phone, the thread or the
@@ -443,9 +328,11 @@
   $effect(() => {
     const frame = previewFrame.iframe;
     const floating = paneLayout.floatSheet
-      ? (cardFloat ?? pinComposer.composerFloat ?? null)
+      ? (pinThread.cardFloat ?? pinComposer.composerFloat ?? null)
       : null;
-    const sheetCard = threadPushed ? (railSurface ?? null) : floating;
+    const sheetCard = pinThread.threadPushed
+      ? (pinThread.railSurface ?? null)
+      : floating;
     if (!(frame && previewFrame.connected)) {
       return;
     }
@@ -533,385 +420,6 @@
     sized.request();
     return () => sized.disconnect();
   });
-  /** Pins the agent is working on: the last delivery carried them and its turn runs. */
-  const live = $derived.by(() => {
-    const stamps = paneDoc.pins.flatMap((pin) => [
-      pin.sentAt ?? "",
-      ...pin.thread.map((entry) => entry.sentAt ?? ""),
-    ]);
-    const last = stamps.reduce((a, b) => (b > a ? b : a), "");
-    if (!(last && paneSubject.fleet.working(instanceId))) {
-      return new Set<string>();
-    }
-    return new Set(
-      paneDoc.pins
-        .filter(
-          (pin) =>
-            !pin.resolvedAt &&
-            (pin.sentAt === last ||
-              pin.thread.some((entry) => entry.sentAt === last))
-        )
-        .map((pin) => pin.id)
-    );
-  });
-  /**
-   * The pins with an answer the person hasn't looked at (core `newAnswer`:
-   * an agent's entry or resolve newer than his last look, the pin's
-   * `seenAt` in the doc, so it holds on every device). The open thread is
-   * being looked at.
-   */
-  const unread = $derived(
-    new Set(
-      paneDoc.pins
-        .filter((pin) => pin.id !== openPin && newAnswer(pin))
-        .map((pin) => pin.id)
-    )
-  );
-  // The open thread is looked at: what the agent answered there is seen, on every device.
-  $effect(() => {
-    const pin = cardPin;
-    if (!(pin && paneDoc.doc && newAnswer(pin)) || paneDoc.onlyOnPage(pin.id)) {
-      return;
-    }
-    untrack(() => paneDoc.doc?.see(pin.id));
-  });
-  // Each pill's dot on the page: the agent at work on it, or an answer unread.
-  $effect(() => {
-    const working = [...live];
-    const answered = [...unread];
-    if (previewFrame.connected) {
-      untrack(() =>
-        previewFrame.post({
-          type: "cawco:pin-marks",
-          live: working,
-          unread: answered,
-        })
-      );
-    }
-  });
-  /**
-   * Back on a page with something to check, the rail opens itself on To
-   * check beside the page, once per page as it is read; a change that
-   * lands while he is here only counts in its tab. Where the rail is the
-   * well's foot sheet (a phone, a pane under 640px) it would stand over the
-   * page he came to see (the owner, on his iPhone: "the comments pane opens
-   * by default on mobile so I have to dismiss it"): there it opens from
-   * Comments alone.
-   */
-  let checkedFor: string | null = null;
-  $effect(() => {
-    const id = paneSubject.artifactId;
-    if (
-      !id ||
-      paneDoc.listHold !== "ready" ||
-      checkedFor === id ||
-      paneSubject.isCanvas ||
-      !paneLayout.railPlaced
-    ) {
-      return;
-    }
-    checkedFor = id;
-    if (!paneLayout.railSheet && untrack(() => changeTour.checkCount) > 0) {
-      untrack(() => {
-        listFilter = "check";
-        paneMode.showList(true);
-      });
-    }
-  });
-  /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
-  const stepping = $derived(
-    paneDoc.pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
-  );
-  /**
-   * Pin `id` focused on the page, with `scroll` brought into view (`instant`
-   * in one step). Its pill wears the focus ring only when the keyboard got
-   * it there (`keyed`, by default the last input): an open or stepped-to pin
-   * reached by a press is marked by its card and its row, never a ring
-   * (DESIGN.md, The One Ring Rule).
-   */
-  function focusPin(
-    id: string,
-    scroll: boolean,
-    { instant = false, keyed = lastInput.current === "key" } = {}
-  ) {
-    previewFrame.post({ type: "cawco:focus-pin", id, scroll, instant, keyed });
-  }
-  /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
-  function openCard(id: string, via: "key" | "pointer" = "pointer") {
-    commentKit.loadKit();
-    pinPeek.dropPeek();
-    if (closingPin) {
-      // Another pin's card going back into its pill goes at once; its own turns back.
-      if (closingPin !== id) {
-        lastDrawn = null;
-      }
-      closingPin = null;
-    }
-    if (pinComposer.composing) {
-      pinComposer.cancelComposer();
-    }
-    if (openPin && openPin !== id) {
-      closeCard(true);
-    }
-    // A key or a press inside the page, which the host never hears: the page's last input is it.
-    lastInput.current = via;
-    if (openPin !== id) {
-      // Its place is the page's to say; the card drawn now keeps its own until it does (`drawnPin`).
-      pinHeard = null;
-    }
-    openPin = id;
-    focusedPin = id;
-    cardError = null;
-    cardParent = null;
-    previewFrame.post({ type: "cawco:track-pin", id });
-    // Brought into view in one step, not a glide: its card stands where its
-    // pill lands, and the page tells that place once.
-    focusPin(id, true, { instant: true, keyed: via === "key" });
-  }
-  /**
-   * The thread closes: its Close, Esc, another row or pin opened (`swap`:
-   * its card stays as it stands until the next one's place is heard, then
-   * goes at once, so no frame shows it beside the next). Closed, its card
-   * beside the pill goes back into it, and the phone's sheet slides down,
-   * each drawn until it has (`closingPin`).
-   * Its reply's words stay with its pin.
-   */
-  function closeCard(swap = false) {
-    const id = openPin;
-    if (!swap && id && drawnPin === id) {
-      closingPin = id;
-    }
-    openPin = null;
-    if (!swap) {
-      pinAt = null;
-    }
-    pinHeard = null;
-    cardError = null;
-    replying = false;
-    cardParent = null;
-    if (id && id === paneMode.placing) {
-      paneMode.placeElsewhere(false);
-    }
-    previewFrame.post({ type: "cawco:track-pin", id: null });
-  }
-  function markFocused(id: string) {
-    focusedPin = id;
-  }
-  /** J and K: the next or the previous pin on the page, outlined and scrolled to. */
-  function step(by: 1 | -1) {
-    if (stepping.length === 0) {
-      return;
-    }
-    const at = stepping.findIndex((pin) => pin.id === focusedPin);
-    const next =
-      stepping[(at + by + stepping.length) % stepping.length] ?? stepping[0];
-    focusedPin = next.id;
-    // J and K are the keyboard's own steps.
-    focusPin(next.id, true, { keyed: true });
-    if (openPin) {
-      openCard(next.id, "key");
-    }
-  }
-  /** A pin's own address (its thread's Copy link): its artifact's tab, opening the pin's thread. */
-  const pinLink = (number: number): string =>
-    paneSubject.artifactId
-      ? `${location.origin}/artifact/${encodeURIComponent(paneSubject.artifactId)}?pin=${number}`
-      : location.href;
-  /**
-   * The place the address names, opened once its page is ready and its pins
-   * are read: a pin's thread (`?pin=N`), or a decision card (`?card=<id>`).
-   */
-  let linkedFor: string | null = null;
-  function openLinkedPin() {
-    const asked = new URL(location.href).searchParams;
-    if (!paneSubject.artifactId || linkedFor === paneSubject.artifactId) {
-      return;
-    }
-    const card = asked.get("card");
-    if (card) {
-      linkedFor = paneSubject.artifactId;
-      showCard(card);
-      return;
-    }
-    const change = asked.get("change");
-    if (change) {
-      linkedFor = paneSubject.artifactId;
-      changeTour.stepToChange(change);
-      return;
-    }
-    const number = Number(asked.get("pin"));
-    if (openPinNumbered(number)) {
-      linkedFor = paneSubject.artifactId;
-    }
-  }
-  $effect(() => {
-    if (previewFrame.connected && paneDoc.view) {
-      untrack(openLinkedPin);
-    }
-  });
-  /** Pin `number`'s thread opened, when the page holds it; whether it did. */
-  function openPinNumbered(number: number): boolean {
-    const pin = Number.isInteger(number)
-      ? paneDoc.pins.find((one) => one.number === number)
-      : undefined;
-    if (!pin) {
-      return false;
-    }
-    if (pin.resolvedAt || pin.movedAt) {
-      // Off the page: its thread opens from its row, in Resolved or Open.
-      listFilter = pin.resolvedAt ? "resolved" : "open";
-      paneMode.showList(true);
-    }
-    openCard(pin.id);
-    return true;
-  }
-  /** Decision card `card` brought into view and outlined for a moment. */
-  function showCard(card: string) {
-    previewFrame.post({
-      type: "cawco:show-element",
-      selector: `#decision-${CSS.escape(card)}`,
-      outline: "flash",
-    });
-  }
-  /*
-   * A chip's press (artifact-names.svelte.ts `askOpen`): once the page is
-   * up and its pins are read, the place it names opens, once: a pin's
-   * thread, a decision card, or the artifact as it is.
-   */
-  $effect(() => {
-    const id = paneSubject.artifactId;
-    const at = id ? openAsked(id) : null;
-    if (!(id && at && previewFrame.connected && paneDoc.view)) {
-      return;
-    }
-    untrack(() => {
-      takeOpen(id);
-      if ("pin" in at) {
-        openPinNumbered(at.pin);
-      } else if ("card" in at) {
-        showCard(at.card);
-      } else if ("change" in at) {
-        changeTour.stepToChange(at.change);
-      }
-    });
-  });
-  /** The person's words in the open thread; a resolved pin's reply reopens it ("Reply to reopen"). */
-  function reply(text: string, held = false) {
-    const draft = commentKit.replyDraft;
-    if (!(openPin && draft)) {
-      return;
-    }
-    const said = { ...saidIn(draft, text), held };
-    const reopens = !!cardPin?.resolvedAt;
-    if (paneDoc.onlyOnPage(openPin)) {
-      // The page holds the pin and keeps the words on its device until the
-      // hub has them; its answer (`cawco:reply-result`) draws them, or puts
-      // them back in the field with why.
-      paneDoc.pageWords.set(openPin, text);
-      replying = true;
-      previewFrame.post({ type: "cawco:reply", pin: openPin, ...said });
-      if (reopens) {
-        previewFrame.post({
-          type: "cawco:resolve",
-          pin: openPin,
-          resolved: false,
-        });
-      }
-      cardError = null;
-      return;
-    }
-    cardError = paneDoc.doc
-      ? paneDoc.doc.reply(openPin, said)
-      : "The pane lost the page's document, so the reply wasn't kept. Reload, then reply again.";
-    if (cardError === null && reopens && paneDoc.doc) {
-      cardError = paneDoc.doc.resolve(openPin, false);
-    }
-    if (cardError === null) {
-      // Said: the words are in the thread, so no draft is left to keep.
-      commentKit.drafts?.discard(openPin);
-    } else if (draft.unsent) {
-      draft.fill(draft.unsent);
-      draft.settle();
-    }
-  }
-  /** A pin resolved or reopened: from its thread's head, or its row in the rail. */
-  function resolvePin(resolved: boolean, id: string | null = openPin) {
-    if (!id) {
-      return;
-    }
-    focusPast(id, resolved);
-    if (paneDoc.onlyOnPage(id)) {
-      cardError = null;
-      previewFrame.post({ type: "cawco:resolve", pin: id, resolved });
-      return;
-    }
-    const refused = paneDoc.doc
-      ? paneDoc.doc.resolve(id, resolved)
-      : `The pane lost the page's document, so the comment wasn't ${resolved ? "resolved" : "reopened"}. Reload, then try again.`;
-    if (id === openPin) {
-      cardError = refused;
-    } else if (refused) {
-      paneNotice.say({ message: refused, again: null });
-    }
-  }
-  /**
-   * The rail's rows as it last drew them, in its tab and its order: what the
-   * focus steps through once the comment it stood on leaves that tab. Kept
-   * while the rail stands aside (a phone's sheet, while a thread stands).
-   */
-  let railOrder: string[] = [];
-  /**
-   * Comment `id` resolved (or reopened) leaves the tab in front of him when
-   * that tab is Open (or Resolved): the tab stays, and the focus, when it
-   * stood on it, moves to the row after it there, else the one before it,
-   * else to none (the tab's empty state). So J and K walk the rows he sees,
-   * and the rail never follows the comment to its new tab.
-   */
-  function focusPast(id: string, resolved: boolean) {
-    const leaves =
-      (listFilter === "open" && resolved) ||
-      (listFilter === "resolved" && !resolved);
-    if (!(leaves && focusedPin === id)) {
-      return;
-    }
-    const at = railOrder.indexOf(id);
-    const rest = railOrder.filter((one) => one !== id);
-    const next = at === -1 ? null : (rest[at] ?? rest[at - 1] ?? null);
-    focusedPin = next;
-    if (next) {
-      focusPin(next, false);
-    }
-  }
-  /**
-   * The thread's Delete, once asked in place: the pin goes from the doc (core
-   * `deletePin`), its pill from the page, and the thread closes. A refusal
-   * throws its sentence, which stays under the question.
-   */
-  function deleteOpenPin(): Promise<void> {
-    const id = openPin;
-    if (!id) {
-      return Promise.resolve();
-    }
-    let refused: string | null = null;
-    if (paneDoc.onlyOnPage(id)) {
-      // The page holds it alone: deleted there, its answer saying any refusal.
-      previewFrame.post({ type: "cawco:delete", pin: id });
-      paneDoc.pageSays(id, null);
-    } else {
-      refused = paneDoc.doc
-        ? paneDoc.doc.delete(id)
-        : "The pane lost the page's document, so the comment wasn't deleted. Reload, then try again.";
-    }
-    if (refused) {
-      return Promise.reject(new Error(refused));
-    }
-    if (focusedPin === id) {
-      focusedPin = null;
-    }
-    commentKit.drafts?.discard(id);
-    closeCard();
-    return Promise.resolve();
-  }
   /** What holds the focus as a control: a key it takes is its own. */
   const PANE_CONTROL =
     'button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"]';
@@ -932,23 +440,23 @@
     } else if (name === "C" && !paneSubject.isCanvas) {
       paneMode.showPins(!paneMode.pinsShown);
     } else if (name === "j") {
-      step(1);
+      pinThread.step(1);
     } else if (name === "k") {
-      step(-1);
+      pinThread.step(-1);
     } else if (
       name === "Enter" &&
-      focusedPin &&
-      paneDoc.pins.some((pin) => pin.id === focusedPin)
+      pinThread.focusedPin &&
+      paneDoc.pins.some((pin) => pin.id === pinThread.focusedPin)
     ) {
       // Only a pin of this page: one J and K stood on elsewhere opens nothing.
-      openCard(focusedPin, "key");
+      pinThread.openCard(pinThread.focusedPin, "key");
     } else if (name === "/" && paneMode.listOpen) {
       rail?.focusSearch();
     } else if (name === "Escape") {
       if (pinComposer.composing) {
         pinComposer.cancelComposer();
-      } else if (openPin) {
-        closeCard();
+      } else if (pinThread.openPin) {
+        pinThread.closeCard();
       } else {
         paneMode.setMode("interact");
       }
@@ -1021,7 +529,11 @@
     ) {
       return;
     }
-    if (pinComposer.composing || openPin || paneMode.mode !== "interact") {
+    if (
+      pinComposer.composing ||
+      pinThread.openPin ||
+      paneMode.mode !== "interact"
+    ) {
       pressKey("Escape");
       event.preventDefault();
     }
@@ -1109,15 +621,18 @@
           if (!paneMode.pinsShown) {
             paneMode.showPins(false);
           }
-          openLinkedPin();
+          pinThread.openLinkedPin();
           pinComposer.restoreDraft();
-          if (openPin) {
-            previewFrame.post({ type: "cawco:track-pin", id: openPin });
+          if (pinThread.openPin) {
+            previewFrame.post({
+              type: "cawco:track-pin",
+              id: pinThread.openPin,
+            });
           }
           previewFrame.post({
             type: "cawco:pin-marks",
-            live: [...live],
-            unread: [...unread],
+            live: [...pinThread.live],
+            unread: [...pinThread.unread],
           });
           if (!onScreen) {
             // Loaded while its tab is off screen: held from the start.
@@ -1178,7 +693,7 @@
         ) {
           paneDoc.pageSays(id, message.pin);
         }
-        openCard(id, message.via === "key" ? "key" : "pointer");
+        pinThread.openCard(id, message.via === "key" ? "key" : "pointer");
         break;
       }
       case "cawco:compose": {
@@ -1187,8 +702,8 @@
         if (!said) {
           return;
         }
-        if (openPin) {
-          closeCard();
+        if (pinThread.openPin) {
+          pinThread.closeCard();
         }
         commentKit.loadKit();
         pinPeek.dropPeek();
@@ -1215,8 +730,8 @@
       case "cawco:pin-chain": {
         const id = previewPinId(message.id);
         const parent = previewCompose(message)?.chain[1];
-        if (id && id === openPin) {
-          cardParent = {
+        if (id && id === pinThread.openPin) {
+          pinThread.cardParent = {
             id,
             name:
               parent && parent.anchor.selector !== "body"
@@ -1249,7 +764,7 @@
       case "cawco:reply-result":
       case "cawco:resolve-result":
       case "cawco:delete-result":
-        heardPageWrite(message.type, message);
+        pinThread.heardPageWrite(message.type, message);
         break;
       case "cawco:page-pins":
         // The replies the hub refused that the page keeps, every one each time: they stand in their threads.
@@ -1294,9 +809,12 @@
         }
         break;
       case "cawco:pin-at": {
-        if (openPin && previewPinId(message.id) === openPin) {
-          pinAt = previewPinAt(message);
-          pinHeard = openPin;
+        if (
+          pinThread.openPin &&
+          previewPinId(message.id) === pinThread.openPin
+        ) {
+          pinThread.pinAt = previewPinAt(message);
+          pinThread.pinHeard = pinThread.openPin;
         }
         break;
       }
@@ -1457,72 +975,6 @@
   async function backToSession() {
     await goto(paneSubject.fleet.sessionHref(instanceId));
   }
-  /** The rail's bottom sheet stands up (ThreadSheet `open`). */
-  const railSheetOpen = $derived(
-    paneMode.listOpen &&
-      paneLayout.railPlaced &&
-      !paneSubject.isCanvas &&
-      paneLayout.railSheet &&
-      !railAway
-  );
-  /** The rail's bottom sheet is drawn: from its open until it has slid down (ThreadSheet `onclosed`). */
-  let railSheetDrawn = $state(false);
-  /** The rail's bottom sheet's surface: what covers the page while a thread stands in it. */
-  let railSurface = $state<HTMLElement>();
-  /**
-   * A thread opened while the Comments sheet stands opens in that sheet,
-   * over its list, Back leading (HIG, Sheets: "Display only one sheet at a
-   * time"), never as a second sheet after the list's goes.
-   */
-  const threadPushed = $derived(
-    paneMode.listOpen &&
-      paneLayout.railPlaced &&
-      !paneSubject.isCanvas &&
-      paneLayout.railSheet &&
-      openPin !== null
-  );
-  /**
-   * The open thread's pin is being placed again (Pin it somewhere else): a
-   * sheet holding it drops to its low stop, so the page above it takes the
-   * tap while the card's bar and its Cancel stay in view.
-   */
-  const placingThread = $derived(
-    paneMode.placing !== null && paneMode.placing === openPin
-  );
-  /** The list in front holds nothing: the sheet stands low, never half its room empty (ThreadSheet `short`). */
-  const railEmpty = $derived.by(() => {
-    switch (listFilter) {
-      case "check":
-        return changeTour.checkCount === 0;
-      case "held":
-        return !paneDoc.pins.some(pinHeld);
-      case "resolved":
-        return !paneDoc.pins.some((pin) => !!pin.resolvedAt);
-      case "open":
-        return !paneDoc.pins.some((pin) => !pin.resolvedAt);
-    }
-  });
-  /** The Comments sheet holds a line or two, or its thread is being placed again (ThreadSheet `short`). */
-  const railShort = $derived(
-    (railEmpty && !threadPushed) || (threadPushed && placingThread)
-  );
-  /** Back, in the sheet: the list again, the thread gone at once (no card goes back into a pill). */
-  function backToList() {
-    closeCard();
-    closingPin = null;
-  }
-  /** The Comments sheet goes, with a thread standing in it. */
-  function closeSheet() {
-    if (threadPushed) {
-      backToList();
-    }
-    paneMode.showList(false);
-  }
-  $effect(() => {
-    if (railSheetOpen) {
-      railSheetDrawn = true;
-    }
-  });
   const browserRow = $derived(
     paneSubject.isBrowser ? paneSubject.fleet.browser(instanceId) : null
   );
@@ -2055,7 +1507,7 @@
     down={paneDoc.linkDown ? NOT_REACHING : null}
     label={paneMode.commentsTitle}
     onclick={() => paneMode.showList(!paneMode.listOpen)}
-    open={paneLayout.railSheet ? railSheetOpen : paneMode.listOpen}
+    open={paneLayout.railSheet ? pinThread.railSheetOpen : paneMode.listOpen}
     held={paneDoc.heldCount}
     pinsShown={paneMode.pinsShown}
     toCheck={changeTour.checkCount}
@@ -2156,16 +1608,16 @@
       }
     }}
     sendRefused={paneDoc.sendRefused}
-    focused={focusedPin}
+    focused={pinThread.focusedPin}
     hold={paneDoc.listHold}
     {layout}
-    {live}
+    live={pinThread.live}
     onclose={() => paneMode.showList(false)}
     onhover={(id) => previewFrame.post({ type: "cawco:hover-pin", id })}
     onopen={(id, via) =>
-      listFilter === "check"
+      pinThread.listFilter === "check"
         ? changeTour.openChecked(id, via)
-        : openCard(id, via)}
+        : pinThread.openCard(id, via)}
     checks={paneSubject.isCanvas
       ? undefined
       : {
@@ -2175,28 +1627,28 @@
           unasked: changeTour.checking.unasked.length > 0 ? checkUnasked : null,
         }}
     onpage={() => {
-      if (openPin) {
-        closeCard();
+      if (pinThread.openPin) {
+        pinThread.closeCard();
       }
       pinComposer.composingPage = true;
       previewFrame.post({ type: "cawco:compose-page" });
     }}
     onpageclose={pinComposer.cancelComposer}
     pageComposer={composerBody}
-    pageOpen={pageHung}
-    onresolve={(id, resolved) => resolvePin(resolved, id)}
+    pageOpen={pinThread.pageHung}
+    onresolve={(id, resolved) => pinThread.resolvePin(resolved, id)}
     onretry={paneDoc.relink}
     onretrypin={paneSend.retryPin}
     onshown={(ids) => {
-      railOrder = ids;
+      pinThread.railOrder = ids;
     }}
-    open={openPin}
+    open={pinThread.openPin}
     whyNotSent={paneSend.notSentWhy}
     pins={paneDoc.pins}
     retrying={paneSend.pinsRetrying}
-    {unread}
-    bind:filter={listFilter}
-    bind:scroll={listScroll}
+    unread={pinThread.unread}
+    bind:filter={pinThread.listFilter}
+    bind:scroll={pinThread.listScroll}
     bind:sort={paneMode.railSort}
   />
 {/snippet}
@@ -2727,37 +2179,39 @@
         changes={(paneDoc.view?.activity[pin.id]?.length ?? 0) > 0
           ? threadChanges
           : undefined}
-        marked={peek || !!pinAt?.mark}
+        marked={peek || !!pinThread.pinAt?.mark}
         session={paneSubject.owner ? instanceId : null}
         {draft}
-        link={pinLink(pin.number)}
-        live={live.has(pin.id)}
+        link={pinThread.pinLink(pin.number)}
+        live={pinThread.live.has(pin.id)}
         name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
         back={pushed
-          ? { to: commentWords.comments, onback: backToList }
+          ? { to: commentWords.comments, onback: pinThread.backToList }
           : undefined}
-        onclose={pushed ? closeSheet : () => closeCard()}
+        onclose={pushed ? pinThread.closeSheet : () => pinThread.closeCard()}
         sheet={pushed || sheet}
-        ondelete={deleteOpenPin}
+        ondelete={pinThread.deleteOpenPin}
         ondraft={() => commentKit.drafts?.changed(pin.id)}
-        onfind={() => focusPin(pin.id, true)}
+        onfind={() => pinThread.focusPin(pin.id, true)}
         onplace={paneMode.placeElsewhere}
-        onhold={(text) => reply(text, true)}
-        onreply={(text) => reply(text)}
-        onresolve={(resolved) => resolvePin(resolved)}
+        onhold={(text) => pinThread.reply(text, true)}
+        onreply={(text) => pinThread.reply(text)}
+        onresolve={(resolved) => pinThread.resolvePin(resolved)}
         onretry={() => paneSend.retryPin(pin.id)}
-        parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
+        parent={!peek && pinThread.cardParent?.id === pin.id
+          ? pinThread.cardParent.name
+          : null}
         {peek}
         {pin}
         placing={paneMode.placing === pin.id}
-        problem={peek ? null : cardError}
-        sending={!peek && replying}
+        problem={peek ? null : pinThread.cardError}
+        sending={!peek && pinThread.replying}
         retrying={paneSend.pinsRetrying.has(pin.id)}
         whyNotSent={paneSend.notSentWhy(pin)}
       />
     {/if}
   {/snippet}
-  {#if railSheetDrawn}
+  {#if pinThread.railSheetDrawn}
     <!-- The rail as the well's bottom sheet, on a phone and in a pane under
          640px: the kit's drawer (ThreadSheet's host), its grabber and two
          stops, half its room where it opens and the whole room (HIG, Sheets:
@@ -2774,24 +2228,30 @@
          at its whole room, the comments under its bar, and a drag takes it
          to half. -->
     <ThreadSheet
-      label={threadPushed && cardPin
-        ? `Comment ${cardPin.number}`
+      label={pinThread.threadPushed && pinThread.cardPin
+        ? `Comment ${pinThread.cardPin.number}`
         : commentWords.comments}
-      onclose={closeSheet}
+      onclose={pinThread.closeSheet}
       onclosed={() => {
-        if (!railSheetOpen) {
-          railSheetDrawn = false;
+        if (!pinThread.railSheetOpen) {
+          pinThread.railSheetDrawn = false;
         }
       }}
       onmoved={() => sayCovered?.()}
-      open={railSheetOpen}
-      short={railShort}
-      tall={sheet && !railShort}
-      bind:surface={railSurface}
+      open={pinThread.railSheetOpen}
+      short={pinThread.railShort}
+      tall={sheet && !pinThread.railShort}
+      bind:surface={pinThread.railSurface}
     >
-      {#if threadPushed && cardPin && commentKit.kit && commentKit.replyDraft}
-        {#key cardPin.id}
-          {@render thread(cardPin, commentKit.replyDraft, false, true, true)}
+      {#if pinThread.threadPushed && pinThread.cardPin && commentKit.kit && commentKit.replyDraft}
+        {#key pinThread.cardPin.id}
+          {@render thread(
+            pinThread.cardPin,
+            commentKit.replyDraft,
+            false,
+            true,
+            true
+          )}
         {/key}
       {:else}
         {@render railOf("sheet")}
@@ -2826,15 +2286,15 @@
     data-mode={paneMode.mode !== "interact" && !paneSubject.isCanvas
       ? paneMode.mode
       : undefined}
-    {@attach measureRoom}
+    {@attach pinThread.measureRoom}
   >
-    {#if pinComposer.composing && commentKit.kit && commentKit.nextDraft && !pageHung}
+    {#if pinComposer.composing && commentKit.kit && commentKit.nextDraft && !pinThread.pageHung}
       <PinFloat
         bare
         box={pinComposer.composing.at?.box ?? null}
         label={commentWords.comment}
         mark={pinComposer.composing.at?.mark ?? null}
-        room={{ w: roomW, h: roomH }}
+        room={{ w: pinThread.roomW, h: pinThread.roomH }}
         sheet={paneLayout.floatSheet}
         slot="pin-composer"
         bind:float={pinComposer.composerFloat}
@@ -2844,8 +2304,8 @@
     {/if}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
          another's never moves to it. -->
-    {#if cardPin && commentKit.kit && commentKit.replyDraft && !threadPushed}
-      {#key cardPin.id}
+    {#if pinThread.cardPin && commentKit.kit && commentKit.replyDraft && !pinThread.threadPushed}
+      {#key pinThread.cardPin.id}
         {#if paneLayout.floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
                bottom sheet, dragged between its stops (ThreadSheet): it
@@ -2853,37 +2313,43 @@
                and its element stand above it (what the comment is about
                in view), and goes to the whole room on a drag. -->
           <ThreadSheet
-            label={`Comment ${cardPin.number}`}
-            onclose={() => closeCard()}
+            label={`Comment ${pinThread.cardPin.number}`}
+            onclose={() => pinThread.closeCard()}
             onclosed={() => {
-              if (!openPin) {
-                closingPin = null;
+              if (!pinThread.openPin) {
+                pinThread.closingPin = null;
               }
             }}
             onmoved={() => sayCovered?.()}
-            open={openPin !== null}
-            short={placingThread}
-            bind:surface={cardFloat}
+            open={pinThread.openPin !== null}
+            short={pinThread.placingThread}
+            bind:surface={pinThread.cardFloat}
           >
-            {@render thread(cardPin, commentKit.replyDraft, false, false, true)}
+            {@render thread(
+              pinThread.cardPin,
+              commentKit.replyDraft,
+              false,
+              false,
+              true
+            )}
           </ThreadSheet>
         {:else}
           <PinFloat
-            box={pinAt?.box ?? null}
-            label={`Comment ${cardPin.number}`}
-            mark={pinAt?.mark ?? null}
+            box={pinThread.pinAt?.box ?? null}
+            label={`Comment ${pinThread.cardPin.number}`}
+            mark={pinThread.pinAt?.mark ?? null}
             onclosed={() => {
-              if (!openPin) {
-                closingPin = null;
+              if (!pinThread.openPin) {
+                pinThread.closingPin = null;
               }
             }}
-            open={openPin !== null}
-            pin={cardPin.number}
-            room={{ w: roomW, h: roomH }}
+            open={pinThread.openPin !== null}
+            pin={pinThread.cardPin.number}
+            room={{ w: pinThread.roomW, h: pinThread.roomH }}
             slot="pin-card"
-            bind:float={cardFloat}
+            bind:float={pinThread.cardFloat}
           >
-            {@render thread(cardPin, commentKit.replyDraft, false)}
+            {@render thread(pinThread.cardPin, commentKit.replyDraft, false)}
           </PinFloat>
         {/if}
       {/key}
@@ -2898,12 +2364,12 @@
           onpress={() => {
             const id = pinPeek.peekPin?.id;
             if (id) {
-              openCard(id);
+              pinThread.openCard(id);
             }
           }}
           onrest={pinPeek.restOnPeek}
           pin={pinPeek.peekPin.number}
-          room={{ w: roomW, h: roomH }}
+          room={{ w: pinThread.roomW, h: pinThread.roomH }}
           slot="pin-peek"
         >
           {@render thread(
