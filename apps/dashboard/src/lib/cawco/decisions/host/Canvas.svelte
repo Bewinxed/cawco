@@ -16,6 +16,7 @@
   says so in words where it would stand.
 -->
 <script lang="ts">
+  import { type FrameSays, pageSaid } from "@cawco/core/page-wire";
   import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -58,7 +59,7 @@
         },
         sync: `/__cawco/artifact/${held?.id ?? id}`,
         theme: scheme.now,
-      },
+      } satisfies FrameSays,
       location.origin
     );
   }
@@ -67,7 +68,7 @@
   $effect(() => {
     const { now } = scheme;
     frame?.contentWindow?.postMessage(
-      { type: "cawco:theme", theme: now },
+      { type: "cawco:theme", theme: now } satisfies FrameSays,
       location.origin
     );
   });
@@ -78,16 +79,11 @@
   let underSkeleton = false;
   $effect(() => {
     const heard = (event: MessageEvent) => {
-      const told = event.data as {
-        height?: unknown;
-        type?: unknown;
-        width?: unknown;
-      } | null;
+      const told = pageSaid(event.data);
       if (
         event.source === frame?.contentWindow &&
         told?.type === CANVAS_EMBED_SIZE &&
-        typeof told.width === "number" &&
-        typeof told.height === "number"
+        told.width !== null
       ) {
         shape = { width: told.width, height: told.height };
       }

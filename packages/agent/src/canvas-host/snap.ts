@@ -19,7 +19,6 @@
  * the canvas); the page cannot.
  */
 import { recognise } from "@cawco/core/shapes";
-import { toHost } from "@cawco/preview/overlay/host-origin";
 import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
@@ -32,6 +31,7 @@ import type {
 } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { clock, progressOf, tokenMs } from "./motion";
+import { sayToHost } from "./say";
 
 /** How far a held pen may wander and still be held, px: the brief's number. */
 export const HOLD_PX = 4;
@@ -183,7 +183,7 @@ export const snapToShape = (
     elements: replaced,
     captureUpdate: CaptureUpdateAction.IMMEDIATELY,
   });
-  toHost({ type: "cawco:snap", id: shape.id });
+  sayToHost({ type: "cawco:snap", id: shape.id });
   return true;
 };
 

@@ -6,6 +6,7 @@
  * come in, and the rest of the pane works on shapes it knows.
  */
 
+import type { PageSays } from "@cawco/core/page-wire";
 import {
   type PaneKey,
   paneKeyOf,
@@ -449,6 +450,18 @@ export function previewShortcut(message: {
     : null;
 }
 
+/** The messages of that list a page says as core declares them (page-wire `PageSays`); each field is checked by what reads it. */
+const DECLARED_MESSAGES = [
+  "cawco:sheet",
+  // A component artifact's stage, answering its design graph (core stage-graph.ts; each read by its reader there).
+  STAGE_REACHED,
+  STAGE_LAID,
+  STAGE_FAULT,
+  STAGE_DIFFERENCES,
+  STAGE_TIME,
+  STAGE_DIALS_WRITTEN,
+] as const satisfies readonly PageSays["type"][];
+
 /** The `type` of every message the pane answers by kind (PreviewPane `receive`). */
 const PAGE_MESSAGES = [
   "cawco:ready",
@@ -477,14 +490,7 @@ const PAGE_MESSAGES = [
   SHORTCUT_MESSAGE,
   "cawco:error",
   "cawco:resolved",
-  "cawco:sheet",
-  // A component artifact's stage, answering its design graph (core stage-graph.ts; each read by its reader there).
-  STAGE_REACHED,
-  STAGE_LAID,
-  STAGE_FAULT,
-  STAGE_DIFFERENCES,
-  STAGE_TIME,
-  STAGE_DIALS_WRITTEN,
+  ...DECLARED_MESSAGES,
 ] as const;
 
 /** A message the pane answers by its `type`; each field besides is checked by what reads it. */

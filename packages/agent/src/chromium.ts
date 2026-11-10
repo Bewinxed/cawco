@@ -12,6 +12,7 @@
  * `host`), and {@link greet} says the hello the dashboard's pane would.
  */
 
+import type { FrameInset, FrameSays } from "@cawco/core/page-wire";
 import type { Browser, Frame, Page } from "playwright-core";
 import { browserExecutable, chromiumSandboxed } from "./capabilities";
 import { deliverHello, holdAnimations } from "./in-page/page";
@@ -113,7 +114,7 @@ export const isHelloArtifact = (value: unknown): value is HelloArtifact =>
 export async function greet(
   page: Page,
   named: HelloArtifact,
-  inset?: Record<string, number>
+  inset?: FrameInset
 ): Promise<void> {
   await page.evaluate(deliverHello, {
     type: "cawco:hello",
@@ -121,7 +122,7 @@ export async function greet(
     sync: named.sync,
     theme: "light",
     ...(inset ? { inset } : {}),
-  });
+  } satisfies FrameSays);
 }
 
 /**

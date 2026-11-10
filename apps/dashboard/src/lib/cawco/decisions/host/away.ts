@@ -5,12 +5,16 @@
  * canvas holds its stories' animation-frame callbacks while away (agent
  * canvas runtime).
  */
-import { awaySaid, CANVAS_AWAY } from "@cawco/core/stage";
+import { awaySaid, type FrameSays } from "@cawco/core/page-wire";
+import { CANVAS_AWAY } from "@cawco/core/stage";
 
 export function relayAway(): void {
   let away = false;
   const tell = (frame: HTMLIFrameElement) =>
-    frame.contentWindow?.postMessage({ type: CANVAS_AWAY, away }, "*");
+    frame.contentWindow?.postMessage(
+      { type: CANVAS_AWAY, away } satisfies FrameSays,
+      "*"
+    );
   addEventListener("message", (event) => {
     const said =
       event.source === window.parent ? awaySaid(event.data) : undefined;

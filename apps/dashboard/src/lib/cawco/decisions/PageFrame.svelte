@@ -1,8 +1,4 @@
 <script lang="ts">
-  import {
-    PAGE_TOUCHED_MESSAGE,
-    PREVIEW_LOCKED_MESSAGE,
-  } from "@cawco/core/preview/routes";
   /**
    * A decision page in the Decisions tab's pane, live: the project's page, on
    * the project's own preview origin at `/__cawco/page/<id>/`, whichever
@@ -18,6 +14,11 @@
    * pane does (PreviewPane): the agent's artifact_create or artifact_show
    * answers from it.
    */
+  import type { FrameSays } from "@cawco/core/page-wire";
+  import {
+    PAGE_TOUCHED_MESSAGE,
+    PREVIEW_LOCKED_MESSAGE,
+  } from "@cawco/core/preview/routes";
   import { decisionsWords } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
   import { artifactShown } from "#lib/cawco/artifact-api.js";
@@ -182,7 +183,7 @@
       artifact: { id: artifactId, kind: "page", name },
       sync: `/__cawco/artifact/${artifactId}`,
       inset: { bottom: insetBottom },
-    });
+    } satisfies FrameSays);
   }
 
   // The card the address names (`#<card>`) is brought into view and outlined
@@ -207,7 +208,7 @@
     const scheme = theme.resolved;
     untrack(() => {
       if (connected) {
-        post({ type: "cawco:theme", theme: scheme });
+        post({ type: "cawco:theme", theme: scheme } satisfies FrameSays);
       }
     });
   });
@@ -215,7 +216,10 @@
     const bottom = insetBottom;
     untrack(() => {
       if (connected) {
-        post({ type: "cawco:place", inset: { bottom } });
+        post({
+          type: "cawco:place",
+          inset: { bottom },
+        } satisfies FrameSays);
       }
     });
   });
