@@ -18,11 +18,7 @@
 
   let cycling = $state(false);
   onMount(() => {
-    (
-      window as unknown as {
-        __buttonBench: { start: () => void; stop: () => void };
-      }
-    ).__buttonBench = {
+    window.__buttonBench = {
       start: () => {
         cycling = true;
       },

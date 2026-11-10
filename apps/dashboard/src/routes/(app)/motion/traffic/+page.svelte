@@ -258,175 +258,177 @@
   $effect(() => {
     // The driver's whole surface. Everything a scenario needs and nothing that
     // reaches around the component under test.
-    (window as unknown as Record<string, unknown>).__traffic = {
-      seed,
-      reset,
-      tool,
-      assistant,
-      note,
-      glance,
-      thinking,
-      streaming,
-      run,
-      compaction,
-      /**
-       * A transcript read back, as the hub serves it: the blocks are the
-       * session's history before the transcript mounts, so nothing in them
-       * arrives.
-       */
-      load: (blocks: Message[]) => {
-        session = blankSession(INSTANCE);
-        session.messages = blocks.map((block) => ({
-          ...block,
-          instanceId: INSTANCE,
-        }));
-        landed = false;
-        generation += 1;
-      },
-      /**
-       * A page of `count` older blocks put in front of what is held, as a
-       * read back lands (the store's own page in front): a new array.
-       */
-      front: (count: number) => {
-        const older: Message[] = [];
-        for (let i = 0; i < count; i += 1) {
-          n += 1;
-          older.push({
-            id: `older-${n}`,
+    Object.assign(window, {
+      __traffic: {
+        seed,
+        reset,
+        tool,
+        assistant,
+        note,
+        glance,
+        thinking,
+        streaming,
+        run,
+        compaction,
+        /**
+         * A transcript read back, as the hub serves it: the blocks are the
+         * session's history before the transcript mounts, so nothing in them
+         * arrives.
+         */
+        load: (blocks: Message[]) => {
+          session = blankSession(INSTANCE);
+          session.messages = blocks.map((block) => ({
+            ...block,
             instanceId: INSTANCE,
-            type: "assistant",
-            content: `An older turn, read back (${i + 1} of ${count}).`,
+          }));
+          landed = false;
+          generation += 1;
+        },
+        /**
+         * A page of `count` older blocks put in front of what is held, as a
+         * read back lands (the store's own page in front): a new array.
+         */
+        front: (count: number) => {
+          const older: Message[] = [];
+          for (let i = 0; i < count; i += 1) {
+            n += 1;
+            older.push({
+              id: `older-${n}`,
+              instanceId: INSTANCE,
+              type: "assistant",
+              content: `An older turn, read back (${i + 1} of ${count}).`,
+              timestamp: now(),
+            } as Message);
+          }
+          session.messages = [...older, ...session.messages];
+          session.rev += 1;
+        },
+        landed: () => landed,
+        /** A bar floating over the transcript's top, `length` into it (a docked pane's); undefined for none. */
+        head: (length: string | undefined) => {
+          headRoom = length;
+        },
+        /** A call's body opened, by its call id, as the reader's press opens it: before a `load`, drawn open. */
+        open: (call: string) => disclosureAt(INSTANCE, call).set(true),
+        /** A call's body folded shut, by its call id, as the reader's press folds it. */
+        shut: (call: string) => disclosureAt(INSTANCE, call).set(false),
+        /** The transcript opened at a record, `terms` the words it matched on, as `?at=…&match=…` asks. */
+        seek: (at: string, terms: string[] = []) =>
+          askOpenAt(INSTANCE, at, terms),
+        /**
+         * The rows a transcript mounted now draws for these messages — what a
+         * reload draws — by key, with whether each divider has a brief.
+         */
+        fold: () =>
+          buildRowsFrom(session, null).rows.map((row) => ({
+            key: row.key,
+            kind: row.kind,
+            brief: "brief" in row ? row.brief !== null : null,
+          })),
+        rows: () => session.messages.length,
+        patch: (next: Partial<SessionState>) => Object.assign(session, next),
+        /** A row the hub takes out (`block.remove`): gone from the list in one flush. */
+        remove: (id: string) => {
+          session.messages = session.messages.filter(
+            (message) => message.id !== id
+          );
+          session.rev += 1;
+        },
+        /**
+         * A call starting: its glance in flight under the id its message lands
+         * by (`finish`), as a real call's glance and its record share one.
+         */
+        start: (name: string, glanceText: string): string => {
+          n += 1;
+          const id = `call-${n}`;
+          session.currentTool = { name, glance: glanceText, toolId: id };
+          session.busy = true;
+          return id;
+        },
+        /** The call `start` began lands: its record in and its glance gone, in one update. */
+        finish: (id: string, name: string, command: string, said: string) => {
+          push({
+            id: `tool-${id}`,
+            toolCallId: id,
+            type: "tool.use",
+            content: "",
             timestamp: now(),
-          } as Message);
-        }
-        session.messages = [...older, ...session.messages];
-        session.rev += 1;
+            metadata: {
+              toolName: name,
+              toolId: id,
+              toolInput: { command, description: said },
+              toolResult: "ok",
+              toolStatus: "success",
+            },
+          });
+          if (session.currentTool?.toolId === id) {
+            session.currentTool = null;
+          }
+        },
+        user: (content: string) => {
+          n += 1;
+          push({ id: `user-${n}`, type: "user", content, timestamp: now() });
+          session.busy = true;
+        },
+        /** A send the session has not read: waiting at the end, after the live tail. */
+        send: (content: string): string => {
+          n += 1;
+          const id = `send-${n}`;
+          push({
+            id,
+            type: "user",
+            content,
+            timestamp: now(),
+            state: "pending",
+            queued: true,
+          });
+          return id;
+        },
+        /**
+         * The session read it: the same row, moved to what its record says —
+         * which is all the store does (`place` in stores/transcripts.svelte.ts).
+         */
+        read: (id: string) => {
+          const row = session.messages.find((message) => message.id === id);
+          if (row) {
+            row.state = "read";
+            row.queued = false;
+          }
+        },
+        /** A send that did not go, in the conversation: not sent, with why. */
+        fail: (content: string, reason: string): string => {
+          n += 1;
+          const id = `failed-${n}`;
+          push({
+            id,
+            type: "user",
+            content,
+            timestamp: now(),
+            state: "failed",
+            metadata: { sendFailed: reason },
+          });
+          return id;
+        },
+        /**
+         * Its retry went out: the record says `replaced`, and the store draws it
+         * no more — which is all `place` does with one.
+         */
+        replace: (id: string) => {
+          session.records[id] = {
+            uuid: id,
+            instanceId: INSTANCE,
+            acceptedAt: now(),
+            body: { type: "user", message: { role: "user", content: "" } },
+            mode: "turn",
+            state: "replaced",
+          };
+          session.messages = session.messages.filter(
+            (message) => message.id !== id
+          );
+          session.rev += 1;
+        },
       },
-      landed: () => landed,
-      /** A bar floating over the transcript's top, `length` into it (a docked pane's); undefined for none. */
-      head: (length: string | undefined) => {
-        headRoom = length;
-      },
-      /** A call's body opened, by its call id, as the reader's press opens it: before a `load`, drawn open. */
-      open: (call: string) => disclosureAt(INSTANCE, call).set(true),
-      /** A call's body folded shut, by its call id, as the reader's press folds it. */
-      shut: (call: string) => disclosureAt(INSTANCE, call).set(false),
-      /** The transcript opened at a record, `terms` the words it matched on, as `?at=…&match=…` asks. */
-      seek: (at: string, terms: string[] = []) =>
-        askOpenAt(INSTANCE, at, terms),
-      /**
-       * The rows a transcript mounted now draws for these messages — what a
-       * reload draws — by key, with whether each divider has a brief.
-       */
-      fold: () =>
-        buildRowsFrom(session, null).rows.map((row) => ({
-          key: row.key,
-          kind: row.kind,
-          brief: "brief" in row ? row.brief !== null : null,
-        })),
-      rows: () => session.messages.length,
-      patch: (next: Partial<SessionState>) => Object.assign(session, next),
-      /** A row the hub takes out (`block.remove`): gone from the list in one flush. */
-      remove: (id: string) => {
-        session.messages = session.messages.filter(
-          (message) => message.id !== id
-        );
-        session.rev += 1;
-      },
-      /**
-       * A call starting: its glance in flight under the id its message lands
-       * by (`finish`), as a real call's glance and its record share one.
-       */
-      start: (name: string, glanceText: string): string => {
-        n += 1;
-        const id = `call-${n}`;
-        session.currentTool = { name, glance: glanceText, toolId: id };
-        session.busy = true;
-        return id;
-      },
-      /** The call `start` began lands: its record in and its glance gone, in one update. */
-      finish: (id: string, name: string, command: string, said: string) => {
-        push({
-          id: `tool-${id}`,
-          toolCallId: id,
-          type: "tool.use",
-          content: "",
-          timestamp: now(),
-          metadata: {
-            toolName: name,
-            toolId: id,
-            toolInput: { command, description: said },
-            toolResult: "ok",
-            toolStatus: "success",
-          },
-        });
-        if (session.currentTool?.toolId === id) {
-          session.currentTool = null;
-        }
-      },
-      user: (content: string) => {
-        n += 1;
-        push({ id: `user-${n}`, type: "user", content, timestamp: now() });
-        session.busy = true;
-      },
-      /** A send the session has not read: waiting at the end, after the live tail. */
-      send: (content: string): string => {
-        n += 1;
-        const id = `send-${n}`;
-        push({
-          id,
-          type: "user",
-          content,
-          timestamp: now(),
-          state: "pending",
-          queued: true,
-        });
-        return id;
-      },
-      /**
-       * The session read it: the same row, moved to what its record says —
-       * which is all the store does (`place` in stores/transcripts.svelte.ts).
-       */
-      read: (id: string) => {
-        const row = session.messages.find((message) => message.id === id);
-        if (row) {
-          row.state = "read";
-          row.queued = false;
-        }
-      },
-      /** A send that did not go, in the conversation: not sent, with why. */
-      fail: (content: string, reason: string): string => {
-        n += 1;
-        const id = `failed-${n}`;
-        push({
-          id,
-          type: "user",
-          content,
-          timestamp: now(),
-          state: "failed",
-          metadata: { sendFailed: reason },
-        });
-        return id;
-      },
-      /**
-       * Its retry went out: the record says `replaced`, and the store draws it
-       * no more — which is all `place` does with one.
-       */
-      replace: (id: string) => {
-        session.records[id] = {
-          uuid: id,
-          instanceId: INSTANCE,
-          acceptedAt: now(),
-          body: { type: "user", message: { role: "user", content: "" } },
-          mode: "turn",
-          state: "replaced",
-        };
-        session.messages = session.messages.filter(
-          (message) => message.id !== id
-        );
-        session.rev += 1;
-      },
-    };
+    });
   });
 </script>
 

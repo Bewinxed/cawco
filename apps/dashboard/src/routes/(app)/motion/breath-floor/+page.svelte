@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { PulseFrame } from "@cawco/core/frames";
   /**
    * Live work's breath on every surface it stands on, for the breath-floor
    * probe. On the page, raised, recess, recess-deep and well surfaces, every
@@ -60,11 +59,7 @@
    * script): what SessionStatus draws its Working glyph for.
    */
   const WORKING_ID = "0f1e2d3c-0000-4000-8000-0000000000b1";
-  (
-    globalThis as unknown as {
-      __cawcoDebug: { frame: (frame: PulseFrame) => void };
-    }
-  ).__cawcoDebug.frame({
+  window.__cawcoDebug.frame({
     kind: "pulse",
     instanceId: WORKING_ID,
     pulse: {
