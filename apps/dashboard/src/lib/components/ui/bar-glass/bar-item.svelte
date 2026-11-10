@@ -133,7 +133,7 @@
     children?: Snippet;
     /** Where it goes, as a link. */
     href?: string;
-    onclick?: (event: MouseEvent) => void;
+    onclick?: (event: MouseEvent & { currentTarget: HTMLElement }) => void;
     /** Its shortcut, as the tooltip draws it. */
     keys?: string;
     /** Its tooltip's words where they say more than its name; `false`: no tooltip (a title, which says itself). */
@@ -157,11 +157,17 @@
     ref?: HTMLElement | null;
     [attribute: `data-${string}`]: unknown;
     [aria: `aria-${string}`]: unknown;
-    onpointerdown?: (event: PointerEvent) => void;
-    onkeydown?: (event: KeyboardEvent) => void;
-    onpointerenter?: (event: PointerEvent) => void;
-    onpointerleave?: (event: PointerEvent) => void;
-    onblur?: (event: FocusEvent) => void;
+    onpointerdown?: (
+      event: PointerEvent & { currentTarget: HTMLElement }
+    ) => void;
+    onkeydown?: (event: KeyboardEvent & { currentTarget: HTMLElement }) => void;
+    onpointerenter?: (
+      event: PointerEvent & { currentTarget: HTMLElement }
+    ) => void;
+    onpointerleave?: (
+      event: PointerEvent & { currentTarget: HTMLElement }
+    ) => void;
+    onblur?: (event: FocusEvent & { currentTarget: HTMLElement }) => void;
   } = $props();
 
   /**
