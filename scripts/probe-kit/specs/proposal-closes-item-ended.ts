@@ -25,6 +25,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { payloadOf } from "../hub";
 import { delegateStarted, type Kit, open, type Spec } from "../kit";
 import {
   commitDesign,
@@ -113,11 +114,18 @@ const run = async (kit: Kit): Promise<void> => {
     return;
   }
   // The person's view of it: its row in Needs you, by what it asks.
-  const summary = (
+  const { presentation } = payloadOf(
     (await pendingNow(fleet)).find(
       (one) => one.requestId === proposal.requestId
-    ) as { payload?: { presentation?: { summary?: string } } } | undefined
-  )?.payload?.presentation?.summary;
+    ) ?? {}
+  );
+  const summary =
+    typeof presentation === "object" &&
+    presentation !== null &&
+    "summary" in presentation &&
+    typeof presentation.summary === "string"
+      ? presentation.summary
+      : undefined;
   const needs = await kit.page("desk");
   await open(needs, `${base}/`, "body");
   const needsRow = summary ? needs.getByText(summary).first() : undefined;

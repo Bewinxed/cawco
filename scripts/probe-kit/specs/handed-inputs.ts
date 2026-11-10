@@ -964,10 +964,11 @@ const refusedBefore = async (
   // An item's assets, nested a folder down, by the item's short id.
   const key = a.workItemId.slice(0, 8);
   const byAssets = await tried([{ assets: key }]);
-  const assets = byAssets.started
+  const assetsStarted = byAssets.started;
+  const assets = assetsStarted
     ? await Promise.all(
         Object.keys(BRIEFS).map((path) =>
-          inputText(byAssets.started as Started, `assets/${key}/${path}`)
+          inputText(assetsStarted, `assets/${key}/${path}`)
         )
       )
     : [];

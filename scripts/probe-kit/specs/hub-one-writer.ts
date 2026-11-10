@@ -122,9 +122,9 @@ const spec: Spec = {
         harness: "claude",
         model: "sonnet",
       });
-    const listed = (await hubAt(fleet.base)
+    const listed = await hubAt(fleet.base)
       .api["delegate-types"].get()
-      .then((r) => dataOf(r))) as { types: { name: string }[] };
+      .then((r) => dataOf(r));
     kit.check(
       "a delegate type saved through the hub's route is read back through it",
       saved.error === null && listed.types.some((type) => type.name === TYPE),

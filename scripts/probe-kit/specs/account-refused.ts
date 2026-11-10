@@ -53,6 +53,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { HubAnswer } from "../../../packages/agent/src/hub-client";
 import type {
   Account,
   AccountSignin,
@@ -68,17 +69,25 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { answerText, type HubAsk, handled, hubAt, said } from "../hub";
+import {
+  answerText,
+  type HubAsk,
+  handled,
+  hubAt,
+  type Said,
+  said,
+} from "../hub";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
 
 /** `request` as the in-process hub reads it (`hub.handle`). */
 
 /** `ask` of the in-process hub, as its routes read it (`hub.handle`). */
-const hubAskedAnswer = async (
+const hubAskedAnswer = async <A extends HubAnswer>(
   hub: { handle: (r: Request) => Promise<Response> | Response },
-  ask: HubAsk
-) => said(await ask(handled((request) => hub.handle(request))));
+  ask: HubAsk<A>
+): Promise<Said<A>> =>
+  said(await ask(handled((request) => hub.handle(request))));
 
 const MACHINE_A = "machine-a";
 const MACHINE_B = "machine-b";
@@ -433,8 +442,7 @@ const wayBack = async (
   const machineBody = machineRoute.text;
   kit.check(
     "D: POST /api/accounts/:id/refusal-check runs the check: an account refused account-wide is checked (no machine connected here: no verdict)",
-    routed.status === 200 &&
-      (JSON.parse(routedBody) as { kind: string }).kind === "none",
+    routed.status === 200 && !routed.refused && routed.json.kind === "none",
     `${routed.status} ${routedBody.slice(0, 300)}`
   );
   const machineChecked: string[] = [];
@@ -451,7 +459,8 @@ const wayBack = async (
   kit.check(
     "D: a refusal of one machine's credential is never checked: the route and the check answer not-refused, nothing is asked, and it stays signed out",
     machineRoute.status === 200 &&
-      (JSON.parse(machineBody) as { kind: string }).kind === "not-refused" &&
+      !machineRoute.refused &&
+      machineRoute.json.kind === "not-refused" &&
       machineChecked.length === 0 &&
       signinOf(machineRefused.id, MACHINE_A)?.state === "signed-out",
     `${machineRoute.status} ${machineBody.slice(0, 200)}`

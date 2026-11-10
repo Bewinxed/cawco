@@ -114,9 +114,9 @@ const run = async (kit: Kit) => {
     () => "",
     (error: Error) => error.message
   );
-  const health = (await hubAt(fleet.base)
+  const health = await hubAt(fleet.base)
     .health.get()
-    .then((r) => dataOf(r))) as { hubId?: string };
+    .then((r) => dataOf(r));
   kit.check(
     "3: with the port its own again, the fleet's hub answers there with the id the fleet wrote beside its database, and hubUp passes",
     passed === "" && health.hubId === own,
