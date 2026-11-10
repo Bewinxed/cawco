@@ -8,7 +8,6 @@ import {
   previewSettings,
   projects,
 } from "./schema";
-import { singleton } from "./singleton";
 
 /** The fleet's preview mode as stored; no row reads as port mode. */
 interface StoredPreviewSettings {
@@ -175,7 +174,11 @@ export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({
     db.delete(previewPorts).where(owned(key)).run();
   },
   settings: () => {
-    const row = singleton(db, previewSettings, PREVIEW_SETTINGS_ID);
+    const row = db
+      .select()
+      .from(previewSettings)
+      .where(eq(previewSettings.id, PREVIEW_SETTINGS_ID))
+      .get();
     return row
       ? { mode: row.mode, pattern: row.pattern }
       : { mode: "port", pattern: null };

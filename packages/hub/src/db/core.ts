@@ -3,7 +3,7 @@
  * one of them calls. `db/index.ts` builds it once and hands it to each.
  */
 
-import { and, inArray, not, sql } from "drizzle-orm";
+import { and, eq, inArray, not, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { type AreasDb, areasDb } from "./areas";
 import { type ArtifactEvents, artifactEvents, projectPage } from "./artifacts";
@@ -18,7 +18,6 @@ import {
   supervisorConfig,
 } from "./schema";
 import { type Revocations, revocations } from "./session-identity";
-import { singleton } from "./singleton";
 import { type TaskLinksDb, taskLinksDb } from "./task-links";
 import type { Tx } from "./tx";
 
@@ -94,7 +93,11 @@ export const dbCore = (
 
   /** The fleet's choices row, which drizzle 0032 writes on every hub. */
   const supervisorChoices = (): typeof supervisorConfig.$inferSelect => {
-    const row = singleton(db, supervisorConfig, SUPERVISOR_CONFIG_ID);
+    const row = db
+      .select()
+      .from(supervisorConfig)
+      .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+      .get();
     if (!row) {
       throw new Error(
         `supervisor_config has no '${SUPERVISOR_CONFIG_ID}' row: drizzle 0032 writes it, so this database did not migrate`
