@@ -14,20 +14,15 @@ export class ProjectRefusal extends StatusRefusal<
   400 | 403 | 404 | 409 | 413 | 415 | 422 | 500 | 503 | 504
 > {}
 
-/** A {@link ProjectRefusal} as the route's answer, in its status and words; anything else is thrown on. */
-export const projectRefused = (error: unknown) => {
-  if (error instanceof ProjectRefusal) {
-    return refusal(error.status, "project-refused", error.message);
-  }
-  throw error;
-};
-
-/** Runs a route's work, a {@link ProjectRefusal} answered as {@link projectRefused}. */
+/** Runs a route's work, a {@link ProjectRefusal} answered as the route's refusal in its status and words; anything else is thrown on. */
 export const projectAttempt = async <T>(work: () => T | Promise<T>) => {
   try {
     return await work();
   } catch (error) {
-    return projectRefused(error);
+    if (error instanceof ProjectRefusal) {
+      return refusal(error.status, "project-refused", error.message);
+    }
+    throw error;
   }
 };
 

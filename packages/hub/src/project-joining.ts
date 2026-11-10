@@ -1,27 +1,23 @@
 import { posix } from "node:path";
 import { detach } from "@cawco/core/detach";
-import type { MachinePath } from "@cawco/core/machine-path";
+import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import { projectWords } from "@cawco/core/words/project";
 import { ElysiaStatus } from "elysia";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import { checkoutOf } from "./db/projects";
 import type { HubContext } from "./hub-context";
 import { onAccountMachines } from "./placement";
-import { listFolder } from "./project-folder";
+import { listFolder, projectRoot } from "./project-folder";
 import type { ProjectAsk, ProjectMade } from "./project-making";
 import { placesChanged } from "./project-placements";
-import {
-  ProjectRefusal,
-  projectRefusalOf,
-  projectRootOf,
-} from "./project-refusal";
+import { projectRootOf } from "./project-refusal";
 import { NOTHING_READ, readCheckout } from "./projects";
+import { refusal } from "./refusal";
 import type { WorkAsk, WorkPlace } from "./work-place";
 import { workPlace } from "./work-place";
 
 export type ProjectJoiningContext = Pick<
   HubContext,
-  | "askedMachinePath"
   | "caw"
   | "db"
   | "machineName"
@@ -46,11 +42,9 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * agent; else `~/.cawco/caw/<projectId>`, made on the first machine that is
    * online. Undefined while no machine is. Among the machines where the
    * project's account is signed in, when any is (placement.ts
-   * `onAccountMachines`).
+   * `onAccountMachines`). The folder's refusal of the hub's folder.
    */
-  const leadHome = async (
-    projectId: string
-  ): Promise<{ machineId: string; cwd: string } | undefined> => {
+  const leadHome = async (projectId: string) => {
     const machines = onAccountMachines(
       ctx.onlineMachines().map((id) => ({ machineId: id })),
       ctx.db.project(projectId)?.inEffect.account.value,
@@ -62,13 +56,14 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
       // Made and committed on first use, as every read of it does.
       const made = await listFolder(projectId);
       if (made instanceof ElysiaStatus) {
-        throw projectRefusalOf(made);
+        return made;
       }
-      return { machineId: hubMachine, cwd: projectRootOf(projectId) };
+      const cwd = projectRoot(projectId);
+      return cwd instanceof ElysiaStatus ? cwd : { machineId: hubMachine, cwd };
     }
     const [machineId] = machines;
     if (!machineId) {
-      return undefined;
+      return;
     }
     // The machine's home, so the session's row names a real path; the spawn
     // makes the folder (the agent's `#workdir`).
@@ -118,15 +113,16 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * (caw.ts `setup`). The dashboard's "New project" and an accepted project
    * offer come here.
    */
-  /** A paused machine's folder is read nothing: the person is told now, not kept waiting for the pause's end. */
-  const folderReadable = (machineId: string | undefined): void => {
+  /** A paused machine's folder is read nothing: the person is told now (project-machine-paused), not kept waiting for the pause's end. */
+  const folderUnread = (machineId: string | undefined) => {
     const paused = machineId && ctx.machinePause.words(machineId);
-    if (paused) {
-      throw new ProjectRefusal(
-        409,
-        `${paused}, so its folder is not read until then. Add it after the pause, or resume the machine first.`
-      );
-    }
+    return paused
+      ? refusal(
+          409,
+          "project-machine-paused",
+          `${paused}, so its folder is not read until then. Add it after the pause, or resume the machine first.`
+        )
+      : undefined;
   };
 
   /**
@@ -142,7 +138,10 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     (body.prompt?.trim() ? projectWords.placeholderName : undefined);
 
   /** Each project being made now, by the id its prompt went as ({@link createOrJoinProject}). */
-  const projectsMaking = new Map<string, Promise<ProjectMade>>();
+  const projectsMaking = new Map<
+    string,
+    ReturnType<typeof makeOrJoinProject>
+  >();
 
   /** The place a project was made from: its checkout, else its folder on the hub. */
   const madeFrom = (project: ProjectRow): PlaceRow =>
@@ -154,9 +153,10 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * A project made, or a folder joined to the one it belongs to. The same
    * prompt again under the id it went as while the first is being made (a
    * device sending again after its answer was lost) answers both: nothing
-   * is made twice.
+   * is made twice. Refused in the hub's words: a folder that is no
+   * absolute path on its machine, or a paused machine's.
    */
-  const createOrJoinProject = (asked: ProjectAsk): Promise<ProjectMade> => {
+  const createOrJoinProject = (asked: ProjectAsk) => {
     const promptId = asked.setup?.promptId;
     if (!promptId) {
       return makeOrJoinProject(asked);
@@ -197,16 +197,19 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     };
   };
 
-  const makeOrJoinProject = async (asked: ProjectAsk): Promise<ProjectMade> => {
-    const checkout = asked.checkout && {
-      machineId: asked.checkout.machineId,
-      path: ctx.askedMachinePath(
-        asked.checkout.machineId,
-        asked.checkout.cwd,
-        (message, cause) => new ProjectRefusal(400, message, { cause })
-      ),
-    };
-    folderReadable(checkout?.machineId);
+  const makeOrJoinProject = async (asked: ProjectAsk) => {
+    const path =
+      asked.checkout &&
+      ctx.db.machinePathOn(asked.checkout.machineId, asked.checkout.cwd);
+    if (path instanceof MachinePathRefused) {
+      return refusal(400, "project-checkout-path-unfit", path.message);
+    }
+    const checkout = asked.checkout &&
+      path && { machineId: asked.checkout.machineId, path };
+    const unread = folderUnread(checkout?.machineId);
+    if (unread) {
+      return unread;
+    }
     const { remote, root } = checkout
       ? await readCheckout(ctx.runOnMachine, checkout.machineId, checkout.path)
       : NOTHING_READ;
@@ -225,12 +228,13 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     ctx.projectsChanged();
     ctx.projectStarters.touched(created.id, "project created");
     startProject(created, asked);
-    return {
+    const made: ProjectMade = {
       project: created,
       place: madeFrom(created),
       placeAdded: false,
       joined: false,
     };
+    return made;
   };
 
   /**
