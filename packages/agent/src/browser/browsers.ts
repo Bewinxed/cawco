@@ -40,8 +40,9 @@ import type {
 } from "@cawco/core/browser";
 import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
+import type { AgentPorts } from "../agent-ports";
 import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
-import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
+import { frontOrigin, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
 import { relayKeyOf } from "./relay-urls";
@@ -114,18 +115,15 @@ const hostOf = async (
 /** What a start says while it runs, by key: the frame shows it until the record does. */
 const starting = new Map<BrowserKey, Progress>();
 
-let sink: (frame: BrowserFrame) => void = () => undefined;
-let machineId = "";
 let lastSent = "";
 
-/** Where the daemon sends its frames, and the machine they are of. */
-export const setBrowserSink = (
-  id: string,
-  send: (frame: BrowserFrame) => void
-): void => {
-  machineId = id;
-  sink = send;
-};
+/**
+ * What the registry tells the hub through, and the machine its frames are
+ * of. The daemon's; a terminal's `cawco browser` has no hub link, so it
+ * passes a port that goes nowhere, and the daemon's watch of the records
+ * tells the hub what it wrote.
+ */
+export type BrowserPorts = Pick<AgentPorts, "browsers" | "machineId">;
 
 const runtimeRow = (found: Runtime | { missing: string }): BrowserRuntime =>
   "missing" in found
@@ -162,15 +160,17 @@ export const browserRows = async (): Promise<BrowserRow[]> =>
     .map(rowOf);
 
 /** The runtime and every browser of the machine, whole, as its records hold them now. */
-export const browserFrame = async (): Promise<BrowserFrame> => ({
+export const browserFrame = async (
+  ports: BrowserPorts
+): Promise<BrowserFrame> => ({
   kind: "browsers",
-  machineId,
+  machineId: ports.machineId,
   runtime: runtimeRow(await browserRuntime()),
   browsers: await browserRows(),
 });
 
 /** Tells the hub the runtime and every browser, when anything of it changed. */
-const tell = async (): Promise<void> => {
+const tell = async (ports: BrowserPorts): Promise<void> => {
   // The daemon reads each live browser's page origin (front-origin.ts).
   if (servingGates) {
     syncOrigins(
@@ -186,25 +186,27 @@ const tell = async (): Promise<void> => {
               host: record.host,
             },
           ])
-      )
+      ),
+      // A page's origin that settled is told as any change is.
+      () => told(ports)
     );
   }
-  const frame = await browserFrame();
+  const frame = await browserFrame(ports);
   const text = JSON.stringify(frame);
   if (text !== lastSent) {
     lastSent = text;
-    sink(frame);
+    ports.browsers(frame);
   }
 };
 
-const told = (): void => {
-  tell().catch((error: unknown) =>
+const told = (ports: BrowserPorts): void => {
+  tell(ports).catch((error: unknown) =>
     console.warn(`[browser] the frame was not sent: ${String(error)}`)
   );
 };
 
 /** A record changed outside the registry (the shield's take-over): the hub is told. */
-export const browsersChanged = (): void => told();
+export const browsersChanged = (ports: BrowserPorts): void => told(ports);
 
 const why = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -213,14 +215,14 @@ const why = (error: unknown): string =>
 let servingGates = false;
 
 /** Writes `key`'s last use as now: a gate connection opened or closed. */
-const used = (key: BrowserKey): void => {
+const used = (key: BrowserKey, ports: BrowserPorts): void => {
   withBrowser(key, async () => {
     const record = await readBrowser(key);
     if (record) {
       await writeBrowser({ ...record, lastUsedAt: Date.now() });
     }
   })
-    .then(told)
+    .then(() => told(ports))
     .catch((error: unknown) =>
       console.warn(`[browser] ${key}'s last use was not kept: ${why(error)}`)
     );
@@ -252,13 +254,13 @@ const rulesWaiting = new Set<BrowserKey>();
  * take-over cut every connection), when the next session's acquisition
  * matches them instead.
  */
-const rulesAtRelease = (key: BrowserKey): void => {
+const rulesAtRelease = (key: BrowserKey, ports: BrowserPorts): void => {
   if (!rulesWaiting.delete(key)) {
     return;
   }
   readBrowser(key)
     .then((record) =>
-      record && !record.takeover ? wakeBrowser(key, "match") : undefined
+      record && !record.takeover ? wakeBrowser(ports, key, "match") : undefined
     )
     .catch((error: unknown) =>
       console.warn(
@@ -274,11 +276,14 @@ const rulesAtRelease = (key: BrowserKey): void => {
  * preview-name rules as `rules` says; without, only while it runs.
  */
 const devtoolsOf = async (
+  ports: BrowserPorts,
   key: BrowserKey,
   wake: boolean,
   rules: RulesAt
 ): Promise<string | undefined> => {
-  const record = wake ? await wakeBrowser(key, rules) : await readBrowser(key);
+  const record = wake
+    ? await wakeBrowser(ports, key, rules)
+    : await readBrowser(key);
   if (record?.state !== "live") {
     return;
   }
@@ -294,11 +299,13 @@ const devtoolsOf = async (
  * preview-name rules as `rules` says: its record as it stands then.
  */
 export const wakeBrowser = async (
+  ports: BrowserPorts,
   key: BrowserKey,
   rules: RulesAt = "keep"
 ): Promise<BrowserRecord | undefined> => {
   const kept = (await readBrowser(key))?.relay;
   await startBrowser(
+    ports,
     {
       key,
       ...(kept && relayHolds(kept) ? { relay: kept } : {}),
@@ -313,13 +320,15 @@ export const wakeBrowser = async (
  * `BROWSER_VIEWER_TOKEN`), the browser woken first when it sleeps.
  */
 export const viewerSession = async (
+  ports: BrowserPorts,
   key: BrowserKey
 ): Promise<BrowserViewerSession> => {
   if (!isBrowserKey(key)) {
     throw new Error(`${String(key)} is no browser key.`);
   }
   const before = await readBrowser(key);
-  const record = before?.state === "live" ? before : await wakeBrowser(key);
+  const record =
+    before?.state === "live" ? before : await wakeBrowser(ports, key);
   if (!record) {
     throw new Error(`${key} has no record on this machine.`);
   }
@@ -333,7 +342,7 @@ export const viewerSession = async (
 };
 
 /** Serves `record`'s gate behind the machine's one gate port, when this process serves gates. */
-const gateFor = (record: BrowserRecord): void => {
+const gateFor = (record: BrowserRecord, ports: BrowserPorts): void => {
   if (!servingGates) {
     return;
   }
@@ -343,11 +352,12 @@ const gateFor = (record: BrowserRecord): void => {
     key,
     // A session's acquisition matches the rules; while another holds the
     // browser, the remake waits for its release.
-    devtools: (wake, alone) => devtoolsOf(key, wake, alone ? "match" : "defer"),
+    devtools: (wake, alone) =>
+      devtoolsOf(ports, key, wake, alone ? "match" : "defer"),
     used: (held) => {
-      used(key);
+      used(key, ports);
       if (!held) {
-        rulesAtRelease(key);
+        rulesAtRelease(key, ports);
       }
     },
   });
@@ -360,10 +370,10 @@ const gateFor = (record: BrowserRecord): void => {
 };
 
 /** Every record's gate served, and the gate of a browser no record keeps any more stopped. */
-const gatesNow = async (): Promise<void> => {
+const gatesNow = async (ports: BrowserPorts): Promise<void> => {
   const records = await allBrowsers();
   for (const record of records) {
-    gateFor(record);
+    gateFor(record, ports);
   }
   const kept = new Set(records.map((record) => record.key));
   for (const key of servedGates()) {
@@ -377,12 +387,12 @@ let gating: Promise<void> | undefined;
 let gateAgain = false;
 
 /** {@link gatesNow} as a record is written: one at a time, once more if one was written meanwhile. */
-const gatesAsWritten = (): void => {
+const gatesAsWritten = (ports: BrowserPorts): void => {
   if (gating) {
     gateAgain = true;
     return;
   }
-  gating = gatesNow()
+  gating = gatesNow(ports)
     .catch((error: unknown) =>
       console.warn(`[browser] the gates were not served: ${why(error)}`)
     )
@@ -390,7 +400,7 @@ const gatesAsWritten = (): void => {
       gating = undefined;
       if (gateAgain) {
         gateAgain = false;
-        gatesAsWritten();
+        gatesAsWritten(ports);
       }
     });
 };
@@ -419,7 +429,10 @@ const runtimeAwayWhy = (record: BrowserRecord): string => {
  * kept (a take-over the person holds included), started again once the
  * runtime answers. Answers that `why`.
  */
-const markAway = async (record: BrowserRecord): Promise<string> => {
+const markAway = async (
+  record: BrowserRecord,
+  ports: BrowserPorts
+): Promise<string> => {
   const away = runtimeAwayWhy(record);
   if (!(record.runtimeAway && record.why === away)) {
     await writeBrowser({
@@ -431,7 +444,7 @@ const markAway = async (record: BrowserRecord): Promise<string> => {
     console.info(
       `[browser] ${record.key}: its container runtime does not answer; kept as it is until it does`
     );
-    told();
+    told(ports);
   }
   return away;
 };
@@ -478,6 +491,7 @@ const standsAsAsked = async (
  * as `rules` says ({@link RulesAt}).
  */
 export const startBrowser = (
+  ports: BrowserPorts,
   args: BrowserStartArgs,
   rules: RulesAt = "keep"
 ): Promise<BrowserRow> => {
@@ -492,7 +506,7 @@ export const startBrowser = (
       (await recordFor(key, key, (await hostFor()).kind));
     const host = await hostOf(record);
     if (!host) {
-      throw new Error(await markAway(record));
+      throw new Error(await markAway(record, ports));
     }
     if (relay) {
       record = { ...record, relay };
@@ -502,7 +516,7 @@ export const startBrowser = (
     if (await standsAsAsked(record, host, relay, rules)) {
       record = { ...record, lastUsedAt: Date.now() };
       await writeBrowser(record);
-      told();
+      told(ports);
       return rowOf(record);
     }
     // Its kept slot's ports taken by another program while it was down (a
@@ -511,7 +525,7 @@ export const startBrowser = (
     if (!(await host.running(record)) && (await portsTaken(record))) {
       record = await moveSlot(record, held, "another program holds them");
     }
-    return launch(record, host, relay, held);
+    return launch(ports, record, host, relay, held);
   });
 };
 
@@ -543,6 +557,7 @@ const moveSlot = async (
  * running keeps it.
  */
 const launch = async (
+  ports: BrowserPorts,
   record: BrowserRecord,
   host: BrowserHost,
   relay: BrowserRelay | undefined,
@@ -551,13 +566,13 @@ const launch = async (
 ): Promise<BrowserRow> => {
   const { key } = record;
   starting.set(key, { state: "starting" });
-  told();
+  told(ports);
   try {
     const started = await host.start(record, {
       ...(relay ? { relay } : {}),
       progress: (progress) => {
         starting.set(key, progress);
-        told();
+        told(ports);
       },
     });
     const { why: _why, runtimeAway: _away, ...live } = started;
@@ -570,7 +585,7 @@ const launch = async (
     // Made with the rules wanted now: no remake waits on a release.
     rulesWaiting.delete(key);
     console.info(`[browser] ${key} live on the ${host.kind} host`);
-    gateFor(now);
+    gateFor(now, ports);
     // Its row is the record's: live, not the start's last step.
     starting.delete(key);
     return rowOf(now);
@@ -582,7 +597,7 @@ const launch = async (
         held,
         `refused at start (${why(error)})`
       );
-      return launch(placed, host, relay, held, true);
+      return launch(ports, placed, host, relay, held, true);
     }
     const failed: BrowserRecord = {
       ...record,
@@ -595,7 +610,7 @@ const launch = async (
     throw error;
   } finally {
     starting.delete(key);
-    told();
+    told(ports);
   }
 };
 
@@ -645,8 +660,11 @@ const reserved = async (key: BrowserKey): Promise<BrowserRecord> => {
  * launched toward (door.ts). The gate wakes the browser as the tool first
  * connects, and the browser takes its ports then.
  */
-export const reserveBrowser = async (key: BrowserKey): Promise<void> => {
-  gateFor(await reserved(key));
+export const reserveBrowser = async (
+  ports: BrowserPorts,
+  key: BrowserKey
+): Promise<void> => {
+  gateFor(await reserved(key), ports);
 };
 
 /** Whether a live container's relay credential is near its end, or is for another relay, and a fresh one came. */
@@ -661,6 +679,7 @@ const relayDue = (
 
 /** Stops the browser of `key`, keeping its profile. */
 export const stopBrowser = async (
+  ports: BrowserPorts,
   key: BrowserKey
 ): Promise<BrowserRow | null> => {
   // A key this machine never kept gets no dir of its own for asking.
@@ -673,7 +692,7 @@ export const stopBrowser = async (
       return null;
     }
     starting.set(key, { state: "stopping" });
-    told();
+    told(ports);
     try {
       await stopOn(record);
       const asleep: BrowserRecord = {
@@ -687,13 +706,16 @@ export const stopBrowser = async (
       return rowOf(asleep);
     } finally {
       starting.delete(key);
-      told();
+      told(ports);
     }
   });
 };
 
 /** Stops the browser of `key` and deletes its profile and record. */
-export const removeBrowser = async (key: BrowserKey): Promise<void> => {
+export const removeBrowser = async (
+  ports: BrowserPorts,
+  key: BrowserKey
+): Promise<void> => {
   if (!(await readBrowser(key))) {
     return;
   }
@@ -712,7 +734,7 @@ export const removeBrowser = async (key: BrowserKey): Promise<void> => {
   stopGate(key);
   await forgetBrowser(key);
   console.info(`[browser] ${key} removed`);
-  told();
+  told(ports);
 };
 
 /**
@@ -720,7 +742,7 @@ export const removeBrowser = async (key: BrowserKey): Promise<void> => {
  * asleep, whatever its record last said (an agent restart ends a local
  * Chromium; a machine restart, a container).
  */
-const readBack = async (): Promise<void> => {
+const readBack = async (ports: BrowserPorts): Promise<void> => {
   for (const record of await allBrowsers()) {
     if (starting.has(record.key)) {
       continue;
@@ -737,7 +759,7 @@ const readBack = async (): Promise<void> => {
       const host = await hostOf(now);
       // Its runtime does not answer: not known to run or to have stopped.
       if (!host) {
-        await markAway(now);
+        await markAway(now, ports);
         return;
       }
       if (!(await host.running(now))) {
@@ -753,7 +775,7 @@ const readBack = async (): Promise<void> => {
  * Stops the browsers nobody has used for {@link BROWSER_IDLE_MS}, and those
  * whose relay credential runs out; never one an agent is connected to.
  */
-const idleDown = async (): Promise<void> => {
+const idleDown = async (ports: BrowserPorts): Promise<void> => {
   const now = Date.now();
   for (const record of await allBrowsers()) {
     if (
@@ -771,7 +793,7 @@ const idleDown = async (): Promise<void> => {
       console.info(
         `[browser] ${record.key} ${idle ? "idle for 30 minutes" : "relay credential near its end"}: stopping`
       );
-      await stopBrowser(record.key).catch((error: unknown) =>
+      await stopBrowser(ports, record.key).catch((error: unknown) =>
         console.warn(`[browser] ${record.key} did not stop: ${why(error)}`)
       );
     }
@@ -782,7 +804,10 @@ const idleDown = async (): Promise<void> => {
  * The browsers that waited on their runtime, started again now that it
  * answers: each as it was, its container and volume kept.
  */
-const backFromAway = async (records: BrowserRecord[]): Promise<void> => {
+const backFromAway = async (
+  ports: BrowserPorts,
+  records: BrowserRecord[]
+): Promise<void> => {
   for (const record of records) {
     if (!record.runtimeAway) {
       continue;
@@ -790,7 +815,7 @@ const backFromAway = async (records: BrowserRecord[]): Promise<void> => {
     console.info(
       `[browser] ${record.key}: its container runtime answers again; starting it`
     );
-    await wakeBrowser(record.key).catch((error: unknown) =>
+    await wakeBrowser(ports, record.key).catch((error: unknown) =>
       console.warn(`[browser] ${record.key} did not start again: ${why(error)}`)
     );
   }
@@ -841,6 +866,7 @@ export const stopBrowsers = async (): Promise<void> => {
  * (`signal`), removes everything labelled with its key again, and says why.
  */
 const intoContainer = async (
+  ports: BrowserPorts,
   container: ContainerHost,
   into: BrowserRecord,
   signIns: SignIns,
@@ -854,7 +880,7 @@ const intoContainer = async (
       ...(relay && relayHolds(relay) ? { relay } : {}),
       progress: (progress) => {
         starting.set(key, progress);
-        told();
+        told(ports);
       },
     });
     goOn(signal);
@@ -869,7 +895,7 @@ const intoContainer = async (
     }
     goOn(signal);
     await writeBrowser({ ...made, state: "live", lastUsedAt: Date.now() });
-    gateFor(made);
+    gateFor(made, ports);
   } catch (error) {
     await container
       .removeLabelled(key)
@@ -896,6 +922,7 @@ const intoContainer = async (
  * leaves the record as it was, on the local host.
  */
 const moveIntoContainer = (
+  ports: BrowserPorts,
   key: BrowserKey,
   answering: Runtime
 ): Promise<void> =>
@@ -914,7 +941,7 @@ const moveIntoContainer = (
       }),
     };
     starting.set(key, { state: "starting" });
-    told();
+    told(ports);
     try {
       // The sign-ins are read at the ports the local Chromium runs on: its
       // own slot. The container's slot is taken only once it stopped, since
@@ -931,6 +958,7 @@ const moveIntoContainer = (
       const placed = await slotted(from, await container.heldSlots());
       const { local: _local, why: _why, runtimeAway: _away, ...kept } = placed;
       await intoContainer(
+        ports,
         container,
         { ...kept, host: "container", state: "asleep" },
         signIns,
@@ -958,7 +986,7 @@ const moveIntoContainer = (
       moving = undefined;
       settle();
       starting.delete(key);
-      told();
+      told(ports);
     }
   });
 
@@ -966,6 +994,7 @@ const noop = (): void => undefined;
 
 /** Every local browser moved into a container now that `answering` answers, each at rest, a failed one a recheck later. */
 const moveLocals = async (
+  ports: BrowserPorts,
   records: BrowserRecord[],
   answering: Runtime
 ): Promise<void> => {
@@ -978,27 +1007,27 @@ const moveLocals = async (
     ) {
       continue;
     }
-    await moveIntoContainer(record.key, answering);
+    await moveIntoContainer(ports, record.key, answering);
   }
 };
 
 /** One tick: the runtime again when due, every browser's gate, the records against their hosts, those that waited on the runtime started again, the local ones moved into a container once it answers, the idle ones down, and the frame. */
-const tick = async (): Promise<void> => {
+const tick = async (ports: BrowserPorts): Promise<void> => {
   const records = await allBrowsers();
   const waiting = records.some((record) => record.runtimeAway);
   const missing = "missing" in (await browserRuntime());
   if (waiting || (missing && Date.now() - runtimeAt > RUNTIME_RECHECK_MS)) {
     await browserRuntime(true);
   }
-  await gatesNow();
-  await readBack();
+  await gatesNow(ports);
+  await readBack(ports);
   const found = await browserRuntime();
   if (!("missing" in found)) {
-    await backFromAway(await allBrowsers());
-    await moveLocals(await allBrowsers(), found);
+    await backFromAway(ports, await allBrowsers());
+    await moveLocals(ports, await allBrowsers(), found);
   }
-  await idleDown();
-  await tell();
+  await idleDown(ports);
+  await tell(ports);
 };
 
 /**
@@ -1013,10 +1042,10 @@ const tick = async (): Promise<void> => {
  * dir's watch is an FSEvents stream over its whole tree, fseventsd queues
  * the daemon nothing of a running browser.
  */
-export const watchBrowsers = async (): Promise<() => void> => {
+export const watchBrowsers = async (
+  ports: BrowserPorts
+): Promise<() => void> => {
   servingGates = true;
-  // A page's origin that settled is told as any change is.
-  setOriginSink(() => told());
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
   // A local browser's profile an earlier agent kept beside its record moves
   // under `chromium/` before anything starts one (local-host.ts `moveKeptFiles`).
@@ -1024,11 +1053,11 @@ export const watchBrowsers = async (): Promise<() => void> => {
   // Every kept browser's gate made before the port answers, so a connection
   // as the agent starts meets its gate as its record says: closed under a
   // take-over the daemon restarted in (`gateFor`), never the no-browser 404.
-  await gatesNow();
+  await gatesNow(ports);
   listenGates();
   const records = watch(browsersDir(), { recursive: true }, (_event, name) => {
     if (name?.endsWith("record.json")) {
-      gatesAsWritten();
+      gatesAsWritten(ports);
     }
   });
   records.unref();
@@ -1044,7 +1073,7 @@ export const watchBrowsers = async (): Promise<() => void> => {
         ? "[browser] no container runtime: browsers run as local Chromium"
         : `[browser] runtime ${found.kind} ${found.version} (API ${found.api}${found.rootless ? ", rootless" : ""}) at ${found.endpoint}`
     );
-    await tick();
+    await tick(ports);
   } catch (error) {
     stop();
     throw error;
@@ -1057,7 +1086,7 @@ export const watchBrowsers = async (): Promise<() => void> => {
       return;
     }
     ticking = true;
-    tick()
+    tick(ports)
       .catch((error: unknown) =>
         console.warn(`[browser] tick failed: ${why(error)}`)
       )

@@ -123,6 +123,7 @@ export default {
       await startMcpGateway(() => base, {
         freshen: (accountId) =>
           freshen(accountId, { borrowAsk: () => undefined }),
+        browsers: { browsers: () => undefined, machineId: "probe-machine" },
         supervisorHolds: () => undefined,
       });
       const { readUpdateSettings } =

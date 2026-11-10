@@ -214,7 +214,6 @@ import { accountsChangedHere, watchQuietBoundaries } from "./boundary/looks";
 import {
   browserFrame,
   removeBrowser,
-  setBrowserSink,
   startBrowser,
   stopBrowser,
   stopBrowsers,
@@ -228,7 +227,6 @@ import {
   relayRuntimeRead,
   removeRelay,
   renewRelay,
-  setRelaySink,
   startRelay,
   stopRelay,
   watchRelay,
@@ -239,7 +237,6 @@ import {
   browserViewers,
   handBackBrowser,
   restoreShields,
-  setShieldSink,
   shieldBrowser,
 } from "./browser/shield";
 import { buildInfo } from "./build";
@@ -2077,7 +2074,7 @@ const attach = (
       network = now;
       needs = lacking;
       if (moved) {
-        relayReachChanged().catch((error: unknown) =>
+        relayReachChanged(ports).catch((error: unknown) =>
           console.warn(
             `[relay] its addresses were not told again: ${error instanceof Error ? error.message : String(error)}`
           )
@@ -3382,9 +3379,13 @@ const startDaemon = (rediscover = false) =>
       hubLine.send({ verb: "frames", machineId: "", payload: frame });
     const ports: AgentPorts = {
       borrowAsk: framed,
+      browsers: framed,
       commandQueue: framed,
+      machineId: machineIdValue,
       moveProgress: framed,
       opencodeAccounts,
+      relay: framed,
+      shield: framed,
       stage: framed,
       stageClone: framed,
     };
@@ -3393,6 +3394,7 @@ const startDaemon = (rediscover = false) =>
         startMcpGateway(() => hubUrl, {
           freshen: (accountId) => freshen(accountId, ports),
           supervisorHolds: () => supervising?.restartHolds(),
+          browsers: ports,
         })
       ),
       (listener) => Effect.sync(() => listener.stop(true))
@@ -3711,36 +3713,30 @@ const startDaemon = (rediscover = false) =>
     });
     // A project's browser (browser/browsers.ts): started or woken on its
     // machine's host, stopped, removed; the whole list told on each change.
-    setBrowserSink(machineIdValue, (frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(BROWSER_START, (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : startBrowser(args as BrowserStartArgs)
+        : startBrowser(ports, args as BrowserStartArgs)
     );
     supervisor.declareControl(BROWSER_STOP, async (args) =>
-      stopBrowser(browserKeyOf(args))
+      stopBrowser(ports, browserKeyOf(args))
     );
     supervisor.declareControl(BROWSER_REMOVE, async (args) =>
-      removeBrowser(browserKeyOf(args))
+      removeBrowser(ports, browserKeyOf(args))
     );
     // The person takes a browser over privately and hands it back
     // (browser/shield.ts); a take-over with no view for two minutes is
     // handed back here, and the hub told.
-    setShieldSink(machineIdValue, (frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(BROWSER_SHIELD, (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : shieldBrowser({
+        : shieldBrowser(ports, {
             ...(args as BrowserShieldArgs),
             key: browserKeyOf(args),
           })
     );
     supervisor.declareControl(BROWSER_HANDBACK, async (args) =>
-      handBackBrowser(browserKeyOf(args))
+      handBackBrowser(ports, browserKeyOf(args))
     );
     // A browser ask as it parks: the asking door's page on the asked origin,
     // which a take-over brings to the front (browser/shield.ts).
@@ -3757,14 +3753,14 @@ const startDaemon = (rediscover = false) =>
     // browser-routes.ts): the machine's one browser listener, and a neko
     // session of its own for each viewer.
     supervisor.declareControl(BROWSER_LISTEN, async (args) =>
-      listenBrowsers(args)
+      listenBrowsers(args, ports)
     );
     supervisor.declareControl(BROWSER_VIEWER_TOKEN, async (args) =>
-      viewerSession(browserKeyOf(args))
+      viewerSession(ports, browserKeyOf(args))
     );
     // The machine's browsers whole, as its records hold them: what the hub
     // reads as the machine registers (its take-overs are the machine's own).
-    supervisor.declareControl(BROWSER_ROWS, () => browserFrame());
+    supervisor.declareControl(BROWSER_ROWS, () => browserFrame(ports));
     supervisor.declareControl(BROWSER_VIEWERS, (args) => {
       const { count } = args as BrowserViewersArgs;
       const key = browserKeyOf(args);
@@ -3791,11 +3787,11 @@ const startDaemon = (rediscover = false) =>
         // gates start closed as the registry makes them, browsers.ts
         // `gateFor`), so a browser the registry then reads back as stopped
         // has its take-over released and its gate opened.
-        restoreShields()
+        restoreShields(ports)
           .catch((error: unknown) =>
             console.warn(`[browser] take-overs not restored: ${String(error)}`)
           )
-          .then(() => watchBrowsers())
+          .then(() => watchBrowsers(ports))
           .then(
             (stop) => {
               unwatchBrowsers = stop;
@@ -3816,23 +3812,20 @@ const startDaemon = (rediscover = false) =>
     yield* Effect.addFinalizer(() => Effect.promise(() => stopBrowsers()));
     // The fleet's stream relay, when this machine runs it (browser/relay.ts):
     // started, stopped, its certificate renewed; read back from its container.
-    setRelaySink(machineIdValue, (frame) =>
-      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
-    );
     supervisor.declareControl(RELAY_START, async (args) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
-        : startRelay(relayStartOf(args))
+        : startRelay(ports, relayStartOf(args))
     );
-    supervisor.declareControl(RELAY_STOP, () => stopRelay());
-    supervisor.declareControl(RELAY_REMOVE, () => removeRelay());
+    supervisor.declareControl(RELAY_STOP, () => stopRelay(ports));
+    supervisor.declareControl(RELAY_REMOVE, () => removeRelay(ports));
     supervisor.declareControl(RELAY_RENEW, (args) => {
       const token = (args as { cloudflareToken?: unknown } | null)
         ?.cloudflareToken;
       if (typeof token !== "string") {
         throw new Error("relay.renew takes the Cloudflare token.");
       }
-      return renewRelay({ cloudflareToken: token });
+      return renewRelay(ports, { cloudflareToken: token });
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
     // runtime read, and a binding from here through it.
@@ -3848,7 +3841,7 @@ const startDaemon = (rediscover = false) =>
     });
     yield* Effect.forkScoped(
       Effect.promise(() =>
-        watchRelay().catch((error: unknown) =>
+        watchRelay(ports).catch((error: unknown) =>
           console.warn(`[relay] not read back: ${String(error)}`)
         )
       )

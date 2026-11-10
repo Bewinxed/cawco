@@ -52,7 +52,10 @@ await writeBrowser({
 });
 
 // A build whose watch answers no stop answers nothing here.
-const stop: unknown = await watchBrowsers();
+const stop: unknown = await watchBrowsers({
+  browsers: () => undefined,
+  machineId: "probe-machine",
+});
 const record = await recordFor(key, "probe", "local");
 const profile = profileDir(record);
 const read = (path: string) => readFile(path, "utf8").catch(() => undefined);
