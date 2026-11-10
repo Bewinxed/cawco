@@ -122,7 +122,7 @@ const writeXcodeHome = async (id: string): Promise<void> => {
   const library = join(xcodeHomeOf(id), "Library");
   await mkdir(library, { recursive: true });
   const hostLibrary = join(homedir(), "Library");
-  const names = await readdir(hostLibrary).catch(() => [] as string[]);
+  const names = await readdir(hostLibrary).catch(() => []);
   const links = new Map<string, string>([
     ...names.map((name): [string, string] => [name, join(hostLibrary, name)]),
     ...XCODE_OWN_LIBRARY.map((name): [string, string] => [

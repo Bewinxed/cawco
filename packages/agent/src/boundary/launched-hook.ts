@@ -160,7 +160,7 @@ export const launchedHook = async (
     return;
   }
   const events = HOOK_EVENTS_FLAG.test(commandLine);
-  const gatesFiles = GATING_MATCHERS.has(matcher as string);
+  const gatesFiles = matcher !== undefined && GATING_MATCHERS.has(matcher);
   const command = z.string().parse(JSON.parse(quoted));
   if (quotedArgs) {
     const args = z.array(z.string()).parse(JSON.parse(quotedArgs));
@@ -178,7 +178,7 @@ export const launchedHook = async (
   }
   const words = QUOTED_WORDS.test(command)
     ? [...command.matchAll(QUOTED_WORD)].map(([, word]) =>
-        (word as string).replaceAll("'\\''", "'")
+        word.replaceAll("'\\''", "'")
       )
     : [];
   const [binary, verb] = words;

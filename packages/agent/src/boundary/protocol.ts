@@ -41,12 +41,18 @@ export type JudgeArgs = Readonly<Record<(typeof JUDGE_ARGS)[number], string>>;
 export const judgeArgv = (args: JudgeArgs): string[] =>
   JUDGE_ARGS.map((name) => args[name]);
 
+/** Whether `named` holds every one of `names`, none empty. */
+const holdsEach = <Name extends string>(
+  names: readonly Name[],
+  named: Record<string, string>
+): named is Record<Name, string> => names.every((name) => named[name] !== "");
+
 /** The judge's arguments read from its argv; undefined when one is missing or empty. */
 export const judgeArgsOf = (argv: readonly string[]): JudgeArgs | undefined => {
   const named = Object.fromEntries(
     JUDGE_ARGS.map((name, index) => [name, argv[index] ?? ""])
-  ) as Record<(typeof JUDGE_ARGS)[number], string>;
-  return JUDGE_ARGS.every((name) => named[name] !== "") ? named : undefined;
+  );
+  return holdsEach(JUDGE_ARGS, named) ? named : undefined;
 };
 
 /** The line the judge prints once it answers on its socket. */
@@ -113,8 +119,8 @@ export const hostArgv = (args: HostArgs): string[] => [
 export const hostArgsOf = (argv: readonly string[]): HostArgs | undefined => {
   const named = Object.fromEntries(
     HOST_ARGS.map((name, index) => [name, argv[index] ?? ""])
-  ) as Record<(typeof HOST_ARGS)[number], string>;
-  return HOST_ARGS.every((name) => named[name] !== "")
+  );
+  return holdsEach(HOST_ARGS, named)
     ? { ...named, places: argv.slice(HOST_ARGS.length) }
     : undefined;
 };

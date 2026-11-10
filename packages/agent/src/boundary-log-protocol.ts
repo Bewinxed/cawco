@@ -157,7 +157,7 @@ export const logRefusal = (argv: readonly string[]): string | undefined => {
     return `cawco: inside a workspace boundary log runs only \`log show\` and \`log stream\`, read only, so \`log${command ? ` ${command}` : ""}\` did not run`;
   }
   for (let index = 0; index < rest.length; index += 1) {
-    const word = rest[index] as string;
+    const word = rest[index];
     const why = grammar.refused.get(word);
     if (why) {
       return `cawco: \`log ${command} ${word}\` did not run: it ${why}`;

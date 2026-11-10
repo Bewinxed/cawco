@@ -57,9 +57,9 @@ import {
  */
 export const settleGonePlaces = async (): Promise<void> => {
   try {
-    const ids = (
-      await readdir(workspacesDir()).catch(() => [] as string[])
-    ).filter(isPlace);
+    const ids = (await readdir(workspacesDir()).catch(() => [])).filter(
+      isPlace
+    );
     for (const id of ids) {
       const held = await readHeld(id).catch(() => undefined);
       if (held) {
@@ -240,7 +240,7 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
   if (!facts) {
     return;
   }
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(() => []);
   for (const id of ids) {
     if (isStarting(id) || isClosing(id)) {
       continue;

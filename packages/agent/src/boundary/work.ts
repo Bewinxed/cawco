@@ -234,9 +234,9 @@ const workers = async (
   rows: ReadonlyMap<number, ProcessLineage>;
   work: Map<number, Worker>;
 }> => {
-  const ids = (
-    only ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
-  ).filter((id) => !isPlace(id));
+  const ids = (only ?? (await readdir(workspacesDir()).catch(() => []))).filter(
+    (id) => !isPlace(id)
+  );
   const [lineage, lines] = await Promise.all([
     processLineage(),
     commandLines(),

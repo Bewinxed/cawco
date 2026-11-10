@@ -91,9 +91,9 @@ const {
 } = handed;
 
 /** The copy the agent wrote beside this script (`JUDGE_SCRIPT`). */
-const { judgeCall, readPolicy } = (await import(
+const { judgeCall, readPolicy }: Judge = await import(
   join(import.meta.dir, "workspace-judge.ts")
-)) as Judge;
+);
 
 /** The tools whose command runs through the CLI's shell prefix; every other tool is judged. */
 const SHELL_TOOLS = new Set(["Bash", "Monitor"]);
@@ -116,9 +116,12 @@ const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
  * as that build allowed it: the CLI judged its rules on this rewrite all
  * along, until it is relaunched.
  */
-const throughExecutor = (call: Record<string, unknown>): string => {
+const throughExecutor = (
+  call: Record<string, unknown>,
+  written: string
+): string => {
   const ended = quote(join(claudeTmp, `.cwd-${randomUUID()}`));
-  const command = `${quote(exec)} --session --cwd-out ${ended} ${quote(call.command as string)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(${quote(cat)} ${ended})"; fi; ${quote(rm)} -f ${ended}; (exit $__cawco_status)`;
+  const command = `${quote(exec)} --session --cwd-out ${ended} ${quote(written)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(${quote(cat)} ${ended})"; fi; ${quote(rm)} -f ${ended}; (exit $__cawco_status)`;
   return `${JUDGE_ALLOWS}\n${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
@@ -165,7 +168,7 @@ const answer = (text: string, shellPrefix: string): string => {
         return `${JUDGE_ALLOWS}\n`;
       }
       if (shellPrefix === JUDGE_NO_PREFIX) {
-        return throughExecutor(call);
+        return throughExecutor(call, call.command);
       }
       if (!HEX.test(shellPrefix)) {
         throw new Error("the hook sent no shell prefix");

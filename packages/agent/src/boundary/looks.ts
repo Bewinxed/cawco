@@ -194,7 +194,7 @@ const recheckNow = async (
 ): Promise<void> => {
   const procs = (await procsHeld()).filter((proc) => proc.alive);
   const runningIds = (
-    ids ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
+    ids ?? (await readdir(workspacesDir()).catch(() => []))
   ).filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)));
   for (const id of runningIds) {
     if (isStarting(id) || isClosing(id)) {
@@ -243,7 +243,7 @@ const recheckNow = async (
  */
 const inUseNow = async (): Promise<string[]> => {
   const procs = (await procsHeld()).filter((proc) => proc.alive);
-  const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
+  const ids = (await readdir(workspacesDir()).catch(() => []))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
     .filter((id) => !(isStarting(id) || isClosing(id)));
   const facts = await liveFacts(procs);
@@ -450,7 +450,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
  */
 const sweepQuiet = async (): Promise<void> => {
   const procs = (await procsHeld()).filter((proc) => proc.alive);
-  const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
+  const ids = (await readdir(workspacesDir()).catch(() => []))
     .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
     .filter((id) => !isClosing(id));
   if (ids.length === 0) {
@@ -515,7 +515,7 @@ const judgesAnswer = async (procs: readonly HeldProc[]): Promise<void> => {
     return;
   }
   await Promise.all(allArming());
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(() => []);
   if (ids.length === 0) {
     return;
   }

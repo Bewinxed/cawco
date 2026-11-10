@@ -1066,20 +1066,19 @@ export const endView = async (
  */
 const RENAME_SWAP = 0x2;
 
-interface Darwin {
-  renamex_np: (from: unknown, to: unknown, flags: number) => number;
-}
-let darwin: Darwin | undefined;
-const swapPaths = (a: string, b: string): void => {
-  darwin ??= dlopen("libSystem.B.dylib", {
+const openDarwin = () =>
+  dlopen("libSystem.B.dylib", {
     renamex_np: {
-      args: [FFIType.ptr, FFIType.ptr, FFIType.u32],
+      args: [FFIType.ptr, FFIType.ptr, FFIType.u32] as const,
       returns: FFIType.i32,
     },
-  }).symbols as unknown as Darwin;
+  });
+let darwin: ReturnType<typeof openDarwin> | undefined;
+const swapPaths = (a: string, b: string): void => {
+  darwin ??= openDarwin();
   const from = Buffer.from(`${a}\0`);
   const to = Buffer.from(`${b}\0`);
-  if (darwin.renamex_np(ptr(from), ptr(to), RENAME_SWAP) !== 0) {
+  if (darwin.symbols.renamex_np(ptr(from), ptr(to), RENAME_SWAP) !== 0) {
     throw new Error(`${a} and ${b} could not be swapped`);
   }
 };
@@ -1284,15 +1283,14 @@ export const removeLayer = async (id: string, layer: Layer): Promise<void> => {
 
 // ----------------------------------------------------------- the change set
 
-interface Libc {
-  lgetxattr: (
-    path: unknown,
-    name: unknown,
-    value: unknown,
-    size: number
-  ) => number;
-}
-let libc: Libc | undefined;
+const openLibc = () =>
+  dlopen("libc.so.6", {
+    lgetxattr: {
+      args: [FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.u64] as const,
+      returns: FFIType.i64,
+    },
+  });
+let libc: ReturnType<typeof openLibc> | undefined;
 
 /**
  * Whether the upper dir `path` is opaque: it replaced the lower dir of its
@@ -1302,18 +1300,14 @@ let libc: Libc | undefined;
  * `trusted.` (overlayfs.rst, "Whiteouts and opaque directories").
  */
 const isOpaque = (path: string): boolean => {
-  libc ??= dlopen("libc.so.6", {
-    lgetxattr: {
-      args: [FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.u64],
-      returns: FFIType.i64,
-    },
-  }).symbols as unknown as Libc;
+  libc ??= openLibc();
+  const lib = libc;
   const file = Buffer.from(`${path}\0`);
   const value = Buffer.alloc(4);
   return ["user.overlay.opaque", "trusted.overlay.opaque"].some((name) => {
     const key = Buffer.from(`${name}\0`);
     const got = Number(
-      (libc as Libc).lgetxattr(ptr(file), ptr(key), ptr(value), value.length)
+      lib.symbols.lgetxattr(ptr(file), ptr(key), ptr(value), value.length)
     );
     return got >= 1 && value[0] === "y".charCodeAt(0);
   });
@@ -1372,7 +1366,7 @@ const opaqueDeletes = async (
   lower: string,
   names: readonly string[]
 ): Promise<void> => {
-  for (const name of await readdir(lower).catch(() => [] as string[])) {
+  for (const name of await readdir(lower).catch(() => [])) {
     const rel = relative(walk.folder, join(lower, name));
     if (!(names.includes(name) || walk.skip(rel))) {
       walk.changes.push({ path: rel, change: "delete" });
@@ -1394,7 +1388,7 @@ const upperChanges = async (
 ): Promise<ChangedPath[]> => {
   const walk: Walk = { changes: [], folder, skip };
   const down = async (dir: string): Promise<void> => {
-    const names = await readdir(join(upper, dir)).catch(() => [] as string[]);
+    const names = await readdir(join(upper, dir)).catch(() => []);
     if (dir && isOpaque(join(upper, dir))) {
       await opaqueDeletes(walk, join(at, dir), names);
     }
@@ -1459,8 +1453,8 @@ const copyChanges = async (
   };
   const down = async (dir: string): Promise<void> => {
     const [mine, was] = await Promise.all([
-      readdir(join(path, dir)).catch(() => [] as string[]),
-      readdir(join(base, dir)).catch(() => [] as string[]),
+      readdir(join(path, dir)).catch((): string[] => []),
+      readdir(join(base, dir)).catch((): string[] => []),
     ]);
     for (const name of was) {
       const rel = join(dir, name);
@@ -1536,14 +1530,14 @@ const differsFromFolder = async (
   }
   const from = delegateFile(layer, change.path);
   const mine = from ? await lstat(from).catch(() => undefined) : undefined;
-  if (!(there && mine)) {
+  if (!(there && mine && from)) {
     return true;
   }
   if (mine.isSymbolicLink() || there.isSymbolicLink()) {
     return !(
       mine.isSymbolicLink() &&
       there.isSymbolicLink() &&
-      (await readlink(from as string)) === (await readlink(target))
+      (await readlink(from)) === (await readlink(target))
     );
   }
   if (!(mine.isFile() && there.isFile()) || mine.size !== there.size) {
@@ -1553,10 +1547,7 @@ const differsFromFolder = async (
   if ((mine.mode & 0o7777) !== (there.mode & 0o7777)) {
     return true;
   }
-  const [a, b] = await Promise.all([
-    readFile(from as string),
-    readFile(target),
-  ]);
+  const [a, b] = await Promise.all([readFile(from), readFile(target)]);
   return !a.equals(b);
 };
 
