@@ -166,16 +166,17 @@
         return { parts: [said], w: said.w };
       }
       // The stage drew each story at its own width: a shape of another width than the one named is none of this picture's.
-      const drawn = stories.map((one) => {
+      const parts: { h: number; w: number }[] = [];
+      for (const one of stories) {
         const shape = shapes?.drawn[one];
-        return shape && (namedWidth === null || shape.w === namedWidth)
-          ? shape
-          : undefined;
-      });
-      if (stories.length === 0 || !drawn.every((one) => one !== undefined)) {
+        if (!shape || (namedWidth !== null && shape.w !== namedWidth)) {
+          return null;
+        }
+        parts.push(shape);
+      }
+      if (parts.length === 0) {
         return null;
       }
-      const parts = drawn as { h: number; w: number }[];
       return { parts, w: Math.max(...parts.map((one) => one.w)) };
     }
   );

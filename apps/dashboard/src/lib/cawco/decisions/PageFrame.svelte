@@ -21,6 +21,7 @@
   } from "@cawco/core/preview/routes";
   import { decisionsWords } from "@cawco/core/words/decisions";
   import { untrack } from "svelte";
+  import { z } from "zod";
   import { artifactShown } from "#lib/cawco/artifact-api.js";
 
   import { artifactReached } from "#lib/cawco/files/reached.js";
@@ -262,11 +263,13 @@
       )) {
         return;
       }
-      const told = event.data as {
-        message?: unknown;
-        of?: unknown;
-        type?: unknown;
-      } | null;
+      const told = z
+        .looseObject({
+          message: z.unknown(),
+          of: z.unknown(),
+          type: z.unknown(),
+        })
+        .safeParse(event.data).data;
       // A Canvas's Open to draw or a Preview's Open full: the artifact opens
       // where a chip of it pressed here opens.
       const opening = previewOpenArtifact(event.data);

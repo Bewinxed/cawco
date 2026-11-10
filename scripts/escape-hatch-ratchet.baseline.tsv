@@ -182,7 +182,6 @@ as-unknown-as	{ cardFrames: CardFrames }	scripts/probe-kit/specs/comments.ts	1
 as-unknown-as	{ cardFrames: typeof frames }	scripts/probe-kit/specs/comments.ts	1
 as-unknown-as	{ cawco: { send: () => Promise<void> } }	scripts/probe-kit/specs/decision-restart.ts	1
 as-unknown-as	{ cawco: object }	scripts/probe-kit/specs/preview-burst.ts	1
-as-unknown-as	{ cawco?: Bridge }	apps/dashboard/src/lib/cawco/decisions/host/page.svelte.ts	1
 as-unknown-as	{ cawco?: StandIn }	scripts/probe-kit/decision-pick-wiring.ts	1
 as-unknown-as	{ cawcoArtifact: { doc: { getMap: (n: string) => { get: (id: string) => 	scripts/probe-kit/specs/comments.ts	1
 as-unknown-as	{ cawcoArtifact: { doc: { getMap: (n: string) => { get: (k: string) => u	scripts/probe-kit/specs/comments.ts	4
@@ -282,7 +281,6 @@ as-unknown-as	ArtifactsDb	scripts/probe-kit/specs/web/page-faults.ts	1
 as-unknown-as	AskRecord	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
 as-unknown-as	Base64Image["source"]	packages/hub/src/media.ts	1
 as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
-as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/decides/preview/SetupFixture.svelte	1
 as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
 as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
 as-unknown-as	CommandLifecycle	packages/agent/src/harnesses/claude.ts	2
@@ -293,7 +291,6 @@ as-unknown-as	Deps	scripts/probe-kit/specs/preview-reclaim.ts	1
 as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
 as-unknown-as	DocMeta["drawn"]	scripts/probe-kit/specs/answered-pages.ts	1
 as-unknown-as	DocumentRequests	scripts/probe-kit/specs/canvas-cost.ts	3
-as-unknown-as	ElementNode	apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte	1
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
 as-unknown-as	FleetMcpConfig	packages/hub/src/routes/fleet-mcp.ts	1
 as-unknown-as	Freshable[]	packages/core/src/usage/windows.ts	1

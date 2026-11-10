@@ -12,6 +12,7 @@
   same (dials.ts), and hears each turn (`onvalues`).
 -->
 <script lang="ts">
+  import { z } from "zod";
   import GraphDials from "../../graph/Dials.svelte";
   import {
     type DialValue,
@@ -38,12 +39,15 @@
   const name = $derived(String(props.name ?? "Dials"));
   const read = $derived(dialsOfConfig(props.config ?? {}));
   /** Every panel's values as the hub keeps them, by panel name. */
-  const keptAll = $derived.by((): Record<string, DialValues> => {
-    const value = picks.now.dials?.value;
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, DialValues>)
-      : {};
-  });
+  const keptAll = $derived.by(
+    (): Record<string, DialValues> =>
+      z
+        .record(
+          z.string(),
+          z.record(z.string(), z.union([z.number(), z.string(), z.boolean()]))
+        )
+        .safeParse(picks.now.dials?.value).data ?? {}
+  );
   /** His values, by path: the kept ones once they come, while he has turned nothing. */
   let values = $state<DialValues>({});
   let taken = false;
