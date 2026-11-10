@@ -8391,7 +8391,16 @@ export const createServer = (
       machineId === undefined
         ? onlineMachines().length > 0
         : Boolean(registry.agent(machineId)),
-    leadHome,
+    // caw.ts types it plain: typing it from project-joining closes
+    // caw → project-joining → hub-context → caw. A refused folder is
+    // thrown on in its words, as Caw's start reads a failure.
+    leadHome: async (projectId) => {
+      const home = await leadHome(projectId);
+      if (home instanceof ElysiaStatus) {
+        throw new Error(home.response.detail);
+      }
+      return home;
+    },
     workPlace: workPlaceOf,
     folderChanged: (projectId) => {
       tasks.touched(projectId);
