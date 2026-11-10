@@ -89,7 +89,10 @@ function tabsOf(track: Element, order: string[]): HTMLElement[] {
  * A press on a tab: a drag once it travels past `START`, else left to be the
  * click it is. Called from the tab's `pointerdown`.
  */
-export function pressTab(event: PointerEvent, drag: TabDrag): void {
+export function pressTab(
+  event: PointerEvent & { currentTarget: HTMLElement },
+  drag: TabDrag
+): void {
   if (
     event.button !== 0 ||
     !event.isPrimary ||
@@ -98,7 +101,7 @@ export function pressTab(event: PointerEvent, drag: TabDrag): void {
   ) {
     return;
   }
-  const tab = event.currentTarget as HTMLElement;
+  const tab = event.currentTarget;
   const x0 = event.clientX;
   const y0 = event.clientY;
   const pointer = event.pointerId;
