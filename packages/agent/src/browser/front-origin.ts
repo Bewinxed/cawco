@@ -20,6 +20,7 @@
  * ({@link onFrontMoved}).
  */
 import type { BrowserHostKind, BrowserKey } from "@cawco/core/browser";
+import { z } from "zod";
 import { CdpLink } from "./cdp-takeover";
 
 /** How long after a link that would not open it is tried again, while the browser is live. Our call. */
@@ -107,16 +108,20 @@ const show = (key: BrowserKey, watch: Watch): void => {
   }
 };
 
+/** A target's info in a `Target.*` event that is a page's. */
+const PAGE_INFO = z.object({
+  targetId: z.string(),
+  type: z.literal("page"),
+  url: z.unknown(),
+});
+
 /** A page's info from a `Target.*` event: kept when it is a page. */
 const notePage = (watch: Watch, info: unknown): boolean => {
-  const { targetId, type, url } = (info ?? {}) as {
-    targetId?: unknown;
-    type?: unknown;
-    url?: unknown;
-  };
-  if (typeof targetId !== "string" || type !== "page") {
+  const page = PAGE_INFO.safeParse(info);
+  if (!page.success) {
     return false;
   }
+  const { targetId, url } = page.data;
   const was = watch.pages.get(targetId);
   const now = typeof url === "string" ? url : "";
   if (was?.url === now) {
@@ -135,22 +140,19 @@ const open = (key: BrowserKey, watch: Watch): void => {
       }
       watch.link = link;
       link.onEvent = (message) => {
-        const params = (message.params ?? {}) as {
-          targetInfo?: unknown;
-          targetId?: unknown;
-        };
+        const { targetInfo, targetId } = message.params ?? {};
         let moved = false;
         if (
           message.method === "Target.targetCreated" ||
           message.method === "Target.targetInfoChanged"
         ) {
-          moved = notePage(watch, params.targetInfo);
+          moved = notePage(watch, targetInfo);
         } else if (
           message.method === "Target.targetDestroyed" &&
-          typeof params.targetId === "string"
+          typeof targetId === "string"
         ) {
-          moved = watch.pages.delete(params.targetId);
-          if (watch.front === params.targetId) {
+          moved = watch.pages.delete(targetId);
+          if (watch.front === targetId) {
             watch.front = undefined;
           }
         }

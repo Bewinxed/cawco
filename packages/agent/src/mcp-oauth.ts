@@ -35,12 +35,12 @@ const FLEET_PATH = /^\/mcp\/fleet\//u;
  * caller that went away is not resent for.
  */
 function throughDrops(
-  first: Response & { body: ReadableStream<Uint8Array> },
+  first: { body: ReadableStream<Uint8Array>; kind: string | null },
   again: () => Promise<Response | { away: string }>,
   stopped: AbortSignal,
   what: string
 ): ReadableStream<Uint8Array> {
-  const kind = first.headers.get("content-type");
+  const { kind } = first;
   let reader = first.body.getReader();
   let passed = 0;
   let skip = 0;
@@ -195,7 +195,10 @@ async function relayMcp(
   return new Response(
     keyed && response.body
       ? throughDrops(
-          response as Response & { body: ReadableStream<Uint8Array> },
+          {
+            body: response.body,
+            kind: response.headers.get("content-type"),
+          },
           () => throughHubAway(tryOnce, request.signal),
           request.signal,
           `${request.method} ${incoming.pathname}`
@@ -212,6 +215,12 @@ const parsed = (body: ArrayBuffer): unknown => {
     return undefined;
   }
 };
+
+/** A parsed JSON message's member `key`; undefined for a message that is no object or has none. */
+const member = (message: unknown, key: string): unknown =>
+  typeof message === "object" && message !== null
+    ? Object.entries(message).find(([name]) => name === key)?.[1]
+    : undefined;
 
 /**
  * Whether a relayed request is a tool call, to be run once however often it
@@ -233,7 +242,7 @@ function toolCall(
   }
   const message = parsed(body);
   return (Array.isArray(message) ? message : [message]).some(
-    (one) => (one as { method?: unknown } | null)?.method === "tools/call"
+    (one) => member(one, "method") === "tools/call"
   );
 }
 
@@ -253,7 +262,7 @@ function heldCall(
   if (MCP_RELAY_PATH.test(pathname)) {
     return heldMcpCall(pathname, parsed(body));
   }
-  const name = (parsed(body) as { name?: unknown } | undefined)?.name;
+  const name = member(parsed(body), "name");
   if (typeof name !== "string") {
     return "unnamed";
   }
@@ -264,11 +273,9 @@ function heldCall(
 function heldMcpCall(pathname: string, message: unknown): string | undefined {
   const cawco = pathname === "/mcp/cawco";
   for (const one of Array.isArray(message) ? message : [message]) {
-    const call = one as
-      { method?: unknown; params?: { name?: unknown } } | undefined;
-    const name =
-      typeof call?.params?.name === "string" ? call.params.name : "unnamed";
-    if (call?.method !== "tools/call") {
+    const called = member(member(one, "params"), "name");
+    const name = typeof called === "string" ? called : "unnamed";
+    if (member(one, "method") !== "tools/call") {
       continue;
     }
     if (!cawco) {
@@ -323,7 +330,7 @@ function holdingUntilEnd(response: Response, release: () => void): Response {
  */
 function notStarted(body: ArrayBuffer | undefined): Response {
   const message = body ? parsed(body) : undefined;
-  const id = (message as { id?: unknown } | undefined)?.id;
+  const id = member(message, "id");
   return Response.json(
     id === undefined
       ? { error: AGENT_RESTARTING, started: false }
@@ -349,9 +356,7 @@ async function restartRoute(
     return new Response("Not from a browser.", { status: 403 });
   }
   if (request.method === "POST") {
-    const { ms } = (await request.json().catch(() => ({}))) as {
-      ms?: unknown;
-    };
+    const ms = member(await request.json().catch(() => ({})), "ms");
     if (typeof ms === "number" && ms > 0) {
       raiseFence("service-restart", Math.min(ms, 5 * 60_000));
     } else {
@@ -540,7 +545,11 @@ export const startMcpGateway = async (
     console.info(`[gateway] MCP gateway serving on 127.0.0.1:${port}`);
     return server;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "EADDRINUSE"
+    ) {
       // Whoever it is, by name: on 2026-10-08 it was a leaf's network namespace
       // forwarding the port, not an agent, and saying "another agent" sent the
       // diagnosis the wrong way for an hour and a half.
