@@ -25,6 +25,8 @@ import type { ExternalActor, ExternalState } from "@cawco/core/external-items";
 import type { Stage } from "@cawco/core/task-views";
 import type { TrackerTarget } from "@cawco/core/trackers";
 import type { StageKind } from "@cawco/core/views";
+import type { problem } from "elysia";
+import type { AnyProblem } from "./refusal";
 
 /** Linear's six categories, which GitHub's states take too. */
 export type StateType =
@@ -109,48 +111,91 @@ export type Listed<T> =
 /** An issue as a write names it: its key for the tracker, its ref for sentences. */
 type IssueRef = Pick<Issue, "key" | "ref">;
 
+/** A 400 the person reads, under the tracker's own `code`. */
+type Said<Code extends string> = ReturnType<
+  typeof problem<400, { code: Code; detail: string }>
+>;
+
+/**
+ * Why a tracker would not do what the sync asked, in its own words with
+ * what the person can do. Each adapter returns one where it was asked for
+ * an answer, never throws it; the code says what the sync reads of it:
+ *
+ * - `tracker-sign-in`: the connection's key or app was not taken.
+ * - `tracker-scope`: the connection reaches the service but may not do this.
+ * - `tracker-rate`: the service's rate limit holds calls back until
+ *   `resumeAt` (ms).
+ * - `tracker-unreachable`: no answer.
+ * - `tracker-input`: the tracker would not take what was sent.
+ *
+ * The other codes are the causes of one adapter's own, each an `input` the
+ * tracker would not take.
+ */
+export type TrackerProblem =
+  | Said<"tracker-sign-in">
+  | Said<"tracker-scope">
+  | ReturnType<
+      typeof problem<
+        400,
+        { code: "tracker-rate"; detail: string; resumeAt: number }
+      >
+    >
+  | Said<"tracker-unreachable">
+  | Said<"tracker-input">
+  | Said<"tracker-repo-unfit">
+  | Said<"tracker-github-issue-unknown">
+  | Said<"tracker-linear-no-data">
+  | Said<"tracker-linear-label-unknown">
+  | Said<"tracker-linear-issue-not-made">
+  | Said<"tracker-linear-issue-not-changed">
+  | Said<"tracker-linear-comment-not-taken">;
+
+/** Whether the tracker's rate limit holds the calls back, until {@link resumeOf}. */
+export const heldByRate = (misfit: AnyProblem): boolean =>
+  misfit.response.code === "tracker-rate";
+
+/** Whether a problem stops a whole sync, rather than one task's part of it: a rate limit, or a sign-in the tracker did not take. */
+export const stopsSync = (misfit: AnyProblem): boolean =>
+  heldByRate(misfit) || misfit.response.code === "tracker-sign-in";
+
+/** Whether the connection itself is what the tracker would not take: its sign-in or its scope. The binding says it. */
+export const deniesConnection = (misfit: AnyProblem): boolean =>
+  misfit.response.code === "tracker-sign-in" ||
+  misfit.response.code === "tracker-scope";
+
+/** When a rate limit lets the next call go, in ms; null for any other problem. */
+export const resumeOf = (misfit: AnyProblem): number | null =>
+  "resumeAt" in misfit.response && typeof misfit.response.resumeAt === "number"
+    ? misfit.response.resumeAt
+    : null;
+
+/** What each call answers when the tracker would not do it: its {@link TrackerProblem}. */
 export interface TrackerAdapter {
   /** The target's issues changed since the cursor, pull requests left out. */
-  changed: (cursor: ListCursor) => Promise<Listed<Issue>>;
+  changed: (cursor: ListCursor) => Promise<Listed<Issue> | TrackerProblem>;
   /** Writes a comment on an issue, as `author` where the tracker lets the app say so. */
   comment: (
     issue: IssueRef,
     author: string,
     body: string
-  ) => Promise<{ createdAt: number; id: string; url: string }>;
+  ) => Promise<{ createdAt: number; id: string; url: string } | TrackerProblem>;
   /** The target's issues' comments written since the cursor, oldest first. */
-  comments: (cursor: ListCursor) => Promise<Listed<IssueComment>>;
-  create: (draft: IssueDraft) => Promise<Issue>;
+  comments: (
+    cursor: ListCursor
+  ) => Promise<Listed<IssueComment> | TrackerProblem>;
+  create: (draft: IssueDraft) => Promise<Issue | TrackerProblem>;
   /** The target as the connection reaches it: reading it is the first proof of the connection's scope. */
-  describe: () => Promise<TrackerTarget>;
+  describe: () => Promise<TrackerTarget | TrackerProblem>;
   /** One issue by its key; null when it is gone (deleted, moved off the target, or not an issue). */
-  issue: (key: string) => Promise<Issue | null>;
+  issue: (key: string) => Promise<Issue | null | TrackerProblem>;
   /** The key of the issue a URL names on this target; undefined when it names none here. */
-  keyOf: (url: string) => Promise<string | undefined>;
+  keyOf: (url: string) => Promise<string | undefined | TrackerProblem>;
   /** Every state the target's issues can be in, in the tracker's own order. */
-  states: () => Promise<IssueState[]>;
-  update: (issue: IssueRef, patch: IssuePatch) => Promise<Issue>;
-}
-
-/**
- * Why a tracker refused, in its own words with what the person can do:
- * `sign-in` (the connection's key or app was refused), `scope` (the
- * connection reaches the service but may not do this), `rate` (its rate
- * limit holds calls back until `resumeAt`), `input` (the tracker would not
- * take what was sent), `unreachable` (no answer).
- */
-export class TrackerRefusal extends Error {
-  readonly kind: "sign-in" | "scope" | "rate" | "input" | "unreachable";
-  readonly resumeAt: number | null;
-  constructor(
-    kind: TrackerRefusal["kind"],
-    message: string,
-    resumeAt: number | null = null
-  ) {
-    super(message);
-    this.kind = kind;
-    this.resumeAt = resumeAt;
-  }
+  states: () => Promise<IssueState[] | TrackerProblem>;
+  update: (
+    issue: IssueRef,
+    patch: IssuePatch
+  ) => Promise<Issue | TrackerProblem>;
 }
 
 /** The categories a kind's stage puts its issue in, the first the tracker has. */
