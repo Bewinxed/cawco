@@ -28,7 +28,7 @@ import {
   PICTURE_PAGE_SCROLLER,
   PICTURE_VIEW,
 } from "@cawco/core/artifact-picture";
-import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/preview/protocol";
+import { PREVIEW_DOWNS } from "@cawco/core/preview/protocol";
 import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/preview/routes";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
 import type { Frame, Page } from "playwright-core";
@@ -40,21 +40,19 @@ import {
   isHelloArtifact,
   launchChromium,
 } from "./chromium";
+import {
+  documentHeight,
+  documentReady,
+  heardOfHost,
+  hearHost,
+  hiddenLength,
+  markChanged,
+} from "./in-page/page";
 
 /** What the hub asks a picture of: where the page loads, at what width, and the artifact its hello names. */
 export interface PictureAsk extends HelloArtifact {
   url: string;
   width: number;
-}
-
-/** What {@link watchReadiness} keeps on the page. */
-interface Readiness {
-  /** When the page last painted a larger element or ended a request, in its `performance.now()`. */
-  __cawcoChangedAt?: number;
-  /** Whether the page has painted its largest contentful element at least once. */
-  __cawcoPainted?: boolean;
-  /** Its own fetches and XHRs in flight. */
-  __cawcoPending?: number;
 }
 
 /**
@@ -97,20 +95,14 @@ const watchReadiness = `(() => {
   };
 })();`;
 
-/** What the page says to its host, as the stand-in hears it: its lock turned it away, or the proxy served its down page (core `downResponse`). */
-interface Heard {
-  __cawcoDown?: { down?: unknown; why?: unknown };
-  __cawcoHeard?: (data: unknown) => void;
-  __cawcoLocked?: boolean;
-}
-
 /** The words the panel draws for down page `down`, and its cause: a refusal's. */
-const downWords = (name: string, down: Heard["__cawcoDown"]): string => {
-  const words =
-    PREVIEW_DOWNS.find((hop) => hop === down?.down) === undefined
-      ? "Preview unavailable."
-      : DOWN_WORDS[down?.down as PreviewDown];
-  const why = typeof down?.why === "string" ? ` Its cause: ${down.why}` : "";
+const downWords = (
+  name: string,
+  down: NonNullable<Window["__cawcoDown"]>
+): string => {
+  const hop = PREVIEW_DOWNS.find((one) => one === down.down);
+  const words = hop === undefined ? "Preview unavailable." : DOWN_WORDS[hop];
+  const why = typeof down.why === "string" ? ` Its cause: ${down.why}` : "";
   return `${name} wasn't drawn: the panel would say "${words}"${why}`;
 };
 
@@ -122,77 +114,6 @@ const timedOut = (error: unknown) =>
 
 /** How often the page and its frames are read for readiness. Our call. */
 const READY_POLL_MS = 100;
-
-/**
- * Whether a document is ready ({@link watchReadiness}): its fonts loaded, its
- * content painted, nothing of its own in flight, all of it still for `settle`
- * ms, no decision page's Preview still waiting in its view: the skeleton
- * in its well, which stands for the whole wait (decisions host Preview.svelte),
- * and no picture in its view still loading: decision pages' pictures load
- * lazily (decisions host Image.svelte), so one comes in only once the window
- * grows to reach it. A
- * skeleton inside a frame is that design's own, a story of its loading state.
- * A frame's painted content is its words as well: one that stood at no height
- * while it painted (a canvas, until it says its shape) is never told a
- * largest paint.
- */
-const documentReady = ({
-  framed,
-  settle,
-}: {
-  framed: boolean;
-  settle: number;
-}): boolean => {
-  const doc = globalThis as unknown as Readiness & {
-    document: {
-      body: { textContent: string | null } | null;
-      fonts: { status: string };
-      querySelectorAll: (selector: string) => Iterable<{
-        complete?: boolean;
-        getBoundingClientRect: () => {
-          bottom: number;
-          height: number;
-          top: number;
-        };
-      }>;
-      readyState: string;
-    };
-    innerHeight: number;
-  };
-  const inView = (one: {
-    getBoundingClientRect: () => {
-      bottom: number;
-      height: number;
-      top: number;
-    };
-  }): boolean => {
-    const box = one.getBoundingClientRect();
-    return box.height > 0 && box.top < doc.innerHeight && box.bottom > 0;
-  };
-  const waiting = [
-    ...doc.document.querySelectorAll(
-      '[data-slot="media"] [data-slot="skeleton"]'
-    ),
-  ].some(inView);
-  // A picture not yet loaded may stand at no height, so only its place counts.
-  const loading = [...doc.document.querySelectorAll("img")].some((one) => {
-    const box = one.getBoundingClientRect();
-    return (
-      one.complete === false && box.top < doc.innerHeight && box.bottom >= 0
-    );
-  });
-  const painted =
-    doc.__cawcoPainted === true ||
-    (framed && !!doc.document.body?.textContent?.trim());
-  return (
-    !(waiting || loading) &&
-    painted &&
-    doc.document.readyState === "complete" &&
-    doc.document.fonts.status === "loaded" &&
-    doc.__cawcoPending === 0 &&
-    performance.now() - (doc.__cawcoChangedAt ?? 0) >= settle
-  );
-};
 
 /** Whether `frame` stands in what the picture shows: in the window, neither empty nor hidden. One still at no opacity is a frame on its way, and counts. */
 const shownInPicture = async (frame: Frame, page: Page): Promise<boolean> => {
@@ -272,17 +193,7 @@ const framesReady = async (page: Page, until: number): Promise<void> => {
  * length is the document's, and its layout stands at the window it asked for.
  */
 const openToLength = async (page: Page, width: number): Promise<void> => {
-  const hidden = await page.evaluate((selector) => {
-    const { document } = globalThis as unknown as {
-      document: {
-        querySelector: (
-          selector: string
-        ) => { clientHeight: number; scrollHeight: number } | null;
-      };
-    };
-    const scroller = document.querySelector(selector);
-    return scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
-  }, PICTURE_PAGE_SCROLLER);
+  const hidden = await page.evaluate(hiddenLength, PICTURE_PAGE_SCROLLER);
   if (hidden > 0) {
     const view = page.viewportSize()?.height ?? PICTURE_VIEW.height;
     await page.setViewportSize({
@@ -324,17 +235,7 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
     await page.addInitScript(watchReadiness);
     // A page turned away at its origin's lock, or a down page in its stead,
     // says so to its host; the panel draws its own words for either.
-    await page.addInitScript((locked) => {
-      const heard = globalThis as unknown as Heard;
-      heard.__cawcoHeard = (data) => {
-        const said = data as { type?: unknown } | null;
-        if (said?.type === locked) {
-          heard.__cawcoLocked = true;
-        } else if (said?.type === "cawco:down") {
-          heard.__cawcoDown = said as Heard["__cawcoDown"];
-        }
-      };
-    }, PREVIEW_LOCKED_MESSAGE);
+    await page.addInitScript(hearHost, PREVIEW_LOCKED_MESSAGE);
     await page
       .goto(ask.url, { timeout: PICTURE_LIMITS.loadMs, waitUntil: "load" })
       .catch((error: unknown) => {
@@ -344,10 +245,7 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
             : `${name} wasn't drawn: its page didn't load (${error instanceof Error ? error.message : String(error)}).`
         );
       });
-    const heard = await page.evaluate(() => {
-      const { __cawcoDown, __cawcoLocked } = globalThis as unknown as Heard;
-      return { down: __cawcoDown, locked: __cawcoLocked === true };
-    });
+    const heard = await page.evaluate(heardOfHost);
     if (heard.locked) {
       throw new Error(
         `${name} wasn't drawn: its preview origin turned the picture's pass away.`
@@ -358,22 +256,11 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
     }
     await greet(page, ask);
     // The hello places the person's pins: the quiet counts from it too.
-    await page.evaluate(() => {
-      (globalThis as unknown as Readiness).__cawcoChangedAt = performance.now();
-    });
+    await page.evaluate(markChanged);
     await ready(page, Math.max(0, deadline - Date.now()));
     await openToLength(page, width);
     await framesReady(page, deadline);
-    const tall = await page.evaluate(async () => {
-      const { document } = globalThis as unknown as {
-        document: {
-          documentElement: { scrollHeight: number };
-          fonts: { ready: Promise<unknown> };
-        };
-      };
-      await document.fonts.ready;
-      return document.documentElement.scrollHeight;
-    });
+    const tall = await page.evaluate(documentHeight);
     const height = Math.min(
       Math.max(tall, PICTURE_VIEW.height),
       PICTURE_LIMITS.maxHeight
