@@ -17,7 +17,6 @@
   import { pinProblem } from "@cawco/core/comments/validate";
   import { detach } from "@cawco/core/detach";
   import type { ChangedItem } from "@cawco/core/doc-meta";
-  import { machineLabel } from "@cawco/core/machine-names";
   import type { FrameSays } from "@cawco/core/page-wire";
   import { pinName } from "@cawco/core/pin-name";
   import {
@@ -168,7 +167,6 @@
   import { besideLine, inspectorBesideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
-  import { resolveSessionTitle } from "../links";
   import {
     type MarkdownFleet,
     markdownFleetAbove,
@@ -225,7 +223,7 @@
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { artifactAddress } from "./page-source";
-  import { paneFleet } from "./pane-fleet";
+  import { PaneSubject } from "./pane-subject.svelte";
   import { enterPreviews, turnedAwayWords } from "./pass";
   import SheetInspector from "./SheetInspector.svelte";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
@@ -288,6 +286,10 @@
     /** Where the switch stands in the bar (SideSurface `switcherAt`). */
     switcherAt?: "start" | "end";
   } = $props();
+  const paneSubject = new PaneSubject({
+    instanceId: () => instanceId,
+    ownTab: () => ownTab,
+  });
   let iframe = $state<HTMLIFrameElement>();
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
@@ -347,10 +349,14 @@
    * own button, and says a field's problem under the field; the band goes
    * once the page is heard from again.
    */
-  let failure = $state<{
-    message: string;
+  let failure = $state<Failure | null>(null);
+  interface Failure {
     again: "reload" | "close" | null;
-  } | null>(null);
+    message: string;
+  }
+  function say(next: Failure | null) {
+    failure = next;
+  }
   /**
    * An act of the pane's own the hub refused (Verify, a show from the
    * title's menu): said on the same line, with Try again, kept through a
@@ -386,10 +392,6 @@
     }
   }
   let well = $state<HTMLDivElement>();
-  /** The session's panel, row and machines, from whichever store this tree set (pane-fleet.ts). */
-  const fleet = paneFleet();
-  const preview = $derived(fleet.preview(instanceId));
-  const source = $derived(preview?.source);
   /**
    * The preview's own origin, never the dashboard's, picked by where this
    * tab reached the dashboard (core `previewRoute`): host mode's name when
@@ -415,10 +417,10 @@
   let addressTries = $state(0);
   let addressAsking = $state(false);
   const unnamedId = $derived(
-    preview?.state === "open" &&
-      preview.artifact.kind !== "browser" &&
-      !namesOrigin(preview)
-      ? preview.artifact.id
+    paneSubject.preview?.state === "open" &&
+      paneSubject.preview.artifact.kind !== "browser" &&
+      !namesOrigin(paneSubject.preview)
+      ? paneSubject.preview.artifact.id
       : null
   );
   $effect(() => {
@@ -448,11 +450,14 @@
   );
   // A browser is drawn here from its stream (BrowserView), never framed from an origin.
   const route = $derived.by(() => {
-    if (!preview || preview.artifact.kind === "browser") {
+    if (
+      !paneSubject.preview ||
+      paneSubject.preview.artifact.kind === "browser"
+    ) {
       return null;
     }
-    if (namesOrigin(preview)) {
-      return previewRoute(preview, location);
+    if (namesOrigin(paneSubject.preview)) {
+      return previewRoute(paneSubject.preview, location);
     }
     return hubSaid && "address" in hubSaid && hubSaid.id === unnamedId
       ? previewRoute(hubSaid.address, location)
@@ -476,7 +481,7 @@
         .nullable(),
       null
     );
-    return kept?.revision === preview?.revision &&
+    return kept?.revision === paneSubject.preview?.revision &&
       typeof kept?.at === "string" &&
       kept.at.startsWith("/")
       ? kept.at
@@ -485,10 +490,10 @@
   /** `at` is the page's own place on its origin (the overlay's `url`). */
   function keepAt(at: URL): void {
     const place = `${at.pathname}${at.search}${at.hash}`;
-    if (!(paneOrigin && preview)) {
+    if (!(paneOrigin && paneSubject.preview)) {
       return;
     }
-    writeJson(keepKey, { revision: preview.revision, at: place });
+    writeJson(keepKey, { revision: paneSubject.preview.revision, at: place });
   }
   /**
    * Where a show starts: a page at its own place on the origin that serves
@@ -498,10 +503,17 @@
    * the page the agent named (`path`), else the root.
    */
   const startAt = $derived.by(() => {
-    if (preview?.project || preview?.artifact.kind === "page") {
-      return projectPagePlace(preview.artifact.id);
+    if (
+      paneSubject.preview?.project ||
+      paneSubject.preview?.artifact.kind === "page"
+    ) {
+      return projectPagePlace(paneSubject.preview.artifact.id);
     }
-    return (source && "path" in source ? source.path : undefined) ?? "/";
+    return (
+      (paneSubject.source && "path" in paneSubject.source
+        ? paneSubject.source.path
+        : undefined) ?? "/"
+    );
   });
   /**
    * The place the frame opens, a path on the preview's origin: the start
@@ -509,7 +521,7 @@
    * going on inside it never reloads the frame.
    */
   const framePlace = $derived.by(() => {
-    if (!(preview?.revision && paneOrigin)) {
+    if (!(paneSubject.preview?.revision && paneOrigin)) {
       return startAt;
     }
     return untrack(keptAt) ?? startAt;
@@ -529,7 +541,6 @@
    * let in. An entry that landed since stands for it (preview/pass.ts).
    */
   let frameSince = 0;
-
   /**
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
    * which answers any page with no credentials, and with the hub's words,
@@ -643,8 +654,7 @@
       hostMode: settings?.mode === "host",
     });
   }
-  const artifact = $derived(preview?.artifact);
-  const frameKey = $derived(`${preview?.revision}:${reload}`);
+  const frameKey = $derived(`${paneSubject.preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
   let standing = $state<string | null>(null);
   /*
@@ -673,7 +683,7 @@
     settling = section ? settleAway(section) : null;
   }
   $effect(() => {
-    if (isCanvas) {
+    if (paneSubject.isCanvas) {
       return;
     }
     const id = paneId;
@@ -683,7 +693,7 @@
     return () => loadedPanes.leave(id);
   });
   $effect(() => {
-    if (isCanvas) {
+    if (paneSubject.isCanvas) {
       return;
     }
     if (!onScreen) {
@@ -723,7 +733,7 @@
    * screen, it is held again.
    */
   $effect(() => {
-    if (isCanvas || onScreen) {
+    if (paneSubject.isCanvas || onScreen) {
       return;
     }
     const message = tabReached ? "cawco:release" : "cawco:hold";
@@ -757,18 +767,18 @@
     }
     refusedEntries += 1;
     if (refusedEntries > 1) {
-      failure = {
+      say({
         message: turnedAwayWords(origin),
         again: "reload",
-      };
+      });
       return;
     }
     const refused = await enterPreviews(origin, frameSince);
     if (refused) {
-      failure = {
+      say({
         message: `The hub didn't give this preview a pass: ${refused}`,
         again: "reload",
-      };
+      });
       return;
     }
     reload += 1;
@@ -786,7 +796,6 @@
   }
   const frameError = (message: string | null) =>
     message ? { message, again: "reload" as const } : null;
-
   /*
    * Nothing serves the page: the proxy answered with its own page, which
    * names the hop that did not answer (core `PreviewDown`). The pane draws
@@ -866,23 +875,6 @@
       downTries = 0;
     }
   });
-  const owner = $derived(fleet.session(instanceId));
-  const ownerMachine = $derived.by(() => {
-    const machine = fleet.machines.find(
-      (one) => one.machineId === owner?.machineId
-    );
-    return machine ? machineLabel(machine.hostname) : "its machine";
-  });
-  const ownerName = $derived(
-    owner
-      ? resolveSessionTitle({
-          title: owner.title,
-          cwd: owner.cwd,
-          id: owner.id,
-        })
-      : "the session"
-  );
-  const downPort = $derived(source && "port" in source ? source.port : null);
   const downTitle = $derived.by(() => {
     switch (shownDown) {
       case "server":
@@ -890,7 +882,7 @@
       case "workspace":
         return "That workspace isn't running";
       case "reach":
-        return `${ownerMachine} couldn't reach the page's server`;
+        return `${paneSubject.ownerMachine} couldn't reach the page's server`;
       case "closed":
         return "This preview is closed";
       case "gone":
@@ -903,11 +895,8 @@
       case null:
         break;
     }
-    return previewWords.machineNotAnswering(ownerMachine);
+    return previewWords.machineNotAnswering(paneSubject.ownerMachine);
   });
-  /** Open its session, beside Try again, wherever this pane is not that session's own. */
-  const offerSession = $derived(!!owner && ownTab);
-
   $effect(() => {
     if (frameKey) {
       connected = false;
@@ -932,7 +921,7 @@
   // (the head's, a Needs you row's) carries what this page shows
   // (open-pages.ts).
   $effect(() => {
-    const id = connected ? artifact?.id : undefined;
+    const id = connected ? paneSubject.artifact?.id : undefined;
     if (!id) {
       return;
     }
@@ -992,14 +981,17 @@
     }, PAGE_SILENT_MS);
   }
   $effect(() => {
-    const revision = preview?.state === "open" ? preview.revision : undefined;
-    const id = artifact?.id;
+    const revision =
+      paneSubject.preview?.state === "open"
+        ? paneSubject.preview.revision
+        : undefined;
+    const id = paneSubject.artifact?.id;
     if (!(revision && id && pageVisible.current) || saidFor === revision) {
       return;
     }
     const current = loadedKey === frameKey;
     let word: { ok: true } | { ok: false; error: ShownFailure } | null = null;
-    if (isCanvas) {
+    if (paneSubject.isCanvas) {
       word = stage?.connected && stage.at === "panel" ? { ok: true } : null;
     } else if (current && down) {
       word = { ok: false, error: down };
@@ -1026,7 +1018,6 @@
       }
     );
   });
-
   /**
    * How long the page has said ready and its frame's size has stood still
    * before its thumbnail is taken: its first paints and fonts land, and the
@@ -1043,7 +1034,7 @@
    * 467, 422 and 479 px on three walks.
    */
   $effect(() => {
-    const record = preview;
+    const record = paneSubject.preview;
     const frame = iframe;
     if (!(
       frame &&
@@ -1071,7 +1062,6 @@
       settled.disconnect();
     };
   });
-
   /*
    * The page keeps its own state (Projects spec §5.10): the overlay joins
    * the artifact's live document itself, on the path `cawco:hello` names.
@@ -1340,10 +1330,10 @@
     }
     const refused = await enterPreviews(origin, performance.now());
     if (refused && said) {
-      failure = {
+      say({
         message: `The hub didn't give this preview a pass: ${refused}`,
         again: null,
-      };
+      });
     }
     post({ type: "cawco:reconnect" });
   }
@@ -1369,23 +1359,13 @@
    */
   const headLine = $derived(
     view?.sentAt && (!view.revisedAt || view.sentAt > view.revisedAt)
-      ? artifactWords.sentTo(ownerName)
-      : (artifact?.ask ?? "")
-  );
-  /*
-   * A sheet's stage (live components): the project's own dev toolchain
-   * (Vite, Astro or Nuxt), which the
-   * daemon runs in its workspace; or a workspace preview's server, the
-   * command it names (`serve`), run the same way. Its state is in the doc:
-   * starting, waking (from sleep) and a sheet's page compiling stand on the
-   * loading cover; a sheet's compile errors on a card over the last render,
-   * dimmed; a stage that didn't start or stopped, where the page would be.
-   */
-  const served = $derived(
-    source && "port" in source && source.serve ? source : null
+      ? artifactWords.sentTo(paneSubject.ownerName)
+      : (paneSubject.artifact?.ask ?? "")
   );
   const staged = $derived(
-    artifact?.kind === "component" || served ? (view?.stage ?? null) : null
+    paneSubject.artifact?.kind === "component" || paneSubject.served
+      ? (view?.stage ?? null)
+      : null
   );
   /**
    * The stage the cover waits on: none once this load's page answered
@@ -1426,7 +1406,7 @@
     }
     switch (awaited?.status) {
       case "starting":
-        return served
+        return paneSubject.served
           ? { line: sheetWords.serverStarting }
           : { dir: awaited.dir };
       case "waking":
@@ -1445,7 +1425,9 @@
   );
   /** A sheet's page still compiling: its stage serves, the page hasn't said it is ready, and no compile error has ended the compile. */
   const compiling = $derived(
-    awaited?.status === "live" && !served && compileErrors.length === 0
+    awaited?.status === "live" &&
+      !paneSubject.served &&
+      compileErrors.length === 0
   );
   /**
    * How long the cover may stand: the time the daemon gives a stage to serve
@@ -1478,7 +1460,7 @@
   $effect(() => {
     const budget = waitingFor;
     // Read so that a Try again (`reload`) or another artifact starts the wait over.
-    if (budget === null || reload < 0 || artifactId === undefined) {
+    if (budget === null || reload < 0 || paneSubject.artifactId === undefined) {
       neverDrawn = false;
       return;
     }
@@ -1497,7 +1479,7 @@
   /** The never-drawn canvas's Remove: destructive, so asked in place under it (AskHere, The Open Page Rule), as the inspector's Remove is. */
   const removeAsks = new Asker<AskHereRequest>();
   function removeShown() {
-    const shown = artifact;
+    const shown = paneSubject.artifact;
     if (!shown) {
       return;
     }
@@ -1533,17 +1515,10 @@
     inspectOpen = open;
     store("local", inspectKey, open ? "open" : "shut");
   }
-  const isSheet = $derived(artifact?.kind === "component");
-  /**
-   * A page or a sheet draws in the dashboard's theme (the overlay's
-   * `themed`): its frame's `color-scheme` is that theme too, so a page that
-   * styles dark by `prefers-color-scheme` hears it. A preview is its own app.
-   */
-  const themedFrame = $derived(artifact?.kind === "page" || isSheet);
   const inspector = $derived.by(() => {
-    const id = artifactId;
+    const id = paneSubject.artifactId;
     const session = instanceId;
-    return id && isSheet
+    return id && paneSubject.isSheet
       ? new Inspector(
           post,
           (change) => writeSheet(session, id, change),
@@ -1608,8 +1583,8 @@
     }
     const refused = doc.sendHeld(note);
     // Gone to the hub: a refusal of it comes back (`keepRefused`).
-    if (refused === null && artifactId) {
-      keepSendRefused(artifactId, null);
+    if (refused === null && paneSubject.artifactId) {
+      keepSendRefused(paneSubject.artifactId, null);
     }
     return refused;
   };
@@ -1647,7 +1622,7 @@
    * it is the pane's own panel or sheet.
    */
   const inspectorInRoom = $derived(
-    isSheet &&
+    paneSubject.isSheet &&
       inspecting &&
       inspectorLayout === "panel" &&
       wellW > 0 &&
@@ -1691,12 +1666,11 @@
   const coarse = new MediaQuery("(pointer: coarse)");
   const floatSheet = $derived(sheet || phone.current || coarse.current);
   let sending = $state(false);
-  const artifactId = $derived(artifact?.id);
   $effect(() => {
-    const id = artifactId;
+    const id = paneSubject.artifactId;
     const session = instanceId;
     // A browser keeps nothing in a doc: no pins, no ink, no picks (§5.11, "Private").
-    if (!id || isBrowser) {
+    if (!id || paneSubject.isBrowser) {
       return;
     }
     docSync = { state: "reading" };
@@ -1745,7 +1719,7 @@
       // The hub didn't keep a write of the pane's: said where the page's own
       // refusals are, and the person's words in it kept aside in their thread.
       (why, lost) => {
-        failure = { message: why, again: null };
+        say({ message: why, again: null });
         keepRefused(id, why, lost);
       }
     );
@@ -1761,7 +1735,7 @@
   });
   // What this pane holds names itself to the chips that name it: no chip asks the hub for it.
   $effect(() => {
-    const shown = artifact;
+    const shown = paneSubject.artifact;
     if (shown) {
       noteArtifact(shown.id, {
         instanceId,
@@ -1771,7 +1745,6 @@
       });
     }
   });
-
   /*
    * The setup page is done once the person sends it from the page (its own
    * `cawco.send`, which stamps the doc's `sentAt`): on a phone its sheet
@@ -1784,14 +1757,14 @@
    * said in the band over the page, and the picks stay unsent.
    */
   async function sendAll(control: "panel-head" | "panel-more") {
-    if (!artifact || sending) {
+    if (!paneSubject.artifact || sending) {
       return;
     }
     sending = true;
     try {
-      await sendArtifact(instanceId, artifact.id, control);
+      await sendArtifact(instanceId, paneSubject.artifact.id, control);
     } catch (error) {
-      failure = { message: failureWords(error), again: null };
+      say({ message: failureWords(error), again: null });
     } finally {
       sending = false;
     }
@@ -1846,7 +1819,7 @@
    * which the doc brings back) as well as in the band over the page.
    */
   async function retryPin(id: string) {
-    if (!artifact || pinsRetrying.has(id)) {
+    if (!paneSubject.artifact || pinsRetrying.has(id)) {
       return;
     }
     pinsRetrying = new Set([...pinsRetrying, id]);
@@ -1857,7 +1830,7 @@
           post({ type: "cawco:resend-pin", id });
         }
         if (refusedReplies[id]) {
-          retryRefused(artifact.id, id);
+          retryRefused(paneSubject.artifact.id, id);
         }
       } else if (onlyOnPage(id)) {
         // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
@@ -1865,10 +1838,10 @@
         relink();
         await reachedHub(id);
       } else {
-        await retryComment(instanceId, artifact.id, id);
+        await retryComment(instanceId, paneSubject.artifact.id, id);
       }
     } catch (error) {
-      failure = { message: failureWords(error), again: null };
+      say({ message: failureWords(error), again: null });
     } finally {
       pinsRetrying = new Set([...pinsRetrying].filter((one) => one !== id));
     }
@@ -1937,15 +1910,15 @@
         // The head's room over the page's top, px: a document CawCo draws
         // takes it on its own scroller and says so (`cawco:head-room`).
         headRoom: inset ? 0 : headRoomPx(),
-        ...(artifact
+        ...(paneSubject.artifact
           ? {
               artifact: {
-                id: artifact.id,
-                kind: artifact.kind,
-                name: artifact.name,
-                title: artifact.title,
+                id: paneSubject.artifact.id,
+                kind: paneSubject.artifact.kind,
+                name: paneSubject.artifact.name,
+                title: paneSubject.artifact.title,
               },
-              sync: artifactSyncPath(artifact.id),
+              sync: artifactSyncPath(paneSubject.artifact.id),
             }
           : {}),
       } satisfies FrameSays,
@@ -1984,7 +1957,6 @@
     pinsShown = visible;
     post({ type: "cawco:pins-shown", shown: visible });
   }
-
   /*
    * The comments (Projects spec §5.7; the artifact panel's surface brief, Placing a comment, The
    * Comments rail, A thread beside its pin): the composer beside the pill
@@ -2240,7 +2212,7 @@
       ...pin.thread.map((entry) => entry.sentAt ?? ""),
     ]);
     const last = stamps.reduce((a, b) => (b > a ? b : a), "");
-    if (!(last && fleet.working(instanceId))) {
+    if (!(last && paneSubject.fleet.working(instanceId))) {
       return new Set<string>();
     }
     return new Set(
@@ -2303,7 +2275,11 @@
       : [];
   });
   /** The stops as the page orders them (`cawco:change-stops`): each change's anchors and the pin standing with it. */
-  let pageStops = $state.raw<{ anchors: string[]; pin: string | null }[]>([]);
+  let pageStops = $state.raw<PageStop[]>([]);
+  interface PageStop {
+    anchors: string[];
+    pin: string | null;
+  }
   $effect(() => {
     const anchors = unseenChanges
       .filter((item) => item.kind === "element" || item.kind === "card")
@@ -2376,7 +2352,7 @@
     }
   });
   /** The page's stops as it said them, each a list of anchors and a pin or none; anything else left out. */
-  const changeStopsOf = (value: unknown): typeof pageStops =>
+  const changeStopsOf = (value: unknown): PageStop[] =>
     Array.isArray(value)
       ? value.flatMap((one: unknown) => {
           const stop = one as { anchors?: unknown; pin?: unknown } | null;
@@ -2492,18 +2468,18 @@
   let askingAgain = $state.raw<ReadonlySet<string>>(new Set());
   /** A comment's Ask again: it goes to the session again, whole; once it went, what changed under it is looked at. */
   async function askAgainPin(id: string) {
-    if (!artifact || askingAgain.has(id)) {
+    if (!paneSubject.artifact || askingAgain.has(id)) {
       return;
     }
     askingAgain = new Set([...askingAgain, id]);
     try {
-      await askAgain(instanceId, artifact.id, id);
+      await askAgain(instanceId, paneSubject.artifact.id, id);
       seeSoon(
         (checking.byPin.get(id) ?? []).map((item) => item.anchor),
         0
       );
     } catch (error) {
-      failure = { message: failureWords(error), again: null };
+      say({ message: failureWords(error), again: null });
     } finally {
       askingAgain = new Set([...askingAgain].filter((one) => one !== id));
     }
@@ -2594,12 +2570,12 @@
    */
   let checkedFor: string | null = null;
   $effect(() => {
-    const id = artifactId;
+    const id = paneSubject.artifactId;
     if (
       !id ||
       listHold !== "ready" ||
       checkedFor === id ||
-      isCanvas ||
+      paneSubject.isCanvas ||
       !railPlaced
     ) {
       return;
@@ -2612,12 +2588,10 @@
       });
     }
   });
-
   /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
   const stepping = $derived(
     pins.filter((pin) => !(pin.movedAt || pin.resolvedAt))
   );
-
   /**
    * The comment kit: the composer, the thread and their drafts, loaded once
    * the page in the pane is up, or as soon as a composer or a thread is
@@ -2670,7 +2644,7 @@
     if (!ready) {
       return;
     }
-    const held = ready.commentDrafts(() => artifactId);
+    const held = ready.commentDrafts(() => paneSubject.artifactId);
     drafts = held;
     return () => {
       held.release();
@@ -2679,13 +2653,12 @@
   });
   /** The next comment's draft: its words and chips stay for the next composer. */
   const nextDraft = $derived(
-    drafts && artifactId ? drafts.draft(NEXT_COMMENT) : null
+    drafts && paneSubject.artifactId ? drafts.draft(NEXT_COMMENT) : null
   );
   /** The open thread's reply. */
   const replyDraft = $derived(
     drafts && cardPin ? drafts.draft(cardPin.id) : null
   );
-
   /** What the person said in a draft just taken by its composer: its words, and its files by reference. */
   const saidIn = (
     draft: {
@@ -2693,7 +2666,6 @@
     },
     text: string
   ) => ({ text, attachments: commentAttachments(draft.unsent?.files ?? []) });
-
   /**
    * Pin `id` focused on the page, with `scroll` brought into view (`instant`
    * in one step). Its pill wears the focus ring only when the keyboard got
@@ -2708,7 +2680,6 @@
   ) {
     post({ type: "cawco:focus-pin", id, scroll, instant, keyed });
   }
-
   /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
   function openCard(id: string, via: "key" | "pointer" = "pointer") {
     loadKit();
@@ -2803,7 +2774,9 @@
   type KeptDraft = z.infer<typeof KeptDraftSchema>;
   let keptDraft: KeptDraft | null = null;
   const draftKey = $derived(
-    artifactId ? `cawco-comment-draft:${artifactId}` : null
+    paneSubject.artifactId
+      ? `cawco-comment-draft:${paneSubject.artifactId}`
+      : null
   );
   function keepDraftAt(next: KeptDraft | null) {
     keptDraft = next;
@@ -2872,7 +2845,7 @@
       keepDraftAt(null);
       // The newest comment is the one J and K step from.
       if (written) {
-        focusedPin = (pin as Pin).id;
+        markFocused((pin as Pin).id);
       }
       drafts?.discard(NEXT_COMMENT);
       return;
@@ -2890,6 +2863,9 @@
       typeof message.error === "string"
         ? message.error
         : "The page didn't keep that comment. Try again.";
+  }
+  function markFocused(id: string) {
+    focusedPin = id;
   }
   // A press anywhere in the dashboard outside the composer closes it; one in a
   // modal layer or a menu (its target chip's) is that layer's.
@@ -2924,8 +2900,8 @@
   }
   /** A pin's own address (its thread's Copy link): its artifact's tab, opening the pin's thread. */
   const pinLink = (number: number): string =>
-    artifactId
-      ? `${location.origin}/artifact/${encodeURIComponent(artifactId)}?pin=${number}`
+    paneSubject.artifactId
+      ? `${location.origin}/artifact/${encodeURIComponent(paneSubject.artifactId)}?pin=${number}`
       : location.href;
   /**
    * The place the address names, opened once its page is ready and its pins
@@ -2934,24 +2910,24 @@
   let linkedFor: string | null = null;
   function openLinkedPin() {
     const asked = new URL(location.href).searchParams;
-    if (!artifactId || linkedFor === artifactId) {
+    if (!paneSubject.artifactId || linkedFor === paneSubject.artifactId) {
       return;
     }
     const card = asked.get("card");
     if (card) {
-      linkedFor = artifactId;
+      linkedFor = paneSubject.artifactId;
       showCard(card);
       return;
     }
     const change = asked.get("change");
     if (change) {
-      linkedFor = artifactId;
+      linkedFor = paneSubject.artifactId;
       stepToChange(change);
       return;
     }
     const number = Number(asked.get("pin"));
     if (openPinNumbered(number)) {
-      linkedFor = artifactId;
+      linkedFor = paneSubject.artifactId;
     }
   }
   $effect(() => {
@@ -2989,7 +2965,7 @@
    * thread, a decision card, or the artifact as it is.
    */
   $effect(() => {
-    const id = artifactId;
+    const id = paneSubject.artifactId;
     const at = id ? openAsked(id) : null;
     if (!(id && at && connected && view)) {
       return;
@@ -3075,7 +3051,7 @@
     if (id === openPin) {
       cardError = refused;
     } else if (refused) {
-      failure = { message: refused, again: null };
+      say({ message: refused, again: null });
     }
   }
   /**
@@ -3136,7 +3112,6 @@
     closeCard();
     return Promise.resolve();
   }
-
   /**
    * The pill the pointer rests on, its peek beside it: its thread's card
    * holding his words and the latest reply (PinCard `peek`), after
@@ -3198,7 +3173,6 @@
       ? (pins.find((pin) => pin.id === peekAt?.id) ?? null)
       : null
   );
-
   /** What holds the focus as a control: a key it takes is its own. */
   const PANE_CONTROL =
     'button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"]';
@@ -3211,9 +3185,12 @@
    * or Draw back to Interact (`parentEscape`).
    */
   function pressKey(name: PaneKey) {
-    if ((name === "v" || name === "c" || name === "d") && !isCanvas) {
+    if (
+      (name === "v" || name === "c" || name === "d") &&
+      !paneSubject.isCanvas
+    ) {
       setMode(MODE_KEYS[name]);
-    } else if (name === "C" && !isCanvas) {
+    } else if (name === "C" && !paneSubject.isCanvas) {
       showPins(!pinsShown);
     } else if (name === "j") {
       step(1);
@@ -3246,7 +3223,7 @@
    */
   function paneKey(event: KeyboardEvent) {
     // A browser has no modes, pins or rail: its keys are the browser's own.
-    if (isBrowser) {
+    if (paneSubject.isBrowser) {
       return;
     }
     const { target } = event;
@@ -3371,8 +3348,8 @@
         downWhy = null;
         const parsed = new URL(at);
         keepAt(parsed);
-        if (preview) {
-          preview.title = previewTitle(message.title) ?? "";
+        if (paneSubject.preview) {
+          paneSubject.preview.title = previewTitle(message.title) ?? "";
         }
         if (message.type === "cawco:ready") {
           readyFrom = event.origin;
@@ -3385,7 +3362,7 @@
           // The frame Try again reloaded answered: what it was tried for is over.
           retrying = false;
           if (failure?.again === "reload") {
-            failure = null;
+            say(null);
           }
           // A page loaded again holds no comment being written.
           composing = null;
@@ -3419,23 +3396,25 @@
       case "cawco:captured": {
         // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
         const shot = previewThumbnail(message);
-        if (shot && preview) {
-          preview.thumbnail = shot;
-          preview.thumbnailRevision = preview.revision;
-          preview.thumbnailWanted = false;
+        if (shot && paneSubject.preview) {
+          paneSubject.preview.thumbnail = shot;
+          paneSubject.preview.thumbnailRevision = paneSubject.preview.revision;
+          paneSubject.preview.thumbnailWanted = false;
           // The hub keeps it as the artifact's latest picture: Files' cards
           // draw it, whichever panel took it: its own or its delegation
           // tree's (the hub keeps it as the artifact's session's). A canvas
           // keeps its own.
-          if (preview.artifact.kind !== "canvas") {
-            keepThumbnail(instanceId, preview.artifact.id, shot).catch(
-              (error: unknown) => {
-                console.error("The page's thumbnail was not kept", error);
-              }
-            );
+          if (paneSubject.preview.artifact.kind !== "canvas") {
+            keepThumbnail(
+              instanceId,
+              paneSubject.preview.artifact.id,
+              shot
+            ).catch((error: unknown) => {
+              console.error("The page's thumbnail was not kept", error);
+            });
           }
         }
-        failure = frameError(previewError(message.error));
+        say(frameError(previewError(message.error)));
         retrying = false;
         break;
       }
@@ -3613,14 +3592,14 @@
         if (said) {
           // A send the page made itself goes again from its own button; a
           // field's problem is the page's to show under the field.
-          failure = { message: said, again: of ? null : "reload" };
+          say({ message: said, again: of ? null : "reload" });
         }
         retrying = false;
         break;
       }
       case "cawco:resolved":
         if (failure && failure.again === null) {
-          failure = null;
+          say(null);
         }
         break;
       case "cawco:sheet": {
@@ -3692,9 +3671,9 @@
   let section = $state<HTMLElement>();
   let shown = false;
   $effect(() => {
-    const open = preview?.state === "open";
-    if (shown && !open && !sheet && section && artifact) {
-      closeToRow(section, artifact.id);
+    const open = paneSubject.preview?.state === "open";
+    if (shown && !open && !sheet && section && paneSubject.artifact) {
+      closeToRow(section, paneSubject.artifact.id);
     }
     shown = open;
   });
@@ -3738,17 +3717,11 @@
   }
   /** Close in the artifact's own tab: back to the session that made it. */
   async function backToSession() {
-    await goto(fleet.sessionHref(instanceId));
+    await goto(paneSubject.fleet.sessionHref(instanceId));
   }
-  /*
-   * A canvas stands on its stage (canvas/stage.svelte.ts), one iframe for it
-   * wherever it is: the well holds a slot the stage stands over, so Dock and
-   * Undock fly that same iframe between the composer and here.
-   */
-  const isCanvas = $derived(artifact?.kind === "canvas");
   /** The rail's bottom sheet stands up (ThreadSheet `open`). */
   const railSheetOpen = $derived(
-    listOpen && railPlaced && !isCanvas && railSheet && !railAway
+    listOpen && railPlaced && !paneSubject.isCanvas && railSheet && !railAway
   );
   /** The rail's bottom sheet is drawn: from its open until it has slid down (ThreadSheet `onclosed`). */
   let railSheetDrawn = $state(false);
@@ -3760,7 +3733,11 @@
    * time"), never as a second sheet after the list's goes.
    */
   const threadPushed = $derived(
-    listOpen && railPlaced && !isCanvas && railSheet && openPin !== null
+    listOpen &&
+      railPlaced &&
+      !paneSubject.isCanvas &&
+      railSheet &&
+      openPin !== null
   );
   /**
    * The open thread's pin is being placed again (Pin it somewhere else): a
@@ -3802,17 +3779,15 @@
       railSheetDrawn = true;
     }
   });
-  /*
-   * A browser (Projects spec §5.11, "The view") is its stream in the well
-   * (BrowserView), its head's own control Take over, or Hand back while the
-   * person holds it. It has no modes, comments or ink: what the person sees
-   * there reaches no agent.
-   */
-  const isBrowser = $derived(artifact?.kind === "browser");
-  const browserRow = $derived(isBrowser ? fleet.browser(instanceId) : null);
+  const browserRow = $derived(
+    paneSubject.isBrowser ? paneSubject.fleet.browser(instanceId) : null
+  );
   const browserMachine = $derived.by(() => {
-    const machineId = owner?.machineId ?? browserRow?.machineId ?? "";
-    const known = fleet.machines.find((one) => one.machineId === machineId);
+    const machineId =
+      paneSubject.owner?.machineId ?? browserRow?.machineId ?? "";
+    const known = paneSubject.fleet.machines.find(
+      (one) => one.machineId === machineId
+    );
     return {
       machineId,
       name: browserRow?.machineName ?? known?.hostname ?? machineId,
@@ -3837,22 +3812,24 @@
           machineId: row.machineId,
         });
     browserActing = false;
-    failure = why
-      ? {
-          message: holding
-            ? browserWords.cantHandBack(why)
-            : browserWords.cantTakeOver(why),
-          again: null,
-        }
-      : null;
+    say(
+      why
+        ? {
+            message: holding
+              ? browserWords.cantHandBack(why)
+              : browserWords.cantTakeOver(why),
+            again: null,
+          }
+        : null
+    );
   }
   const holder = Symbol("panel");
   let canvasSlot = $state<HTMLElement>();
   let stage = $state<Stage>();
   /** This session's composer can take the canvas back: not a conversation's shown beside a thread, not its own tab. */
-  const canUndock = $derived(isCanvas && !ownTab);
+  const canUndock = $derived(paneSubject.isCanvas && !ownTab);
   $effect(() => {
-    const canvas = isCanvas ? artifact : undefined;
+    const canvas = paneSubject.isCanvas ? paneSubject.artifact : undefined;
     const slot = canvasSlot;
     const session = instanceId;
     if (!(canvas && slot)) {
@@ -3892,7 +3869,7 @@
    * a page loaded again while held (`connected` anew) is held again.
    */
   $effect(() => {
-    const one = isCanvas ? stage : undefined;
+    const one = paneSubject.isCanvas ? stage : undefined;
     if (!one?.connected) {
       return;
     }
@@ -3902,13 +3879,13 @@
   });
   /** Undock (or Done here): the session's composer takes the canvas back, open or as its chip. */
   function giveBack(folded: boolean) {
-    if (!(canUndock && artifact)) {
+    if (!(canUndock && paneSubject.artifact)) {
       return;
     }
     handBack.ask = {
       instanceId,
-      id: artifact.id,
-      name: artifact.name,
+      id: paneSubject.artifact.id,
+      name: paneSubject.artifact.name,
       folded,
     };
   }
@@ -3916,12 +3893,12 @@
   async function close() {
     closing = true;
     try {
-      await fleet.closePreview(instanceId);
+      await paneSubject.fleet.closePreview(instanceId);
     } catch (error) {
-      failure = {
+      say({
         message: failureWords(error),
         again: "close",
-      };
+      });
     } finally {
       closing = false;
     }
@@ -3932,7 +3909,9 @@
     // Built untracked: the view depends on the session and the kind alone,
     // never on the state it holds (nightly 4202's crash was a view's effect
     // re-running on the state it wrote).
-    return isSheet ? untrack(() => new CanvasViewState(session)) : null;
+    return paneSubject.isSheet
+      ? untrack(() => new CanvasViewState(session))
+      : null;
   });
   /**
    * A component artifact's design graph's line to its stage page: what the
@@ -3941,7 +3920,9 @@
    */
   const link = $derived.by(() => {
     const session = instanceId;
-    return isSheet && session ? untrack(() => new StageLink(post)) : null;
+    return paneSubject.isSheet && session
+      ? untrack(() => new StageLink(post))
+      : null;
   });
   // The inspector's controls are for the story the stage stands at.
   inspectKept(
@@ -3949,12 +3930,14 @@
     () => inspector
   );
   /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
-  const sheetCanvas = $derived(isSheet ? canvasOf(startAt) : null);
+  const sheetCanvas = $derived(paneSubject.isSheet ? canvasOf(startAt) : null);
   /**
    * The frame stands in the design graph's stage, under the stage's own
    * head: the head's room is the graph page's, never the frame's.
    */
-  const inGraph = $derived(isSheet && !!artifact && !!link && !!sheetCanvas);
+  const inGraph = $derived(
+    paneSubject.isSheet && !!paneSubject.artifact && !!link && !!sheetCanvas
+  );
   /**
    * Where the frame stands in the well: in the design graph's stage, or
    * under the floating head's room (`--page-top`) beside a side card's
@@ -3990,13 +3973,13 @@
   /** The canvas view's Verify: a design system round on the canvas, its verdict to the session; the hub's sentence says what it did. */
   let verifying = $state(false);
   async function verify() {
-    if (!artifact) {
+    if (!paneSubject.artifact) {
       return;
     }
     verifying = true;
     const key = actKey;
     try {
-      toast.info(await verifyArtifact(instanceId, artifact.id));
+      toast.info(await verifyArtifact(instanceId, paneSubject.artifact.id));
       if ((refusals.get(key)?.asked as PaneAct | undefined)?.act === "verify") {
         refusals.delete(key);
       }
@@ -4004,14 +3987,13 @@
       // Said on the pane's own line, with Try again, never a toast
       // (DESIGN.md, The Work Outlives Its Surface Rule).
       refusals.set(key, {
-        reason: `${artifact.title} was not verified: ${failureClause(error)}. The canvas stays as it is.`,
+        reason: `${paneSubject.artifact.title} was not verified: ${failureClause(error)}. The canvas stays as it is.`,
         asked: { act: "verify" } satisfies PaneAct,
       });
     } finally {
       verifying = false;
     }
   }
-
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
     interact: IconInteractLinear,
@@ -4023,20 +4005,18 @@
     comment: "Comment",
     draw: "Draw",
   };
-
   /** Reload: a canvas's stage frame from its address, any other page by a new frame. */
   function reloadPage() {
-    if (isCanvas && stage?.frame) {
+    if (paneSubject.isCanvas && stage?.frame) {
       stage.frame.src = stage.src;
     } else {
       reload += 1;
     }
   }
-
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
-    if (isBrowser && browserRow) {
+    if (paneSubject.isBrowser && browserRow) {
       const shows = browserHead(browserRow, {
         online: browserMachine.online,
         viewing: browserViewing,
@@ -4063,7 +4043,7 @@
     }
     // A decision page's one Send is its own, at its foot (its doc's
     // `ownSend`): the head stands none for it.
-    if (artifact && unsentCount > 0 && !view?.ownSend) {
+    if (paneSubject.artifact && unsentCount > 0 && !view?.ownSend) {
       all.push({
         key: "send",
         priority: HEAD_PRIORITY.send,
@@ -4081,7 +4061,7 @@
         menu: undockMenu,
       });
     }
-    if (artifact && !ownTab) {
+    if (paneSubject.artifact && !ownTab) {
       all.push({
         key: "open",
         priority: HEAD_PRIORITY.open,
@@ -4106,10 +4086,10 @@
         menu: inspectMenu,
       });
     }
-    if (isBrowser) {
+    if (paneSubject.isBrowser) {
       return all;
     }
-    if (!isCanvas) {
+    if (!paneSubject.isCanvas) {
       all.push({
         key: "mode",
         priority: HEAD_PRIORITY.mode,
@@ -4160,7 +4140,7 @@
       size="sm"
       variant="outline"
     />
-    {#if offerSession && owner}
+    {#if paneSubject.offerSession && paneSubject.owner}
       {@render sessionOpen()}
     {/if}
   </div>
@@ -4168,11 +4148,11 @@
 
 <!-- Its session, beside Try again, or the way by hand where it can't be asked here. -->
 {#snippet sessionOpen()}
-  {#if owner}
+  {#if paneSubject.owner}
     <Button
-      href={fleet.sessionHref(owner.id)}
+      href={paneSubject.fleet.sessionHref(paneSubject.owner.id)}
       pad="none"
-      label={`Open ${ownerName}`}
+      label={`Open ${paneSubject.ownerName}`}
       size="sm"
       variant="link"
     />
@@ -4183,13 +4163,15 @@
      it again (The Empty Starts Work Rule): asked in that session's composer
      where it stands beside this pane, unsent; else its session opened. -->
 {#snippet goneAsk()}
-  {@const composer = fleet.composer?.(instanceId)}
+  {@const composer = paneSubject.fleet.composer?.(instanceId)}
   <EmptyAsk
     byHand={sessionOpen}
     canStart={!!composer}
-    label={previewWords.goneAskLabel(composer?.agent ?? ownerName)}
+    label={previewWords.goneAskLabel(composer?.agent ?? paneSubject.ownerName)}
     onask={() =>
-      composer?.ask(previewWords.goneAskWords(artifact?.title ?? ""))}
+      composer?.ask(
+        previewWords.goneAskWords(paneSubject.artifact?.title ?? "")
+      )}
     reason={previewWords.goneCantAsk}
     size="sm"
   />
@@ -4325,11 +4307,11 @@
 {/snippet}
 
 {#snippet openBar()}
-  {#if artifact}
+  {#if paneSubject.artifact}
     <!-- The same artifact, its doc and its tools, in a tab of its own. -->
     <BarItem
       data-slot="other"
-      href={`/artifact/${encodeURIComponent(artifact.id)}`}
+      href={`/artifact/${encodeURIComponent(paneSubject.artifact.id)}`}
       icon={IconExternalLinear}
       label="Open in new tab"
       props={{ rel: "noopener", target: "_blank" }}
@@ -4337,7 +4319,8 @@
   {/if}
 {/snippet}
 {#snippet openMenu()}
-  {#if artifact}
+  {#if paneSubject.artifact}
+    {@const artifact = paneSubject.artifact}
     <DropdownMenu.Item>
       {#snippet child({ props })}
         <a
@@ -4502,10 +4485,10 @@
      page's name and place (never "Preview" again under the switch that says
      it), the preview's own controls, Close; the page in the well. -->
 {#snippet artifactTitle()}
-  {#if artifact}
+  {#if paneSubject.artifact}
     <ArtifactMenu
       {instanceId}
-      held={preview?.artifacts}
+      held={paneSubject.preview?.artifacts}
       line={headLine}
       lineId={`${paneId}-line`}
       onrefused={(reason, chosen) => {
@@ -4518,7 +4501,7 @@
           } satisfies PaneAct,
         });
       }}
-      shown={artifact}
+      shown={paneSubject.artifact}
     />
   {/if}
 {/snippet}
@@ -4562,8 +4545,8 @@
     held={heldCount}
     onsendheld={sendHeldNow}
     onsendrefusedclosed={() => {
-      if (artifactId) {
-        keepSendRefused(artifactId, null);
+      if (paneSubject.artifactId) {
+        keepSendRefused(paneSubject.artifactId, null);
       }
     }}
     {sendRefused}
@@ -4575,7 +4558,7 @@
     onhover={(id) => post({ type: "cawco:hover-pin", id })}
     onopen={(id, via) =>
       listFilter === "check" ? openChecked(id, via) : openCard(id, via)}
-    checks={isCanvas
+    checks={paneSubject.isCanvas
       ? undefined
       : {
           count: checkCount,
@@ -4614,7 +4597,7 @@
      the page's mode seam (the artifact panel's surface brief, The Comments
      rail; the owner's pick "Beside the page"). -->
 {#snippet railBeside()}
-  {#if listOpen && railPlaced && !isCanvas && !railSheet}
+  {#if listOpen && railPlaced && !paneSubject.isCanvas && !railSheet}
     <RailFloat>
       {@render railOf("beside")}
     </RailFloat>
@@ -4626,7 +4609,7 @@
   <section
     data-slot="preview-pane"
     data-preview-inset
-    aria-label={artifact?.title ?? "Preview"}
+    aria-label={paneSubject.artifact?.title ?? "Preview"}
     class="@container flex flex-col flex-1 min-h-0"
     bind:this={section}
   >
@@ -4640,7 +4623,7 @@
 {:else}
   <SideSurface
     of="preview"
-    mode={isCanvas || isBrowser ? undefined : mode}
+    mode={paneSubject.isCanvas || paneSubject.isBrowser ? undefined : mode}
     closeFailed={failure?.again === "close"}
     {closing}
     items={headItems}
@@ -4651,7 +4634,7 @@
     subtitleId={`${paneId}-line`}
     {switcher}
     {switcherAt}
-    titleControl={artifact ? artifactTitle : undefined}
+    titleControl={paneSubject.artifact ? artifactTitle : undefined}
     beside={railBeside}
     bind:section
     bind:well
@@ -4662,7 +4645,7 @@
 
 <!-- Changed since you looked: a glass over the page at the well's foot (ChangesTag). -->
 {#snippet changesBar()}
-  {#if changeStops.length > 0 && !isCanvas}
+  {#if changeStops.length > 0 && !paneSubject.isCanvas}
     <ChangesTag
       above={pageFoot}
       at={tour ? tourAt : null}
@@ -4682,7 +4665,7 @@
     <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
     <iframe
       data-ready={!current || loaded || undefined}
-      data-panel-inspector={(!isSheet &&
+      data-panel-inspector={(!paneSubject.isSheet &&
         inspecting &&
         inspectorLayout === "panel") ||
         undefined}
@@ -4703,7 +4686,7 @@
         }
       }}
       src={`${paneOrigin}${framePlace}`}
-      data-scheme={themedFrame ? theme.resolved : undefined}
+      data-scheme={paneSubject.themedFrame ? theme.resolved : undefined}
       title="Preview"
       {@attach (node) => {
         if (key === frameKey) {
@@ -4718,7 +4701,7 @@
 <!-- The page in the well, and what stands over it: the panel's and an
      inset's alike. -->
 {#snippet framed()}
-  {#if isCanvas}
+  {#if paneSubject.isCanvas}
     <!-- The canvas's stage stands over this box: its one iframe. The stage
          is a layer on the body over every page layer (CanvasStages,
          `--layer-stage`), so it can never run beneath the head's glass as a
@@ -4731,10 +4714,10 @@
       style:--slot-top={inset ? "0px" : "var(--side-room, 0px)"}
       bind:this={canvasSlot}
     ></div>
-  {:else if isBrowser && artifact}
+  {:else if paneSubject.isBrowser && paneSubject.artifact}
     <BrowserView
       addressAtFoot={!!sheet}
-      artifactId={artifact.id}
+      artifactId={paneSubject.artifact.id}
       browser={browserRow}
       {instanceId}
       machine={browserMachine}
@@ -4812,7 +4795,7 @@
          meanwhile. A component artifact's frame stands in its design graph's
          stage (the graph's chrome round it, the panel's DOM), the inspector's
          panel beside the graph. -->
-    {#if inGraph && artifact && link && sheetCanvas}
+    {#if inGraph && paneSubject.artifact && link && sheetCanvas}
       <div
         data-slot="graph-host"
         data-panel-inspector={(inspecting &&
@@ -4825,13 +4808,13 @@
         <!-- The graph runs to the card's top under the floating head and
              takes its room on its own page (DesignGraph). -->
         <DesignGraph
-          ask={artifact.ask ?? ""}
+          ask={paneSubject.artifact.ask ?? ""}
           files={sheetCanvas.files}
           frame={frameTags}
           inspector={inspectorInRoom ? roomInspector : undefined}
           {link}
           {keptDials}
-          memory={`cawco-graph-kept:${artifact.id}`}
+          memory={`cawco-graph-kept:${paneSubject.artifact.id}`}
           {keptTuned}
           {startFace}
           ondials={(values) => {
@@ -4897,17 +4880,17 @@
         <CoverState waiting={stageWaiting} />
       {/if}
     </div>
-    {#if canvasView?.map && artifact && isSheet}
+    {#if canvasView?.map && paneSubject.artifact && paneSubject.isSheet}
       <!-- Map mode: the canvas's component among what renders it and what it renders, over the page, which stays loaded under it. -->
       <CanvasMap
         address={paneOrigin ? `${paneOrigin}${startAt}` : null}
-        artifactId={artifact.id}
+        artifactId={paneSubject.artifact.id}
         component={link?.front
           ? (link.sheets[link.front]?.meta.component ?? null)
           : null}
         {instanceId}
         ready={loaded}
-        revision={preview?.revision ?? ""}
+        revision={paneSubject.preview?.revision ?? ""}
       />
     {/if}
     {#if compileErrors.length > 0}
@@ -4953,8 +4936,8 @@
     >
       <EmptyState
         icon={IconAlert}
-        title={served
-          ? sheetWords.serverDownTitle(served.port)
+        title={paneSubject.served
+          ? sheetWords.serverDownTitle(paneSubject.served.port)
           : sheetWords.downTitle(staged.dir)}
       >
         {#snippet line()}
@@ -5033,18 +5016,18 @@
             Its server can't be reached until the workspace runs again. Once a
             session there is back, try again.
           {:else if shownDown === "server"}
-            {downPort
-              ? `${previewWords.nothingOnPort(downPort)} on ${ownerMachine}, so the page can't load.`
-              : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}
-            {#if served}
+            {paneSubject.downPort
+              ? `${previewWords.nothingOnPort(paneSubject.downPort)} on ${paneSubject.ownerMachine}, so the page can't load.`
+              : `The page's server on ${paneSubject.ownerMachine} isn't running, so the page can't load.`}
+            {#if paneSubject.served}
               CawCo starts it again by itself; try again in a moment.
-            {:else if offerSession}
+            {:else if paneSubject.offerSession}
               {previewWords.startFromSession}
             {:else}
               Start it again, then try again.
             {/if}
           {:else if shownDown === "reach"}
-            The way to the page's server on {ownerMachine} didn't open{shownWhy
+            The way to the page's server on {paneSubject.ownerMachine} didn't open{shownWhy
               ? `: ${shownWhy}`
               : "."}
             Try again; if it fails again, start the server again from its session.
@@ -5056,9 +5039,9 @@
           {:else if shownDown === "crashed"}
             {previewWords.crashedLine(shownWhy ?? "no message")}
           {:else}
-            The preview comes from {ownerMachine}, which isn't answering the hub{shownWhy
-              ? `: ${shownWhy}`
-              : "."} Once it answers, try again.
+            The preview comes from {paneSubject.ownerMachine}, which isn't
+            answering the hub{shownWhy ? `: ${shownWhy}` : "."} Once it answers, try
+            again.
           {/if}
           {#if !down && docDown}
             <span
@@ -5085,7 +5068,7 @@
     >
       <EmptyState icon={IconAlert} title={previewWords.notLoadedTitle}>
         {#snippet line()}
-          {previewWords.notLoadedLine(ownerMachine)}
+          {previewWords.notLoadedLine(paneSubject.ownerMachine)}
         {/snippet}
         {#snippet action()}
           {@render frameRetry()}
@@ -5116,12 +5099,12 @@
     {#if kit}
       {@const Card = kit.PinCard}
       <Card
-        agentName={owner ? ownerName : "The session"}
+        agentName={paneSubject.owner ? paneSubject.ownerName : "The session"}
         changes={(view?.activity[pin.id]?.length ?? 0) > 0
           ? threadChanges
           : undefined}
         marked={peek || !!pinAt?.mark}
-        session={owner ? instanceId : null}
+        session={paneSubject.owner ? instanceId : null}
         {draft}
         link={pinLink(pin.number)}
         live={live.has(pin.id)}
@@ -5208,7 +5191,7 @@
     style:--frame-y={frameBox ? `${frameBox.y}px` : undefined}
     style:--frame-w={frameBox ? `${frameBox.w}px` : undefined}
     style:--frame-h={frameBox ? `${frameBox.h}px` : undefined}
-    data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
+    data-mode={mode !== "interact" && !paneSubject.isCanvas ? mode : undefined}
     {@attach measureRoom}
   >
     {#if composing && kit && nextDraft && !pageHung}
