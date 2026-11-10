@@ -11,7 +11,7 @@
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import Dials from "./Dials.svelte";
   import type { DialValues, GraphDial } from "./dials";
-  import { propDials, savedOf } from "./prop-dials";
+  import { contentCases, propDials, savedOf } from "./prop-dials";
 
   let {
     dials,
@@ -21,6 +21,8 @@
     props,
     args,
     edits,
+    longest = {},
+    content = null,
     lang,
   }: {
     dials: GraphDial[];
@@ -34,6 +36,10 @@
     args: Record<string, unknown>;
     /** His prop values not saved yet. */
     edits: DialValues;
+    /** The longest value each prop's own data holds, by name, where it has one. */
+    longest?: DialValues;
+    /** The words' case he picked, by its name: every text prop it reaches holds its words. */
+    content?: string | null;
     lang: string | undefined;
   } = $props();
 
@@ -41,6 +47,13 @@
   const phone = new MediaQuery("(width < 640px)");
   const stage = $derived(phone.current ? 700 : 820);
   const nothing = () => undefined;
+  const shown = $derived(propDials(props, dials));
+  const cases = $derived(contentCases(shown, longest));
+  /** His edits with the picked case's words over the text props it reaches. */
+  const held = $derived({
+    ...edits,
+    ...(cases.find((one) => one.label === content)?.fill ?? {}),
+  });
   /**
    * The card hugs the controls' grid (Dials' columns, their two gaps, its
    * pad and edge), never past the reading measure, so no strip of the card
@@ -69,9 +82,10 @@
       onreset={nothing}
       state={{
         component,
-        props: propDials(props, dials),
+        props: shown,
+        content: { cases, onpick: nothing },
         saved: savedOf(props, args),
-        edits,
+        edits: held,
         onchange: nothing,
         onreset: nothing,
         onsave: nothing,

@@ -7,35 +7,134 @@
  * (its `arg` target) shows once, as the dial.
  */
 import type { PropMeta } from "@cawco/core/stage";
+import { graphWords } from "@cawco/core/words/graph";
 import { controlOf } from "../preview/sheet-inspector.svelte";
 import type { DialValue, DialValues, GraphDial } from "./dials";
 
 /** A default's quotes, as docgen writes it (`"neutral"`). */
 const QUOTES = /^["'`]|["'`]$/gu;
 
-/** A prop as the dial of its kind; none for a slot or a code-typed prop. */
+const { cases } = graphWords.dials;
+
+/**
+ * A name that says the words are an identifier (a branch, a path, a link, a
+ * key): its content is one unbroken run in one script, so it takes the
+ * length cases and none of the shapes prose from people and locales takes.
+ */
+const IDENTIFIER =
+  /(?:^(?:url|href|link|path|file|branch|ref|slug|id|key|sha|email|hash)|[a-z](?:Url|URL|Href|Link|Path|File|Branch|Ref|Slug|Id|ID|Key|Sha|Email|Hash))s?$/u;
+
+/**
+ * The words each case fills a text prop with where its own data holds no
+ * longer value: the break skill's content length and content shape axes
+ * (interfaces/skills/break/scenarios.md), as a delegate row's or a task
+ * card's words could stand.
+ */
+const SAMPLE = {
+  long: "The tray's chips wrap onto a second line once a project has more than nine sessions, and the last chip slides under the composer, so pressing it opens the wrong session.",
+  longIdentifier:
+    "https://github.com/bewinxed/cockpit/compare/main...cawco/5d20079d-fix-tray-chip-overflow-when-a-project-has-more-than-nine-sessions",
+  noSpaces: "Donaudampfschiffahrtsgesellschaftskapitänsmützenabzeichen",
+  emoji: "🚀 Ship the tray fix 🎉🔥 before Thursday 👀",
+  rightToLeft: "إصلاح شريحة CawCo tray على iOS 27 قبل الإصدار",
+};
+
+/** A case of the component's words: its name, and the words it fills each text prop it reaches with, by prop name. */
+export interface ContentCase {
+  fill: Record<string, string>;
+  label: string;
+}
+
+/**
+ * The cases the component's words can be put in, at once across its text
+ * props (the owner's pick, 2026-11-10: one switch for the whole component,
+ * after interfaces `break`), each kept only where it reaches a prop: Empty
+ * and Long reach every text prop (Long with the longest value the prop's own
+ * data holds, `longest`, else a sample); No spaces, Emoji and Right to left
+ * only words people or other locales write, never an identifier (a
+ * branch, a path, a link), which runs unbroken in one script.
+ */
+export function contentCases(
+  props: readonly GraphDial[],
+  longest: DialValues = {}
+): ContentCase[] {
+  const text = props.filter((dial) => dial.kind === "text");
+  const prose = text.filter((dial) => !IDENTIFIER.test(dial.name));
+  const fill = (
+    dials: readonly GraphDial[],
+    words: (dial: GraphDial) => string
+  ): Record<string, string> =>
+    Object.fromEntries(dials.map((dial) => [dial.name, words(dial)]));
+  const long = (dial: GraphDial): string => {
+    const real = longest[dial.name];
+    if (typeof real === "string") {
+      return real;
+    }
+    return IDENTIFIER.test(dial.name) ? SAMPLE.longIdentifier : SAMPLE.long;
+  };
+  return [
+    { label: cases.empty, fill: fill(text, () => "") },
+    { label: cases.long, fill: fill(text, long) },
+    { label: cases.noSpaces, fill: fill(prose, () => SAMPLE.noSpaces) },
+    { label: cases.emoji, fill: fill(prose, () => SAMPLE.emoji) },
+    { label: cases.rightToLeft, fill: fill(prose, () => SAMPLE.rightToLeft) },
+  ].filter((one) => Object.keys(one.fill).length > 0);
+}
+
+/** A word's start inside an identifier: a capital after a small letter or a figure, or an underscore or hyphen. */
+const WORD_START = /(?<=[a-z0-9])(?=[A-Z])|[_-]+/gu;
+
+/**
+ * An identifier said as words in sentence case, as a dial's name is
+ * written: `showBranch` "Show branch", `DelegateRow` "Delegate row",
+ * `titleFont` "Title font". A run of capitals (`URL`) stays as written.
+ */
+export function wordsOf(identifier: string): string {
+  const parts = identifier.split(WORD_START).filter(Boolean);
+  return parts
+    .map((part, at) => {
+      const acronym = part.length > 1 && part === part.toUpperCase();
+      if (acronym) {
+        return part;
+      }
+      const small = part.toLowerCase();
+      return at === 0 ? small.charAt(0).toUpperCase() + small.slice(1) : small;
+    })
+    .join(" ");
+}
+
+/**
+ * A prop as the dial of its kind, named in words; none for a slot or a
+ * code-typed prop. Whatever has a known set of values is picked from it: an
+ * enum and a size or font token as a choice, a colour token as its
+ * swatches; only free words are typed.
+ */
 function dialOf(prop: PropMeta): GraphDial | null {
-  const target = { arg: prop.name };
+  const base = {
+    name: prop.name,
+    label: wordsOf(prop.name),
+    target: { arg: prop.name },
+  };
+  const options = (prop.options ?? []).map(String);
+  if (prop.type.name === "token-color" && options.length > 0) {
+    return { ...base, kind: "color", options };
+  }
+  if (
+    (prop.type.name === "token-size" || prop.type.name === "token-font") &&
+    options.length > 0
+  ) {
+    return { ...base, kind: "select", options };
+  }
   switch (controlOf(prop)) {
     case "segments":
     case "select":
-      return {
-        kind: "select",
-        name: prop.name,
-        options: (prop.options ?? []).map(String),
-        target,
-      };
+      return { ...base, kind: "select", options };
     case "switch":
-      return { kind: "toggle", name: prop.name, target };
+      return { ...base, kind: "toggle" };
     case "number":
-      return { kind: "number", name: prop.name, target };
+      return { ...base, kind: "number" };
     case "text":
-      return {
-        kind: "text",
-        name: prop.name,
-        ...(prop.options?.length ? { options: prop.options.map(String) } : {}),
-        target,
-      };
+      return { ...base, kind: "text" };
     case "slot":
     case "code":
       return null;

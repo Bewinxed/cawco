@@ -32,7 +32,8 @@ const INK_NAMES = [
   "ink-row",
   "ink-muted",
   "selected-ink",
-  "data-good",
+  "data-ok",
+  "data-warn",
   "data-bad",
 ];
 
@@ -62,6 +63,15 @@ export const DELEGATE_ARGS = {
   showBranch: true,
   compact: false,
   tint: "selected-ink",
+};
+
+/** The longest value each of the delegate row's props holds in a live fleet's rows. */
+export const DELEGATE_LONGEST: DialValues = {
+  title:
+    "Fold the artifact panel's Inspect into the design graph's Dials card, keep Save and Save as new state under the rows, and draw it at 1440 and 390",
+  branch: "cawco/5d20079d-fold-the-artifact-panels-inspect-into-dials",
+  turns: 412,
+  cost: 1834.62,
 };
 
 /** The dials the agent put on the delegate row: its height, its glyph's size, and its compact form (the row's own `compact` prop). */
@@ -119,6 +129,15 @@ export const SPEND_ARGS = {
   showTrend: true,
 };
 
+/** The longest value each of the task card's props holds on a real board. */
+export const TASK_LONGEST: DialValues = {
+  title:
+    "Hub: a session's row says when the person last wrote to it, when they pressed Done, and whether its turn ended waiting on its own work",
+  assignee: "design-review delegate on obelisk-of-light",
+  due: "Thursday 12 November 2026, 17:30",
+  estimate: 40,
+};
+
 /** A task card on a project's board: twenty props it lists. */
 export const TASK_CARD: PropMeta[] = [
   prop("title", "string", "string", { required: true }),
@@ -126,7 +145,20 @@ export const TASK_CARD: PropMeta[] = [
   oneOf("column", ["inbox", "next", "doing", "review", "done"]),
   oneOf("priority", ["low", "normal", "high", "urgent"], "normal"),
   prop("assignee", "string", "string"),
-  prop("project", "string", "string"),
+  oneOf("project", [
+    "cockpit",
+    "cawco-ios",
+    "landing",
+    "hub-migrations",
+    "routines",
+    "design-system",
+    "docs",
+    "billing",
+    "probe-kit",
+    "fleet-watch",
+    "onboarding",
+    "release-notes",
+  ]),
   prop("due", "string", "string"),
   prop("estimate", "number", "number"),
   prop("spent", "number", "number"),

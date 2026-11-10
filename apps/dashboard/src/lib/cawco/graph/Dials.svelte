@@ -31,7 +31,6 @@
   import { graphWords } from "@cawco/core/words/graph";
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import { IconReset } from "#lib/icons.js";
   import DialRow from "./DialRow.svelte";
@@ -41,6 +40,7 @@
     type DialValues,
     type GraphDial,
   } from "./dials";
+  import { type ContentCase, wordsOf } from "./prop-dials";
 
   const words = graphWords;
 
@@ -48,6 +48,15 @@
   interface StateProps {
     /** The component the state mounts: its name heads the props. */
     component: string;
+    /**
+     * The cases its words can be put in, all its text props at once
+     * (prop-dials.ts `contentCases`), and his pick of one: its fill, or
+     * null for the saved words.
+     */
+    content?: {
+      cases: readonly ContentCase[];
+      onpick: (fill: Record<string, string> | null) => void;
+    };
     /** His values not saved yet, by name. */
     edits: DialValues;
     onchange: (name: string, value: DialValue) => void;
@@ -103,6 +112,40 @@
   const propsChanged = $derived(
     state ? changedOf(state.props, state.saved, state.edits) : []
   );
+  /** The words' switch as a row of the grid: a choice among its cases, Saved first. */
+  const CONTENT = "content";
+  const contentDial = $derived<GraphDial | null>(
+    state?.content && state.content.cases.length > 0
+      ? {
+          kind: "select",
+          name: CONTENT,
+          label: words.dials.content,
+          options: [
+            words.dials.cases.saved,
+            ...state.content.cases.map((one) => one.label),
+          ],
+          target: { arg: CONTENT },
+        }
+      : null
+  );
+  /** The case the text props stand in now: Saved while all hold their saved words, a case while each it reaches holds its words and the rest their saved; none once he wrote his own. */
+  const contentPicked = $derived.by(() => {
+    const own = state;
+    const cases = own?.content?.cases ?? [];
+    if (!own) {
+      return "";
+    }
+    const names = [...new Set(cases.flatMap((one) => Object.keys(one.fill)))];
+    const now = (name: string) => own.edits[name] ?? own.saved[name];
+    const at = (fill: Record<string, string>) =>
+      names.every((name) =>
+        name in fill ? now(name) === fill[name] : now(name) === own.saved[name]
+      );
+    if (at({})) {
+      return words.dials.cases.saved;
+    }
+    return cases.find((one) => at(one.fill))?.label ?? "";
+  });
   /** Under the phone line a colour's picker unfolds under its row, across the face. */
   const phone = new MediaQuery("(width < 640px)");
   /** The controls in their headings' order: those under none first, then each heading's. */
@@ -124,17 +167,20 @@
   });
 
   /**
-   * The inspector grid: the Animation face's names' column, the control
-   * (`c-graph-control-w` at most, the grid standing at the face's start, so
-   * on a wide room the undo glyph stays beside what it marks), and the undo
-   * glyph's column held in every row, so every control starts on one edge
-   * and ends on another.
+   * The inspector grid: the names' column as wide as its longest name (the
+   * Animation face's names' width at most, a longer one wrapping), the
+   * control in the rest, and the undo glyph's column held in every row, so
+   * every control starts on one edge and ends on another, no strip of air
+   * between a name and its control. The grid stands no wider than a name's
+   * column, a control's and the glyph's (`--grid-max`), so on a wide room
+   * the undo glyph stays beside what it marks.
    */
   const COLUMNS =
-    "minmax(0, var(--c-graph-move-name-w)) minmax(0, var(--c-graph-control-w)) var(--c-btn-h-xs)";
+    "fit-content(var(--c-graph-move-name-w)) minmax(0, 1fr) var(--c-btn-h-xs)";
   /** Narrow: the name takes what it needs up to two fifths, its control the rest. */
-  const NARROW_COLUMNS =
-    "fit-content(40%) minmax(0, var(--c-graph-control-w)) var(--c-btn-h-xs)";
+  const NARROW_COLUMNS = "fit-content(40%) minmax(0, 1fr) var(--c-btn-h-xs)";
+  const GRID_MAX =
+    "calc(var(--c-graph-move-name-w) + var(--c-graph-control-w) + var(--c-btn-h-xs) + 2 * var(--space-3))";
   /** A layer's open and close, for the control named `key`. */
   const layerOf = (key: string) => (next: boolean) => {
     if (next) {
@@ -153,12 +199,26 @@
   }
 </script>
 
-{#snippet head(text: string)}
-  <h3 class={sectionHeadVariants({ inset: "flush", class: "col-span-full" })}>
+<!-- The card's two parts each stand under a head that says what it is,
+     in the row role and strong ink: the agent's dials, the component's own
+     props. -->
+{#snippet partHead(text: string)}
+  <h3
+    class="col-span-full m-0 flex min-w-0 items-end text-ink-strong type-row text-pretty"
+  >
+    {text}
+  </h3>
+{/snippet}
+<!-- A heading the agent wrote over some of its dials: in the label role and
+     muted ink, under the part's head, set apart by the space above it. -->
+{#snippet groupHead(text: string)}
+  <h4
+    class="col-span-full m-0 flex min-h-c-btn-h-xs min-w-0 items-end text-ink-muted type-label"
+  >
     <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
       >{text}</span
     >
-  </h3>
+  </h4>
 {/snippet}
 
 <TooltipProvider>
@@ -166,6 +226,7 @@
     class="@container/dials flex min-h-0 min-w-0 flex-1 flex-col"
     data-slot="dials"
     style:--cols={COLUMNS}
+    style:--grid-max={GRID_MAX}
     style:--narrow={NARROW_COLUMNS}
   >
     <!-- Its scroller clips: it stands a step out and pads the step back, so
@@ -184,58 +245,103 @@
       <!-- Under a floating head the rows clear it at rest (`--face-top`). -->
       <div aria-hidden="true" class="h-(--face-top,0px)"></div>
       <div
-        class="grid min-w-0 grid-cols-(--cols) justify-start gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
+        class="grid min-w-0 max-w-(--grid-max) grid-cols-(--cols) gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
         data-slot="dials-grid"
       >
-        {#each sections as section (section.head)}
+        {#if dials.length > 0}
           <section
-            aria-label={section.head ?? undefined}
-            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+            aria-label={state ? words.dials.agentHead : undefined}
+            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3"
+            data-slot="dials-agent"
           >
-            {#if section.head}
-              {@render head(section.head)}
+            {#if state}
+              {@render partHead(words.dials.agentHead)}
             {/if}
-            {#each section.dials as dial (dial.name)}
-              {@const hand = held?.name === dial.name ? held : null}
-              <DialRow
-                {dial}
-                edited={changed.includes(dial.name)}
-                held={hand}
-                {lang}
-                onchange={(next) => onchange(dial.name, next)}
-                onopenchange={layerOf(dial.name)}
-                onreset={() => onreset([dial.name], false)}
-                open={open === dial.name}
-                phone={phone.current}
-                value={values[dial.name] ?? written[dial.name]}
-                was={written[dial.name]}
-              />
-            {/each}
+            <div
+              class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-5"
+            >
+              {#each sections as section (section.head)}
+                <section
+                  aria-label={section.head ?? undefined}
+                  class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+                >
+                  {#if section.head}
+                    {@render groupHead(section.head)}
+                  {/if}
+                  {#each section.dials as dial (dial.name)}
+                    {@const hand = held?.name === dial.name ? held : null}
+                    <DialRow
+                      {dial}
+                      edited={changed.includes(dial.name)}
+                      held={hand}
+                      {lang}
+                      onchange={(next) => onchange(dial.name, next)}
+                      onopenchange={layerOf(dial.name)}
+                      onreset={() => onreset([dial.name], false)}
+                      open={open === dial.name}
+                      phone={phone.current}
+                      value={values[dial.name] ?? written[dial.name]}
+                      was={written[dial.name]}
+                    />
+                  {/each}
+                </section>
+              {/each}
+            </div>
           </section>
-        {/each}
+        {/if}
         {#if state && state.props.length > 0}
           {@const own = state}
+          {@const title = words.dials.propsHead(wordsOf(own.component))}
+          <!-- After the agent's part, a hairline across the card and the
+               space of a part's gap on each side of it: where one ends. -->
           <section
-            aria-label={own.component}
-            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+            aria-label={title}
+            class={[
+              "col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3",
+              dials.length > 0 &&
+                "border-t border-t-border-hairline pt-space-5",
+            ]}
             data-slot="dials-props"
           >
-            {@render head(own.component)}
-            {#each own.props as prop (prop.name)}
-              <DialRow
-                dial={prop}
-                edited={propsChanged.includes(prop.name)}
-                idPrefix="prop"
-                {lang}
-                onchange={(next) => own.onchange(prop.name, next)}
-                onopenchange={layerOf(`prop:${prop.name}`)}
-                onreset={() => own.onreset([prop.name], false)}
-                open={open === `prop:${prop.name}`}
-                phone={phone.current}
-                value={own.edits[prop.name] ?? own.saved[prop.name]}
-                was={own.saved[prop.name]}
-              />
-            {/each}
+            {@render partHead(title)}
+            <div
+              class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+            >
+              {#if contentDial && own.content}
+                {@const pick = own.content}
+                <DialRow
+                  dial={contentDial}
+                  edited={false}
+                  idPrefix="prop"
+                  {lang}
+                  onchange={(next) =>
+                    pick.onpick(
+                      pick.cases.find((one) => one.label === next)?.fill ?? null
+                    )}
+                  onopenchange={layerOf(`prop:${CONTENT}`)}
+                  onreset={() => pick.onpick(null)}
+                  open={open === `prop:${CONTENT}`}
+                  phone={phone.current}
+                  value={contentPicked}
+                  was={contentPicked}
+                />
+              {/if}
+              {#each own.props as prop (prop.name)}
+                <DialRow
+                  dial={prop}
+                  edited={propsChanged.includes(prop.name)}
+                  idPrefix="prop"
+                  {lang}
+                  onchange={(next) => own.onchange(prop.name, next)}
+                  onopenchange={layerOf(`prop:${prop.name}`)}
+                  onreset={() => own.onreset([prop.name], false)}
+                  open={open === `prop:${prop.name}`}
+                  phone={phone.current}
+                  value={own.edits[prop.name] ?? own.saved[prop.name]}
+                  was={own.saved[prop.name]}
+                />
+              {/each}
+            </div>
           </section>
         {/if}
       </div>
@@ -244,7 +350,7 @@
       <!-- Under the rows, on the grid's edges: the way back at the names'
            start, the state's saves at the controls' end. -->
       <div
-        class="grid min-w-0 flex-none grid-cols-(--cols) justify-start gap-x-space-3 pt-space-3 @max-timeline/dials:grid-cols-(--narrow)"
+        class="grid min-w-0 max-w-(--grid-max) flex-none grid-cols-(--cols) gap-x-space-3 pt-space-3 @max-timeline/dials:grid-cols-(--narrow)"
         data-slot="dials-foot"
       >
         <div class="col-span-full flex min-w-0 items-center gap-space-1">

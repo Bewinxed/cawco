@@ -49,13 +49,15 @@ const stepFor = (span: number): number => {
 
 /**
  * A number dial's range: the agent's `min`, `max` and `step`, else 0 to
- * three times its written value (1 for a written 0) on a step from the
- * span. A figure typed past either end is kept as typed: the fill and the
- * slider stand at that end, and nothing is clamped on a reload.
+ * three times its written value (1 for a written 0; a negative one three
+ * times its size either side of 0, so its fill stands a third along) on a
+ * step from the span. A figure typed past either end is kept as typed: the
+ * fill and the slider stand at that end, and nothing is clamped on a reload.
  */
 export function rangeOf(dial: GraphDial, written: number): DialRange {
-  const min = dial.min ?? Math.min(0, written);
-  const max = dial.max ?? Math.max(min + 1, written > 0 ? written * 3 : 1);
+  const reach = Math.abs(written) * 3;
+  const min = dial.min ?? (written < 0 ? -reach : 0);
+  const max = dial.max ?? Math.max(min + 1, reach > 0 ? reach : 1);
   return { min, max, step: dial.step ?? stepFor(max - min) };
 }
 

@@ -9,12 +9,14 @@
 import {
   DELEGATE_ARGS,
   DELEGATE_DIALS,
+  DELEGATE_LONGEST,
   DELEGATE_ROW,
   DELEGATE_WRITTEN,
   SPEND_ARGS,
   SPEND_TILE,
   TASK_ARGS,
   TASK_CARD,
+  TASK_LONGEST,
 } from "./bench/props-fixture";
 import DialsCardFrame from "./dials-card-frame.svelte";
 
@@ -29,6 +31,7 @@ export default {
     props: DELEGATE_ROW,
     args: DELEGATE_ARGS,
     edits: {},
+    longest: DELEGATE_LONGEST,
     lang: "en",
   },
 };
@@ -41,6 +44,11 @@ export const TwoPropsChanged = {
   args: { edits: { state: "waiting", turns: 22 } },
 };
 
+/** Every text prop of the delegate row in its longest words, the way to judge the row at its worst. */
+export const LongText = {
+  args: { content: "Long" },
+};
+
 /** A spend tile no agent put a dial on: only its props. */
 export const PropsOnly = {
   args: {
@@ -49,6 +57,7 @@ export const PropsOnly = {
     component: "SpendTile",
     props: SPEND_TILE,
     args: SPEND_ARGS,
+    longest: {},
   },
 };
 
@@ -60,6 +69,7 @@ export const TwentyProps = {
     component: "TaskCard",
     props: TASK_CARD,
     args: TASK_ARGS,
+    longest: TASK_LONGEST,
     edits: { priority: "urgent" },
   },
 };

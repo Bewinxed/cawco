@@ -15,19 +15,17 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import * as Select from "#lib/components/ui/select/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconReset } from "#lib/icons.js";
   import ColourPicker from "./ColourPicker.svelte";
+  import DialChoice, { optionSaid, paint } from "./DialChoice.svelte";
   import DialColour from "./DialColour.svelte";
   import DialNumber from "./DialNumber.svelte";
   import { type DialValue, type GraphDial, rangeOf } from "./dials";
   import { figureOf } from "./figures";
 
   const words = graphWords;
-  /** A figure and a unit written together ("36px", "1.5rem", "250 ms"). */
-  const FIGURE_UNIT = /^(-?\d+(?:\.\d+)?)\s*([a-z%]+)$/iu;
 
   let {
     dial,
@@ -43,6 +41,7 @@
     onchange,
     onreset,
   }: {
+    /** The control: an agent's dial, or a prop as one. */
     dial: GraphDial;
     /** What the control shows: his value, else `was`. */
     value: DialValue | undefined;
@@ -67,13 +66,6 @@
 
   const name = $derived(dial.label ?? dial.name);
   const id = $derived(`${idPrefix}-${dial.name}`);
-  /** A select's option said as a figure and its unit, where it is one ("36px": "36" "px"), so every control writes a unit one way; else the words as they are. */
-  const splitUnit = (option: string): { figure: string; unit: string } => {
-    const match = FIGURE_UNIT.exec(option.trim());
-    return match
-      ? { figure: match[1] ?? option, unit: match[2] ?? "" }
-      : { figure: option, unit: "" };
-  };
   /** A value said in words, one form everywhere: a figure, a space and its unit ("10 px", a select's "36px" too), a toggle on or off, words as they are. */
   const said = (one: DialValue | undefined): string => {
     if (typeof one === "number") {
@@ -82,15 +74,10 @@
     if (typeof one === "boolean") {
       return one ? words.dials.on : words.dials.off;
     }
-    const { figure, unit } = splitUnit(String(one ?? ""));
-    return unit ? `${figure} ${unit}` : figure;
+    return optionSaid(String(one ?? ""));
   };
-  /** A figure's control writes its value at its end (a number, a select of figures); the was-value stands under it there. */
-  const atEnd = $derived(
-    dial.kind === "number" ||
-      (dial.kind === "select" &&
-        (dial.options ?? []).some((one) => splitUnit(one).unit !== ""))
-  );
+  /** A number writes its value at its field's end: the one it was stands under it there. */
+  const atEnd = $derived(dial.kind === "number");
   /** Presses of an action so far: what its arg is set to. */
   let presses = $state(0);
   const layer = $derived({ open, onOpenChange: onopenchange });
@@ -134,6 +121,17 @@
             value={Number(value ?? start)}
           />
         </div>
+      {:else if dial.kind === "color" && dial.options?.length}
+        <!-- A colour among the design system's: its swatches, picked. -->
+        <DialChoice
+          {id}
+          label={name}
+          onchange={(next) => onchange(next)}
+          {onopenchange}
+          options={dial.options}
+          swatches
+          value={String(value ?? "")}
+        />
       {:else if dial.kind === "color"}
         <div class="min-w-0 flex-1" {id}>
           <DialColour
@@ -146,57 +144,15 @@
           />
         </div>
       {:else if dial.kind === "select"}
-        {@const shown = splitUnit(String(value ?? ""))}
-        <Select.Root
-          onValueChange={(next: string) => onchange(next)}
-          type="single"
+        <DialChoice
+          {id}
+          label={name}
+          onchange={(next) => onchange(next)}
+          {onopenchange}
+          {open}
+          options={dial.options ?? []}
           value={String(value ?? "")}
-          {...layer}
-        >
-          <Select.Trigger
-            align={shown.unit ? "end" : undefined}
-            aria-label={name}
-            class="w-full min-w-0"
-            {id}
-          >
-            <!-- Its value in the fields' own size, the 16px floor
-                 a field takes on a phone and under a finger
-                 (design.css), so every control's value reads alike;
-                 a figure at the field's end, as a number's is. -->
-            <span
-              class="min-w-0 truncate num max-phone:text-(length:--text-field-floor) coarse:text-(length:--text-field-floor)"
-              >{shown.figure}{#if shown.unit}<span
-                  class="ms-space-1 text-ink-muted">{shown.unit}</span
-                >{/if}</span
-            >
-          </Select.Trigger>
-          <Select.Content>
-            {#each dial.options ?? [] as option (option)}
-              {@const shownOption = splitUnit(option)}
-              <!-- Each option as the field writes it: its figure, its unit
-                   muted; while his differs, the one it was marked by the
-                   undo glyph that takes it back. -->
-              <Select.Item label={option} value={option}>
-                {#snippet children()}
-                  {#if edited && option === was}
-                    <IconReset
-                      aria-hidden="true"
-                      class="size-icon-sm text-ink-muted"
-                    />
-                    <span class="sr-only">{words.dials.agentsValue}</span>
-                  {/if}
-                  <!-- At the edge the trigger writes it at. -->
-                  <span class={["num", shownOption.unit && "flex-1 text-end"]}
-                    >{shownOption.figure}{#if shownOption.unit}<span
-                        class="ms-space-1 text-ink-muted"
-                        >{shownOption.unit}</span
-                      >{/if}</span
-                  >
-                {/snippet}
-              </Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
+        />
       {:else if dial.kind === "toggle"}
         <Switch
           checked={value === true}
@@ -204,23 +160,18 @@
           onCheckedChange={(next: boolean) => onchange(next)}
         />
       {:else}
-        <!-- A line of words; a prop typed with the design system's names
-             offers them (a token's colour, size or font). -->
+        <!-- Free words: one line holding the value, its end an ellipsis
+             while it is longer; pressed, it takes the caret and his own
+             words (the kit's field written where it stands). -->
         <Input
-          autocomplete="off"
+          dir="auto"
           {id}
-          list={dial.options?.length ? `${id}-names` : undefined}
+          look="inline"
+          measure="shrink"
           onchange={(event: Event) =>
             onchange((event.currentTarget as HTMLInputElement).value)}
           value={String(value ?? "")}
         />
-        {#if dial.options?.length}
-          <datalist id={`${id}-names`}>
-            {#each dial.options as option (option)}
-              <option value={option}></option>
-            {/each}
-          </datalist>
-        {/if}
       {/if}
     </div>
     <!-- The undo glyph's column, held in every row: a changed
@@ -265,7 +216,7 @@
             class="checker block size-space-3 flex-none overflow-clip rounded-hair border border-border-control"
             ><span
               class="block size-full bg-(--was)"
-              style:--was={String(was ?? "")}
+              style:--was={paint(String(was ?? ""))}
             ></span></span
           >
         {/if}

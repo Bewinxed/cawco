@@ -359,5 +359,19 @@ export const graphWords = {
     /** Beside Save: a new state from his values, the saved one kept. */
     saveNew: "Save as new state",
     saving: "Saving…",
+    /** The card's part that holds the dials the agent put on the drawing. */
+    agentHead: "Agent's dials",
+    /** The card's part that holds the props of the state on the stage, by its component's name in words. */
+    propsHead: (component: string) => `${component} props`,
+    /** The props' one switch of words: the row's name, and its cases, each filling every text prop it reaches at once. */
+    content: "All text",
+    cases: {
+      saved: "Saved",
+      empty: "Empty",
+      long: "Long",
+      noSpaces: "No spaces",
+      emoji: "Emoji",
+      rightToLeft: "Right to left",
+    },
   },
 } as const;
