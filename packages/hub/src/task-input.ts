@@ -20,8 +20,10 @@
 import { ACT_ORIGIN } from "@cawco/core/harness/kinds";
 import { taskLink } from "@cawco/core/references";
 import { noticeWords } from "@cawco/core/words/notices";
+import { ElysiaStatus } from "elysia";
 import type { Caw, YourAct, YourWords } from "./caw";
 import type { DbShape } from "./db";
+import { projectRefusalOf } from "./project-refusal";
 import type { TaskEvent, Tasks } from "./tasks";
 
 /** How long a task's pieces wait for the next before they go together, ms. */
@@ -139,6 +141,9 @@ export const createTaskInput = ({
       return;
     }
     const task = await tasks.get(projectId, taskId);
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
     const told = await caw.tell(
       projectId,
       inputEvent(projectId, task, written)

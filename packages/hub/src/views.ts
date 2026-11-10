@@ -61,7 +61,6 @@ import {
   readFolderFileAt,
   writeFolderFile,
 } from "./project-folder";
-import { projectAttempt } from "./project-refusal";
 import { appliesNow } from "./proposal-base";
 import { refusal } from "./refusal";
 import { nextRunsOf, slotLabel } from "./routines";
@@ -246,8 +245,11 @@ export const createViews = ({
     if (unknown instanceof ElysiaStatus) {
       return unknown;
     }
-    const { tasks: rows } = await tasks.list(projectId);
-    const viewed: ViewTaskRow[] = rows
+    const list = await tasks.list(projectId);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    const viewed: ViewTaskRow[] = list.tasks
       .filter(
         (row) =>
           (filter.stage === undefined || row.stage === filter.stage) &&
@@ -263,10 +265,18 @@ export const createViews = ({
     if (name instanceof ElysiaStatus) {
       return name;
     }
-    const [{ tasks: rows }, { stages }] = await Promise.all([
+    const [list, view] = await Promise.all([
       tasks.list(projectId),
       tasks.stages(projectId),
     ]);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    if (view instanceof ElysiaStatus) {
+      return view;
+    }
+    const { tasks: rows } = list;
+    const { stages } = view;
     const byKind = Object.fromEntries(
       STAGE_KINDS.map((kind) => [kind, 0])
     ) as Record<StageKind, number>;
@@ -734,7 +744,7 @@ const removalOf = (
   ask: `Remove “${viewTitle(view)}”? ${file} is deleted as a commit, and ${page ? `its block leaves the ${BLOCK_PAGE_TITLES[page]} page` : "its tab goes"}. Nothing else changes.`,
 });
 
-/** The routes for a project's views and the view tools they read; the tasks' thrown refusals answered by {@link projectAttempt}. */
+/** The routes for a project's views and the view tools they read. */
 export const viewRoutes = (
   views: Views,
   blocks: Pick<Blocks, "discarded" | "kept" | "pageOf" | "removed">
@@ -812,16 +822,15 @@ export const viewRoutes = (
       {
         body: viewToolInput("tasks"),
       },
-      ({ params, body }) =>
-        projectAttempt(async () => {
-          const rows = await views.tasks(params.id, body);
-          return rows instanceof ElysiaStatus ? rows : { rows };
-        })
+      async ({ params, body }) => {
+        const rows = await views.tasks(params.id, body);
+        return rows instanceof ElysiaStatus ? rows : { rows };
+      }
     )
     .post(
       "/api/projects/:id/view-tools/stages",
       { body: viewToolInput("stages") },
-      ({ params }) => projectAttempt(() => views.stages(params.id))
+      ({ params }) => views.stages(params.id)
     )
     .post(
       "/api/projects/:id/view-tools/routines",

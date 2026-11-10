@@ -38,10 +38,12 @@ import type { PlanStep, SessionPlan, TaskTodo } from "@cawco/core/plan";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { stepLink, taskLink, todoLink } from "@cawco/core/references";
 import { contextWords } from "@cawco/core/words/context";
+import { ElysiaStatus } from "elysia";
 import type { QuestionAnswer } from "./artifacts/questions";
 import type { AskedOf } from "./artifacts/shapes";
 import type { DbShape } from "./db";
 import type { Note } from "./memory";
+import { projectRefusalOf } from "./project-refusal";
 import type { Refused } from "./refusal";
 import type { Tasks } from "./tasks";
 
@@ -376,6 +378,9 @@ const filedTasks = async (
   instanceId: string
 ): Promise<OpenItemRows["tasks"]> => {
   const list = await deps.tasks.list(projectId);
+  if (list instanceof ElysiaStatus) {
+    throw projectRefusalOf(list);
+  }
   const open = list.tasks.filter(
     (task) =>
       task.createdBy?.id === instanceId &&
@@ -386,6 +391,9 @@ const filedTasks = async (
   return await Promise.all(
     open.map(async (task) => {
       const read = await deps.tasks.get(projectId, task.id);
+      if (read instanceof ElysiaStatus) {
+        throw projectRefusalOf(read);
+      }
       return {
         id: read.id,
         stage: read.stage,
