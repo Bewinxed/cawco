@@ -664,8 +664,8 @@ export const surfaceRun = (
       })
       .then(
         (told) => {
-          if (!told.woke) {
-            unheard(told.why);
+          if (told instanceof ElysiaStatus) {
+            unheard(told.response.detail);
           }
         },
         (error: unknown) =>
@@ -1048,7 +1048,7 @@ export const createRoutines = ({
       return;
     }
     const label = slotLabel(run.slot, routine.timeZone);
-    caw.notice(routine.projectId, {
+    const unnoted = caw.notice(routine.projectId, {
       title: `Routine · ${routine.name}${NOTE_WHAT[phase](label)}`,
       ...(body ? { body } : {}),
       event: {
@@ -1062,6 +1062,11 @@ export const createRoutines = ({
         schedule: scheduleOf(routine),
       },
     });
+    if (unnoted) {
+      console.warn(
+        `[routines] ${routine.name} (${run.slot}) was not noted: ${unnoted.response.detail}`
+      );
+    }
   };
 
   /**
@@ -1225,7 +1230,7 @@ export const createRoutines = ({
       trigger: `the routine ${routineLink(routine.id, routine.name)}, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}`,
       text: `Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${leadContract(run.id)}`,
     });
-    if (woke.woke) {
+    if (!(woke instanceof ElysiaStatus)) {
       store.setRun(run.id, { state: "running" });
       return;
     }
@@ -2044,7 +2049,7 @@ export const createRoutines = ({
       ? ` · next ${nextWords(schedule.nextAt, routine.timeZone)}`
       : "";
     const body = [routine.madeWhy, lasts].filter(Boolean).join("\n\n");
-    caw.notice(projectId, {
+    const unnoted = caw.notice(projectId, {
       title: `${who} set up a routine: ${routine.name} · ${schedule.words}${next}`,
       ...(body ? { body } : {}),
       event: {
@@ -2058,6 +2063,11 @@ export const createRoutines = ({
         why: routine.madeWhy,
       },
     });
+    if (unnoted) {
+      console.warn(
+        `[routines] ${routine.name} was not noted as made: ${unnoted.response.detail}`
+      );
+    }
   };
 
   /**

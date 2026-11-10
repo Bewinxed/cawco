@@ -671,8 +671,8 @@ export const createJevTasks = ({
       trigger: `the person wrote from their phone${task ? `, about ${taskLink(projectId, task.id, task.title)}` : ""}`,
       words: sentence,
     });
-    if (!woke.woke && woke.thrown !== undefined) {
-      throw woke.thrown;
+    if (woke instanceof ElysiaStatus) {
+      return woke;
     }
   };
 

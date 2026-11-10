@@ -72,7 +72,7 @@ import { pageHash } from "@cawco/preview/proxy";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { Artifacts } from "./artifacts/service";
 import type { ArtifactTaker } from "./artifacts/taker";
-import type { PersonsSend } from "./caw";
+import type { Caw, PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import type { FolderProblem } from "./decision-page";
 import { PROGRAM_FILE, readKept } from "./decision-program";
@@ -396,7 +396,7 @@ export interface DecisionsDeps {
   tellConversation: (
     projectId: string,
     said: PersonsSend
-  ) => Promise<{ instanceId: string; send: string }>;
+  ) => ReturnType<Caw["tellYours"]>;
 }
 
 /** The record as written: what the hub reads back, with who it asked. */
@@ -1036,13 +1036,17 @@ export const createDecisions = (deps: DecisionsDeps) => {
     record: StoredRecord,
     to: ReturnType<typeof heardBy>,
     ask: PersonsSend
-  ): Promise<{ error: unknown; why: string } | null> => {
+  ): Promise<{ why: string } | null> => {
     try {
       if ("instance" in to) {
         deps.tell(to.instance, ask, record.askedSend ?? crypto.randomUUID());
         return null;
       }
-      const { send } = await deps.tellConversation(projectId, ask);
+      const told = await deps.tellConversation(projectId, ask);
+      if (told instanceof ElysiaStatus) {
+        return { why: told.response.detail };
+      }
+      const { send } = told;
       await deps.commit(
         projectId,
         {
@@ -1058,10 +1062,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
       );
       return null;
     } catch (error) {
-      return {
-        error,
-        why: error instanceof Error ? error.message : String(error),
-      };
+      return { why: error instanceof Error ? error.message : String(error) };
     }
   };
 
@@ -1193,7 +1194,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
     read: DecisionPageRead,
     to: ReturnType<typeof heardBy>,
     words: string
-  ): Promise<DecisionSent> => {
+  ) => {
     const page = `They wrote it on the decision page “${read.title}” (decisions/${name}/).`;
     if ("instance" in to) {
       deps.tell(
@@ -1206,15 +1207,20 @@ export const createDecisions = (deps: DecisionsDeps) => {
         crypto.randomUUID()
       );
       deps.changed(projectId);
-      return { to: "session" };
+      const sent: DecisionSent = { to: "session" };
+      return sent;
     }
-    const { instanceId } = await deps.tellConversation(projectId, {
+    const told = await deps.tellConversation(projectId, {
       by: "you",
       words,
       note: `${page} ${handedToCaw(read)}`,
     });
+    if (told instanceof ElysiaStatus) {
+      return told;
+    }
     deps.changed(projectId);
-    return { to: "caw", instanceId };
+    const sent: DecisionSent = { to: "caw", instanceId: told.instanceId };
+    return sent;
   };
 
   return {
