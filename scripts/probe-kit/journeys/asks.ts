@@ -1,4 +1,5 @@
 import type { Reply, Seen } from "../../scratch-fleet";
+import { payloadOf } from "../hub";
 import type { KitFleet } from "../kit";
 import { eventually, waiting } from "./suite";
 
@@ -40,38 +41,27 @@ export function asking(seen: Seen, otherwise: (seen: Seen) => Reply): Reply {
   return say(result.includes(DENIED) ? HELD_BACK : RAN);
 }
 
-/** One parked ask, as the hub lists it (`/api/pending`). */
-export interface Parked {
-  input: Record<string, unknown>;
-  instanceId: string;
-  requestId: string;
-  toolName: string;
-}
-
-/** Every ask the hub holds for the person: `/api/pending`'s asks, the artifact lane apart. */
-const pendingAsks = async (fleet: KitFleet): Promise<Parked[]> =>
-  (await waiting(fleet)).asks as Parked[];
-
 /**
  * A Claude session in its default mode (it asks), with the message that
- * makes it ask, parked on the hub: its id and its ask.
+ * makes it ask, parked on the hub: its id.
  */
 export async function sessionAsking(
   fleet: KitFleet,
   title: string,
   token: string
-): Promise<{ id: string; parked: Parked }> {
+): Promise<{ id: string }> {
   const id = await fleet.spawn("claude", title, fleet.workdir, {
     permissionMode: "default",
   });
   await fleet.send(id, `JOURNEY-ASK ${token} Tidy the release notes.`);
-  const asks = await eventually(
+  await eventually(
     "the hub holds the session's Bash ask",
-    () => pendingAsks(fleet),
+    async () => (await waiting(fleet)).asks,
     (all) =>
-      all.some((one) => one.instanceId === id && one.toolName === "Bash"),
+      all.some(
+        (one) => one.instanceId === id && payloadOf(one).toolName === "Bash"
+      ),
     90_000
   );
-  const parked = asks.find((one) => one.instanceId === id) as Parked;
-  return { id, parked };
+  return { id };
 }
