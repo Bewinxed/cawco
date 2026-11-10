@@ -21,6 +21,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { ElysiaStatus } from "elysia";
 import { machineAccount } from "./accounts";
 import { finishedAnswer } from "./continuation-words";
 import { CONTINUATION_CANCELLED } from "./continuations";
@@ -70,7 +71,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     id: string,
     cancelled: () => boolean,
     mode: PermissionMode
-  ): Promise<string> => {
+  ) => {
     const answered = new Promise<void>((resolve, reject) => {
       ctx.turnWaiters.set(id, { machineId: source.machineId, resolve, reject });
     });
@@ -78,7 +79,7 @@ export const createContextReads = (ctx: ContextReadsContext) => {
     answered.catch(() => undefined);
     ctx.summarisers.add(id);
     try {
-      await ctx.spawnFromHub(
+      const spawned = await ctx.spawnFromHub(
         source.machineId,
         {
           instanceId: id,
@@ -97,6 +98,9 @@ export const createContextReads = (ctx: ContextReadsContext) => {
         // permission prompt.
         mode
       );
+      if (spawned instanceof ElysiaStatus) {
+        return spawned;
+      }
       if (cancelled()) {
         throw new Error(CONTINUATION_CANCELLED);
       }

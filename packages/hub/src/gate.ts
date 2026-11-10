@@ -322,7 +322,7 @@ export const createGate = ({
     workspace: WorkspaceRow,
     item: WorkItemRow,
     machineId: string
-  ): Promise<WorkspaceRow> => {
+  ) => {
     const held = db
       .checkWorkspacesOf(workspace.id)
       .find((each) => each.machineId === machineId);
@@ -340,14 +340,13 @@ export const createGate = ({
           : "this item belongs to no project, so the hub knows no checkout of its repository there."
       );
     }
-    const opened = await workspaces.openWorkspace(
+    return await workspaces.openWorkspace(
       item.instanceId,
       repository,
       machineId,
       projectId,
       { checksFor: workspace.id }
     );
-    return opened;
   };
   /**
    * Runs the landing gate's `steps` in order. A step runs in the workspace's
@@ -424,14 +423,18 @@ export const createGate = ({
     };
     const placed = new Map<
       string,
-      Promise<{ at: WorkspaceRow; head: string }>
+      Promise<
+        | { at: WorkspaceRow; head: string }
+        | Exclude<Awaited<ReturnType<typeof gateWorkspace>>, WorkspaceRow>
+      >
     >();
     /** The gate workspace on `machineId`, at the workspace's commit. */
-    const atCommit = (
-      machineId: string
-    ): Promise<{ at: WorkspaceRow; head: string }> =>
+    const atCommit = (machineId: string) =>
       once(placed, machineId, async () => {
         const at = await gateWorkspace(workspace, item, machineId);
+        if (at instanceof ElysiaStatus) {
+          return at;
+        }
         commit ??= call(workspace.machineId, CONTROL_WORKSPACE_BUNDLE, [
           refOf(workspace),
           workspace.base,
@@ -456,7 +459,18 @@ export const createGate = ({
     ): Promise<Ran | undefined> => {
       const on = `on ${machineName(db, machineId)}`;
       try {
-        const { at, head } = await atCommit(machineId);
+        const cut = await atCommit(machineId);
+        if (cut instanceof ElysiaStatus) {
+          return {
+            where: on,
+            complete: {
+              exitCode: 1,
+              stdout: "",
+              stderr: `The hub could not run this step ${on}: ${cut.response.detail}`,
+            },
+          };
+        }
+        const { at, head } = cut;
         const complete = await command(
           machineId,
           at.path,
@@ -760,15 +774,6 @@ export const createGate = ({
       pick(capable)
     );
   };
-  /** The project's gate ({@link projectGate}), the folder's refusal thrown on in its words, as the landing's failures are: finish_item answers them. */
-  const gateOf = async (projectId: string) => {
-    const declared = await projectGate(projectId);
-    if (declared instanceof ElysiaStatus) {
-      throw new Error(declared.response.detail);
-    }
-    return declared;
-  };
-
   /**
    * THE landing gate of an item: what stands between its finished work and
    * where it lands, and what no session writes. The steps its project
@@ -779,17 +784,25 @@ export const createGate = ({
    * A project with no gate.md declares none. An item that lands none has no
    * gate: it puts nothing anywhere. `refusal`, in words, when gate.md does
    * not read or no machine a due step needs is online (then `needs`, the
-   * capability the item waits for).
+   * capability the item waits for); the folder's problem when gate.md cannot
+   * be read off it.
    */
   const gateSteps = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
-  ): Promise<Gate | GateRefusal> => {
+  ): Promise<
+    | Gate
+    | GateRefusal
+    | Exclude<Awaited<ReturnType<typeof projectGate>>, { kind: string }>
+  > => {
     const { projectId } = item;
     if (item.lands === "none" || !projectId) {
       return { declared: false, steps: [] };
     }
-    const declared = await gateOf(projectId);
+    const declared = await projectGate(projectId);
+    if (declared instanceof ElysiaStatus) {
+      return declared;
+    }
     if (declared.kind === "none") {
       return { declared: false, steps: [] };
     }
@@ -798,15 +811,24 @@ export const createGate = ({
         refusal: `Not landed: this project's ${GATE_FILE}, which declares its merge checks, does not read, so the hub cannot tell what to run. ${declared.problems.join(" ")} It is in the project's folder on the hub: ask your parent or the person to fix it there, then call finish_item again.`,
       };
     }
-    const touched = declared.steps.some((step) => step.inputs || step.targetMap)
+    return await dueSteps(workspace, item, projectId, declared.steps);
+  };
+  /** The steps `steps` declare that are due for an item, by what its diff touches; or the first refusal. */
+  const dueSteps = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    projectId: string,
+    declared: readonly DeclaredStep[]
+  ): Promise<Gate | GateRefusal> => {
+    const touched = declared.some((step) => step.inputs || step.targetMap)
       ? await changedPaths(workspace, item)
       : [];
-    const maps = await targetMapsOf(workspace, item, declared.steps, touched);
+    const maps = await targetMapsOf(workspace, item, declared, touched);
     if ("refusal" in maps) {
       return maps;
     }
     const steps: GateStep[] = [];
-    for (const step of declared.steps) {
+    for (const step of declared) {
       const due = dueStep(
         workspace,
         projectId,

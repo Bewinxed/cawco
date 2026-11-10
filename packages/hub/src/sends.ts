@@ -46,7 +46,7 @@ import { SEND_STATES } from "@cawco/core/session-messages";
 import { withPastedText } from "@cawco/core/transcript-rules";
 import type { TranscriptWindow, WindowAsk } from "@cawco/core/transcript-types";
 import { noticeWords } from "@cawco/core/words/notices";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { PersonsSend } from "./caw";
 import type { DbShape } from "./db";
 import type { PublicInstanceRow } from "./db/instances";
@@ -64,7 +64,6 @@ import { externalizeImages, mediaNameOf } from "./media";
 import { talksWithPerson } from "./roles";
 import { sessionWord } from "./session-word";
 import { unreachable } from "./unreachable";
-import { WorkItemRefusal } from "./work-item-state";
 
 /** The system origin name of the hub's word that a session at its account's limit may go on (at-limit.ts `CARRY_ON_ORIGIN`). */
 export const LIMIT_ORIGIN = "limit";
@@ -515,6 +514,10 @@ export const createSends = (ctx: SendsContext) => {
         ),
       },
     });
+    if (sent instanceof ElysiaStatus) {
+      sendSettles.delete(uuid);
+      return sent.response.detail;
+    }
     const owed = sent?.state === "pending" && sent.owed !== null;
     const outcome =
       owed || (sent && sent.state !== "pending") ? sent : await settled;
@@ -605,7 +608,7 @@ export const createSends = (ctx: SendsContext) => {
     if (!(from && to)) {
       return;
     }
-    deliverSend(
+    const sent = deliverSend(
       sessionWord(
         from,
         undeliveredNotice(sessionLabel(to).tag, reason),
@@ -613,6 +616,11 @@ export const createSends = (ctx: SendsContext) => {
         { shouldQuery: false }
       )
     );
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[sends] a session's undelivered notice was not sent: ${sent.response.detail}`
+      );
+    }
   };
 
   /**
@@ -1982,10 +1990,7 @@ export const createSends = (ctx: SendsContext) => {
    * own steps (`ahead`), which go first (`compactionSend`).
    *
    */
-  const deliverSend = (
-    asked: Envelope<SendPayload>,
-    ahead = false
-  ): SentMessageRow | undefined => {
+  const deliverSend = (asked: Envelope<SendPayload>, ahead = false) => {
     const envelope = toContinuation(byIdNow(asked), "refused");
     if (!envelope) {
       return;
@@ -2089,10 +2094,15 @@ export const createSends = (ctx: SendsContext) => {
     const uuid = crypto.randomUUID();
     changeSend(send, { state: "replaced", replacedBy: uuid });
     const { delivery: _delivery, ...payload } = moved.payload;
-    deliverSend({
+    const sent = deliverSend({
       ...moved,
       payload: { ...payload, message: { ...payload.message, uuid } },
     });
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[sends] a send carried to a later session was not sent: ${sent.response.detail}`
+      );
+    }
   };
 
   /**
@@ -2115,7 +2125,7 @@ export const createSends = (ctx: SendsContext) => {
     if (!notice) {
       return;
     }
-    deliverToSession(
+    const sent = deliverToSession(
       {
         verb: "send",
         machineId,
@@ -2134,6 +2144,11 @@ export const createSends = (ctx: SendsContext) => {
       },
       false
     );
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[sends] the note on whose delegates a fork has was not sent: ${sent.response.detail}`
+      );
+    }
   };
   /**
    * A send that starts a turn goes behind what its session is owed of the
@@ -2154,7 +2169,7 @@ export const createSends = (ctx: SendsContext) => {
     if (!words) {
       return;
     }
-    deliverToSession(
+    const sent = deliverToSession(
       {
         verb: "send",
         machineId,
@@ -2173,6 +2188,11 @@ export const createSends = (ctx: SendsContext) => {
       },
       false
     );
+    if (sent instanceof ElysiaStatus) {
+      console.warn(
+        `[sends] the person's plan changes were not folded in: ${sent.response.detail}`
+      );
+    }
   };
 
   /**
@@ -2335,13 +2355,18 @@ export const createSends = (ctx: SendsContext) => {
       .listedInstancesByIds(ctx.db.plansWithAwayNotes())
       .filter(holdsNews);
     for (const row of told) {
-      deliverSend(
+      const sent = deliverSend(
         sessionWord(row, BACK_MESSAGE, {
           kind: "system",
           name: BACK_ORIGIN,
           line: noticeWords.back,
         })
       );
+      if (sent instanceof ElysiaStatus) {
+        console.warn(
+          `[presence] the person's return was not told to a session: ${sent.response.detail}`
+        );
+      }
     }
     console.log(
       `[presence] the person is back: ${told.length} session(s) holding news from while they were away told so, each to recap it${told.length > 0 ? `: ${told.map((row) => ctx.sessionName(row)).join(", ")}` : ""}`
@@ -2477,7 +2502,7 @@ export const createSends = (ctx: SendsContext) => {
     envelope: Envelope<SendPayload>,
     ahead: boolean
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
-  ): SentMessageRow => {
+  ) => {
     const { instanceId, message } = envelope.payload;
     const { machineId } = envelope;
     const keepAlive = isKeepAlive(message);
@@ -2490,7 +2515,10 @@ export const createSends = (ctx: SendsContext) => {
       ? undefined
       : ctx.sendRefusal(instanceId, message.origin);
     if (refused?.gone) {
-      throw new WorkItemRefusal(409, refused.reason);
+      return problem(409, {
+        code: "send-conversation-gone",
+        detail: refused.reason,
+      });
     }
     const [target] = ctx.db.getInstancesByIds([instanceId]);
     // The parent's, the conversation's or the reader's word ends an interrupt's hold
@@ -2861,12 +2889,12 @@ export const createSends = (ctx: SendsContext) => {
   const sessionSend = (
     asked: Envelope<SendPayload>,
     requester: InstanceRow
-  ): SendDelivery => {
+  ) => {
     const envelope = byIdNow(asked);
     const { payload } = envelope;
     const malformed = normalizeRelayMessage(payload);
     if (malformed) {
-      throw new WorkItemRefusal(400, malformed);
+      return problem(400, { code: "send-malformed", detail: malformed });
     }
     const { instanceId } = payload;
     const [before] = ctx.db.getInstancesByIds([instanceId]);
@@ -2874,12 +2902,18 @@ export const createSends = (ctx: SendsContext) => {
       ...envelope,
       machineId: envelope.machineId || requester.machineId,
     });
+    if (record instanceof ElysiaStatus) {
+      return record;
+    }
     // No record: the send went nowhere a session holds.
     if (!record) {
       return { busy: ctx.pulses.get(instanceId)?.busy === true };
     }
     if (record.state === "failed") {
-      throw new WorkItemRefusal(404, record.reason ?? "the send failed");
+      return problem(404, {
+        code: "send-failed",
+        detail: record.reason ?? "the send failed",
+      });
     }
     const hold = holdOf(record);
     const plan =
