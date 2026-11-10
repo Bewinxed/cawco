@@ -10,6 +10,7 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
 } from "@cawco/core/plan";
+import { STAGE_TOOLCHAINS } from "@cawco/core/stage";
 import { z } from "zod";
 
 const BrowserKeyShape = z.union([
@@ -112,7 +113,7 @@ const StageStateOfShape = z.object({
   status: StageStatusShape,
 });
 
-const StageToolchainShape = z.enum(["vite", "astro", "nuxt"]);
+const StageToolchainShape = z.enum(STAGE_TOOLCHAINS);
 export type StageToolchainOutput = z.output<typeof StageToolchainShape>;
 
 const SheetStageStateShape = StageStateOfShape.extend({

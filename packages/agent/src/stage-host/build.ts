@@ -129,6 +129,18 @@ async function canvasFaces(): Promise<{
   };
 }
 
+/** The text of a bundle's one output file. */
+const outputText = (
+  what: string,
+  outputs: Bun.BuildArtifact[]
+): Promise<string> => {
+  const [built] = outputs;
+  if (!built) {
+    throw new Error(`${what} built no file.`);
+  }
+  return built.text();
+};
+
 /** The canvas's browser runtime (canvas/runtime.ts), bundled: an ES module the stage serves as `cawco:stage/runtime.js`. */
 async function canvasRuntime(): Promise<string> {
   const result = await bundled("The canvas runtime", {
@@ -138,7 +150,7 @@ async function canvasRuntime(): Promise<string> {
     minify: true,
   });
   await refuseSchemeLowering("The stage's canvas runtime", result.outputs);
-  return await (result.outputs[0] as Bun.BuildArtifact).text();
+  return await outputText("The canvas runtime", result.outputs);
 }
 
 /** The host, bundled: its text. */
@@ -165,7 +177,7 @@ export async function buildStageHost(): Promise<string> {
     },
   });
   await refuseSchemeLowering("The stage host", result.outputs);
-  return await (result.outputs[0] as Bun.BuildArtifact).text();
+  return await outputText("The stage host", result.outputs);
 }
 
 /**
