@@ -55,10 +55,12 @@ export interface SendSlidesHost {
   readonly landed: boolean;
   readonly list: VirtualizerHandle | undefined;
   readonly listing: HTMLElement | undefined;
-  readonly presentation: { readonly handed: ReadonlyMap<string, Handoff> };
-  readonly renderedRows: Row[];
   readonly rowBuild: {
     readonly frozenSettled: Row[];
+  };
+  readonly rowDraw: {
+    readonly presentation: { readonly handed: ReadonlyMap<string, Handoff> };
+    readonly renderedRows: Row[];
   };
 }
 
@@ -195,7 +197,7 @@ export class SendSlides {
     this.movedAfter = new Set();
     this.settledFrom = new Map();
     this.foldMove = false;
-    const drawn = this.#host.renderedRows;
+    const drawn = this.#host.rowDraw.renderedRows;
     const start = drawn.findIndex((row) => after.has(row.key));
     if (!(boxes && this.#host.listing) || start < 0) {
       return;
@@ -235,7 +237,7 @@ export class SendSlides {
         );
       } else if (
         this.#host.arrivals.tickets.get(row.key)?.kind === "arrive" &&
-        !this.#host.presentation.handed.has(row.key)
+        !this.#host.rowDraw.presentation.handed.has(row.key)
       ) {
         arrivedAt = now.top;
       }
@@ -260,7 +262,9 @@ export class SendSlides {
 
   /** Where virtua has the row `key` in the list, by its sizes; null when it is not in the list. */
   offsetOf(key: string): number | null {
-    const index = this.#host.renderedRows.findIndex((row) => row.key === key);
+    const index = this.#host.rowDraw.renderedRows.findIndex(
+      (row) => row.key === key
+    );
     return index < 0 || !this.#host.list
       ? null
       : this.#host.list.getItemOffset(index);
@@ -310,7 +314,7 @@ export class SendSlides {
     if (Math.abs(delta) <= 0.5) {
       return;
     }
-    const first = this.#host.renderedRows[0]?.key;
+    const first = this.#host.rowDraw.renderedRows[0]?.key;
     if (first !== undefined) {
       this.slidFrom.set(node, { first, front: this.offsetOf(first) ?? 0, top });
     }

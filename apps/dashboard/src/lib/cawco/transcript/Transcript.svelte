@@ -59,7 +59,6 @@
     tick,
     untrack,
   } from "svelte";
-  import type { Attachment } from "svelte/attachments";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -88,7 +87,7 @@
   import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
   import { findIn } from "../find/conversation-find.svelte";
   import { markFind, rangesOf } from "../find/find-marks";
-  import { noteChange, repeatedKey, reportRepeat } from "../repeated-keys";
+  import { noteChange } from "../repeated-keys";
   import { provideSessionHere } from "../session-here";
   import { boardStore } from "../stores/board.svelte";
   import { type SessionState, sessionsStore } from "../stores/sessions.svelte";
@@ -101,8 +100,8 @@
   import type { Message } from "../types";
   import { warm } from "../workspace/warm.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
-  import { ArrivalLedger, callId } from "./arrival-ledger.svelte";
-  import { type Handoff, provideLedger, type Ticket } from "./arrivals.svelte";
+  import { ArrivalLedger } from "./arrival-ledger.svelte";
+  import { provideLedger, type Ticket } from "./arrivals.svelte";
   import Behind from "./Behind.svelte";
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
@@ -127,8 +126,13 @@
   } from "./open-at.svelte";
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
-  import { type Built, NO_ROWS, RowBuild } from "./row-build.svelte";
-  import { called, type Fold, type Row, rowSaid, wellRunsFrom } from "./rows";
+  import { RowBuild } from "./row-build.svelte";
+  import {
+    type Keys,
+    perSettled,
+    RowPresentation,
+  } from "./row-presentation.svelte";
+  import { type Row, wellRunsFrom } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
   import { SendSlides } from "./send-slides.svelte";
@@ -224,41 +228,6 @@
    * so where it happens.
    */
   const active = $derived(isFocused);
-  /**
-   * `read` of a build's settled rows (`Built`'s `settled`), once for each
-   * array the fold hands over: a new array is a settled row moved, gone or
-   * changed (rows.ts `stillDrawn`: the store's revision moves with every
-   * change to a message), so what was read of the last one still holds.
-   */
-  function perSettled<T>(read: (settled: Row[]) => T): (settled: Row[]) => T {
-    const seen = new WeakMap<Row[], T>();
-    return (settled) => {
-      if (!seen.has(settled)) {
-        seen.set(settled, read(settled));
-      }
-      return seen.get(settled) as T;
-    };
-  }
-  /** Which keys a list of rows holds. */
-  interface Keys {
-    has: (key: string) => boolean;
-  }
-  const settledKeys = perSettled(
-    (settled) => new Set(settled.map((row) => row.key))
-  );
-  /** The keys of `among`, which begins with `settled`: those read once, the rest now. */
-  function keysIn(among: Row[], settled: Row[]): Keys {
-    const known = settledKeys(settled);
-    const rest = new Set<string>();
-    for (let i = settled.length; i < among.length; i += 1) {
-      rest.add(among[i].key);
-    }
-    return { has: (key) => known.has(key) || rest.has(key) };
-  }
-  /** Where among settled rows the ones that can leave stand (`canLeave`): a failed send, a compaction running. */
-  const leavableIn = perSettled((settled) =>
-    settled.flatMap((row, index) => (canLeave(row) ? [index] : []))
-  );
   // The transcript opens on the latest message, not the top. virtua fires an
   // onscroll on mount (scrollTop 0, tall content) which would flip `atBottom`
   // false before the tail-follow effect runs, leaving the reader at the top —
@@ -331,12 +300,6 @@
     get onList() {
       return onList;
     },
-    get presentation() {
-      return presentation;
-    },
-    get renderedRows() {
-      return renderedRows;
-    },
     get scroller() {
       return scroller;
     },
@@ -357,6 +320,9 @@
     },
     get arrivals(): ArrivalLedger {
       return arrivals;
+    },
+    get rowDraw(): RowPresentation {
+      return rowDraw;
     },
   };
 
@@ -460,445 +426,8 @@
           },
         };
   };
+  const rowDraw = new RowPresentation(host);
 
-  /**
-   * ROWS LEAVE WHERE THEY STAND; THEY DO NOT VANISH.
-   *
-   * The live tail's rows — the turn's indicator, a tool's glance, a queued
-   * message — go the moment the session says so, and a failed send goes as
-   * its retry replaces it; virtua drops a missing key at once, and the list
-   * would lose that height in one frame. So a row that goes WITHOUT becoming
-   * something else in the list is kept where it stood while it folds shut
-   * (`Row`'s `leaving`), the rows under it closing up over the fold, and the
-   * end of its own fold is what takes it out, at no height by then. virtua
-   * keeps its sizes by index, so a row taken out of the middle hands its
-   * size to the row after it until that one is measured again. A live row
-   * that settled is not leaving: the row it became is already on screen, in
-   * its place.
-   */
-  const TAIL_KINDS = new Set<Row["kind"]>(["live", "livetool", "queued"]);
-  /**
-   * A row that can leave the list, as it was last drawn, with where it stood:
-   * the keys of the rows above it, nearest first, back to the first one that
-   * cannot leave — or none, when it was the first row.
-   */
-  interface Standing {
-    above: string[];
-    row: Row;
-  }
-  /** The live tail's rows and the failed sends, as last drawn. */
-  let standing = new Map<string, Standing>();
-  /** Rows folding shut where they stood. */
-  let leaving: Standing[] = [];
-  let leftTick = $state(0);
-  /** The keys the list drew last: a row not among them is new. */
-  let drawnKeys: Keys = new Set<string>();
-  /**
-   * The row that takes a leaving row's place: whether it takes the place in
-   * on top of its own (`absorbs`), and whether it is a different row from
-   * the one that left (`replaces`), which then fades over the place as the
-   * taker opens.
-   */
-  interface Taker {
-    absorbs: boolean;
-    key: string;
-    replaces: boolean;
-  }
-
-  /**
-   * Whether `row` can leave the list: a tail row, a failed send its retry
-   * replaces, or a compaction still running, which goes when it turns out
-   * never to have happened (skipped, or stopped: rows.ts `outcome`).
-   */
-  const canLeave = (row: Row): boolean =>
-    TAIL_KINDS.has(row.kind) ||
-    (row.kind === "single" && row.message.state === "failed") ||
-    (row.kind === "compaction" && row.state === "compacting");
-
-  /**
-   * Whether the row `key` has left the list, rather than become something
-   * else in it: a live row that became its settled row, or a tool's glance
-   * whose call has landed, is already on screen in its new form, and a
-   * queued message the session read is still in the list under its key.
-   */
-  function hasLeft(key: string, row: Row, ended: Fold["ended"]): boolean {
-    if (row.kind === "single") {
-      return untrack(() => session.records[key]?.state === "replaced");
-    }
-
-    return !(
-      (ended?.key === key && ended.into !== null) ||
-      (row.kind === "livetool" &&
-        untrack(() => called(session, row.glance.toolId)))
-    );
-  }
-
-  /** The build the rows were last drawn from (`presentation`). */
-  let drawnFrom: Built | null = null;
-  // What it reads of the rows' messages (a send's state, a call's id) is the
-  // build's to depend on (`session.rev`): untracked, it is invalidated by a
-  // new build and a fold ending alone, not by every row it reads.
-  //
-  // `shifted` is virtua's `shift` for this drawing: the build's own word on
-  // the change it made, said once, in the drawing that build makes. virtua
-  // keeps its sizes by index and reads `shift` whenever the list's length
-  // changes. Held on for as long as the build stood, a fold that ended after
-  // a page landed in front took its row out with `shift` still set: virtua
-  // dropped the FIRST size, every row above the fold was left holding the
-  // size of the row under it, and none of them was measured again (their
-  // indexes had not moved), so the turn's rows stood over one another until
-  // a reload (the owner's "good morning", nightly 0.1.12-nightly.5855).
-  const presentation = $derived.by(() => {
-    track(leftTick);
-    const from = rowBuild.built;
-    const shifted = from.shifted && from !== drawnFrom;
-    drawnFrom = from;
-    const { rows: next, ended, settled } = from;
-    return untrack(() => ({ ...withLeaving(next, settled, ended), shifted }));
-  });
-
-  /**
-   * The rows as drawn: `next`, with the rows folding shut where they stood,
-   * and the settled rows they still begin with — none, when a row folding
-   * shut stands among those.
-   */
-  function withLeaving(next: Row[], settled: Row[], ended: Fold["ended"]) {
-    const present = keysIn(next, settled);
-    const folding = new Set(leaving.map(({ row }) => row.key));
-    const handed = new Map<string, Handoff>();
-    // Only a row on screen folds or hands its place on: one outside virtua's
-    // range, or one no frame has laid out yet (`drawnHeights`), has nothing
-    // to fold, and nobody to see it go.
-    for (const [key, stood] of standing) {
-      if (present.has(key) || folding.has(key)) {
-        continue;
-      }
-      const node = drawnRow(key);
-      const height = node ? drawnHeights.get(node) : undefined;
-      if (
-        !node ||
-        height === undefined ||
-        handOn(node, height, takerOf(key, stood, next, ended), handed)
-      ) {
-        continue;
-      }
-      if (hasLeft(key, stood.row, ended)) {
-        leaving.push(stood);
-        slides.noteFold(key);
-      }
-    }
-    leaving = leaving.filter(({ row }) => !present.has(row.key));
-    // The rows themselves, when nothing folds: a streamed word copies none.
-    const drawn = leaving.length > 0 ? [...next] : next;
-    // Where the first row put back in stands: one among the settled rows
-    // means the list no longer begins with them.
-    let first = drawn.length;
-    // Each goes back in where it stood. One that stood under another row on
-    // its way out goes in once that one is in; one whose place is not in the
-    // list any more — the rows around it read again from history — was not
-    // seen to go, and is let go with them.
-    let unplaced = leaving;
-    let placed = true;
-    while (unplaced.length > 0 && placed) {
-      placed = false;
-      unplaced = unplaced.filter(({ above, row }) => {
-        const at = placeIn(drawn, above, ended);
-        if (at < 0) {
-          return true;
-        }
-        drawn.splice(at, 0, row);
-        first = Math.min(first, at);
-        placed = true;
-        return false;
-      });
-    }
-    const lost = new Set(unplaced.map(({ row }) => row.key));
-    leaving = leaving.filter(({ row }) => !lost.has(row.key));
-    const begins = first >= settled.length ? settled : NO_ROWS;
-    standing = standingIn(drawn, begins, present);
-    drawnKeys = keysIn(drawn, begins);
-    return {
-      rows: drawn,
-      settled: begins,
-      leaving: new Set(leaving.map(({ row }) => row.key)),
-      handed,
-    };
-  }
-
-  /**
-   * The row drawn as `node`, `height` tall as the last frame laid it out,
-   * hands its place to `taker`: the height the taker starts from — the
-   * place's, or the place's on top of its own when it absorbs it. A row
-   * that becomes another is drawn at the place's height whether or not it
-   * moves; a run taking a call in is drawn at its own new height at once
-   * when nothing moves, or when no frame has laid it out yet, and is handed
-   * nothing. False when nothing takes the place.
-   */
-  function handOn(
-    node: HTMLElement,
-    height: number,
-    taker: Taker | null,
-    handed: Map<string, Handoff>
-  ): boolean {
-    if (!taker) {
-      return false;
-    }
-    const ghost = taker.replaces ? ghostOf(node) : null;
-    if (!taker.absorbs) {
-      handed.set(taker.key, { from: height, ghost, taken: false });
-      return true;
-    }
-    const holder = drawnRow(taker.key);
-    const own = holder ? drawnHeights.get(holder) : undefined;
-    if (
-      own !== undefined &&
-      untrack(() => landed && arrivals.watched && motionOk.current)
-    ) {
-      // The run's place grows out of the one it took over, under it: the
-      // ghost stands where the row stood, below the run's own lines.
-      if (ghost) {
-        ghost.style.transform = `translateY(${own}px)`;
-      }
-      handed.set(taker.key, { from: own + height, ghost, taken: false });
-    }
-    return true;
-  }
-
-  /**
-   * The row drawn as `node`, copied as it is on screen, to stand over its
-   * place while it fades (`Row`'s handoff): inert, unheard, and carrying none
-   * of the hooks the list and the flights find rows by.
-   */
-  function ghostOf(node: HTMLElement): HTMLElement {
-    const copy = node.cloneNode(true) as HTMLElement;
-    copy.removeAttribute("data-row");
-    copy.inert = true;
-    copy.setAttribute("aria-hidden", "true");
-    for (const hooked of copy.querySelectorAll(
-      "[data-row], [data-share], [data-message], [aria-live]"
-    )) {
-      hooked.removeAttribute("data-row");
-      hooked.removeAttribute("data-share");
-      hooked.removeAttribute("data-message");
-      hooked.removeAttribute("aria-live");
-    }
-    return copy;
-  }
-
-  /** The row `key` as it is drawn now, before the update lands. */
-  const drawnRow = (key: string): HTMLElement | null | undefined =>
-    listing?.querySelector<HTMLElement>(`[data-row="${CSS.escape(key)}"]`);
-
-  /**
-   * Each row of the list's height as the last frame laid it out: its border
-   * box, from the reports of one size observer on every row, read inside the
-   * delivery on the layout that frame has just done (frame-observer's
-   * shared delivery, as LiveRow's `drawnHeight`). What a row handing its
-   * place on hands on (`handOn`), read off the record in the update that
-   * changes the rows. Read off the rows there instead, their boxes laid the
-   * page out again after that update's own writes (a reply's frame, forced
-   * after a Svelte style write: be88156f). A row with none has never been
-   * laid out, and has nothing on screen to hand on.
-   */
-  const drawnHeights = new WeakMap<Element, number>();
-  /** The rows' size observer, made by the first row the list mounts (none on the server). */
-  let rowSizes: FrameObserver | null = null;
-  /**
-   * The rows' size observer, made here and not in a row's attachment: made
-   * there, its reader closed over that row, and held the first row the list
-   * mounted for as long as the list lived (tab-return's detached leg).
-   */
-  function rowSizesOf(): FrameObserver {
-    rowSizes ??= frameObserver(null, {
-      read: (entries) => {
-        for (const entry of entries) {
-          const height = entry.borderBoxSize[0]?.blockSize;
-          if (height !== undefined) {
-            drawnHeights.set(entry.target, height);
-          }
-        }
-      },
-    });
-    return rowSizes;
-  }
-  /** A row of the list, heard as each frame lays it out (`drawnHeights`). */
-  const measureRow: Attachment<HTMLElement> = (node) => {
-    const sizes = rowSizesOf();
-    sizes.observe(node, { box: "border-box" });
-    return () => {
-      sizes.unobserve(node);
-      drawnHeights.delete(node);
-    };
-  };
-  onDestroy(() => rowSizes?.disconnect());
-  /** A row's height as the last frame laid it out (`drawnHeights`): what its fold starts from (Row's `heightOf`). */
-  const heightOfRow = (row: HTMLElement): number | undefined =>
-    drawnHeights.get(row);
-
-  /**
-   * A TAIL ROW HANDS ITS PLACE TO THE ROW THAT TAKES IT.
-   *
-   * The tail's rows change hands in one update: the live row settles into
-   * the row it became, a tool's glance lands as its call in a run, the turn's
-   * indicator gives way to the tool it announced. Each was drawn as one row
-   * going and another arriving at its own height, on no shared clock — the
-   * settled row cut the live row's height tween short, the run came in at
-   * virtua's estimate, WebKit drew the tool's opening at nothing under a fold
-   * already running — and every row above jumped. So the row that takes the
-   * place starts at the height it took over and tweens to its own (`Row`'s
-   * handoff), and the list lays it out at that height before it has
-   * measured it (`handOn`).
-   *
-   * The taker of the row `key` that is no longer in the list, or null: the
-   * row its live content settled into, the run its call landed in — which
-   * takes the glance's height in on top of its own when it was already drawn
-   * (`absorbs`) — or the new row standing where it stood. The turn's live
-   * row and a glance give their place to whatever the turn did next, in the
-   * same frame: a new row where they stood, or the run just above them that
-   * took the new call in. Waiting on their fold before the next row opened
-   * left the place empty between the two, and the tail dipped and jumped.
-   * A queued message gives its place only to another tail row.
-   */
-  function takerOf(
-    key: string,
-    stood: Standing,
-    next: Row[],
-    ended: Fold["ended"]
-  ): Taker | null {
-    if (ended?.key === key && ended.into) {
-      return { key: ended.into, absorbs: false, replaces: false };
-    }
-    const { row } = stood;
-    if (row.kind === "livetool") {
-      // From the end: the call has just landed, in the newest runs.
-      const holder = next.findLast(
-        (r) =>
-          r.kind === "tools" &&
-          r.messages.some(
-            (m) => (m.metadata?.toolId ?? m.toolCallId) === row.glance.toolId
-          )
-      );
-      if (holder) {
-        return {
-          key: holder.key,
-          absorbs: drawnKeys.has(holder.key),
-          replaces: false,
-        };
-      }
-    }
-    if (!(TAIL_KINDS.has(row.kind) && hasLeft(key, row, ended))) {
-      return null;
-    }
-    const at = placeIn(next, stood.above, ended);
-    const heir = next[at];
-    const turns = row.kind !== "queued";
-    if (
-      heir &&
-      !drawnKeys.has(heir.key) &&
-      (turns || TAIL_KINDS.has(heir.kind))
-    ) {
-      return { key: heir.key, absorbs: false, replaces: true };
-    }
-    const runAbove = next[at - 1];
-    if (
-      turns &&
-      runAbove?.kind === "tools" &&
-      drawnKeys.has(runAbove.key) &&
-      runAbove.messages.some(
-        (m) => arrivals.tickets.get(callId(m))?.kind === "arrive"
-      )
-    ) {
-      return { key: runAbove.key, absorbs: true, replaces: true };
-    }
-    return null;
-  }
-
-  /**
-   * The rows of the list (`present`) that can leave, each with the rows drawn
-   * above it — a row already folding among them. A folding row is not one of
-   * them: it has left, and counted again it would be taken out again, and
-   * fold again, every time its fold ended.
-   */
-  function standingIn(
-    drawn: Row[],
-    settled: Row[],
-    present: Keys
-  ): Map<string, Standing> {
-    const stood = new Map<string, Standing>();
-    const stand = (index: number) => {
-      const row = drawn[index];
-      if (!(present.has(row.key) && canLeave(row))) {
-        return;
-      }
-      const above: string[] = [];
-      for (let i = index - 1; i >= 0; i -= 1) {
-        above.push(drawn[i].key);
-        if (!canLeave(drawn[i])) {
-          break;
-        }
-      }
-      stood.set(row.key, { above, row });
-    };
-    // Among the settled rows, the few that can leave were found once.
-    for (const index of leavableIn(settled)) {
-      stand(index);
-    }
-    for (let index = settled.length; index < drawn.length; index += 1) {
-      stand(index);
-    }
-    return stood;
-  }
-
-  /**
-   * Where a row that stood under `above` goes back in among `drawn`: under
-   * the nearest of those rows still drawn — a live row that settled stands
-   * as the row it became — first when it stood first, or -1 while none is.
-   */
-  function placeIn(
-    drawn: Row[],
-    above: string[],
-    ended: Fold["ended"]
-  ): number {
-    if (above.length === 0) {
-      return 0;
-    }
-    for (const key of above) {
-      const as = key === ended?.key && ended.into ? ended.into : key;
-      // From the end: the rows a row stood under are the tail's, nearly always.
-      const index = drawn.findLastIndex((row) => row.key === as);
-      if (index >= 0) {
-        return index + 1;
-      }
-    }
-    return -1;
-  }
-  /**
-   * The rows virtua keys, as they are, once their keys were checked: a key
-   * held twice is reported with both rows and what moved the page last
-   * (repeated-keys.ts), before the keyed each throws on it. The settled
-   * rows they begin with are checked once for each such array, the rest
-   * each time.
-   */
-  const settledRepeat = perSettled((settled) =>
-    repeatedKey(settled, (row) => row.key)
-  );
-  function keysChecked(drawn: Row[], settled: Row[]): Row[] {
-    const repeat =
-      (settled.length > 0 ? settledRepeat(settled) : null) ??
-      repeatedKey(
-        drawn,
-        (row) => row.key,
-        settled.length,
-        settledKeys(settled)
-      );
-    if (repeat) {
-      reportRepeat("transcript's rows", repeat, rowSaid);
-    }
-    return drawn;
-  }
-  const renderedRows = $derived(
-    keysChecked(presentation.rows, presentation.settled)
-  );
   /**
    * THE SERVER'S FIRST SCREEN IS PAINTED, AND STAYS UNTIL THE LIST TAKES IT.
    *
@@ -918,15 +447,15 @@
    * pane's placeholder stands over it instead (`onshown`).
    */
   const servedRows = $derived(
-    firstScreen && standsAtTail && !shown && renderedRows.length > 0
+    firstScreen && standsAtTail && !shown && rowDraw.renderedRows.length > 0
   );
   /**
    * The reader's rows whose well runs on into the next. A row folding away is
    * already out of its run: the rows either side close or join over its fold.
    */
   const runsOn = $derived.by((): Keys => {
-    const drawn = renderedRows;
-    const { leaving: gone, settled } = presentation;
+    const drawn = rowDraw.renderedRows;
+    const { leaving: gone, settled } = rowDraw.presentation;
     return untrack(() => {
       // No row folding away stands among the settled rows (`withLeaving`).
       const before = settledRuns(settled);
@@ -1105,7 +634,9 @@
     const top = list.getScrollOffset();
     const first = list.findItemIndex(top);
     const last = list.findItemIndex(top + list.getViewportSize());
-    const at = new Map(renderedRows.map((row, index) => [row.key, index]));
+    const at = new Map(
+      rowDraw.renderedRows.map((row, index) => [row.key, index])
+    );
     const out: { far: number; key: string; px: number }[] = [];
     for (const item of container.children) {
       const key = item.querySelector<HTMLElement>(":scope > [data-row]")
@@ -1136,7 +667,7 @@
     const last = list.findItemIndex(top + list.getViewportSize());
     const inView: string[] = [];
     for (let index = list.findItemIndex(top); index <= last; index += 1) {
-      const key = renderedRows[index]?.key;
+      const key = rowDraw.renderedRows[index]?.key;
       if (key !== undefined && aside.has(key)) {
         inView.push(key);
       }
@@ -1235,7 +766,9 @@
     if (holding.length === 0) {
       return;
     }
-    const at = new Map(renderedRows.map((row, index) => [row.key, index]));
+    const at = new Map(
+      rowDraw.renderedRows.map((row, index) => [row.key, index])
+    );
     // A row rewritten since the pane was put away (its text changed: the
     // live row a turn streamed into) has outgrown the size virtua has for
     // it: it is not skipped, and is measured in the frame that lays the
@@ -1385,8 +918,8 @@
    * mounts one only once its store holds that many rows.
    */
   const keepMounted = $derived.by(() => {
-    const count = renderedRows.length;
-    const { leaving: folding, settled } = presentation;
+    const count = rowDraw.renderedRows.length;
+    const { leaving: folding, settled } = rowDraw.presentation;
     // Not seen, the tail has no motion to keep: every row its session sends
     // would wait mounted for the reach to style it, with the view it was put
     // away at (tab-return 1b: 8 rows, 550 elements, in the warm frame). A
@@ -1402,7 +935,7 @@
       folding.size > 0 && index < count;
       index += 1
     ) {
-      if (folding.has(renderedRows[index].key)) {
+      if (folding.has(rowDraw.renderedRows[index].key)) {
         kept.push(index);
       }
     }
@@ -1416,7 +949,7 @@
     // buffer steps back up (`frontHeld`).
     if (frontHeld.length > 0) {
       const mountedKeys = new Set(frontHeld);
-      renderedRows.forEach((row, index) => {
+      rowDraw.renderedRows.forEach((row, index) => {
         if (mountedKeys.has(row.key)) {
           kept.push(index);
         }
@@ -1425,7 +958,7 @@
     // The rows a pane held as it was laid out again, held while they stage (`heldRows`).
     if (heldRows.length > 0) {
       const warmKeys = new Set(heldRows);
-      renderedRows.forEach((row, index) => {
+      rowDraw.renderedRows.forEach((row, index) => {
         if (warmKeys.has(row.key)) {
           kept.push(index);
         }
@@ -1433,7 +966,7 @@
     }
     // Put away, every row mounted as it was (`away`): one let go there stays held.
     if (away.size > 0) {
-      renderedRows.forEach((row, index) => {
+      rowDraw.renderedRows.forEach((row, index) => {
         if (away.has(row.key)) {
           kept.push(index);
         }
@@ -1466,7 +999,7 @@
   let landings = 0;
   function landFar(was: number): void {
     // Before the reveal nothing is painted: the first landing has no screen to keep.
-    if (!(list && shown && renderedRows.length > 0)) {
+    if (!(list && shown && rowDraw.renderedRows.length > 0)) {
       return;
     }
     // virtua's own range as it stands, read off its sizes: the view and its
@@ -1480,7 +1013,7 @@
       Array.from({ length: to - from + 1 }, (_, i) => from + i)
     );
     if (away.size > 0) {
-      renderedRows.forEach((row, index) => {
+      rowDraw.renderedRows.forEach((row, index) => {
         if (away.has(row.key)) {
           behind.add(index);
         }
@@ -1593,7 +1126,7 @@
           // The rows from the end that fill the view and the screen above it
           // (`ABOVE_LANDING`), by virtua's sizes: each step's rows measured by
           // now, the rest at `ROW_ESTIMATE`.
-          const count = renderedRows.length;
+          const count = rowDraw.renderedRows.length;
           const fill = viewHeight * ABOVE_LANDING;
           let need = 0;
           for (let height = 0; need < count && height < fill; need += 1) {
@@ -1612,20 +1145,6 @@
       );
     step();
   }
-
-  function left(key: string): void {
-    leaving = leaving.filter(({ row }) => row.key !== key);
-    leftTick += 1;
-  }
-
-  /**
-   * A leaving row's report, bound to its key when `Row` reads it — as its
-   * fold starts. The list item behind a row is a live view of an index, and
-   * by the time a fold finishes the tail can have changed under it (a queued
-   * message read mid-turn leaves as its turn lands above), so reading the key
-   * then read past the end of the list and the row never left.
-   */
-  const leaver = (key: string) => () => left(key);
 
   let scroller = $state<HTMLElement | undefined>();
   /**
@@ -1841,13 +1360,13 @@
    * at the offset the scroll handler last saw.
    */
   function saveLanding(): void {
-    if (!(list && shown) || renderedRows.length === 0) {
+    if (!(list && shown) || rowDraw.renderedRows.length === 0) {
       return;
     }
     sizes.set(landingFor, {
       cache: list.getCache(),
-      first: placeOf(renderedRows[0]),
-      count: renderedRows.length,
+      first: placeOf(rowDraw.renderedRows[0]),
+      count: rowDraw.renderedRows.length,
     });
     const place = atBottom ? null : (keptPlace ?? placeAt(lastTop));
     const landing: Landing = place ? { tail: false, ...place } : { tail: true };
@@ -1886,8 +1405,8 @@
       return -1;
     }
     return "at" in resume
-      ? rowAt(renderedRows, resume.at, paged()?.cursor === null)
-      : rowHolding(renderedRows, resume.block);
+      ? rowAt(rowDraw.renderedRows, resume.at, paged()?.cursor === null)
+      : rowHolding(rowDraw.renderedRows, resume.block);
   }
 
   /**
@@ -1897,11 +1416,11 @@
    * virtua's sizes, never the page.
    */
   function placeAt(top: number): { block: string; into: number } | null {
-    if (!list || renderedRows.length === 0) {
+    if (!list || rowDraw.renderedRows.length === 0) {
       return null;
     }
     for (let index = list.findItemIndex(top); index >= 0; index -= 1) {
-      const block = blockOf(renderedRows[index]);
+      const block = blockOf(rowDraw.renderedRows[index]);
       if (block) {
         return { block, into: top - listStart - list.getItemOffset(index) };
       }
@@ -2024,7 +1543,7 @@
     message: Message | undefined;
     record: Element;
   } | null {
-    const row = renderedRows[index];
+    const row = rowDraw.renderedRows[index];
     const drawn = row
       ? listing?.querySelector(`[data-row="${CSS.escape(row.key)}"]`)
       : null;
@@ -2201,9 +1720,9 @@
         // moved under it, and the whole list is read for it only then.
         const top = list ? list.findItemIndex(lastTop) : -1;
         const index =
-          top >= 0 && blockOf(renderedRows[top]) === place.block
+          top >= 0 && blockOf(rowDraw.renderedRows[top]) === place.block
             ? top
-            : rowHolding(renderedRows, place.block);
+            : rowHolding(rowDraw.renderedRows, place.block);
         const put = index >= 0 && scrollToRow(index, place.into);
         if (put) {
           frames += 1;
@@ -2221,7 +1740,7 @@
   $effect(() => {
     // The rows drawn are what moves the place, and whether this drawing
     // shifted them is said with them.
-    const { shifted } = presentation;
+    const { shifted } = rowDraw.presentation;
     // A change only in front is virtua's own `shift`, unless a landing's
     // place is still held: then it is put back after that change too.
     if (!shifted || performance.now() < holdUntil) {
@@ -2303,7 +1822,7 @@
     // Said once, here, where the seek ends: a landing is a state change and
     // a record not held is a refusal (PRODUCT.md, screen readers), and
     // nothing after it (a scroll, a live row) says it again.
-    const index = rowAt(renderedRows, docId, paged()?.cursor === null);
+    const index = rowAt(rowDraw.renderedRows, docId, paged()?.cursor === null);
     if (index < 0) {
       marked = null;
       unfound = paged()?.olderFault ? "unread" : "gone";
@@ -2320,7 +1839,9 @@
         findHere.arrived();
       }
     }
-    marked = found ? null : { key: renderedRows[index].key, state: "on" };
+    marked = found
+      ? null
+      : { key: rowDraw.renderedRows[index].key, state: "on" };
     // The record opened at is the place now, as a reader's scroll to it is.
     keptPlace = placeAt(lastTop);
     // The finder's own words for the key that brought the reader here
@@ -2982,7 +2503,7 @@
     if (bottom - was > scroller.clientHeight) {
       // Drawn already: its rows are built first (`stageFar`), and the
       // pin lands once they are.
-      if (list && shown && renderedRows.length > 0 && !stagedReady) {
+      if (list && shown && rowDraw.renderedRows.length > 0 && !stagedReady) {
         stageFar();
         return;
       }
@@ -3337,7 +2858,9 @@
         // A list that opens on a compaction is shown with Caw beside the
         // word, not a frame or two before him: it waits for his picture
         // (bounded, see `compactionMarkComing`), then measures again.
-        const caw = renderedRows.some((row) => row.kind === "compaction")
+        const caw = rowDraw.renderedRows.some(
+          (row) => row.kind === "compaction"
+        )
           ? compactionMarkComing()
           : null;
         if (caw) {
@@ -3587,8 +3110,8 @@
    * rows around it theirs, until it is gone.
    */
   const continued = $derived.by((): Keys => {
-    const rowList = renderedRows;
-    const { settled } = presentation;
+    const rowList = rowDraw.renderedRows;
+    const { settled } = rowDraw.presentation;
     return untrack(() => {
       const before = settledContinued(settled);
       const after = continuesAbove(rowList, settled.length);
@@ -3798,7 +3321,8 @@
       if (place.live) {
         return listing?.querySelector('[data-slot="live"]') ?? null;
       }
-      const drawn = renderedRows[rowHolding(renderedRows, place.docId)];
+      const drawn =
+        rowDraw.renderedRows[rowHolding(rowDraw.renderedRows, place.docId)];
       const row = drawn
         ? listing?.querySelector(`[data-row="${CSS.escape(drawn.key)}"]`)
         : null;
@@ -3849,7 +3373,7 @@
       findHere.at,
       findHere.open,
       findHere.whose,
-      renderedRows
+      rowDraw.renderedRows
     );
     let frame = 0;
     const schedule = () => {
@@ -4025,7 +3549,7 @@
     }
     untrack(() => {
       trayReveal.delete(session.instanceId);
-      const index = renderedRows.findIndex(
+      const index = rowDraw.renderedRows.findIndex(
         (row) => row.kind === "single" && row.message.id === want
       );
       if (index >= 0) {
@@ -4043,7 +3567,7 @@
     }
     untrack(() => {
       connectReveal.delete(session.instanceId);
-      const index = renderedRows.findLastIndex(
+      const index = rowDraw.renderedRows.findLastIndex(
         (row) => row.kind === "connect" && row.answer === null
       );
       if (index < 0) {
@@ -4060,7 +3584,7 @@
         return;
       }
       list?.scrollToIndex(index, { align: "center", smooth: true });
-      const { key } = renderedRows[index];
+      const { key } = rowDraw.renderedRows[index];
       requestAnimationFrame(() => {
         document
           .querySelector(`[data-row="${CSS.escape(key)}"]`)
@@ -4132,7 +3656,7 @@
    * place.
    */
   const behind = $derived(
-    renderedRows.length > 0
+    rowDraw.renderedRows.length > 0
       ? (sessionsStore.session(session.instanceId)?.behind ?? null)
       : null
   );
@@ -4270,7 +3794,7 @@
   <!-- Empty is what is drawn: a conversation whose one row is folding away
        as its retry comes in is not empty for the frame between the two, and
        the empty state shown there pushed the fold 53px down. -->
-  {#if (session.loading || session.cursor !== null) && renderedRows.length === 0}
+  {#if (session.loading || session.cursor !== null) && rowDraw.renderedRows.length === 0}
     <p
       data-slot="transcript-empty"
       class="mark-line isolate flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
@@ -4280,7 +3804,7 @@
     >
       <LiveDot /><span>Loading transcript…</span>
     </p>
-  {:else if renderedRows.length === 0}
+  {:else if rowDraw.renderedRows.length === 0}
     <!-- Only once the read has said the conversation is empty, fading in
          where it stands. The two keys that do anything from the composer
          below. Left-aligned: this surface is a ledger. -->
@@ -4325,7 +3849,7 @@
     bind:this={headStrip}
     {@attach keepPlace}
   >
-    {#if renderedRows.length > 0 && session.olderFault}
+    {#if rowDraw.renderedRows.length > 0 && session.olderFault}
       <p
         data-slot="transcript-empty"
         class="text-size-meta font-normal text-ink-muted py-space-5"
@@ -4347,7 +3871,7 @@
       >
         {commonWords.tryAgain}
       </Button>
-    {:else if renderedRows.length > 0 && rowBuild.built.before}
+    {:else if rowDraw.renderedRows.length > 0 && rowBuild.built.before}
       <p
         data-slot="transcript-empty"
         class="mark-line flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
@@ -4387,7 +3911,7 @@
     <Virtualizer
       bufferSize={buffer}
       {cache}
-      data={renderedRows}
+      data={rowDraw.renderedRows}
       getKey={(r) => r.key}
       itemProps={itemAttrs}
       itemSize={ROW_ESTIMATE}
@@ -4396,7 +3920,7 @@
       {onresize}
       {onscrollend}
       scrollRef={scroller}
-      shift={presentation.shifted}
+      shift={rowDraw.presentation.shifted}
       startMargin={olderRoom + spare}
       bind:this={
         () => list,
@@ -4408,14 +3932,14 @@
       {#snippet children(row)}
         <TranscriptRow
           continues={continued.has(row.key)}
-          handoff={presentation.handed.get(row.key)}
-          heightOf={heightOfRow}
+          handoff={rowDraw.presentation.handed.get(row.key)}
+          heightOf={rowDraw.heightOfRow}
           id={row.kind === "tools" ? undefined : row.key}
-          leaving={presentation.leaving.has(row.key)}
+          leaving={rowDraw.presentation.leaving.has(row.key)}
           marked={marked?.key === row.key ? marked.state : undefined}
-          measured={measureRow}
+          measured={rowDraw.measureRow}
           motion={arrivals.motionOf(row)}
-          onleft={leaver(row.key)}
+          onleft={rowDraw.leaver(row.key)}
           rowKey={row.key}
         >
           {#snippet children(ticket)}
@@ -4550,7 +4074,7 @@
         </div>
       {/if}
       <div class="isolate">
-        {#each renderedRows as row (row.key)}
+        {#each rowDraw.renderedRows as row (row.key)}
           <TranscriptRow continues={continued.has(row.key)}>
             {#snippet children()}
               {@render rowBody(row, null, false)}
