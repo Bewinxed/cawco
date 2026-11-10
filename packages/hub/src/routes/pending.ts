@@ -5,7 +5,7 @@
 import { archiveRefusal } from "@cawco/core/archive";
 import type { ArtifactNeedsRead } from "@cawco/core/artifact-needs";
 import type { Envelope } from "@cawco/core/protocol";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { clientCopy } from "../ask-presentation";
 import type { HubContext } from "../hub-context";
 import {
@@ -13,7 +13,6 @@ import {
   messageCollapseId,
   turnCollapseId,
 } from "../notifications";
-import { refusal } from "../refusal";
 
 export const pendingRoutes = ({
   archiveView,
@@ -64,11 +63,10 @@ export const pendingRoutes = ({
             return why ? [`${id}: ${why}`] : [];
           });
           if (refused.length > 0) {
-            return refusal(
-              409,
-              "not-archived-still-doing",
-              `Not archived, still doing something. ${refused.join(" ")}`
-            );
+            return problem(409, {
+              code: "not-archived-still-doing",
+              detail: `Not archived, still doing something. ${refused.join(" ")}`,
+            });
           }
         }
         const instanceIds = body.ids;

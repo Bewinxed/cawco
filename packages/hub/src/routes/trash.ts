@@ -4,10 +4,10 @@
 
 import type { HarnessConfigKind } from "@cawco/core/harness-config";
 import { areaWords } from "@cawco/core/words/areas";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import type { TrashKind } from "../db/schema";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
+
 import { unreachable } from "../unreachable";
 
 export const trashRoutes = ({
@@ -121,19 +121,22 @@ export const trashRoutes = ({
           if (!back.ok) {
             switch (back.why) {
               case "taken":
-                return refusal(
-                  409,
-                  "trash-name-taken",
-                  "Something of the same name was made while it waited, and that one stays."
-                );
+                return problem(409, {
+                  code: "trash-name-taken",
+                  detail:
+                    "Something of the same name was made while it waited, and that one stays.",
+                });
               case "unbound":
-                return refusal(409, "undo-unbound", areaWords.undoUnbound);
+                return problem(409, {
+                  code: "undo-unbound",
+                  detail: areaWords.undoUnbound,
+                });
               case "gone":
-                return refusal(
-                  404,
-                  "trash-gone",
-                  "It can no longer be brought back: its undo has run out."
-                );
+                return problem(404, {
+                  code: "trash-gone",
+                  detail:
+                    "It can no longer be brought back: its undo has run out.",
+                });
               default:
                 throw unreachable(back);
             }

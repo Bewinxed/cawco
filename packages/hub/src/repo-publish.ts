@@ -34,12 +34,11 @@ import {
   type PlacePush,
 } from "@cawco/core/workspace/controls";
 import { startedPath } from "@cawco/core/workspace-needs";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type { PlaceRow, ProjectRow } from "./db/projects";
 import type { PlaceRepos } from "./place-repo";
-import { refusal } from "./refusal";
 
 /** GitHub's rule for a repository's name. */
 const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/u;
@@ -95,20 +94,19 @@ export const createRepoPublish = ({
       return place;
     }
     if (checkouts.length === 0) {
-      return refusal(
-        409,
-        "repo-publish-no-checkout",
-        "This project has no checkout on a machine to publish: its only place is its folder on the hub."
-      );
+      return problem(409, {
+        code: "repo-publish-no-checkout",
+        detail:
+          "This project has no checkout on a machine to publish: its only place is its folder on the hub.",
+      });
     }
     const listed = checkouts.map((place) => place.path).join(", ");
-    return refusal(
-      400,
-      "repo-publish-folder-unnamed",
-      named
+    return problem(400, {
+      code: "repo-publish-folder-unnamed",
+      detail: named
         ? `${named} isn't one of this project's folders. Pass one as folder: ${listed}.`
-        : `Name the folder to publish (folder): ${listed}.`
-    );
+        : `Name the folder to publish (folder): ${listed}.`,
+    });
   };
 
   /** Refused when the hub repository `key` is published already: its link names where. */
@@ -117,11 +115,10 @@ export const createRepoPublish = ({
       ? db.projectLinkPublishedFrom(project.id, hubRepoSegment(key))
       : undefined;
     return linked
-      ? refusal(
-          409,
-          "repo-publish-published",
-          `This folder's repository is already published, as ${linked}.`
-        )
+      ? problem(409, {
+          code: "repo-publish-published",
+          detail: `This folder's repository is already published, as ${linked}.`,
+        })
       : undefined;
   };
 
@@ -141,18 +138,17 @@ export const createRepoPublish = ({
     const pick = wanted ? github.find((one) => one.name === wanted) : sole;
     if (!pick) {
       return wanted
-        ? refusal(
-            404,
-            "repo-publish-connection-unknown",
-            `There is no GitHub connection ${wanted}.`
-          )
-        : refusal(
-            400,
-            "repo-publish-connection-unnamed",
-            from.length === 0
-              ? "The fleet has no GitHub connection to create the repository with; add one in Settings › Connections."
-              : `Name the GitHub connection to create it with (connection): ${from.map((one) => one.name).join(", ")}.`
-          );
+        ? problem(404, {
+            code: "repo-publish-connection-unknown",
+            detail: `There is no GitHub connection ${wanted}.`,
+          })
+        : problem(400, {
+            code: "repo-publish-connection-unnamed",
+            detail:
+              from.length === 0
+                ? "The fleet has no GitHub connection to create the repository with; add one in Settings › Connections."
+                : `Name the GitHub connection to create it with (connection): ${from.map((one) => one.name).join(", ")}.`,
+          });
     }
     // A connection the hub cannot sign in as is refused before anyone is
     // asked; so is a GitHub App's, which makes no repository under a person
@@ -162,11 +158,10 @@ export const createRepoPublish = ({
       pick.auth === "gh" ||
       pick.auth === "device"
     )) {
-      return refusal(
-        400,
-        "repo-publish-connection-unfit",
-        `${pick.name} signs in with ${pick.auth}; creating a repository takes a GitHub connection that acts as you: gh on a machine, a code sign-in, or a token.`
-      );
+      return problem(400, {
+        code: "repo-publish-connection-unfit",
+        detail: `${pick.name} signs in with ${pick.auth}; creating a repository takes a GitHub connection that acts as you: gh on a machine, a code sign-in, or a token.`,
+      });
     }
     connections.githubClient(pick.name);
     return pick;
@@ -184,11 +179,11 @@ export const createRepoPublish = ({
   ) => {
     const name = asked.name?.trim() ?? "";
     if (!REPO_NAME.test(name)) {
-      return refusal(
-        400,
-        "repo-publish-name-unfit",
-        "create_repo takes the repository's name: letters, digits, '.', '-' and '_'."
-      );
+      return problem(400, {
+        code: "repo-publish-name-unfit",
+        detail:
+          "create_repo takes the repository's name: letters, digits, '.', '-' and '_'.",
+      });
     }
     const connection = connectionOf(project, asked.connection);
     if (connection instanceof ElysiaStatus) {
@@ -306,11 +301,10 @@ export const createRepoPublish = ({
     ])) as PlacePush;
     const { hub } = pushed;
     if (!hub) {
-      return refusal(
-        502,
-        "repo-publish-hub-unnamed",
-        `${place.path} answered its push without naming the hub repository it went to.`
-      );
+      return problem(502, {
+        code: "repo-publish-hub-unnamed",
+        detail: `${place.path} answered its push without naming the hub repository it went to.`,
+      });
     }
     const published = unpublished(project, hub);
     if (published) {

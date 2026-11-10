@@ -2,11 +2,10 @@
  * A session's delivered credential: listing it, its installation's ack, installing it on a machine's word.
  */
 
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import { addressOf } from "../hub-auth";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
 
 export const sessionIdentityRoutes = ({
   db,
@@ -60,19 +59,18 @@ export const sessionIdentityRoutes = ({
         const authorization = request.headers.get("authorization");
         const identity = identities.resolve(authorization);
         if (!identity) {
-          return refusal(
-            401,
-            "valid-delivered-session-credential",
-            "A valid delivered session credential is required for installation ACK"
-          );
+          return problem(401, {
+            code: "valid-delivered-session-credential",
+            detail:
+              "A valid delivered session credential is required for installation ACK",
+          });
         }
         const acknowledged = identities.acknowledge(authorization);
         if (!acknowledged) {
-          return refusal(
-            409,
-            "credential-installation-no-longer",
-            "This credential installation is no longer pending"
-          );
+          return problem(409, {
+            code: "credential-installation-no-longer",
+            detail: "This credential installation is no longer pending",
+          });
         }
         // The credential its launch carried is installed: that launch is up.
         if (acknowledged === "pending") {
@@ -104,11 +102,10 @@ export const sessionIdentityRoutes = ({
             .filter((row) => row.machineId !== caller.machineId)
             .map((row) => row.id);
           if (others.length > 0) {
-            return refusal(
-              403,
-              "installs-credentials-own-sessions",
-              `${machineName(caller.machineId)} installs credentials for its own sessions only; not ${others.join(", ")}.`
-            );
+            return problem(403, {
+              code: "installs-credentials-own-sessions",
+              detail: `${machineName(caller.machineId)} installs credentials for its own sessions only; not ${others.join(", ")}.`,
+            });
           }
         }
         return await Promise.all(body.instanceIds.map(installSessionIdentity));

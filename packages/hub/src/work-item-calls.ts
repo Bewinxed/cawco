@@ -1,8 +1,8 @@
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, type problem } from "elysia";
 import type { DbShape } from "./db";
 import type { DelegateResult } from "./delegate-result";
 import type { AttemptAsk } from "./dispatch";
-import type { RefusalOf } from "./refusal";
+
 import type { createTreeStops } from "./tree-stops";
 import { WorkItemRefusal } from "./work-item-state";
 import type { WorkItemRequest, WorkItemStart, WorkItems } from "./work-items";
@@ -51,8 +51,15 @@ export interface WorkItemCallsDeps {
   ) => Promise<
     | { recorded: string }
     | { approved: boolean }
-    | RefusalOf<400, "discard-ask-reason">
-    | RefusalOf<404, "discard-ask-session-unknown">
+    | ReturnType<
+        typeof problem<400, { code: "discard-ask-reason"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<
+          404,
+          { code: "discard-ask-session-unknown"; detail: string }
+        >
+      >
   >;
   /** Workspace `id` discarded for `from`. */
   readonly discarded: (

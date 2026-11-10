@@ -111,14 +111,14 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { readsOnly } from "./connection-writes";
 import type { ConnectionRow, ConnectionsDb } from "./db/connections";
 import type { ConnectionAppSecret, ConnectionSecret } from "./db/stored-types";
 import { undoable } from "./db/trash";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
-import { refusal } from "./refusal";
+
 import { connectionToolsFor, roleOf } from "./roles";
 import {
   GITHUB_API,
@@ -342,7 +342,7 @@ export interface ConnectionsDeps {
   readonly typeConnections: (row: InstanceRow) => readonly string[];
 }
 
-const problem = (message: string): never => {
+const misfit = (message: string): never => {
   throw new ConnectionProblem(message);
 };
 
@@ -477,10 +477,10 @@ const originOf = (origin: string): URL => {
   try {
     base = new URL(origin);
   } catch {
-    return problem("origin is the address the browser reaches the hub at.");
+    return misfit("origin is the address the browser reaches the hub at.");
   }
   if (base.protocol !== "http:" && base.protocol !== "https:") {
-    problem("origin is an http or https address.");
+    misfit("origin is an http or https address.");
   }
   return base;
 };
@@ -637,7 +637,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const listed = new Map<string, Tool[]>();
 
   const row = (name: string): ConnectionRow =>
-    db.byName(name) ?? problem(`There is no connection ${name}.`);
+    db.byName(name) ?? misfit(`There is no connection ${name}.`);
 
   /**
    * A row's secret, as its sealed column opened it. One the hub's key cannot
@@ -702,7 +702,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     app: Extract<ConnectionAppSecret, { service: "github" }>
   ): Octokit => {
     if (!app.installationId) {
-      return problem(
+      return misfit(
         `${r.name}'s GitHub App isn't installed yet: install it on the repositories it reads.`
       );
     }
@@ -743,7 +743,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const ghToken = async (r: ConnectionRow): Promise<string> => {
     const { gh, key } = opened(r);
     if (!gh) {
-      return problem(`${r.name} names no machine's gh: connect it again.`);
+      return misfit(`${r.name} names no machine's gh: connect it again.`);
     }
     const held = ghRead.get(r.id);
     if (held && held.at > Date.now() - GH_FRESH_MS) {
@@ -766,7 +766,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         ? connectionsWords.ghSignInAgain(gh.login, machine)
         : `${read.why} The hub holds no token from its gh yet.`;
     setState(r, "error", said);
-    return problem(`${r.name}: ${said}`);
+    return misfit(`${r.name}: ${said}`);
   };
 
   /**
@@ -825,7 +825,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       if (!answer.access_token) {
         const said = `GitHub refused to refresh its sign-in (${answer.error_description ?? answer.error ?? "no token"}). Sign in again.`;
         setState(r, "needs-sign-in", said);
-        return problem(`${r.name}: ${said}`);
+        return misfit(`${r.name}: ${said}`);
       }
       keepTokens(r.id, answer as OAuthTokens);
       drop(r.id);
@@ -851,7 +851,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return accessRefreshed(r, tokens, async (refreshToken) => {
       if (!refreshToken) {
         setState(r, "needs-sign-in", "Its sign-in ran out. Sign in again.");
-        return problem(`${r.name}'s sign-in ran out. Sign in again.`);
+        return misfit(`${r.name}'s sign-in ran out. Sign in again.`);
       }
       try {
         const fresh = await refreshAuthorization(LINEAR_API, {
@@ -926,7 +926,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const { app } = opened(r);
     if (!app) {
       setState(r, "needs-sign-in", connectionsWords.saidSetApp);
-      return problem(`${r.name} needs its app: ${NO_SECRET}.`);
+      return misfit(`${r.name} needs its app: ${NO_SECRET}.`);
     }
     if (app.service === "linear") {
       const token = await linearAccess(r);
@@ -1086,7 +1086,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     id: string,
     signIn?: { state: string; opened: (url: URL) => void }
   ): OAuthClientProvider => {
-    const fresh = () => db.byId(id) ?? problem("This connection was removed.");
+    const fresh = () => db.byId(id) ?? misfit("This connection was removed.");
     return {
       get redirectUrl() {
         return redirectOf(fresh());
@@ -1113,7 +1113,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       },
       codeVerifier: () =>
         opened(fresh()).verifier ??
-        problem("This sign-in has no verifier. Start sign-in again."),
+        misfit("This sign-in has no verifier. Start sign-in again."),
       redirectToAuthorization: (url) => {
         if (signIn) {
           signIn.opened(url);
@@ -1166,7 +1166,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const sealed = opened(r);
     if ((r.auth === "bearer" || r.auth === "header") && !sealed.key) {
       setState(r, "needs-sign-in", connectionsWords.saidSetKey);
-      problem(`${r.name} needs its key: ${NO_SECRET}.`);
+      misfit(`${r.name} needs its key: ${NO_SECRET}.`);
     }
     if (r.transport === "stdio") {
       return new StdioClientTransport({
@@ -1201,9 +1201,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       r.tokensExpireAt.getTime() <= Date.now() + 60_000 &&
       (await auth(provider(r.id), { serverUrl: r.url ?? "" })) !== "AUTHORIZED"
     ) {
-      problem(
-        `${r.name} is not signed in: its sign-in ran out. Sign in again.`
-      );
+      misfit(`${r.name} is not signed in: its sign-in ran out. Sign in again.`);
     }
     const client = new Client(
       { name: "CawCo hub", version: "1.0.0" },
@@ -1300,7 +1298,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     use: (client: Client, signal: AbortSignal) => Promise<T>
   ): Promise<Bounded<T>> => {
     if (r.state === "needs-sign-in") {
-      problem(`${r.name} is not signed in: ${r.reason ?? NO_SECRET}.`);
+      misfit(`${r.name} is not signed in: ${r.reason ?? NO_SECRET}.`);
     }
     const once = async (): Promise<Bounded<T>> => {
       const connected = await clientOf(r);
@@ -1606,7 +1604,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const lfsBasic = (name: string): string => {
     const why = lfsProblem(name);
     if (why) {
-      problem(why);
+      misfit(why);
     }
     const key = opened(row(name)).key ?? "";
     return Buffer.from(`x-access-token:${key}`).toString("base64");
@@ -1661,9 +1659,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
     args: Record<string, unknown>
   ): Promise<CallToolResult> => {
     const parsed =
-      parseConnectionTool(name) ?? problem(`${name} is not a connection tool.`);
+      parseConnectionTool(name) ?? misfit(`${name} is not a connection tool.`);
     if (!granted(actor).includes(parsed.connection)) {
-      problem(
+      misfit(
         `${name} isn't available to this session: neither its delegate type nor its project lists the connection ${parsed.connection}.`
       );
     }
@@ -1675,11 +1673,11 @@ export const createConnections = (deps: ConnectionsDeps) => {
         ?.find(
           (one) => sessionToolName(parsed.connection, one.name) === name
         ) ??
-      problem(
+      misfit(
         `${name} is not one of ${parsed.connection}'s tools as the hub last listed them.`
       );
     if (connectionToolsFor(roleOf(actor)) === "read-only" && !readsOnly(tool)) {
-      problem(
+      misfit(
         `${name} isn't available here: this session reads the outside world, so it gets only a connection's read-only tools.`
       );
     }
@@ -1693,14 +1691,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const areasProblem = (areas: string[] | undefined) => {
     const unknown = (areas ?? []).find((id) => !deps.areaExists(id));
     if (unknown) {
-      problem(areaWords.scopeNoArea(unknown));
+      misfit(areaWords.scopeNoArea(unknown));
     }
   };
 
   const projectsProblem = (projects: string[] | undefined) => {
     const unknown = (projects ?? []).filter((id) => !deps.projectExists(id));
     if (unknown.length > 0) {
-      problem(`There is no project ${unknown.join(", ")}.`);
+      misfit(`There is no project ${unknown.join(", ")}.`);
     }
   };
 
@@ -1763,15 +1761,15 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const create = async (input: ConnectionInput): Promise<ConnectionView> => {
     const said = inputProblem(input);
     if (said) {
-      problem(said);
+      misfit(said);
     }
     if (input.auth === "gh") {
-      problem(
+      misfit(
         "A gh connection is made from a machine's gh: pick it in Sign in to GitHub."
       );
     }
     if (db.byName(input.name)) {
-      problem(`There is a connection ${input.name} already.`);
+      misfit(`There is a connection ${input.name} already.`);
     }
     projectsProblem(input.projects);
     areasProblem(input.areas);
@@ -1812,14 +1810,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const next = merged(r, patch);
     const said = inputProblem(next);
     if (said) {
-      problem(said);
+      misfit(said);
     }
     projectsProblem(patch.projects);
     areasProblem(patch.areas);
     const where = whereOf(next);
     const moved = JSON.stringify(where) !== JSON.stringify(whereOf(r));
     if (moved && (next.auth === "gh" || r.auth === "gh")) {
-      problem(
+      misfit(
         `${name} reads a machine's gh: remove it and connect another way instead.`
       );
     }
@@ -1870,10 +1868,10 @@ export const createConnections = (deps: ConnectionsDeps) => {
         gh: "it reads its machine's gh.",
         device: "sign in with a code instead.",
       };
-      problem(`${name} signs in with ${r.auth}, not a key: ${instead[r.auth]}`);
+      misfit(`${name} signs in with ${r.auth}, not a key: ${instead[r.auth]}`);
     }
     if (!key.trim() || key.length > 8192) {
-      problem("A key is between 1 and 8192 characters.");
+      misfit("A key is between 1 and 8192 characters.");
     }
     reseal(r.id, () => ({ key: key.trim() }));
     drop(r.id);
@@ -1893,14 +1891,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const r = row(name);
     const service = appServiceOf(r.service);
     if (r.auth !== "app" || !service) {
-      return problem(`${name} signs in with ${r.auth}, not as an app.`);
+      return misfit(`${name} signs in with ${r.auth}, not as an app.`);
     }
     if (service === "github") {
-      return problem(connectionsWords.githubAppRegisters(name));
+      return misfit(connectionsWords.githubAppRegisters(name));
     }
     const app = linearAppOf(input);
     if (typeof app === "string") {
-      return problem(app);
+      return misfit(app);
     }
     reseal(r.id, () => ({ app }));
     drop(r.id);
@@ -1927,7 +1925,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   ): Promise<{ authorizationUrl: string }> => {
     const { app } = opened(r);
     if (app?.service !== "linear") {
-      return problem(
+      return misfit(
         `${r.name} needs its Linear app first: set its client id and client secret.`
       );
     }
@@ -1942,7 +1940,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         state,
       });
     } catch (error) {
-      return problem(
+      return misfit(
         `${r.name}'s sign-in could not start: ${error instanceof Error ? error.message : String(error)}`
       );
     }
@@ -1985,7 +1983,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   ): { authorizationUrl: string } => {
     const org = (organization ?? opened(r).org ?? "").trim();
     if (org && !GITHUB_LOGIN.test(org)) {
-      return problem(
+      return misfit(
         "The organization is its login on GitHub, like the name in github.com/your-org."
       );
     }
@@ -2020,7 +2018,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       r.auth === "app" &&
       appServiceOf(r.service) === "github"
     )) {
-      return problem(
+      return misfit(
         "This GitHub App sign-in expired or was already completed. Sign in again from Connections."
       );
     }
@@ -2102,13 +2100,13 @@ export const createConnections = (deps: ConnectionsDeps) => {
       ).data as typeof made;
     } catch (error) {
       setState(r, "needs-sign-in", connectionsWords.saidSignIn);
-      return problem(
+      return misfit(
         `GitHub did not hand over the app (${error instanceof Error ? error.message.slice(0, 200) : String(error)}). Sign in again from Connections.`
       );
     }
     const privateKey = pemOf(made.pem);
     if (!(privateKey && made.slug)) {
-      return problem(
+      return misfit(
         "GitHub handed over an app without a private key or a name. Sign in again from Connections."
       );
     }
@@ -2152,7 +2150,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     const r = manifestRow(state);
     const { app } = opened(r);
     if (app?.service !== "github") {
-      return problem(
+      return misfit(
         "This app was never handed over by GitHub. Sign in again from Connections."
       );
     }
@@ -2160,7 +2158,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       return "requested";
     }
     if (!(installationId && DIGITS.test(installationId))) {
-      return problem(
+      return misfit(
         "GitHub's redirect named no installation. Install the app again from its page on GitHub."
       );
     }
@@ -2172,7 +2170,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         userAgent: "CawCo-hub",
       }).rest.apps.getInstallation({ installation_id: Number(installationId) });
     } catch {
-      return problem(
+      return misfit(
         `GitHub doesn't know installation ${installationId} of ${app.slug ?? "this app"}. Install it again from its page on GitHub.`
       );
     }
@@ -2238,7 +2236,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     r: ConnectionRow
   ): Promise<{ authorizationUrl: string }> => {
     if (!GITHUB_DEVICE_CLIENT_ID) {
-      return problem(
+      return misfit(
         "Sign-in with a code needs CawCo's GitHub app, which isn't registered yet. Connect with gh on a machine, or as a GitHub App."
       );
     }
@@ -2257,12 +2255,12 @@ export const createConnections = (deps: ConnectionsDeps) => {
         scope: DEVICE_SCOPE,
       });
     } catch (error) {
-      return problem(
+      return misfit(
         `GitHub did not hand out a code: ${error instanceof Error ? error.message : String(error)}.`
       );
     }
     if (!(codes.device_code && codes.user_code && codes.verification_uri)) {
-      return problem(
+      return misfit(
         `GitHub did not hand out a code (${codes.error_description ?? codes.error ?? "no code"}).`
       );
     }
@@ -2405,12 +2403,12 @@ export const createConnections = (deps: ConnectionsDeps) => {
       .slice(0, 24)
       .replace(TRAILING_HYPHENS, "");
     if (db.byName(name)) {
-      return problem(`There is a connection ${name} already.`);
+      return misfit(`There is a connection ${name} already.`);
     }
     projectsProblem(input.projects);
     const read = await deps.gh.token(input.machineId, input.host, input.login);
     if (read.kind !== "token") {
-      return problem(
+      return misfit(
         read.kind === "refused"
           ? connectionsWords.ghSignInAgain(
               input.login,
@@ -2463,7 +2461,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       return startDevice(r);
     }
     if (r.auth !== "oauth" && r.auth !== "app") {
-      problem(`${name} signs in with ${r.auth}, not OAuth.`);
+      misfit(`${name} signs in with ${r.auth}, not OAuth.`);
     }
     const base = originOf(origin ?? deps.hubOrigin());
     const redirect = `${base.origin}${CONNECTION_CALLBACK_PATH}`;
@@ -2506,7 +2504,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       );
     }
     if (!authorizationUrl) {
-      return problem(`${name}'s server asked for no sign-in.`);
+      return misfit(`${name}'s server asked for no sign-in.`);
     }
     db.update(r.id, { signInUrl: authorizationUrl.toString() });
     setState(r, "needs-sign-in", connectionsWords.saidUnderWay);
@@ -2522,7 +2520,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   ): Promise<ConnectionView> => {
     const r = db.bySignInState(state);
     if (!(r?.signInExpiresAt && r.signInExpiresAt.getTime() > Date.now())) {
-      return problem(
+      return misfit(
         "This sign-in expired or was already completed. Start sign-in again."
       );
     }
@@ -2550,7 +2548,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const exchangeApp = async (r: ConnectionRow, code: string): Promise<void> => {
     const { app, verifier } = opened(r);
     if (app?.service !== "linear" || !verifier) {
-      return problem(
+      return misfit(
         "This sign-in's app was changed while it was under way. Start sign-in again."
       );
     }
@@ -2599,7 +2597,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       metadata?.authorization_response_iss_parameter_supported === true &&
       iss !== metadata.issuer
     ) {
-      return problem(
+      return misfit(
         "This sign-in came back from a different authorization server than it started with. Start sign-in again."
       );
     }
@@ -2631,13 +2629,13 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const githubClient = (name: string): Octokit => {
     const r = row(name);
     if (appServiceOf(r.service) !== "github") {
-      return problem(`${name} is a ${r.service} connection, not a GitHub one.`);
+      return misfit(`${name} is a ${r.service} connection, not a GitHub one.`);
     }
     const sealed = opened(r);
     if (r.auth === "app") {
       return sealed.app?.service === "github"
         ? githubAppOctokit(r, sealed.app)
-        : problem(`${name} needs its GitHub App: sign in to register it.`);
+        : misfit(`${name} needs its GitHub App: sign in to register it.`);
     }
     if (r.auth === "gh" || r.auth === "device") {
       // Each request is signed with the token as it is then: a gh token
@@ -2663,12 +2661,12 @@ export const createConnections = (deps: ConnectionsDeps) => {
     }
     if (r.auth === "bearer") {
       return new Octokit({
-        auth: sealed.key ?? problem(`${name} needs its key: ${NO_SECRET}.`),
+        auth: sealed.key ?? misfit(`${name} needs its key: ${NO_SECRET}.`),
         baseUrl: GITHUB_API,
         userAgent: "CawCo-hub",
       });
     }
-    return problem(
+    return misfit(
       `${name} signs in with ${r.auth}; a tracker reads GitHub through gh on a machine, a code sign-in, a GitHub App or a fine-grained personal access token.`
     );
   };
@@ -2690,7 +2688,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       app?.service === "github" &&
       app.installationId
     )) {
-      return problem(`${name} is no installed GitHub App.`);
+      return misfit(`${name} is no installed GitHub App.`);
     }
     const { data } = await new Octokit({
       authStrategy: createAppAuth,
@@ -2716,19 +2714,18 @@ export const createConnections = (deps: ConnectionsDeps) => {
   const linearClient = async (name: string): Promise<LinearClientFor> => {
     const r = row(name);
     if (appServiceOf(r.service) !== "linear") {
-      return problem(`${name} is a ${r.service} connection, not a Linear one.`);
+      return misfit(`${name} is a ${r.service} connection, not a Linear one.`);
     }
     const apiUrl = `${LINEAR_API}/graphql`;
     let signedIn: { accessToken: string } | { apiKey: string };
     if (r.auth === "bearer") {
       signedIn = {
-        apiKey:
-          opened(r).key ?? problem(`${name} needs its key: ${NO_SECRET}.`),
+        apiKey: opened(r).key ?? misfit(`${name} needs its key: ${NO_SECRET}.`),
       };
     } else if (r.auth === "app") {
       signedIn = { accessToken: await linearAccess(r) };
     } else {
-      return problem(
+      return misfit(
         `${name} signs in with ${r.auth}; a tracker reads Linear through a Linear app or a personal API key.`
       );
     }
@@ -2765,7 +2762,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
     deps.lifetime.cancel(devicePolls.get(r.id));
     devicePolls.delete(r.id);
     const restore =
-      deps.trash(name) ?? problem(`There is no connection ${name}.`);
+      deps.trash(name) ?? misfit(`There is no connection ${name}.`);
     console.info(`[connections] removed ${name}`);
     deps.changed();
     return restore;
@@ -2892,7 +2889,7 @@ const plainText = (text: string, code = 200) =>
 /** A refusal as a 400 in words; anything else is the hub's own failure. */
 const refused = (error: unknown) => {
   if (error instanceof ConnectionProblem) {
-    return refusal(400, "connection-problem", error.message);
+    return problem(400, { code: "connection-problem", detail: error.message });
   }
   throw error;
 };
@@ -2962,11 +2959,10 @@ export const connectionRoutes = (connections: Connections) =>
       async ({ params, body }) => {
         try {
           if (!("clientId" in body)) {
-            return refusal(
-              400,
-              "github-app-registers",
-              connectionsWords.githubAppRegisters(params.name)
-            );
+            return problem(400, {
+              code: "github-app-registers",
+              detail: connectionsWords.githubAppRegisters(params.name),
+            });
           }
           return await connections.setApp(params.name, body);
         } catch (error) {

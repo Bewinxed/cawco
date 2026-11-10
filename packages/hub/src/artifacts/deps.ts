@@ -17,12 +17,13 @@ import type {
   StageWarm,
 } from "@cawco/core/stage";
 import type { FolderWeight } from "@cawco/preview/proxy";
+import type { problem } from "elysia";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import type { ArtifactNamed, BuiltProgram } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
 import type { HubLifetimeShape } from "../lifetime";
 import type { PreviewListeners } from "../preview";
-import type { RefusalOf } from "../refusal";
+
 import type { SentPage } from "../setup";
 import type { StateAsk } from "./component";
 import type { ArtifactDocs } from "./docs";
@@ -37,28 +38,34 @@ import type {
 } from "./shapes";
 
 /**
- * A refusal from across the hub's import cycle (decisions, settling and the
- * artifact pages reach this file again):
- * the wiring says it again (refusal.ts `resaid`), its status and code as a
- * number and a string.
+ * A problem from across the hub's import cycle (decisions, settling and the
+ * artifact pages reach this file again): the wiring makes it again with
+ * Elysia's `problem`, its status and code typed as a number and a string.
  */
-type Resaid = RefusalOf;
+type Resaid = ReturnType<
+  typeof problem<number, { code: string; detail: string }>
+>;
 
 /** A machine call of the hub's own wiring that no machine answered: away (503), or not in time (504). */
 type Unanswered<Away extends string, Late extends string> =
-  RefusalOf<503, Away> | RefusalOf<504, Late>;
+  | ReturnType<typeof problem<503, { code: Away; detail: string }>>
+  | ReturnType<typeof problem<504, { code: Late; detail: string }>>;
 
 /** A stage's refusal (artifact-events.ts `onStage`): its workspace gone or on no machine, its machine away or late, or the stage's own no. */
 type StageRefused =
-  | RefusalOf<409, "stage-workspace-gone">
-  | RefusalOf<409, "stage-workspace-unplaced">
+  | ReturnType<
+      typeof problem<409, { code: "stage-workspace-gone"; detail: string }>
+    >
+  | ReturnType<
+      typeof problem<409, { code: "stage-workspace-unplaced"; detail: string }>
+    >
   | Unanswered<"stage-machine-away", "stage-machine-late">
-  | RefusalOf<422, "stage-said-no">;
+  | ReturnType<typeof problem<422, { code: "stage-said-no"; detail: string }>>;
 
 /** Why an artifact has no origin a browser of the session's own opens (preview-browse.ts `browsedOrigin`): no session holds it, no machine serves it, or its listener does not open. */
 type OriginRefused =
-  | RefusalOf<404, "browse-unheld">
-  | RefusalOf<409, "browse-unserved">
+  | ReturnType<typeof problem<404, { code: "browse-unheld"; detail: string }>>
+  | ReturnType<typeof problem<409, { code: "browse-unserved"; detail: string }>>
   | Exclude<ReturnType<PreviewListeners["address"]>, { port: number }>
   | Exclude<ReturnType<PreviewListeners["embed"]>, { port: number }>;
 
@@ -96,7 +103,12 @@ export interface ArtifactServiceDeps {
   browse: (
     instance: InstanceRow,
     row: ArtifactRow
-  ) => Browsed | OriginRefused | RefusalOf<503, "browse-unnamed">;
+  ) =>
+    | Browsed
+    | OriginRefused
+    | ReturnType<
+        typeof problem<503, { code: "browse-unnamed"; detail: string }>
+      >;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => void;
   /**
@@ -178,7 +190,9 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     | FolderWeight
     | Unanswered<"artifact-folder-machine-away", "artifact-folder-machine-late">
-    | RefusalOf<422, "artifact-folder-unread">
+    | ReturnType<
+        typeof problem<422, { code: "artifact-folder-unread"; detail: string }>
+      >
   >;
   /** Whether a dashboard (or the app) follows the session's stream now: one shows it. */
   followed: (instanceId: string) => boolean;
@@ -226,10 +240,21 @@ export interface ArtifactServiceDeps {
     png: string
   ) => Promise<
     | string
-    | RefusalOf<409, "picture-save-no-workspace">
-    | RefusalOf<503, "picture-save-unanswered">
-    | RefusalOf<503, "picture-save-failed">
-    | RefusalOf<400, "picture-save-refused">
+    | ReturnType<
+        typeof problem<
+          409,
+          { code: "picture-save-no-workspace"; detail: string }
+        >
+      >
+    | ReturnType<
+        typeof problem<503, { code: "picture-save-unanswered"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<503, { code: "picture-save-failed"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<400, { code: "picture-save-refused"; detail: string }>
+      >
   >;
   /**
    * The projects session `instance` is the conversation of (their Caw): an ended writer's
@@ -296,9 +321,13 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     | string
     | OriginRefused
-    | RefusalOf<503, "picture-no-daemon">
-    | RefusalOf<503, "picture-undrawn">
-    | RefusalOf<503, "picture-none">
+    | ReturnType<
+        typeof problem<503, { code: "picture-no-daemon"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<503, { code: "picture-undrawn"; detail: string }>
+      >
+    | ReturnType<typeof problem<503, { code: "picture-none"; detail: string }>>
   >;
   /**
    * The agent's reply `text` on a pin of artifact `artifactId` asks the
@@ -355,8 +384,18 @@ export interface ArtifactServiceDeps {
     sync: string
   ) => Promise<
     | CanvasScreen
-    | RefusalOf<503, "artifact-screen-no-daemon">
-    | RefusalOf<503, "artifact-screen-unopened">
+    | ReturnType<
+        typeof problem<
+          503,
+          { code: "artifact-screen-no-daemon"; detail: string }
+        >
+      >
+    | ReturnType<
+        typeof problem<
+          503,
+          { code: "artifact-screen-unopened"; detail: string }
+        >
+      >
     | Exclude<ReturnType<PreviewListeners["local"]>, string>
   >;
   /**
@@ -369,7 +408,12 @@ export interface ArtifactServiceDeps {
     artifact: ArtifactRow,
     page: SentPage
   ) => Promise<
-    | RefusalOf<400 | 404 | 409 | 413 | 503 | 504, "setup-place-refused">
+    | ReturnType<
+        typeof problem<
+          400 | 404 | 409 | 413 | 503 | 504,
+          { code: "setup-place-refused"; detail: string }
+        >
+      >
     | undefined
   >;
   /**
@@ -386,7 +430,12 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     | StageState
     | Unanswered<"artifact-serve-machine-away", "artifact-serve-machine-late">
-    | RefusalOf<422, "artifact-serve-unstarted">
+    | ReturnType<
+        typeof problem<
+          422,
+          { code: "artifact-serve-unstarted"; detail: string }
+        >
+      >
   >;
   /** Whether project `projectId` is set up (tasks.ts `isSetUp`): where its setup page lands (core `setupLanding`). */
   setUp: (projectId: string) => boolean;

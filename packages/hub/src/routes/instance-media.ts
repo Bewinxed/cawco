@@ -8,10 +8,10 @@ import {
   imageProviderOf,
 } from "@cawco/core/image-generation";
 import { secondsOf } from "@cawco/core/time";
-import { Elysia, t } from "elysia";
+import { Elysia, problem, t } from "elysia";
 import { hidden } from "../hidden";
 import type { HubContext } from "../hub-context";
-import { refusal } from "../refusal";
+
 import { unreachable } from "../unreachable";
 
 export const instanceMediaRoutes = ({
@@ -36,11 +36,12 @@ export const instanceMediaRoutes = ({
         const [row] = db.listedInstancesByIds([params.id]);
         const write = readForgeAsk({ repo: "-", write: body.write })?.write;
         if (!(row && write)) {
-          return refusal(
-            row ? 400 : 404,
-            "forge-post-refused",
-            row ? "forge_post takes one write." : "Unknown calling session."
-          );
+          return problem(row ? 400 : 404, {
+            code: "forge-post-refused",
+            detail: row
+              ? "forge_post takes one write."
+              : "Unknown calling session.",
+          });
         }
         server?.timeout(request, 0);
         const answer = await forgePosts.post(row, {
@@ -49,7 +50,7 @@ export const instanceMediaRoutes = ({
         });
         return answer.ok
           ? answer.text
-          : refusal(422, "forge-post-refused", answer.text);
+          : problem(422, { code: "forge-post-refused", detail: answer.text });
       }
     )
     .post(
@@ -75,11 +76,10 @@ export const instanceMediaRoutes = ({
       async ({ params, body, request, server }) => {
         const [row] = db.listedInstancesByIds([params.id]);
         if (!row) {
-          return refusal(
-            404,
-            "unknown-calling-session",
-            "Unknown calling session."
-          );
+          return problem(404, {
+            code: "unknown-calling-session",
+            detail: "Unknown calling session.",
+          });
         }
         server?.timeout(request, 0);
         // The provider the call names wins; else the fleet's default,
@@ -111,24 +111,22 @@ export const instanceMediaRoutes = ({
         switch (answer.kind) {
           case "unanswered":
             return answer.reason === "dead"
-              ? refusal(
-                  503,
-                  "sessions-machine-offline-image",
-                  "The session's machine is offline; image generation was not started."
-                )
-              : refusal(
-                  504,
-                  "image-generation-did-not",
-                  `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`
-                );
+              ? problem(503, {
+                  code: "sessions-machine-offline-image",
+                  detail:
+                    "The session's machine is offline; image generation was not started.",
+                })
+              : problem(504, {
+                  code: "image-generation-did-not",
+                  detail: `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`,
+                });
           case "answered":
             return answer.value.ok
               ? (answer.value.result as GeneratedImage)
-              : refusal(
-                  422,
-                  "image-not-generated",
-                  answer.value.error ?? "Image generation failed."
-                );
+              : problem(422, {
+                  code: "image-not-generated",
+                  detail: answer.value.error ?? "Image generation failed.",
+                });
           default:
             throw unreachable(answer);
         }
