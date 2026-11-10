@@ -1,10 +1,10 @@
 /** NDJSON host, spawned exclusively by sessiond. Agent disconnects do not end it. */
 import { createInterface } from "node:readline";
-import { INSTALL_SESSION_CREDENTIAL } from "@cawco/core/harness";
 import { mcpGatewayPort } from "@cawco/core/ports";
 import { MESSAGES_READ } from "@cawco/core/session-messages";
 import type { BrowserDoor } from "../browser/door";
 import type { HarnessContext, HarnessSession } from "../harness";
+import { installOf } from "./credential-controls";
 import { startPiHost } from "./pi-runtime";
 import {
   backgroundShell,
@@ -148,15 +148,13 @@ createInterface({ input: process.stdin })
       return;
     }
     handle(command).catch((error: unknown) => {
-      const credential =
-        command.type === "control" &&
-        command.method === INSTALL_SESSION_CREDENTIAL
-          ? command.args[0]
+      const installing =
+        command.type === "control"
+          ? installOf(command.method, command.args)
           : undefined;
-      const message =
-        typeof credential === "string" && credential
-          ? String(error).replaceAll(credential, "[credential]")
-          : String(error);
+      const message = installing
+        ? String(error).replaceAll(installing.credential, "[credential]")
+        : String(error);
       if ("id" in command) {
         output({ type: "reply", id: command.id, error: message });
       } else if (command.type === "send") {
