@@ -70,8 +70,7 @@ import {
   trashProjectFolder,
   untrashProjectFolder,
 } from "./project-folder";
-import { projectRefusalOf, projectRootOf } from "./project-refusal";
-import { StatusRefusal } from "./refusal";
+import { refusal } from "./refusal";
 import { readStages } from "./stages";
 import {
   ARCHIVE_DIR,
@@ -310,22 +309,20 @@ interface Merge {
   slugs: string[];
 }
 
-/** Every fold the live projects' folders hold. */
-const mergesOf = async (
-  projects: readonly { id: string; name: string }[]
-): Promise<Merge[]> => {
+/** Every fold the live projects' folders hold; the first folder's refusal. */
+const mergesOf = async (projects: readonly { id: string; name: string }[]) => {
   const merges: Merge[] = [];
   for (const project of projects) {
     const has = await hasProjectFolder(project.id);
     if (has instanceof ElysiaStatus) {
-      throw projectRefusalOf(has);
+      return has;
     }
     if (!has) {
       continue;
     }
     const commits = await folderCommitsCarrying(project.id, MERGE_LINE);
     if (commits instanceof ElysiaStatus) {
-      throw projectRefusalOf(commits);
+      return commits;
     }
     for (const commit of commits) {
       const slugs = commit.paths.flatMap((path) => fileTaskSlug(path) ?? []);
@@ -456,7 +453,8 @@ const summed = (
 
 /**
  * Project `id`'s newest trash entry (`forgottenAt`: the one forgotten then)
- * and its record; a record that does not read is refused in words.
+ * and its record; a record that does not read is refused in words
+ * (restore-record-unreadable).
  */
 const newestEntry = async (id: string, forgottenAt: number | undefined) => {
   const entry = (await entries()).find(
@@ -466,8 +464,9 @@ const newestEntry = async (id: string, forgottenAt: number | undefined) => {
   const record = entry
     ? await recordOf(entry).catch((error: unknown) => {
         if (isDamagedRecord(error)) {
-          throw new RestoreRefusal(
+          return refusal(
             422,
+            "restore-record-unreadable",
             projectTrashWords.unreadable(id, error.reason)
           );
         }
@@ -615,18 +614,12 @@ export const purgeTrash = async (id: string): Promise<number> => {
   return mine.length;
 };
 
-/** A restore the hub turns down: its status, and the words the caller reads. */
-export class RestoreRefusal extends StatusRefusal<400 | 404 | 409 | 422> {}
-
 /**
  * A folded duplicate's folder set aside (project-merge.ts), with a record
  * that says it was folded into `into`, so it is never listed as forgotten.
- * Answers where the folder went.
+ * Answers where the folder went, or the folder's refusal of the move.
  */
-export const trashFoldedFolder = async (
-  id: string,
-  into: string
-): Promise<string | undefined> => {
+export const trashFoldedFolder = async (id: string, into: string) => {
   const at = new Date();
   const entry = entryOf(id, at);
   writeStateFileSync(
@@ -640,11 +633,7 @@ export const trashFoldedFolder = async (
     } satisfies EntryRecord),
     RECORD_WRITE
   );
-  const folder = await trashProjectFolder(id, entry);
-  if (folder instanceof ElysiaStatus) {
-    throw projectRefusalOf(folder);
-  }
-  return folder;
+  return await trashProjectFolder(id, entry);
 };
 
 /** A forget as it went. */
@@ -662,31 +651,6 @@ export interface Forgot {
   sessions: number;
 }
 
-export interface ProjectTrash {
-  /**
-   * Forgets project `id`: its record written to the trash, its rows deleted,
-   * its folder moved beside the record. `by` is the presence id of the
-   * client that asked. Its browsers were stopped first (browsers.ts
-   * `forgetProject`); the record names them. Undefined: there is no such
-   * project.
-   */
-  readonly forget: (
-    id: string,
-    by: string | null
-  ) => Promise<Forgot | undefined>;
-  /** Every forgotten project the trash can bring back, newest first. */
-  readonly forgotten: () => Promise<ForgottenProject[]>;
-  /**
-   * Brings project `id` back from its newest entry (`forgottenAt`: the one
-   * forgotten then); `name` names one forgotten before the hub kept its
-   * name. Throws a {@link RestoreRefusal} in the hub's words.
-   */
-  readonly restore: (
-    id: string,
-    asked: { forgottenAt?: number; name?: string }
-  ) => Promise<ProjectRestored>;
-}
-
 export const projectTrash = (
   db: Pick<
     DbShape,
@@ -699,41 +663,63 @@ export const projectTrash = (
     | "project"
     | "restoreProject"
   >
-): ProjectTrash => {
-  /** The live project holding `id`, refused in words. */
-  const refuseLive = (id: string): void => {
+) => {
+  /** The live project holding `id`, refused in words (restore-id-taken). */
+  const liveHolds = (id: string) => {
     const live = db.project(id);
-    if (live) {
-      throw new RestoreRefusal(409, projectTrashWords.idTaken(live.name, id));
-    }
+    return live
+      ? refusal(
+          409,
+          "restore-id-taken",
+          projectTrashWords.idTaken(live.name, id)
+        )
+      : undefined;
   };
-  /** A folder standing where the entry's goes back to, refused in words. */
-  const refuseFolder = async (entry: Entry, name: string): Promise<void> => {
-    const root = projectRootOf(entry.id);
+  /** A folder standing where the entry's goes back to, refused in words (restore-folder-taken), or the folder's refusal of the id. */
+  const folderHolds = async (entry: Entry, name: string) => {
+    const root = projectRoot(entry.id);
+    if (root instanceof ElysiaStatus) {
+      return root;
+    }
     if (entry.folder && (await stat(root).catch(() => undefined))) {
-      throw new RestoreRefusal(409, projectTrashWords.folderTaken(name, root));
+      return refusal(
+        409,
+        "restore-folder-taken",
+        projectTrashWords.folderTaken(name, root)
+      );
     }
   };
-  /** Moves the entry's folder back, runs `put`, and moves it out again when `put` throws. */
-  const withFolder = async <T>(entry: Entry, put: () => T): Promise<T> => {
+  /** The entry's folder moved out to the trash again, when it has one; the folder's refusal of the move. */
+  const putBack = async (entry: Entry) => {
+    if (!entry.folder) {
+      return;
+    }
+    const out = await trashProjectFolder(entry.id, entry.entry);
+    return out instanceof ElysiaStatus ? out : undefined;
+  };
+  /** Moves the entry's folder back, runs `put`, and moves it out again when `put` refuses or throws; a refused move's refusal first. */
+  const withFolder = async <T>(entry: Entry, put: () => T) => {
     const back = await untrashProjectFolder(
       entry.id,
       entry.folder ? entry.entry : null
     );
     if (back instanceof ElysiaStatus) {
-      throw projectRefusalOf(back);
+      return back;
     }
+    let done: T;
     try {
-      return put();
+      done = put();
     } catch (error) {
-      if (entry.folder) {
-        const out = await trashProjectFolder(entry.id, entry.entry);
-        if (out instanceof ElysiaStatus) {
-          throw projectRefusalOf(out);
-        }
+      const out = await putBack(entry);
+      if (out) {
+        return out;
       }
       throw error;
     }
+    if (done instanceof ElysiaStatus) {
+      return (await putBack(entry)) ?? done;
+    }
+    return done;
   };
   /** The record's browsers its machines still keep: one the person removed since is gone with its profile. */
   const stillKept = (browsers: readonly KeptBrowser[]): number =>
@@ -742,17 +728,24 @@ export const projectTrash = (
     ).length;
   /** The folds the live projects hold, read once per call and only when asked. */
   const mergesOnce = () => {
-    let read: Promise<Merge[]> | undefined;
+    let read: ReturnType<typeof mergesOf> | undefined;
     return () => {
       read ??= mergesOf(db.listProjects());
       return read;
     };
   };
-  /** What a folder with no record brings, and the project it was folded into when every task of it lives there. */
-  const folderAlone = async (entry: Entry, merges: () => Promise<Merge[]>) => {
+  /** What a folder with no record brings, and the project it was folded into when every task of it lives there; a live folder's refusal. */
+  const folderAlone = async (
+    entry: Entry,
+    merges: () => ReturnType<typeof mergesOf>
+  ) => {
     const tasks = await trashedTasks(entry.entry);
     const slugs = tasks.map((one) => taskSlug(one.title));
-    const fold = slugs.length > 0 ? foldOf(slugs, await merges()) : undefined;
+    const folds = slugs.length > 0 ? await merges() : [];
+    if (folds instanceof ElysiaStatus) {
+      return folds;
+    }
+    const fold = slugs.length > 0 ? foldOf(slugs, folds) : undefined;
     return {
       tasks,
       brings: folderBrings(
@@ -763,36 +756,53 @@ export const projectTrash = (
     };
   };
 
-  /** A folder with no record brought back under a new row named `name`, unless it was a fold. */
-  const restoreFolder = async (
-    entry: Entry,
-    asked: { name?: string }
-  ): Promise<ProjectRestored> => {
+  /** A folder with no record brought back under a new row named `name`, unless it was a fold; refused in words. */
+  const restoreFolder = async (entry: Entry, asked: { name?: string }) => {
     const { id } = entry;
     const alone = await folderAlone(entry, mergesOnce());
+    if (alone instanceof ElysiaStatus) {
+      return alone;
+    }
     if (alone.foldedInto) {
-      throw new RestoreRefusal(
+      return refusal(
         409,
+        "restore-folded",
         projectTrashWords.foldedInto(id, alone.foldedInto.name)
       );
     }
     const name = asked.name?.trim();
     if (!name) {
-      throw new RestoreRefusal(400, projectTrashWords.nameNeeded(id));
+      return refusal(
+        400,
+        "restore-name-needed",
+        projectTrashWords.nameNeeded(id)
+      );
     }
-    refuseLive(id);
-    await refuseFolder(entry, name);
-    await withFolder(entry, () => db.createProject({ id, name, remote: null }));
-    return {
+    const held = liveHolds(id) ?? (await folderHolds(entry, name));
+    if (held) {
+      return held;
+    }
+    const made = await withFolder(entry, () =>
+      db.createProject({ id, name, remote: null })
+    );
+    if (made instanceof ElysiaStatus) {
+      return made;
+    }
+    const root = projectRoot(id);
+    if (root instanceof ElysiaStatus) {
+      return root;
+    }
+    const restored: ProjectRestored = {
       id,
       name,
       // Its one place: its folder on the hub, which a new row makes.
       brought: {
-        ...folderBrings(await taskFiles(projectRootOf(id)), null),
+        ...folderBrings(await taskFiles(root), null),
         places: 1,
       },
       left: {},
     };
+    return restored;
   };
 
   /** A machine by the name the hub holds for it now, else its id. */
@@ -831,8 +841,8 @@ export const projectTrash = (
     ),
   ];
 
-  /** Every forgotten project of the trash's entries, but folds. */
-  const listed = async (): Promise<ForgottenProject[]> => {
+  /** Every forgotten project of the trash's entries, but folds; a live folder's refusal. */
+  const listed = async () => {
     const out: ForgottenProject[] = [];
     const merges = mergesOnce();
     const all = await entries();
@@ -888,6 +898,9 @@ export const projectTrash = (
       // A record that does not read lists what its folder alone holds; a
       // fold's folder is none a person forgot.
       const alone = entry.folder ? await folderAlone(entry, merges) : undefined;
+      if (alone instanceof ElysiaStatus) {
+        return alone;
+      }
       if (alone && !alone.foldedInto) {
         out.push({
           id: entry.id,
@@ -904,7 +917,17 @@ export const projectTrash = (
   };
 
   return {
-    forget: async (id, by) => {
+    /**
+     * Forgets project `id`: its record written to the trash, its rows deleted,
+     * its folder moved beside the record. `by` is the presence id of the
+     * client that asked. Its browsers were stopped first (browsers.ts
+     * `forgetProject`); the record names them. Undefined: there is no such
+     * project.
+     */
+    forget: async (
+      id: string,
+      by: string | null
+    ): Promise<Forgot | undefined> => {
       const project = db.project(id);
       if (!project) {
         return;
@@ -972,16 +995,33 @@ export const projectTrash = (
       };
     },
 
+    /** Every forgotten project the trash can bring back, newest first. */
     forgotten: listed,
 
-    restore: async (id, asked) => {
+    /**
+     * Brings project `id` back from its newest entry (`forgottenAt`: the one
+     * forgotten then); `name` names one forgotten before the hub kept its
+     * name. Refused in the hub's words, each cause its own code.
+     */
+    restore: async (
+      id: string,
+      asked: { forgottenAt?: number; name?: string }
+    ) => {
       const { entry, record } = await newestEntry(id, asked.forgottenAt);
+      if (record instanceof ElysiaStatus) {
+        return record;
+      }
       if (!(entry && (record || entry.folder))) {
-        throw new RestoreRefusal(404, projectTrashWords.notForgotten(id));
+        return refusal(
+          404,
+          "restore-not-forgotten",
+          projectTrashWords.notForgotten(id)
+        );
       }
       if (record?.kind === "folded") {
-        throw new RestoreRefusal(
+        return refusal(
           409,
+          "restore-folded",
           projectTrashWords.foldedInto(
             id,
             db.project(record.into)?.name ?? record.into
@@ -991,27 +1031,34 @@ export const projectTrash = (
       if (!record) {
         return await restoreFolder(entry, asked);
       }
-      refuseLive(id);
-      await refuseFolder(entry, record.name);
+      const held = liveHolds(id) ?? (await folderHolds(entry, record.name));
+      if (held) {
+        return held;
+      }
       const restored = await withFolder(entry, () => {
         const done = db.restoreProject(id, record.rows);
-        if (!done.ok) {
-          throw done.why === "live"
-            ? new RestoreRefusal(
-                409,
-                projectTrashWords.idTaken(db.project(id)?.name ?? id, id)
-              )
-            : new RestoreRefusal(
-                409,
-                projectTrashWords.placeTaken(
-                  record.name,
-                  done.holder.name,
-                  done.path
-                )
-              );
+        if (done.ok) {
+          return done;
         }
-        return done;
+        return done.why === "live"
+          ? refusal(
+              409,
+              "restore-id-taken",
+              projectTrashWords.idTaken(db.project(id)?.name ?? id, id)
+            )
+          : refusal(
+              409,
+              "restore-place-taken",
+              projectTrashWords.placeTaken(
+                record.name,
+                done.holder.name,
+                done.path
+              )
+            );
       });
+      if (restored instanceof ElysiaStatus) {
+        return restored;
+      }
       // Its rows are live again: the record has nothing left to keep.
       await rm(recordPath(entry.entry), { force: true });
       const left = summed(restored.taken, restored.gone);
@@ -1021,7 +1068,7 @@ export const projectTrash = (
       if (browsers < record.browsers.length) {
         left.browsers = record.browsers.length - browsers;
       }
-      return {
+      const back: ProjectRestored = {
         id,
         name: record.name,
         brought: bringsOf(
@@ -1033,6 +1080,9 @@ export const projectTrash = (
         ),
         left,
       };
+      return back;
     },
   };
 };
+
+export type ProjectTrash = ReturnType<typeof projectTrash>;
