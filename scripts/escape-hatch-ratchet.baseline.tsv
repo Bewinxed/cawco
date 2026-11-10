@@ -1,8 +1,13 @@
 # Written by the check that reads it (lib/ratchet.ts); never edited by hand.
 as-unknown-as	[ string, string, string, ]	packages/core/src/external-items.ts	1
 as-unknown-as	[ string, string, string, string, string, ]	packages/core/src/external-items.ts	1
+as-unknown-as	{ __buttonBench: { start: () => void; stop: () => void }; }	apps/dashboard/src/routes/(app)/motion/button-pending/+page.svelte	1
+as-unknown-as	[string, string, string]	apps/dashboard/src/lib/cawco/find/mention.svelte.ts	1
 as-unknown-as	{ __cawcoDebug: { boardState: { fleetRead: boolean }; projectsState: { p	apps/dashboard/src/routes/(app)/motion/hover-glide/+page.svelte	1
 as-unknown-as	{ __cawcoDebug: Bench }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
+as-unknown-as	{ __cawcoDeliver: (data: unknown) => void }	packages/agent/src/chromium.ts	1
+as-unknown-as	{ __cawcoGraph: CanvasGraph }	packages/agent/src/stage-host/canvas/embed.ts	1
+as-unknown-as	{ __cawcoGraph?: CanvasGraph }	packages/agent/src/stage-host/canvas/stage.ts	1
 as-unknown-as	{ __cawcoParents?: readonly string[] }	packages/preview/src/overlay/host-origin.ts	1
 as-unknown-as	{ __rbReal?: Real }	apps/dashboard/src/routes/(app)/motion/recent/+page.svelte	1
 as-unknown-as	{ __transcriptBuilds?: Record<string, number>; }	apps/dashboard/src/lib/cawco/transcript/Transcript.svelte	1
@@ -39,6 +44,7 @@ as-unknown-as	FleetMcpConfig	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Freshable[]	packages/core/src/usage/windows.ts	1
 as-unknown-as	HookDraft	packages/hub/src/server.ts	1
 as-unknown-as	HookFrame	packages/agent/src/harnesses/claude.ts	1
+as-unknown-as	Libc	packages/agent/src/layer.ts	1
 as-unknown-as	Libc	packages/core/src/flock.ts	1
 as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
@@ -57,10 +63,16 @@ as-unknown-as	RawRecord	packages/agent/src/harnesses/claude-transcript.ts	6
 as-unknown-as	ReadableWritablePair< Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer> >	packages/core/src/compress-answer.ts	1
 as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
+as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
+as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
+as-unknown-as	Record<string, unknown[]>	scripts/probe-kit/specs/graph-stage.ts	1
+as-unknown-as	Record<string, string>	apps/dashboard/src/lib/cawco/accounts/figure.ts	1
+as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/transcript/rows.ts	2
+as-unknown-as	Record<string, unknown>	packages/agent/src/stage-host/canvas/runtime.ts	1
+as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
+as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	2
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
-as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
-as-unknown-as	RouteData	apps/dashboard/src/lib/cawco/graph/RouteEdge.svelte	1
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	SendPayload	packages/hub/src/stream.ts	1
