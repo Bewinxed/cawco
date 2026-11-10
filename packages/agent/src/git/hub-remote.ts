@@ -70,19 +70,18 @@ export const hubGitEnv = (
   repo: string,
   extra: [string, string][] = [],
   declared?: DeclaredLfs
-): Record<string, string> =>
-  ({
-    ...hostEnvironment(),
-    ...GIT_LOCALE,
-    GIT_TERMINAL_PROMPT: "0",
-    ...configEnv([
-      [`http.${repo}.extraHeader`, `Authorization: Basic ${basicOf()}`],
-      ...(declared
-        ? declaredPins(declared, urlOrigin(repo))
-        : lfsPins(lfsEndpointOf(repo), true)),
-      ...extra,
-    ]),
-  }) as Record<string, string>;
+): Record<string, string> => ({
+  ...hostEnvironment(),
+  ...GIT_LOCALE,
+  GIT_TERMINAL_PROMPT: "0",
+  ...configEnv([
+    [`http.${repo}.extraHeader`, `Authorization: Basic ${basicOf()}`],
+    ...(declared
+      ? declaredPins(declared, urlOrigin(repo))
+      : lfsPins(lfsEndpointOf(repo), true)),
+    ...extra,
+  ]),
+});
 
 /**
  * The ref of a project's main hub repository naming the repository that took

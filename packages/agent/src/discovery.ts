@@ -6,6 +6,7 @@ import { CAWCO_MDNS_TYPE } from "@cawco/core/protocol";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
 import { Bonjour, type Service } from "bonjour-service";
+import { z } from "zod";
 import { readConfig, writeConfig } from "./config";
 import { hubClient } from "./hub-client";
 
@@ -169,11 +170,17 @@ export const browseMdns = (): Promise<Bounded<string[]>> =>
   );
 
 /** The shape of `tailscale status --json` this reads, and nothing more. */
-interface TailscaleNode {
-  HostName?: string;
-  Online?: boolean;
-  TailscaleIPs?: string[];
-}
+const TailscaleNode = z.object({
+  HostName: z.string().optional(),
+  Online: z.boolean().optional(),
+  TailscaleIPs: z.array(z.string()).optional(),
+});
+type TailscaleNode = z.infer<typeof TailscaleNode>;
+
+const TailscaleStatus = z.object({
+  Peer: z.record(z.string(), TailscaleNode).nullish(),
+  Self: TailscaleNode.nullish(),
+});
 
 /**
  * The macOS app ships its CLI inside the bundle and only symlinks it into the
@@ -204,18 +211,19 @@ export const tailscaleCandidates = async (
   if (!binary) {
     return [];
   }
-  const status = await Bun.$`${binary} status --json`
+  const said: unknown = await Bun.$`${binary} status --json`
     .env(hostEnvironment())
     .quiet()
     .json()
     .catch(() => undefined);
-  if (!status) {
+  const status = TailscaleStatus.safeParse(said);
+  if (!status.success) {
     return [];
   }
 
   const nodes: TailscaleNode[] = [
-    ...Object.values((status.Peer ?? {}) as Record<string, TailscaleNode>),
-    ...((status.Self ? [status.Self] : []) as TailscaleNode[]),
+    ...Object.values(status.data.Peer ?? {}),
+    ...(status.data.Self ? [status.data.Self] : []),
   ];
   return nodes
     .filter((node) => node.Online && node.TailscaleIPs?.[0])

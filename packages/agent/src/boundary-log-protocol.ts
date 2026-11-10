@@ -156,8 +156,9 @@ export const logRefusal = (argv: readonly string[]): string | undefined => {
   if (!(command && grammar)) {
     return `cawco: inside a workspace boundary log runs only \`log show\` and \`log stream\`, read only, so \`log${command ? ` ${command}` : ""}\` did not run`;
   }
-  for (let index = 0; index < rest.length; index += 1) {
-    const word = rest[index] as string;
+  const words = rest.values();
+  for (let next = words.next(); !next.done; next = words.next()) {
+    const word = next.value;
     const why = grammar.refused.get(word);
     if (why) {
       return `cawco: \`log ${command} ${word}\` did not run: it ${why}`;
@@ -166,10 +167,9 @@ export const logRefusal = (argv: readonly string[]): string | undefined => {
       continue;
     }
     if (grammar.values.has(word)) {
-      if (index + 1 >= rest.length) {
+      if (words.next().done) {
         return `cawco: \`log ${command} ${word}\` did not run: it needs a value`;
       }
-      index += 1;
       continue;
     }
     return word.startsWith("-")

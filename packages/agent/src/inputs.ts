@@ -47,7 +47,6 @@ import {
   type InputNamed,
   type InputsAdmitted,
   type InputsLanded,
-  type InputsPlace,
   type InputsRead,
   type WorkspaceRef,
   type WorkspaceSaved,
@@ -57,6 +56,7 @@ import {
   projectFolderOf,
   resolveAsFar,
 } from "@cawco/core/workspace-policy";
+import { z } from "zod";
 import { isWorkspaceRef } from "./hub-command";
 import { cloneHolding } from "./workspace-records";
 
@@ -375,6 +375,17 @@ export const admitFiles = async (
   return reals;
 };
 
+/** The list of paths a control hands over. */
+const PATHS = z.array(z.string());
+
+/** The files {@link CONTROL_INPUTS_WRITE} hands over: the fields a write reads. */
+const WRITTEN_FILES = z.array(
+  z.object({ content: z.string(), mode: z.number(), name: z.string() })
+);
+
+/** A session's place: the session and the folder it works in. */
+const SESSION_PLACE = z.object({ cwd: z.string(), session: z.string() });
+
 /**
  * Each of `paths` admitted, or the first reason one may not go ({@link
  * admit}), two that would land under one name, or more than {@link
@@ -388,14 +399,13 @@ const admitAll = async (
   bound: unknown,
   project: unknown
 ): Promise<Admitted[] | string> => {
-  if (!(
-    Array.isArray(paths) && paths.every((one) => typeof one === "string")
-  )) {
+  const listed = PATHS.safeParse(paths);
+  if (!listed.success) {
     throw new Error("inputs must be a list of absolute paths");
   }
   const reach = await reachOf(bound, project);
   const tally: Tally = { admitted: [], named: new Map(), bytes: 0 };
-  for (const path of paths as string[]) {
+  for (const path of listed.data) {
     const why = await admit(path, reach, tally);
     if (why) {
       return why;
@@ -504,12 +514,13 @@ export const writeInputs = async (
   ref: unknown,
   files: unknown
 ): Promise<InputsLanded> => {
-  if (!Array.isArray(files)) {
+  const listed = WRITTEN_FILES.safeParse(files);
+  if (!listed.success) {
     throw new Error("inputs must be a list of files");
   }
   const folder = await writeInto(
     ref,
-    (files as InputFile[]).map((file) => ({
+    listed.data.map((file) => ({
       name: file.name,
       mode: file.mode,
       bytes: () => Promise.resolve(Buffer.from(file.content, "base64")),
@@ -637,16 +648,13 @@ const inputsHome = async (
       what: `workspace ${place.id}'s own inputs folder`,
     };
   }
-  const asked = place as Partial<Extract<InputsPlace, { session: string }>>;
-  if (!(
-    typeof asked?.session === "string" &&
-    SESSION_ID.test(asked.session) &&
-    typeof asked.cwd === "string"
-  )) {
+  const sessionPlace = SESSION_PLACE.safeParse(place);
+  if (!(sessionPlace.success && SESSION_ID.test(sessionPlace.data.session))) {
     throw new Error(
       "inputs are written for a workspace, { id, path }, or a session, { session, cwd }"
     );
   }
+  const asked = sessionPlace.data;
   const held = await cloneHolding(asked.cwd);
   if (held) {
     return {

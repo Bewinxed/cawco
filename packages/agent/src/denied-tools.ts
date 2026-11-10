@@ -44,6 +44,7 @@ import { userLayerPath } from "@cawco/core/paths/claude";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { clockWords } from "@cawco/core/words/account-lines";
+import { z } from "zod";
 
 /** Every `claude` this user starts reads it, daemon-spawned or not. */
 const SETTINGS = userLayerPath("settings.json");
@@ -54,10 +55,12 @@ const SIDECAR = userLayerPath("cawco-fleet.json");
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-const asRecord = (value: unknown): Record<string, unknown> | undefined =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+const OBJECT = z.record(z.string(), z.unknown());
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined => {
+  const object = OBJECT.safeParse(value);
+  return object.success ? object.data : undefined;
+};
 
 /** The fleet's denials as this machine last heard them. */
 export interface FleetDenials {
@@ -256,8 +259,8 @@ function withDeniedTools(
 ): { changed: boolean; next: Record<string, unknown> } {
   const next = { ...(asRecord(settings) ?? {}) };
   const permissions = { ...(asRecord(next.permissions) ?? {}) };
-  const current = Array.isArray(permissions.deny)
-    ? (permissions.deny as unknown[])
+  const current: unknown[] = Array.isArray(permissions.deny)
+    ? permissions.deny
     : [];
   const gone = new Set(dropped.filter((tool) => !deny.includes(tool)));
   const kept = current.filter(

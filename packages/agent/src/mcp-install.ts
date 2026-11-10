@@ -63,16 +63,13 @@ const PACKAGE_EQUALS = "--package=";
 
 /** The package one npx option names, and how many arguments it took; none when the option names no package. */
 const packageOption = (
-  args: readonly string[],
-  at: number
+  arg: string,
+  following: string | undefined
 ): { taken: number; value: string | undefined } | undefined => {
-  const arg = args[at] as string;
   if (arg.startsWith(PACKAGE_EQUALS)) {
     return { value: arg.slice(PACKAGE_EQUALS.length), taken: 1 };
   }
-  return PACKAGE_OPTIONS.has(arg)
-    ? { value: args[at + 1], taken: 2 }
-    : undefined;
+  return PACKAGE_OPTIONS.has(arg) ? { value: following, taken: 2 } : undefined;
 };
 
 /** npx's options, before its first positional: the `--package` they name, and where the positionals start. */
@@ -81,12 +78,11 @@ const readOptions = (
 ): { at: number; named?: string } | { refused: string } => {
   let named: string | undefined;
   let at = 0;
-  while (at < args.length && args[at]?.startsWith("-")) {
-    const arg = args[at] as string;
+  for (let arg = args[at]; arg?.startsWith("-"); arg = args[at]) {
     if (arg === "--") {
       return { at: at + 1, named };
     }
-    const option = packageOption(args, at);
+    const option = packageOption(arg, args[at + 1]);
     if (option) {
       if (named !== undefined || !option.value) {
         const why =
@@ -501,7 +497,7 @@ let queue: Promise<void> = Promise.resolve();
 let again: ReturnType<typeof setTimeout> | undefined;
 
 /** `work` after everything before it on the queue, and before everything after. */
-const inTurn = (work: () => Promise<void>): Promise<void> => {
+const inTurn = <T>(work: () => Promise<T>): Promise<T> => {
   const next = queue.then(work);
   queue = next.then(
     () => undefined,
@@ -616,13 +612,13 @@ export const syncInstalls = async <T>(
   work: () => Promise<{ dirs: string[]; result: T }>,
   live: () => readonly string[]
 ): Promise<T> => {
-  let done: { dirs: string[]; result: T } | undefined;
-  await inTurn(async () => {
-    done = await work();
-    named = new Set(done.dirs);
+  const done = await inTurn(async () => {
+    const answered = await work();
+    named = new Set(answered.dirs);
+    return answered;
   });
   await retireInstalls(live);
-  return (done as { dirs: string[]; result: T }).result;
+  return done.result;
 };
 
 /**
@@ -635,12 +631,12 @@ export const syncInstalls = async <T>(
 export const placeInstalls = async <T>(
   work: () => Promise<{ dirs: string[]; result: T }>
 ): Promise<T> => {
-  let done: { dirs: string[]; result: T } | undefined;
-  await inTurn(async () => {
-    done = await work();
-    for (const dir of done.dirs) {
+  const done = await inTurn(async () => {
+    const answered = await work();
+    for (const dir of answered.dirs) {
       named?.add(dir);
     }
+    return answered;
   });
-  return (done as { dirs: string[]; result: T }).result;
+  return done.result;
 };

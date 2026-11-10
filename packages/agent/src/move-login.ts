@@ -236,7 +236,7 @@ const readText = async (path: string): Promise<string | undefined> => {
     const text = await readFile(path, "utf8");
     return text.trim() ? text : undefined;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return undefined;
     }
     throw error;

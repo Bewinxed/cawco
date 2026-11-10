@@ -983,7 +983,7 @@ const hostGitEnv = async (): Promise<Record<string, string>> => {
   const key = "credential.https://github.com.helper";
   return withGitConfig(
     {
-      ...(hostEnvironment() as Record<string, string>),
+      ...hostEnvironment(),
       ...GIT_LOCALE,
       GIT_TERMINAL_PROMPT: "0",
     },
@@ -993,7 +993,7 @@ const hostGitEnv = async (): Promise<Record<string, string>> => {
             [key, ""],
             [key, `!${shellQuote(gh)} auth git-credential`],
             ["lfs.https://github.com/.access", "basic"],
-          ] as [string, string][])
+          ] satisfies [string, string][])
         : []),
       ...DOOR_LFS,
     ]
@@ -1600,7 +1600,8 @@ const pipeHubHelper = (
     ref.path,
     safeGitArgv([`remote-${scheme}`, "origin", url])
   );
-  const child = spawn(run.argv[0] as string, run.argv.slice(1), {
+  const [file = "git", ...args] = run.argv;
+  const child = spawn(file, args, {
     cwd: run.cwd,
     env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
     stdio: ["pipe", "pipe", "pipe"],
@@ -1808,7 +1809,10 @@ export const gitDoorEnv = (
         `${each}/git/`,
       ]),
       ...(outsideOrigin
-        ? [[`url.cawco::${origin}.insteadOf`, origin] as [string, string]]
+        ? ([[`url.cawco::${origin}.insteadOf`, origin]] satisfies [
+            string,
+            string,
+          ][])
         : []),
       // The filters the hub branch's checkout ran with (workspace.ts
       // `createWorkspace`): without the clean one, git inside reads every

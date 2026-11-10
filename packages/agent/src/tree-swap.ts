@@ -41,6 +41,7 @@ import { hashFiles } from "@cawco/core/file-hash";
 import type { SkillFile } from "@cawco/core/fleet";
 import { treeStoreOf } from "@cawco/core/paths/claude";
 import { writeStateFile } from "@cawco/core/state-file";
+import { z } from "zod";
 
 /**
  * The paths of the files the fleet carried for a tree, as a JSON list in the
@@ -71,10 +72,8 @@ export const carriedList = async (
   const listed: unknown = await Bun.file(join(tree, CARRIED))
     .json()
     .catch(() => undefined);
-  return Array.isArray(listed) &&
-    listed.every((path) => typeof path === "string")
-    ? (listed as string[])
-    : undefined;
+  const paths = z.array(z.string()).safeParse(listed);
+  return paths.success ? paths.data : undefined;
 };
 
 /** Every file and link under `root`, relative to it; the root itself followed. */
@@ -184,7 +183,7 @@ const dropTrees = async (
   name: string,
   keep?: string
 ): Promise<void> => {
-  const entries = await readdir(store).catch(() => [] as string[]);
+  const entries = await readdir(store).catch((): string[] => []);
   await Promise.all(
     entries
       .filter((entry) => entry !== keep && isTreeOf(name, entry))

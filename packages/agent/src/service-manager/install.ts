@@ -387,7 +387,12 @@ const keeperChildren = async (endpoint: string): Promise<number[]> => {
   try {
     dialled = await SessiondClient.connect(endpoint);
   } catch (error) {
-    if (NOBODY_THERE.has((error as NodeJS.ErrnoException).code ?? "")) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      NOBODY_THERE.has(error.code)
+    ) {
       return [];
     }
     throw error;

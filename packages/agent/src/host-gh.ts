@@ -103,6 +103,14 @@ export const ghAccountToken = async (
 
 const SCOPE_SEPARATOR = /\s*,\s*/u;
 
+const GH_ACCOUNT = z.object({
+  active: z.boolean().optional(),
+  host: z.string().optional(),
+  login: z.string().optional(),
+  scopes: z.string().optional(),
+  state: z.string().optional(),
+});
+
 /**
  * The accounts the host's gh is signed in to, as `gh auth status --json
  * hosts` lists them, each one gh checked with GitHub (`state` "success"),
@@ -123,13 +131,11 @@ export const ghAccounts = async (): Promise<GhAccount[]> => {
   }
   return Object.values(read.hosts ?? {}).flatMap((entries) =>
     (Array.isArray(entries) ? entries : []).flatMap((entry) => {
-      const one = entry as Partial<{
-        active: boolean;
-        host: string;
-        login: string;
-        scopes: string;
-        state: string;
-      }>;
+      const parsed = GH_ACCOUNT.safeParse(entry);
+      if (!parsed.success) {
+        return [];
+      }
+      const one = parsed.data;
       return one.state === "success" && one.host && one.login
         ? [
             {

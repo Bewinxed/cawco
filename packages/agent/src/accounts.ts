@@ -22,7 +22,6 @@ import {
 } from "@cawco/core/accounts";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import type { MachineHarnessReport } from "@cawco/core/harness";
-import type { ModelInfo } from "@cawco/core/harness/kinds";
 import {
   accountClaudeJson,
   accountConfigDir,
@@ -39,6 +38,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import type { AuthState } from "@cawco/core/session-messages";
 import { unhandled } from "@cawco/core/unhandled";
 import { configurePage } from "@cawco/core/words/configure";
+import { z } from "zod";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
@@ -180,6 +180,14 @@ export const noAuthAnswer = (
 export const authStatusNotRun = (dir: string, why: string): string =>
   `\`claude auth status\` was not run for ${dir}: ${why} Its sign-in was not read.`;
 
+const AUTH_STATUS = z.object({
+  loggedIn: z.boolean(),
+  authMethod: z.unknown(),
+  email: z.unknown(),
+  orgId: z.unknown(),
+  orgName: z.unknown(),
+});
+
 /** `claude auth status --json`'s output read as an answer, or undefined when it is none (no JSON, no `loggedIn`). */
 const statusIn = (
   output: string
@@ -192,15 +200,14 @@ const statusIn = (
       orgName?: unknown;
     }
   | undefined => {
-  let parsed: { loggedIn?: unknown } | null;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(output);
   } catch {
     return undefined;
   }
-  return typeof parsed?.loggedIn === "boolean"
-    ? (parsed as { loggedIn: boolean })
-    : undefined;
+  const status = AUTH_STATUS.safeParse(parsed);
+  return status.success ? status.data : undefined;
 };
 
 /**
@@ -754,7 +761,7 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
       identityOf(init.account)
     );
     return {
-      models: init.models as ModelInfo[],
+      models: init.models,
       ...(identity ? { identity } : {}),
       ...(init.account.subscriptionType
         ? { subscriptionType: init.account.subscriptionType }
