@@ -51,6 +51,12 @@ export const BUILD_TITLE = "Build the design system";
 const DESIGN_SKILL = "design-system";
 
 export interface DesignOffersDeps {
+  /** Runs a machine-scoped daemon function; throws the machine's own words (landed.ts). */
+  call: (
+    machineId: string,
+    method: string,
+    args: unknown[]
+  ) => Promise<unknown>;
   db: DbShape;
   /** The person said Not now: the project's starters stop suggesting one (project-starters.ts). */
   declined: (projectId: string) => void;

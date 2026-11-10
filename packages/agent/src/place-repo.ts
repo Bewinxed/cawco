@@ -43,7 +43,6 @@ import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
-import { refuseShortOfWorkspace } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import { configEnv } from "./git-credential";
 import { LFS_FILTERS } from "./move";
@@ -792,23 +791,6 @@ export const notAProject = (path: string): string | undefined => {
     return `${root} holds this machine's cache folder ${cache}, so CawCo won't make it a git repository. ${instead}`;
   }
   return undefined;
-};
-
-/**
- * {@link CONTROL_REPO_ROOT}: the top of the git checkout the folder at
- * `path` is in, or null when it is in none. Reads only; a folder that is
- * not there is refused. Asked only before a workspace is cut (hub
- * place-repo.ts `beforeCut`), so a machine that lacks what a workspace
- * needs refuses here first, before the folder is read.
- */
-export const repoRoot = async (path: unknown): Promise<string | null> => {
-  refuseShortOfWorkspace();
-  const folder = String(path);
-  const info = await stat(folder).catch(() => undefined);
-  if (!info?.isDirectory()) {
-    throw new Error(`${folder} is not a folder on this machine.`);
-  }
-  return (await repoTop(folder, Date.now() + WORKSPACE_GIT_TIMEOUT_MS)) ?? null;
 };
 
 const placeRepoNow = async (root: string): Promise<PlaceRepo> => {

@@ -142,6 +142,7 @@ import {
   unknownControlWords,
   VERIFY_SESSION_CREDENTIAL,
   WITHDRAW_PERMISSION,
+  WORKSPACE_GIT_TIMEOUT_MS,
   type WorkspaceRef,
   withWorktreeLine,
   workWords,
@@ -262,6 +263,7 @@ import {
 import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { removeTree } from "./remove-tree";
+import { repoTop } from "./repo-top";
 import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
 import {
@@ -5371,7 +5373,11 @@ export class SessionSupervisor {
   /**
    * A detached checkout of `baseCwd`'s repo at `~/.worktrees/<repo>-<id8>`,
    * outside the repo so its own `git status` never sees it. A directory with
-   * no commit to check out (not a repo, or an empty one) runs as it is.
+   * no commit to check out runs as it is: one in no repository, by the one
+   * reading of that (repo-top.ts `repoTop`), or in a checkout with no commit
+   * yet. A folder in a repository git does not read as a checkout (its
+   * config says bare, its `.git` unreadable) is refused as a workspace's is,
+   * never run in as it is: the spin-off would work in the live folder.
    */
   async #addWorktree(instanceId: string, baseCwd: string): Promise<string> {
     const recorded = await readJson<Worktree>(worktreeRecord(instanceId));
@@ -5380,17 +5386,16 @@ export class SessionSupervisor {
       this.#recordWorktree(instanceId, recorded);
       return recorded.dir;
     }
-    const repository = await hostGit(baseCwd, [
-      "rev-parse",
-      "--show-toplevel",
-      "--show-prefix",
-      "HEAD",
-    ]);
-    if (repository.exitCode !== 0) {
+    const root = await repoTop(baseCwd, Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
+    if (root === undefined) {
       return baseCwd;
     }
-
-    const [root = "", prefix = ""] = repository.text().split("\n");
+    // In a checkout git reads, this fails for one reason: HEAD names no commit yet.
+    const at = await hostGit(baseCwd, ["rev-parse", "--show-prefix", "HEAD"]);
+    if (at.exitCode !== 0) {
+      return baseCwd;
+    }
+    const [prefix = ""] = at.text().split("\n");
     const path = expandHome(
       `~/.worktrees/${basename(root)}-${instanceId.slice(0, 8)}`
     );

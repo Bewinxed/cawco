@@ -107,6 +107,12 @@ const OUI = /\.oui$/u;
 export interface ProjectStartersDeps {
   /** Every open dashboard hears a project's new set. */
   broadcast: (frame: StartersChangedFrame) => void;
+  /** Runs a machine-scoped daemon function; throws the machine's own words (landed.ts). */
+  call: (
+    machineId: string,
+    method: string,
+    args: unknown[]
+  ) => Promise<unknown>;
   db: DbShape;
   /** The hub's lifetime: each project's quiet runs on it. */
   lifetime: HubLifetimeShape;

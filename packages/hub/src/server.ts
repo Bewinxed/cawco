@@ -233,6 +233,7 @@ import {
   CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_RELOAD_SKILLS,
+  CONTROL_REPO_ROOT,
   CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
@@ -26041,10 +26042,13 @@ export const createServer = (
       method === CONTROL_PLACE_PUSH
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
-    // A delegate's inputs admitted or read only look at its parent's files
-    // ({@link asRead}); every other method here changes the machine.
+    // A delegate's inputs admitted or read only look at its parent's files,
+    // and a folder's checkout is only read ({@link asRead}); every other
+    // method here changes the machine.
     const answer =
-      method === CONTROL_INPUTS_ADMIT || method === CONTROL_INPUTS_READ
+      method === CONTROL_INPUTS_ADMIT ||
+      method === CONTROL_INPUTS_READ ||
+      method === CONTROL_REPO_ROOT
         ? await readAgent(machineId, method, args, timeout)
         : await callAgent(machineId, method, args, timeout);
     switch (answer.kind) {
@@ -27259,6 +27263,7 @@ export const createServer = (
   const designOffers = createDesignOffers({
     db,
     tasks,
+    call: callMachine,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     notice: (projectId, note) => caw.notice(projectId, note),
@@ -27318,6 +27323,7 @@ export const createServer = (
     db,
     lifetime,
     tasks,
+    call: callMachine,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     broadcast: (payload) =>

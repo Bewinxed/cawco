@@ -278,7 +278,7 @@ import {
   setMoveProgress,
 } from "./move";
 import { placePush } from "./place-push";
-import { placeLfs, placeRepo, repoRoot } from "./place-repo";
+import { placeLfs, placeRepo } from "./place-repo";
 import { listenBrowsers, previewNetworks, servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
 import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
@@ -314,6 +314,7 @@ import {
   storedHashes,
 } from "./redaction";
 import { removeFolder } from "./remove-folder";
+import { repoRoot } from "./repo-top";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
@@ -3560,7 +3561,7 @@ const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : removeFolder(asked as RemoveFolder)
     );
-    // What a workspace cut from a folder is cut from: read only.
+    // The checkout a folder is in, as a workspace cut there reads it: read only.
     supervisor.registerDaemonFunction(CONTROL_REPO_ROOT, (path) =>
       repoRoot(path)
     );

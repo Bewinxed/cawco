@@ -26,7 +26,7 @@
  */
 import { lstat, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
+import { CONTROL_REPO_ROOT, WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
@@ -170,4 +170,19 @@ export const repoTop = async (
   throw new Error(
     `${path} is inside a git repository's own directory, not a checkout of it, so CawCo leaves the folder as it is.`
   );
+};
+
+/**
+ * {@link CONTROL_REPO_ROOT}: {@link repoTop} of the folder at `path`, asked
+ * by the hub of the machine the folder is on (hub landed.ts): its checkout's
+ * top, or null when it is in no repository. Reads only. Refused for a path
+ * that is no folder here, and as {@link repoTop} refuses.
+ */
+export const repoRoot = async (path: unknown): Promise<string | null> => {
+  const folder = String(path);
+  const info = await stat(folder).catch(() => undefined);
+  if (!info?.isDirectory()) {
+    throw new Error(`${folder} is not a folder on this machine.`);
+  }
+  return (await repoTop(folder, Date.now() + WORKSPACE_GIT_TIMEOUT_MS)) ?? null;
 };

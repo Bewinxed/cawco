@@ -18,7 +18,7 @@
  *   machine's report says so, and a delegate from its home folder is
  *   refused in the report's own words, passed on whole by the hub, the
  *   install command its last line with nothing after it.
- * - C: in a project, the folder read before a cut (`CONTROL_REPO_ROOT`) is
+ * - C: in a project, the cut (agent workspace.ts `createWorkspace`) is
  *   refused first in those words: what the machine lacks before the folder.
  * - D: the machine's row in the dashboard shows those words, drawn, the
  *   install command in a well of its own with Copy, and Show details says

@@ -16,10 +16,19 @@
  * `design/` and the latest commits from that commit. A checkout with no
  * origin has nowhere else for work to land, so its own branch is what it
  * has; a place that is no git repository yet is a folder, read as one.
+ *
+ * Which of the two a place is, its machine says, by the one reading a
+ * workspace's kind is chosen by ({@link CONTROL_REPO_ROOT}, agent
+ * repo-top.ts): the top of its checkout, or that it is in no repository. A
+ * place git does not read as a checkout (its config says bare, its `.git`
+ * unreadable) is neither: it is not read at all, and the log names why. A
+ * failing `git rev-parse --show-toplevel` in the read's own shell was taken
+ * for a plain folder until 2026-11-10, so a checkout whose config said bare
+ * was read as one, its live `design/` folder for its landed branch's.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { CommandResult } from "@cawco/core";
+import { CONTROL_REPO_ROOT, type CommandResult } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { DbShape } from "./db";
 import { projectRoot } from "./project-folder";
@@ -29,6 +38,12 @@ const READ_MS = 30_000;
 const LAST_NEWLINE = /\n$/u;
 
 export interface LandedDeps {
+  /** Runs a machine-scoped daemon function; throws the machine's own words. */
+  call: (
+    machineId: string,
+    method: string,
+    args: unknown[]
+  ) => Promise<unknown>;
   db: Pick<DbShape, "project">;
   online: (machineId: string) => boolean;
   run: (
@@ -48,29 +63,26 @@ export interface Landed {
 }
 
 /**
- * The read, run in a place: the branch (empty for a plain folder), `yes` or
- * `no` for `design/` on it, then its latest `commits` as `sha<TAB>subject`.
- * awk, not sed's `\t`, reads `ls-remote`: BSD sed on a Mac has no `\t`.
+ * The read of a checkout, run at its top: the branch, `yes` or `no` for
+ * `design/` on it, then its latest `commits` as `sha<TAB>subject`. awk, not
+ * sed's `\t`, reads `ls-remote`: BSD sed on a Mac has no `\t`.
  */
-const readLanded = (commits: number): string =>
-  `${SAFE_GIT_SHELL}if top=$(git rev-parse --show-toplevel 2>/dev/null); then
-  cd "$top" || exit 1
-  if git remote get-url origin >/dev/null 2>&1; then
-    b=$(git ls-remote --symref origin HEAD | awk '$1 == "ref:" && $3 == "HEAD" { sub("^refs/heads/", "", $2); print $2 }')
-    [ -n "$b" ] || { echo "origin names no default branch" >&2; exit 3; }
-    git fetch --quiet --no-tags origin "+refs/heads/$b:refs/remotes/origin/$b" || exit 4
-    r="refs/remotes/origin/$b"
-  else
-    b=$(git symbolic-ref --quiet --short HEAD) || { echo "on no branch" >&2; exit 3; }
-    r="refs/heads/$b"
-  fi
-  printf '%s\\n' "$b"
-  if [ "$(git cat-file -t "$r:design" 2>/dev/null)" = tree ]; then echo yes; else echo no; fi
-  if git rev-parse --quiet --verify "$r^{commit}" >/dev/null; then git log -${commits} --format='%H%x09%s' "$r" --; fi
+const readCheckout = (commits: number): string =>
+  `${SAFE_GIT_SHELL}if git remote get-url origin >/dev/null 2>&1; then
+  b=$(git ls-remote --symref origin HEAD | awk '$1 == "ref:" && $3 == "HEAD" { sub("^refs/heads/", "", $2); print $2 }')
+  [ -n "$b" ] || { echo "origin names no default branch" >&2; exit 3; }
+  git fetch --quiet --no-tags origin "+refs/heads/$b:refs/remotes/origin/$b" || exit 4
+  r="refs/remotes/origin/$b"
 else
-  echo
-  if [ -d design ]; then echo yes; else echo no; fi
-fi`;
+  b=$(git symbolic-ref --quiet --short HEAD) || { echo "on no branch" >&2; exit 3; }
+  r="refs/heads/$b"
+fi
+printf '%s\\n' "$b"
+if [ "$(git cat-file -t "$r:design" 2>/dev/null)" = tree ]; then echo yes; else echo no; fi
+if git rev-parse --quiet --verify "$r^{commit}" >/dev/null; then git log -${commits} --format='%H%x09%s' "$r" --; fi`;
+
+/** The read of a place in no repository, run in it: no branch, then `yes` or `no` for its `design/` folder. */
+const READ_FOLDER = "echo; if [ -d design ]; then echo yes; else echo no; fi";
 
 /** One checkout's landed branch, or undefined when it cannot be read now. */
 const landedAt = async (
@@ -81,8 +93,28 @@ const landedAt = async (
   if (!deps.online(place.machineId)) {
     return;
   }
+  // Not read: the machine said why (its place in a repository git does not
+  // read as a checkout, or itself not answering), and the log keeps it.
+  const kind = await deps
+    .call(place.machineId, CONTROL_REPO_ROOT, [place.path])
+    .then(
+      (answer) => ({ top: typeof answer === "string" ? answer : undefined }),
+      (error: unknown) => {
+        console.warn(
+          `[landed] ${place.path} on ${place.machineId} was not read: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    );
+  if (!kind) {
+    return;
+  }
   const read = await deps
-    .run(place.machineId, place.path, readLanded(commits), READ_MS)
+    .run(
+      place.machineId,
+      kind.top ?? place.path,
+      kind.top ? readCheckout(commits) : READ_FOLDER,
+      READ_MS
+    )
     .catch(() => undefined);
   if (read?.exitCode !== 0) {
     return;

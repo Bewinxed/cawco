@@ -2326,10 +2326,13 @@ export interface WorkspaceCut {
 export const CONTROL_PLACE_REPO = "placeRepo";
 
 /**
- * The top of the git checkout a folder is in, or null when it is in none:
- * what a workspace is cut from when it is cut from that folder. Reads only.
- * Args `[path]`. Answers `string | null`. Refused when the folder is not
- * there, or git can't tell. Machine-scoped.
+ * The top of the git checkout a folder is in, or null when it is in no
+ * repository: the one reading a workspace's kind is chosen by (agent
+ * repo-top.ts), asked by the hub before it reads what a place's work has
+ * landed as (hub landed.ts). Reads only. Args `[path]`. Answers
+ * `string | null`. Refused, naming the cause, when the folder is not there,
+ * when it is in a repository git does not read as a checkout (its config
+ * says bare, its `.git` unreadable), or when git can't tell. Machine-scoped.
  */
 export const CONTROL_REPO_ROOT = "repoRoot";
 
