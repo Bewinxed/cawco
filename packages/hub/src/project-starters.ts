@@ -68,11 +68,7 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { AGENTS_FILE, fileOr } from "./memory";
 import { KNOWLEDGE_DIR } from "./memory-facts";
 import { listFolder } from "./project-folder";
-import {
-  ProjectRefusal,
-  projectRefusalOf,
-  projectRefused,
-} from "./project-refusal";
+import { refusal } from "./refusal";
 import {
   boundStarterInputs,
   STARTER_OFTEN,
@@ -153,18 +149,15 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   /** Projects being written now: an ask that lands meanwhile waits for the next turn. */
   const writing = new Set<string>();
 
-  /** The files under a folder of the project's, by path; none when it has no such folder. */
+  /** The files under a folder of the project's, by path; none when it has no such folder, the folder's refusal when it does not list. */
   const filesIn = async (
     projectId: string,
     dir: string,
     recursive: boolean
-  ): Promise<string[]> => {
+  ) => {
     const listing = await listFolder(projectId, dir, recursive);
     if (listing instanceof ElysiaStatus) {
-      if (listing.status === 404) {
-        return [];
-      }
-      throw projectRefusalOf(listing);
+      return listing.status === 404 ? [] : listing;
     }
     return listing.entries
       .filter((entry) => entry.kind === "file")
@@ -239,28 +232,42 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       .map(({ source, kind, n }) => ({ source, kind, count: n }));
   };
 
-  /** What the project holds now, bounded. */
-  const gather = async (projectId: string): Promise<StarterInputs> => {
+  /** The folder's, the tasks' and the checkouts' reads {@link gather} takes; the first refused read's refusal. */
+  const reads = async (projectId: string) => {
+    const [list, agents, knowledge, drafts, landed] = await Promise.all([
+      tasks.list(projectId),
+      fileOr(projectId, AGENTS_FILE),
+      filesIn(projectId, KNOWLEDGE_DIR, true),
+      filesIn(projectId, DRAFTS_DIR, false),
+      projectDesign(deps, projectId, COMMITS_READ),
+    ]);
+    if (list instanceof ElysiaStatus) {
+      return list;
+    }
+    if (agents instanceof ElysiaStatus) {
+      return agents;
+    }
+    if (knowledge instanceof ElysiaStatus) {
+      return knowledge;
+    }
+    if (drafts instanceof ElysiaStatus) {
+      return drafts;
+    }
+    if (landed instanceof ElysiaStatus) {
+      return landed;
+    }
+    return { all: list.tasks, agents, knowledge, drafts, landed };
+  };
+
+  /** What the project holds now, bounded; the first refused read's refusal. */
+  const gather = async (projectId: string) => {
     const project = db.project(projectId);
     const template = project?.template ?? null;
-    const [{ tasks: all }, agents, knowledge, drafts, landed] =
-      await Promise.all([
-        tasks.list(projectId).then((list) => {
-          if (list instanceof ElysiaStatus) {
-            throw projectRefusalOf(list);
-          }
-          return list;
-        }),
-        fileOr(projectId, AGENTS_FILE).then((text) => {
-          if (text instanceof ElysiaStatus) {
-            throw projectRefusalOf(text);
-          }
-          return text;
-        }),
-        filesIn(projectId, KNOWLEDGE_DIR, true),
-        filesIn(projectId, DRAFTS_DIR, false),
-        projectDesign(deps, projectId, COMMITS_READ),
-      ]);
+    const read = await reads(projectId);
+    if (read instanceof ElysiaStatus) {
+      return read;
+    }
+    const { all, agents, knowledge, drafts, landed } = read;
     const { repo } = landed;
     const now = Date.now();
     const open = all
@@ -346,11 +353,8 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     return sets.every((set) => set !== undefined) ? sets : undefined;
   };
 
-  /** Writes the project's set now: Jev asked over what it holds, unless that is what the stored set was asked over. */
-  const write = async (
-    projectId: string,
-    triggers: Set<StartersTrigger>
-  ): Promise<void> => {
+  /** Writes the project's set now: Jev asked over what it holds, unless that is what the stored set was asked over; a refused read's refusal. */
+  const write = async (projectId: string, triggers: Set<StartersTrigger>) => {
     if (!db.project(projectId)) {
       return;
     }
@@ -364,6 +368,9 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       return;
     }
     const inputs = await gather(projectId);
+    if (inputs instanceof ElysiaStatus) {
+      return inputs;
+    }
     const inputHash = hashOf(inputs);
     const stored = storedSets(projectId);
     checked.set(projectId, Date.now());
@@ -418,11 +425,13 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
         return;
       }
       writing.add(projectId);
+      const said = (words: string | undefined) =>
+        words && console.warn(`[starters] project=${projectId}: ${words}`);
       write(projectId, triggers)
-        .catch((error: unknown) =>
-          console.warn(
-            `[starters] project=${projectId}: ${error instanceof Error ? error.message : String(error)}`
-          )
+        .then(
+          (refused) => said(refused?.response.detail),
+          (error: unknown) =>
+            said(error instanceof Error ? error.message : String(error))
         )
         .finally(() => writing.delete(projectId));
     });
@@ -507,16 +516,18 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       place: StarterPlace,
       text: string,
       outcome: "picked" | "edited"
-    ): { ok: true } {
+    ) {
       const stored = db.starters.set(projectId, place);
       if (!stored?.starters.some((starter) => starter.text === text)) {
-        throw new ProjectRefusal(
+        return refusal(
           404,
+          "starter-unknown",
           "That starter is not one this project offers there now."
         );
       }
       db.starters.record(projectId, place, text, outcome);
-      return { ok: true };
+      const recorded: { ok: true } = { ok: true };
+      return recorded;
     },
   };
 };
@@ -535,11 +546,6 @@ export const starterRoutes = (starters: ProjectStarters) =>
         outcome: t.Union([t.Literal("picked"), t.Literal("edited")]),
       }),
     },
-    ({ params, body }) => {
-      try {
-        return starters.record(params.id, body.place, body.text, body.outcome);
-      } catch (error) {
-        return projectRefused(error);
-      }
-    }
+    ({ params, body }) =>
+      starters.record(params.id, body.place, body.text, body.outcome)
   );

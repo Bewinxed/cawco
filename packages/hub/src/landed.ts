@@ -22,8 +22,9 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { CommandResult } from "@cawco/core/commands/controls";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
-import { projectRootOf } from "./project-refusal";
+import { projectRoot } from "./project-folder";
 
 /** A fetch of origin's default branch and a read of it; past this the machine is not going to answer. */
 const READ_MS = 30_000;
@@ -109,13 +110,18 @@ const landedAt = async (
  * the landed branch of any checkout has `design/`; false when none does and
  * every checkout answered (a project with no checkout has its folder
  * alone); null when a checkout that might have one cannot be read now.
+ * The folder's refusal when the project's id names no folder.
  */
 export const projectDesign = async (
   deps: LandedDeps,
   projectId: string,
   commits = 0
-): Promise<{ hasDesign: boolean | null; repo: Landed | undefined }> => {
-  const inFolder = existsSync(join(projectRootOf(projectId), "design"));
+) => {
+  const root = projectRoot(projectId);
+  if (root instanceof ElysiaStatus) {
+    return root;
+  }
+  const inFolder = existsSync(join(root, "design"));
   if (inFolder && commits === 0) {
     return { hasDesign: true, repo: undefined };
   }
