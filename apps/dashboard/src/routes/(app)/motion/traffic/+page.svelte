@@ -245,8 +245,10 @@
     ["Grep", "cascade"],
   ];
 
-  /** A run of `count` calls, one every `gapMs` — the shape that broke. */
-  /** Calls have to land one at a time for a run to fold the way a real one does. */
+  /**
+   * A run of `count` calls, one every `gapMs` — the shape that broke. Calls
+   * have to land one at a time for a run to fold the way a real one does.
+   */
   async function run(count: number, gapMs: number): Promise<void> {
     for (let i = 0; i < count; i += 1) {
       const [name, arg] = TOOLS[i % TOOLS.length];

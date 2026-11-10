@@ -76,8 +76,6 @@ export const streamHost: StreamHost = {
   noteFailure: (record) => ledgerPorts.noteFailure(record),
 };
 
-/** Re-exported so a component reads one import for a command and its stages. */
-
 /** One command's record, by the id {@link submitCommand} returned. */
 export function commandRecord(commandId: string): CommandRecord | null {
   return streamState.commands[commandId] ?? null;

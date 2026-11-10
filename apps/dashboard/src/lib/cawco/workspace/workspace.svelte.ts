@@ -288,7 +288,6 @@ function show(leaf: LeafNode, sessionId: string | null): void {
   leaf.active = sessionId;
 }
 
-/** A tab that left a group takes the group's opener with it, as the tab opened or the one it came from. */
 /** A tab taken out of its group to stand in another: the group shows its first tab if it was in front. */
 function takeOut(leaf: LeafNode, sessionId: string): void {
   leaf.tabs.splice(leaf.tabs.indexOf(sessionId), 1);
@@ -298,6 +297,7 @@ function takeOut(leaf: LeafNode, sessionId: string): void {
   }
 }
 
+/** A tab that left a group takes the group's opener with it, as the tab opened or the one it came from. */
 function forget(leaf: LeafNode, sessionId: string): void {
   if (leaf.opened?.id === sessionId || leaf.opened?.from === sessionId) {
     leaf.opened = null;

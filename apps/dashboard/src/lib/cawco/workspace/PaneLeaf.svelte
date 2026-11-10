@@ -52,11 +52,10 @@
 
   let {
     leaf,
-    swipeable = false,
-    hosted = false,
-
     /** Only the phone's single group takes the swipe. */
+    swipeable = false,
     /** The top bar is drawing this group's tabs; the group draws none of its own. */
+    hosted = false,
   }: { leaf: LeafNode; swipeable?: boolean; hosted?: boolean } = $props();
 
   const swipe = createSwipe(() => leaf.id);

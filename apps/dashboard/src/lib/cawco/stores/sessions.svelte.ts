@@ -89,7 +89,6 @@ export interface BlockedRequest {
   stale: boolean;
 }
 
-/** Everything one session view needs — live or browsed from storage. */
 /**
  * What the session's own context window looks like right now — the SDK's
  * `getContextUsage`, which is what Claude Code's `/context` reads. Categories
@@ -129,6 +128,7 @@ export type ReadFault =
     }
   | { message: string; reason: "failed" };
 
+/** Everything one session view needs — live or browsed from storage. */
 export interface SessionState {
   /**
    * Why the last read again over the rows held failed. The rows stay where
@@ -410,7 +410,6 @@ export function session(instanceId: string): SessionState {
   return target;
 }
 
-/** Fills in what the registry knows about a session this browser did not spawn. */
 /**
  * The daemon's now-state, written onto the session it describes.
  *
@@ -430,6 +429,7 @@ export function applyPulse(target: SessionState, pulse: PulseReading): void {
   }
 }
 
+/** Fills in what the registry knows about a session this browser did not spawn. */
 export function hydrate(target: SessionState): void {
   const pulse = pulseOf(target.instanceId);
   if (pulse) {
@@ -572,7 +572,6 @@ export const sessionsStore = {
       maxTokens: t.context?.maxTokens ?? null,
     };
   },
-  /** What a session offers behind `/`, grouped the way the palette lists it. */
   /**
    * The MCP servers and tools the session's newest `init` announced: the hub's
    * stored copy, read as the view opened, then each live `init` — so a reload
@@ -581,6 +580,7 @@ export const sessionsStore = {
    */
   toolingOf: (instanceId: string): SessionTooling =>
     sessionsState.sessions[instanceId]?.tooling ?? { servers: [], tools: [] },
+  /** What a session offers behind `/`, grouped the way the palette lists it. */
   commandsOf: (instanceId: string): AvailableCommand[] => {
     const target = sessionsState.sessions[instanceId];
     return target ? availableCommands(target.commands) : [];
