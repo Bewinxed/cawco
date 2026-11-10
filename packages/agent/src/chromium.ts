@@ -14,6 +14,7 @@
 
 import type { Browser, Frame, Page } from "playwright-core";
 import { browserExecutable, chromiumSandboxed } from "./capabilities";
+import { deliverHello, holdAnimations } from "./in-page/page";
 
 /** Why this machine can't launch its browser, in the words a tool answers. */
 class ChromiumMissing extends Error {}
@@ -89,15 +90,20 @@ export interface HelloArtifact {
 }
 
 /** Whether `value` names an artifact as a hello does. */
-export const isHelloArtifact = (value: unknown): value is HelloArtifact => {
-  const named = value as Partial<HelloArtifact> | null;
-  return (
-    typeof named?.sync === "string" &&
-    typeof named.artifact?.id === "string" &&
-    typeof named.artifact.kind === "string" &&
-    typeof named.artifact.name === "string"
-  );
-};
+export const isHelloArtifact = (value: unknown): value is HelloArtifact =>
+  typeof value === "object" &&
+  value !== null &&
+  "sync" in value &&
+  typeof value.sync === "string" &&
+  "artifact" in value &&
+  typeof value.artifact === "object" &&
+  value.artifact !== null &&
+  "id" in value.artifact &&
+  typeof value.artifact.id === "string" &&
+  "kind" in value.artifact &&
+  typeof value.artifact.kind === "string" &&
+  "name" in value.artifact &&
+  typeof value.artifact.name === "string";
 
 /**
  * The dashboard's hello to a page loaded under {@link HOST_STAND_IN}
@@ -109,19 +115,13 @@ export async function greet(
   named: HelloArtifact,
   inset?: Record<string, number>
 ): Promise<void> {
-  await page.evaluate(
-    (hello) =>
-      (
-        globalThis as unknown as { __cawcoDeliver: (data: unknown) => void }
-      ).__cawcoDeliver(hello),
-    {
-      type: "cawco:hello",
-      artifact: named.artifact,
-      sync: named.sync,
-      theme: "light",
-      ...(inset ? { inset } : {}),
-    }
-  );
+  await page.evaluate(deliverHello, {
+    type: "cawco:hello",
+    artifact: named.artifact,
+    sync: named.sync,
+    theme: "light",
+    ...(inset ? { inset } : {}),
+  });
 }
 
 /**
@@ -135,34 +135,10 @@ export async function greet(
  */
 export async function holdTimeAnimations(page: Page): Promise<void> {
   await Promise.all(
-    page.frames().map((frame: Frame) =>
-      frame
-        .evaluate(() => {
-          interface Run {
-            cancel: () => void;
-            effect: {
-              getComputedTiming: () => { endTime?: number | null };
-            } | null;
-            finish: () => void;
-            timeline: { constructor: { name: string } } | null;
-          }
-          const doc = (
-            globalThis as unknown as {
-              document: { getAnimations: () => Run[] };
-            }
-          ).document;
-          for (const run of doc.getAnimations()) {
-            if (run.timeline?.constructor.name !== "DocumentTimeline") {
-              continue;
-            }
-            if (Number.isFinite(run.effect?.getComputedTiming().endTime)) {
-              run.finish();
-            } else {
-              run.cancel();
-            }
-          }
-        })
-        .catch(() => undefined)
-    )
+    page
+      .frames()
+      .map((frame: Frame) =>
+        frame.evaluate(holdAnimations).catch(() => undefined)
+      )
   );
 }
