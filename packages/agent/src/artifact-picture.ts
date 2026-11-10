@@ -327,11 +327,16 @@ export async function drawArtifact(ask: PictureAsk): Promise<{ png: string }> {
     await page.addInitScript((locked) => {
       const heard = globalThis as unknown as Heard;
       heard.__cawcoHeard = (data) => {
-        const said = data as { type?: unknown } | null;
-        if (said?.type === locked) {
+        if (typeof data !== "object" || data === null || !("type" in data)) {
+          return;
+        }
+        if (data.type === locked) {
           heard.__cawcoLocked = true;
-        } else if (said?.type === "cawco:down") {
-          heard.__cawcoDown = said as Heard["__cawcoDown"];
+        } else if (data.type === "cawco:down") {
+          heard.__cawcoDown = {
+            down: "down" in data ? data.down : undefined,
+            why: "why" in data ? data.why : undefined,
+          };
         }
       };
     }, PREVIEW_LOCKED_MESSAGE);

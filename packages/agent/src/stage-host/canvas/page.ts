@@ -6,22 +6,24 @@
  * shapes from here, so neither imports the other.
  */
 
-import type {
-  AnimationRead,
-  CanvasSpec,
-  FramePictureRead,
-  FrameRender,
-  Interaction,
-  MoveRender,
-  PageError,
-  PageReport,
-  Scheme,
-  SectionPlan,
-  SectionSheet,
-  SheetOnPage,
-  StageErrorKind,
-  Story,
-  SweepAt,
+import {
+  type AnimationRead,
+  type CanvasGraph,
+  type CanvasSpec,
+  type FramePictureRead,
+  type FrameRender,
+  type Interaction,
+  type MoveRender,
+  type PageError,
+  type PageReport,
+  type Scheme,
+  SECTION_WRITTEN,
+  type SectionPlan,
+  type SectionSheet,
+  type SheetOnPage,
+  type StageErrorKind,
+  type Story,
+  type SweepAt,
 } from "@cawco/core/stage";
 import { shellWords } from "@cawco/core/words/shell";
 import type { deltaOf } from "./measure";
@@ -223,13 +225,34 @@ export interface CanvasState {
   view: View;
 }
 
+/** Vite's error as its server sends it to pages (`prepareError`): its message, the module's id and its place. */
+interface ViteError {
+  frame?: string;
+  id?: string;
+  loc?: { column?: number; file?: string; line?: number };
+  message: string;
+  pluginCode?: string;
+}
+
 declare global {
   interface Window {
     __cawcoCanvas?: CanvasState;
     __cawcoErrors?: { at: number; error: unknown }[];
+    /** The count of the page's preloads (host.ts `serveCanvas`). */
+    __cawcoGraph?: CanvasGraph;
     __cawcoSheetChosen?: string | null;
     /** Each section's sheet as last told the pane, by its file: the overlay tells a pane that says hello late every one. */
     __cawcoSheetsOnPage?: Record<string, SheetOnPage>;
+    /** The overlay's bridge into the artifact's doc, when a panel shows the page. */
+    cawco?: Bridge;
+  }
+  /** The window events of the stage's HMR: its client module (host.ts) dispatches each as Vite's `import.meta.hot` hears it. */
+  interface WindowEventMap {
+    "cawco:after-update": CustomEvent<null>;
+    "cawco:section": CustomEvent<SectionModule>;
+    "cawco:stage-error": CustomEvent<ViteError | undefined>;
+    "cawco:updates": CustomEvent<string[]>;
+    [SECTION_WRITTEN]: CustomEvent<string>;
   }
 }
 

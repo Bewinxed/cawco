@@ -7,8 +7,8 @@ import {
   keptOnRemake,
 } from "@cawco/core/canvas";
 import { docMeta } from "@cawco/core/doc-meta";
+import type { CanvasPress } from "@cawco/core/page-wire";
 import { toSegment } from "@cawco/core/shapes";
-import { toHost } from "@cawco/preview/overlay/host-origin";
 /**
  * The canvas's scene on its doc (Projects spec §5.10, D23–D25): Excalidraw
  * bound to the artifact's doc by y-excalidraw, the agent's writes converted
@@ -63,6 +63,7 @@ import {
 import { bindingMade } from "./bound";
 import { clock, progressOf, tokenMs } from "./motion";
 import type { CanvasHold } from "./replica";
+import { sayToHost } from "./say";
 import { HOLD_PX, seenByDoc, snapToShape, swapView } from "./snap";
 
 /** Origins of the page's own transactions. */
@@ -550,7 +551,7 @@ const tellDrawn = (live: Doc): (() => void) => {
       ).length;
     if (count !== told) {
       told = count;
-      toHost({ type: "cawco:drawn", count });
+      sayToHost({ type: "cawco:drawn", count });
     }
   };
   elements.observeDeep(tell);
@@ -825,7 +826,7 @@ const tellPresses = (api: ExcalidrawImperativeAPI): (() => void) => {
       ? boxOf(pressed as Parameters<typeof boxOf>[0])
       : undefined;
     window.dispatchEvent(
-      new CustomEvent("cawco:element-press", {
+      new CustomEvent<CanvasPress>("cawco:element-press", {
         detail: {
           element:
             pressed && box

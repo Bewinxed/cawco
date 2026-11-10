@@ -15,6 +15,7 @@
  * pane is away or none of it stands in view: a frame is a document of its
  * own, which neither of the others reaches.
  */
+import type { FrameSays } from "@cawco/core/page-wire";
 import { CANVAS_AWAY } from "@cawco/core/stage";
 
 /** Marks the root while the tab is hidden. Returns the cleanup. */
@@ -108,7 +109,10 @@ export function settleAway(node: Element): () => void {
 
 /** Frame `frame` told its pane is away, or back (core `CANVAS_AWAY`). */
 const tellFrame = (frame: HTMLIFrameElement, away: boolean) =>
-  frame.contentWindow?.postMessage({ type: CANVAS_AWAY, away }, "*");
+  frame.contentWindow?.postMessage(
+    { type: CANVAS_AWAY, away } satisfies FrameSays,
+    "*"
+  );
 
 /** Every frame under `node` told its pane is away, or back. */
 function tellFrames(node: Element, away: boolean): void {

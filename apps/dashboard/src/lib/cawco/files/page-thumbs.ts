@@ -17,6 +17,7 @@
  */
 
 import { PICTURE_VIEW } from "@cawco/core/artifact-picture";
+import type { FrameSays } from "@cawco/core/page-wire";
 import {
   PREVIEW_LOCKED_MESSAGE,
   projectPagePlace,
@@ -122,7 +123,7 @@ async function drawPage(
           artifact: { id: artifact.id, kind: "page", name: artifact.name },
           sync: `/__cawco/artifact/${artifact.id}`,
           inset: { bottom: 0 },
-        });
+        } satisfies FrameSays);
       });
       frame.src = found.src;
       document.body.append(frame);

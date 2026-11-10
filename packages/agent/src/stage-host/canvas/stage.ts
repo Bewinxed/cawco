@@ -66,10 +66,10 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import type { PageBody } from "@cawco/core/page-wire";
 import {
   type AnimationRead,
   type CanvasDial,
-  type CanvasGraph,
   FORMS,
   type FramePictureRead,
   type FrameRender,
@@ -99,14 +99,10 @@ import {
   STAGE_ROOM,
   STAGE_TIME,
   type StageCompare,
-  type StageDialsWritten,
-  type StageDifferences,
-  type StageFault,
   type StageLaid,
   type StageReach,
   type StageReached,
   type StageReveal,
-  type StageTime,
   type StateRef,
   shownName,
   stageCompareOf,
@@ -151,6 +147,7 @@ import {
   windowRoom,
   windowWidth,
 } from "./viewport";
+import type { StageAnswer } from "./window-events";
 
 /** The most of a story's error a Preview's failure carries (`CANVAS_EMBED_FAILED`): its Preview says it on one line. Our call. */
 const EMBED_WHY_MAX = 200;
@@ -797,7 +794,7 @@ export function bootStage(page: Page): Mode {
   let live: Live | null = null;
   /** The move the last reach read, replayed as the Animation face plays, scrubs and tunes it; the page its clock. */
   const replays = new Replays(
-    (time) => tell<StageTime>(STAGE_TIME, time),
+    (time) => tell(STAGE_TIME, time),
     () => ringLit(),
     (el) => rootOf(el)
   );
@@ -836,8 +833,8 @@ export function bootStage(page: Page): Mode {
   const rootOf = (el: Element) => el === drawing || el === ownRoot(drawing);
 
   /** Tells the panel, through the overlay (preview overlay/page.ts relays each to the pane). */
-  const tell = <Message extends object>(type: string, message: Message) =>
-    dispatchEvent(new CustomEvent(type, { detail: message }));
+  const tell = <Type extends StageAnswer>(type: Type, body: PageBody<Type>) =>
+    dispatchEvent(new CustomEvent(type, { detail: body }));
 
   const scheme = (): Column["scheme"] =>
     view.scheme === "both" ? "light" : view.scheme;
@@ -939,7 +936,7 @@ export function bootStage(page: Page): Mode {
     });
     canvas.append(card);
     fault = card;
-    tell<StageFault>(STAGE_FAULT, { on: target.ref, message: error.message });
+    tell(STAGE_FAULT, { on: target.ref, message: error.message });
     reread();
   }
 
@@ -1300,7 +1297,7 @@ export function bootStage(page: Page): Mode {
   /** A reach's turn, once every reach before it is done. */
   async function reachTurn(asking: StageReach, mine: number): Promise<void> {
     const answer = (rest: Omit<StageReached, "ask" | "on">) =>
-      tell<StageReached>(STAGE_REACHED, {
+      tell(STAGE_REACHED, {
         ask: asking.ask,
         on: asking.to,
         ...rest,
@@ -1537,7 +1534,7 @@ export function bootStage(page: Page): Mode {
     const said = JSON.stringify(laidOut);
     if (said !== laidSaid) {
       laidSaid = said;
-      tell<StageLaid>(STAGE_LAID, laidOut);
+      tell(STAGE_LAID, laidOut);
     }
     reread();
   }
@@ -1815,7 +1812,7 @@ export function bootStage(page: Page): Mode {
       lit = thing;
       ringLit();
     },
-    said: (time) => tell<StageTime>(STAGE_TIME, time),
+    said: (time) => tell(STAGE_TIME, time),
   });
 
   /* --- The agent's dials, turned in the panel --------------------------- */
@@ -1841,14 +1838,14 @@ export function bootStage(page: Page): Mode {
     const said = JSON.stringify(values);
     if (said !== writtenSaid) {
       writtenSaid = said;
-      tell<StageDialsWritten>(STAGE_DIALS_WRITTEN, { values });
+      tell(STAGE_DIALS_WRITTEN, { values });
     }
   }
 
   // The stage's floating head (the design graph's StagePane): the room it
   // takes over the page's top, which the column pads its top by.
-  addEventListener(STAGE_ROOM, (event) => {
-    const said = stageRoomOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_ROOM, (event) => {
+    const said = stageRoomOf(event.detail);
     if (said) {
       document.documentElement.style.setProperty(
         STAGE_ROOM_VAR,
@@ -1857,8 +1854,8 @@ export function bootStage(page: Page): Mode {
     }
   });
 
-  addEventListener(STAGE_DIALS, (event) => {
-    const asking = stageDialsOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_DIALS, (event) => {
+    const asking = stageDialsOf(event.detail);
     if (asking) {
       page.applyDials(asking.values);
     }
@@ -1966,7 +1963,7 @@ export function bootStage(page: Page): Mode {
       found = [];
       beside = false;
       arrange();
-      tell<StageDifferences>(STAGE_DIFFERENCES, {
+      tell(STAGE_DIFFERENCES, {
         ask: asking.ask,
         found,
         beside,
@@ -2058,7 +2055,7 @@ export function bootStage(page: Page): Mode {
   /** The differences as last read, told the panel for its last Compare ask. */
   function tellDifferences(): void {
     if (comparing) {
-      tell<StageDifferences>(STAGE_DIFFERENCES, {
+      tell(STAGE_DIFFERENCES, {
         ask: comparing.ask,
         found,
         beside,
@@ -2118,20 +2115,20 @@ export function bootStage(page: Page): Mode {
   // Each layer the drawing opens collides with the drawing, as with the app's window at its width.
   drawingsAsViewport(() => (live && !frame.hidden ? [drawing] : []));
 
-  addEventListener(STAGE_REACH, (event) => {
-    const asking = stageReachOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_REACH, (event) => {
+    const asking = stageReachOf(event.detail);
     if (asking) {
       reach(asking);
     }
   });
-  addEventListener(STAGE_REVEAL, (event) => {
-    const asking = stageRevealOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_REVEAL, (event) => {
+    const asking = stageRevealOf(event.detail);
     if (asking) {
       reveal(asking);
     }
   });
-  addEventListener(STAGE_COMPARE, (event) => {
-    const asking = stageCompareOf((event as CustomEvent<unknown>).detail);
+  window.addEventListener(STAGE_COMPARE, (event) => {
+    const asking = stageCompareOf(event.detail);
     if (asking) {
       compare(asking);
     }
@@ -2925,8 +2922,7 @@ function bootColumn(page: Page): Mode {
   // Every states file in order, once the page may load its stories: a Preview's once the page holding it says its whole graph is in the renderer (host.ts `graphPreloads`, core `CANVAS_EMBED_READY`), any other page's at once.
   page.quietly(
     (async () => {
-      await (window as unknown as { __cawcoGraph?: CanvasGraph }).__cawcoGraph
-        ?.go;
+      await window.__cawcoGraph?.go;
       for (const section of sections) {
         await page.loadSection(section);
       }

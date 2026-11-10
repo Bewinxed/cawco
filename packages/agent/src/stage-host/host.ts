@@ -113,6 +113,12 @@ import {
   TraceMap,
 } from "@jridgewell/trace-mapping";
 import { parse as lex, init as lexerReady } from "es-module-lexer";
+import type {
+  ErrorPayload,
+  HotPayload,
+  InferCustomEventPayload,
+  ViteDevServer,
+} from "vite";
 import { PACKAGE_TREES } from "../package-trees";
 import { propsOf } from "./docgen";
 import {
@@ -150,14 +156,8 @@ interface DevServer {
           discovered: Record<string, { processing?: Promise<void> }>;
         };
       } | null;
-      hot: {
-        send: (payload: unknown, ...rest: unknown[]) => void;
-        /** A page's event over Vite's HMR channel, with the page's client (one object per connection): the stage's own, and Vite's `vite:client:disconnect`. */
-        on: (
-          event: string,
-          listener: (data: unknown, client: object) => void
-        ) => void;
-      };
+      /** Vite's HMR channel to the pages: the stage's own events ({@link SECTION_HELD}, {@link SECTION_WRITTEN}) are typed by the augmentation of its `CustomEventMap` below. */
+      hot: ViteDevServer["environments"]["client"]["hot"];
       pluginContainer: {
         resolveId: (
           id: string,
@@ -648,6 +648,14 @@ async function drawnFrom(abs: string, text: string): Promise<string[]> {
 
 /** The event a canvas page sends the stage over Vite's HMR channel as it loads a section: `{ file }`, its states file from the root. */
 const SECTION_HELD = "cawco:section-held";
+
+/** The stage's own events over Vite's HMR channel, in Vite's own map of them (`vite/types/customEvent.d.ts`), so `hot.send` and `hot.on` carry their payloads. */
+declare module "vite/types/customEvent.d.ts" {
+  interface CustomEventMap {
+    [SECTION_HELD]: { file: string };
+    [SECTION_WRITTEN]: { file: string };
+  }
+}
 
 /** Each open page's sections: the states files (from the root) its canvas has loaded, by its connection to Vite's HMR (its hot channel's client). */
 const pageSections = new Map<object, Set<string>>();
@@ -2967,11 +2975,7 @@ function keepMissing(files: string[]): void {
     if (existsSync(abs)) {
       if (kept?.kind === "missing") {
         stageErrors.delete(abs);
-        server?.environments.client.hot.send({
-          type: "custom",
-          event: SECTION_WRITTEN,
-          data: { file },
-        });
+        server?.environments.client.hot.send(SECTION_WRITTEN, { file });
         changed = true;
       }
     } else if (kept?.kind !== "missing") {
@@ -3203,15 +3207,6 @@ function watchStory(file: string): void {
   }).unref();
 }
 
-/** A compile error as Vite's server sends it the pages (`hot.send`, type `error`). */
-interface SentError {
-  frame?: string;
-  id?: string;
-  loc?: { column?: number; file?: string; line?: number };
-  message: string;
-  pluginCode?: string;
-}
-
 /**
  * The plugin: the sheet's page, its virtual module and its stories; every
  * compile error the client is sent, kept until its module compiles again
@@ -3279,7 +3274,7 @@ function cawcoStage() {
    * compile stops its own section, which no module graph links it to while
    * its load fails.
    */
-  const keepSent = (err: SentError) => {
+  const keepSent = (err: ErrorPayload["err"]) => {
     if (err.pluginCode === SECTION_MISSING) {
       return;
     }
@@ -3430,20 +3425,30 @@ function cawcoStage() {
       nameFailedModules(dev);
       const { hot } = dev.environments.client;
       const send = hot.send.bind(hot);
-      hot.send = (payload: unknown, ...rest: unknown[]) => {
-        const sent = payload as { err?: SentError; type?: string } | undefined;
-        if (sent?.type === "error" && sent.err) {
+      function sendKept(payload: HotPayload): void;
+      function sendKept<Event extends string>(
+        event: Event,
+        data?: InferCustomEventPayload<Event>
+      ): void;
+      function sendKept(payload: HotPayload | string, data?: unknown): void {
+        if (typeof payload === "string") {
+          send(payload, data);
+          return;
+        }
+        if (payload.type === "error") {
           // A request no page made is answered with its error alone: no page hears it.
-          if (!pageAsks(sent.err.id)) {
+          if (!pageAsks(payload.err.id)) {
             return;
           }
-          keepSent(sent.err);
+          keepSent(payload.err);
         }
-        return send(payload, ...rest);
-      };
+        send(payload);
+      }
+      hot.send = sendKept;
       // Each section a page loads is held while the page is open: an edit checks only those.
       hot.on(SECTION_HELD, (data, client) => {
-        const named = (data as { file?: unknown } | null)?.file;
+        // A page runs the project's code: its word is checked, whatever the type says.
+        const named: unknown = data?.file;
         const file = typeof named === "string" ? storyFile(named) : null;
         if (file) {
           holdSection(client, file);
