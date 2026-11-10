@@ -52,7 +52,7 @@ import type { InboundEvent } from "./ingress";
 import type { GitHubWaitState } from "./task-waits";
 import type { TaskActor, Tasks, TaskView } from "./tasks";
 import { intoFile } from "./tracker-adapter";
-import { answerOf, githubActorOf, githubRefusal } from "./tracker-github";
+import { answerOf, githubActorOf, githubProblem } from "./tracker-github";
 
 /** How far a comment's headings go into a task file (tracker-adapter.ts). */
 const COMMENT_DEPTH = 2;
@@ -347,8 +347,8 @@ const readRows = async (
     };
   } catch (error) {
     return {
-      problem: githubRefusal(error, `read ${first.ref}`, item.container)
-        .message,
+      problem: githubProblem(error, `read ${first.ref}`, item.container)
+        .response.detail,
     };
   }
 };
