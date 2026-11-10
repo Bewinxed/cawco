@@ -18,7 +18,7 @@
  *   A short overlap reads the window's edge again, which the sync's links
  *   make harmless. Pull requests, which the issues list carries too, are
  *   left out ("You can identify pull requests by the `pull_request` key").
- * - **Refusals** say GitHub's words and what the connection needs: "you
+ * - **Problems** say GitHub's words and what the connection needs: "you
  *   receive a 'Resource not accessible by integration' or 'Resource not
  *   accessible by personal access token' error, then your token has
  *   insufficient permissions … You can use the `X-Accepted-GitHub-Permissions`
@@ -32,6 +32,7 @@ import { readWithin } from "@cawco/core/bounded";
 import type { ExternalActor } from "@cawco/core/external-items";
 import type { TrackerTarget } from "@cawco/core/trackers";
 import type { Octokit } from "@octokit/rest";
+import { ElysiaStatus, problem } from "elysia";
 import {
   type Issue,
   type IssueComment,
@@ -42,7 +43,7 @@ import {
   type Listed,
   labelSet,
   type TrackerAdapter,
-  TrackerRefusal,
+  type TrackerProblem,
 } from "./tracker-adapter";
 
 /** One request. Our choice, as github.ts's. */
@@ -262,42 +263,39 @@ const rateLimited = (
   return retry > 0 ? Date.now() + retry * 1000 : reset * 1000 || Date.now();
 };
 
-/** GitHub's refusal of `what` on `repo`, in its words and with what the connection needs. */
-export const githubRefusal = (
+/** What GitHub's error says of `what` on `repo`, in its words and with what the connection needs, as the problem its status is. */
+export const githubProblem = (
   error: unknown,
   what: string,
   repo: string
-): TrackerRefusal => {
-  if (error instanceof TrackerRefusal) {
-    return error;
-  }
+): TrackerProblem => {
   const { status, headers, said } = answerOf(error);
   if (status === undefined) {
-    return new TrackerRefusal(
-      "unreachable",
-      `GitHub could not be reached to ${what}: ${said}`
-    );
+    return problem(400, {
+      code: "tracker-unreachable",
+      detail: `GitHub could not be reached to ${what}: ${said}`,
+    });
   }
   if (status === 401) {
-    return new TrackerRefusal(
-      "sign-in",
-      `GitHub refused the connection's sign-in (401 ${said}).`
-    );
+    return problem(400, {
+      code: "tracker-sign-in",
+      detail: `GitHub refused the connection's sign-in (401 ${said}).`,
+    });
   }
   const resumeAt = rateLimited(status, headers);
   if (resumeAt !== null) {
-    return new TrackerRefusal(
-      "rate",
-      `GitHub's rate limit holds the sync back until ${new Date(resumeAt).toISOString()}.`,
-      resumeAt
-    );
+    return problem(400, {
+      code: "tracker-rate",
+      detail: `GitHub's rate limit holds the sync back until ${new Date(resumeAt).toISOString()}.`,
+      resumeAt,
+    });
   }
   if (status === 403) {
     const needs = headers["x-accepted-github-permissions"];
-    return new TrackerRefusal(
-      "scope",
-      `GitHub refused to ${what} on ${repo}: ${said}.${needs ? ` The connection needs ${needs.replaceAll("=", ": ")} on ${repo} (X-Accepted-GitHub-Permissions: ${needs}).` : ""}`
-    );
+    return problem(400, {
+      code: "tracker-scope",
+      detail: `GitHub refused to ${what} on ${repo}: ${said}.${needs ? ` The connection needs ${needs.replaceAll("=", ": ")} on ${repo} (X-Accepted-GitHub-Permissions: ${needs}).` : ""}`,
+    });
   }
   // GitHub answers a request it will not let this connection see the same
   // as one for nothing: "GitHub uses a `404 Not Found` response instead of a
@@ -305,49 +303,51 @@ export const githubRefusal = (
   // repositories" (docs.github.com/en/rest/using-the-rest-api/
   // troubleshooting-the-rest-api). Which of the two it was is not known here.
   if (status === 404) {
-    return new TrackerRefusal(
-      "scope",
-      `GitHub answered 404 to ${what} on ${repo}${said ? `: ${said}` : ""}. GitHub answers 404 both where nothing is at that name and where the connection may not see it: check that ${repo} is spelt as on GitHub, and that the connection's GitHub App is installed on it or its fine-grained token lists it.`
-    );
+    return problem(400, {
+      code: "tracker-scope",
+      detail: `GitHub answered 404 to ${what} on ${repo}${said ? `: ${said}` : ""}. GitHub answers 404 both where nothing is at that name and where the connection may not see it: check that ${repo} is spelt as on GitHub, and that the connection's GitHub App is installed on it or its fine-grained token lists it.`,
+    });
   }
-  return new TrackerRefusal(
-    "input",
-    `GitHub answered ${status} to ${what} on ${repo}${said ? `: ${said}` : ""}.`
-  );
+  return problem(400, {
+    code: "tracker-input",
+    detail: `GitHub answered ${status} to ${what} on ${repo}${said ? `: ${said}` : ""}.`,
+  });
 };
 
 /**
  * One request within {@link REQUEST_MS}, given its signal: what it answered,
- * GitHub's refusal in words, or that it did not answer in time.
+ * GitHub's problem in words, or that it did not answer in time.
  */
 const within = async <T>(
   what: string,
   repo: string,
   run: (signal: AbortSignal) => Promise<T>
-): Promise<T> => {
+): Promise<T | TrackerProblem> => {
   let read: Awaited<ReturnType<typeof readWithin<T>>>;
   try {
     read = await readWithin(REQUEST_MS, run);
   } catch (error) {
-    throw githubRefusal(error, what, repo);
+    return githubProblem(error, what, repo);
   }
   if (read.kind === "unanswered") {
-    throw new TrackerRefusal(
-      "unreachable",
-      `GitHub did not answer to ${what} on ${repo} within ${REQUEST_MS / 1000} s.`
-    );
+    return problem(400, {
+      code: "tracker-unreachable",
+      detail: `GitHub did not answer to ${what} on ${repo} within ${REQUEST_MS / 1000} s.`,
+    });
   }
   return read.value;
 };
 
-/** `owner/repo` as its two parts, or a refusal in words. */
-const partsOf = (repo: string): { owner: string; repo: string } => {
+/** `owner/repo` as its two parts, or a problem in words. */
+export const partsOf = (
+  repo: string
+): { owner: string; repo: string } | TrackerProblem => {
   const found = OWNER_REPO.exec(repo.trim());
   if (!found) {
-    throw new TrackerRefusal(
-      "input",
-      `“${repo}” is not a repository like owner/name.`
-    );
+    return problem(400, {
+      code: "tracker-repo-unfit",
+      detail: `“${repo}” is not a repository like owner/name.`,
+    });
   }
   return { owner: found[1] as string, repo: found[2] as string };
 };
@@ -371,12 +371,15 @@ type Page =
   | { etag: string | null; kind: "page"; raws: unknown[] }
   | { kind: "unchanged" };
 
-/** One repository's issues, as the sync asks of a tracker. */
+/** One repository's issues, as the sync asks of a tracker; a problem when the name is no `owner/repo`. */
 export const githubAdapter = (
   octokit: Octokit,
   repoName: string
-): TrackerAdapter => {
+): TrackerAdapter | TrackerProblem => {
   const target = partsOf(repoName);
+  if (target instanceof ElysiaStatus) {
+    return target;
+  }
   const repo = `${target.owner}/${target.repo}`;
   const call = <T>(what: string, run: (signal: AbortSignal) => Promise<T>) =>
     within(what, repo, run);
@@ -388,7 +391,7 @@ export const githubAdapter = (
     since: string,
     page: number,
     etag: string | null
-  ): Promise<Page> =>
+  ): Promise<Page | TrackerProblem> =>
     call(what, async (signal) => {
       try {
         const answer = await octokit.request(route, {
@@ -423,11 +426,14 @@ export const githubAdapter = (
     cursor: ListCursor,
     read: (raw: Raw) => T | null,
     stamp: (raw: Raw) => number
-  ): Promise<Listed<T>> => {
+  ): Promise<Listed<T> | TrackerProblem> => {
     const since = new Date(
       Math.max(0, cursor.since - OVERLAP_MS)
     ).toISOString();
     const first = await readPage(what, route, since, 1, cursor.etag);
+    if (first instanceof ElysiaStatus) {
+      return first;
+    }
     if (first.kind === "unchanged") {
       return { kind: "unchanged" };
     }
@@ -435,6 +441,9 @@ export const githubAdapter = (
     let last = first.raws.length;
     for (let page = 2; last === PER_PAGE && page <= MAX_PAGES; page += 1) {
       const next = await readPage(what, route, since, page, null);
+      if (next instanceof ElysiaStatus) {
+        return next;
+      }
       const more = next.kind === "page" ? next.raws : [];
       raws.push(...(more as Raw[]));
       last = more.length;
@@ -581,7 +590,7 @@ export const githubAdapter = (
 export const githubTargets = async (
   octokit: Octokit,
   app: boolean
-): Promise<TrackerTarget[]> => {
+): Promise<TrackerTarget[] | TrackerProblem> => {
   const what = app
     ? "list the repositories the app is installed on"
     : "list the token's repositories";
@@ -613,6 +622,9 @@ export const githubTargets = async (
     number += 1
   ) {
     const batch = await page(number);
+    if (batch instanceof ElysiaStatus) {
+      return batch;
+    }
     repos.push(...batch);
     last = batch.length;
   }
