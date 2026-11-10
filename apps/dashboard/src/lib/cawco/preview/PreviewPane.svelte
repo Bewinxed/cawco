@@ -133,12 +133,6 @@
     takeOpen,
   } from "../artifact-names.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
-  import {
-    handBack,
-    holdStage,
-    letGo,
-    type Stage,
-  } from "../canvas/stage.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
   import { artifactReached } from "../files/reached";
   import { besideLine } from "../graph/beside";
@@ -199,6 +193,7 @@
   import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
+  import { PaneCanvas } from "./pane-canvas.svelte";
   import { PaneLayout } from "./pane-layout.svelte";
   import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
@@ -281,6 +276,12 @@
   const previewReach = new PreviewReach({
     instanceId: () => instanceId,
     onScreen: () => onScreen,
+    paneSubject,
+  });
+  const paneCanvas = new PaneCanvas({
+    instanceId: () => instanceId,
+    onScreen: () => onScreen,
+    ownTab: () => ownTab,
     paneSubject,
   });
   let iframe = $state<HTMLIFrameElement>();
@@ -684,7 +685,10 @@
     const current = loadedKey === frameKey;
     let word: { ok: true } | { ok: false; error: ShownFailure } | null = null;
     if (paneSubject.isCanvas) {
-      word = stage?.connected && stage.at === "panel" ? { ok: true } : null;
+      word =
+        paneCanvas.stage?.connected && paneCanvas.stage.at === "panel"
+          ? { ok: true }
+          : null;
     } else if (current && down) {
       word = { ok: false, error: down };
     } else if (current && connected) {
@@ -3413,72 +3417,6 @@
         : null
     );
   }
-  const holder = Symbol("panel");
-  let canvasSlot = $state<HTMLElement>();
-  let stage = $state<Stage>();
-  /** This session's composer can take the canvas back: not a conversation's shown beside a thread, not its own tab. */
-  const canUndock = $derived(paneSubject.isCanvas && !ownTab);
-  $effect(() => {
-    const canvas = paneSubject.isCanvas ? paneSubject.artifact : undefined;
-    const slot = canvasSlot;
-    const session = instanceId;
-    if (!(canvas && slot)) {
-      return;
-    }
-    // Held, placed and stood here once per canvas and slot: what this reads
-    // of the stages is what it writes, so none of it is a dependency.
-    const held = untrack(() => {
-      const one = holdStage(holder, session, canvas.id, canvas.name);
-      stage = one;
-      one.slots.panel = slot;
-      one.actions.panel = {
-        undock: () => giveBack(false),
-        done: () => giveBack(true),
-      };
-      one.standAt("panel");
-      one.changed();
-      return one;
-    });
-    return () => {
-      if (held.slots.panel === slot) {
-        held.slots.panel = undefined;
-        held.actions.panel = undefined;
-        if (held.at === "panel") {
-          held.standAt(null);
-        }
-      }
-      letGo(holder, held.id);
-      stage = undefined;
-    };
-  });
-  /*
-   * The canvas, standing in this panel while its conversation's tab is off
-   * screen, is held as a page is (the overlay's hold.ts, in its host page);
-   * it is never let go, as the stage keeps its one iframe wherever it stands.
-   * Anywhere else (the tab in view, the canvas in the composer) it runs, and
-   * a page loaded again while held (`connected` anew) is held again.
-   */
-  $effect(() => {
-    const one = paneSubject.isCanvas ? stage : undefined;
-    if (!one?.connected) {
-      return;
-    }
-    one.post({
-      type: !onScreen && one.at === "panel" ? "cawco:hold" : "cawco:release",
-    });
-  });
-  /** Undock (or Done here): the session's composer takes the canvas back, open or as its chip. */
-  function giveBack(folded: boolean) {
-    if (!(canUndock && paneSubject.artifact)) {
-      return;
-    }
-    handBack.ask = {
-      instanceId,
-      id: paneSubject.artifact.id,
-      name: paneSubject.artifact.name,
-      folded,
-    };
-  }
   let closing = $state(false);
   async function close() {
     closing = true;
@@ -3575,8 +3513,8 @@
   };
   /** Reload: a canvas's stage frame from its address, any other page by a new frame. */
   function reloadPage() {
-    if (paneSubject.isCanvas && stage?.frame) {
-      stage.frame.src = stage.src;
+    if (paneSubject.isCanvas && paneCanvas.stage?.frame) {
+      paneCanvas.stage.frame.src = paneCanvas.stage.src;
     } else {
       reload += 1;
     }
@@ -3621,7 +3559,7 @@
         words: true,
       });
     }
-    if (canUndock) {
+    if (paneCanvas.canUndock) {
       all.push({
         key: "undock",
         priority: HEAD_PRIORITY.undock,
@@ -3858,18 +3796,21 @@
 {#snippet undockBar()}
   <BarItem
     data-slot="other"
-    aria-disabled={!stage || undefined}
+    aria-disabled={!paneCanvas.stage || undefined}
     icon={IconUndockLinear}
     label="Undock"
     onclick={() => {
-      if (stage) {
-        giveBack(false);
+      if (paneCanvas.stage) {
+        paneCanvas.giveBack(false);
       }
     }}
   />
 {/snippet}
 {#snippet undockMenu()}
-  <DropdownMenu.Item disabled={!stage} onSelect={() => giveBack(false)}>
+  <DropdownMenu.Item
+    disabled={!paneCanvas.stage}
+    onSelect={() => paneCanvas.giveBack(false)}
+  >
     <IconUndock /><span>Undock</span>
   </DropdownMenu.Item>
 {/snippet}
@@ -4289,7 +4230,7 @@
       aria-hidden="true"
       class="absolute inset-x-0 bottom-0 top-(--slot-top) pointer-events-none"
       style:--slot-top={inset ? "0px" : "var(--side-room, 0px)"}
-      bind:this={canvasSlot}
+      bind:this={paneCanvas.canvasSlot}
     ></div>
   {:else if paneSubject.isBrowser && paneSubject.artifact}
     <BrowserView
