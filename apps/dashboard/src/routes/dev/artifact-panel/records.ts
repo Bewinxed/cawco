@@ -247,7 +247,7 @@ export const ARTIFACTS = [
  * its counts and its scroll are read at a size a busy page reaches.
  */
 export const LONG: Pin[] = Array.from({ length: 150 }, (_, at) => {
-  const like = PINS[at % PINS.length] as Pin;
+  const like = PINS[at % PINS.length];
   const when = new Date(Date.parse(like.at) - at * 60_000).toISOString();
   return {
     ...like,
