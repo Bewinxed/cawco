@@ -136,7 +136,7 @@ import {
   capableWaitReason,
 } from "./gate-file";
 import { type HeldInput, handedInputs } from "./handed-input";
-import { type HandedFile, HandedInputRefusal } from "./handed-inputs";
+import type { HandedFile, HandedInputs } from "./handed-inputs";
 import { byId } from "./handles";
 import { holdsBut, type ItemHold, itemHold } from "./item-holds";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
@@ -860,11 +860,8 @@ interface WorkItemDeps extends Pick<
     headline?: string,
     outputs?: string[]
   ) => void;
-  /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; throws a refusal in its words. */
-  readonly resolveHanded: (
-    caller: InstanceRow,
-    input: HeldInput
-  ) => AsyncGenerator<HandedFile> | Promise<HandedFile[]> | HandedFile[];
+  /** One input that names what the hub holds, as its files, read for `caller` (handed-inputs.ts), an item's assets one by one as they are asked for; or its refusal in its words. */
+  readonly resolveHanded: HandedInputs["resolve"];
   /** The one send path; its record says whether the machine took it. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -3248,23 +3245,25 @@ export const createWorkItems = ({
     const resolved: HandedFile[] = [];
     let bytes = 0;
     for (const input of held) {
-      try {
-        for await (const file of await resolveHanded(reader, input)) {
-          // What is made for its reader as it is written (a preview's pass)
-          // is a few hundred bytes: what is in hand now is what counts.
-          bytes += typeof file.bytes === "function" ? 0 : file.bytes.length;
-          if (bytes > INPUTS_LIMIT_BYTES) {
-            throw new WorkItemRefusal(
-              400,
-              workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB)
-            );
-          }
-          resolved.push(file);
+      // A handed input's refusal is the delegate's, thrown as its refusals are.
+      const files = await resolveHanded(reader, input);
+      if (files instanceof ElysiaStatus) {
+        throw inputsRefused(files.response.detail);
+      }
+      for await (const file of files) {
+        if (file instanceof ElysiaStatus) {
+          throw inputsRefused(file.response.detail);
         }
-      } catch (error) {
-        throw error instanceof HandedInputRefusal
-          ? inputsRefused(error.message, { cause: error })
-          : error;
+        // What is made for its reader as it is written (a preview's pass)
+        // is a few hundred bytes: what is in hand now is what counts.
+        bytes += typeof file.bytes === "function" ? 0 : file.bytes.length;
+        if (bytes > INPUTS_LIMIT_BYTES) {
+          throw new WorkItemRefusal(
+            400,
+            workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB)
+          );
+        }
+        resolved.push(file);
       }
     }
     return resolved;
