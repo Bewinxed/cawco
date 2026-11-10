@@ -2426,10 +2426,10 @@ const attach = (
       return reportedHarnesses;
     };
 
-    // An envelope a harness builds itself (opencode's custody inspection
-    // frame); hand-offs and spawns go through the hub's MCP, never this socket.
+    // From here the agent's own frames and the envelopes a harness builds
+    // itself (opencode's custody inspection frame) leave on this socket;
+    // hand-offs and spawns go through the hub's MCP, never this socket.
     hubLine.use(socket, identity.machineId);
-    supervisor.emit = (envelope) => hubLine.send(envelope);
 
     supervisor.sink = (frame) => {
       if (socket.readyState !== WebSocket.OPEN) {
@@ -3381,6 +3381,7 @@ const startDaemon = (rediscover = false) =>
       borrowAsk: framed,
       browsers: framed,
       commandQueue: framed,
+      emit: (envelope) => hubLine.send(envelope),
       machineId: machineIdValue,
       moveProgress: framed,
       opencodeAccounts,

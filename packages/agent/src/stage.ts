@@ -505,7 +505,7 @@ const tell = (stage: Stage) => {
 /**
  * Every stage told again where it is now, as the daemon registers with the
  * hub: a frame sent while no connection was open was dropped (daemon.ts
- * `supervisor.emit`), and the docs it was owed to are set right here. Sent,
+ * `HubLine`), and the docs it was owed to are set right here. Sent,
  * not logged: no stage changed, and a line each would read as a second
  * start of a stage the agent's restart was starting as it registered.
  */

@@ -647,6 +647,7 @@ type SupervisorPorts = Pick<
   | "borrowAsk"
   | "browsers"
   | "commandQueue"
+  | "emit"
   | "machineId"
   | "stage"
   | "stageClone"
@@ -1167,9 +1168,7 @@ export class SessionSupervisor {
     return this.#sinkTo(frame);
   };
   /** Puts an arbitrary envelope on the daemon's hub socket (hand-offs). */
-  emit: (envelope: Envelope) => void = () => {
-    // replaced once the daemon has a hub connection to emit onto
-  };
+  emit = (envelope: Envelope): void => this.#ports.emit(envelope);
   /**
    * Asks the hub what a launch starting now runs on ({@link LaunchGrant}),
    * through whichever connection is up; the daemon's to fill in. Settles,
