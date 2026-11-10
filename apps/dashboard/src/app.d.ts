@@ -76,21 +76,23 @@ declare global {
     // interface Locals {}
     /** What a route's load hands the shell, read from `page.data` by the components that draw it. */
     interface PageData {
+      /** The first paint's board: what the server read of the hub (stores/board.svelte.ts `servedBoard`). */
+      board?:
+        | import("./lib/cawco/served-board").ServedBoard<
+            import("./lib/cawco/projects").ProjectRow
+          >
+        | null;
       /** Each tab's shape as last measured, from the layout's cookie. */
       foldBoxes?: Record<
         string,
         import("./lib/components/ui/fluid-tabs/fold-memory").FoldMeasure
       >;
-      /** The conversations' names the layout's server load read, by session. */
-      names?: Record<string, import("./lib/platform/hub-read").HubRead<string>>;
-      /** The first paint's board: what the server read of the hub (stores/board.svelte.ts `servedBoard`). */
-      board?: import("./lib/cawco/served-board").ServedBoard<
-        import("./lib/cawco/projects").ProjectRow
-      > | null;
       /** The server's copy of each kept preference (platform/prefs.ts). */
       kept?: Partial<Record<import("./lib/platform/prefs").Pref, string>>;
       /** The conversations the layout landed the board's address on. */
       landed?: string[];
+      /** The conversations' names the layout's server load read, by session. */
+      names?: Record<string, import("./lib/platform/hub-read").HubRead<string>>;
       /** The tabs whose names the server resolved. */
       resolved?: string[];
       /** A project page's server-read start, when the page is one. */

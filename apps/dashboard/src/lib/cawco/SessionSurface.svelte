@@ -58,10 +58,7 @@
   import PaneGrid from "#lib/cawco/workspace/PaneGrid.svelte";
   import PaneHost from "#lib/cawco/workspace/PaneHost.svelte";
   import PaneLeaf from "#lib/cawco/workspace/PaneLeaf.svelte";
-  import {
-    holdProjectSeed,
-    type ProjectSeed,
-  } from "#lib/cawco/workspace/project-seed.js";
+  import { holdProjectSeed } from "#lib/cawco/workspace/project-seed.js";
   import {
     isSessionTab,
     projectOfTab,

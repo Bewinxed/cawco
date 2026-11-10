@@ -95,7 +95,7 @@
   import { fullSize } from "./workspace/full-size.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { projectOfTab, tabOfPath } from "./workspace/tabs";
-  import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
+  import { workspace } from "./workspace/workspace.svelte";
 
   // The sidebar primitives (SidebarMenuButton etc.) call `useSidebar()` which
   // needs a context. The Shell manages its own layout (resize, mobile sheet),
