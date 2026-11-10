@@ -113,7 +113,10 @@ export class Stage {
   pictured: (() => void) | null = null;
   /** The resize handles' handlers: the composer's while it stands there. */
   grab: {
-    down: (handle: Handle, event: PointerEvent) => void;
+    down: (
+      handle: Handle,
+      event: PointerEvent & { currentTarget: HTMLElement }
+    ) => void;
     key: (handle: Handle, event: KeyboardEvent) => void;
   } | null = null;
   /**
