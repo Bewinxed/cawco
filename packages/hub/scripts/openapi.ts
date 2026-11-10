@@ -393,6 +393,66 @@ const toDocument = (
   };
 };
 
+/**
+ * A problem's `detail` is prose. Elysia's `problem(status, { code, detail })`
+ * types the words each call passes as their literal (its `const` type
+ * parameter), so one cause said in two sentences is two members of a
+ * route's type: here each problem's `detail` is the string the document says
+ * it is, never an enum of sentences, and a union's members that then read
+ * alike are one.
+ */
+const asProse = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(asProse);
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  let fields: Schema = Object.fromEntries(
+    Object.entries(value as Schema).map(([field, item]) => [
+      field,
+      asProse(item),
+    ])
+  );
+  // A problem's members, written out as one object or as an intersection's.
+  const parts = Array.isArray(fields.allOf)
+    ? [fields, ...(fields.allOf as Schema[])]
+    : [fields];
+  const members = parts.map(
+    (part) => (part.properties ?? {}) as Record<string, Schema>
+  );
+  const has = (key: string) => members.some((one) => one[key] !== undefined);
+  if (has("code") && has("detail") && has("status")) {
+    const prose = (part: Schema): Schema => {
+      const own = part.properties as Record<string, Schema> | undefined;
+      return own?.detail && isText(own.detail)
+        ? { ...part, properties: { ...own, detail: { type: "string" } } }
+        : part;
+    };
+    fields = prose(fields);
+    if (Array.isArray(fields.allOf)) {
+      fields = { ...fields, allOf: (fields.allOf as Schema[]).map(prose) };
+    }
+  }
+  for (const union of ["anyOf", "oneOf"] as const) {
+    const listed = fields[union];
+    if (!Array.isArray(listed)) {
+      continue;
+    }
+    const once = (listed as unknown[]).filter(
+      (member, at) =>
+        (listed as unknown[]).findIndex((other) =>
+          Bun.deepEquals(other, member, true)
+        ) === at
+    );
+    if (once.length === 1 && Object.keys(fields).length === 1) {
+      return once[0];
+    }
+    fields = { ...fields, [union]: once };
+  }
+  return fields;
+};
+
 /** A `Response` a handler returns carries its own status; it is no body here. */
 const withoutResponse = (schema: Schema): Schema | undefined => {
   if (schema.$ref === RESPONSE) {
@@ -491,7 +551,7 @@ for (const { op, method, path } of operations) {
       continue;
     }
     const bare = withoutResponse(returned);
-    const schema = bare && (toDocument(bare) as Schema);
+    const schema = bare && (asProse(toDocument(bare)) as Schema);
     if (!schema) {
       // Only a `Response`: the handler answers with bytes of its own.
       op.responses[status] = { description, content: binary };
@@ -550,7 +610,7 @@ for (const { op, method, path } of operations) {
 
 for (const [name, schema] of Object.entries(definitions)) {
   if (!ids.includes(name) && NAME.test(name)) {
-    components[name] = toDocument(schema);
+    components[name] = asProse(toDocument(schema));
   }
 }
 

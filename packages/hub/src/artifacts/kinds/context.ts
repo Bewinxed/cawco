@@ -10,9 +10,10 @@ import type { ChoiceEntry } from "@cawco/core/choices";
 import type { DecisionCard } from "@cawco/core/decisions";
 import type { ChangedItem, MetaMap } from "@cawco/core/doc-meta";
 import type { InstanceRow } from "@cawco/core/protocol";
+import type { problem } from "elysia";
 import type { ArtifactRow } from "../../db/artifacts";
 import type { BuiltProgram } from "../../decision-program";
-import type { RefusalOf } from "../../refusal";
+
 import type { createAccess } from "../access";
 import type { ArtifactServiceDeps } from "../deps";
 import type { createMarks } from "../marks";
@@ -37,12 +38,18 @@ export interface KindContext {
       before: Record<string, unknown>;
       tested: ReadonlySet<string>;
     }
-  ) => RefusalOf<409, "artifact-answers-stand"> | undefined;
+  ) =>
+    | ReturnType<
+        typeof problem<409, { code: "artifact-answers-stand"; detail: string }>
+      >
+    | undefined;
   askedOf: (
     input: Pick<ArtifactInput, "does" | "ask" | "title">
   ) =>
     | { ask: string; does: ArtifactDoes; title: string }
-    | RefusalOf<422, "artifact-create-shape">;
+    | ReturnType<
+        typeof problem<422, { code: "artifact-create-shape"; detail: string }>
+      >;
   brokenBy: (
     page: { id: string | undefined; name: string; projectId: string | null },
     cards: DecisionCard[]
@@ -80,7 +87,11 @@ export interface KindContext {
   mediaHeld: (
     owner: InstanceRow,
     program: BuiltProgram
-  ) => RefusalOf<422, "artifact-media-unfit"> | undefined;
+  ) =>
+    | ReturnType<
+        typeof problem<422, { code: "artifact-media-unfit"; detail: string }>
+      >
+    | undefined;
   mediaSeen: (page: ArtifactRow, id: string) => ArtifactRow | undefined;
   namedFor: ReturnType<typeof createAccess>["namedFor"];
   ofTree: ReturnType<typeof createAccess>["ofTree"];
@@ -91,9 +102,18 @@ export interface KindContext {
     input: ArtifactInput
   ) =>
     | InstanceRow
-    | RefusalOf<400, "artifact-draft-to-parent">
-    | RefusalOf<409, "artifact-no-parent">
-    | RefusalOf<404, "artifact-parent-gone">;
+    | ReturnType<
+        typeof problem<
+          400,
+          { code: "artifact-draft-to-parent"; detail: string }
+        >
+      >
+    | ReturnType<
+        typeof problem<409, { code: "artifact-no-parent"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<404, { code: "artifact-parent-gone"; detail: string }>
+      >;
   pagesShowing: () => Map<string, ArtifactRow[]>;
   pendingFor: (row: ArtifactRow) => ArtifactPending | null;
   personChangedAfter: (

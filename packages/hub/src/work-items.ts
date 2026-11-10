@@ -155,7 +155,7 @@ import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
 import { handle } from "./presenters/words";
 import { folderPath } from "./project-folder";
-import type { Refused } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
 import type { Todo } from "./task-file";
@@ -813,7 +813,7 @@ interface WorkItemDeps extends Pick<
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
    * these; or its refusal.
    */
-  readonly planSteps: (instanceId: string) => Promise<PlanStep[] | Refused>;
+  readonly planSteps: (instanceId: string) => Promise<PlanStep[] | AnyProblem>;
   /**
    * A project's first work item on `machineId`, which holds no checkout of
    * it: the machine is sent the project's rows from now on (server.ts

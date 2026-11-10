@@ -1,4 +1,5 @@
-import { refusal } from "../refusal";
+import { problem } from "elysia";
+
 import type { createSessionIdentities } from "../session-identity";
 
 /** A request's session credential (`Authorization: Bearer …`), or null: never the person's `Owner` token. */
@@ -22,13 +23,12 @@ export const sessionCallerRefusal = (
   const authorization = bearerOf(request);
   const identity = identities.resolve(authorization);
   if (authorization !== null && !identity) {
-    return refusal(
-      401,
-      "invalid-session-credential",
-      "Invalid session credential"
-    );
+    return problem(401, {
+      code: "invalid-session-credential",
+      detail: "Invalid session credential",
+    });
   }
   if (identity && identity.instanceId !== instanceId) {
-    return refusal(403, "not-this-session", stranger);
+    return problem(403, { code: "not-this-session", detail: stranger });
   }
 };

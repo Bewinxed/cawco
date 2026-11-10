@@ -7,7 +7,7 @@
  * - `golar lint`: the rules below, over the files the change reaches.
  *
  * The rules: the hub-path ban (scripts/lint/hub-path-door.ts) over every
- * caller of the hub's source; the refusal rule (scripts/lint/refusal-kept.ts)
+ * caller of the hub's source; the problem rule (scripts/lint/problem-kept.ts)
  * over the hub's own; the switch check (scripts/lint/switch-exhaustiveness.ts) over
  * the dashboard's and every package's `.ts`, `.svelte.ts` and `.svelte`
  * files, every script's (scripts/, each package's and the dashboard's
@@ -25,7 +25,7 @@ import "@golar/svelte";
 import { defineConfig } from "golar/unstable";
 import { hubPathDoor } from "./scripts/lint/hub-path-door.ts";
 import { noFetchAlias } from "./scripts/lint/no-fetch-alias.ts";
-import { refusalKept } from "./scripts/lint/refusal-kept.ts";
+import { problemKept } from "./scripts/lint/problem-kept.ts";
 import { switchExhaustiveness } from "./scripts/lint/switch-exhaustiveness.ts";
 
 /** The planted mistakes, read by their own globs below and never as product code. */
@@ -96,7 +96,7 @@ const hubCallers = within(
     "scripts/**/*.ts"
   )
 ).filter((path) => !path.startsWith(LINT_FIXTURES));
-// The hub's source, whose helpers refuse by returning (scripts/lint/refusal-kept.ts).
+// The hub's source, whose helpers return Elysia's problems (scripts/lint/problem-kept.ts).
 const hub = within(tracked("packages/hub/src/**/*.ts"));
 const designed = within(
   tracked("apps/dashboard/src/**/*.ts", "apps/dashboard/src/**/*.svelte")
@@ -134,7 +134,7 @@ export default defineConfig({
       },
       {
         files: hub.map(literal),
-        rules: [refusalKept],
+        rules: [problemKept],
       },
     ],
   },

@@ -108,7 +108,7 @@ import type {
 } from "@cawco/core/session-messages";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
 import type { DbShape } from "./db";
@@ -175,7 +175,7 @@ import {
   YOU,
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
-import { type Refused, refusal } from "./refusal";
+import type { AnyProblem } from "./refusal";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
 import { listOf, scalarOf } from "./task-file";
@@ -259,10 +259,6 @@ const NOT_LASTING = [
   "duplicate",
 ] as const satisfies readonly Verdict[];
 const VERDICTS: readonly Verdict[] = ["lasting", ...NOT_LASTING];
-
-/** The refusal of a session in no project, which has no memory of its own: `why`, the sentence that says so. */
-const noProject = (why: string) =>
-  refusal(409, "memory-session-no-project", why);
 
 /** Your answer to a proposal for `paths`, as its note in the project's conversation: `sha` is your commit, null when you declined; it links the first file. */
 const answeredNote = (
@@ -608,18 +604,16 @@ const sinceAsked = (since: string | undefined, today: string) => {
     return null;
   }
   if (!(DAY.test(since) && !Number.isNaN(Date.parse(since)))) {
-    return refusal(
-      400,
-      "memory-since-unread",
-      `since is "${since}": give the day as YYYY-MM-DD, like {"text": "…", "since": "2026-09-01"}.`
-    );
+    return problem(400, {
+      code: "memory-since-unread",
+      detail: `since is "${since}": give the day as YYYY-MM-DD, like {"text": "…", "since": "2026-09-01"}.`,
+    });
   }
   if (since > today) {
-    return refusal(
-      400,
-      "memory-since-to-come",
-      `since is ${since}, a day to come: note a fact once it holds.`
-    );
+    return problem(400, {
+      code: "memory-since-to-come",
+      detail: `since is ${since}, a day to come: note a fact once it holds.`,
+    });
   }
   return since < today ? since : null;
 };
@@ -914,7 +908,10 @@ const candidate = (note: Note, cited: ReadonlySet<string>): boolean =>
 const proposable = (raw: string) => {
   const rel = folderPath(raw);
   if (rel instanceof ElysiaStatus) {
-    return refusal(400, "memory-path-unfit", rel.response.detail);
+    return problem(400, {
+      code: "memory-path-unfit",
+      detail: rel.response.detail,
+    });
   }
   if (rel === AGENTS_FILE) {
     return rel;
@@ -922,11 +919,10 @@ const proposable = (raw: string) => {
   if (rel.startsWith(`${KNOWLEDGE_DIR}/`) && rel.endsWith(".md")) {
     return rel;
   }
-  return refusal(
-    400,
-    "memory-file-not-memory",
-    `${raw} is not a memory file: propose AGENTS.md or knowledge/<topic>.md.`
-  );
+  return problem(400, {
+    code: "memory-file-not-memory",
+    detail: `${raw} is not a memory file: propose AGENTS.md or knowledge/<topic>.md.`,
+  });
 };
 
 /** AGENTS.md with `text` added as a line of its `## Notes` section, made when it has none. */
@@ -963,14 +959,16 @@ const withNote = (agents: string, text: string): string => {
 const reasonOf = (raw: string) => {
   const why = raw.trim();
   if (!why) {
-    return refusal(400, "memory-why-missing", "Say why, in one line.");
+    return problem(400, {
+      code: "memory-why-missing",
+      detail: "Say why, in one line.",
+    });
   }
   if (why.length > WHY_LIMIT) {
-    return refusal(
-      400,
-      "memory-why-too-long",
-      `why is ${why.length} characters long; say it in one line, under ${WHY_LIMIT}.`
-    );
+    return problem(400, {
+      code: "memory-why-too-long",
+      detail: `why is ${why.length} characters long; say it in one line, under ${WHY_LIMIT}.`,
+    });
   }
   return why;
 };
@@ -1028,11 +1026,10 @@ const checkReadable = (facts: ProposalFile[]) => {
     );
   });
   if (bad.length > 0) {
-    return refusal(
-      400,
-      "memory-facts-unread",
-      `These lines do not read as facts: ${bad.map(lineWords).join("; ")}. Write each as \`- <fact> (since <date>, from <note ids>, used <date>)\`, with at most one indented \`  Why: <grounding>\` line under it; a replaced one under \`## Formerly\` with \`until\` and \`replaced by\`.`
-    );
+    return problem(400, {
+      code: "memory-facts-unread",
+      detail: `These lines do not read as facts: ${bad.map(lineWords).join("; ")}. Write each as \`- <fact> (since <date>, from <note ids>, used <date>)\`, with at most one indented \`  Why: <grounding>\` line under it; a replaced one under \`## Formerly\` with \`until\` and \`replaced by\`.`,
+    });
   }
 };
 
@@ -1063,11 +1060,10 @@ const checkSourcesKept = (
     (id) => !(now.has(id) || archive.includes(id) || regrounded(id))
   );
   if (lost.length > 0) {
-    return refusal(
-      409,
-      "memory-sources-dropped",
-      `The change drops what ${lost.join(", ")} grounded. A fact's change keeps its history: a replaced line moves under \`## Formerly\`, an unused one moves to ${KNOWLEDGE_ARCHIVE}/.`
-    );
+    return problem(409, {
+      code: "memory-sources-dropped",
+      detail: `The change drops what ${lost.join(", ")} grounded. A fact's change keeps its history: a replaced line moves under \`## Formerly\`, an unused one moves to ${KNOWLEDGE_ARCHIVE}/.`,
+    });
   }
 };
 
@@ -1085,11 +1081,10 @@ const checkSourcesCited = (
     (id) => !(was.has(id) || cites.includes(id) || converted.has(id))
   );
   if (unsourced.length > 0) {
-    return refusal(
-      400,
-      "memory-sources-uncited",
-      `Its lines rest on ${unsourced.join(", ")}, which it does not cite: cite every inbox note a new line comes from in \`notes\`.`
-    );
+    return problem(400, {
+      code: "memory-sources-uncited",
+      detail: `Its lines rest on ${unsourced.join(", ")}, which it does not cite: cite every inbox note a new line comes from in \`notes\`.`,
+    });
   }
 };
 
@@ -1105,21 +1100,19 @@ const checkRulings = (before: FactFile[], after: FactFile[]) => {
     .flatMap((file) => file.facts)
     .filter((fact) => fact.ruling && !was.has(rulingForm(fact)));
   if (written.length > 0) {
-    return refusal(
-      400,
-      "memory-ruling-written",
-      `Only the person writes a ruling: ${written.map((fact) => fact.raw).join("; ")}. Write the line with \`since\` and \`from\`, citing its notes.`
-    );
+    return problem(400, {
+      code: "memory-ruling-written",
+      detail: `Only the person writes a ruling: ${written.map((fact) => fact.raw).join("; ")}. Write the line with \`since\` and \`from\`, citing its notes.`,
+    });
   }
   const dropped = before
     .flatMap((file) => file.facts)
     .filter((fact) => fact.ruling && !now.has(rulingForm(fact)));
   if (dropped.length > 0) {
-    return refusal(
-      409,
-      "memory-ruling-dropped",
-      `A ruling is the person's word and stays in its fact file, word for word: ${dropped.map((fact) => fact.raw).join("; ")}.`
-    );
+    return problem(409, {
+      code: "memory-ruling-dropped",
+      detail: `A ruling is the person's word and stays in its fact file, word for word: ${dropped.map((fact) => fact.raw).join("; ")}.`,
+    });
   }
 };
 
@@ -1163,14 +1156,13 @@ const checkWholeLines = (
     .flatMap((file) => file.facts)
     .filter((fact) => (fact.why?.length ?? 0) > (why.get(lineForm(fact)) ?? 0));
   if (reworded.length > 0 || added.length > 0 || grown.length > 0) {
-    return refusal(
-      400,
-      "memory-lines-changed-uncited",
-      `Citing no notes, a change folds or reshapes: a fold shortens or drops \`Why:\` lines and leaves every fact line word for word, never merging or rewording one; a reshape moves lines whole across files. These changed: ${[
+    return problem(400, {
+      code: "memory-lines-changed-uncited",
+      detail: `Citing no notes, a change folds or reshapes: a fold shortens or drops \`Why:\` lines and leaves every fact line word for word, never merging or rewording one; a reshape moves lines whole across files. These changed: ${[
         ...[...reworded, ...added].map(([form]) => form),
         ...grown.map((fact) => `${fact.text} (its Why: grew)`),
-      ].join("; ")}.`
-    );
+      ].join("; ")}.`,
+    });
   }
 };
 
@@ -1195,11 +1187,10 @@ const checkOneFormerly = (before: FactFile[], after: FactFile[]) => {
       )
   );
   if (crowded.length > 0) {
-    return refusal(
-      400,
-      "memory-formerly-crowded",
-      `A fact keeps one Formerly line: move the older to ${KNOWLEDGE_ARCHIVE}/<topic>.md in the same change. Under one fact: ${crowded.map((formerly) => formerly.map((each) => each.text).join(" | ")).join("; ")}.`
-    );
+    return problem(400, {
+      code: "memory-formerly-crowded",
+      detail: `A fact keeps one Formerly line: move the older to ${KNOWLEDGE_ARCHIVE}/<topic>.md in the same change. Under one fact: ${crowded.map((formerly) => formerly.map((each) => each.text).join(" | ")).join("; ")}.`,
+    });
   }
 };
 
@@ -1213,11 +1204,10 @@ const checkReshapeFloor = (facts: ProposalFile[], standing: number) => {
   ).length;
   const left = standing - emptied + made;
   if (emptied > made && left < RESHAPE_BELOW) {
-    return refusal(
-      400,
-      "memory-reshape-below-floor",
-      `A reshape merging files would leave ${left} fact files; below ${RESHAPE_BELOW} a reshape only splits a file whose facts fall under two descriptions.`
-    );
+    return problem(400, {
+      code: "memory-reshape-below-floor",
+      detail: `A reshape merging files would leave ${left} fact files; below ${RESHAPE_BELOW} a reshape only splits a file whose facts fall under two descriptions.`,
+    });
   }
 };
 
@@ -1282,11 +1272,11 @@ const personsNotes = (agents: string): string => {
 const checkPersonsNotes = (files: ProposalFile[]) => {
   const agents = files.find((file) => file.path === AGENTS_FILE);
   if (agents && personsNotes(agents.before) !== personsNotes(agents.content)) {
-    return refusal(
-      403,
-      "memory-persons-notes-changed",
-      "AGENTS.md's `## Notes` are the person's own notes (Make a note): leave that section as it stands and propose the change elsewhere in the file or in knowledge/."
-    );
+    return problem(403, {
+      code: "memory-persons-notes-changed",
+      detail:
+        "AGENTS.md's `## Notes` are the person's own notes (Make a note): leave that section as it stands and propose the change elsewhere in the file or in knowledge/.",
+    });
   }
 };
 
@@ -1441,18 +1431,16 @@ const editsOf = (proposal: Proposal, asked: unknown[]) => {
       path?: unknown;
     };
     if (typeof path !== "string" || typeof content !== "string") {
-      return refusal(
-        400,
-        "memory-edit-unshaped",
-        "Each edited file is `{ path, content }`."
-      );
+      return problem(400, {
+        code: "memory-edit-unshaped",
+        detail: "Each edited file is `{ path, content }`.",
+      });
     }
     if (!proposal.files.some((file) => file.path === path)) {
-      return refusal(
-        400,
-        "memory-edit-not-proposed",
-        `${path} is not a file this proposal changes.`
-      );
+      return problem(400, {
+        code: "memory-edit-not-proposed",
+        detail: `${path} is not a file this proposal changes.`,
+      });
     }
     edits.set(path, content);
   }
@@ -1669,7 +1657,7 @@ export interface MemoryDeps {
    */
   readonly curator: () => {
     /** routines.ts `ensureCurator`, plain-typed: typing it from there closes memory → routines → memory. */
-    ensure: (projectId: string) => Refused | undefined;
+    ensure: (projectId: string) => AnyProblem | undefined;
     inboxPassed: (projectId: string) => void;
   };
   readonly db: Pick<
@@ -1723,11 +1711,10 @@ export const createMemory = ({
   const projectOf = (projectId: string) => {
     const project = db.project(projectId);
     if (!project) {
-      return refusal(
-        404,
-        "memory-project-unknown",
-        `The hub keeps no project ${projectId}.`
-      );
+      return problem(404, {
+        code: "memory-project-unknown",
+        detail: `The hub keeps no project ${projectId}.`,
+      });
     }
     return project;
   };
@@ -1850,9 +1837,11 @@ export const createMemory = ({
   const inboxOf = (actor: InstanceRow) =>
     actor.projectId
       ? projectOf(actor.projectId)
-      : noProject(
-          "This session is in no project; a note goes to a project's inbox."
-        );
+      : problem(409, {
+          code: "memory-session-no-project",
+          detail:
+            "This session is in no project; a note goes to a project's inbox.",
+        });
 
   /**
    * An agent's note into its project's inbox, one commit, its taint the
@@ -1867,7 +1856,10 @@ export const createMemory = ({
     const projectId = project.id;
     const words = raw.trim();
     if (!words) {
-      return refusal(400, "memory-note-empty", "A note needs words.");
+      return problem(400, {
+        code: "memory-note-empty",
+        detail: "A note needs words.",
+      });
     }
     const at = new Date();
     const held = sinceAsked(since, dayOf(at));
@@ -2820,11 +2812,10 @@ export const createMemory = ({
       notes.length === 0 &&
       !paths.every((path) => path.startsWith(`${KNOWLEDGE_DIR}/`))
     ) {
-      return refusal(
-        400,
-        "memory-notes-uncited",
-        "Cite the inbox notes the change comes from."
-      );
+      return problem(400, {
+        code: "memory-notes-uncited",
+        detail: "Cite the inbox notes the change comes from.",
+      });
     }
     if (notes.length === 0) {
       return notes;
@@ -2836,11 +2827,10 @@ export const createMemory = ({
     const waiting = new Set(inbox.map((each) => each.id));
     const missing = notes.filter((id) => !waiting.has(id));
     if (missing.length > 0) {
-      return refusal(
-        409,
-        "memory-notes-not-waiting",
-        `${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not a note waiting in the inbox (tainted, sorted out, or in another proposal).`
-      );
+      return problem(409, {
+        code: "memory-notes-not-waiting",
+        detail: `${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not a note waiting in the inbox (tainted, sorted out, or in another proposal).`,
+      });
     }
     return notes;
   };
@@ -2888,22 +2878,20 @@ export const createMemory = ({
   ) => {
     const twice = paths.find((path, index) => paths.indexOf(path) !== index);
     if (twice) {
-      return refusal(
-        400,
-        "memory-file-named-twice",
-        `${twice} is named twice; give each file once.`
-      );
+      return problem(400, {
+        code: "memory-file-named-twice",
+        detail: `${twice} is named twice; give each file once.`,
+      });
     }
     const files = await filesNow(projectId, paths, asked);
     if (files instanceof ElysiaStatus) {
       return files;
     }
     if (files.every((file) => file.before === file.content)) {
-      return refusal(
-        409,
-        "memory-change-empty",
-        `${paths.join(", ")} already ${paths.length === 1 ? "says" : "say"} exactly that; nothing to change.`
-      );
+      return problem(409, {
+        code: "memory-change-empty",
+        detail: `${paths.join(", ")} already ${paths.length === 1 ? "says" : "say"} exactly that; nothing to change.`,
+      });
     }
     const standing = await standingFiles(projectId);
     if (standing instanceof ElysiaStatus) {
@@ -2992,7 +2980,10 @@ export const createMemory = ({
   ) => {
     const { projectId } = actor;
     if (!projectId) {
-      return noProject("This session is in no project, so it has no memory.");
+      return problem(409, {
+        code: "memory-session-no-project",
+        detail: "This session is in no project, so it has no memory.",
+      });
     }
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
@@ -3077,32 +3068,31 @@ export const createMemory = ({
   ) => {
     const { projectId } = actor;
     if (!projectId) {
-      return noProject(
-        "This session is in no project, so it has no delegates/."
-      );
+      return problem(409, {
+        code: "memory-session-no-project",
+        detail: "This session is in no project, so it has no delegates/.",
+      });
     }
     const project = projectOf(projectId);
     if (project instanceof ElysiaStatus) {
       return project;
     }
-    const problem = typeFileProblem(path, content);
-    if (problem) {
-      return refusal(
-        400,
-        "memory-type-unfit",
-        `${path} was not proposed: ${problem}`
-      );
+    const misfit = typeFileProblem(path, content);
+    if (misfit) {
+      return problem(400, {
+        code: "memory-type-unfit",
+        detail: `${path} was not proposed: ${misfit}`,
+      });
     }
     const before = await fileOr(projectId, path);
     if (before instanceof ElysiaStatus) {
       return before;
     }
     if (before === content) {
-      return refusal(
-        409,
-        "memory-change-empty",
-        `${path} already says exactly that; nothing to change.`
-      );
+      return problem(409, {
+        code: "memory-change-empty",
+        detail: `${path} already says exactly that; nothing to change.`,
+      });
     }
     const name = path.slice(DELEGATES_DIR.length, -".md".length);
     const proposing = await openProposal(projectId, [
@@ -3439,13 +3429,12 @@ export const createMemory = ({
     for (const file of files.filter((one) =>
       one.path.startsWith(DELEGATES_DIR)
     )) {
-      const problem = typeFileProblem(file.path, file.content);
-      if (problem) {
-        return refusal(
-          400,
-          "memory-type-unfit",
-          `${file.path} was not approved: ${problem}`
-        );
+      const misfit = typeFileProblem(file.path, file.content);
+      if (misfit) {
+        return problem(400, {
+          code: "memory-type-unfit",
+          detail: `${file.path} was not approved: ${misfit}`,
+        });
       }
     }
     const approved: Proposal = { ...proposal, files };
@@ -3549,29 +3538,26 @@ export const createMemory = ({
   /** The note the person withdraws, refused when it is no note, gone already, or waiting in a proposal. */
   const withdrawable = async (projectId: string, id: string) => {
     if (!NOTE_ID.test(id)) {
-      return refusal(
-        400,
-        "memory-note-id-unfit",
-        `${id} is not a note id (n-YYYYMMDD-HHMMSS-xxxxxx).`
-      );
+      return problem(400, {
+        code: "memory-note-id-unfit",
+        detail: `${id} is not a note id (n-YYYYMMDD-HHMMSS-xxxxxx).`,
+      });
     }
     const gone = await noteNamed(projectId, id);
     if (gone instanceof ElysiaStatus) {
       return gone;
     }
     if (!gone) {
-      return refusal(
-        404,
-        "memory-note-unknown",
-        `${id} is no note of this project.`
-      );
+      return problem(404, {
+        code: "memory-note-unknown",
+        detail: `${id} is no note of this project.`,
+      });
     }
     if (gone.outcome === "withdrawn") {
-      return refusal(
-        409,
-        "memory-note-withdrawn",
-        `${id} is withdrawn already.`
-      );
+      return problem(409, {
+        code: "memory-note-withdrawn",
+        detail: `${id} is withdrawn already.`,
+      });
     }
     const proposals = await proposalsOf(projectId);
     if (proposals instanceof ElysiaStatus) {
@@ -3581,11 +3567,10 @@ export const createMemory = ({
       (each) => each.notes.includes(id) || each.withdraws === id
     );
     if (pending) {
-      return refusal(
-        409,
-        "memory-note-pending",
-        `${pending.id} ${pending.withdraws === id ? "withdraws" : "cites"} ${id} and waits for your answer; answer it first.`
-      );
+      return problem(409, {
+        code: "memory-note-pending",
+        detail: `${pending.id} ${pending.withdraws === id ? "withdraws" : "cites"} ${id} and waits for your answer; answer it first.`,
+      });
     }
     return gone;
   };
@@ -3705,7 +3690,10 @@ export const createMemory = ({
   ) => {
     const { projectId } = actor;
     if (!projectId) {
-      return noProject("This session is in no project.");
+      return problem(409, {
+        code: "memory-session-no-project",
+        detail: "This session is in no project.",
+      });
     }
     const waiting = await candidates(projectId);
     if (waiting instanceof ElysiaStatus) {
@@ -3715,11 +3703,10 @@ export const createMemory = ({
     for (const { id, kind } of sorted) {
       const each = waiting.find((one) => one.id === id);
       if (!each) {
-        return refusal(
-          404,
-          "memory-note-not-in-inbox",
-          `${id} is not a note waiting in the inbox.`
-        );
+        return problem(404, {
+          code: "memory-note-not-in-inbox",
+          detail: `${id} is not a note waiting in the inbox.`,
+        });
       }
       settled.push({ note: each, outcome: kind, verdict: kind, by: "curator" });
     }
@@ -3738,7 +3725,10 @@ export const createMemory = ({
   const read = async (actor: InstanceRow, raw: string | undefined) => {
     const { projectId } = actor;
     if (!projectId) {
-      return noProject("This session is in no project.");
+      return problem(409, {
+        code: "memory-session-no-project",
+        detail: "This session is in no project.",
+      });
     }
     if (!raw) {
       const inbox = await candidates(projectId);
@@ -3780,11 +3770,10 @@ export const createMemory = ({
       rel.startsWith(`${KNOWLEDGE_DIR}/`) ||
       rel.startsWith(`${INBOX_DIR}/`)
     )) {
-      return refusal(
-        400,
-        "memory-read-path-unfit",
-        "Read AGENTS.md, a knowledge/ file or a memory/inbox/ note."
-      );
+      return problem(400, {
+        code: "memory-read-path-unfit",
+        detail: "Read AGENTS.md, a knowledge/ file or a memory/inbox/ note.",
+      });
     }
     return await readFolderFile(projectId, rel);
   };
@@ -3799,14 +3788,16 @@ export const createMemory = ({
     }
     const words = raw.trim();
     if (!words) {
-      return refusal(400, "memory-note-empty", "Say what to note.");
+      return problem(400, {
+        code: "memory-note-empty",
+        detail: "Say what to note.",
+      });
     }
     if (words.length > NOTE_LIMIT) {
-      return refusal(
-        400,
-        "memory-note-too-long",
-        `The note is ${words.length} characters long; a note stops at ${NOTE_LIMIT}.`
-      );
+      return problem(400, {
+        code: "memory-note-too-long",
+        detail: `The note is ${words.length} characters long; a note stops at ${NOTE_LIMIT}.`,
+      });
     }
     const before = await fileOr(projectId, AGENTS_FILE);
     if (before instanceof ElysiaStatus) {

@@ -57,7 +57,7 @@ import {
 import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import { CLOSED_STAGE_KINDS, type StageKind } from "@cawco/core/views";
-import { Elysia, ElysiaStatus, t } from "elysia";
+import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import { designShaped } from "./design-offers";
@@ -68,7 +68,7 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { AGENTS_FILE, fileOr } from "./memory";
 import { KNOWLEDGE_DIR } from "./memory-facts";
 import { listFolder } from "./project-folder";
-import { refusal } from "./refusal";
+
 import {
   boundStarterInputs,
   STARTER_OFTEN,
@@ -519,11 +519,10 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
     ) {
       const stored = db.starters.set(projectId, place);
       if (!stored?.starters.some((starter) => starter.text === text)) {
-        return refusal(
-          404,
-          "starter-unknown",
-          "That starter is not one this project offers there now."
-        );
+        return problem(404, {
+          code: "starter-unknown",
+          detail: "That starter is not one this project offers there now.",
+        });
       }
       db.starters.record(projectId, place, text, outcome);
       const recorded: { ok: true } = { ok: true };

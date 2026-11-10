@@ -61,7 +61,7 @@ import {
 import { DAY_MS } from "@cawco/core/time";
 import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { spawnWords } from "@cawco/core/words/spawn";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import type { DbShape } from "./db";
 import type { MoveRow } from "./db/moves";
 import { checkoutOf, type PlaceRow, type ProjectRow } from "./db/projects";
@@ -69,7 +69,7 @@ import type { MoveState } from "./db/stored-types";
 import { bareRepoPath } from "./git-remote";
 import type { HubLifetimeShape } from "./lifetime";
 import { hubRemoteIdentity, normaliseRemote } from "./projects";
-import { refusal } from "./refusal";
+
 import { received } from "./stored-json";
 
 /** A machine a step needs is away: the job waits for its next register. */
@@ -564,11 +564,10 @@ export const createMoves = (deps: MovesDeps) => {
       project.places.find(
         (place) => place.id === from && place.kind === "checkout"
       ) ??
-      refusal(
-        404,
-        "folder-not-in-project",
-        `That folder is no longer in ${project.name}. Pick another under Move from.`
-      )
+      problem(404, {
+        code: "folder-not-in-project",
+        detail: `That folder is no longer in ${project.name}. Pick another under Move from.`,
+      })
     );
   };
 
@@ -694,7 +693,7 @@ export const createMoves = (deps: MovesDeps) => {
       path ?? `~/${posix.basename(sourcePlace.path)}`
     );
     return targetPath instanceof MachinePathRefused
-      ? refusal(400, "target-path", targetPath.message)
+      ? problem(400, { code: "target-path", detail: targetPath.message })
       : targetPath;
   };
 
@@ -716,7 +715,10 @@ export const createMoves = (deps: MovesDeps) => {
   ) => {
     const project = db.project(projectId);
     if (!project) {
-      return refusal(404, "no-project", `There is no project ${projectId}.`);
+      return problem(404, {
+        code: "no-project",
+        detail: `There is no project ${projectId}.`,
+      });
     }
     const sourcePlace = sourceOf(project, asked.from);
     if (sourcePlace instanceof ElysiaStatus) {
@@ -839,14 +841,13 @@ export const createMoves = (deps: MovesDeps) => {
   const movable = (planned: Plan, request: MoveRequest) => {
     const { project, estimate: estimated, source, target } = planned;
     if (estimated.refused) {
-      return refusal(409, "move-refused", estimated.refused);
+      return problem(409, { code: "move-refused", detail: estimated.refused });
     }
     if (!(estimated.needed && source && target)) {
-      return refusal(
-        409,
-        "already-there",
-        `${project.name} is already on ${deps.machineName(request.machineId)} at ${estimated.path}: start the session there.`
-      );
+      return problem(409, {
+        code: "already-there",
+        detail: `${project.name} is already on ${deps.machineName(request.machineId)} at ${estimated.path}: start the session there.`,
+      });
     }
     return { project, estimate: estimated, source, target };
   };
@@ -1072,11 +1073,11 @@ export const createMoves = (deps: MovesDeps) => {
     // one it left out.
     const { harness } = asked.spawn;
     if (!harness) {
-      return refusal(
-        400,
-        "move-needs-harness",
-        "A move names the harness its session starts on. Pick one, then move it again."
-      );
+      return problem(400, {
+        code: "move-needs-harness",
+        detail:
+          "A move names the harness its session starts on. Pick one, then move it again.",
+      });
     }
     // Its session's mode is settled as every start's is, before anything
     // moves: a move whose start could only be refused copies nothing.
@@ -1086,7 +1087,7 @@ export const createMoves = (deps: MovesDeps) => {
       asked.spawn.permissionMode
     );
     if (unfit) {
-      return refusal(400, "mode-refused", unfit);
+      return problem(400, { code: "mode-refused", detail: unfit });
     }
     const request: NamedMoveRequest = {
       ...asked,
@@ -1113,11 +1114,10 @@ export const createMoves = (deps: MovesDeps) => {
       ask.key !== undefined &&
       request.approved !== ask.key
     ) {
-      return refusal(
-        409,
-        "move-changed",
-        `What moving ${project.name} does changed since you looked. Check it again.`
-      );
+      return problem(409, {
+        code: "move-changed",
+        detail: `What moving ${project.name} does changed since you looked. Check it again.`,
+      });
     }
     // The repository moved is linked by its origin: the target's clone,
     // whose origin it is, is known as the project by it. One with no origin
@@ -1482,21 +1482,22 @@ export const createMoves = (deps: MovesDeps) => {
   const cancel = (id: string, kept?: string) => {
     const row = db.moveRow(id);
     if (!row) {
-      return refusal(404, "move-not-running", "That move is not running.");
+      return problem(404, {
+        code: "move-not-running",
+        detail: "That move is not running.",
+      });
     }
     if (row.stage === "started" || row.stage === "cancelled") {
-      return refusal(
-        409,
-        "move-over",
-        `That move has already ${row.stage === "started" ? "started its session" : "been cancelled"}.`
-      );
+      return problem(409, {
+        code: "move-over",
+        detail: `That move has already ${row.stage === "started" ? "started its session" : "been cancelled"}.`,
+      });
     }
     if (row.stage === "start") {
-      return refusal(
-        409,
-        "move-starting",
-        "The session is already starting; it can't be cancelled now."
-      );
+      return problem(409, {
+        code: "move-starting",
+        detail: "The session is already starting; it can't be cancelled now.",
+      });
     }
     const words = kept ?? keptOf(row);
     const machine = machineFor(row);
@@ -1528,14 +1529,16 @@ export const createMoves = (deps: MovesDeps) => {
   const retry = (id: string) => {
     const row = db.moveRow(id);
     if (!row) {
-      return refusal(404, "move-not-running", "That move is not running.");
+      return problem(404, {
+        code: "move-not-running",
+        detail: "That move is not running.",
+      });
     }
     if (row.stage !== "failed" || !row.state.error) {
-      return refusal(
-        409,
-        "move-not-failed",
-        "Only a move that failed can be retried."
-      );
+      return problem(409, {
+        code: "move-not-failed",
+        detail: "Only a move that failed can be retried.",
+      });
     }
     const { stage } = row.state.error;
     const moved = update(id, stage, ({ error: _error, ...state }) => state);
