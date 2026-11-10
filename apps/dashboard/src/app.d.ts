@@ -3,6 +3,8 @@
 // for information about these interfaces
 declare global {
   interface Window {
+    /** Dev only: how many times each transcript, by session id, has built its rows (row-build.svelte.ts `countBuild`); a probe counts them. */
+    __transcriptBuilds?: Record<string, number>;
     /** Replays the button clicks app.html held before hydration. */
     releaseHeldTaps: () => void;
   }

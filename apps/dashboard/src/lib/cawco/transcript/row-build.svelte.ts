@@ -296,12 +296,9 @@ export class RowBuild {
     if (!import.meta.env.DEV || typeof window === "undefined") {
       return;
     }
-    const w = window as unknown as {
-      __transcriptBuilds?: Record<string, number>;
-    };
-    w.__transcriptBuilds ??= {};
+    window.__transcriptBuilds ??= {};
     const key = this.#host.session.instanceId;
-    w.__transcriptBuilds[key] = (w.__transcriptBuilds[key] ?? 0) + 1;
+    window.__transcriptBuilds[key] = (window.__transcriptBuilds[key] ?? 0) + 1;
   };
 
   readonly built = $derived.by<Built>(() => {
