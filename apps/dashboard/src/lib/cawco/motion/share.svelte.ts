@@ -31,6 +31,7 @@
  * flies its tab from where its row is now.
  */
 import { tick } from "svelte";
+import { frameObserver } from "../frame-observer";
 import { CURVE, dur, ease, motionOk } from "./curves.svelte";
 import { reflowsFrom, handOver as restReflow } from "./rows.svelte";
 
@@ -95,12 +96,13 @@ export function departBox(
   key: string,
   source: HTMLElement,
   stays = true,
-  rect: DOMRect = source.getBoundingClientRect()
+  rect: DOMRect = source.getBoundingClientRect(),
+  radius: string = getComputedStyle(source).borderRadius
 ): void {
   departures.set(key, {
     by: "click",
     rect,
-    radius: getComputedStyle(source).borderRadius,
+    radius,
     source,
     stays,
     at: performance.now(),
@@ -534,6 +536,93 @@ function flyMoves(): void {
 /** Bumped by every regroup, so a box that stays mounted lands again. */
 let generation = $state(0);
 
+/** Where a regroup's boxes stood, and the root they stand in. */
+interface Boxes {
+  base: DOMRect;
+  boxes: { box: HTMLElement; key: string; rect: DOMRect }[];
+  scrolled: number;
+}
+
+/**
+ * Every `[data-regroup]` box under `root` where it is drawn, the root's own
+ * box and its scroll: what a regroup departs from. Read where the layout
+ * is the last frame's (`regroupPrimer`), it costs nothing; read in the
+ * press that regroups, it laid out and restyled the page the press had just
+ * changed (a menu item ticked): 60 to 412ms of forced style at 4x.
+ */
+function boxesIn(root: HTMLElement): Boxes {
+  const boxes: Boxes["boxes"] = [];
+  for (const box of root.querySelectorAll<HTMLElement>("[data-regroup]")) {
+    const key = box.dataset.regroup;
+    if (key) {
+      boxes.push({ box, key, rect: box.getBoundingClientRect() });
+    }
+  }
+  return {
+    base: root.getBoundingClientRect(),
+    scrolled: root.scrollTop,
+    boxes,
+  };
+}
+
+/** The boxes read on the last frame's layout, for the root they were read in, while they stand. */
+let ready: (Boxes & { root: HTMLElement }) | null = null;
+
+/** Boxes read for `root` that still stand where they were read, taken. */
+function readyBoxes(root: HTMLElement): Boxes | null {
+  const read = ready;
+  ready = null;
+  return read?.root === root ? read : null;
+}
+
+/**
+ * While a regrouping menu is open (GroupMenu `onopenchange`): the boxes of
+ * the list it regroups are read inside a frame's size delivery
+ * (frameObserver `readNext`), on the layout that frame has just done, and
+ * read again whenever anything under the root comes, goes or moves, the
+ * root scrolls, or a regroup lands. A press then regroups from them,
+ * reading nothing. Closed, nothing is read.
+ */
+export function regroupPrimer(
+  rootOf: () => HTMLElement | null
+): (open: boolean) => void {
+  let stop: (() => void) | null = null;
+  return (open) => {
+    stop?.();
+    stop = null;
+    const root = rootOf();
+    if (!(open && root)) {
+      ready = null;
+      return;
+    }
+    const reader = frameObserver(() => undefined, {
+      read: () => {
+        ready = root.isConnected ? { root, ...boxesIn(root) } : null;
+      },
+    });
+    const again = () => {
+      ready = null;
+      reader.readNext();
+    };
+    const moved = new MutationObserver(again);
+    moved.observe(root, { childList: true, subtree: true });
+    root.addEventListener("scroll", again, { passive: true });
+    window.addEventListener("resize", again);
+    landedHooks.add(again);
+    again();
+    stop = () => {
+      reader.disconnect();
+      moved.disconnect();
+      root.removeEventListener("scroll", again);
+      window.removeEventListener("resize", again);
+      landedHooks.delete(again);
+    };
+  };
+}
+
+/** What reads again once a regroup's flights have landed (`regroupPrimer`). */
+const landedHooks = new Set<() => void>();
+
 /** A regroup's own update is under way: what it mounts and unmounts simply comes and goes. */
 let regroupingNow = false;
 
@@ -565,18 +654,13 @@ export function regroup(
 ): void {
   const before = new Set<string>();
   const parents: { key: string; copy: HTMLElement; rect: DOMRect }[] = [];
-  const base = root.getBoundingClientRect();
-  // Where a gone parent's copy stands is read here, before the change:
-  // read between the copies' writes, each read laid the page out again.
-  const scrolled = root.scrollTop;
-  for (const box of root.querySelectorAll<HTMLElement>("[data-regroup]")) {
-    const key = box.dataset.regroup;
-    if (!key) {
-      continue;
-    }
+  // Where every box stands, and the root: read on the last frame's layout
+  // while the menu that regroups is open (`regroupPrimer`), or here.
+  const { base, scrolled, boxes } = readyBoxes(root) ?? boxesIn(root);
+  for (const { box, key, rect } of boxes) {
     before.add(key);
-    const rect = box.getBoundingClientRect();
-    departBox(key, box, true, rect);
+    // Moved only (`landRegroup`): its corner's radius is never read.
+    departBox(key, box, true, rect, "");
     if (box.matches(PARENT) && motionOk.current) {
       parents.push({ key, copy: box.cloneNode(true) as HTMLElement, rect });
     }
@@ -646,12 +730,16 @@ export function regroup(
         .animate([{ opacity: 1 }, { opacity: 0 }], fadeOut)
         .finished.finally(() => copy.remove());
     }
-    if (settled) {
-      if (moves.length > 0) {
-        landed.push(settled);
-      } else {
-        settled();
+    const done = () => {
+      settled?.();
+      for (const hook of landedHooks) {
+        hook();
       }
+    };
+    if (moves.length > 0) {
+      landed.push(done);
+    } else {
+      done();
     }
   });
 }

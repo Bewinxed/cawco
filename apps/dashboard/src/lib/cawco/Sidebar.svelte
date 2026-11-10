@@ -57,7 +57,7 @@
   import { markHue } from "./mark";
   import { type BranchOptions, branch } from "./motion/branch.svelte";
   import { reflow } from "./motion/rows.svelte";
-  import { landRegroup, regroup } from "./motion/share.svelte";
+  import { landRegroup, regroup, regroupPrimer } from "./motion/share.svelte";
   import PresenceMenu from "./PresenceMenu.svelte";
   import ProjectEndTray from "./ProjectEndTray.svelte";
   import ProjectMark from "./ProjectMark.svelte";
@@ -315,6 +315,9 @@
 
   /** The rail's content: what a regroup moves (`data-regroup-root`). */
   let content = $state<HTMLElement | null>(null);
+
+  /** While Projects' menu is open, its rows are read ahead of a press (motion/share). */
+  const primeProjects = regroupPrimer(() => content);
 
   /** A press in Projects' menu: the projects move to their new places. */
   function pickProjects(at: number, by: ProjectGroupBy): void {
@@ -706,6 +709,7 @@
             <GroupMenu
               label={sidebarWords.groupProjects}
               levels={grouping.projects}
+              onopenchange={primeProjects}
               onpick={pickProjects}
               options={PROJECT_OPTIONS}
             />

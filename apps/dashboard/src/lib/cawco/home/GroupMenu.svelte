@@ -20,6 +20,7 @@
     levels,
     options,
     onpick,
+    onopenchange,
   }: {
     /** The button's name ("Group sessions"). */
     label: string;
@@ -29,6 +30,8 @@
     options: readonly T[];
     /** A press on `by` in the column of level `at`. */
     onpick: (at: number, by: T) => void;
+    /** The menu opened or closed: the list it regroups reads its rows ahead (motion/share `regroupPrimer`). */
+    onopenchange?: (open: boolean) => void;
   } = $props();
 
   const WORD: Record<string, string> = {
@@ -39,7 +42,7 @@
   };
 </script>
 
-<DropdownMenu.Root>
+<DropdownMenu.Root onOpenChange={onopenchange}>
   <Tip {label}>
     {#snippet children(tip)}
       <DropdownMenu.Trigger>

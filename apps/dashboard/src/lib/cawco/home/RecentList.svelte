@@ -36,7 +36,7 @@
   import { rowHref } from "../links";
   import { type BranchOptions, branch } from "../motion/branch.svelte";
   import { echoBeat } from "../motion/echo.svelte";
-  import { regroup } from "../motion/share.svelte";
+  import { regroup, regroupPrimer } from "../motion/share.svelte";
   import OlderRows, { olderOut } from "../OlderRows.svelte";
   import {
     DELEGATE_WINDOW,
@@ -92,10 +92,15 @@
   /** The section, for the root a regroup moves (`data-regroup-root`). */
   let section = $state<HTMLElement | null>(null);
 
+  /** The root a regroup moves: the rail's content, or the section. */
+  const regroupRoot = (): HTMLElement | null =>
+    section?.closest<HTMLElement>("[data-regroup-root]") ?? section;
+  /** While the menu is open, the rows are read ahead of a press (motion/share). */
+  const prime = regroupPrimer(regroupRoot);
+
   /** A press in the menu: the list regroups, its rows moving to their new places. */
   function pick(at: number, by: (typeof RECENT_OPTIONS)[number]): void {
-    const root =
-      section?.closest<HTMLElement>("[data-regroup-root]") ?? section;
+    const root = regroupRoot();
     if (!root) {
       grouping.pickRecent(at, by);
       return;
@@ -373,6 +378,7 @@
     <GroupMenu
       label={sidebarWords.groupSessions}
       levels={grouping.recent}
+      onopenchange={prime}
       onpick={pick}
       options={RECENT_OPTIONS}
     />
