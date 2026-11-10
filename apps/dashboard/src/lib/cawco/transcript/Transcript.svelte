@@ -100,7 +100,6 @@
     reconnectingNow,
   } from "../stores/transcript-reads.svelte";
   import type { Message } from "../types";
-  import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import {
@@ -135,17 +134,13 @@
   import QuestionCard from "./QuestionCard.svelte";
   import TranscriptRow from "./Row.svelte";
   import {
-    buildRowsFrom,
-    called,
-    type Fold,
-    type FoldMemo,
-    queuedFrom,
-    type Row,
-    rowSaid,
-    type StepFold,
-    stepFold,
-    wellRunsFrom,
-  } from "./rows";
+    type Built,
+    LIVE_KINDS,
+    NO_ROWS,
+    RowBuild,
+    tailStart,
+  } from "./row-build.svelte";
+  import { called, type Fold, type Row, rowSaid, wellRunsFrom } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
   import { SendSlides } from "./send-slides.svelte";
@@ -241,50 +236,6 @@
    * so where it happens.
    */
   const active = $derived(isFocused);
-
-  /**
-   * The folded rows — frozen while this pane is off screen.
-   *
-   * The session layout keeps one pane per open tab and never unmounts it, so
-   * the scroll offset and the half-typed message survive a switch. The cost of
-   * that was paid on every streamed frame: a session streaming into a tab the
-   * reader is NOT looking at rebuilt every row and re-parsed the streaming
-   * turn's markdown, frame after frame, forever. Measured at 1.09s of script
-   * and 513 layouts per 300 streamed frames — MORE than the same stream costs
-   * in the pane actually on screen, because the background session was the
-   * large one. With several tabs open and one session streaming, the reader
-   * pays that for a picture nobody can see.
-   *
-   * So an invisible transcript stops reading the session at all. While
-   * `visible` is false the body below touches only `visible` and the array it
-   * already built, which means nothing the session writes can invalidate it —
-   * there is no recompute to skip because there is no invalidation. virtua
-   * stays mounted on the rows it already has, so the DOM, the heights it
-   * measured and the scroll offset are all untouched and a frozen pane costs
-   * nothing per frame.
-   *
-   * Flipping `visible` or `focused` back on does NOT rebuild in that flush.
-   * The switch used to fold every message and re-render every row inside the
-   * same task as the tab change — the dock's `appendChild`, the scroll
-   * restore and a 256ms fold, all before the first paint — which is the
-   * delay the reader felt as the tab sticking. Now the switch paints the
-   * frozen rows as they are (`held`), and the catch-up runs after that paint
-   * as an APPEND: the fold restarts at the last turn before the old end, so
-   * every row before it keeps its identity and the keyed each touches only
-   * the rows that are actually new. The tail-follow effect below then rides
-   * to the new tail if the reader was at the tail when they left.
-   *
-   * The grid adds a third state between those two. A pane that is visible but
-   * NOT focused still has to show what its agent is saying, but rebuilding it
-   * on every frame of its own stream is what makes four panes cost four times
-   * one. So it reads the session under `untrack` and depends on nothing but a
-   * counter the scheduler bumps when this pane's turn comes round. The session
-   * can write as often as it likes; only the tick invalidates this. A hidden
-   * pane takes the same turns at the scheduler's slow tier, so that by the
-   * time it is switched to there is usually nothing left to fold.
-   */
-  /** No settled rows: a build whose rows are all read afresh. */
-  const NO_ROWS: Row[] = [];
   /**
    * `read` of a build's settled rows (`Built`'s `settled`), once for each
    * array the fold hands over: a new array is a settled row moved, gone or
@@ -320,84 +271,6 @@
   const leavableIn = perSettled((settled) =>
     settled.flatMap((row, index) => (canLeave(row) ? [index] : []))
   );
-  let frozen: Row[] = [];
-  /** The rows `frozen` begins with as the fold keeps them (see `Built`). */
-  let frozenSettled: Row[] = NO_ROWS;
-  /**
-   * A build: the rows, whether they grew at the front, and how the last live
-   * row ended — and the array the rows begin with, `settled`: the fold's
-   * settled rows (rows.ts `FoldMemo.drawn`), the same array from one build to
-   * the next for as long as none of them moves. Whatever is read off every
-   * row is read off those once for each such array (`perSettled`), and off
-   * the rows after them each build: a streamed word moves the tail alone.
-   */
-  interface Built {
-    /**
-     * Whether the conversation had a page before these rows as they were
-     * built: the strip before the list says so (the markup) for these rows,
-     * and goes with the page that ends it in the flush that puts it in front.
-     */
-    before: boolean;
-    ended: Fold["ended"];
-    rows: Row[];
-    settled: Row[];
-    shifted: boolean;
-  }
-  /** Whether the rows on screen were built with a page before them (`Built.before`). */
-  let frozenBefore = false;
-  /** The rows already on screen, handed back unchanged: nothing moved, nothing ended. */
-  const STILL_BUILD = (): Built => ({
-    before: frozenBefore,
-    rows: frozen,
-    settled: frozenSettled,
-    shifted: false,
-    ended: null,
-  });
-  /**
-   * The second step of a change virtua has to take in two (see `build`):
-   * the rows it ends on, and the bump that hands them over.
-   */
-  let pending: { rows: Row[]; settled: Row[] } | null = null;
-  let secondStep = $state(0);
-  /** What `frozen` was folded from — the incremental fold's memory. */
-  let memo: FoldMemo | null = null;
-  /** Whether `frozen` holds a real build yet — the first one is unconditional. */
-  let primed = false;
-  /** Bumped by the scheduler. The ONLY dependency of an unfocused rebuild. */
-  let rebuildTick = $state(0);
-  /**
-   * The switch flush, and the frame it paints: while this holds, the rows
-   * are the frozen ones whatever the session says. Raised by the build that
-   * first sees the rising edge of `visible` / `focused` with something to
-   * catch up on (see `hold`), let go once that flush has painted.
-   */
-  let held = false;
-  /** Bumped when the hold lets go: the build's dependency on the release. */
-  let released = $state(0);
-  /**
-   * How many times `visible` or `focused` has risen. A count rather than the
-   * two flags, so the build it feeds is invalidated by a rising edge alone: a
-   * pane leaving view is no reason to rebuild it inside that flush.
-   */
-  let seenVisible = false;
-  let seenFocused = false;
-  let rises = 0;
-  const risen = $derived.by(() => {
-    if ((visible && !seenVisible) || (isFocused && !seenFocused)) {
-      rises += 1;
-    }
-    seenVisible = visible;
-    seenFocused = isFocused;
-    return rises;
-  });
-  /** The count the last build saw: a build that sees a higher one is the switch's. */
-  let builtRises = 0;
-  /**
-   * From the switch until the append lands — what the tail indicator shows.
-   * Distinct from `held` because the fold itself happens after the hold is
-   * released, and the indicator should stay until it has.
-   */
-  let catching = $state(false);
   // The transcript opens on the latest message, not the top. virtua fires an
   // onscroll on mount (scrollTop 0, tall content) which would flip `atBottom`
   // false before the tail-follow effect runs, leaving the reader at the top —
@@ -452,16 +325,6 @@
     return () => document.removeEventListener("visibilitychange", seen);
   });
 
-  /**
-   * Whether this view is being watched: landed and drawn, the transcript
-   * being worked in, on screen, not replaying a catch-up, on a visible page.
-   * A build outside this window is history for this view, whatever it
-   * contains.
-   */
-  const watched = $derived(
-    landed && shown && active && visible && !catching && !pageHidden
-  );
-
   $effect(() => {
     const id = session.instanceId;
     if (!watched) {
@@ -483,218 +346,9 @@
   const placeOf = (row: Row): string =>
     row.kind === "single" ? row.message.id : row.key;
 
-  /** Rows whose data is the live tail's own — they exist only while the session is live. */
-  const LIVE_KINDS = new Set<Row["kind"]>(["live", "livetool", "queued"]);
-
   /** A tool call's id to the ledger: the run it sits in is not what arrives. */
   const callId = (m: { id?: string; toolCallId?: string | null }): string =>
     `call:${m.id ?? m.toolCallId}`;
-
-  /**
-   * What the session looked like when these rows were last built.
-   *
-   * Coming back to a conversation used to rebuild every row and re-render
-   * them — markdown parsed, code highlighted — whether or not a single word
-   * had arrived while it was away. Measured on a real switch: one 256ms task
-   * with the main thread blocked for all of it, which is the delay a reader
-   * feels as the tab "sticking".
-   *
-   * Nothing that has not changed needs rebuilding. When the print matches,
-   * the SAME array is returned, so the keyed each sees identical rows, no
-   * component re-renders, and the pane simply becomes visible again.
-   */
-  let builtPrint = "";
-  /**
-   * Each message array this view folds gets a number. The ledger reads a new
-   * array as history and a grown one as live, so a build must see every new
-   * array: the store's read replacing the server's stand-in with a list of
-   * the same length printed the same, was never built, and the first turn
-   * pushed onto the store's list was taken for history — the reader's own
-   * message arriving still.
-   */
-  const arrays = new WeakMap<object, number>();
-  let arraySerial = 0;
-  const arrayOf = (messages: object): number => {
-    let serial = arrays.get(messages);
-    if (serial === undefined) {
-      arraySerial += 1;
-      serial = arraySerial;
-      arrays.set(messages, serial);
-    }
-    return serial;
-  };
-  // Where the waiting messages begin and which message ends the conversation
-  // before them: a read moves a row there without changing how many
-  // messages there are.
-  const printOf = (): string => {
-    const settled = queuedFrom(session.messages);
-    const last = session.messages[settled - 1];
-
-    return (
-      `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` +
-      `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:` +
-      `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:${session.lastCompaction?.at ?? ""}:${session.cursor === null ? 0 : 1}:` +
-      `${last?.metadata?.sendFailed ?? ""}:${session.rev}`
-    );
-  };
-  /** Dev-only: the gate that catches an accidentally tracked session read. */
-  const countBuild = (): void => {
-    if (!import.meta.env.DEV || typeof window === "undefined") {
-      return;
-    }
-    const w = window as unknown as {
-      __transcriptBuilds?: Record<string, number>;
-    };
-    w.__transcriptBuilds ??= {};
-    const key = session.instanceId;
-    w.__transcriptBuilds[key] = (w.__transcriptBuilds[key] ?? 0) + 1;
-  };
-  const built = $derived.by<Built>(() => {
-    track(secondStep);
-    track(fronted);
-    // The switch flush paints what is already there; the catch-up comes
-    // after the paint, through the hold letting go.
-    if (risen !== builtRises) {
-      builtRises = risen;
-      if (primed && !held && untrack(() => printOf() !== builtPrint)) {
-        hold();
-      }
-    }
-    track(released);
-    if (held) {
-      return STILL_BUILD();
-    }
-    // A pane born off screen would otherwise hold an empty transcript until it
-    // was first looked at, so the first build never consults the tier.
-    if (!isFocused && primed) {
-      // Read, not used: this is `built`'s reactive dependency on the unfocused
-      // tier's own clock — its change is what re-runs this branch to re-check
-      // the print, in place of the tracked reads `untrack` below hides.
-      track(rebuildTick);
-      return untrack(rebuild);
-    }
-    // The print is the whole of what a focused build depends on: the live
-    // tail's fields and the store's revision of the rows (`session.rev`),
-    // which moves whenever a row is placed, moved or takes the hub's word.
-    // The fold itself reads every row of the conversation, and tracked, each
-    // build of a long transcript registered (and the next one compared) a
-    // dependency per field per row, on every streamed frame.
-    printOf();
-    return untrack(rebuild);
-  });
-
-  /**
-   * What the build returns once the switch and the tier have had their say.
-   *
-   * Reading the print tracks exactly the handful of fields that mean "there
-   * is something new to draw", so an unchanged session cannot invalidate
-   * this at all — and a changed one still rebuilds on the very next frame.
-   * It is read BEFORE the second step of a two-step change is handed over:
-   * a build that returned the second step without it depended on the bump
-   * alone, and nothing the session wrote after that rebuilt the rows. A
-   * session that moved between the two steps drops the second one and is
-   * built afresh from the first.
-   */
-  function rebuild(): Built {
-    const caught = catchUp;
-    catchUp = false;
-    const current = printOf() === builtPrint;
-    const next = pending;
-    pending = null;
-    if (next && current) {
-      return {
-        before: session.cursor !== null,
-        rows: next.rows,
-        settled: next.settled,
-        shifted: frontOnly(frozen, next.rows),
-        ended: null,
-      };
-    }
-    if (primed && current) {
-      return STILL_BUILD();
-    }
-    return run(caught);
-  }
-
-  /**
-   * The switch itself: the build that meets the rising edge of `visible` or
-   * `focused` holds the rows for this flush and schedules the catch-up behind
-   * its paint. It is the build that decides, not an `$effect.pre` ahead of
-   * it: in async mode Svelte runs a flush's dirty block effects (`{#if}`,
-   * `{#each}`) as it walks the tree and every `$effect.pre` after the walk,
-   * and those blocks read the rows. A pre-effect's hold came after the build
-   * it was meant to stop — a tab's whole history folded and shifted in
-   * front, and virtua's 4767px scroll correction written, inside the
-   * release of the swipe that opened it.
-   *
-   * `catching` is state, and a build may not write state: it goes up in the
-   * microtask behind this flush, before the paint.
-   *
-   * The delay is `requestAnimationFrame` THEN `setTimeout(0)`, not either
-   * alone. A rAF callback runs at the top of the next frame, before that
-   * frame paints, and Svelte flushes the state change it makes in a
-   * microtask right behind it — still before the paint, which is exactly the
-   * blocking this exists to avoid. `setTimeout(0)` alone is a macrotask the
-   * browser may run within the same frame interval, ahead of its rendering
-   * step. The pair pins the work to the far side of one real paint.
-   *
-   * Nothing is held when the print already matches: a pane whose rows are
-   * current simply becomes visible, with no indicator to flash.
-   */
-  function hold(): void {
-    held = true;
-    queueMicrotask(() => {
-      catching = true;
-    });
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        held = false;
-        catchUp = true;
-        released += 1;
-      }, 0);
-    });
-  }
-  /** The next build is the catch-up behind a switch's paint (`hold`): what it appends is folded in steps (`foldInSteps`). */
-  let catchUp = false;
-
-  function run(caught = false): Built {
-    if (stepping) {
-      if (stepping.list === session.messages) {
-        return STILL_BUILD();
-      }
-      // The list moved on under the fold (another page in front, a read):
-      // what it is now decides.
-      stepping = null;
-    }
-    const steps = primed ? stepFold(session, memo, caught) : null;
-    if (steps) {
-      foldInSteps(steps);
-      return STILL_BUILD();
-    }
-    countBuild();
-    builtPrint = printOf();
-    return build();
-  }
-
-  /**
-   * A PAGE IN FRONT, AND A LONG CATCH-UP, ARE FOLDED A STEP A TASK, AND
-   * HANDED OVER IN ONE.
-   *
-   * A page of older blocks put in front of a long conversation folded every
-   * message in the task its page landed in (109–432ms of script on Safari,
-   * a 188ms task on Chromium's trace: transcript-holds' wheel); a tab caught
-   * up after a long absence folded all its session said meanwhile in the
-   * task behind the switch's paint (`hold`: 64–77ms frames on Safari). So
-   * the rows on screen stay as they are (`STILL_BUILD`), and the fold runs
-   * `STEP_MS` a task, each step once a frame has painted (web.dev,
-   * "Optimize long tasks"; `requestAnimationFrame` then `setTimeout`, the
-   * yield every engine has: `scheduler.yield` is not in Safari, MDN
-   * "Limited availability"). The build after the last step takes its memo,
-   * draws the rows from it at once, and hands a page in front to virtua with
-   * its `shift` in that one flush: rows added in front only, the one change
-   * `shift` is for (inokawa/virtua#284).
-   */
-  let stepping: StepFold | null = null;
   /**
    * The rows mounted as a page in front is handed over, by key, kept
    * mounted while the buffer steps back up (`keepMounted`). Handed over
@@ -703,151 +357,41 @@
    * the hand-over's task, 80ms of its 185 (transcript-holds' wheel).
    */
   let frontHeld = $state<string[]>([]);
-  /** Bumped when a page in front is folded: the build's dependency on it. */
-  let fronted = $state(0);
-  /** How long a step of a stepped fold runs, ms: a quarter of a frame here, a frame on a CPU four times slower. Our own call. */
-  const STEP_MS = 4;
-  function foldInSteps(steps: StepFold): void {
-    stepping = steps;
-    let folded = false;
-    const step = () =>
-      requestAnimationFrame(() =>
-        setTimeout(() => {
-          if (stepping !== steps) {
-            return;
-          }
-          // The hand-over in a task of its own: behind the last step, it
-          // was that step and the drawing of the rows in one.
-          if (!folded) {
-            folded = steps.step(STEP_MS);
-            step();
-            return;
-          }
-          handOver(steps);
-        })
-      );
-    step();
-  }
-  /** The stepped fold's rows, handed to the build (`fronted`). */
-  function handOver(steps: StepFold): void {
-    memo = steps.memo();
-    stepping = null;
-    if (steps.front) {
-      // Handed over with nothing mounted past what is (`frontHeld`): the
-      // screen above fills a step a task (`buffer`).
-      frontHeld = [...onList()];
-      buffer = 0;
-    }
-    // The page that ends the conversation's pages takes the strip before
-    // the list with it (`Built.before`).
-    const strip =
-      steps.front && frozenBefore && session.cursor === null && !atBottom
-        ? olderRoom
-        : 0;
-    fronted += 1;
-    if (strip > 0 && scroller) {
-      stripGone(scroller, strip);
-    }
-  }
-  onDestroy(() => {
-    stepping = null;
-  });
-  /**
-   * THE STRIP GOES WITH THE PAGE THAT ENDS IT, AND MOVES NOTHING. Left to
-   * its own observer (`keepPlace`), WebKit delivered its shrink a frame
-   * after the rows came in under it (transcript-holds, webkit 390: the
-   * row at the view's top painted 53.375px up for a frame). So the flush
-   * that hands the page over is run now, and the view moved up by the
-   * strip's height in the same task, behind virtua's own jump (whose write
-   * laid the page out): the observer then hears nothing left to move.
-   */
-  function stripGone(node: HTMLElement, strip: number): void {
-    flushSync();
-    olderRoom = 0;
-    node.scrollTop -= strip;
-    lastWrite = node.scrollTop;
-  }
-
-  function build(): Built {
-    const folded = buildRowsFrom(session, memo);
-    const { rows: next } = folded;
-    ({ memo } = folded);
-    const settled = folded.memo.drawn.rows;
-    ledger(folded);
-    slides.noteMoves(frozen, next, folded.ended, settled);
-    // FRONT-CHANGE DETECTION for virtua's `shift` mode: an older history chunk
-    // arriving puts new rows ABOVE everything on screen — without `shift`,
-    // virtua keeps the scroll OFFSET and the content lurches toward the top
-    // (the post-SSR "jumps to the top then back" flash). The read that
-    // replaces the server's tail can also START later than it did, dropping
-    // rows in front: virtua keeps its sizes by index, so without `shift` every
-    // row on screen landed on an index with no size, hid, and reappeared
-    // measured somewhere else (0.66 at 1440). Either is exact: the rows on
-    // screen are the same, in the same order, to the end of the list.
-    // Returned WITH the rows so the Virtualizer reads both in the same flush.
-    //
-    // Only once LANDED. Before the first landing there is no position to
-    // keep — `land` teleports to the tail regardless — and asking for a shift
-    // then is worse than useless: virtua has not attached its scroller yet
-    // (that waits a tick after mount), so the anchoring jump stays pending
-    // until the landing's own write has already put the scroller at its
-    // maximum. Applied on top of that, the jump is clamped, fires no scroll
-    // event, and virtua's range stays latched at empty until the reader
-    // scrolls — a switched-to pane with a sized box and not one row in it.
-    const landedNow = untrack(() => landed);
-    const shifted = landedNow && frontOnly(frozen, next);
-    // TWO STEPS. The read that replaces the server's tail with the live
-    // session's can change both ends at once: rows dropped or added in
-    // front, and the live row arriving at the end. virtua's `shift` moves
-    // its sizes at ONE end per update, and with neither the rows on screen
-    // lost their sizes, hid, and reappeared measured somewhere else (0.66
-    // mid-turn at 1440). So the end goes first — the rows before it
-    // untouched, their sizes where they were — and the front a microtask
-    // later, as the shift it is. Both land before the paint.
-    if (landedNow && !shifted) {
-      const was = tailStart(frozen);
-      const now = tailStart(next);
-      // The same settled rows, or as many, is no change in front: asked
-      // before copying either.
-      if (
-        settled !== frozenSettled &&
-        was !== now &&
-        frontOnly(frozen.slice(0, was), next.slice(0, now))
-      ) {
-        pending = { rows: next, settled };
-        queueMicrotask(() => {
-          secondStep += 1;
-        });
-        return {
-          before: session.cursor !== null,
-          rows: [...frozen.slice(0, was), ...next.slice(now)],
-          // The last build's settled rows, still in front: a tail never
-          // holds a settled row (rows.ts `tailRows`).
-          settled: frozenSettled.length <= was ? frozenSettled : NO_ROWS,
-          shifted: false,
-          ended: folded.ended,
-        };
-      }
-    }
-    return {
-      before: session.cursor !== null,
-      rows: next,
-      settled,
-      shifted,
-      ended: folded.ended,
-    };
-  }
   /**
    * What the engines below are handed to read of this component and of one
    * another: its props and flags, and each engine as a getter, so an engine
    * constructed later is there by the time one reads it.
    */
   const host = {
-    get frozenSettled() {
-      return frozenSettled;
+    get atBottom() {
+      return atBottom;
+    },
+    get buffer() {
+      return buffer;
+    },
+    set buffer(value) {
+      buffer = value;
+    },
+    get frontHeld() {
+      return frontHeld;
+    },
+    set frontHeld(value) {
+      frontHeld = value;
+    },
+    get isFocused() {
+      return isFocused;
     },
     get landed() {
       return landed;
+    },
+    get lastWrite() {
+      return lastWrite;
+    },
+    set lastWrite(value) {
+      lastWrite = value;
+    },
+    get ledger() {
+      return ledger;
     },
     get list() {
       return list;
@@ -855,99 +399,48 @@
     get listing() {
       return listing;
     },
+    get olderRoom() {
+      return olderRoom;
+    },
+    set olderRoom(value) {
+      olderRoom = value;
+    },
+    get onList() {
+      return onList;
+    },
     get presentation() {
       return presentation;
     },
     get renderedRows() {
       return renderedRows;
     },
+    get scroller() {
+      return scroller;
+    },
+    get session() {
+      return session;
+    },
     get tickets() {
       return tickets;
+    },
+    get visible() {
+      return visible;
     },
     get watched() {
       return watched;
     },
+    get slides(): SendSlides {
+      return slides;
+    },
+    get rowBuild(): RowBuild {
+      return rowBuild;
+    },
   };
+
+  const rowBuild = new RowBuild(host);
 
   const slides = new SendSlides(host);
 
-  /** Where a build's own tail — the live row, the tool in flight, the queue — begins. */
-  function tailStart(sequence: Row[]): number {
-    let start = sequence.length;
-    while (start > 0 && LIVE_KINDS.has(sequence[start - 1].kind)) {
-      start -= 1;
-    }
-    return start;
-  }
-
-  /**
-   * Whether `next` differs from `prior` only in front: rows added before the
-   * first one that survives, or dropped before it, and from that row on the
-   * same rows in the same order to the end of both.
-   */
-  function frontOnly(prior: Row[], next: Row[]): boolean {
-    if (
-      prior.length === 0 ||
-      next.length === prior.length ||
-      next.at(-1)?.key !== prior.at(-1)?.key
-    ) {
-      return false;
-    }
-    const index = new Map(next.map((row, i) => [row.key, i]));
-    const from = prior.findIndex((row) => index.has(row.key));
-    if (from < 0) {
-      return false;
-    }
-    const to = index.get(prior[from].key) as number;
-
-    return (
-      next.length - to === prior.length - from &&
-      prior.slice(from).every((row, i) => next[to + i].key === row.key)
-    );
-  }
-
-  /**
-   * Take a turn in the rotation while unfocused — the visible tier beside the
-   * pane being read, the slow tier when hidden behind it — and give it back
-   * on focus. The fingerprint is every cheap O(1) reading that means "there
-   * is something new to draw" — deliberately not a deep comparison, because
-   * the point is to skip the expensive build, not to do an expensive check
-   * first.
-   */
-  $effect(() => {
-    if (isFocused) {
-      return;
-    }
-    return rebuildScheduler.join(
-      session.instanceId,
-      printOf,
-      () => {
-        rebuildTick += 1;
-      },
-      visible ? "visible" : "hidden"
-    );
-  });
-
-  // Side effects that the derived CANNOT carry (Svelte forbids writes inside
-  // $derived). An $effect runs after the derived is read but before the DOM
-  // renders, so the bookkeeping stays in sync with what the Virtualizer sees.
-  $effect(() => {
-    const { rows: next, settled, before } = built;
-    frozen = next;
-    frozenSettled = settled;
-    frozenBefore = before;
-    primed = true;
-    // The append has landed: the rows on screen are the session's again, and
-    // the indicator under them has nothing left to wait for.
-    if (!(held || stepping) && untrack(() => catching)) {
-      catching = false;
-    }
-    // The update is in: what it moved starts where it was drawn.
-    if (slides.beforeMove) {
-      untrack(slides.slideMoves);
-    }
-  });
-  const rows = $derived(built.rows);
   /**
    * While the session is stopped at its account's limit, its newest account
    * line is that stop, drawn as an error with its way out
@@ -957,7 +450,7 @@
     const instance = boardStore.instanceIndex.byId.get(session.instanceId);
     const words = instance ? stopWords(instance) : undefined;
     const key = words
-      ? rows.findLast((one) => one.kind === "account")?.key
+      ? rowBuild.rows.findLast((one) => one.kind === "account")?.key
       : undefined;
     return words && key ? { key, words } : undefined;
   });
@@ -966,9 +459,9 @@
     // the first-row match, so the saved entry is checked on its own first.
     const saved = sizes.get(session.instanceId);
     return saved !== undefined &&
-      built.rows.length > 0 &&
-      saved.first === placeOf(built.rows[0]) &&
-      built.rows.length >= saved.count
+      rowBuild.built.rows.length > 0 &&
+      saved.first === placeOf(rowBuild.built.rows[0]) &&
+      rowBuild.built.rows.length >= saved.count
       ? saved.cache
       : undefined;
   });
@@ -1117,7 +610,7 @@
   // a reload (the owner's "good morning", nightly 0.1.12-nightly.5855).
   const presentation = $derived.by(() => {
     track(leftTick);
-    const from = built;
+    const from = rowBuild.built;
     const shifted = from.shifted && from !== drawnFrom;
     drawnFrom = from;
     const { rows: next, ended, settled } = from;
@@ -1619,7 +1112,7 @@
   let buffer = $state(0);
   $effect(() => {
     const full = viewHeight * BUFFER_SCREENS;
-    track(fronted);
+    track(rowBuild.fronted);
     if (narrow || unseen) {
       buffer = 0;
       return;
@@ -2907,14 +2400,17 @@
     if (!(docId && shown && visible)) {
       return;
     }
-    track(rowCount);
+    track(rowBuild.rowCount);
     const own = paged();
     if (session.loading || own?.loading) {
       return;
     }
     if (untrack(anchorIndex) < 0) {
       if (own?.cursor && !own.olderFault) {
-        if (!own.hydrating && untrack(printOf) === builtPrint) {
+        if (
+          !own.hydrating &&
+          untrack(rowBuild.printOf) === rowBuild.builtPrint
+        ) {
           detach(
             untrack(() => readOlderPage(own.instanceId)),
             "untrack"
@@ -3039,13 +2535,6 @@
       detach(readOlderPage(store.instanceId), "readOlderPage");
     }
   }
-
-  /**
-   * How many rows there are, apart from the rows themselves: every build is
-   * a new list, a streamed word's included, and what asks for an older page
-   * cares only when a page has changed how many there are.
-   */
-  const rowCount = $derived(rows.length);
   /**
    * The list's place in the view, heard in the shared size observer's
    * delivery (frame-observer.ts): the listing is observed again in the
@@ -3099,7 +2588,7 @@
     ) {
       return;
     }
-    track(rowCount);
+    track(rowBuild.rowCount);
     return askOlderInFrame();
   });
 
@@ -3840,8 +3329,8 @@
       // at another row with the place a moment from arriving above it
       // (transcript-holds, its reload legs).
       if (
-        pending !== null ||
-        untrack(printOf) !== builtPrint ||
+        rowBuild.pending !== null ||
+        untrack(rowBuild.printOf) !== rowBuild.builtPrint ||
         (store !== null && store !== session && store.messages.length > 0)
       ) {
         return;
@@ -4038,7 +3527,7 @@
   // it would hold an invisible transcript for good. An empty read that has
   // finished IS settled; say so.
   $effect(() => {
-    if (session.loading || rows.length > 0) {
+    if (session.loading || rowBuild.rows.length > 0) {
       return;
     }
     landed = true;
@@ -4070,7 +3559,7 @@
       }
       return;
     }
-    if (rows.length > 0) {
+    if (rowBuild.rows.length > 0) {
       detach(
         tick().then(() => {
           if (!landed) {
@@ -4202,8 +3691,8 @@
     // The calls whose glance the last build drew: each is that glance, landed.
     // A glance is a tail row (`tailStart`): only the tail is read.
     const glanced = new Set(
-      frozen
-        .slice(tailStart(frozen))
+      rowBuild.frozen
+        .slice(tailStart(rowBuild.frozen))
         .flatMap((row) => (row.kind === "livetool" ? [row.glance.toolId] : []))
     );
     for (const { id, row } of fresh) {
@@ -4576,10 +4065,14 @@
   }
 
   const showBack = $derived(
-    findHere.landed && findHere.reading !== null && rows.length > 0
+    findHere.landed && findHere.reading !== null && rowBuild.rows.length > 0
   );
   const showLatest = $derived(
-    landed && farFromLatest && rows.length > 0 && !findHere.open && !showBack
+    landed &&
+      farFromLatest &&
+      rowBuild.rows.length > 0 &&
+      !findHere.open &&
+      !showBack
   );
 
   // ── The live region ─────────────────────────────────────────────────────
@@ -4649,14 +4142,14 @@
     // announces what arrived while it was away exactly once, rather than
     // re-reading the whole transcript. An older page put in front is history
     // too, however long the pane has been read.
-    if (!(landed && active) || built.shifted) {
-      for (const r of rows) {
+    if (!(landed && active) || rowBuild.built.shifted) {
+      for (const r of rowBuild.rows) {
         announced.add(announceKeyOf(r));
       }
       return;
     }
     let phrase = "";
-    for (const r of rows) {
+    for (const r of rowBuild.rows) {
       const key = announceKeyOf(r);
       if (!key || announced.has(key)) {
         continue;
@@ -4786,7 +4279,7 @@
         ? askWords.questionFrom(agentName)
         : askWords.permissionFrom(agentName);
     }
-    if (rows.at(-1)?.kind === "question") {
+    if (rowBuild.rows.at(-1)?.kind === "question") {
       return `Question from ${agentName}`;
     }
     return "";
@@ -4801,6 +4294,16 @@
     renderedRows.length > 0
       ? (sessionsStore.session(session.instanceId)?.behind ?? null)
       : null
+  );
+
+  /**
+   * Whether this view is being watched: landed and drawn, the transcript
+   * being worked in, on screen, not replaying a catch-up, on a visible page.
+   * A build outside this window is history for this view, whatever it
+   * contains.
+   */
+  const watched = $derived(
+    landed && shown && active && visible && !rowBuild.catching && !pageHidden
   );
 </script>
 
@@ -5013,7 +4516,7 @@
       >
         {commonWords.tryAgain}
       </Button>
-    {:else if renderedRows.length > 0 && built.before}
+    {:else if renderedRows.length > 0 && rowBuild.built.before}
       <p
         data-slot="transcript-empty"
         class="mark-line flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
@@ -5175,9 +4678,9 @@
         {unfoundWords}
       </p>
     {/if}
-    {#if catching || showLatest || showBack}
+    {#if rowBuild.catching || showLatest || showBack}
       <div class="flex justify-center items-box-end gap-space-2">
-        {#if catching}
+        {#if rowBuild.catching}
           <CatchUp />
         {/if}
         {#if showBack}
@@ -5205,7 +4708,7 @@
     class="absolute inset-0 isolate flex flex-col-reverse overflow-y-auto anchor-none ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
   >
     <div>
-      {#if built.before}
+      {#if rowBuild.built.before}
         <div class="isolate">
           <p
             data-slot="transcript-empty"
