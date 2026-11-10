@@ -103,6 +103,7 @@ declare global {
       region?: boolean;
     }
     // interface Locals {}
+    /** What a route's load hands the shell, read from `page.data` by the components that draw it. */
     interface PageData {
       /** Configure's card heights, as its layout reads them off the cookie (routes/(app)/config/+layout.server.ts). */
       cards?: import("#lib/cawco/config/cards.js").Cards;
@@ -113,6 +114,13 @@ declare global {
       >;
       /** The machines the hub holds, counted by the board's load. */
       machineCount?: number | null;
+      /** The conversations' names the layout's server load read, by session. */
+      names?: Record<
+        string,
+        import("./lib/platform/hub-read.js").HubRead<string>
+      >;
+      /** The hub's pulses as the layout's server load read them. */
+      pulses?: Record<string, import("@cawco/core/protocol").SessionPulse>;
       /** The wide screen's resolved tabs, from the root layout load. */
       resolved?: string[];
       /** A project page's seed (workspace/project-seed.ts). */
