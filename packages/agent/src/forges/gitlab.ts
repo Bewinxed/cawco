@@ -11,7 +11,7 @@
 import { join } from "node:path";
 import { Gitlab } from "@gitbeaker/rest";
 import { configHome, readYamlConfig, sameHost } from "./cli-config";
-import type { ForgeAdapter, ForgeSignIn } from "./forge";
+import type { ForgeAdapter, ForgeSignIn } from "./forge-adapter";
 
 /** glab's config dir, as glab finds it. */
 const glabConfigDir = (): string =>

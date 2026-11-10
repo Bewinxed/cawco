@@ -20,7 +20,7 @@ import type { Pid } from "@cawco/core/signal";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { rgPath } from "@vscode/ripgrep-universal";
-import { colimaHome } from "../browser/media-forwarding";
+import { colimaHome } from "../browser/colima";
 import { runtimeSockets } from "../browser/runtime";
 import { RELAY_STEP } from "../proxy-relay";
 import { execScript } from "./exec";

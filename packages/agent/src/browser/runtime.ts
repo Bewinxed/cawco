@@ -13,7 +13,7 @@ import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import Docker from "dockerode";
 import { z } from "zod";
-import { colimaHome, colimaProfileOf } from "./media-forwarding";
+import { colimaHome, colimaProfileOf } from "./colima";
 
 /** A container runtime that answered. */
 export interface Runtime {

@@ -90,8 +90,6 @@ import { readyHarnessRows, syncHarnessConfig } from "./fleet-harness-config";
 import {
   type FleetHarnessSet,
   readFleetHarnessSet,
-  type SetHarnessConfig,
-  type SetHook,
   writeFleetHarnessSet,
 } from "./fleet-harness-set";
 import {
@@ -108,6 +106,7 @@ import {
   placeSets,
   readPlaceSet,
 } from "./fleet-place-set";
+import type { SetHarnessConfig, SetHook } from "./fleet-set-rows";
 import { expandHome } from "./fs";
 import { readJson, writeJson } from "./json-file";
 import { readMcpRuntime, readSettledOnce } from "./mcp-status";
