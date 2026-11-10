@@ -29,7 +29,12 @@ import {
 } from "@cawco/core";
 import { piAgentDir, piMemoryFile, piSkillsDir } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { type LocatedRecord, readSpans } from "@cawco/jsonl-parser";
+import {
+  type LocatedRecord,
+  readSpans,
+  type TranscriptRecord,
+  typeFilter,
+} from "@cawco/jsonl-parser";
 import type {
   ImageContent,
   Model,
@@ -67,6 +72,7 @@ import { readSettledOnce } from "../mcp-status";
 import { probeStarted } from "../probe-count";
 import { toolGate } from "../tools";
 import { type FleetSidecar, readSidecar, writeJson } from "./fleet-common";
+import { lastPromptAt, timeOf } from "./last-prompt";
 import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiCredential, type PiCredentialState } from "./pi-auth";
 import { piMcpEntry, piMcpList } from "./pi-mcp";
@@ -901,6 +907,30 @@ const piMcpReport = async (
 };
 
 /** Read-only SDK metadata plus the machine's pi profile; both processes use it. */
+
+/** The lines a pi prompt can be on ({@link piPromptAt}), before any is parsed. */
+const PI_PROMPT_TYPES = typeFilter("message");
+
+/**
+ * When a pi session entry was sent, if it is the person's prompt: a
+ * `message` entry whose message is the `user` role's (pi's own
+ * `SessionMessageEntry`; a tool's answer is `toolResult`, a command run with
+ * `!` is `bashExecution`, and what an extension said is a `custom_message`
+ * entry), timed as pi times it (session-manager.js
+ * `getMessageActivityTime`: the message's own `timestamp`, else the entry's).
+ */
+function piPromptAt(record: TranscriptRecord): number | undefined {
+  const entry = record as {
+    message?: { role?: unknown; timestamp?: unknown };
+    timestamp?: unknown;
+    type?: unknown;
+  };
+  if (entry.type !== "message" || entry.message?.role !== "user") {
+    return;
+  }
+  return timeOf(entry.message.timestamp) ?? timeOf(entry.timestamp);
+}
+
 export class PiProfile {
   readonly kind = "pi" as const;
   readonly capabilities = PI_CAPABILITIES;
@@ -1039,15 +1069,27 @@ export class PiProfile {
     const sessions = dir
       ? await SessionManager.list(dir)
       : await SessionManager.listAll();
-    return sessions.map((info) => ({
-      sessionId: info.id,
-      harness: "pi",
-      createdAt: info.created.getTime(),
-      lastModified: info.modified.getTime(),
-      ...(info.cwd || dir ? { cwd: info.cwd || dir } : {}),
-      ...(info.firstMessage ? { firstPrompt: info.firstMessage } : {}),
-      ...(info.name ? { customTitle: info.name } : {}),
-    }));
+    const listed: NeutralSessionInfo[] = [];
+    for (const info of sessions) {
+      // pi's own `modified` is its last message of either side: the
+      // person's own last prompt is read here (last-prompt.ts).
+      const wroteAt = await lastPromptAt(
+        info.path,
+        PI_PROMPT_TYPES,
+        piPromptAt
+      );
+      listed.push({
+        sessionId: info.id,
+        harness: "pi",
+        createdAt: info.created.getTime(),
+        lastModified: info.modified.getTime(),
+        ...(wroteAt === undefined ? {} : { wroteAt }),
+        ...(info.cwd || dir ? { cwd: info.cwd || dir } : {}),
+        ...(info.firstMessage ? { firstPrompt: info.firstMessage } : {}),
+        ...(info.name ? { customTitle: info.name } : {}),
+      });
+    }
+    return listed;
   }
 
   async getSessionInfo(

@@ -1249,7 +1249,7 @@ const sessionsOnMachine = async (
   }
 };
 
-const sessionToInfo = (
+export const sessionToInfo = (
   session: StoredSession,
   tag?: string
 ): NeutralSessionInfo => ({
@@ -1258,6 +1258,7 @@ const sessionToInfo = (
   ...(session.title ? { customTitle: session.title } : {}),
   lastModified: session.time_updated,
   createdAt: session.time_created,
+  ...(session.wrote_at === null ? {} : { wroteAt: session.wrote_at }),
   cwd: session.directory,
   ...(tag ? { tag } : {}),
 });

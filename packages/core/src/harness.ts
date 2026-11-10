@@ -850,6 +850,15 @@ export interface NeutralSessionInfo {
   sessionId: string;
   summary?: string;
   tag?: string;
+  /**
+   * When the person last sent a prompt in it (ms epoch), read from the
+   * transcript at its source: Claude's last `user` record that holds a
+   * prompt, not a tool result; OpenCode's last `user` message; pi's last
+   * `user` message. Absent when it holds none. What a stored transcript is
+   * placed by, as a listed session is by its `wroteAt`: an agent's reply
+   * never moves it, where {@link lastModified} moves on every write.
+   */
+  wroteAt?: number;
 }
 
 /** A stored transcript entry. `message` is the {@link NeutralMessage} the turn wrote. */

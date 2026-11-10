@@ -239,6 +239,11 @@ export async function readSpans(
 export interface ReverseOptions extends Omit<ScanOptions, "baseOffset" | "baseLine" | "stats"> {
   /** Hard cap on bytes read back from the end (default 32 MiB). */
   maxBytes?: number;
+  /**
+   * Bytes read back a step (default {@link CHUNK_BYTES}): smaller for a read
+   * after one record near the end, as a listing's of each of a thousand files.
+   */
+  chunkBytes?: number;
 }
 
 /**
@@ -314,7 +319,7 @@ export class ReverseReader {
   async #lastLineEnd(handle: Awaited<ReturnType<typeof open>>, size: number): Promise<number> {
     let hi = size;
     while (hi > 0) {
-      const lo = Math.max(0, hi - CHUNK_BYTES);
+      const lo = Math.max(0, hi - (this.#options.chunkBytes ?? CHUNK_BYTES));
       const buf = new Uint8Array(hi - lo);
       await handle.read(buf, 0, buf.length, lo);
       this.#read += buf.length;
@@ -329,7 +334,7 @@ export class ReverseReader {
 
   /** One chunk back: the whole lines before what is read, parsed. */
   async #step(handle: Awaited<ReturnType<typeof open>>): Promise<number> {
-    let span = CHUNK_BYTES;
+    let span = this.#options.chunkBytes ?? CHUNK_BYTES;
     for (;;) {
       const lo = Math.max(0, this.#from - span);
       const buf = new Uint8Array(this.#from - lo);

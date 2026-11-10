@@ -27,8 +27,9 @@ import {
   transcriptUserText,
   type WindowAsk,
 } from "@cawco/core";
-import type { LocatedRecord } from "@cawco/jsonl-parser";
+import type { LocatedRecord, TranscriptRecord } from "@cawco/jsonl-parser";
 import { ReverseReader, readSpans, typeFilter } from "@cawco/jsonl-parser";
+import { timeOf } from "./last-prompt.ts";
 import {
   idSpans,
   type LineIndex,
@@ -1188,6 +1189,26 @@ function opensTurn(msg: SDKSessionMessage): boolean {
   const text = transcriptUserText(msg.message);
   return !!text?.trim() && !interruptLine(text);
 }
+
+/**
+ * When `record` was sent, if it is the person's prompt: a `user` record that
+ * opens a turn ({@link opensTurn}: words of their own, not a compaction's
+ * summary or the CLI's line for a stopped turn), not a tool's result, a
+ * subagent's, a command's hidden text or a background task's notice
+ * ({@link toSDKMessage}). What a stored transcript is placed by
+ * (last-prompt.ts).
+ */
+export function claudePromptAt(record: TranscriptRecord): number | undefined {
+  const r = record as unknown as RawRecord;
+  if (r.type !== "user" || chainFields(r).toolResult) {
+    return;
+  }
+  const msg = toSDKMessage(r);
+  return msg && opensTurn(msg) ? timeOf(r.timestamp) : undefined;
+}
+
+/** The lines a prompt can be on ({@link claudePromptAt}), before any is parsed. */
+export const CLAUDE_PROMPT_TYPES = typeFilter("user");
 
 /** The fields of a record the chain walk reads ({@link ChainNode}). */
 function chainFields(r: RawRecord): Partial<ChainNode> {

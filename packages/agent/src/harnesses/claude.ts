@@ -267,6 +267,8 @@ import {
 } from "../wakeups";
 import { FULL_CAPABILITIES } from "./capabilities";
 import {
+  CLAUDE_PROMPT_TYPES,
+  claudePromptAt,
   hookFailureId,
   readSaidWindow,
   readSessionChain,
@@ -277,6 +279,7 @@ import {
   withHarnessNote,
 } from "./claude-transcript";
 import { claudeCompactsAt, claudeEnvWindow } from "./compaction-points";
+import { lastPromptAt } from "./last-prompt";
 import { tailLines } from "./transcript-tail";
 
 /**
@@ -903,6 +906,16 @@ const sessionInfoAt = async (
   return (
     info && { ...structuredClone(info), lastModified: Math.floor(modified) }
   );
+};
+
+/**
+ * When the person last sent a prompt in the transcript at `file`, as the
+ * listing carries it (core `NeutralSessionInfo.wroteAt`): read backward from
+ * its end, kept until the file changes (last-prompt.ts).
+ */
+const wroteIn = async (file: string): Promise<{ wroteAt?: number }> => {
+  const at = await lastPromptAt(file, CLAUDE_PROMPT_TYPES, claudePromptAt);
+  return at === undefined ? {} : { wroteAt: at };
 };
 
 /** The session's transcript file, or an error naming the session when none exists. */
@@ -5274,13 +5287,18 @@ class ClaudeHarness implements Harness {
         }
       }
     }
-    const read = await listingRead(files, ({ file, sessionId }) =>
-      sessionInfoAt(file, sessionId)
-    );
+    const read = await listingRead(files, async ({ file, sessionId }) => {
+      const info = await sessionInfoAt(file, sessionId);
+      return info && { ...toInfo(info), ...(await wroteIn(file)) };
+    });
+    const ownDated = await listingRead(own, async (info) => {
+      const file = await claudeSessionFile(info.sessionId, dir);
+      return { ...toInfo(info), ...(file ? await wroteIn(file) : {}) };
+    });
     return [
-      ...own,
-      ...read.filter((info): info is SDKSessionInfo => info !== undefined),
-    ].map(toInfo);
+      ...ownDated,
+      ...read.filter((info): info is NeutralSessionInfo => info !== undefined),
+    ];
   }
 
   async getSessionInfo(
@@ -5292,7 +5310,7 @@ class ClaudeHarness implements Harness {
       return;
     }
     const info = await sessionInfoAt(file, sessionKey);
-    return info ? toInfo(info) : undefined;
+    return info ? { ...toInfo(info), ...(await wroteIn(file)) } : undefined;
   }
 
   async getSessionMessages(

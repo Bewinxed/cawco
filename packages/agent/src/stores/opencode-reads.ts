@@ -102,6 +102,8 @@ export interface StoredSession {
   time_created: number;
   time_updated: number;
   title: string | null;
+  /** When the person last sent a message in it (its last `user` message's `time_created`); null when none. */
+  wrote_at: number | null;
 }
 
 /** What the session listing narrows to: one directory's root sessions, or one session by id, root or not. */
@@ -111,9 +113,17 @@ export interface SessionQuery {
 }
 
 /**
- * The root sessions in the database at `path`, `query` narrowing them. A
- * database 2.0 is still making (an account server's first start) has no
- * sessions table yet, and so no session.
+ * The root sessions in the database at `path`, `query` narrowing them, each
+ * with its last `user` message's time, in the one query. A database 2.0 is
+ * still making (an account server's first start) has no sessions table yet,
+ * and so no session.
+ *
+ * The last user message is read through 2.0's index on `session_message`
+ * (`session_id`, `time_created`, `id`: packages/core/src/session/sql.ts
+ * `session_message_session_time_created_id_idx`), newest first, to the first
+ * `user` row: a session's own rows, never the table. A user row in 2.0 is
+ * the person's prompt; a tool's answer is in the assistant message's
+ * content, not a row of its own.
  */
 const sessionsIn = (
   path: string,
@@ -131,7 +141,11 @@ const sessionsIn = (
     }
     return db
       .query<StoredSession, [string | null, string | null]>(
-        `SELECT id, title, directory, time_created, time_updated FROM session_v2
+        `SELECT id, title, directory, time_created, time_updated,
+             (SELECT m.time_created FROM session_message m
+                WHERE m.session_id = session_v2.id AND m.type = 'user'
+                ORDER BY m.time_created DESC LIMIT 1) AS wrote_at
+           FROM session_v2
            WHERE (CASE WHEN ?2 IS NULL THEN parent_id IS NULL ELSE id = ?2 END)
              AND (?1 IS NULL OR directory = ?1)`
       )

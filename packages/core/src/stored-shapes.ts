@@ -3104,6 +3104,7 @@ const NeutralSessionInfoShape = declared(
     sessionId: z.string(),
     summary: z.string().optional(),
     tag: z.string().optional(),
+    wroteAt: z.number().optional(),
   }),
   "NeutralSessionInfo",
   "packages/core/src/harness.ts"

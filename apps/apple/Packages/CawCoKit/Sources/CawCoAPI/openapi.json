@@ -38553,6 +38553,10 @@
           },
           "tag": {
             "type": "string"
+          },
+          "wroteAt": {
+            "description": "When the person last sent a prompt in it (ms epoch), read from the\ntranscript at its source: Claude's last `user` record that holds a\nprompt, not a tool result; OpenCode's last `user` message; pi's last\n`user` message. Absent when it holds none. What a stored transcript is\nplaced by, as a listed session is by its `wroteAt`: an agent's reply\nnever moves it, where {@link lastModified} moves on every write.",
+            "type": "number"
           }
         },
         "required": [
