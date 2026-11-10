@@ -15,8 +15,9 @@ import { SvelteMap } from "svelte/reactivity";
 import type { ConversationFind } from "../find/conversation-find.svelte";
 import type { SendExtras } from "../send-store";
 import type { SuggestCandidate } from "../suggest.svelte";
-import type { ComposerAsk, ComposerFoot } from "../transcript/Composer.svelte";
 import type { ComposerDraft } from "../transcript/composer-draft.svelte";
+import type { ComposerFoot } from "../transcript/dock-foot.svelte";
+import type { ComposerAsk } from "../transcript/grown-ask.svelte";
 
 /** Everything the composer takes from the conversation it is writing to. */
 export interface ComposerBinding {

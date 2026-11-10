@@ -117,7 +117,7 @@
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
-  import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
+  import Composer from "./transcript/Composer.svelte";
   import ConnectCard from "./transcript/ConnectCard.svelte";
   import {
     ComposerDraft,
@@ -130,6 +130,7 @@
   } from "./transcript/connect-sign-ins.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import { followSends } from "./transcript/follow-sends.svelte";
+  import type { ComposerAsk } from "./transcript/grown-ask.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import { parkedAsks } from "./transcript/present";
