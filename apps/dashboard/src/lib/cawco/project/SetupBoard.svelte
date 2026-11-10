@@ -75,16 +75,15 @@
   } = $props();
 
   /** What else the page asks, each in words; a card with no words of its own is left to the page. */
+  const alsoAsks = new Map(Object.entries(setupWords.alsoAsks));
   const also = $derived(
     cards.flatMap((id) => {
-      const part = Object.hasOwn(setupWords.alsoAsks, id)
-        ? setupWords.alsoAsks[id as keyof typeof setupWords.alsoAsks]
-        : undefined;
+      const part = alsoAsks.get(id);
       return part ? [part] : [];
     })
   );
   const blocks = (one: BlockedRequest): boolean =>
-    (one.request.input as { blocks?: unknown }).blocks === true;
+    one.request.input.blocks === true;
 
   /** An answer to one of his questions on the board, as his composer would send it; hands back its command's id. */
   const answer = (
@@ -108,7 +107,7 @@
   function answerCaw() {
     const first = firstOptions();
     if (onBoard && first) {
-      first.focus({ focusVisible: true } as FocusOptions);
+      first.focus({ focusVisible: true });
       return;
     }
     onanswercaw();

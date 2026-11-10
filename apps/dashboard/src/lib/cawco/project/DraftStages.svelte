@@ -103,8 +103,7 @@
       id="{uid}-aim"
       look="prose"
       measure="column"
-      oninput={(event: Event) =>
-        onaim((event.currentTarget as HTMLTextAreaElement).value)}
+      oninput={(event) => onaim(event.currentTarget.value)}
       value={aim}
     />
   </div>
