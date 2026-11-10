@@ -42,6 +42,9 @@ const KIND_WORDS = new Set([
   "file",
 ]);
 
+/** A result that has a handle: one a chip can be made of. */
+export type Handled = FindResult & { handle: string };
+
 export interface Chip {
   /** The handle the hub resolves. */
   handle: string;
@@ -87,12 +90,8 @@ const tipOf = (result: FindResult, now: number): string => {
 };
 
 /** The chip `result` becomes, beside the other candidates it was chosen from. */
-function chipOf(
-  result: FindResult,
-  candidates: FindResult[],
-  now: number
-): Chip {
-  const handle = result.handle as string;
+function chipOf(result: Handled, candidates: Handled[], now: number): Chip {
+  const { handle } = result;
   const title = result.title.trim();
   const twins = candidates.filter(
     (c) => c !== result && c.title.trim().toLowerCase() === title.toLowerCase()
@@ -141,7 +140,7 @@ export function markMentions(
   let out = "";
   let from = 0;
   for (const match of words.matchAll(SERIALISED)) {
-    const [whole, label, handle] = match as unknown as [string, string, string];
+    const [whole, label, handle] = match;
     if (!(said || SESSION_HANDLE.test(handle))) {
       continue;
     }
@@ -231,13 +230,13 @@ export class MentionState {
   );
 
   /** Candidates for the words typed now (the last answer while the next is asked). */
-  candidates = $derived.by(() => {
+  candidates: Handled[] = $derived.by(() => {
     if (this.answer.state !== "ok") {
-      return [] as FindResult[];
+      return [];
     }
     const here = this.#here();
     return this.answer.value.results
-      .filter((r) => r.handle !== null)
+      .filter((r): r is Handled => r.handle !== null)
       .filter(
         (r) =>
           !(
@@ -299,7 +298,7 @@ export class MentionState {
     }
   }
 
-  chip(result: FindResult | null = this.active): Chip | null {
+  chip(result: Handled | null = this.active): Chip | null {
     if (!result) {
       return null;
     }

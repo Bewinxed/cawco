@@ -267,10 +267,10 @@ export class FinderState {
   );
 
   /** Project words he typed that name a project in the answer: each becomes a chip. */
-  projectChips = $derived.by(() => {
+  projectChips = $derived.by((): string[] => {
     const answer = this.namesNow;
     if (!answer) {
-      return [] as string[];
+      return [];
     }
     const names = new Set(
       answer.results
@@ -300,7 +300,7 @@ export class FinderState {
    * than the wait grace, nor typed matches at the doorway: past it, an
    * answer of the other sort is let go. A failed ask leaves none.
    */
-  shownNameRows = $derived.by(() => {
+  shownNameRows = $derived.by((): Spoken[] => {
     const { names } = this;
     const sameSort =
       names.state === "ok" && (names.for === "") === (this.asked === "");
@@ -308,7 +308,7 @@ export class FinderState {
     const answer =
       names.state === "ok" && (sameSort || inFlight) ? names.value : null;
     if (!answer) {
-      return [] as Spoken[];
+      return [];
     }
     return answer.results
       .filter(isSpoken)
@@ -340,7 +340,7 @@ export class FinderState {
       }
       entries.push(
         results.length === 1
-          ? { type: "one", result: results[0] as FindResult }
+          ? { type: "one", result: results[0] }
           : { type: "fold", kind, results }
       );
     }
@@ -348,10 +348,10 @@ export class FinderState {
   });
 
   /** "Where it was said": sessions the machines found it in, not already above. */
-  saidRows = $derived.by(() => {
+  saidRows = $derived.by((): Spoken[] => {
     const answer = this.everywhereShown;
     if (!(answer && this.typed)) {
-      return [] as Spoken[];
+      return [];
     }
     const above = new Set(this.shownNameRows.map(keyOf));
     return answer.results
@@ -409,9 +409,9 @@ export class FinderState {
     return this.everywhere.state === "refused" ? this.everywhere.detail : null;
   });
 
-  waitingItems = $derived.by(() => {
+  waitingItems = $derived.by((): WaitingItem[] => {
     if (this.waiting.state !== "ok") {
-      return [] as WaitingItem[];
+      return [];
     }
     const items = [...this.waiting.value.items];
     if (this.waitingSort === "project") {
@@ -660,7 +660,7 @@ export class FinderState {
       stops.findIndex((s) => s.key === this.active?.key)
     );
     const next = Math.min(stops.length - 1, Math.max(0, at + step));
-    this.chosen = (stops[next] as Stop).key;
+    this.chosen = stops[next].key;
   }
 
   /** → on the active stop: peek a row, unfold a fold, open the waiting list. */
@@ -727,7 +727,7 @@ export class FinderState {
     const { words } = this.parsed;
     let out = words;
     for (let i = 0; i + lower.length <= words.length; i += 1) {
-      if (lower.every((w, j) => (words[i + j] as string).toLowerCase() === w)) {
+      if (lower.every((w, j) => words[i + j].toLowerCase() === w)) {
         out = [...words.slice(0, i), ...words.slice(i + lower.length)];
         break;
       }
