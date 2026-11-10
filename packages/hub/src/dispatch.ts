@@ -138,6 +138,7 @@ import type {
 import type { StageKind, TaskMover } from "@cawco/core/views";
 import { judgedWords } from "@cawco/core/words/judged";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
+import type { TellProblem } from "./caw-problems";
 import type { DbShape } from "./db";
 import type { WorkItemRow } from "./db/project-work";
 import type { ProjectRow } from "./db/projects";
@@ -212,7 +213,7 @@ export interface DispatchDeps {
   readonly conversationFor: (
     projectId: string,
     by: Origin
-  ) => Promise<InstanceRow | undefined>;
+  ) => Promise<InstanceRow | TellProblem | undefined>;
   readonly db: Pick<
     DbShape,
     | "accounts"
@@ -876,14 +877,14 @@ export const createDispatcher = ({
     db.getInstancesByIds([id])[0] as InstanceRow | undefined;
 
   /** The project's conversation, started now when it has none; undefined while its switch is off. */
-  const conversationOf = async (
-    project: ProjectRow,
-    by: Origin = "event"
-  ): Promise<InstanceRow | undefined> => {
+  const conversationOf = async (project: ProjectRow, by: Origin = "event") => {
     const row =
       by === "you" || project.eventsOn
         ? await conversationFor(project.id, by)
         : undefined;
+    if (row instanceof ElysiaStatus) {
+      return row;
+    }
     return row && !parentProblem(row, project.id) ? row : undefined;
   };
 
@@ -1644,14 +1645,12 @@ export const createDispatcher = ({
     }
     const { project, ready } = look;
     const slots = project.maxAttempts - look.live;
-    let reportsTo: InstanceRow | undefined;
-    try {
-      reportsTo = await conversationOf(project);
-    } catch (error) {
+    const reportsTo = await conversationOf(project);
+    if (reportsTo instanceof ElysiaStatus) {
       return await unreported(
         projectId,
         ready.slice(0, slots),
-        failure(error).message
+        reportsTo.response.detail
       );
     }
     if (reportsTo) {
@@ -1731,14 +1730,12 @@ export const createDispatcher = ({
     if (mover && !parentProblem(mover, project.id)) {
       return mover;
     }
-    let caw: InstanceRow | undefined;
-    try {
-      caw = await conversationOf(project);
-    } catch (error) {
+    const caw = await conversationOf(project);
+    if (caw instanceof ElysiaStatus) {
       note(
         project.id,
         task,
-        `${how}, but Caw, who takes its report, did not start: ${failure(error).message}`
+        `${how}, but Caw, who takes its report, did not start: ${caw.response.detail}`
       );
       return;
     }
@@ -2383,6 +2380,9 @@ export const createDispatcher = ({
     }
     if (!parentInstanceId) {
       const conversation = await conversationOf(project, "you");
+      if (conversation instanceof ElysiaStatus) {
+        return conversation;
+      }
       return conversation
         ? conversation
         : problem(409, {

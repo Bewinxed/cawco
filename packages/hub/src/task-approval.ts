@@ -110,7 +110,7 @@ export const createTaskApproval = ({
       text: approvalText(approval, task.title, filer),
     });
     console.log(
-      `[tasks] ${id} in ${projectId}: approved; ${why}: Caw ${woke.woke ? "hears it" : `was not woken: ${woke.why}`}`
+      `[tasks] ${id} in ${projectId}: approved; ${why}: Caw ${woke instanceof ElysiaStatus ? `was not woken: ${woke.response.detail}` : "hears it"}`
     );
   };
 

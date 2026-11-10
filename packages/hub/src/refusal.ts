@@ -1,8 +1,4 @@
-import {
-  type ElysiaStatus,
-  problem,
-  type ValidationErrorResponse,
-} from "elysia";
+import type { ElysiaStatus, ValidationErrorResponse } from "elysia";
 
 /**
  * Any problem Elysia's `problem(status, { code, detail })` returns, read
@@ -60,28 +56,3 @@ export class StatusRefusal<Code extends number = RefusalCode> extends Error {
     this.status = code;
   }
 }
-
-type RefusalKind = new (code: RefusalCode, message: string) => StatusRefusal;
-
-/** The `refuse` that throws a module's own refusal. */
-export const refuser =
-  (Kind: RefusalKind) =>
-  (code: RefusalCode, message: string): never => {
-    throw new Kind(code, message);
-  };
-
-const rethrow = (error: unknown): never => {
-  throw error;
-};
-
-/** A thrown refusal of `Kind` as the route's {@link refusal}, under `code`; anything else goes to `otherwise`, thrown on by default. */
-export const refusalAnswer =
-  <const Code extends string, R = never>(
-    Kind: RefusalKind,
-    code: Code,
-    otherwise: (error: unknown) => R = rethrow
-  ) =>
-  (error: unknown) =>
-    error instanceof Kind
-      ? problem(error.status, { code, detail: error.message })
-      : otherwise(error);

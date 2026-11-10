@@ -88,6 +88,7 @@ import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
+import type { LeadHomeProblem } from "./caw-problems";
 import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import type { Origin } from "./db/schema";
@@ -117,12 +118,7 @@ import {
   readFolderFile,
   writeFolderFile,
 } from "./project-folder";
-import {
-  type AnyProblem,
-  refusalAnswer,
-  refuser,
-  StatusRefusal,
-} from "./refusal";
+import type { AnyProblem } from "./refusal";
 import type { CawToolName } from "./roles";
 import {
   SETUP_CARDS,
@@ -147,11 +143,14 @@ export interface ViewPlace {
 }
 
 /** The harness a change names, refused when CawCo runs none of that name; undefined when it names none. */
-const harnessOf = (asked: string | undefined): HarnessKind | undefined =>
+const harnessOf = (asked: string | undefined) =>
   asked === undefined
     ? undefined
     : (harnessNamed(asked) ??
-      refuse(400, `CawCo runs no harness called ${asked}.`));
+      problem(400, {
+        code: "caw-harness-unknown",
+        detail: `CawCo runs no harness called ${asked}.`,
+      }));
 
 /**
  * The model Caw runs after a change: the one it names (blank is the
@@ -439,14 +438,17 @@ const STAGES_FILE = "stages.md";
 /** A project's delegate types: a write there is a proposal the person approves (memory.ts `proposeType`). */
 const DELEGATES_DIR = "delegates/";
 
-/** stages.md as Caw writes it, refused with what does not read. */
-const stagesRead = (body: string | Uint8Array): void => {
+/** stages.md as Caw writes it, refused with what does not read; undefined when it reads. */
+const stagesRead = (body: string | Uint8Array) => {
   const reading = readStages(
     typeof body === "string" ? body : new TextDecoder().decode(body)
   );
-  if (!reading.ok) {
-    throw new Error(`stages.md was not written: ${reading.problems.join(" ")}`);
-  }
+  return reading.ok
+    ? undefined
+    : problem(422, {
+        code: "caw-stages-unfit",
+        detail: `stages.md was not written: ${reading.problems.join(" ")}`,
+      });
 };
 
 /**
@@ -466,15 +468,19 @@ const typeText = (
   rel: string,
   body: string | Uint8Array,
   approved: boolean
-): string => {
+) => {
   if (typeof body !== "string") {
-    throw new Error(
-      `${rel} was not ${approved ? "written" : "proposed"}: a delegate type is text, not bytes.`
-    );
+    return problem(422, {
+      code: "caw-delegate-type-bytes",
+      detail: `${rel} was not ${approved ? "written" : "proposed"}: a delegate type is text, not bytes.`,
+    });
   }
   const misfit = approved ? typeFileProblem(rel, body) : undefined;
   if (misfit) {
-    throw new Error(`${rel} was not written: ${misfit}`);
+    return problem(422, {
+      code: "caw-delegate-type-unfit",
+      detail: `${rel} was not written: ${misfit}`,
+    });
   }
   return body;
 };
@@ -493,13 +499,8 @@ const errorWords = (error: unknown): string =>
 const CAW_OFF =
   "Events don't reach this project's conversation while its switch is off.";
 
-/** A refusal a route answers with its status. */
-class CawRefusal extends StatusRefusal {}
-
 /** Why a send went nowhere when its record names no reason. */
 const NOT_TAKEN = "Its session didn't take the message.";
-
-const refuse = refuser(CawRefusal);
 
 export interface CawDeps {
   /** The project's conversation ended a turn (project-starters.ts asks its starters again). */
@@ -552,7 +553,9 @@ export interface CawDeps {
    */
   readonly leadHome: (
     projectId: string
-  ) => Promise<{ machineId: string; cwd: string } | undefined>;
+  ) => Promise<
+    { machineId: string; cwd: string } | LeadHomeProblem | undefined
+  >;
   /** The machines online now, and the name CawCo shows a machine by. */
   readonly machines: {
     name: (machineId: string) => string;
@@ -650,13 +653,16 @@ export const createCaw = ({
   workPlace,
 }: CawDeps) => {
   /** Conversations being started now, by project: one start per project at a time. */
-  const starting = new Map<string, Promise<InstanceRow>>();
+  const starting = new Map<string, ReturnType<typeof startConversation>>();
   /** The session each start in {@link starting} is making, by project, once its id is minted. */
   const startingIds = new Map<string, string>();
 
   const projectOf = (projectId: string) =>
     db.project(projectId) ??
-    refuse(404, `The hub keeps no project ${projectId}.`);
+    problem(404, {
+      code: "caw-project-unknown",
+      detail: `The hub keeps no project ${projectId}.`,
+    });
 
   const row = (id: string): InstanceRow | undefined =>
     db.getInstancesByIds([id])[0] as InstanceRow | undefined;
@@ -678,9 +684,7 @@ export const createCaw = ({
   };
 
   /** The project's conversation, when it has one the hub can still wake. */
-  const standing = (
-    project: ReturnType<typeof projectOf>
-  ): InstanceRow | undefined => {
+  const standing = (project: ProjectRow): InstanceRow | undefined => {
     const current = project.conversationInstanceId
       ? row(project.conversationInstanceId)
       : undefined;
@@ -697,7 +701,7 @@ export const createCaw = ({
    * when its place is one.
    */
   const checkoutFor = (
-    project: ReturnType<typeof projectOf>
+    project: ProjectRow
   ): { cwd: string; machineId: string } | undefined => {
     const place = workPlace(project);
     return place.kind === "checkout" ? place : undefined;
@@ -709,9 +713,7 @@ export const createCaw = ({
    * its own ({@link CawDeps.leadHome}). The conversation cuts no workspace,
    * so a project whose checkouts are all away still has one.
    */
-  const placeFor = async (
-    project: ReturnType<typeof projectOf>
-  ): Promise<{ machineId: string; cwd: string } | undefined> => {
+  const placeFor = async (project: ProjectRow) => {
     const checkout = checkoutFor(project);
     return checkout
       ? { machineId: checkout.machineId, cwd: checkout.cwd }
@@ -719,7 +721,7 @@ export const createCaw = ({
   };
 
   /** Why the conversation could not start for the project now, on or off, or null. */
-  const problemOf = (project: ReturnType<typeof projectOf>): string | null => {
+  const problemOf = (project: ProjectRow): string | null => {
     if (standing(project) || checkoutFor(project)) {
       return null;
     }
@@ -731,7 +733,7 @@ export const createCaw = ({
    * nobody chose, a machine refusing it), by project, until a start goes:
    * the project's head says it ({@link view}).
    */
-  const startRefusals = new Map<string, string>();
+  const startProblems = new Map<string, string>();
 
   /**
    * The permission mode a start of the project's conversation takes for
@@ -742,7 +744,7 @@ export const createCaw = ({
    * that machine (launches.ts `settleMode`).
    */
   const modeFor = (
-    project: ReturnType<typeof projectOf>,
+    project: ProjectRow,
     event: Pick<HubEvent, "route" | "routine"> | undefined
   ): OfferedMode | undefined =>
     (event?.route ? db.ingress.route(event.route)?.mode : undefined) ??
@@ -760,20 +762,25 @@ export const createCaw = ({
    * says it, while no machine is online.
    */
   const startOf = async (
-    project: ReturnType<typeof projectOf>,
+    project: ProjectRow,
     mode: OfferedMode | undefined
-  ): Promise<CawStart> => {
-    const place =
-      (await placeFor(project)) ??
-      refuse(409, problemOf(project) ?? CAW_NO_MACHINE);
+  ) => {
+    const place = await placeFor(project);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
+    if (!place) {
+      return problem(409, { code: "caw-no-machine", detail: CAW_NO_MACHINE });
+    }
     const harness = project.cawHarness;
-    return {
+    const start: CawStart = {
       machineId: place.machineId,
       cwd: place.cwd,
       harness,
       model: project.cawModel ?? null,
       permissionMode: mode ?? db.chosenMode(place.machineId, harness) ?? null,
     };
+    return start;
   };
 
   /**
@@ -831,11 +838,11 @@ export const createCaw = ({
    * deleted, the project's conversation stays as it was, and why stands as
    * the project's `problem` ({@link view}) until a start goes.
    */
-  const startConversation = async (
-    project: ReturnType<typeof projectOf>,
-    start: Start
-  ): Promise<{ conversation: InstanceRow; sent: string }> => {
+  const startConversation = async (project: ProjectRow, start: Start) => {
     const how = await startOf(project, start.mode);
+    if (how instanceof ElysiaStatus) {
+      return how;
+    }
     const instanceId = crypto.randomUUID();
     startingIds.set(project.id, instanceId);
     try {
@@ -851,9 +858,10 @@ export const createCaw = ({
         requestId: crypto.randomUUID(),
       });
     } catch (error) {
-      startRefusals.set(project.id, errorWords(error));
+      const why = errorWords(error);
+      startProblems.set(project.id, why);
       projectsChanged();
-      throw error;
+      return problem(502, { code: "caw-failed", detail: why });
     }
     const conversation = row(instanceId);
     const sent = conversation
@@ -864,14 +872,14 @@ export const createCaw = ({
       const why = conversationWords.firstSendRefused(
         "why" in sent ? sent.why : NOT_TAKEN
       );
-      startRefusals.set(project.id, why);
+      startProblems.set(project.id, why);
       projectsChanged();
       console.warn(
         `[caw] ${project.name}: its conversation's start was undone (${instanceId}): ${why}`
       );
-      return refuse(409, why);
+      return problem(409, { code: "caw-start-undone", detail: why });
     }
-    startRefusals.delete(project.id);
+    startProblems.delete(project.id);
     setConversation(project.id, instanceId);
     console.log(
       `[caw] ${project.name}: started its conversation on ${project.cawHarness} (${instanceId})`
@@ -882,7 +890,7 @@ export const createCaw = ({
     return { conversation, sent: sent.uuid };
   };
 
-  /** The words that start the conversation, sent: a refusal thrown on the way is why they did not go. */
+  /** The words that start the conversation, sent: an error thrown on the way is why they did not go. */
   const firstSend = (
     conversation: InstanceRow,
     start: Start
@@ -901,16 +909,13 @@ export const createCaw = ({
    * Callers at once share one start; `started` says whether this call's
    * words went out with it, as the send `sent`.
    */
-  const conversationFor = async (
-    projectId: string,
-    start: Start
-  ): Promise<
-    | { row: InstanceRow; sent?: string | undefined; started: boolean }
-    | undefined
-  > => {
+  const conversationFor = async (projectId: string, start: Start) => {
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     if (start.by === "event" && !project.eventsOn) {
-      return undefined;
+      return;
     }
     const current = standing(project);
     if (current) {
@@ -918,51 +923,32 @@ export const createCaw = ({
     }
     const pending = starting.get(projectId);
     if (pending !== undefined) {
-      return { row: await pending, started: false };
+      // A start that fails is the starter's to answer; those sharing it hear it too.
+      const shared = await pending;
+      return shared instanceof ElysiaStatus
+        ? shared
+        : { row: shared.conversation, started: false };
     }
     const begun = startConversation(project, start).finally(() => {
       starting.delete(projectId);
       startingIds.delete(projectId);
     });
-    const shared = begun.then((one) => one.conversation);
-    // A start that fails is the starter's to answer; those sharing it hear it too.
-    shared.catch(() => undefined);
-    starting.set(projectId, shared);
+    starting.set(projectId, begun);
     const made = await begun;
-    return { row: made.conversation, sent: made.sent, started: true };
+    return made instanceof ElysiaStatus
+      ? made
+      : { row: made.conversation, sent: made.sent, started: true };
   };
 
-  /**
-   * What one send to the conversation came to: its session took it, or not
-   * and why (`why`, the hub's sentence), with what was thrown when
-   * something refused it.
-   */
-  type Told =
-    | { instanceId: string; send: string; woke: true }
-    | {
-        thrown?: unknown;
-        why: string;
-        woke: false;
-      };
-
   /** Why `event` goes nowhere now: events are off, or the project is past its cap; undefined when it goes. */
-  const heldBack = (
-    project: ReturnType<typeof projectOf>,
-    event: ProjectEvent
-  ): Extract<Told, { woke: false }> | undefined => {
-    const route = routeOf(event);
-    if (route === "event" && !project.eventsOn) {
-      return { woke: false, why: CAW_OFF };
+  const heldBack = (project: ProjectRow, event: ProjectEvent) => {
+    if (routeOf(event) === "event" && !project.eventsOn) {
+      return problem(409, { code: "caw-off", detail: CAW_OFF });
     }
     const capped = caps.quiets(project.id);
-    if (capped === undefined) {
-      return;
-    }
-    return {
-      woke: false,
-      why: capped,
-      ...(route === "you" ? { thrown: new CawRefusal(409, capped) } : {}),
-    };
+    return capped === undefined
+      ? undefined
+      : problem(409, { code: "caw-spend-capped", detail: capped });
   };
 
   /**
@@ -973,41 +959,43 @@ export const createCaw = ({
    * {@link modeFor}'s mode, with `skills` in its context first). The
    * person's words and acts reach it on or off; an event, only while the
    * switch is on. Past the project's spend cap nothing goes. There is no
-   * timer behind it.
+   * timer behind it. Answers the conversation's session and the send, or
+   * why nothing went.
    */
   const tell = async (
     projectId: string,
     event: ProjectEvent,
     skills?: readonly string[]
-  ): Promise<Told> => {
+  ) => {
     const project = projectOf(projectId);
-    const refused = heldBack(project, event);
-    if (refused) {
-      return refused;
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const held = heldBack(project, event);
+    if (held) {
+      return held;
     }
     const said = (session: InstanceRow) => saidOf(project, session.cwd, event);
     const mode = modeFor(project, event.by === "event" ? event : undefined);
-    let conversation: Awaited<ReturnType<typeof conversationFor>>;
-    try {
-      conversation = await conversationFor(projectId, {
-        by: routeOf(event),
-        first: said,
-        ...(skills ? { skills } : {}),
-        ...(mode ? { mode } : {}),
-      });
-    } catch (error) {
-      return { woke: false, why: errorWords(error), thrown: error };
+    const conversation = await conversationFor(projectId, {
+      by: routeOf(event),
+      first: said,
+      ...(skills ? { skills } : {}),
+      ...(mode ? { mode } : {}),
+    });
+    if (conversation instanceof ElysiaStatus) {
+      return conversation;
     }
     if (!conversation) {
-      return { woke: false, why: CAW_OFF };
+      return problem(409, { code: "caw-off", detail: CAW_OFF });
     }
     const sent =
       conversation.started && conversation.sent
         ? { uuid: conversation.sent }
         : message(conversation.row, said(conversation.row));
     return "uuid" in sent
-      ? { woke: true, instanceId: conversation.row.id, send: sent.uuid }
-      : { woke: false, why: sent.why };
+      ? { instanceId: conversation.row.id, send: sent.uuid }
+      : problem(409, { code: "caw-send-not-taken", detail: sent.why });
   };
 
   /** {@link tell} for the tellers that only log what did not go: an event is never lost silently. */
@@ -1020,8 +1008,8 @@ export const createCaw = ({
     };
     tell(projectId, event).then(
       (told) => {
-        if (!told.woke) {
-          said(told.why);
+        if (told instanceof ElysiaStatus) {
+          said(told.response.detail);
         }
       },
       (error: unknown) => said(errorWords(error))
@@ -1030,22 +1018,13 @@ export const createCaw = ({
 
   /**
    * {@link tell} for the person's words or acts from a page (a view's ask, a
-   * decided page): what refused them is thrown, as the page's answer;
-   * answers the conversation's session and the send.
+   * decided page): what held them back is the page's answer.
    */
-  const tellYours = async (
-    projectId: string,
-    event: YourWords | YourAct
-  ): Promise<{ instanceId: string; send: string }> => {
-    const told = await tell(projectId, event);
-    if (told.woke) {
-      return { instanceId: told.instanceId, send: told.send };
-    }
-    throw told.thrown ?? new CawRefusal(409, told.why);
-  };
+  const tellYours = (projectId: string, event: YourWords | YourAct) =>
+    tell(projectId, event);
 
   /** Ends the project's conversation and clears it: its harness or model moved. */
-  const retire = (project: ReturnType<typeof projectOf>): void => {
+  const retire = (project: ProjectRow): void => {
     if (project.conversationInstanceId) {
       turnEnded(
         project.conversationInstanceId,
@@ -1062,7 +1041,7 @@ export const createCaw = ({
    * sessions (as its forget lists them) whose delegation chain tops at it,
    * each with what it is. Rows under it stand at the top.
    */
-  const initiated = (project: ReturnType<typeof projectOf>): CawRunning[] => {
+  const initiated = (project: ProjectRow): CawRunning[] => {
     const own = project.conversationInstanceId;
     const listed = stops.running(project.id).filter((session) => {
       const one = session.id === own ? undefined : row(session.id);
@@ -1098,7 +1077,7 @@ export const createCaw = ({
    * is its own, with nothing left to stop.
    */
   const foreignOf = (
-    project: ReturnType<typeof projectOf>,
+    project: ProjectRow,
     running: CawRunning[],
     ids: string[]
   ): string[] => {
@@ -1128,23 +1107,20 @@ export const createCaw = ({
    * conversation itself is a session like any other: it stays, for your
    * next words.
    */
-  const turnOff = (
-    project: ReturnType<typeof projectOf>,
-    choice: CawInitiated | undefined
-  ): void => {
+  const turnOff = (project: ProjectRow, choice: CawInitiated | undefined) => {
     const running = initiated(project);
     if (running.length > 0 && !choice) {
-      refuse(
-        409,
-        `The project's conversation started ${running.length === 1 ? "1 thing that is" : `${running.length} things that are`} still running. Name which stop (\`initiated: { stop: [...] }\`, none to let them all finish), then turn it off.`
-      );
+      return problem(409, {
+        code: "caw-initiated-unnamed",
+        detail: `The project's conversation started ${running.length === 1 ? "1 thing that is" : `${running.length} things that are`} still running. Name which stop (\`initiated: { stop: [...] }\`, none to let them all finish), then turn it off.`,
+      });
     }
     const foreign = foreignOf(project, running, choice?.stop ?? []);
     if (foreign.length > 0) {
-      refuse(
-        409,
-        `${foreign.join(", ")} ${foreign.length === 1 ? "wasn't" : "weren't"} started by the project's conversation, so nothing stopped and it is still on.`
-      );
+      return problem(409, {
+        code: "caw-initiated-foreign",
+        detail: `${foreign.join(", ")} ${foreign.length === 1 ? "wasn't" : "weren't"} started by the project's conversation, so nothing stopped and it is still on.`,
+      });
     }
     const stopping = new Set(choice?.stop ?? []);
     const stopped = running.filter((one) => stopping.has(one.id));
@@ -1167,9 +1143,12 @@ export const createCaw = ({
     }
   };
 
-  const view = (projectId: string): ProjectConversationView => {
+  const view = (projectId: string) => {
     const project = projectOf(projectId);
-    return {
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
+    const conversation: ProjectConversationView = {
       on: project.eventsOn,
       hearsTasks: project.hearsTasks,
       attemptsHearComments: project.attemptsHearComments,
@@ -1177,12 +1156,13 @@ export const createCaw = ({
       model: project.cawModel,
       mode: project.cawMode,
       instanceId: project.conversationInstanceId,
-      problem: problemOf(project) ?? startRefusals.get(projectId) ?? null,
+      problem: problemOf(project) ?? startProblems.get(projectId) ?? null,
       starting: starting.has(projectId),
       startingId: startingIds.get(projectId) ?? null,
       running: initiated(project),
       spendUsd: db.cawSpentSince(projectId, 0),
     };
+    return conversation;
   };
 
   /** Where a view was asked for, as the facts beside the person's words (the project-view skill says what to do with them). */
@@ -1198,9 +1178,10 @@ export const createCaw = ({
       return kept;
     }
     if (kept.includes(name)) {
-      throw new Error(
-        `“${name}” is a kept view already, standing where the person put it: draft its change without a page.`
-      );
+      return problem(409, {
+        code: "caw-view-kept",
+        detail: `“${name}” is a kept view already, standing where the person put it: draft its change without a page.`,
+      });
     }
   };
 
@@ -1268,8 +1249,12 @@ export const createCaw = ({
     };
   };
 
-  const bodyOf = (body: string): string =>
-    body.trim() || refuse(400, "A message needs words.");
+  const bodyOf = (body: string) =>
+    body.trim() ||
+    problem(400, {
+      code: "caw-message-empty",
+      detail: "A message needs words.",
+    });
 
   /**
    * The facts a setup page is built from, for `project_setup` (setup.ts
@@ -1280,11 +1265,14 @@ export const createCaw = ({
   const setupFacts = async (
     projectId: string,
     change: readonly SetupPart[]
-  ): Promise<SetupFacts> => {
+  ) => {
     const project = projectOf(projectId);
+    if (project instanceof ElysiaStatus) {
+      return project;
+    }
     const stages = await stagesFileOf(projectId);
     if (stages instanceof ElysiaStatus) {
-      throw new Error(stages.response.detail);
+      return stages;
     }
     const tasks: Record<string, string[]> = {};
     for (const indexed of db.taskIndex(projectId)) {
@@ -1293,7 +1281,7 @@ export const createCaw = ({
         `${indexed.id} “${indexed.title}”`,
       ];
     }
-    return {
+    const facts: SetupFacts = {
       name: project.name,
       named: project.name !== projectWords.placeholderName,
       tapped: project.tapped ?? null,
@@ -1318,6 +1306,7 @@ export const createCaw = ({
       areas: db.areas.list().map((one) => `${one.name} (id ${one.id})`),
       cards: SETUP_CARDS,
     };
+    return facts;
   };
 
   /** An area by its name; null for none, or one gone. */
@@ -1355,31 +1344,126 @@ export const createCaw = ({
    */
   const setupsSent = new Map<string, string>();
 
+  /**
+   * A `folder_write`'s file, once its session may write it: a delegate
+   * type waits for the person's approval unless `approved`, stages.md must
+   * read, any other file is committed as the session (`folder_write`).
+   */
+  const fileWritten = async (
+    calling: { actor: InstanceRow; project: ProjectRow },
+    rel: string,
+    body: string | Uint8Array,
+    approved: boolean,
+    toolUseId: string | undefined
+  ) => {
+    if (rel.startsWith(DELEGATES_DIR)) {
+      const type = typeText(rel, body, approved);
+      if (type instanceof ElysiaStatus) {
+        return type;
+      }
+      if (!approved) {
+        return await proposeType(calling.actor, rel, type, toolUseId);
+      }
+    }
+    if (rel === STAGES_FILE) {
+      const unfit = stagesRead(body);
+      if (unfit) {
+        return unfit;
+      }
+    }
+    const projectId = calling.project.id;
+    const committed = await writeFolderFile(projectId, rel, body, {
+      author: { name: boardTitle(calling.actor) },
+    });
+    if (committed instanceof ElysiaStatus) {
+      return committed;
+    }
+    folderChanged(projectId);
+    return { ok: true, path: rel, sha: committed.sha };
+  };
+
+  /**
+   * A change to the project's conversation written: its `next` switches, its
+   * model and harness (`moved`: the conversation went to another), every
+   * dashboard reading the projects again when any of them moved, and the
+   * events that waited going to it once it is turned on.
+   */
+  const configured = (
+    project: ProjectRow,
+    next: {
+      attemptsHearComments: boolean;
+      hearsTasks: boolean;
+      mode: OfferedMode | null;
+      on: boolean;
+    },
+    moves: {
+      harness: HarnessKind | undefined;
+      model: string | null;
+      moved: boolean;
+    }
+  ): void => {
+    db.setProjectCaw(project.id, {
+      eventsOn: next.on,
+      cawModel: moves.model,
+      cawMode: next.mode,
+      hearsTasks: next.hearsTasks,
+      attemptsHearComments: next.attemptsHearComments,
+      ...(moves.harness ? { cawHarness: moves.harness } : {}),
+    });
+    // Every dashboard's switch says where it stands now, not only the one
+    // that flipped it.
+    if (
+      moves.moved ||
+      next.on !== project.eventsOn ||
+      next.mode !== project.cawMode ||
+      next.hearsTasks !== project.hearsTasks ||
+      next.attemptsHearComments !== project.attemptsHearComments
+    ) {
+      projectsChanged();
+    }
+    if (next.on && !project.eventsOn) {
+      conversationStarted(project.id);
+    }
+  };
+
+  /** {@link api.notice} for a project the hub keeps. */
+  const noticeIn = (project: ProjectRow, note: ProjectNote): void => {
+    const kept = db.projectNotes.add(
+      project.id,
+      project.conversationInstanceId,
+      note
+    );
+    if (project.conversationInstanceId) {
+      noted(project.conversationInstanceId, kept);
+    }
+  };
+
   const api = {
     /**
      * The session an attempt nobody asked for reports to (dispatch.ts): the
      * project's conversation, started for that attempt when it has none.
      * Undefined for the hub's attempt while the switch is off.
      */
-    conversationFor: async (
-      projectId: string,
-      by: Origin
-    ): Promise<InstanceRow | undefined> => {
+    conversationFor: async (projectId: string, by: Origin) => {
       const project = projectOf(projectId);
+      if (project instanceof ElysiaStatus) {
+        return project;
+      }
       const mode = modeFor(project, undefined);
-      return (
-        await conversationFor(projectId, {
-          by,
-          first: (session) =>
-            saidOf(project, session.cwd, {
-              by: "event",
-              kind: "delegate-report",
-              trigger: `${by === "you" ? "the person" : "the hub"} started an attempt at one of its tasks`,
-              text: "Its report comes to you when it ends.",
-            }),
-          ...(mode ? { mode } : {}),
-        })
-      )?.row;
+      const conversation = await conversationFor(projectId, {
+        by,
+        first: (session) =>
+          saidOf(project, session.cwd, {
+            by: "event",
+            kind: "delegate-report",
+            trigger: `${by === "you" ? "the person" : "the hub"} started an attempt at one of its tasks`,
+            text: "Its report comes to you when it ends.",
+          }),
+        ...(mode ? { mode } : {}),
+      });
+      return conversation instanceof ElysiaStatus
+        ? conversation
+        : conversation?.row;
     },
     tell,
     tellQuietly,
@@ -1428,24 +1512,23 @@ export const createCaw = ({
      * or off. A project with no conversation yet keeps it for the one that
      * starts.
      */
-    notice(projectId: string, note: ProjectNote): void {
+    notice(projectId: string, note: ProjectNote) {
       const project = projectOf(projectId);
-      const kept = db.projectNotes.add(
-        projectId,
-        project.conversationInstanceId,
-        note
-      );
-      if (project.conversationInstanceId) {
-        noted(project.conversationInstanceId, kept);
+      if (project instanceof ElysiaStatus) {
+        return project;
       }
+      noticeIn(project, note);
     },
 
     /**
      * What the project has spent: today and this month in the hub's zone,
      * its conversation's share and each task's attempts.
      */
-    spend(projectId: string): ProjectSpend {
+    spend(projectId: string) {
       const project = projectOf(projectId);
+      if (project instanceof ElysiaStatus) {
+        return project;
+      }
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const month = new Date(today);
@@ -1466,7 +1549,7 @@ export const createCaw = ({
           usd: (held?.usd ?? 0) + item.usd,
         });
       }
-      return {
+      const ledger: ProjectSpend = {
         todayStart,
         monthStart,
         todayUsd: spent.todayUsd,
@@ -1481,6 +1564,7 @@ export const createCaw = ({
           .filter((attempt) => attempt.usd > 0 || attempt.lastAt >= monthStart)
           .sort((a, b) => b.lastAt - a.lastAt),
       };
+      return ledger;
     },
 
     /**
@@ -1507,45 +1591,39 @@ export const createCaw = ({
         model?: string | null;
         on?: boolean;
       }
-    ): ProjectConversationView {
+    ) {
       const project = projectOf(projectId);
+      if (project instanceof ElysiaStatus) {
+        return project;
+      }
       const harness = harnessOf(change.harness);
+      if (harness instanceof ElysiaStatus) {
+        return harness;
+      }
       const on = change.on ?? project.eventsOn;
       const rehomed = harness !== undefined && harness !== project.cawHarness;
       const model = modelAfter(project.cawModel, change.model, rehomed);
       const moved = rehomed || model !== project.cawModel;
       if (!on && project.eventsOn) {
-        turnOff(project, change.initiated);
+        const held = turnOff(project, change.initiated);
+        if (held) {
+          return held;
+        }
       }
       if (moved) {
         retire(project);
       }
-      const mode = change.mode === undefined ? project.cawMode : change.mode;
-      const hearsTasks = change.hearsTasks ?? project.hearsTasks;
-      const attemptsHearComments =
-        change.attemptsHearComments ?? project.attemptsHearComments;
-      db.setProjectCaw(projectId, {
-        eventsOn: on,
-        cawModel: model,
-        cawMode: mode,
-        hearsTasks,
-        attemptsHearComments,
-        ...(harness ? { cawHarness: harness } : {}),
-      });
-      // Every dashboard's switch says where it stands now, not only the one
-      // that flipped it.
-      if (
-        on !== project.eventsOn ||
-        moved ||
-        mode !== project.cawMode ||
-        hearsTasks !== project.hearsTasks ||
-        attemptsHearComments !== project.attemptsHearComments
-      ) {
-        projectsChanged();
-      }
-      if (on && !project.eventsOn) {
-        conversationStarted(projectId);
-      }
+      configured(
+        project,
+        {
+          on,
+          mode: change.mode === undefined ? project.cawMode : change.mode,
+          hearsTasks: change.hearsTasks ?? project.hearsTasks,
+          attemptsHearComments:
+            change.attemptsHearComments ?? project.attemptsHearComments,
+        },
+        { model, harness, moved }
+      );
       return view(projectId);
     },
 
@@ -1554,9 +1632,11 @@ export const createCaw = ({
      * panel's first words, project/conversation.ts on the dashboard): as
      * every start of it does ({@link startOf}), in the project's mode.
      */
-    start(projectId: string): Promise<CawStart> {
+    start(projectId: string) {
       const project = projectOf(projectId);
-      return startOf(project, modeFor(project, undefined));
+      return project instanceof ElysiaStatus
+        ? project
+        : startOf(project, modeFor(project, undefined));
     },
 
     /**
@@ -1569,20 +1649,26 @@ export const createCaw = ({
      * merely in the project is not one. Refused for a session the hub does
      * not list, one of another project, or one discarded.
      */
-    name(projectId: string, instanceId: string): ProjectConversationView {
+    name(projectId: string, instanceId: string) {
       const project = projectOf(projectId);
+      if (project instanceof ElysiaStatus) {
+        return project;
+      }
       const session = row(instanceId);
       if (!session || session.projectId !== project.id) {
-        return refuse(
-          404,
-          `Session ${instanceId} is not one of this project's.`
-        );
+        return problem(404, {
+          code: "caw-session-not-in-project",
+          detail: `Session ${instanceId} is not one of this project's.`,
+        });
       }
       if (GONE.has(session.status)) {
-        return refuse(409, `Session ${instanceId} was discarded.`);
+        return problem(409, {
+          code: "caw-session-discarded",
+          detail: `Session ${instanceId} was discarded.`,
+        });
       }
       if (project.conversationInstanceId !== instanceId) {
-        startRefusals.delete(project.id);
+        startProblems.delete(project.id);
         setConversation(project.id, instanceId);
         if (project.eventsOn) {
           conversationStarted(project.id);
@@ -1602,15 +1688,21 @@ export const createCaw = ({
       projectId: string,
       raw: string,
       place: ViewPlace | null = null
-    ): Promise<{ instanceId: string }> {
+    ) {
+      const words = bodyOf(raw);
+      if (words instanceof ElysiaStatus) {
+        return words;
+      }
       const told = await tellYours(projectId, {
         by: "you",
         kind: "view-request",
         trigger: "the person asked for a view of the project",
-        words: bodyOf(raw),
+        words,
         note: viewPlaceNote(place),
       });
-      return { instanceId: told.instanceId };
+      return told instanceof ElysiaStatus
+        ? told
+        : { instanceId: told.instanceId };
     },
 
     /**
@@ -1618,20 +1710,14 @@ export const createCaw = ({
      * conversation, the whole of the message, naming the view beside them.
      * Answers its session.
      */
-    async askAboutView(
-      projectId: string,
-      name: string,
-      raw: string
-    ): Promise<{ instanceId: string }> {
+    async askAboutView(projectId: string, name: string, raw: string) {
       const words = bodyOf(raw);
+      if (words instanceof ElysiaStatus) {
+        return words;
+      }
       const kept = await views.view(projectId, name);
       if (kept instanceof ElysiaStatus) {
-        // The views' refusal (a view the project does not keep) as Caw's, with its sentence.
-        const code = kept.status;
-        return refuse(
-          code === 400 || code === 404 || code === 409 ? code : 400,
-          kept.response.detail
-        );
+        return kept;
       }
       const told = await tellYours(projectId, {
         by: "you",
@@ -1640,7 +1726,9 @@ export const createCaw = ({
         words,
         note: `The view is kept: name "${kept.name}", its program views/${kept.name}.oui.`,
       });
-      return { instanceId: told.instanceId };
+      return told instanceof ElysiaStatus
+        ? told
+        : { instanceId: told.instanceId };
     },
 
     /**
@@ -1659,12 +1747,15 @@ export const createCaw = ({
         note?: ProjectNote;
         prompt?: string;
       }
-    ): Promise<string | undefined> {
+    ) {
       const project = projectOf(projectId);
+      if (project instanceof ElysiaStatus) {
+        return project;
+      }
       const prompt = ask.prompt?.trim();
       if (!prompt) {
-        api.notice(
-          projectId,
+        noticeIn(
+          project,
           ask.note ?? {
             title: `Project · ${project.name} made`,
             event: { kind: "project", what: "made", name: project.name },
@@ -1689,9 +1780,9 @@ export const createCaw = ({
             },
         [EVENT_SKILLS["project-setup"]]
       );
-      if (!told.woke) {
+      if (told instanceof ElysiaStatus) {
         console.warn(
-          `[caw] ${project.name}: its setup did not reach its conversation: ${told.why}`
+          `[caw] ${project.name}: its setup did not reach its conversation: ${told.response.detail}`
         );
         return;
       }
@@ -1790,37 +1881,18 @@ export const createCaw = ({
      * session's its scope lists them to (roles.ts `allows`).
      */
     tools(actor: InstanceRow | undefined, toolUseId?: string) {
-      /** The calling session's project, whose views, folder and Setup these are. */
-      const ours = (): string => {
-        const projectId = actor?.projectId;
-        if (!(projectId && db.project(projectId))) {
-          throw new Error(
-            "This session belongs to no project, so it has no project folder, views or Setup."
-          );
-        }
-        return projectId;
-      };
-      /** The session calling: discovery, with no session, executes nothing. */
-      const me = (): InstanceRow => {
-        if (!actor) {
-          throw new Error("Discovery cannot execute tools");
-        }
-        return actor;
-      };
-      /** `body` committed at `rel` in the project's folder as the session calling (`folder_write`). */
-      const committed = async (
-        projectId: string,
-        rel: string,
-        body: string | Uint8Array
-      ) => {
-        const written = await writeFolderFile(projectId, rel, body, {
-          author: { name: boardTitle(me()) },
-        });
-        if (written instanceof ElysiaStatus) {
-          return written;
-        }
-        folderChanged(projectId);
-        return { ok: true, path: rel, sha: written.sha };
+      /** The calling session and its project, whose views, folder and Setup these are; discovery, with no session, executes nothing. */
+      const ours = () => {
+        const project = actor?.projectId
+          ? db.project(actor.projectId)
+          : undefined;
+        return actor && project
+          ? { actor, project }
+          : problem(409, {
+              code: "caw-tools-no-project",
+              detail:
+                "This session belongs to no project, so it has no project folder, views or Setup.",
+            });
       };
       return [
         tool(
@@ -1828,7 +1900,11 @@ export const createCaw = ({
           "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
           { path: z.string().optional() },
           async ({ path }) => {
-            const projectId = ours();
+            const calling = ours();
+            if (calling instanceof ElysiaStatus) {
+              return calling;
+            }
+            const projectId = calling.project.id;
             const file = await readFolderFile(projectId, path ?? "");
             // No path, or a folder: its listing.
             return file instanceof ElysiaStatus &&
@@ -1847,32 +1923,30 @@ export const createCaw = ({
             encoding: z.enum(FOLDER_ENCODINGS).optional(),
           },
           async ({ path, content, encoding }) => {
-            const projectId = ours();
+            const calling = ours();
+            if (calling instanceof ElysiaStatus) {
+              return calling;
+            }
+            const projectId = calling.project.id;
             const rel = folderPath(path);
             if (rel instanceof ElysiaStatus) {
               return rel;
             }
             // The setup page sent is the person's approval of AGENTS.md and
             // the delegate types its writer writes from it.
-            const approved = setupsSent.get(projectId) === me().id;
+            const approved = setupsSent.get(projectId) === calling.actor.id;
             const theirs = notWriters(rel, approved);
             if (theirs) {
-              throw new Error(`${rel} was not written: ${theirs}`);
+              return problem(403, {
+                code: "caw-folder-write-barred",
+                detail: `${rel} was not written: ${theirs}`,
+              });
             }
             const body = folderContent(content, encoding);
             if (body instanceof ElysiaStatus) {
               return body;
             }
-            if (rel.startsWith(DELEGATES_DIR)) {
-              const type = typeText(rel, body, approved);
-              if (!approved) {
-                return await proposeType(me(), rel, type, toolUseId);
-              }
-            }
-            if (rel === STAGES_FILE) {
-              stagesRead(body);
-            }
-            return await committed(projectId, rel, body);
+            return await fileWritten(calling, rel, body, approved, toolUseId);
           },
           folderWrittenWords
         ),
@@ -1889,13 +1963,21 @@ export const createCaw = ({
             position: z.number().int().min(0).optional(),
           },
           async (input) => {
-            const projectId = ours();
-            const by = boardTitle(me());
-            const drafted = await draftView(projectId, me().id, by, input);
+            const calling = ours();
+            if (calling instanceof ElysiaStatus) {
+              return calling;
+            }
+            const by = boardTitle(calling.actor);
+            const drafted = await draftView(
+              calling.project.id,
+              calling.actor.id,
+              by,
+              input
+            );
             if (drafted instanceof ElysiaStatus) {
               return drafted;
             }
-            api.notice(projectId, {
+            noticeIn(calling.project, {
               title: `View · ${by} drafted “${drafted.view}”`,
               event: { kind: "view", name: drafted.view },
             });
@@ -1911,8 +1993,10 @@ export const createCaw = ({
             args: z.record(z.string(), z.unknown()).optional(),
           },
           async ({ tool: name, args }) => {
-            const projectId = ours();
-            return await views.query(projectId, name, args ?? {});
+            const calling = ours();
+            return calling instanceof ElysiaStatus
+              ? calling
+              : await views.query(calling.project.id, name, args ?? {});
           },
           viewQueryWords
         ),
@@ -1925,7 +2009,12 @@ export const createCaw = ({
               .optional()
               .describe("Parts to ask again."),
           },
-          async ({ change }) => await setupFacts(ours(), change ?? []),
+          async ({ change }) => {
+            const calling = ours();
+            return calling instanceof ElysiaStatus
+              ? calling
+              : await setupFacts(calling.project.id, change ?? []);
+          },
           setupFactsWords
         ),
         tool(
@@ -1933,14 +2022,18 @@ export const createCaw = ({
           "Name your project while it has its placeholder name.",
           { name: z.string().min(1).max(200) },
           async ({ name }) => {
-            const projectId = ours();
-            const now = projectOf(projectId).name;
-            if (now !== projectWords.placeholderName) {
-              throw new Error(
-                `The project is named “${now}” already; the person renames it from its details or the setup page's name field.`
-              );
+            const calling = ours();
+            if (calling instanceof ElysiaStatus) {
+              return calling;
             }
-            const renamed = await rename(projectId, name);
+            const now = calling.project.name;
+            if (now !== projectWords.placeholderName) {
+              return problem(409, {
+                code: "caw-project-named",
+                detail: `The project is named “${now}” already; the person renames it from its details or the setup page's name field.`,
+              });
+            }
+            const renamed = await rename(calling.project.id, name);
             return typeof renamed === "string" ? { name: renamed } : renamed;
           },
           (named: { name: string }) => `Named the project “${named.name}”.`
@@ -1962,26 +2055,13 @@ export const createCaw = ({
 
 export type Caw = ReturnType<typeof createCaw>;
 
-const answer = refusalAnswer(CawRefusal, "caw-refused", (error) =>
-  problem(502, {
-    code: "caw-failed",
-    detail: error instanceof Error ? error.message : String(error),
-  })
-);
-
 const HARNESS = t.UnionEnum(HARNESSES);
 const BLOCK_PAGE = t.UnionEnum(BLOCK_PAGES);
 
 /** The routes for a project's conversation and your asks for views. */
 export const cawRoutes = (caw: Caw) =>
   new Elysia()
-    .get("/api/projects/:id/caw", ({ params }) => {
-      try {
-        return caw.view(params.id);
-      } catch (error) {
-        return answer(error);
-      }
-    })
+    .get("/api/projects/:id/caw", ({ params }) => caw.view(params.id))
     .patch(
       "/api/projects/:id/caw",
       {
@@ -2000,35 +2080,17 @@ export const cawRoutes = (caw: Caw) =>
           attemptsHearComments: t.Optional(t.Boolean()),
         }),
       },
-      ({ params, body }) => {
-        try {
-          return caw.configure(params.id, body);
-        } catch (error) {
-          return answer(error);
-        }
-      }
+      ({ params, body }) => caw.configure(params.id, body)
     )
     // How his panel starts the project's conversation (caw `start`): where,
     // on what and in which mode. It may make the project's folder, so it is
     // asked for, never read.
-    .post("/api/projects/:id/caw/place", async ({ params }) => {
-      try {
-        return await caw.start(params.id);
-      } catch (error) {
-        return answer(error);
-      }
-    })
+    .post("/api/projects/:id/caw/place", ({ params }) => caw.start(params.id))
     // A conversation his panel started is the project's conversation now.
     .post(
       "/api/projects/:id/caw/conversation",
       { body: t.Object({ instanceId: t.String({ minLength: 1 }) }) },
-      ({ params, body }) => {
-        try {
-          return caw.name(params.id, body.instanceId);
-        } catch (error) {
-          return answer(error);
-        }
-      }
+      ({ params, body }) => caw.name(params.id, body.instanceId)
     )
     // The mode the hub starts every project's conversation in where the
     // project names none; null: the one the person last chose for its
@@ -2039,13 +2101,7 @@ export const cawRoutes = (caw: Caw) =>
       { body: t.Object({ mode: t.Nullable(MODE) }) },
       ({ body }) => ({ mode: caw.setFleetMode(body.mode) })
     )
-    .get("/api/projects/:id/spend", ({ params }) => {
-      try {
-        return caw.spend(params.id);
-      } catch (error) {
-        return answer(error);
-      }
-    })
+    .get("/api/projects/:id/spend", ({ params }) => caw.spend(params.id))
     // "Ask Caw for a view": from the strip a draft tab; from a page's end
     // (`page`, and a `position` in its order) a proposed block on that page.
     .post(
@@ -2059,17 +2115,13 @@ export const cawRoutes = (caw: Caw) =>
       },
       async ({ params, body, request, server }) => {
         server?.timeout(request, 0);
-        try {
-          return await caw.requestView(
-            params.id,
-            body.text,
-            body.page
-              ? { page: body.page, position: body.position ?? null }
-              : null
-          );
-        } catch (error) {
-          return answer(error);
-        }
+        return await caw.requestView(
+          params.id,
+          body.text,
+          body.page
+            ? { page: body.page, position: body.position ?? null }
+            : null
+        );
       }
     )
     // "Ask Caw to change it", on a kept view's tab or block.
@@ -2081,10 +2133,6 @@ export const cawRoutes = (caw: Caw) =>
       },
       async ({ params, body, request, server }) => {
         server?.timeout(request, 0);
-        try {
-          return await caw.askAboutView(params.id, params.name, body.text);
-        } catch (error) {
-          return answer(error);
-        }
+        return await caw.askAboutView(params.id, params.name, body.text);
       }
     );

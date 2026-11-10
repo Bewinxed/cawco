@@ -2827,6 +2827,18 @@ export const createServer = (
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   const leadPort = portOf<Caw | undefined>("lead", undefined);
+  /** A note of the hub's to the person about a project, kept with its conversation (caw.ts `notice`); one for a project the hub does not keep is said in the log. */
+  const noticeProject = (
+    projectId: string,
+    note: Parameters<Caw["notice"]>[1]
+  ): void => {
+    const unnoted = leadPort.now()?.notice(projectId, note);
+    if (unnoted) {
+      console.warn(
+        `[caw] ${projectId}: a note was not kept: ${unnoted.response.detail}`
+      );
+    }
+  };
   // Caw's own project settings (project-settings.ts), made with connections.
   const projectSettingsPort = portOf<ProjectSettings | undefined>(
     "projectSettings",
@@ -4430,14 +4442,8 @@ export const createServer = (
     },
     pageCards: (artifactId, cards) => artifacts.pageCards(artifactId, cards),
     project: (id) => db.project(id),
-    tellCaw: async (projectId, event) => {
-      const told = await caw.tell(projectId, {
-        by: "event",
-        kind: "decision",
-        ...event,
-      });
-      return told.woke ? { instanceId: told.instanceId } : { why: told.why };
-    },
+    tellCaw: (projectId, event) =>
+      caw.tell(projectId, { by: "event", kind: "decision", ...event }),
     heard: (decided) => push.decided(decided),
     seen: (artifactId, card) => push.decidedSeen(artifactId, card),
   });
@@ -4491,13 +4497,17 @@ export const createServer = (
         await signalResponses(to.session, artifact, responses);
         heard = to.session.id;
       } else {
-        ({ instanceId: heard } = await caw.tellYours(to.caw.projectId, {
+        const told = await caw.tellYours(to.caw.projectId, {
           by: "act",
           kind: "person-request",
           trigger: to.caw.trigger,
           origin: { name: ACT_ORIGIN, line: to.caw.line },
           text: to.caw.text,
-        }));
+        });
+        if (told instanceof ElysiaStatus) {
+          return told;
+        }
+        heard = told.instanceId;
       }
       // A setup page sent is the approval of the AGENTS.md and delegate
       // types the session that hears it writes from it (caw.ts `setupSent`).
@@ -7684,9 +7694,7 @@ export const createServer = (
   const placeRepos = createPlaceRepos({
     call: callMachine,
     db,
-    notice: (projectId, note) => {
-      leadPort.now()?.notice(projectId, note);
-    },
+    notice: noticeProject,
   });
   /** Each place's sheet stages as their machines last said, by port, and when: what holds its stage clone (workspaces.ts `stageRuns`). */
   const placeStages = new Map<
@@ -8270,9 +8278,7 @@ export const createServer = (
     }),
     folderChanged: (projectId) => tasks.touched(projectId),
     // The conversation's notes are made further down; read once a call runs.
-    notice: (projectId, note) => {
-      leadPort.now()?.notice(projectId, note);
-    },
+    notice: noticeProject,
     park: (envelope) => parkForPerson(envelope),
     settle: settleParked,
     tell: (instanceId, text, line) => tellProposer(instanceId, text, line),
@@ -8474,16 +8480,7 @@ export const createServer = (
       machineId === undefined
         ? onlineMachines().length > 0
         : Boolean(registry.agent(machineId)),
-    // caw.ts types it plain: typing it from project-joining closes
-    // caw → project-joining → hub-context → caw. A refused folder is
-    // thrown on in its words, as Caw's start reads a failure.
-    leadHome: async (projectId) => {
-      const home = await leadHome(projectId);
-      if (home instanceof ElysiaStatus) {
-        throw new Error(home.response.detail);
-      }
-      return home;
-    },
+    leadHome,
     workPlace: workPlaceOf,
     folderChanged: (projectId) => {
       tasks.touched(projectId);
@@ -8695,7 +8692,8 @@ export const createServer = (
           kind: "hub",
           why: "fleet watch's triage stopped it",
         }),
-      tell: async (projectId, event) => (await caw.tell(projectId, event)).woke,
+      tell: async (projectId, event) =>
+        !((await caw.tell(projectId, event)) instanceof ElysiaStatus),
     })
   );
   const dispatcher = createDispatcher({
@@ -8931,7 +8929,7 @@ export const createServer = (
     tasks,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
-    notice: (projectId, note) => caw.notice(projectId, note),
+    notice: noticeProject,
     // Called on a person's answer, long after both are made.
     declined: (projectId) => projectStarters.designDeclined(projectId),
   });
@@ -8979,7 +8977,7 @@ export const createServer = (
   const lfsOffers = createLfsOffers({
     call: callMachine,
     db,
-    notice: (projectId, note) => caw.notice(projectId, note),
+    notice: noticeProject,
   });
   // A project's starters, written for it by Jev from what it holds now, on
   // its changes (project-starters.ts): a task filed or moved here; its
@@ -9142,7 +9140,7 @@ export const createServer = (
         trigger: "the person changed the project's plan",
         text,
       });
-      return woke.woke ? undefined : woke.why;
+      return woke instanceof ElysiaStatus ? woke.response.detail : undefined;
     },
   });
   planChangesPort.fill(changesOfPlans);
@@ -9917,7 +9915,7 @@ export const createServer = (
     }),
     note: (actor, note) => {
       if (actor.projectId) {
-        caw.notice(actor.projectId, note);
+        noticeProject(actor.projectId, note);
       }
     },
   });
