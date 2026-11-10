@@ -47,6 +47,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { HOUR_MS } from "@cawco/core/time";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core/workspace/controls";
 import type { Subprocess } from "bun";
+import type { AgentPorts } from "./agent-ports";
 import { holdingRemote, withoutCredential } from "./git/hub-credential";
 import { hubGitEnv, hubRepo, hubRepoOf } from "./git/hub-remote";
 import { LFS_FILTERS } from "./git/lfs";
@@ -55,14 +56,6 @@ import { notAProject, placeSettled, placeTurn } from "./place-repo";
 import { remoteWithoutCredential } from "./remote-credential";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
-
-/** Where progress frames go: the daemon's socket. */
-let sendProgress: (frame: MoveProgressFrame) => void = () => undefined;
-export const setMoveProgress = (
-  send: (frame: MoveProgressFrame) => void
-): void => {
-  sendProgress = send;
-};
 
 /** git's environment for a command that reaches the hub's repository `key`. */
 const hubEnv = (
@@ -1218,15 +1211,21 @@ const clonedBefore = async (path: string, jobId: string): Promise<boolean> =>
     await readFile(join(path, ".git", MARKER), "utf8").catch(() => "")
   ).trim() === jobId;
 
-export const moveClone = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
-  holdingRemote(request.remoteBasic, () => cloneStep(request));
+export const moveClone = (
+  request: MoveCloneRequest,
+  ports: Pick<AgentPorts, "moveProgress">
+): Promise<MoveLfsResult> =>
+  holdingRemote(request.remoteBasic, () => cloneStep(request, ports));
 
 /**
  * The clone itself. An outside remote's URL carries no credential, so the
  * clone's `origin` is the bare URL; its credential, when it has one, reaches
  * git through the environment for this one command.
  */
-const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
+const cloneStep = (
+  request: MoveCloneRequest,
+  { moveProgress }: Pick<AgentPorts, "moveProgress">
+): Promise<MoveLfsResult> =>
   runStep(request.jobId, "clone", async (run) => {
     const { path, jobId, snapshot } = request;
     if (await clonedBefore(path, jobId)) {
@@ -1243,7 +1242,7 @@ const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
     await mkdir(dirname(path), { recursive: true });
     await enoughSpace(dirname(path), request.bytes, request.machine);
     const fromHub = request.cloneUrl === undefined;
-    const feed = throttled(sendProgress);
+    const feed = throttled(moveProgress);
     let received = 0;
     try {
       const cloned = await exec(
@@ -1295,7 +1294,7 @@ const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
       }
       await rename(scratch, path);
       const whole = Math.max(received, request.bytes);
-      sendProgress({
+      moveProgress({
         kind: "move_progress",
         jobId,
         stage: "clone",
@@ -1428,8 +1427,11 @@ const fromHubLfs = async (
  * not on that remote: they come from the hub first, and the pull from the
  * remote finds them already here.
  */
-export const moveLfs = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
-  holdingRemote(request.remoteBasic, () => lfsStep(request));
+export const moveLfs = (
+  request: MoveLfsRequest,
+  ports: Pick<AgentPorts, "moveProgress">
+): Promise<MoveLfsResult> =>
+  holdingRemote(request.remoteBasic, () => lfsStep(request, ports));
 
 /** git's environment for the pull: the hub's, or the clone's own `origin` with its credential. */
 const pullEnv = async (
@@ -1447,7 +1449,10 @@ const pullEnv = async (
   return outsideEnv(origin.trim(), request.remoteBasic);
 };
 
-const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
+const lfsStep = (
+  request: MoveLfsRequest,
+  { moveProgress }: Pick<AgentPorts, "moveProgress">
+): Promise<MoveLfsResult> =>
   runStep(request.jobId, "lfs", async (run) => {
     const { path, jobId, snapshot } = request;
     const wanted = await pointersIn(path, snapshot.commit);
@@ -1462,7 +1467,7 @@ const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
       ...(await pullEnv(request)),
       GIT_LFS_PROGRESS: progressFile,
     };
-    const feed = throttled(sendProgress);
+    const feed = throttled(moveProgress);
     const progress = progressTail(progressFile);
     const tail = async () => {
       await progress.read();
@@ -1508,7 +1513,7 @@ const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
           lastLine(pulled.stderr) || lastLine(pulled.stdout)
         );
       }
-      sendProgress({
+      moveProgress({
         kind: "move_progress",
         jobId,
         stage: "lfs",
