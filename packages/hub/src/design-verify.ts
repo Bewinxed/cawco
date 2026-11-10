@@ -71,7 +71,6 @@ import type {
 import { designShaped } from "./design-offers";
 import { designOnBase, ownLandings, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
-import { projectRefusalOf } from "./project-refusal";
 import { hubActor, type Tasks } from "./tasks";
 import { isLive, type Parent, verifierParent } from "./work-item-state";
 import type { WorkItemRequest, WorkItemStart } from "./work-items";
@@ -425,17 +424,17 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     }
   };
 
-  /** Starts a round on `at` for the builder's item; answers what its finish_item says. */
+  /** Starts a round on `at` for the builder's item; answers what its finish_item says, or its task's refused read. */
   const startRound = async (
     item: WorkItemRow & { projectId: string; taskId: string },
     submission: WorkItemSubmission,
     workspace: { base: string; id: string; machineId: string; path: string },
     at: Snapshot
-  ): Promise<string> => {
+  ) => {
     const project = db.project(item.projectId);
     const task = await deps.tasks.get(item.projectId, item.taskId);
     if (task instanceof ElysiaStatus) {
-      throw projectRefusalOf(task);
+      return task;
     }
     const check: DesignCheckRow = {
       id: crypto.randomUUID(),
@@ -517,7 +516,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
    * design work, in a workspace whose base branch holds a system (one only
    * its own commits hold, or its own open task landed, is its build, the
    * person's to judge in review).
-   * Its task and workspace when it is.
+   * Its task and workspace when it is; its task's refused read.
    */
   const judged = async (item: WorkItemRow) => {
     const { projectId, taskId } = item;
@@ -527,7 +526,7 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     }
     const task = await deps.tasks.get(projectId, taskId);
     if (task instanceof ElysiaStatus) {
-      throw projectRefusalOf(task);
+      return task;
     }
     const [workspace] = db.workspacesNamed(item.workspaceId);
     if (!(workspace && designShaped(project.template ?? null, task))) {
@@ -641,14 +640,11 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   };
 
   return {
-    /** work-items.ts `designHold`: the words a `finish_item` answers while held, or nothing to go on. */
-    async hold(
-      item: WorkItemRow,
-      submission: WorkItemSubmission
-    ): Promise<string | undefined> {
+    /** work-items.ts `designHold`: the words a `finish_item` answers while held, or nothing to go on; its task's refused read. */
+    async hold(item: WorkItemRow, submission: WorkItemSubmission) {
       const subject = await judged(item);
-      if (!subject) {
-        return;
+      if (!subject || subject instanceof ElysiaStatus) {
+        return subject;
       }
       const { projectId, taskId, workspace } = subject;
       const latest = db.designChecks.latest(item.id);
