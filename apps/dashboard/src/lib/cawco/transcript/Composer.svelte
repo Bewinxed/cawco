@@ -1,5 +1,4 @@
 <script lang="ts" module>
-  import { traitsOf } from "@cawco/core/harness/traits";
   import type { PermissionResult } from "@cawco/core/session-messages";
   import { failureWords } from "#lib/platform/hub-read.js";
   import type { PendingPermission } from "../stores/sessions.svelte";
@@ -103,20 +102,15 @@
   } from "#lib/icons.js";
   import { felt } from "#lib/platform/feel.svelte.js";
   import { frameObserver, frameSize } from "#lib/platform/frame-observer.js";
-  import { newId } from "#lib/platform/id.js";
   import { autosize } from "#lib/platform/motion/autosize.svelte.js";
   import {
-    CURVE,
     dur,
-    easeDrawer,
     easeOut,
     motionOk,
   } from "#lib/platform/motion/curves.svelte.js";
   import { unfold } from "#lib/platform/motion/fold.svelte.js";
-  import { scrollMotion } from "#lib/platform/motion/keyed.svelte.js";
   import { popOut } from "#lib/platform/motion/pop.svelte.js";
   import { handOver, reflow } from "#lib/platform/motion/rows.svelte.js";
-  import { track } from "#lib/platform/track.js";
   import type { ConversationFind } from "../find/conversation-find.svelte";
   import FindLayer from "../find/FindLayer.svelte";
   import FindLine from "../find/FindLine.svelte";
@@ -137,13 +131,14 @@
   import type { ComposerDraft } from "./composer-draft.svelte";
   import type { ComposerFleet } from "./composer-fleet";
   import { stand } from "./composer-presence.svelte";
+  import { ComposerRecall } from "./composer-recall.svelte";
   import { ComposerSend } from "./composer-send.svelte";
-  import { FieldFlight, heightMs } from "./field-flight.svelte";
+  import { FieldFlight } from "./field-flight.svelte";
   import { landFocusRequests } from "./field-focus.svelte";
   import { FieldHint } from "./field-hint.svelte";
   import { GrownShape, layoutScale, measureShape } from "./grown";
   import { HarnessStart } from "./harness-start.svelte";
-  import { sentByReader } from "./recall";
+  import { PressHold } from "./press-hold.svelte";
   import { opensTurn } from "./rows";
   import { SlashMenu } from "./slash-menu.svelte";
 
@@ -551,7 +546,7 @@
     if (canvas.key(event)) {
       return;
     }
-    if ((recall && wheel?.key(event)) || recallKey(event)) {
+    if ((recalling.recall && recalling.wheel?.key(event)) || recallKey(event)) {
       return;
     }
     // BEFORE the menu: mod+Enter sends what is written as it stands, a
@@ -617,12 +612,12 @@
     );
     // The wheel still folding away (it takes no keys then): ↑ brings it
     // straight back up once it has landed, a close caught mid-way turning back.
-    if (recall && event.key === "ArrowUp" && bare) {
+    if (recalling.recall && event.key === "ArrowUp" && bare) {
       event.preventDefault();
-      reopen = true;
+      recalling.reopen = true;
       return true;
     }
-    if (!(event.key === "ArrowUp" && bare && startsRecall())) {
+    if (!(event.key === "ArrowUp" && bare && recalling.startsRecall())) {
       return false;
     }
     event.preventDefault();
@@ -630,7 +625,7 @@
     if (queued) {
       liftQueued(queued);
     } else {
-      openRecall(true);
+      recalling.openRecall(true);
     }
     return true;
   }
@@ -675,71 +670,48 @@
     fleet: () => fleet,
     paneVisible: () => paneVisible,
     pill: () => pill,
-    recalling: () => !!recall,
+    recalling: () => !!recalling.recall,
     recallOf: () => recallOf,
     shell: () => shell,
-    wheelBack: () => wheel?.back(),
+    wheelBack: () => recalling.wheel?.back(),
   });
   const recalled = $derived(
     fleet && recallOf ? fleet.sessionsStore.session(recallOf) : null
   );
 
-  /**
-   * The wheel, while it is up: whether keys reach it from the field (a held
-   * press leaves the keyboard down), the composer's text when it came up,
-   * and where the caret stood in it.
-   */
-  let recall = $state<{
-    keys: boolean;
-    text: string;
-    caret: [number, number];
-    measured: ReturnType<typeof measureShape>;
-  } | null>(null);
-  /** The pill's buttons, which fold into a deck while the wheel is up. */
-  let ctrls = $state<HTMLElement>();
-  /** The field's box: the draft's row on the wheel. */
-  let fieldWrap = $state<HTMLElement>();
-  let wheel = $state<ReturnType<ComposerFleet["RecallWheel"]>>();
-  /** ↑ pressed while the wheel was folding: it comes up again once folded. */
-  let reopen = false;
-  /** The wheel's row on the field's line, for a screen reader. */
-  let recallActive = $state<string>();
-  /**
-   * The wheel is up and not yet folding: the field has no caret, and a
-   * pick fits the field on the fold's clock once it is off (`.settling`).
-   * The pill's own surface steps aside for as long as the wheel is mounted
-   * (`.recalling`): its shape is the composer until it has folded away.
-   */
-  let wheeling = $state(false);
-  /**
-   * The field's hint fading back in after the wheel has folded away (its
-   * timer while it does): it is not drawn while the wheel is up, where it
-   * would stand doubled under the row on the line.
-   */
-  let hintBack = $state<ReturnType<typeof setTimeout> | 0>(0);
-  const recallId = `recall-${newId()}`;
-  /** What the wheel rolls, read only while it is up. */
-  const sentHere = $derived(
-    recall && recalled ? sentByReader(recalled.messages) : []
-  );
+  /* ---- recall: what you sent, and your queued message ----------------- */
 
-  /**
-   * ↑ starts recall only from an empty field or with the caret at its very
-   * start, so in a draft it still moves the caret, as a shell's does.
-   */
-  function startsRecall(): boolean {
-    if (
-      !(recallOf && field) ||
-      recall ||
-      draft.lifted ||
-      askOpen ||
-      canvas.up
-    ) {
-      return false;
-    }
-    const [from, to] = mentionField?.selection() ?? [0, 0];
-    return from === to && (draft.text === "" || from === 0);
-  }
+  /** The wheel of what you sent, over the pill. */
+  const recalling = new ComposerRecall({
+    askOpen: () => askOpen,
+    canvasUp: () => canvas.up,
+    dismissMenu: () => {
+      menu.dismissed = true;
+    },
+    draft: () => draft,
+    field: () => field,
+    floor: () => floor,
+    folds: (whole) => folds(whole),
+    holding: () => !!press.hold?.live,
+    mentionField: () => mentionField,
+    pill: () => pill,
+    recalled: () => recalled,
+    recallOf: () => recallOf,
+    shell: () => shell,
+    submit: (cuts) => sender.submit(cuts),
+  });
+  /** A held press or a swipe up on a touch screen brings the wheel up. */
+  const press = new PressHold({
+    askOpen: () => askOpen,
+    canvasUp: () => canvas.up,
+    draft: () => draft,
+    field: () => field,
+    openCanvas: () => canvas.room?.open(),
+    openRecall: (keys) => recalling.openRecall(keys),
+    recall: () => recalling.recall,
+    recallOf: () => recallOf,
+    wheel: () => recalling.wheel,
+  });
 
   /** Your newest message, when it is queued and can still be edited. */
   function liftable(): Message | null {
@@ -753,593 +725,6 @@
     }
     return null;
   }
-
-  /**
-   * Where each of the pill's buttons stands in the deck they fold into
-   * while the wheel is up, read before anything is written: Send in front,
-   * where it is; each one behind it slid toward it until it peeks out by
-   * `--c-deck-peek`, a step smaller (`--c-deck-scale`), whole, so its edge
-   * reads behind the one in front and nothing behind it shows through. With
-   * reduced motion nothing slides: the ones behind fade out, and the deck is
-   * Send alone. Returns each button's place, and where the deck starts
-   * (`deck`) and where its first button stands now (`start`), from the
-   * shell's inline start.
-   */
-  function foldDeck(
-    row: HTMLElement,
-    from: number
-  ): { deck: number; start: number; places: DeckPlace[] } {
-    const style = getComputedStyle(row);
-    const peek = Number.parseFloat(style.getPropertyValue("--c-deck-peek"));
-    const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
-    const cards = [...row.children]
-      .filter((card): card is HTMLElement => card instanceof HTMLElement)
-      .map((card) => ({ card, box: card.getBoundingClientRect() }))
-      .filter(({ box }) => box.width > 0)
-      .reverse();
-    const [front] = cards;
-    if (!front) {
-      const none = Number.POSITIVE_INFINITY;
-      return { deck: none, start: none, places: [] };
-    }
-    const slide = motionOk.current;
-    let { left } = front.box;
-    // On the device's pixel grid, so each peeking edge is drawn whole, not
-    // smeared across two pixels at a fraction of its contrast.
-    const grid = window.devicePixelRatio || 1;
-    const places = cards.map(({ card, box }, i) => {
-      const s = slide ? scale ** i : 1;
-      // Its leading edge one peek past the edge of the one in front.
-      const edge = Math.round((front.box.left - i * peek) * grid) / grid;
-      const x = slide
-        ? edge + (box.width * s) / 2 - (box.left + box.width / 2)
-        : 0;
-      if (slide) {
-        left = Math.min(left, edge);
-      }
-      return { card, x, s, o: slide ? 1 : Number(i === 0) };
-    });
-    const first = (cards.at(-1)?.box.left ?? left) - from;
-    return { deck: left - from, start: slide ? first : left - from, places };
-  }
-
-  /** One of the pill's buttons, where it stands in the deck. */
-  interface DeckPlace {
-    card: HTMLElement;
-    o: number;
-    s: number;
-    x: number;
-  }
-  /**
-   * The buttons folded into the deck, and their motion, while they are, and
-   * where the first of them stands unfolded (from the shell's inline start).
-   */
-  let decked: { places: DeckPlace[]; runs: Animation[]; start: number } | null =
-    null;
-  /**
-   * The deck's leading edge on the move, from the shell's inline start:
-   * from `from` to `to` on `run`'s clock, the drawer curve. Every button
-   * slides on the same curve, so the first one's edge leads the whole way.
-   */
-  let deckSlide: { from: number; to: number; run: Animation | null } | null =
-    null;
-
-  /**
-   * Where the deck's leading edge stands this frame (from the shell's
-   * inline start), and whether it has stopped: arithmetic off its motion's
-   * clock, no layout read. The wheel's row on the field's line stops short
-   * of it at every frame.
-   */
-  function deckAt(): { at: number; still: boolean } {
-    const slide = deckSlide;
-    if (!slide) {
-      return { at: Number.POSITIVE_INFINITY, still: true };
-    }
-    const { run } = slide;
-    const ms = Number(run?.effect?.getTiming().duration) || 0;
-    const moving = run?.playState === "running" || run?.playState === "paused";
-    const t =
-      run && moving && ms > 0
-        ? Math.min(1, Math.max(0, Number(run.currentTime ?? 0) / ms))
-        : 1;
-    return {
-      at: slide.from + (slide.to - slide.from) * easeDrawer(t),
-      still: t >= 1,
-    };
-  }
-
-  /**
-   * The buttons slide together into the deck on the wheel's own growth:
-   * its --dur-grow on the drawer curve. Transform and opacity only, by the
-   * Web Animations API, so the buttons' own transitions stay theirs.
-   */
-  function deckIn(places: DeckPlace[], from: number, to: number): void {
-    deckOut(0);
-    const timing = {
-      duration: dur("--dur-grow"),
-      easing: CURVE.drawer,
-      fill: "forwards",
-    } as const;
-    const runs = places.map(({ card, x, s, o }) =>
-      card.animate(
-        [
-          { translate: "0 0", scale: "1", opacity: 1 },
-          { translate: `${x.toFixed(2)}px 0`, scale: String(s), opacity: o },
-        ],
-        timing
-      )
-    );
-    const stack = { places, runs, start: from };
-    decked = stack;
-    deckSlide = { from, to, run: runs.at(-1) ?? null };
-    // Landed, each card stands where it is as its own style, not held by a
-    // motion: a held motion's layer is drawn at full size and scaled, which
-    // smears each card's 1px edge across two pixels; standing, it is drawn
-    // at its size, its edge whole.
-    runs[0]?.finished.then(
-      () => {
-        if (decked !== stack) {
-          return;
-        }
-        // Its own end, written out (WebKit's commitStyles() has written a
-        // finished motion's start).
-        for (const [i, { card, x, s, o }] of places.entries()) {
-          card.style.translate = `${x.toFixed(2)}px 0`;
-          card.style.scale = String(s);
-          card.style.opacity = String(o);
-          runs[i]?.cancel();
-        }
-      },
-      () => undefined
-    );
-  }
-
-  /**
-   * They fan back out to their places from wherever they are, on the
-   * wheel's fold: its --dur-grow-exit on the drawer curve (`ms`: 0 puts
-   * them back at once).
-   */
-  function deckOut(ms = dur("--dur-grow-exit")): void {
-    const was = decked;
-    decked = null;
-    if (!was) {
-      return;
-    }
-    const edge = deckAt().at;
-    deckSlide = null;
-    // Where each one is drawn now, read before the motion that held it goes.
-    const from = was.places.map(({ card }) => {
-      const style = getComputedStyle(card);
-      return {
-        translate: style.translate,
-        scale: style.scale,
-        opacity: Number(style.opacity),
-      };
-    });
-    for (const run of was.runs) {
-      run.cancel();
-    }
-    for (const { card } of was.places) {
-      for (const property of ["translate", "scale", "opacity"]) {
-        card.style.removeProperty(property);
-      }
-    }
-    if (ms <= 0) {
-      return;
-    }
-    const runs = was.places.map(({ card }, i) =>
-      card.animate([from[i], { translate: "0 0", scale: "1", opacity: 1 }], {
-        duration: ms,
-        easing: CURVE.drawer,
-      })
-    );
-    deckSlide = { from: edge, to: was.start, run: runs.at(-1) ?? null };
-  }
-
-  function openRecall(keys: boolean): void {
-    if (
-      !(recallOf && field && shell && pill && ctrls) ||
-      recall ||
-      draft.lifted ||
-      askOpen ||
-      canvas.up
-    ) {
-      return;
-    }
-    // Every size first, before anything is written: one layout per open.
-    const measured = measureShape(shell, pill, field);
-    const deck = foldDeck(ctrls, shell.getBoundingClientRect().left);
-    deckIn(deck.places, deck.start, deck.deck);
-    recall = {
-      keys,
-      text: draft.text,
-      caret: mentionField?.selection() ?? [0, 0],
-      measured,
-    };
-    wheeling = true;
-    menu.dismissed = true;
-    // Keys reach the wheel from the field.
-    if (keys) {
-      field.focus();
-    }
-  }
-
-  /**
-   * The field's next fit, while a pick taken off the wheel waits on it
-   * (autosize `measured`): it runs in the fit, so whatever moves with the
-   * field's new height starts in the frame the height does.
-   */
-  let onFit: ((whole: number) => void) | null = null;
-
-  /**
-   * The wheel's pick, into the field. Its first line stays where the
-   * wheel's row stood, the words they share in place, and the field fits
-   * it on the wheel's fold (`.settling`): growing, its top carries the
-   * further lines up; shrinking, the text stands as low as the line and
-   * the field's top comes down to it on the same curve. The caret goes
-   * after it once it has landed (`recallDone`). Resolves to the pill's
-   * height, fitted.
-   */
-  function recallTake(text: string): Promise<number> {
-    const node = field;
-    const was = node?.offsetHeight ?? 0;
-    const base = pill?.offsetHeight ?? 0;
-    deckOut();
-    wheeling = false;
-    if (!node || text === draft.text) {
-      draft.text = text;
-      return Promise.resolve(base);
-    }
-    const fitted = new Promise<number>((done) => {
-      onFit = (whole) => {
-        onFit = null;
-        const cap =
-          Number.parseFloat(getComputedStyle(node).maxHeight) ||
-          Number.POSITIVE_INFINITY;
-        const next = folds(whole) ? floor : Math.min(whole, cap);
-        const drop = was - next;
-        if (drop > 0.5 && motionOk.current) {
-          node.animate([{ translate: `0 ${drop}px` }, { translate: "0 0" }], {
-            duration: heightMs(node),
-            easing: CURVE.drawer,
-          });
-        }
-        done(base + next - was);
-      };
-    });
-    draft.text = text;
-    return fitted;
-  }
-
-  /** Back to the draft, the caret where it was, so a key typed lands there. */
-  function recallBack(): void {
-    deckOut();
-    wheeling = false;
-    if (recall && field) {
-      mentionField?.select(...recall.caret);
-    }
-  }
-
-  async function recallDone(send: boolean): Promise<void> {
-    const was = recall;
-    const again = reopen;
-    reopen = false;
-    recall = null;
-    // The field's hint comes back once the rows are gone, never under them.
-    clearTimeout(hintBack);
-    hintBack = setTimeout(() => {
-      hintBack = 0;
-    }, dur("--dur-fade"));
-    await tick();
-    const took = was?.text !== draft.text;
-    // Back to the draft and asked for again: it comes straight back up. A
-    // pick taken or sent stands; the ↑ was too late for it.
-    if (again && !took && !send) {
-      openRecall(was?.keys ?? true);
-      return;
-    }
-    // Back to the field if you were typing in it, or to edit what you took;
-    // a hold put away leaves the keyboard down.
-    if (was?.keys || took) {
-      field?.focus();
-    }
-    if (took && field) {
-      // The caret after the pick, ready to edit. A pick past the field's
-      // ceiling scrolls to its end, gliding rather than jumping there.
-      const from = field.scrollTop;
-      mentionField?.select(draft.text.length);
-      const to = Math.max(0, field.scrollHeight - field.clientHeight);
-      if (to !== from) {
-        field.scrollTop = from;
-        field.scrollTo({
-          top: to,
-          behavior: scrollMotion(motionOk.current),
-        });
-      }
-    }
-    // The wheel sends only on mod+Enter, so its send is mod+Enter's.
-    if (send) {
-      sender.submit(true);
-    }
-  }
-
-  // A composer handed another conversation's draft puts the last one's
-  // wheel away at once: what it rolled was that conversation's.
-  $effect.pre(() => {
-    track(draft);
-    untrack(() => {
-      deckOut(0);
-      recall = null;
-      reopen = false;
-      wheeling = false;
-    });
-  });
-
-  // While the wheel is up, a press anywhere outside the composer puts it
-  // away, back to the draft. The grown shape is the composer's: a press on
-  // it, around the rows, rolls the wheel as a press on the rows does.
-  $effect(() => {
-    if (!recall) {
-      return;
-    }
-    const outside = (event: PointerEvent) => {
-      const target = event.target as Element;
-      if (!shell?.contains(target)) {
-        wheel?.back();
-      } else if (target.closest('[data-slot="grown-halo"]')) {
-        wheel?.grab(event);
-      }
-    };
-    document.addEventListener("pointerdown", outside, true);
-    return () => document.removeEventListener("pointerdown", outside, true);
-  });
-
-  // A touch the wheel is rolling must not pan the page under it. Pointer
-  // events cannot cancel a pan, and touch-action alone has not always held
-  // on iOS Safari, so the touch's own moves are cancelled while it belongs
-  // to the wheel: one that began on the composer, or the held press that
-  // brought the wheel up mid-touch.
-  $effect(() => {
-    if (!recall) {
-      return;
-    }
-    let ours = untrack(() => !!hold?.live);
-    const began = (event: TouchEvent) => {
-      ours = !!shell?.contains(event.target as Node);
-    };
-    const moved = (event: TouchEvent) => {
-      if (ours && event.cancelable) {
-        event.preventDefault();
-      }
-    };
-    document.addEventListener("touchstart", began, {
-      capture: true,
-      passive: true,
-    });
-    document.addEventListener("touchmove", moved, {
-      capture: true,
-      passive: false,
-    });
-    return () => {
-      document.removeEventListener("touchstart", began, true);
-      document.removeEventListener("touchmove", moved, true);
-    };
-  });
-
-  /*
-   * A held press or a swipe up on a touch screen. With the keyboard down the
-   * composer is a control you can hold: a finger resting on it
-   * --dur-press-hold brings the wheel up under it, and so does one that
-   * swipes up off it; dragging while still down rolls it. A swipe's own
-   * rise is the opening's: the roll starts where the finger turns back
-   * down, so a swipe lifted while still rising leaves the newest message
-   * on the line. Lifting leaves it up: a tap on a row takes it, a tap
-   * outside puts it away. Moving any other way first is a scroll or a
-   * selection; while the field is being typed in (keyboard up) every touch
-   * is the field's: scrolling it, selecting, pasting. The pill takes no pan
-   * while the keyboard is down (`touch-action`), so a swipe on it never
-   * scrolls the page, and a swipe anywhere else is the page's.
-   */
-  const SLOP = 8;
-  let hold = $state.raw<{
-    id: number;
-    x: number;
-    y: number;
-    from: number;
-    live: boolean;
-    /** A swipe that brought the wheel up and is still rising. */
-    rising: boolean;
-    timer: ReturnType<typeof setTimeout>;
-    lastY: number;
-    lastAt: number;
-    flick: number;
-  } | null>(null);
-  let swallowClick = false;
-
-  /**
-   * A pen on the pill (The pen's swipe): a swipe up with it, by the wheel's
-   * own test (past the slop, more up than across), grows the pill into the
-   * canvas. A pen never holds the wheel up; that press is a finger's.
-   */
-  let pen: { id: number; x: number; y: number } | null = null;
-
-  /** The pen on the pill moved: true when the move was the pen's. */
-  function penMoved(event: PointerEvent): boolean {
-    if (!pen || event.pointerId !== pen.id) {
-      return false;
-    }
-    const dx = event.clientX - pen.x;
-    const dy = event.clientY - pen.y;
-    if (dy < -SLOP && -dy > Math.abs(dx)) {
-      pen = null;
-      event.preventDefault();
-      canvas.room?.open();
-    } else if (Math.hypot(dx, dy) > SLOP) {
-      pen = null;
-    }
-    return true;
-  }
-
-  function onholddown(event: PointerEvent): void {
-    if (event.pointerType === "pen") {
-      pen =
-        recallOf &&
-        !(recall || draft.lifted || askOpen || canvas.up) &&
-        !(event.target as Element).closest("button, a, input")
-          ? { id: event.pointerId, x: event.clientX, y: event.clientY }
-          : null;
-      return;
-    }
-    if (
-      event.pointerType !== "touch" ||
-      !recallOf ||
-      recall ||
-      draft.lifted ||
-      askOpen ||
-      document.activeElement === field
-    ) {
-      return;
-    }
-    // Its own controls answer a press themselves.
-    if ((event.target as Element).closest("button, a, input")) {
-      return;
-    }
-    const press = {
-      id: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      from: event.clientY,
-      live: false,
-      rising: false,
-      lastY: event.clientY,
-      lastAt: 0,
-      flick: 0,
-      timer: setTimeout(() => {
-        if (hold?.id !== press.id) {
-          return;
-        }
-        hold.live = true;
-        hold.from = hold.lastY;
-        hold.lastAt = performance.now();
-        felt("hold");
-        openRecall(false);
-      }, dur("--dur-press-hold")),
-    };
-    hold = press;
-  }
-
-  $effect(() => {
-    const moved = (event: PointerEvent) => {
-      if (penMoved(event)) {
-        return;
-      }
-      const press = hold;
-      if (!press || event.pointerId !== press.id) {
-        return;
-      }
-      const now = performance.now();
-      if (!press.live) {
-        const dx = event.clientX - press.x;
-        const dy = event.clientY - press.y;
-        if (dy < -SLOP && -dy > Math.abs(dx)) {
-          // A swipe up: the wheel comes up under the finger.
-          clearTimeout(press.timer);
-          press.live = true;
-          press.rising = true;
-          press.from = event.clientY;
-          press.lastY = event.clientY;
-          press.lastAt = now;
-          felt("hold");
-          openRecall(false);
-        } else if (Math.hypot(dx, dy) > SLOP) {
-          clearTimeout(press.timer);
-          hold = null;
-        } else {
-          press.lastY = event.clientY;
-        }
-        return;
-      }
-      event.preventDefault();
-      if (press.rising) {
-        if (event.clientY <= press.from) {
-          press.from = event.clientY;
-          press.lastY = event.clientY;
-          press.lastAt = now;
-          return;
-        }
-        press.rising = false;
-      }
-      press.flick =
-        (event.clientY - press.lastY) / Math.max(1, now - press.lastAt);
-      press.lastY = event.clientY;
-      press.lastAt = now;
-      wheel?.follow(event.clientY - press.from);
-    };
-    const lifted = (event: PointerEvent) => {
-      if (pen?.id === event.pointerId) {
-        pen = null;
-      }
-      const press = hold;
-      if (!press || event.pointerId !== press.id) {
-        return;
-      }
-      clearTimeout(press.timer);
-      hold = null;
-      if (!press.live) {
-        return;
-      }
-      // The press is spent: no click on what it lifted from, no focus in
-      // the field.
-      swallowClick = true;
-      setTimeout(() => {
-        swallowClick = false;
-      }, dur("--dur-press-hold"));
-      wheel?.release(press.flick);
-    };
-    document.addEventListener("pointermove", moved, { passive: false });
-    document.addEventListener("pointerup", lifted);
-    document.addEventListener("pointercancel", lifted);
-    return () => {
-      document.removeEventListener("pointermove", moved);
-      document.removeEventListener("pointerup", lifted);
-      document.removeEventListener("pointercancel", lifted);
-    };
-  });
-
-  /** iOS still starts its own press gestures under a live hold: the callout, the focus on lift. */
-  function onholdnative(event: Event): void {
-    if (hold?.live || swallowClick) {
-      event.preventDefault();
-    }
-  }
-  function onholdclick(event: MouseEvent): void {
-    if (swallowClick) {
-      event.stopPropagation();
-      event.preventDefault();
-      swallowClick = false;
-    }
-  }
-
-  /*
-   * While a press is held on the composer, and while the wheel it brought
-   * up is up, nothing on the page selects: iOS would otherwise turn the hold
-   * into a text selection and drag it across the page. Only for a hold: the
-   * switch restyles the whole page, which a key or a click has no need of.
-   */
-  $effect(() => {
-    if (!(hold || (recall && !recall.keys))) {
-      return;
-    }
-    const root = document.documentElement;
-    root.dataset.composerHolding = "";
-    getSelection()?.removeAllRanges();
-    const refuse = (event: Event) => event.preventDefault();
-    document.addEventListener("selectstart", refuse);
-    return () => {
-      delete root.dataset.composerHolding;
-      document.removeEventListener("selectstart", refuse);
-    };
-  });
 
   /*
    * Your queued message, edited in the composer. Its words lift out of their
@@ -1385,7 +770,7 @@
     if (
       !(fleet && field && recallOf) ||
       draft.lifted ||
-      recall ||
+      recalling.recall ||
       askOpen ||
       canvas.up
     ) {
@@ -1845,11 +1230,8 @@
     const { size } = measureShape(shell, pill, field);
     const max = askRoom();
     // What else grows out of the pill puts itself away: the ask has it.
-    if (recall) {
-      deckOut(0);
-      recall = null;
-      reopen = false;
-      wheeling = false;
+    if (recalling.recall) {
+      recalling.putAway();
     }
     if (draft.lifted) {
       returnEdit();
@@ -2020,11 +1402,6 @@
     askShape?.remove();
     askShape = null;
   });
-
-  /** Whose queued sends this harness calls queued, for the wheel's rows. */
-  const queuedWord = $derived(
-    traitsOf(recalled?.harness).queuesSends ? "Queued" : undefined
-  );
 
   /**
    * Files and a long paste join the draft as attachments; other text lands
@@ -2540,7 +1917,7 @@
          them moves. -->
     <div
       data-slot="shell"
-      data-rolling={!!recall || undefined}
+      data-rolling={!!recalling.recall || undefined}
       class="relative pointer-events-auto"
       bind:this={shell}
     >
@@ -2554,28 +1931,28 @@
           }}
         />
       {/if}
-      {#if fleet && recall && shell && fieldWrap}
+      {#if fleet && recalling.recall && shell && recalling.fieldWrap}
         <fleet.RecallWheel
-          deck={deckAt}
-          draft={recall.text}
-          field={fieldWrap}
-          id={recallId}
-          keys={recall.keys}
-          measured={recall.measured}
+          deck={recalling.deckAt}
+          draft={recalling.recall.text}
+          field={recalling.fieldWrap}
+          id={recalling.recallId}
+          keys={recalling.recall.keys}
+          measured={recalling.recall.measured}
           more={!!recalled?.cursor}
           older={() => {
             if (recallOf) {
               detach(fleet?.readOlderPage(recallOf), "readOlderPage");
             }
           }}
-          onback={recallBack}
-          ondone={recallDone}
-          ontake={recallTake}
-          {queuedWord}
-          sent={sentHere}
+          onback={recalling.recallBack}
+          ondone={recalling.recallDone}
+          ontake={recalling.recallTake}
+          queuedWord={recalling.queuedWord}
+          sent={recalling.sentHere}
           {shell}
-          bind:this={wheel}
-          bind:active={recallActive}
+          bind:this={recalling.wheel}
+          bind:active={recalling.recallActive}
         />
       {/if}
       {#if edit}
@@ -2677,12 +2054,12 @@
         data-slot="cin"
         data-asking={askOpen || undefined}
         data-grown={!!edit || askOpen || canvas.up || undefined}
-        data-hint-back={!!hintBack || undefined}
+        data-hint-back={!!recalling.hintBack || undefined}
         data-lead={!!lead || !!also || finding || undefined}
         data-places={(finding && find?.listOpen) || undefined}
-        data-recalling={!!recall || undefined}
-        data-settling={(!!recall && !wheeling) || undefined}
-        data-wheeling={wheeling || undefined}
+        data-recalling={!!recalling.recall || undefined}
+        data-settling={(!!recalling.recall && !recalling.wheeling) || undefined}
+        data-wheeling={recalling.wheeling || undefined}
         aria-keyshortcuts={recallOf
           ? "Meta+Shift+D Control+Shift+D"
           : undefined}
@@ -2691,11 +2068,11 @@
           class:
             "group/cin relative z-2 data-places:rounded-t-none py-(--cin-pad) pr-(--cin-pad) pl-space-3 flex items-end gap-space-2 data-lead:flex-wrap data-recalling:bg-transparent data-recalling:border-transparent data-recalling:shadow-none data-recalling:backdrop-filter-none data-grown:bg-transparent data-grown:border-transparent data-grown:shadow-none data-grown:backdrop-filter-none not-focus-within:touch-none not-focus-within:touch-callout-none",
         })}
-        onclickcapture={onholdclick}
-        oncontextmenu={onholdnative}
-        onpointerdown={onholddown}
+        onclickcapture={press.onholdclick}
+        oncontextmenu={press.onholdnative}
+        onpointerdown={press.onholddown}
         onsubmit={(e) => e.preventDefault()}
-        ontouchend={onholdnative}
+        ontouchend={press.onholdnative}
         bind:this={pill}
         style:--cin-pad="var(--c-composer-inset)"
         style:--cin-ctl="var(--c-composer-field)"
@@ -2834,7 +2211,7 @@
             also ? "basis-full" : "group-data-lead/cin:basis-0",
           ]}
           inert={askOpen}
-          bind:this={fieldWrap}
+          bind:this={recalling.fieldWrap}
           style:--roll-move="0 var(--roll-y)"
           style:--roll-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) var(--roll-y))"}
           style:--fold-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) calc(var(--field-pad) + var(--roll-y, 0px)))"}
@@ -2863,12 +2240,16 @@
                fly in over it, or an ask's card stands over it, it draws none
                of its own text or caret; while the wheel is up, no caret. -->
           <MentionField
-            aria-activedescendant={recall
-              ? recallActive
+            aria-activedescendant={recalling.recall
+              ? recalling.recallActive
               : menu.activeDescendant}
-            aria-controls={recall ? recallId : "composer-menu"}
-            aria-describedby={recallOf ? `${recallId}-way` : undefined}
-            aria-expanded={menu.open || !!recall}
+            aria-controls={recalling.recall
+              ? recalling.recallId
+              : "composer-menu"}
+            aria-describedby={recallOf
+              ? `${recalling.recallId}-way`
+              : undefined}
+            aria-expanded={menu.open || !!recalling.recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
             class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:data-folding:duration-(--dur-morph) motion-safe:group-data-settling/cin:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--dur-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
             data-cue-bottom={(swap.cueBottom && !folded) || undefined}
@@ -2904,7 +2285,7 @@
               fold: folds,
               measured: (whole) => {
                 natural = whole;
-                onFit?.(whole);
+                recalling.onFit?.(whole);
               },
             })}
             {@attach fieldHint.fit}
@@ -2967,7 +2348,7 @@
           {#if recallOf}
             <!-- The way to what you sent here, read with the field: ↑ brings
                it up (a held press, on a touch screen). -->
-            <span class="sr-only" id="{recallId}-way"
+            <span class="sr-only" id="{recalling.recallId}-way"
               >Press Up to show what you sent</span
             >
           {/if}
@@ -2990,7 +2371,7 @@
             "group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide",
             also && "ms-auto",
           ]}
-          inert={!!recall}
+          inert={!!recalling.recall}
           onmousedown={(event) => {
             // The field keeps the focus through a press here (`focused`):
             // the draft stays as tall as it is, so the press stays on its button.
@@ -2998,7 +2379,7 @@
               event.preventDefault();
             }
           }}
-          bind:this={ctrls}
+          bind:this={recalling.ctrls}
         >
           {#if attach}
             <AttachButton
