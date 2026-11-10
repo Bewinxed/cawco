@@ -462,14 +462,7 @@ const spec: Spec = {
     const src = join(fleet.sandbox, "clean-src");
     await mkdir(src, { recursive: true });
     await plant(fleet, realpathSync(src));
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     // CawCo's role memory documents: a person's session's, and a leaf's.
     for (const role of ["orchestrator", "leaf"] as const) {
       await fleet.api((hub) =>

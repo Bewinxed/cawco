@@ -1407,14 +1407,7 @@ const spec: Spec = {
       return say("ok");
     });
     const home = fleet.env.HOME as string;
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     repo = join(fleet.sandbox, "src");
     await mkdir(repo, { recursive: true });
     await writeFile(

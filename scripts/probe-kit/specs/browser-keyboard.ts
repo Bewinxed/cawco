@@ -451,14 +451,7 @@ export async function typeIntoTakeover(
     dockerHost = `unix://${runtime.endpoint}`;
   }
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent", [], { DOCKER_HOST: dockerHost });
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up({ agent: { DOCKER_HOST: dockerHost } });
 
   const project = await fleet.api((hub) =>
     hub.api.projects.post({

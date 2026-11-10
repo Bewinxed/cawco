@@ -150,14 +150,7 @@ interface OnCanvas {
 /** A scratch fleet with one Claude Code session, and the session open on the dashboard, every request watched. */
 const setUp = async (kit: Kit): Promise<OnCanvas> => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const session = await fleet.spawn("claude", "Canvas", fleet.repo);
   let sent = 0;
   const call = async (tool: string, input: object): Promise<string> => {

@@ -373,14 +373,7 @@ const run = async (kit: Kit) => {
   // alone, as on the owner's machine, whose agent runs with none: the fleet
   // sets one for every service (scratch-fleet.ts `claudeTmp`), which the
   // agent would hand the CLI before the fix, and the leg would pass unfixed.
-  fleet.launch("sessiond", [], NO_CLAUDE_TMP);
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent", [], NO_CLAUDE_TMP);
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up({ sessiond: NO_CLAUDE_TMP, agent: NO_CLAUDE_TMP });
   const home = fleet.env.HOME as string;
   await writeFile(
     join(home, ".gitconfig"),

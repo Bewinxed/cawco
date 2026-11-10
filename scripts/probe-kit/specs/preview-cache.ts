@@ -152,14 +152,7 @@ const probe = async (kit: Kit) => {
   const vite = await viteOn(join(kit.out, "vite-app"), vitePort);
 
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const session = await fleet.spawn("claude", "Cache", fleet.repo);
 
   calls.ask("1", {

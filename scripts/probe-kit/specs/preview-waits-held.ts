@@ -150,15 +150,8 @@ const spec: Spec = {
   run: async (kit: Kit) => {
     const { check } = kit;
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
     const stageIdle = { CAWCO_STAGE_IDLE_MS: String(IDLE_MS) };
-    fleet.launch("hub", [], stageIdle);
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent", [], stageIdle);
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up({ hub: stageIdle, agent: stageIdle });
     const base = await fleet.dashboard();
     const home = fleet.env.HOME as string;
     const repo = `${fleet.sandbox}/code`;

@@ -317,14 +317,7 @@ const spec: Spec = {
     const app = serve(release.promise, releaseHeld.promise);
     const port = Number(app.port);
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const base = await fleet.dashboard();
 
     // (1) A decision page's Preview of each start.

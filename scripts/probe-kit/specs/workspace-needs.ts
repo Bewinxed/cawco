@@ -398,14 +398,7 @@ const run = async (kit: Kit) => {
     fleet.env.PATH as string,
     join(fleet.sandbox, "no-git")
   );
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent", [], { PATH: path });
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up({ agent: { PATH: path } });
   const needs = await until(
     "the machine's report of what a workspace needs",
     () => reported(fleet),

@@ -430,14 +430,7 @@ const folderCheck = async (kit: Kit) => {
   };
   try {
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const session = await fleet.spawn("claude", "Weight", fleet.repo);
     calls.ask("1", {
       name: "mcp__cawco__artifact_create",

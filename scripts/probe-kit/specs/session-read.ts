@@ -108,14 +108,7 @@ const spec: Spec = {
     await ruleLeg(kit);
 
     const fleet = await kit.fleet((): Reply => ({ everyMs: 5, words: ["ok"] }));
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const s = await fleet.spawn("claude", "Reader", fleet.repo);
     const t = await fleet.spawn("claude", "Another", fleet.repo);
     const credential = async (session: string) =>

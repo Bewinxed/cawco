@@ -352,14 +352,11 @@ const run = async (kit: Kit) => {
     .quiet();
   await commitAll(npmCards);
 
-  fleet.launch("sessiond", [], withStandIn);
-  await fleet.sessiondUp();
-  fleet.launch("hub", [], withStandIn);
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent", [], withStandIn);
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up({
+    sessiond: withStandIn,
+    hub: withStandIn,
+    agent: withStandIn,
+  });
 
   const project = await fleet.api((hub) =>
     hub.api.projects.post({

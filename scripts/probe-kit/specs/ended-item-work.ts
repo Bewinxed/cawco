@@ -428,14 +428,7 @@ const spec: Spec = {
       delete pending[tag];
     }
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent", [], { CAWCO_LEAK_MEMORY_GIB: String(THRESHOLD_GIB) });
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up({ agent: { CAWCO_LEAK_MEMORY_GIB: String(THRESHOLD_GIB) } });
     const home = fleet.env.HOME as string;
     const repo = `${fleet.sandbox}/code`;
     await Bun.write(

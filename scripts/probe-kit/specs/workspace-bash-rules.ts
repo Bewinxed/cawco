@@ -500,24 +500,19 @@ const exists = async (path: string) => await Bun.file(path).exists();
  */
 const standUp = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
   // The project's browser a local Chromium: the runtime hidden.
-  fleet.launch("agent", [], {
-    DOCKER_HOST: "unix:///nonexistent",
-    PLAYWRIGHT_BROWSERS_PATH:
-      process.env.PLAYWRIGHT_BROWSERS_PATH ??
-      join(
-        homedir(),
-        process.platform === "darwin" ? "Library/Caches" : ".cache",
-        "ms-playwright"
-      ),
+  await fleet.up({
+    agent: {
+      DOCKER_HOST: "unix:///nonexistent",
+      PLAYWRIGHT_BROWSERS_PATH:
+        process.env.PLAYWRIGHT_BROWSERS_PATH ??
+        join(
+          homedir(),
+          process.platform === "darwin" ? "Library/Caches" : ".cache",
+          "ms-playwright"
+        ),
+    },
   });
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
   const home = fleet.env.HOME as string;
   await writeFile(
     join(home, ".gitconfig"),

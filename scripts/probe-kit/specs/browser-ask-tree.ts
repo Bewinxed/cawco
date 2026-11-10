@@ -702,14 +702,7 @@ const run = async (kit: Kit) => {
   const other = servedSite("Probe elsewhere");
   try {
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent", [], { DOCKER_HOST: "unix:///nonexistent" });
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up({ agent: { DOCKER_HOST: "unix:///nonexistent" } });
     const project = await fleet.api((hub) =>
       hub.api.projects.post({
         name: "Ask tree",

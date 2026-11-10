@@ -559,14 +559,7 @@ const spec: Spec = {
     };
 
     try {
-      fleet.launch("sessiond");
-      await fleet.sessiondUp();
-      fleet.launch("hub");
-      await fleet.hubUp();
-      fleet.fileAccount();
-      fleet.launch("agent");
-      await fleet.agentUp();
-      await fleet.accountSignedIn();
+      await fleet.up();
 
       // A project, its lead, and the skills: one for every session, one
       // bound to the project.

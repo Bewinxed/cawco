@@ -66,14 +66,7 @@ async function run(kit: Kit): Promise<void> {
     words: [request.last.includes(ASK) ? PHRASE : "ok"],
   }));
   try {
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
 
     const rule = await fleet.api((hub) =>
       hub.api.rules.post({

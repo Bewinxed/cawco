@@ -2621,14 +2621,7 @@ const run = async (kit: Kit) => {
   await heavyFolder(folder);
   const scene = sceneModel();
   const fleet = await kit.fleet(scene.respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const front = await fleet.spawn("claude", "Quiet");
   await fleet.send(front, `${scene.mark("front")}: hello.`);
   const busy = await fleet.spawn("claude", "Busy");

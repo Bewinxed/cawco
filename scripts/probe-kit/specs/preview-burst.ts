@@ -898,14 +898,7 @@ async function realJoin(kit: Kit): Promise<void> {
   await Bun.$`bun install --lockfile-only --no-progress`
     .cwd(fleet.repo)
     .quiet();
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const session = await fleet.spawn("claude", "Cards", fleet.repo);
   calls.ask("5", {
     name: "mcp__cawco__artifact_create",

@@ -589,14 +589,7 @@ const run = async (kit: Kit) => {
   const refusing = lfsMock(true);
   try {
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
 
     const home = fleet.env.HOME as string;
     const hub = `http://127.0.0.1:${fleet.env.CAWCO_HUB_PORT}`;

@@ -253,14 +253,7 @@ const respond = (request: Seen): Reply =>
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const alpha = await fleet.spawn("claude", "Alpha");
   await fleet.send(alpha, "hello");
   const beta = await fleet.spawn("claude", "Beta");

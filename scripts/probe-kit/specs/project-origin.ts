@@ -224,14 +224,7 @@ const embedHosts = async (tab: Page): Promise<Set<string>> =>
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const dir = `${fleet.sandbox}/pairing-site`;
   await Bun.$`mkdir -p ${dir} && git init -q -b main ${dir}`.quiet();
   // A project of an id shape the hub stores beside its UUIDs (capitals and

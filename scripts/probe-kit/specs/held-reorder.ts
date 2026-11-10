@@ -1137,14 +1137,7 @@ const spec: Spec = {
   name: "held-reorder",
   run: async (kit) => {
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const { live } = await board(kit, fleet);
     const base = await fleet.dashboard();
     const numbers: Record<string, unknown> = {};

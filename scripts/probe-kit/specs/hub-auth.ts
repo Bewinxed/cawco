@@ -324,14 +324,7 @@ const spec: Spec = {
     const { check } = kit;
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
 
     const src = join(fleet.sandbox, "src");
     await Bun.$`mkdir -p ${src}`.quiet();

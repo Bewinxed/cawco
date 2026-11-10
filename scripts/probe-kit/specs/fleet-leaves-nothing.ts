@@ -97,14 +97,7 @@ const spec: Spec = {
   async run(kit) {
     const { check } = kit;
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["done"] }));
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
+    await fleet.up();
     const folders = [fleet.home, fleet.sandbox];
     const said = (list: { command: string; pid: number }[]) =>
       list.map((one) => `${one.pid} ${one.command}`).join("; ") || "none";

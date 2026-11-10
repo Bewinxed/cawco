@@ -396,14 +396,7 @@ const standIn = async (page: Page): Promise<Stand> => {
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const base = await fleet.dashboard();
   const session = await fleet.spawn("claude", "Pins held", fleet.repo);
   const { id } = await fleet.api((client) =>

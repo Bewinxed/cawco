@@ -1829,14 +1829,7 @@ const run = async (kit: Kit) => {
   await Bun.$`bun install --lockfile-only --no-progress`
     .cwd(fleet.repo)
     .quiet();
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const session = await fleet.spawn("claude", "Graph cards", fleet.repo);
   const callIn =
     (from: string) => async (n: string, name: string, input: object) => {

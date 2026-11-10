@@ -709,14 +709,7 @@ const provenOn = async (kit: Kit): Promise<void> => {
     return;
   }
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent", [], agentEnv);
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up({ agent: agentEnv });
   const outsideRun = await run(runtime.cli, [
     "run",
     "-d",

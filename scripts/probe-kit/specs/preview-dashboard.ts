@@ -90,14 +90,7 @@ type Reads = Awaited<ReturnType<typeof dashboardReads>>;
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
-  fleet.launch("agent");
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up();
   const base = await fleet.dashboard();
   const port = Number(new URL(base).port);
   const session = await fleet.spawn("claude", TITLE, fleet.repo);

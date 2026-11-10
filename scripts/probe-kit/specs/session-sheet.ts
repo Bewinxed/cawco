@@ -1752,11 +1752,6 @@ const run = async (kit: Kit) => {
   await writeProject(elsewhere);
   const kitDir = join(fleet.sandbox, "kit");
   await writeKit(kitDir);
-  fleet.launch("sessiond");
-  await fleet.sessiondUp();
-  fleet.launch("hub");
-  await fleet.hubUp();
-  fleet.fileAccount();
   const npmDir = join(fleet.sandbox, "npm");
   await writeNpm(npmDir);
   const enumDir = join(fleet.sandbox, "enum-config");
@@ -1766,9 +1761,7 @@ const run = async (kit: Kit) => {
   const throwingDir = join(fleet.sandbox, "throwing-plugin");
   await writeCommitted(throwingDir, configProject(THROWING_CONFIG));
   // Short enough that the npm stage sleeps within a minute of its last use (legs 10–12).
-  fleet.launch("agent", [], { CAWCO_STAGE_IDLE_MS: String(IDLE_MS) });
-  await fleet.agentUp();
-  await fleet.accountSignedIn();
+  await fleet.up({ agent: { CAWCO_STAGE_IDLE_MS: String(IDLE_MS) } });
   const session = await fleet.spawn("claude", "Cards", fleet.repo);
   /** Asks session `who` to make call `n`, and waits for what it answered. */
   const call = async (
