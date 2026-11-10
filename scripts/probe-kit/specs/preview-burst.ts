@@ -384,8 +384,11 @@ async function hubListener(
     tailnet,
     { listens: true, after: () => undefined }
   );
-  const { port } = listeners.embed(embed, embed);
-  return { port, stop: () => listeners.release(embed) };
+  const opened = listeners.embed(embed, embed);
+  if (!("port" in opened)) {
+    throw new Error(opened.response.detail);
+  }
+  return { port: opened.port, stop: () => listeners.release(embed) };
 }
 
 /**
