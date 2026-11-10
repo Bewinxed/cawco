@@ -20,8 +20,9 @@
  *   names who said a comment with `createAsUser` ("rendered in *User (via
  *   Application)* format", linear.app/developers/oauth-actor-authorization);
  *   an API key writes as its person, so the comment says who in its words.
- * - **Refusals** carry Linear's words: a scope it lacks is "Invalid scope:
- *   `write` required" (type `forbidden`).
+ * - **Problems** carry Linear's words: a scope it lacks is "Invalid scope:
+ *   `write` required" (type `forbidden`). Each is returned as the adapter's
+ *   {@link TrackerProblem}, read off the SDK's error where the SDK is called.
  */
 
 import { readWithin } from "@cawco/core/bounded";
@@ -33,6 +34,7 @@ import {
   parseLinearError,
   RatelimitedLinearError,
 } from "@linear/sdk";
+import { ElysiaStatus, problem } from "elysia";
 import type { LinearClientFor } from "./connections";
 import {
   type Issue,
@@ -45,7 +47,7 @@ import {
   labelSet,
   type StateType,
   type TrackerAdapter,
-  TrackerRefusal,
+  type TrackerProblem,
 } from "./tracker-adapter";
 
 /** One request. Our choice. */
@@ -61,7 +63,7 @@ const ISSUE_URL =
 
 /**
  * One request within {@link REQUEST_MS}, through a client made for it with
- * its signal (connections.ts `LinearClientFor`): its data, Linear's refusal
+ * its signal (connections.ts `LinearClientFor`): its data, Linear's problem
  * in words, or that it did not answer in time.
  */
 const within = async <T>(
@@ -70,7 +72,7 @@ const within = async <T>(
   team: string,
   query: string,
   variables: Record<string, unknown>
-): Promise<T> => {
+): Promise<T | TrackerProblem> => {
   let read: Awaited<ReturnType<typeof readWithin<{ data?: T }>>>;
   try {
     read = await readWithin(REQUEST_MS, (signal) =>
@@ -80,19 +82,19 @@ const within = async <T>(
       )
     );
   } catch (error) {
-    throw linearRefusal(error, what, team);
+    return linearProblem(error, what, team);
   }
   if (read.kind === "unanswered") {
-    throw new TrackerRefusal(
-      "unreachable",
-      `Linear did not answer to ${what} in ${team} within ${REQUEST_MS / 1000} s.`
-    );
+    return problem(400, {
+      code: "tracker-unreachable",
+      detail: `Linear did not answer to ${what} in ${team} within ${REQUEST_MS / 1000} s.`,
+    });
   }
   if (!read.value.data) {
-    throw new TrackerRefusal(
-      "input",
-      `Linear answered nothing to ${what} in ${team}.`
-    );
+    return problem(400, {
+      code: "tracker-linear-no-data",
+      detail: `Linear answered nothing to ${what} in ${team}.`,
+    });
   }
   return read.value.data;
 };
@@ -244,15 +246,12 @@ const issueOf = (raw: RawIssue): Issue => ({
   updatedAt: Date.parse(raw.updatedAt),
 });
 
-/** Linear's refusal of `what` on `team`, in its words. */
-const linearRefusal = (
+/** What Linear's error says of `what` on `team`, in its words, as the problem its type is. */
+const linearProblem = (
   error: unknown,
   what: string,
   team: string
-): TrackerRefusal => {
-  if (error instanceof TrackerRefusal) {
-    return error;
-  }
+): TrackerProblem => {
   const parsed =
     error instanceof LinearError
       ? error
@@ -260,16 +259,16 @@ const linearRefusal = (
   const said = (parsed.errors?.[0]?.message ?? parsed.message).slice(0, 300);
   switch (parsed.type) {
     case LinearErrorType.AuthenticationError:
-      return new TrackerRefusal(
-        "sign-in",
-        `Linear refused the connection's sign-in (${said}).`
-      );
+      return problem(400, {
+        code: "tracker-sign-in",
+        detail: `Linear refused the connection's sign-in (${said}).`,
+      });
     case LinearErrorType.Forbidden:
     case LinearErrorType.FeatureNotAccessible:
-      return new TrackerRefusal(
-        "scope",
-        `Linear refused to ${what} in ${team}: ${said}`
-      );
+      return problem(400, {
+        code: "tracker-scope",
+        detail: `Linear refused to ${what} in ${team}: ${said}`,
+      });
     case LinearErrorType.Ratelimited: {
       const reset =
         parsed instanceof RatelimitedLinearError
@@ -277,17 +276,17 @@ const linearRefusal = (
             (parsed.retryAfter ? Date.now() + parsed.retryAfter * 1000 : null))
           : null;
       const resumeAt = reset ?? Date.now() + 60_000;
-      return new TrackerRefusal(
-        "rate",
-        `Linear's rate limit holds the sync back until ${new Date(resumeAt).toISOString()}.`,
-        resumeAt
-      );
+      return problem(400, {
+        code: "tracker-rate",
+        detail: `Linear's rate limit holds the sync back until ${new Date(resumeAt).toISOString()}.`,
+        resumeAt,
+      });
     }
     case LinearErrorType.NetworkError:
-      return new TrackerRefusal(
-        "unreachable",
-        `Linear could not be reached to ${what}: ${said}`
-      );
+      return problem(400, {
+        code: "tracker-unreachable",
+        detail: `Linear could not be reached to ${what}: ${said}`,
+      });
     case LinearErrorType.BootstrapError:
     case LinearErrorType.GraphqlError:
     case LinearErrorType.InternalError:
@@ -300,10 +299,10 @@ const linearRefusal = (
     case undefined:
       break;
   }
-  return new TrackerRefusal(
-    "input",
-    `Linear would not ${what} in ${team}: ${said}`
-  );
+  return problem(400, {
+    code: "tracker-input",
+    detail: `Linear would not ${what} in ${team}: ${said}`,
+  });
 };
 
 /** One team's issues, as the sync asks of a tracker. `asApp`: the connection is a Linear app. */
@@ -319,7 +318,8 @@ export const linearAdapter = (
     what: string,
     query: string,
     variables: Record<string, unknown>
-  ): Promise<T> => within<T>(client, what, teamName, query, variables);
+  ): Promise<T | TrackerProblem> =>
+    within<T>(client, what, teamName, query, variables);
 
   const team = async () => {
     const data = await ask<{
@@ -331,33 +331,42 @@ export const linearAdapter = (
         states: { nodes: (RawIssue["state"] & { position: number })[] };
       } | null;
     }>("read the team", TEAM_QUERY, { id: teamId });
+    if (data instanceof ElysiaStatus) {
+      return data;
+    }
     if (!data.team) {
-      throw new TrackerRefusal(
-        "scope",
-        `Linear has no team ${teamId} the connection can see.`
-      );
+      return problem(400, {
+        code: "tracker-scope",
+        detail: `Linear has no team ${teamId} the connection can see.`,
+      });
     }
     teamName = `${data.team.key} · ${data.team.name}`;
     return { ...data.team, urlKey: data.organization.urlKey };
   };
 
   /** Each label name the team's issues can carry (its own and the workspace's), to its id. */
-  const labelIds = async (names: readonly string[]): Promise<string[]> => {
+  const labelIds = async (
+    names: readonly string[]
+  ): Promise<string[] | TrackerProblem> => {
     if (names.length === 0) {
       return [];
     }
-    const { issueLabels } = await ask<{
+    const labels = await ask<{
       issueLabels: Page<{ id: string; name: string }>;
     }>("read its labels", LABELS_QUERY, { team: teamId });
+    if (labels instanceof ElysiaStatus) {
+      return labels;
+    }
+    const { issueLabels } = labels;
     const byName = new Map(
       issueLabels.nodes.map((label) => [label.name.toLowerCase(), label.id])
     );
     const missing = names.filter((name) => !byName.has(name.toLowerCase()));
     if (missing.length > 0) {
-      throw new TrackerRefusal(
-        "input",
-        `Linear has no label ${missing.map((name) => `“${name}”`).join(", ")} for ${teamName}; add it in Linear, or take it off the task.`
-      );
+      return problem(400, {
+        code: "tracker-linear-label-unknown",
+        detail: `Linear has no label ${missing.map((name) => `“${name}”`).join(", ")} for ${teamName}; add it in Linear, or take it off the task.`,
+      });
     }
     return names.map((name) => byName.get(name.toLowerCase()) as string);
   };
@@ -370,7 +379,7 @@ export const linearAdapter = (
     cursor: ListCursor,
     read: (raw: Raw) => T,
     stamp: (raw: Raw) => number
-  ): Promise<Listed<T>> => {
+  ): Promise<Listed<T> | TrackerProblem> => {
     const since = new Date(
       Math.max(0, cursor.since - OVERLAP_MS)
     ).toISOString();
@@ -378,11 +387,14 @@ export const linearAdapter = (
     let newest = cursor.since;
     let after: string | null = null;
     for (let page = 0; page < MAX_PAGES; page += 1) {
-      const data: Record<string, Page<Raw>> = await ask(what, query, {
+      const data = await ask<Record<string, Page<Raw>>>(what, query, {
         team: teamId,
         since,
         after,
       });
+      if (data instanceof ElysiaStatus) {
+        return data;
+      }
       const listed = data[field] as Page<Raw>;
       for (const raw of listed.nodes) {
         newest = Math.max(newest, stamp(raw));
@@ -396,20 +408,28 @@ export const linearAdapter = (
     return { kind: "read", items, cursor: { since: newest, etag: null } };
   };
 
-  const issueInput = async (patch: IssuePatch) => ({
-    ...(patch.title === undefined ? {} : { title: patch.title }),
-    ...(patch.description === undefined
-      ? {}
-      : { description: patch.description }),
-    ...(patch.labels === undefined
-      ? {}
-      : { labelIds: await labelIds(patch.labels) }),
-    ...(patch.state === undefined ? {} : { stateId: patch.state.token }),
-  });
+  const issueInput = async (patch: IssuePatch) => {
+    const ids =
+      patch.labels === undefined ? undefined : await labelIds(patch.labels);
+    if (ids instanceof ElysiaStatus) {
+      return ids;
+    }
+    return {
+      ...(patch.title === undefined ? {} : { title: patch.title }),
+      ...(patch.description === undefined
+        ? {}
+        : { description: patch.description }),
+      ...(ids === undefined ? {} : { labelIds: ids }),
+      ...(patch.state === undefined ? {} : { stateId: patch.state.token }),
+    };
+  };
 
   return {
     describe: async () => {
       const read = await team();
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
       return {
         id: read.id,
         name: `${read.key} · ${read.name}`,
@@ -417,24 +437,25 @@ export const linearAdapter = (
       };
     },
 
-    states: async () =>
-      (await team()).states.nodes
-        .toSorted((a, b) => a.position - b.position)
-        .map(stateOf),
+    states: async () => {
+      const read = await team();
+      return read instanceof ElysiaStatus
+        ? read
+        : read.states.nodes
+            .toSorted((a, b) => a.position - b.position)
+            .map(stateOf);
+    },
 
     issue: async (key) => {
-      try {
-        const { issue } = await ask<{
-          issue: (RawIssue & { team: { id: string } }) | null;
-        }>(`read ${key}`, ISSUE_QUERY, { id: key });
-        return issue && issue.team.id === teamId ? issueOf(issue) : null;
-      } catch (error) {
+      const read = await ask<{
+        issue: (RawIssue & { team: { id: string } }) | null;
+      }>(`read ${key}`, ISSUE_QUERY, { id: key });
+      if (read instanceof ElysiaStatus) {
         // "Entity not found": deleted, or never one the connection can see.
-        if (error instanceof TrackerRefusal && error.kind === "input") {
-          return null;
-        }
-        throw error;
+        return read.response.code === "tracker-input" ? null : read;
       }
+      const { issue } = read;
+      return issue && issue.team.id === teamId ? issueOf(issue) : null;
     },
 
     keyOf: async (url) => {
@@ -442,39 +463,58 @@ export const linearAdapter = (
       if (!identifier) {
         return;
       }
-      const { issue } = await ask<{
+      const read = await ask<{
         issue: (RawIssue & { team: { id: string } }) | null;
       }>(`read ${identifier}`, ISSUE_QUERY, { id: identifier });
-      return issue?.team.id === teamId ? issue.id : undefined;
+      if (read instanceof ElysiaStatus) {
+        return read;
+      }
+      return read.issue?.team.id === teamId ? read.issue.id : undefined;
     },
 
     create: async (draft: IssueDraft) => {
-      const { issueCreate } = await ask<{
+      const input = await issueInput(draft);
+      if (input instanceof ElysiaStatus) {
+        return input;
+      }
+      const made = await ask<{
         issueCreate: { issue: RawIssue | null; success: boolean };
       }>("create an issue", CREATE_MUTATION, {
-        input: { teamId, ...(await issueInput(draft)) },
+        input: { teamId, ...input },
       });
+      if (made instanceof ElysiaStatus) {
+        return made;
+      }
+      const { issueCreate } = made;
       if (!(issueCreate.success && issueCreate.issue)) {
-        throw new TrackerRefusal(
-          "input",
-          `Linear did not create the issue in ${teamName}.`
-        );
+        return problem(400, {
+          code: "tracker-linear-issue-not-made",
+          detail: `Linear did not create the issue in ${teamName}.`,
+        });
       }
       return issueOf(issueCreate.issue);
     },
 
     update: async (issue, patch: IssuePatch) => {
-      const { issueUpdate } = await ask<{
+      const input = await issueInput(patch);
+      if (input instanceof ElysiaStatus) {
+        return input;
+      }
+      const changed = await ask<{
         issueUpdate: { issue: RawIssue | null; success: boolean };
       }>(`change ${issue.ref}`, UPDATE_MUTATION, {
         id: issue.key,
-        input: await issueInput(patch),
+        input,
       });
+      if (changed instanceof ElysiaStatus) {
+        return changed;
+      }
+      const { issueUpdate } = changed;
       if (!(issueUpdate.success && issueUpdate.issue)) {
-        throw new TrackerRefusal(
-          "input",
-          `Linear did not change ${issue.ref} in ${teamName}.`
-        );
+        return problem(400, {
+          code: "tracker-linear-issue-not-changed",
+          detail: `Linear did not change ${issue.ref} in ${teamName}.`,
+        });
       }
       return issueOf(issueUpdate.issue);
     },
@@ -528,7 +568,7 @@ export const linearAdapter = (
       ),
 
     comment: async (issue, author, body) => {
-      const { commentCreate } = await ask<{
+      const created = await ask<{
         commentCreate: {
           comment: { createdAt: string; id: string; url: string } | null;
           success: boolean;
@@ -538,11 +578,15 @@ export const linearAdapter = (
           ? { issueId: issue.key, body, createAsUser: `${author} (CawCo)` }
           : { issueId: issue.key, body: `**${author}** on CawCo:\n\n${body}` },
       });
+      if (created instanceof ElysiaStatus) {
+        return created;
+      }
+      const { commentCreate } = created;
       if (!(commentCreate.success && commentCreate.comment)) {
-        throw new TrackerRefusal(
-          "input",
-          `Linear did not take the comment on ${issue.ref}.`
-        );
+        return problem(400, {
+          code: "tracker-linear-comment-not-taken",
+          detail: `Linear did not take the comment on ${issue.ref}.`,
+        });
       }
       return {
         id: commentCreate.comment.id,
@@ -556,11 +600,14 @@ export const linearAdapter = (
 /** The teams a Linear connection reaches, for a project to be bound to one. */
 export const linearTargets = async (
   client: LinearClientFor
-): Promise<TrackerTarget[]> => {
+): Promise<TrackerTarget[] | TrackerProblem> => {
   const data = await within<{
     organization: { urlKey: string };
     teams: Page<{ id: string; key: string; name: string }>;
   }>(client, "list its teams", "Linear", TEAMS_QUERY, {});
+  if (data instanceof ElysiaStatus) {
+    return data;
+  }
   return data.teams.nodes.map((team) => ({
     id: team.id,
     name: `${team.key} · ${team.name}`,
