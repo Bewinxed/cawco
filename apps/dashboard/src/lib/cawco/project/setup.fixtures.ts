@@ -65,7 +65,12 @@ export const PR_DELEGATES: SetupDelegate[] = [
   },
 ];
 
-const call = (id: string, tool: string, input: object, second: number) =>
+const call = (
+  id: string,
+  tool: string,
+  input: Record<string, unknown>,
+  second: number
+) =>
   ({
     id,
     instanceId: "pr-team-conversation",
@@ -75,14 +80,14 @@ const call = (id: string, tool: string, input: object, second: number) =>
     toolCallId: id,
     metadata: {
       toolName: tool,
-      toolInput: input as Record<string, unknown>,
+      toolInput: input,
       toolStatus: "success",
     },
   }) satisfies Message;
 
 /** What Caw calls as he sets it up, by the beat it has reached. */
-export const SETUP_CALLS = {
-  sent: [] as Message[],
+export const SETUP_CALLS: Record<"sent" | "read" | "named", Message[]> = {
+  sent: [],
   read: [call("t1", "mcp__cawco__project_setup", {}, 9)],
   named: [
     call("t1", "mcp__cawco__project_setup", {}, 9),

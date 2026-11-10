@@ -289,7 +289,7 @@ export class CawLead {
     }
     // Seen to move: the ring stands on it whatever the pointer did (a
     // press that only moved focus showed nothing, cold review a89636bb).
-    act?.focus({ preventScroll: true, focusVisible: true } as FocusOptions);
+    act?.focus({ preventScroll: true, focusVisible: true });
   }
 
   /**

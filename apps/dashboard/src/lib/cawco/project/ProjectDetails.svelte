@@ -443,6 +443,8 @@
     }
   }
 
+  /** The trackers a project's tasks can live in, in the order the segments stand. */
+  const TRACKER_CHOICES = ["cawco", "github", "linear"] as const;
   /** Opens the binding's form for a tracker: its usable connections, then their targets. */
   async function pick(next: Tracker): Promise<void> {
     bindFault = null;
@@ -1141,8 +1143,9 @@
             bind:value={
               () => lands,
               (next) => {
-                if (next) {
-                  askLands(next as LandsMode);
+                const mode = LANDS_MODES.find((one) => one === next);
+                if (mode) {
+                  askLands(mode);
                 }
               }
             }
@@ -1281,13 +1284,14 @@
           bind:value={
             () => shownTracker,
             (next) => {
-              if (next) {
-                pick(next as Tracker);
+              const tracker = TRACKER_CHOICES.find((one) => one === next);
+              if (tracker) {
+                pick(tracker);
               }
             }
           }
         >
-          {#each ["cawco", "github", "linear"] as const as each (each)}
+          {#each TRACKER_CHOICES as each (each)}
             <ToggleGroup.Item value={each}
               >{TRACKER_NAMES[each]}</ToggleGroup.Item
             >
@@ -1616,8 +1620,9 @@
             bind:value={
               () => atLimit,
               (next) => {
-                if (next) {
-                  setAtLimit(next as ProjectAtLimit);
+                const way = PROJECT_AT_LIMIT.find((one) => one === next);
+                if (way) {
+                  setAtLimit(way);
                 }
               }
             }

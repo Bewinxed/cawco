@@ -8,7 +8,6 @@
   which each tile still says to a screen reader.
 -->
 <script lang="ts">
-  import type { StageColor, StageIcon } from "@cawco/core/views";
   import { STAGE_COLORS, STAGE_ICONS } from "@cawco/core/views";
   import {
     stageLookWords,
@@ -34,7 +33,8 @@
 <DropdownMenu.Label>{words.glyph}</DropdownMenu.Label>
 <DropdownMenu.RadioGroup
   aria-label={words.glyph}
-  onValueChange={(next) => onlook({ icon: next as StageIcon })}
+  onValueChange={(next) =>
+    onlook({ icon: STAGE_ICONS.find((one) => one === next) })}
   value={stage.icon ?? ""}
 >
   <div
@@ -61,7 +61,7 @@
 <DropdownMenu.RadioGroup
   aria-label={words.color}
   onValueChange={(next) =>
-    onlook({ color: next ? (next as StageColor) : undefined })}
+    onlook({ color: STAGE_COLORS.find((one) => one === next) })}
   value={stage.color ?? ""}
 >
   <div class="flex gap-space-1 px-space-1 pb-space-1">
