@@ -1095,6 +1095,9 @@ export const createContinuations = (ctx: ContinuationsContext) => {
     const open =
       row.openItems ??
       (source ? await ctx.openItems.read(prepared.source.instanceId) : null);
+    if (open instanceof ElysiaStatus) {
+      throw new Error(open.response.detail);
+    }
     if (cancelledContinuation(row.id)) {
       ctx.retireSession(targetMachineOf(row), row.targetInstanceId);
       return false;
