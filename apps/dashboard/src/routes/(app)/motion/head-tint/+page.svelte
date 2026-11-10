@@ -145,10 +145,10 @@
     return rows;
   }
 
-  // The client's own state, as the hub's frames and reads would have set it:
+  // The stores' own state, as the hub's frames and reads would have set it:
   // the sessions' pulses and their histories, in hand (`initialized`), so a
   // pane opening one reads nothing (dev's `__cawcoDebug`, set when
-  // client.svelte.ts loads, which this page imports ahead of this script).
+  // client.svelte.ts loads, which the app layout imports ahead of any page).
   const debug = benchDebug();
   const now = Date.now();
   for (const id of ids) {

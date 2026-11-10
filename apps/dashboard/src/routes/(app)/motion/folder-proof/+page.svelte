@@ -10,7 +10,7 @@
   import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
   /**
-   * Both folder strips on a bench, fed through the client's own state with
+   * Both folder strips on a bench, fed through the stores' own state with
    * no hub, over everything the shell draws (its hub banner included):
    *
    * - the session tabs (`data-strip="session"`): the real PaneTabs, six
@@ -53,9 +53,9 @@
     [ids[5]]: "idle",
   };
 
-  // The client's own state, as the hub's frames would have set it: the
+  // The stores' own state, as the hub's frames would have set it: the
   // sessions' rows and pulses (dev's `__cawcoDebug`, set when
-  // client.svelte.ts loads, which PaneTabs imports ahead of this script).
+  // client.svelte.ts loads, which the app layout imports ahead of any page).
   const debug = (
     globalThis as unknown as {
       __cawcoDebug: {

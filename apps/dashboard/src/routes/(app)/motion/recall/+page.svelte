@@ -6,9 +6,9 @@
    * more to roll than any window shows. ↑ in the empty field, or a press
    * held on the pill on a touch screen, brings it up.
    *
-   * The conversation is the client's own state, as the hub's frames would
+   * The conversation is the stores' own state, as the hub's frames would
    * have set it (dev's `__cawcoDebug`, set when client.svelte.ts loads,
-   * which Composer imports ahead of this script). Its / menu holds two
+   * which the app layout imports ahead of any page). Its / menu holds two
    * skills and a built-in, which the field draws as chips (composer-chips);
    * "@" names what the hub's names answer (`GET /api/find`, which a probe
    * answers: session-mention); `window.__recall` holds the draft, and what

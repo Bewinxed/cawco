@@ -6,7 +6,7 @@
 <script lang="ts">
   /**
    * FIND IN A CONVERSATION, as built (dev bench): the real PaneTabs over
-   * real SessionPanes, each over a real Transcript fed through the client's
+   * real SessionPanes, each over a real Transcript fed through the stores'
    * own state with no hub (head-tint's bench), the group's composer lent
    * as PaneLeaf lends it, and find's one record (find/conversation-find)
    * asked of a fixture in the hub's place. `?state=` draws find's states:
