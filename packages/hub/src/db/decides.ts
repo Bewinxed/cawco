@@ -33,7 +33,6 @@ import {
   decidesSettings,
   turnUsage,
 } from "./schema";
-import { singleton } from "./singleton";
 
 export type CardSettlingRow = typeof cardSettlings.$inferSelect;
 type MemberRow = typeof decidesMembers.$inferSelect;
@@ -183,7 +182,11 @@ export const decidesDb = (
   }
 
   const settings = (): SettingsRow | undefined =>
-    singleton(db, decidesSettings, DECIDES_ID);
+    db
+      .select()
+      .from(decidesSettings)
+      .where(eq(decidesSettings.id, DECIDES_ID))
+      .get();
 
   /** Writes `set` into the one settings row, made when missing. */
   const writeSettings = (set: Partial<Omit<SettingsRow, "id">>): void => {

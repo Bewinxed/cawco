@@ -60,7 +60,6 @@ import {
   workItems,
   workspaces,
 } from "./schema";
-import { singleton, singletonColumn } from "./singleton";
 import type { Tx } from "./tx";
 
 export type PlaceRow = typeof projectPlaces.$inferSelect;
@@ -498,12 +497,11 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
 
   /** What reaching a cap does across the fleet (`spend_settings`): `both` until it is set. */
   const fleetOnCap = (): OnCap =>
-    singletonColumn(
-      db,
-      spendSettings,
-      SPEND_SETTINGS_ID,
-      spendSettings.onCap
-    ) ?? "both";
+    db
+      .select({ value: spendSettings.onCap })
+      .from(spendSettings)
+      .where(eq(spendSettings.id, SPEND_SETTINGS_ID))
+      .get()?.value ?? "both";
 
   /**
    * What stands above the projects read: their areas (`areaIds`, else every
@@ -726,7 +724,11 @@ export const projectsDb = (core: DbCore): ProjectsDb => {
         .run();
     },
     sessionLimits: () => {
-      const row = singleton(db, sessionLimits, SESSION_LIMITS_ID);
+      const row = db
+        .select()
+        .from(sessionLimits)
+        .where(eq(sessionLimits.id, SESSION_LIMITS_ID))
+        .get();
       const memoryPercent = row?.memoryPercent ?? undefined;
       const cpuPercent = row?.cpuPercent ?? undefined;
       return {

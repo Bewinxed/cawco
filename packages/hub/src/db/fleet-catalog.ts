@@ -56,7 +56,6 @@ import {
   projects,
   skills,
 } from "./schema";
-import { singleton } from "./singleton";
 
 /** A line its machine said about a session, kept on its row ({@link DbShape.noteMachineLine}). */
 /**
@@ -664,7 +663,11 @@ export const fleetCatalogDb = (core: DbCore): FleetCatalogDb => {
   };
 
   const getFleetMemory = () => {
-    const row = singleton(db, fleetMemory, MEMORY_ID);
+    const row = db
+      .select()
+      .from(fleetMemory)
+      .where(eq(fleetMemory.id, MEMORY_ID))
+      .get();
     return row
       ? {
           content: row.content,

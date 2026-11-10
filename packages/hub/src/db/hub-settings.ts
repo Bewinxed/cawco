@@ -21,7 +21,6 @@ import {
   SUPERVISOR_CONFIG_ID,
   supervisorConfig,
 } from "./schema";
-import { singleton, singletonColumn } from "./singleton";
 
 export interface HubSettingsDb {
   /** The fleet's choices row (`supervisor_config`) and its tool denials. */
@@ -88,7 +87,11 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
       };
     },
     imageSettings: () => {
-      const row = singleton(db, imageSettings, IMAGE_SETTINGS_ID);
+      const row = db
+        .select()
+        .from(imageSettings)
+        .where(eq(imageSettings.id, IMAGE_SETTINGS_ID))
+        .get();
       return row
         ? { provider: row.provider, model: row.model }
         : DEFAULT_IMAGE_SETTINGS;
@@ -100,12 +103,11 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
         .run();
     },
     fleetWatchOn: () =>
-      singletonColumn(
-        db,
-        fleetWatchSettings,
-        FLEET_WATCH_ID,
-        fleetWatchSettings.on
-      ) ?? true,
+      db
+        .select({ value: fleetWatchSettings.on })
+        .from(fleetWatchSettings)
+        .where(eq(fleetWatchSettings.id, FLEET_WATCH_ID))
+        .get()?.value ?? true,
     setFleetWatchOn: (on) => {
       db.insert(fleetWatchSettings)
         .values({ id: FLEET_WATCH_ID, on })
@@ -133,14 +135,22 @@ export const hubSettingsDb = (core: DbCore): HubSettingsDb => {
         .returning({ id: fleetWatchNotices.id })
         .all().length > 0,
     getOpenRouterConnection: () => {
-      const row = singleton(db, openrouterConnection, OPENROUTER_CONNECTION_ID);
+      const row = db
+        .select()
+        .from(openrouterConnection)
+        .where(eq(openrouterConnection.id, OPENROUTER_CONNECTION_ID))
+        .get();
       // A key the hub's key does not open reads as not connected: connect again.
       return row?.apiKey
         ? { apiKey: row.apiKey, connectedAt: row.connectedAt }
         : undefined;
     },
     getJevSettings: () => {
-      const row = singleton(db, jevSettings, JEV_SETTINGS_ID);
+      const row = db
+        .select()
+        .from(jevSettings)
+        .where(eq(jevSettings.id, JEV_SETTINGS_ID))
+        .get();
       return {
         typesafeKey: row?.typesafeKey || null,
         typesafeKeySetAt: row?.typesafeKey ? row.typesafeKeySetAt : null,
