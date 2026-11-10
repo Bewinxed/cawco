@@ -96,7 +96,7 @@ import type { DbShape } from "./db";
 import type { ProjectRow } from "./db/projects";
 import {
   type DispatchChange,
-  type DispatchView,
+  type Dispatcher,
   dispatchProblem,
 } from "./dispatch";
 import { boardTitle } from "./labels";
@@ -380,10 +380,7 @@ export interface ProjectSettingsDeps {
    * dispatcher would do now: the dashboard's own path (dispatch.ts
    * `configure`, `view`).
    */
-  readonly dispatch: {
-    configure: (projectId: string, change: DispatchChange) => Promise<unknown>;
-    view: (projectId: string) => Promise<DispatchView>;
-  };
+  readonly dispatch: Pick<Dispatcher, "configure" | "view">;
   /**
    * The project's name, Review before done, default landing and account,
    * through the person's own edit (project-edit.ts).
@@ -828,9 +825,16 @@ export const createProjectSettings = ({
       case "set_dispatch":
       case "set_max_attempts":
       case "set_review_limit":
-      case "set_budget":
-        await dispatch.configure(project.id, dispatchColumns(change));
+      case "set_budget": {
+        const configured = await dispatch.configure(
+          project.id,
+          dispatchColumns(change)
+        );
+        if (configured instanceof ElysiaStatus) {
+          return configured;
+        }
         break;
+      }
       case "set_events":
         caw(project.id, { on: change.events });
         break;
@@ -958,8 +962,11 @@ export const createProjectSettings = ({
   };
 
   /** The project's settings as they stand, and what dispatch would do now. */
-  const read = async (project: ProjectRow): Promise<string> => {
+  const read = async (project: ProjectRow) => {
     const now = await dispatch.view(project.id);
+    if (now instanceof ElysiaStatus) {
+      return now;
+    }
     const area = project.areaId
       ? (areas.named(project.areaId)?.name ?? null)
       : null;
