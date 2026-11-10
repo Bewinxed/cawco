@@ -303,8 +303,13 @@ export const createViews = ({
     if (unknown instanceof ElysiaStatus) {
       return unknown;
     }
-    const routines: ViewRoutinesOutput = {
-      rows: db.routines.list(projectId).map((row) => ({
+    const rows: ViewRoutinesOutput["rows"] = [];
+    for (const row of db.routines.list(projectId)) {
+      const nextRuns = nextRunsOf(row.cron, row.timeZone, Date.now());
+      if (nextRuns instanceof ElysiaStatus) {
+        return nextRuns;
+      }
+      rows.push({
         id: row.id,
         name: row.name,
         target: row.target,
@@ -313,7 +318,7 @@ export const createViews = ({
         cron: row.cron,
         timeZone: row.timeZone,
         nextSlot: row.nextSlot.getTime(),
-        nextRuns: nextRunsOf(row.cron, row.timeZone, Date.now()),
+        nextRuns,
         lastSlot: row.lastSlot?.getTime() ?? null,
         runs: db.routines.runs(row.id, runs).map((run) => ({
           slot: slotLabel(run.slot, row.timeZone),
@@ -324,8 +329,9 @@ export const createViews = ({
           endedAt: run.endedAt?.getTime() ?? null,
           usd: run.usd,
         })),
-      })),
-    };
+      });
+    }
+    const routines: ViewRoutinesOutput = { rows };
     return routines;
   };
 
