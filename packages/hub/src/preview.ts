@@ -3,7 +3,6 @@ import { join, relative, sep } from "node:path";
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
 import { readWithin } from "@cawco/core/bounded";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
-import { detach } from "@cawco/core/detach";
 import type { PreviewFrame } from "@cawco/core/frames";
 import type { PageFaultReport } from "@cawco/core/page-faults";
 import type { PreviewDown, PreviewSource } from "@cawco/core/preview/protocol";
@@ -22,17 +21,12 @@ import {
   PREVIEW_PING_PATH,
   type PreviewAddress,
   type PreviewSettings,
-  previewEnterUrl,
 } from "@cawco/core/preview/routes";
 import type { MachineSource, Upstream } from "@cawco/core/preview/upstream";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { DOWN_WORDS } from "@cawco/core/words/preview-down";
-import {
-  type PortHolders,
-  previewPortWords,
-} from "@cawco/core/words/preview-ports";
 import {
   asksUpgrade,
   cachePreview,
@@ -84,14 +78,7 @@ import type { PreviewPassesDb } from "./db/preview-passes";
 import { type PreviewsDb, projectOfOrigin } from "./db/previews";
 import { decisionHostFile } from "./decision-host";
 import { DECISION_ASSETS } from "./decision-program";
-import {
-  enter,
-  lockedResponse,
-  type PassLock,
-  passOf,
-  SESSION_PASS_MS,
-  sessionTicketScope,
-} from "./preview-access";
+import { enter, lockedResponse, type PassLock, passOf } from "./preview-access";
 import {
   type HostPattern,
   hostFor,
@@ -100,7 +87,16 @@ import {
   PORT_SUFFIX,
   parsePattern,
 } from "./preview-hosts";
+import { createListenerTable, HOP, type Listener } from "./preview-listeners";
 import { isEmbed } from "./preview-origin";
+import {
+  CANVAS_PATH,
+  hubsOwn,
+  PAGE_PATH,
+  PAGE_SHAPE_PATH,
+} from "./preview-paths";
+import { createPreviewPorts } from "./preview-ports";
+import { createStaleAddresses } from "./preview-stale";
 import { folderPath } from "./project-folder";
 
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
@@ -129,7 +125,7 @@ export interface PreviewTarget {
  * so the board and the panel's frames read it as one. A page the hub
  * serves stands at the session's origin's root too (the apps load it
  * there); a machine's preview is served on its artifact's own origin alone
- * ({@link embedKey}), never the session's, so whatever the panel shows
+ * (`artifactOrigin`), never the session's, so whatever the panel shows
  * next, a frame of it keeps its own content.
  */
 export const previewTargets = new Map<string, PreviewTarget>();
@@ -370,18 +366,6 @@ const HUB_SERVES: Record<
 
 type ListenerSocket = PreviewSocket | ArtifactSocket;
 
-/** A preview origin's listener on its port: the plain one and its TLS twins, stopped together with their connections. */
-interface Listener {
-  port: number;
-  stop: () => Promise<void>;
-}
-
-/** A machine artifact's listener ({@link createPreviewListeners}' `embeds`), and the origins that may frame it. */
-interface Embed {
-  ancestors: Set<string>;
-  listener: Listener;
-}
-
 const isArtifact = (
   socket: ServerWebSocket<ListenerSocket>
 ): socket is ServerWebSocket<ArtifactSocket> => "artifactId" in socket.data;
@@ -400,7 +384,7 @@ export interface PreviewListenerDeps {
    * Whether a screen follows session `instanceId`'s conversation now, so
    * its panel stands on that screen. Whether its process runs is no use of
    * a preview port: an origin no screen shows gives its port back
-   * ({@link createPreviewListeners}' `reclaimOne`).
+   * (preview-ports.ts `reclaimOne`).
    */
   followed: (instanceId: string) => boolean;
   /**
@@ -444,7 +428,7 @@ export interface PreviewListenerDeps {
   reach: (row: MachineRow) => Promise<PreviewReach>;
   /**
    * The artifact origin `key` shows now, read off its row as it stands:
-   * an artifact's own origin's ({@link embedKey}) the row that points at
+   * an artifact's own origin's (`artifactOrigin`) the row that points at
    * it (schema.ts `artifacts.origin`), so the address it was handed under
    * answers for as long as the artifact lasts; a session's, its panel's
    * artifact. Undefined when nothing does.
@@ -516,37 +500,6 @@ const joinArtifact = (
   return new Response("Not found", { status: 404 });
 };
 
-/**
- * A canvas by its id, whichever artifact the panel shows: the composer's
- * canvas stands outside the panel, at `/__cawco/canvas/<id>/` on its
- * session's preview origin, its bundle and fonts under that.
- */
-const CANVAS_PATH = /^\/__cawco\/canvas\/([0-9a-f-]{36})(\/.*)$/u;
-
-/**
- * A page by its id, whichever artifact the panel shows: the project page's
- * Decisions tab opens a decision page in its own pane, at
- * `/__cawco/page/<id>/` on its session's preview origin, beside the doc's
- * socket the page joins there.
- */
-const PAGE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})(\/.*)$/u;
-
-/**
- * Where a decision page's Preview tells the shape its component canvas
- * said, relative to the page (`shape` beside `/__cawco/page/<id>/`): a POST
- * of the canvas's id, its stories and the shape ({@link PreviewListenerDeps.keepShape}).
- */
-const PAGE_SHAPE_PATH = /^\/__cawco\/page\/([0-9a-f-]{36})\/shape$/u;
-
-/** Everything under it is the hub's own on a preview origin; a previewed app never sees it. */
-const RESERVED = "/__cawco/";
-
-/** A path the hub keeps for itself: under {@link RESERVED}, but a page's own file at its folder's key, which goes on to whatever serves the page. */
-const hubsOwn = (pathname: string): boolean =>
-  pathname.startsWith(RESERVED) && versionedFile(pathname) === null;
-
-const HOP = "hub listener";
-
 /** What every answer to the dashboard's probe carries: readable to any page, never kept, marked the hub's own. */
 const PING_HEADERS = {
   "access-control-allow-origin": "*",
@@ -585,15 +538,6 @@ const PING_RELAY_MS = 5000;
 
 /** How often an origin's use is written to its port row at most (`used`): the reclaim's order needs no finer grain. Our call. */
 const USE_WRITE_MS = MINUTE_MS;
-/**
- * How long a port an origin let go stays held for its stale addresses
- * (createPreviewListeners' `holdVacant`): a session's pass ticket's life
- * (preview-access.ts `SESSION_PASS_MS`), the longest an `artifact_browse`
- * url can still be entered, which a tab kept open past it outlives only
- * on a reload. Past it, the port is free for any program.
- */
-const VACANT_HOLD_MS = SESSION_PASS_MS;
-
 /** A thrown fetch's short name for the pane: its code (`ECONNRESET`), else its kind. */
 const codeOf = (error: unknown): string => {
   const { code } = (error ?? {}) as { code?: unknown };
@@ -984,7 +928,7 @@ async function serveSession(
     return HUB_SERVES[row.kind](row.id, pathname, deps, url);
   }
   // A machine's preview is served on its artifact's own origin alone
-  // (embedKey): the session's panel names that origin, never this one.
+  // (artifactOrigin): the session's panel names that origin, never this one.
   if (!(isEmbed(instanceId) && servedByMachine(row))) {
     previewFailed(
       HOP,
@@ -1096,12 +1040,6 @@ const atTheLock = (
   );
   return downResponse("closed", 404);
 };
-/** An origin whose session or project the hub no longer holds: let go, and said, never kept. */
-const ownerGone = (key: string) =>
-  problem(409, {
-    code: "preview-owner-gone",
-    detail: `No session or project holds the preview origin ${key} now, so it serves nothing.`,
-  });
 /** The port a host pattern's name ends in (`HostPattern.after`), when it names one. */
 const PATTERN_PORT = /:(\d+)$/u;
 /** One name of the pattern's, its port left off: a made-up session's, or the range's first port's. */
@@ -1172,64 +1110,24 @@ export function createPreviewListeners(
   }
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
-  /**
-   * The refusal, in one sentence, when this hub opens no listener
-   * ({@link listens}): asked before every bind ({@link unheld}) and before
-   * any port is moved or taken back ({@link portFor}).
-   */
-  const unlistened = () =>
-    listens
-      ? undefined
-      : problem(503, {
-          code: "preview-no-listener",
-          detail:
-            "This hub opens no preview listener: it was built only to be read.",
-        });
-  /** A port that would not open for a reason no other port avoids, in one sentence. */
-  const portRefused = (port: number, thrown: unknown) =>
-    problem(503, {
-      code: "preview-port-unopened",
-      detail: `Preview port ${port} didn't open on ${hostname} (${causeOf(thrown)}).`,
-    });
-  /** Why a bind refused: no listener on this hub, or a port that would not open. */
-  type Unlistened =
-    NonNullable<ReturnType<typeof unlistened>> | ReturnType<typeof portRefused>;
-  /**
-   * Each origin's open sockets, by its key: a frame that shows it holds one
-   * while it stands (its overlay's doc link, which keeps itself open: core
-   * doc-link.ts; a previewed app's own), so an origin a screen shows is in
-   * use, as a stage counts its viewers by its sockets (agent stage.ts).
-   */
-  const viewers = new Map<string, number>();
-  /**
-   * When this hub process last wrote each origin's use, by its key: a write
-   * throttle alone. The use itself is its port row's (`used_at`), which
-   * orders a full range's reclaim ({@link reclaimOne}) across restarts.
-   */
-  const usedWritten = new Map<string, number>();
+  /** Every listener of the hub's, and what is known of each. */
+  const listeners = createListenerTable();
   /**
    * Origin `key` was used (a request, a socket opened or closed): its port
    * row's `used_at` written, at most once a minute ({@link USE_WRITE_MS}).
    */
   const used = (key: string): void => {
     const now = Date.now();
-    if (now - (usedWritten.get(key) ?? 0) < USE_WRITE_MS) {
-      return;
+    if (listeners.useDue(key, now, USE_WRITE_MS)) {
+      db.used(key, new Date(now));
     }
-    usedWritten.set(key, now);
-    db.used(key, new Date(now));
   };
   const viewed = (socket: ServerWebSocket<ListenerSocket>, by: 1 | -1) => {
     const { data } = socket;
     const key = "artifactId" in data ? data.at : data.instanceId;
     if (key) {
       used(key);
-      const now = (viewers.get(key) ?? 0) + by;
-      if (now > 0) {
-        viewers.set(key, now);
-      } else {
-        viewers.delete(key);
-      }
+      listeners.watch(key, by);
     }
   };
   const websocket: WebSocketHandler<ListenerSocket> = {
@@ -1266,8 +1164,9 @@ export function createPreviewListeners(
    * (preview-access.ts): a request needs the browser's pass, WebSocket
    * upgrades too, but the dashboard's ping and the entry that spends a
    * ticket for one. Host mode's names set it on their domain, an origin's
-   * own port on the host it was reached at. Every bind asks {@link unheld}
-   * first, which refuses on a hub that opens no listener.
+   * own port on the host it was reached at. Every bind asks
+   * preview-ports.ts `unheld` first, which refuses on a hub that opens no
+   * listener.
    */
   const listen = (
     port: number,
@@ -1282,13 +1181,13 @@ export function createPreviewListeners(
       if (instanceId) {
         used(instanceId);
       }
-      const moved = movedOn(request, lock, instanceId);
+      const moved = stale.movedOn(request, lock, instanceId);
       if (moved) {
         return moved;
       }
       const stopped = atTheLock(request, lock, instanceId);
       if (stopped) {
-        return framedBy(stopped, ancestorsOf(instanceId));
+        return framedBy(stopped, listeners.ancestorsOf(instanceId));
       }
       // A page served here (a decision page) asks whether the hub reaches
       // one of its embeds' origins, which this browser didn't.
@@ -1324,7 +1223,10 @@ export function createPreviewListeners(
       return (
         answer &&
         (await compressed(
-          framedBy(await withKeyedOverlay(answer), ancestorsOf(instanceId)),
+          framedBy(
+            await withKeyedOverlay(answer),
+            listeners.ancestorsOf(instanceId)
+          ),
           request.headers.get("accept-encoding"),
           `${instanceId} ${request.url}`
         ))
@@ -1397,16 +1299,13 @@ export function createPreviewListeners(
    * Where origin `key` stands now, as a browser that reached `at` reaches
    * it: host mode's name for it when `at` was one of the names, else its
    * port on the host `at` named. Its listener is opened when it has none;
-   * refused as {@link portFor} refuses.
+   * refused as preview-ports.ts `open` refuses.
    */
   const standsAt = (key: string, at: URL, lock: PassLock) => {
-    const opened = isEmbed(key)
-      ? (embeds.get(key) ?? openEmbed(key))
-      : portOf(key);
-    if (opened instanceof ElysiaStatus) {
-      return opened;
+    const port = ports.open(key);
+    if (port instanceof ElysiaStatus) {
+      return port;
     }
-    const port = typeof opened === "number" ? opened : opened.listener.port;
     if (lock.domain !== null && hostPattern) {
       return originFor(
         hostPattern,
@@ -1416,133 +1315,14 @@ export function createPreviewListeners(
     return `${at.protocol}//${at.hostname}:${port}`;
   };
 
-  /**
-   * A browser at an address that went stale, its origin's port moved on
-   * ({@link reclaimOne}) to another origin or to none ({@link vacant}),
-   * sent on to where it stands now, as every outside link goes:
-   *
-   * - a tab (`Sec-Fetch-Dest: document`) at a page's or a canvas's
-   *   address on an origin that doesn't serve it: the person's pass to the
-   *   artifact's own tab on the dashboard (`/artifact/<id>`), on the
-   *   dashboard origin this browser reached the same host by; a session's
-   *   pass that opens the artifact's origin (`artifact_browse`) to that
-   *   origin where it stands now, the same path, its pass carried there
-   *   (a port's pass is set on its host, a name's on the names' domain);
-   * - an entry with a session's ticket on a port of none of its origins
-   *   (an `artifact_browse` url loaded after the port moved): the ticket,
-   *   unspent, to the entry where its first origin, the artifact's own,
-   *   stands now.
-   *
-   * A frame's load is no tab's: a frame's origin is told to it again
-   * (server.ts `letGo`), and no dashboard is framed. Null for anything
-   * else, which the lock and the origin answer as before.
-   */
-  const movedOn = (
-    request: Request,
-    lock: PassLock,
-    key: string | undefined
-  ): Response | null => {
-    const sent = staleSent(request, lock, key);
-    if (sent instanceof ElysiaStatus) {
-      // Its origin can't open now (its owner gone, every port in use): the
-      // lock and this origin answer it as before.
-      previewFailed(
-        HOP,
-        key ?? null,
-        `a stale address stays: ${sent.response.detail}`
-      );
-      return null;
-    }
-    return sent;
-  };
-
-  /** Where {@link movedOn} sends a stale address, or its origin's refusal; null, said, when that throws. */
-  const staleSent = (
-    request: Request,
-    lock: PassLock,
-    key: string | undefined
-  ): Response | null | StaleRefused => {
-    const url = new URL(request.url);
-    try {
-      if (url.pathname === PREVIEW_ENTER_PATH) {
-        return staleEntry(url, lock, key);
-      }
-      return request.headers.get("sec-fetch-dest") === "document"
-        ? staleTab(request, url, lock, key)
-        : null;
-    } catch (thrown) {
-      previewFailed(
-        HOP,
-        key ?? null,
-        `a stale address stays: ${causeOf(thrown)}`
-      );
-      return null;
-    }
-  };
-
-  /** An entry with a session's ticket on a port of none of its origins, sent on to its first origin's entry ({@link movedOn}). */
-  const staleEntry = (url: URL, lock: PassLock, key: string | undefined) => {
-    const ticket = url.searchParams.get("ticket") ?? "";
-    const scope = sessionTicketScope(ticket);
-    const [own] = scope ?? [];
-    if (!own || (key !== undefined && scope?.includes(key))) {
-      return null;
-    }
-    const next = url.searchParams.get("next");
-    const stands = standsAt(own, url, lock);
-    if (stands instanceof ElysiaStatus) {
-      return stands;
-    }
-    return Response.redirect(
-      previewEnterUrl(stands, ticket, next === null ? undefined : next),
-      302
-    );
-  };
-  /** Why a stale address is not sent on: its origin's refusal to open. */
-  type StaleRefused = Exclude<ReturnType<typeof standsAt>, string>;
-
-  /** A tab at a page's or a canvas's address on an origin that doesn't serve it, sent on by its pass ({@link movedOn}). */
-  const staleTab = (
-    request: Request,
-    url: URL,
-    lock: PassLock,
-    key: string | undefined
-  ) => {
-    const paged = url.pathname.match(PAGE_PATH);
-    const drawn = paged ? null : url.pathname.match(CANVAS_PATH);
-    const artifactId = (paged ?? drawn)?.[1];
-    if (
-      !artifactId ||
-      deps.kindOf(artifactId) !== (paged ? "page" : "canvas") ||
-      (key !== undefined && deps.servedOn(artifactId, key))
-    ) {
-      return null;
-    }
-    if (passOf(request, lock, undefined)) {
-      const dashboards = previewParents();
-      const dashboard =
-        dashboards.find((one) => new URL(one).hostname === url.hostname) ??
-        dashboards[0];
-      return dashboard
-        ? Response.redirect(
-            `${dashboard}/artifact/${encodeURIComponent(artifactId)}`,
-            302
-          )
-        : null;
-    }
-    const origin = deps.originOf(artifactId);
-    return origin && passOf(request, lock, origin)
-      ? redirectTo(origin, url, lock)
-      : null;
-  };
-
-  /** `url`'s path and query where origin `key` stands now ({@link standsAt}), or its refusal. */
-  const redirectTo = (key: string, url: URL, lock: PassLock) => {
-    const stands = standsAt(key, url, lock);
-    return stands instanceof ElysiaStatus
-      ? stands
-      : Response.redirect(`${stands}${url.pathname}${url.search}`, 302);
-  };
+  /** A browser at an address that went stale is sent on to where its origin stands now (preview-stale.ts). */
+  const stale = createStaleAddresses({
+    dashboards: previewParents,
+    kindOf: deps.kindOf,
+    originOf: deps.originOf,
+    servedOn: deps.servedOn,
+    standsAt,
+  });
 
   /**
    * Whether the hub reaches `origin`'s ping itself now, as a browser asks it
@@ -1605,159 +1385,12 @@ export function createPreviewListeners(
    * until Settings › Previews saves a pattern the hub takes.
    */
   let hostPattern: HostPattern | undefined;
-  /**
-   * Whether no socket holds `port` on the listeners' address now: a bind
-   * without `reusePort`, closed at once. A listener binds with `reusePort`
-   * (its tailnet twin needs it), and such a bind succeeds silently on a port
-   * another process holds the same way, the kernel then splitting
-   * connections between the two: a scratch hub beside another took half of
-   * an embed's requests that way, its frame left on the browser's error page.
-   */
-  const unheld = (port: number) => {
-    const refused = unlistened();
-    if (refused) {
-      return refused;
-    }
-    try {
-      Bun.serve({ hostname, port, fetch: () => new Response(null) }).stop(true);
-      return true;
-    } catch (thrown) {
-      // Held: another socket has the port. Any other refusal is the bind
-      // address's, which no other port avoids: said as itself, never as
-      // every preview port taken.
-      if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
-        return false;
-      }
-      return portRefused(port, thrown);
-    }
-  };
-
   /** The lock on every origin's own port: its pass set on the host it was reached at. */
   const portLock: PassLock = {
     domain: null,
     passes,
     sessionLive: deps.sessionLive,
   };
-  /** Each session's listener on its own port, by session. */
-  const sessions = new Map<string, Listener>();
-  /**
-   * Each machine artifact's listener on the port it keeps (made again as a
-   * frame next names it, after a mode change or a restart too), by its key,
-   * with every origin a page that shows it was served on: exactly those may
-   * frame it. It lasts as long as its origin (schema.ts
-   * `artifacts.origin`), whichever row points at it and whoever opened it.
-   */
-  const embeds = new Map<string, Embed>();
-  /** Host mode's one listener. */
-  let byHost: Listener | undefined;
-  /**
-   * Each port an origin of this hub served and let go ({@link release}),
-   * held a while: a stale address there (a tab, or an `artifact_browse` url
-   * kept from before its origin ended or moved) is answered as one on
-   * another origin's port is ({@link movedOn}), not with the browser's
-   * connection error. Only a port the hub handed out is ever held: one it
-   * never gave a preview stays free for any program the person runs (the
-   * release proof's systemd socket on 43458, inside its hub's range, failed
-   * to start when every free port was held, a4df55bbc).
-   *
-   * A held port can't stand down for another program: nothing tells a
-   * listener that another bind was refused (a plain bind just fails
-   * EADDRINUSE; `reusePort` would split its connections, not hand the port
-   * over). So the hold is bounded: {@link VACANT_HOLD_MS}, then the port is
-   * free. Let go at once when an origin takes it ({@link takeVacant}).
-   */
-  const vacant = new Map<number, Listener>();
-
-  /** Port `port`, which an origin served until now, held for {@link VACANT_HOLD_MS} while no origin and no other program has it. */
-  const holdVacant = (port: number): void => {
-    if (
-      !listens ||
-      vacant.has(port) ||
-      barred(port) ||
-      db.ports().some((row) => row.port === port) ||
-      [...embeds.values()].some((embed) => embed.listener.port === port)
-    ) {
-      return;
-    }
-    try {
-      const free = unheld(port);
-      if (free instanceof ElysiaStatus) {
-        previewFailed(
-          HOP,
-          null,
-          `port ${port} wasn't held: ${free.response.detail}`
-        );
-        return;
-      }
-      if (!free) {
-        return;
-      }
-      const held = listen(port, () => undefined, portLock);
-      vacant.set(port, held);
-      after(VACANT_HOLD_MS, () => {
-        if (vacant.get(port) === held) {
-          takeVacant(port);
-        }
-      });
-    } catch (thrown) {
-      previewFailed(HOP, null, `port ${port} wasn't held: ${causeOf(thrown)}`);
-    }
-  };
-
-  /** Port `port` let go by the hub, for an origin to bind: its socket closes as `stop` is called, its connections after. */
-  const takeVacant = (port: number): void => {
-    const held = vacant.get(port);
-    if (held) {
-      vacant.delete(port);
-      detach(held.stop(), "vacant preview port let go");
-    }
-  };
-
-  /**
-   * Serves `instanceId` on `port`: false when another process holds it
-   * (EADDRINUSE). Any other refusal is the bind address's, not the port's,
-   * so no other port would open either: it is returned, in one sentence.
-   */
-  const serveOn = (instanceId: string, port: number) => {
-    takeVacant(port);
-    const free = unheld(port);
-    if (free instanceof ElysiaStatus || !free) {
-      return free;
-    }
-    try {
-      sessions.set(
-        instanceId,
-        listen(port, () => instanceId, portLock)
-      );
-      return true;
-    } catch (thrown) {
-      if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
-        return false;
-      }
-      return portRefused(port, thrown);
-    }
-  };
-
-  /** Why no session may have `port`: one of the fleet's own, or outside the range; null when one may. */
-  const barred = (port: number): string | null => {
-    const fleet = FLEET_PORTS.get(port);
-    if (fleet) {
-      return `it is ${fleet} port`;
-    }
-    // A machine of the fleet may run the stream relay on these (3478, 3479,
-    // 5349, 5350): no preview ever takes one, wherever CAWCO_PREVIEW_PORTS
-    // puts the range.
-    if (isStreamRelayPort(port)) {
-      return "it is the stream relay's port";
-    }
-    if (settings.mode === "host" && port === PREVIEW_PORTS.first) {
-      return "it is host mode's listener port";
-    }
-    return port < PREVIEW_PORTS.first || port > PREVIEW_PORTS.last
-      ? `it is outside the preview ports ${PREVIEW_PORTS_TEXT}`
-      : null;
-  };
-
   /**
    * Whether a screen shows origin `key` through a session's panel it
    * follows: a session's own origin while a screen follows the session; an
@@ -1786,8 +1419,22 @@ export function createPreviewListeners(
     );
   };
 
-  /** Whether origin `key` is in use now: a frame of it open on a screen ({@link viewers}), or a panel a screen follows shows it ({@link panelShows}). */
-  const inUse = (key: string): boolean => viewers.has(key) || panelShows(key);
+  /** Whether origin `key` is in use now: a frame of it open on a screen (a socket on its listener), or a panel a screen follows shows it ({@link panelShows}). */
+  const inUse = (key: string): boolean =>
+    listeners.watched(key) || panelShows(key);
+
+  /** Which port each origin keeps, and the listener opened on it (preview-ports.ts). */
+  const ports = createPreviewPorts({
+    after,
+    db,
+    hostname,
+    inUse,
+    letGo: deps.letGo,
+    listen: (port, route) => listen(port, route, portLock),
+    listeners,
+    listens,
+    mode: () => settings.mode,
+  });
 
   /**
    * Whether origin `key`'s address is told to every screen that shows it
@@ -1795,7 +1442,7 @@ export function createPreviewListeners(
    * artifact) is a row, and it is in use ({@link inUse}) or is a project's
    * that still keeps its stored port. Every origin keeps the port it stores
    * until the range is full and it is the one least recently used that
-   * nothing uses now ({@link reclaimOne}), as Portless keeps a route only
+   * nothing uses now (preview-ports.ts `reclaimOne`), as Portless keeps a route only
    * while its process is alive (github.com/vercel-labs/portless, routes.ts
    * `loadRoutes`). A project's origin whose port was taken back holds none:
    * told again, it is told without one, and opens again only when a screen
@@ -1811,191 +1458,6 @@ export function createPreviewListeners(
       (projectOfOrigin(key) !== null &&
         db.ports().some((row) => row.key === key)));
 
-  /**
-   * One port taken back for origin `asking`, the range being full: from
-   * the origin least recently used (`used_at`, db previews.ts
-   * `portsByUse`) of those no screen shows ({@link inUse}), a running
-   * session's among them; one whose owner went first. Its listener stops,
-   * its stored port is dropped, and what shows it is told again without that
-   * address: the next ask for it opens it on a free port, and says that
-   * address (`letGo`). Every other origin keeps its port, and so its
-   * address. The key that let its port go; undefined when every port is in
-   * use.
-   */
-  const reclaimOne = (asking: string): string | undefined => {
-    const idle = db
-      .portsByUse()
-      .map((row) => row.key)
-      .filter((one) => one !== asking && !inUse(one));
-    const taken = idle.find((one) => !db.ownerHeld(one)) ?? idle[0];
-    if (taken === undefined) {
-      return;
-    }
-    release(taken);
-    deps.letGo([taken]);
-    return taken;
-  };
-
-  /**
-   * The one way a session gets its port, at the hub's start and on demand:
-   * the port it keeps while that is still a preview port and `opens`; else
-   * the lowest of the range that is not the fleet's own, not another
-   * origin's, and opens; else, the range being full, the lowest that opens
-   * once an origin that doesn't hold its port let it go, one at a time
-   * ({@link reclaimOne}). A move is saved, so a collision heals itself, and
-   * said in one line. Its listener opens on it (`bind`), and host mode's
-   * `{port}` names it too.
-   */
-  const portFor = (
-    instanceId: string,
-    opens: (port: number) => boolean | Unlistened
-  ) => {
-    const unopened = unlistened();
-    if (unopened) {
-      return unopened;
-    }
-    // An origin whose session or project is gone holds no port: it is let go, never kept.
-    if (!db.ownerHeld(instanceId)) {
-      return ownerGone(instanceId);
-    }
-    const kept = db.ports().find((row) => row.key === instanceId)?.port;
-    const why = kept === undefined ? undefined : keptStays(kept, opens);
-    if (typeof why === "number" || why instanceof ElysiaStatus) {
-      return why;
-    }
-    const port = openOrReclaim(instanceId, opens);
-    if (port instanceof ElysiaStatus) {
-      return port;
-    }
-    if (port === undefined) {
-      return everyPortTaken();
-    }
-    if (!db.keepPort(instanceId, port)) {
-      // Its owner went while the listener opened.
-      release(instanceId);
-      return ownerGone(instanceId);
-    }
-    if (kept !== undefined) {
-      console.warn(
-        `[preview] ${HOP}: preview of ${instanceId} moves from port ${kept} to ${port}: ${why}`
-      );
-    }
-    return port;
-  };
-
-  /** Port `kept` while it is still a preview port and `opens`; else why it moves, or the refusal of its opening. */
-  const keptStays = (
-    kept: number,
-    opens: (port: number) => boolean | Unlistened
-  ) => {
-    const refused = barred(kept);
-    if (refused) {
-      return refused;
-    }
-    const opened = opens(kept);
-    if (opened instanceof ElysiaStatus) {
-      return opened;
-    }
-    return opened ? kept : "another process holds it";
-  };
-
-  /** {@link firstOpen} of the ports no origin keeps, an origin that doesn't hold its port let go each time none does ({@link reclaimOne}), until one opens or none is left to let go. */
-  const openOrReclaim = (
-    instanceId: string,
-    opens: (port: number) => boolean | Unlistened
-  ) => {
-    for (;;) {
-      const port = firstOpen(new Set(db.ports().map((row) => row.port)), opens);
-      if (port !== undefined || reclaimOne(instanceId) === undefined) {
-        return port;
-      }
-    }
-  };
-
-  /** The lowest port of the range not `taken`, not barred, that `opens`; undefined when none does, or the refusal of one that refused. */
-  const firstOpen = (
-    taken: Set<number>,
-    opens: (port: number) => boolean | Unlistened
-  ): number | Unlistened | undefined => {
-    for (
-      let port = PREVIEW_PORTS.first;
-      port <= PREVIEW_PORTS.last;
-      port += 1
-    ) {
-      if (taken.has(port) || barred(port)) {
-        continue;
-      }
-      const opened = opens(port);
-      if (opened instanceof ElysiaStatus) {
-        return opened;
-      }
-      if (opened) {
-        return port;
-      }
-    }
-  };
-
-  /**
-   * Every port of the range is in use, each by an origin a screen shows or
-   * another program: said with how many each, and what frees one (core
-   * words/preview-ports.ts).
-   */
-  const everyPortTaken = () =>
-    problem(503, {
-      code: "preview-ports-taken",
-      detail: previewPortWords.everyPortTaken(
-        PREVIEW_PORTS_TEXT,
-        portHolders()
-      ),
-    });
-
-  /** What keeps each port of the range, the barred left out: a screen that shows its origin ({@link inUse}), else another program on the hub's machine. */
-  const portHolders = (): PortHolders => {
-    const keys = new Map(db.ports().map((row) => [row.port, row.key]));
-    const count = { others: 0, screens: 0 };
-    for (
-      let port = PREVIEW_PORTS.first;
-      port <= PREVIEW_PORTS.last;
-      port += 1
-    ) {
-      if (barred(port)) {
-        continue;
-      }
-      const key = keys.get(port);
-      if (key !== undefined && inUse(key)) {
-        count.screens += 1;
-      } else {
-        count.others += 1;
-      }
-    }
-    return count;
-  };
-
-  /** Origin `key`'s listener stops and its port is free again, held by the hub a while for a stale address of it ({@link holdVacant}). */
-  const release = (key: string): void => {
-    const listener = sessions.get(key) ?? embeds.get(key)?.listener;
-    if (listener) {
-      // Its port answers a stale address of it from then on.
-      detach(
-        listener.stop().then(() => holdVacant(listener.port)),
-        "preview listener stop"
-      );
-    }
-    sessions.delete(key);
-    embeds.delete(key);
-    viewers.delete(key);
-    usedWritten.delete(key);
-    db.dropPort(key);
-  };
-
-  /** Session `instanceId`'s listener on its port. */
-  const bind = (instanceId: string) =>
-    portFor(instanceId, (port) => serveOn(instanceId, port));
-
-  /** Session `instanceId`'s port, its listener started when it has none. */
-  const portOf = (instanceId: string) =>
-    sessions.get(instanceId)?.port ?? bind(instanceId);
-
   /** The session a Host header names under `pattern`; undefined when it names none, or a port no session holds. */
   const sessionOfHost = (
     pattern: HostPattern,
@@ -2007,14 +1469,13 @@ export function createPreviewListeners(
     }
     if (pattern.key === "session") {
       // The origin, of every one held now (a session's, a project's, an embed's), this label names.
-      return [...db.ports().map((row) => row.key), ...embeds.keys()].find(
+      return [...db.ports().map((row) => row.key), ...listeners.keys()].find(
         (key) => labelOf(key) === value
       );
     }
     const port = Number(value);
     return (
-      db.ports().find((row) => row.port === port)?.key ??
-      [...embeds].find(([, embed]) => embed.listener.port === port)?.[0]
+      db.ports().find((row) => row.port === port)?.key ?? listeners.keyAt(port)
     );
   };
 
@@ -2043,7 +1504,7 @@ export function createPreviewListeners(
       // socket bound the same way, and that one would take a share of the
       // names' requests past the lock: host mode opens only on a port
       // nothing holds.
-      const free = unheld(PREVIEW_PORTS.first);
+      const free = ports.unheld(PREVIEW_PORTS.first);
       if (free instanceof ElysiaStatus) {
         const why = `Port ${PREVIEW_PORTS.first} didn't open for host-mode previews (${free.response.detail}): free it, or set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
         previewFailed(HOP, null, why);
@@ -2054,10 +1515,12 @@ export function createPreviewListeners(
         previewFailed(HOP, null, why);
         return { held: true, why };
       }
-      byHost = listen(
-        PREVIEW_PORTS.first,
-        (request) => sessionOfHost(pattern, request.headers.get("host")),
-        { domain: pattern.domain, passes, sessionLive: deps.sessionLive }
+      listeners.standHost(
+        listen(
+          PREVIEW_PORTS.first,
+          (request) => sessionOfHost(pattern, request.headers.get("host")),
+          { domain: pattern.domain, passes, sessionLive: deps.sessionLive }
+        )
       );
       hostPattern = pattern;
       return null;
@@ -2083,52 +1546,15 @@ export function createPreviewListeners(
     }
     const { pattern } = settings;
     after(HOST_RETRY_MS, () => {
-      if (settings.mode === "host" && settings.pattern === pattern && !byHost) {
+      if (
+        settings.mode === "host" &&
+        settings.pattern === pattern &&
+        !listeners.hosting()
+      ) {
         hostModeOnceFree();
       }
     });
   };
-
-  /**
-   * A machine artifact's listener on the port it keeps ({@link portFor}),
-   * so its origin is the same one across the hub's restarts while its
-   * artifact lasts ({@link holds}): the port it keeps while that still opens,
-   * else the lowest of the range no other origin holds, kept from then on.
-   */
-  const openEmbed = (key: string) => {
-    const kept = portFor(key, (port) => {
-      takeVacant(port);
-      const free = unheld(port);
-      if (free instanceof ElysiaStatus || !free) {
-        return free;
-      }
-      try {
-        embeds.set(key, {
-          ancestors: new Set<string>(),
-          listener: listen(port, () => key, portLock),
-        });
-        return true;
-      } catch (thrown) {
-        if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
-          return false;
-        }
-        return portRefused(port, thrown);
-      }
-    });
-    if (kept instanceof ElysiaStatus) {
-      return kept;
-    }
-    return embeds.get(key) ?? everyPortTaken();
-  };
-
-  /**
-   * Who may frame what origin `key` serves beside the dashboards: an embed's
-   * page, on each exact origin it was served on ({@link embeds}); nobody for
-   * any other origin.
-   */
-  const ancestorsOf = (key: string | undefined): string[] => [
-    ...(key === undefined ? [] : (embeds.get(key)?.ancestors ?? [])),
-  ];
 
   /**
    * The origin origin `owner`'s page was served on, read from where it was
@@ -2137,7 +1563,7 @@ export function createPreviewListeners(
    * loopback). Null when `at` is neither.
    */
   const pageOrigin = (owner: string, at: URL): string | null => {
-    const port = sessions.get(owner)?.port;
+    const port = listeners.portOf(owner);
     if (port !== undefined && at.port === String(port)) {
       return at.origin;
     }
@@ -2153,7 +1579,7 @@ export function createPreviewListeners(
   /**
    * Each kept port is bound again: every session, project or machine
    * artifact that keeps one and has no listener yet gets one on it
-   * (`bind`, {@link openEmbed}), so the address it was handed under answers
+   * (preview-ports.ts `open`), so the address it was handed under answers
    * again; a decision page that frames it names its own origin as it loads.
    * One whose owner went (an artifact deleted while the hub was down, whose
    * port row no key holds) lets it go.
@@ -2164,11 +1590,11 @@ export function createPreviewListeners(
         db.dropPort(key);
         continue;
       }
-      if (sessions.has(key) || embeds.has(key)) {
+      if (listeners.has(key)) {
         continue;
       }
       try {
-        const bound = isEmbed(key) ? openEmbed(key) : bind(key);
+        const bound = ports.open(key);
         if (bound instanceof ElysiaStatus) {
           previewFailed(HOP, key, bound.response.detail);
         }
@@ -2181,22 +1607,13 @@ export function createPreviewListeners(
   /**
    * Every listener stopped, each one's connections closed, before the mode
    * changes: a machine artifact's too, which opens again on a port the new
-   * mode allows as a frame next names it ({@link openEmbed}). One left
+   * mode allows as a frame next names it (preview-ports.ts `open`). One left
    * standing kept a port host mode's listener then binds beside it
    * (`reusePort`), and the kernel handed it half of that port's requests,
    * served with no lock.
    */
   const stopAll = async (): Promise<void> => {
-    const stopping = [
-      ...sessions.values(),
-      ...[...embeds.values()].map((embed) => embed.listener),
-      ...vacant.values(),
-      ...(byHost ? [byHost] : []),
-    ].map((listener) => listener.stop());
-    sessions.clear();
-    embeds.clear();
-    vacant.clear();
-    byHost = undefined;
+    const stopping = listeners.drain().map((listener) => listener.stop());
     hostPattern = undefined;
     await Promise.all(stopping);
   };
@@ -2244,7 +1661,7 @@ export function createPreviewListeners(
      * its preview origin straight after a hub restart finds it bound, before
      * any dashboard asks for its address. A kept port that is the fleet's
      * own, or host mode's, or that another process holds now, moves here
-     * (`bind`).
+     * (preview-ports.ts `open`).
      */
     start(): void {
       if (settings.mode === "host") {
@@ -2256,10 +1673,10 @@ export function createPreviewListeners(
     /**
      * Session `instanceId`'s preview origin: its port, its listener started
      * when it has none; once host mode stands its whole origin too, named
-     * by its id or by that port. Refused as {@link portFor} refuses.
+     * by its id or by that port. Refused as preview-ports.ts `open` refuses.
      */
     address(instanceId: string) {
-      const port = portOf(instanceId);
+      const port = ports.open(instanceId);
       return port instanceof ElysiaStatus ? port : addressAt(instanceId, port);
     },
 
@@ -2268,8 +1685,8 @@ export function createPreviewListeners(
      * what a frame no one uses names ({@link holds}); null when it has none.
      */
     bound(key: string): PreviewAddress | null {
-      const listener = sessions.get(key) ?? embeds.get(key)?.listener;
-      return listener ? addressAt(key, listener.port) : null;
+      const port = listeners.portOf(key);
+      return port === undefined ? null : addressAt(key, port);
     },
 
     /** Whether origin `key` holds its port now ({@link holds}): a frame of it takes one. */
@@ -2283,14 +1700,14 @@ export function createPreviewListeners(
      * dials it ({@link loopback}): a canvas's unseen screen (server.ts).
      */
     local(instanceId: string) {
-      const port = portOf(instanceId);
+      const port = ports.open(instanceId);
       return port instanceof ElysiaStatus ? port : loopback(port);
     },
 
     loopback,
 
     /**
-     * An embedded preview's origin (`key`, {@link embedKey}) for origin
+     * An embedded preview's origin (`key`, db/previews.ts `artifactOrigin`) for origin
      * `owner`'s decision page (`pageAt`, where the browser reached it), or
      * for a session's own browser opening it at the top (`artifact_browse`,
      * no page): its listener on a free preview port of its own, started when
@@ -2298,20 +1715,20 @@ export function createPreviewListeners(
      * origin too, named by its key or port.
      */
     embed(key: string, owner: string, pageAt?: URL) {
-      const held = embeds.get(key) ?? openEmbed(key);
-      if (held instanceof ElysiaStatus) {
-        return held;
+      const port = ports.open(key);
+      if (port instanceof ElysiaStatus) {
+        return port;
       }
       // The page that shows it, as the browser reached it: that exact origin may frame it.
       const framer = pageAt && pageOrigin(owner, pageAt);
       if (framer) {
-        held.ancestors.add(framer);
+        listeners.allow(key, framer);
       }
-      return addressAt(key, held.listener.port);
+      return addressAt(key, port);
     },
 
-    /** The origin's owner ended (a session, a project, an artifact): its listener stops and its port is free again ({@link release}). */
-    release,
+    /** The origin's owner ended (a session, a project, an artifact): its listener stops and its port is free again (preview-ports.ts `release`). */
+    release: ports.release,
 
     /** Whether the hub reaches a preview origin's ping itself now ({@link reachOrigin}). */
     reach: reachOrigin,

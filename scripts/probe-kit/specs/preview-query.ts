@@ -15,7 +15,7 @@
  * parses or rebuilds the URL. Needs no boundary: it runs anywhere.
  *
  * A machine's preview is served on its artifact's own origin alone (hub
- * preview.ts `embedKey`, since f536f2675), never its session's: the hops
+ * db/previews.ts `artifactOrigin`, since f536f2675), never its session's: the hops
  * here are the artifact's origin ({@link ORIGIN}), its row read off it as
  * the hub reads it on every request, and its machine's listener keyed by it.
  *
@@ -76,7 +76,7 @@ const INSTANCE = "00000000-0000-4000-8000-0000000a0e71";
 /** The preview's artifact, and its own origin (schema.ts `artifacts.origin`). */
 const ARTIFACT = "00000000-0000-4000-8000-0000000a0e73";
 const ARTIFACT_ORIGIN = "00000000-0000-4000-8000-0000000a0e74";
-/** The artifact origin's key (hub preview.ts `embedKey`): what the hub's and the machine's listeners are keyed by. */
+/** The artifact origin's key (hub db/previews.ts `artifactOrigin`): what the hub's and the machine's listeners are keyed by. */
 const ORIGIN = `embed-${ARTIFACT_ORIGIN}`;
 /** Another session the hub holds a name for, showing nothing. */
 const OTHER = "00000000-0000-4000-8000-0000000a0e72";
