@@ -11,7 +11,6 @@ import {
   presenceSettings,
   pushDevices,
 } from "./schema";
-import { singleton, singletonColumn } from "./singleton";
 
 /** One device's last word on the person, as notifications.ts keeps it. */
 export type PresenceClientRow = typeof presenceClients.$inferSelect;
@@ -154,7 +153,11 @@ export const presenceDb = (core: DbCore): PresenceDb => {
     },
     presence: {
       appearAway: () => {
-        const row = singleton(db, presenceSettings, PRESENCE_ID);
+        const row = db
+          .select()
+          .from(presenceSettings)
+          .where(eq(presenceSettings.id, PRESENCE_ID))
+          .get();
         return row?.appearAway ? (row.appearAwayAt ?? new Date(0)) : null;
       },
       setAppearAway: (on, at) => {
@@ -196,12 +199,11 @@ export const presenceDb = (core: DbCore): PresenceDb => {
           .run();
       },
       awayAfter: () =>
-        singletonColumn(
-          db,
-          presenceSettings,
-          PRESENCE_ID,
-          presenceSettings.awayAfterMs
-        ) ?? null,
+        db
+          .select({ value: presenceSettings.awayAfterMs })
+          .from(presenceSettings)
+          .where(eq(presenceSettings.id, PRESENCE_ID))
+          .get()?.value ?? null,
       setAwayAfter: (ms) => {
         db.insert(presenceSettings)
           .values({ id: PRESENCE_ID, appearAway: false, awayAfterMs: ms })
@@ -212,7 +214,11 @@ export const presenceDb = (core: DbCore): PresenceDb => {
           .run();
       },
       stretch: () => {
-        const row = singleton(db, presenceSettings, PRESENCE_ID);
+        const row = db
+          .select()
+          .from(presenceSettings)
+          .where(eq(presenceSettings.id, PRESENCE_ID))
+          .get();
         return {
           awaySince: row?.awaySince ?? null,
           backAt: row?.backAt ?? null,
