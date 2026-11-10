@@ -19,7 +19,6 @@ import type { ControlPayload, SendPayload } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import type { PermissionResult } from "@cawco/core/session-messages";
 import type { CommandKind } from "@cawco/core/stream";
-import type { TranscriptBlock } from "@cawco/core/transcript-types";
 import { unhandled } from "@cawco/core/unhandled";
 import { SvelteMap } from "svelte/reactivity";
 import { z } from "zod";
@@ -1321,7 +1320,7 @@ function streamEffectsFor(
               (message) => message.id === sendId
             );
             if (block) {
-              take(target, block as TranscriptBlock, "removed");
+              take(target, block, "removed");
               place(target);
             }
             if (replace) {
