@@ -118,7 +118,7 @@ export class TranscriptFind {
     if (
       this.findHere.landed &&
       (event.type !== "keydown" ||
-        SCROLL_KEYS.has((event as KeyboardEvent).key))
+        (event instanceof KeyboardEvent && SCROLL_KEYS.has(event.key)))
     ) {
       this.findHere.leave();
     }
