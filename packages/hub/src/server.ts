@@ -541,7 +541,6 @@ import {
   YOU as FOLDER_YOU,
   folderFileNames,
   guardFolderFile,
-  listFolder,
   onFolderCommits,
   projectFolderRoutes,
 } from "./project-folder";
@@ -554,7 +553,7 @@ import {
   onPlacesChanged,
   placesChanged,
 } from "./project-placements";
-import { ProjectRefusal, projectRefusalOf } from "./project-refusal";
+import { projectRefusalOf } from "./project-refusal";
 import {
   createProjectSettings,
   type ProjectSettings,
@@ -10062,27 +10061,6 @@ export const createServer = (
       return turns instanceof ElysiaStatus
         ? { why: turns.response.detail }
         : { turns };
-    },
-    // The folder's own listing, every depth: each entry says whether it is a
-    // file or a folder. (Names read of a file are none, not a refusal: a walk
-    // that took a refusal for a file took every file for an empty folder.)
-    folderFiles: async (projectId, dir) => {
-      const listed = await listFolder(projectId, dir, true);
-      if (listed instanceof ElysiaStatus) {
-        if (listed.status === 404) {
-          return [];
-        }
-        throw projectRefusalOf(listed);
-      }
-      if (listed.truncated) {
-        throw new ProjectRefusal(
-          413,
-          `${dir}/ holds more entries than one listing reads; hand its files by path`
-        );
-      }
-      return listed.entries.flatMap((entry) =>
-        entry.kind === "file" ? [entry.path] : []
-      );
     },
     instance: (id) => db.getInstancesByIds([id])[0],
     outputsFolder,
