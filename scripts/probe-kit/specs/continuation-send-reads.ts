@@ -32,7 +32,7 @@ import { dataOf } from "../../../packages/agent/src/hub-client";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MODEL, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** How large the job's `prepared` is made: past the several MB of a 691k-token source. */
 const PREPARED_MB = 40;
@@ -91,7 +91,7 @@ const inflated = (stored: string): string => {
   return JSON.stringify(prepared);
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "continuation-send-reads",
   run: async (kit: Kit) => {
@@ -174,4 +174,6 @@ export default {
       named.slice(0, 3).join("\n").slice(0, 2000)
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

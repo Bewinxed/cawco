@@ -39,7 +39,7 @@ import type { GeneratedImage } from "../../../packages/core/src/image-generation
 import { accountCredentialPath } from "../../../packages/core/src/paths/claude";
 import { DAY_MS } from "../../../packages/core/src/time";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** A 1×1 PNG. */
 const PNG_1X1 =
@@ -66,7 +66,7 @@ interface Asked {
   path: string;
 }
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "image-providers",
   ownHome:
@@ -312,4 +312,6 @@ export default {
       delete process.env.CAWCO_CHATGPT_BASE_URL;
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

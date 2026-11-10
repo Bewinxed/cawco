@@ -32,17 +32,9 @@ import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import type { Pin } from "../../../packages/core/src/comments/model";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import {
-  type Engine,
-  type Kit,
-  type KitFleet,
-  open,
-  pressAt,
-  ROOT,
-  type Spec,
-  settle,
-} from "../kit";
+import { open, pressAt, ROOT, settle } from "../kit";
 import { pagePins } from "../pins";
+import type { Engine, Kit, KitFleet, Spec } from "../spec";
 
 const NAME = "app-comment";
 const PAGE =

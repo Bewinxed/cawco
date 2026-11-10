@@ -10,7 +10,7 @@ import { readFile, stat } from "node:fs/promises";
 import { LAUNCHD_LOG_CAP_BYTES } from "../../packages/core/src/launchd";
 import { systemProgram } from "../../packages/core/src/workspace-needs";
 import { until } from "../scratch-fleet";
-import type { Kit } from "./kit";
+import type { Kit } from "./spec";
 
 /**
  * The writer's program: `line <n> <pad>`, about 190 bytes each, as fast as it

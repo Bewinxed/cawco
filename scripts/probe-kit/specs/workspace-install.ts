@@ -56,8 +56,8 @@ import {
   ownWritesOf,
   realpathsInCopy,
 } from "../copy";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 type Tag = "A" | "B" | "PA" | "PB";
 const TAG = /PROBE-INSTALL-(?:LIST-)?(P?[AB])\b/gu;
@@ -665,9 +665,11 @@ const run = async (kit: Kit) => {
   await cannotList(kit, fleet, "B", b, a);
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "workspace-install",
   host: "it delegates, so its fleet cuts workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

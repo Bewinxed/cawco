@@ -47,8 +47,8 @@ import { LATE_MS } from "../../../packages/core/src/loop-watch";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { searchWords } from "../../../packages/core/src/words/search";
 import { delay, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { running, theProcess } from "../search-processes";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** Stored Claude transcripts on the machine. */
 const TRANSCRIPTS = 100;
@@ -412,7 +412,7 @@ const fewTurns = async (kit: Kit, planted: Planted) => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "search-sync-let-go",
   run: async (kit: Kit) => {
@@ -430,4 +430,6 @@ export default {
       stalls.join("\n") || "no stall"
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

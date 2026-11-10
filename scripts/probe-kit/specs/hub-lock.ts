@@ -22,7 +22,7 @@ import { identifiedPid, signal } from "../../../packages/core/src/signal";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { leasePortRange, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const HUB_ENTRY = join(ROOT, "packages", "hub", "src", "index.ts");

@@ -24,7 +24,8 @@ import { join } from "node:path";
 import { startedPath } from "../../../packages/core/src/workspace-needs";
 import { FILES } from "../../binary/proof-stores";
 import { compileBinary, prepareAssets, TARGETS } from "../../build-binary";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** This machine's binary target, as build-binary.ts names it. */
 const hostTarget = (): string => {
@@ -35,7 +36,7 @@ const hostTarget = (): string => {
   return target;
 };
 
-export default {
+const spec: Spec = {
   group: "Release checks",
   name: "stores-binary",
   run: async (kit: Kit) => {
@@ -73,4 +74,6 @@ export default {
       `${out}\n${err}`.slice(-2000)
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

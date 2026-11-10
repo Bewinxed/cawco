@@ -36,7 +36,7 @@
 
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 

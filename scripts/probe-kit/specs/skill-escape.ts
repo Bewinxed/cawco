@@ -77,8 +77,8 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** A step, in the person's words, so the mock plays the right tool calls for it. */
 const STEP_TAG = /PROBE-SKILL-([a-z]+)/gu;

@@ -54,9 +54,10 @@ import { dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { taskOf, traceMain } from "../frames";
-import { type Kit, type KitFleet, open, readMotion, type Spec } from "../kit";
+import { open, readMotion } from "../kit";
 import { quietLeg } from "../quiet";
 import { asleep, conversationFile, seedRows } from "../seeded-sessions";
+import type { Kit, KitFleet, Spec } from "../spec";
 import { SLOWER } from "./two-pane-perf";
 
 /** Projects on the board. */

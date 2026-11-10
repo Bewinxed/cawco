@@ -18,7 +18,8 @@ import { dataOf } from "../../../packages/agent/src/hub-client";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { pageHub } from "../hub";
-import { COMPOSER, type Kit, open, type Spec } from "../kit";
+import { COMPOSER, open } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const REFUSED = /HTTP Authentication failed/u;

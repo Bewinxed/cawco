@@ -65,8 +65,8 @@ import {
 } from "../browser-tool";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const BROWSE = "mcp__cawco__artifact_browse";
 const MCP_VERSION = "1.11.0";

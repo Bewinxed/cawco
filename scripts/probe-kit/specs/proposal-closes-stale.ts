@@ -66,13 +66,8 @@ import {
   until,
 } from "../../scratch-fleet";
 import { payloadOf } from "../hub";
-import {
-  delegateStarted,
-  type Kit,
-  type KitFleet,
-  open,
-  type Spec,
-} from "../kit";
+import { delegateStarted, open } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const PATH = "delegates/scout.md";
 const TYPE = (line: string) =>

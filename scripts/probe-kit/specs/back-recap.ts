@@ -40,7 +40,7 @@ import {
 } from "../../../packages/core/src/injected";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The line of news the session kept while the person was away. */
 const NEWS = "PROBE-BACK-NEWS: the build landed on main";
@@ -371,8 +371,10 @@ const run = async (kit: Kit): Promise<void> => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "back-recap",
   run,
-} satisfies Spec;
+};
+
+export default spec;

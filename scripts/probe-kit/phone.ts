@@ -6,7 +6,7 @@
  */
 
 import { until } from "../scratch-fleet";
-import type { KitFleet } from "./kit";
+import type { KitFleet } from "./spec";
 
 const BURST_SENT = /\[notify\] push (needs-\S+): \d+ in one \(([^)]*)\)/u;
 

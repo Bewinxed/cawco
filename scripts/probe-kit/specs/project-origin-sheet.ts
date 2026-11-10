@@ -34,7 +34,7 @@ import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import { type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
 import {
   hear,
   PASS_HOSTS,
@@ -44,6 +44,7 @@ import {
   remount,
   storeHostMode,
 } from "../pass-legs";
+import type { Kit, Spec } from "../spec";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,

@@ -29,7 +29,8 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { type Reply, until } from "../../scratch-fleet";
-import { type Engine, type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Engine, Kit, Spec } from "../spec";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
 const FRAME = 'iframe[title="Preview"]';

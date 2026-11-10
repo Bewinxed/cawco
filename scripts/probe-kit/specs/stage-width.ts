@@ -42,7 +42,8 @@ import { renderCanvas } from "../../../packages/agent/src/stage-render";
 import { CANVAS_PATH } from "../../../packages/core/src/stage";
 import { until } from "../../scratch-fleet";
 import { scan } from "../journeys/scan";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const APP = join(ROOT, "apps/dashboard");
 const SCRATCH = "src/lib/cawco/probe-stage-width";

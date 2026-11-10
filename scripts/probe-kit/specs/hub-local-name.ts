@@ -82,8 +82,8 @@ import { connectWords } from "../../../packages/core/src/words/connect";
 import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
 import { leasePortRange, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { type LaunchAgents, launchAgents, RESULT_MARK } from "../launch-agent";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const HUB_ENTRY = join(ROOT, "packages", "hub", "src", "index.ts");

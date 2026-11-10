@@ -41,7 +41,7 @@ import type {
 import { delay, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";
 import { hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const BIG_MB = 406;
 const FIRST_MS = 3000;
@@ -245,7 +245,7 @@ const differing = (
     : `entry ${at}: windows ${JSON.stringify(joined[at])} / whole ${JSON.stringify(all[at])}`;
 };
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "transcript-pages",
   run: async (kit: Kit) => {
@@ -398,4 +398,6 @@ export default {
       stalls.join("\n")
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

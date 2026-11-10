@@ -40,14 +40,8 @@ import { skillsWords } from "../../../../packages/core/src/words/skills";
 import { spawnWords } from "../../../../packages/core/src/words/spawn";
 import { MACHINE } from "../../../scratch-fleet";
 import { answerText, type HubAsk, hubAt } from "../../hub";
-import {
-  type Engine,
-  type Kit,
-  type KitFleet,
-  open,
-  type Spec,
-  type View,
-} from "../../kit";
+import { open } from "../../kit";
+import type { Engine, Kit, KitFleet, Spec, View } from "../../spec";
 import { literal } from "../../words";
 
 /** The New Session form: the desk's popover, the phone's bottom sheet. */

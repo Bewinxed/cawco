@@ -26,7 +26,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const PORT = 47_311;
 const DELAYS_MS = [0, 1, 2, 4, 6, 8, 10, 15, 20, 30, 45, 60];

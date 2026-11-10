@@ -86,18 +86,9 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import { type Box, box } from "../geom";
 import { hubAt } from "../hub";
-import {
-  COMPOSER,
-  type Kit,
-  type KitFleet,
-  open,
-  pressAt,
-  pressIn,
-  type Spec,
-  settle,
-  VIEWS,
-} from "../kit";
+import { COMPOSER, open, pressAt, pressIn, settle } from "../kit";
 import { emulateMotion } from "../motion";
+import { type Kit, type KitFleet, type Spec, VIEWS } from "../spec";
 
 const PILL = 'form[data-slot="cin"]';
 const FIELD = COMPOSER;

@@ -69,8 +69,9 @@ import {
   SCROLLER,
   traceMain,
 } from "../frames";
-import { COMPOSER, type Kit, open, type Spec } from "../kit";
+import { COMPOSER, open } from "../kit";
 import { machineQuiet, quietLeg, quietWords } from "../quiet";
+import type { Kit, Spec } from "../spec";
 
 /** Calls in each long session. */
 const LONG = 2000;

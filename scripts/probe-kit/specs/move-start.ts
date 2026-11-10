@@ -21,7 +21,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const B = "probe-move-b";
 
@@ -126,8 +126,10 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "move-start",
   run,
-} satisfies Spec;
+};
+
+export default spec;

@@ -48,7 +48,8 @@ import type { Frame, Page } from "playwright-core";
 import { shellWords } from "../../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
 import { ToolCalls } from "../../../tool-calls";
-import { type Kit, open, type Spec } from "../../kit";
+import { open } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 /** Mean luminance a day picture is above, and a night one below. Our call. */

@@ -49,7 +49,7 @@ import {
 import type { GeneratedImage } from "../../../packages/core/src/image-generation";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import { fakeAgy } from "../fake-agy";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** A 1×1 PNG. */
 const PNG_1X1 =
@@ -160,7 +160,7 @@ const referencesRun = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "image-antigravity",
   ownHome:
@@ -421,4 +421,6 @@ export default {
       stopped
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

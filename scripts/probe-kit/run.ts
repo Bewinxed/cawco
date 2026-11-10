@@ -61,15 +61,19 @@ import { ensureDeps } from "../lib/deps";
 import { holdAwake } from "../lib/hold-awake";
 import { runTied } from "../lib/tied-child";
 import { callerNames, withoutCaller } from "./caller-env";
-import type { Spec } from "./kit";
+import {
+  ENCLOSING_GIT_ENV,
+  OWN_HOME_ENV,
+  OWN_PROCESS_ENV,
+  type Spec,
+} from "./spec";
 
 // The dependencies first (lib/deps.ts): the kit and the fleet load after them.
 // The machine stays awake for the whole run (lib/hold-awake.ts).
 holdAwake(`bun scripts/probe-kit/run.ts ${process.argv.slice(2).join(" ")}`);
 await ensureDeps();
 const { sweepDeadFleets } = await import("../scratch-fleet");
-const { ENCLOSING_GIT_ENV, OWN_HOME_ENV, OWN_PROCESS_ENV, Run } =
-  await import("./kit");
+const { Run } = await import("./kit");
 const { nameProbeRun, probeSlot } = await import("./slot");
 
 const args = process.argv.slice(2);
@@ -186,7 +190,7 @@ for (const name of chosen) {
   specs.set(name, spec);
 }
 /**
- * A spec that runs in a process of its own (kit.ts `Spec.ownProcess`, or
+ * A spec that runs in a process of its own (spec.ts `Spec.ownProcess`, or
  * `Spec.ownHome`): started fresh, so nothing an earlier spec loaded is
  * loaded there. One that stands up its own git and HOME (`ownHome`) gets a
  * scratch HOME set as it starts, and none of an enclosing workspace's git or

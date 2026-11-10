@@ -56,7 +56,7 @@ import type { Frame, Page } from "playwright-core";
 import { PREVIEW_PASS_COOKIE } from "../../../packages/core/src/preview/routes";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { answerText, hubAt, pageHub } from "../hub";
-import { type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
 import {
   hear,
   PASS_DOMAIN,
@@ -67,6 +67,7 @@ import {
   remount,
   storeHostMode,
 } from "../pass-legs";
+import type { Kit, Spec } from "../spec";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,

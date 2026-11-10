@@ -20,7 +20,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { MACHINE, until } from "../../scratch-fleet";
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 
 const spec: Spec = {
   group: "Workspaces and what agents may touch",

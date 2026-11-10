@@ -40,8 +40,8 @@ import {
   until,
 } from "../../scratch-fleet";
 import { ToolAnswer } from "../../tool-calls";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The second machine, where the leaf runs. */
 const FAR = "machine-sends-far";

@@ -22,7 +22,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { githubStub } from "./forge-stubs";
-import type { Kit } from "./kit";
+import type { Kit } from "./spec";
 import { standExecutor } from "./workspace-executor";
 
 /** What the git-door spec hands the leg. */

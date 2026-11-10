@@ -45,7 +45,7 @@ import { dataOf } from "../../../packages/agent/src/hub-client";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { ACCOUNT, delay, MACHINE, MODEL, until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** How long the pause is asked for: past every read below, ended by hand. */
 const PAUSE_MS = 10 * 60_000;
@@ -149,7 +149,7 @@ const healthLook = async (
   };
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "continuation-held-start",
   run: async (kit: Kit) => {
@@ -257,4 +257,6 @@ export default {
       `job ${JSON.stringify(folded)}; plan ${JSON.stringify(plan)}; lines ${JSON.stringify(foldLines)}; failed ${JSON.stringify(failed)}`
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

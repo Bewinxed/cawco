@@ -20,6 +20,16 @@ Its teardown ends every process whose environment still names one of its
 folders (its HOME, runtime dir, sandbox), however far it forked away: a
 session's MCP server's daemon included (`fleet-leaves-nothing`).
 
+## What a spec is
+
+`spec.ts` states the contract once: a module under `specs/` or `specs/web/`
+exports by default a `Spec` (`const spec: Spec = {…}; export default spec;`),
+and run.ts, kit.ts and the groups lint read its fields from that type. It
+holds `Spec`, `Kit`, `KitFleet`, `View` with `VIEWS`, `Theme`, `Engine`,
+`PageOptions` and the run-location variables (`OWN_HOME_ENV`,
+`OWN_PROCESS_ENV`, `ENCLOSING_GIT_ENV`, `BOUNDARY_INSIDE`), and imports only
+types. kit.ts is the runner behind `Kit`.
+
 ## One machine, so many runs at once
 
 A run takes one of the machine's heavy-work slots (`slot.ts`, core
@@ -310,7 +320,7 @@ under a HOME of its own says so with `ownHome` (its reason), and `run.ts`
 runs it in a process of its own: a scratch HOME set as that process starts,
 and none of an enclosing workspace's git or gh settings (`GIT_CONFIG_*`,
 `CAWCO_GIT_*`, `GIT_SSH_COMMAND`, `GIT_LFS_SKIP_PUSH`, `GIT_TEMPLATE_DIR`,
-`GH_CONFIG_DIR`, kit.ts `ENCLOSING_GIT_ENV`). Bun's `os.homedir()` reads HOME
+`GH_CONFIG_DIR`, spec.ts `ENCLOSING_GIT_ENV`). Bun's `os.homedir()` reads HOME
 once, as the process starts, so a HOME a spec sets later moves nothing
 CawCo's paths read; and a workspace's `pushInsteadOf` would send the spec's
 own setup pushes through that workspace's git door. So `git-door` runs as

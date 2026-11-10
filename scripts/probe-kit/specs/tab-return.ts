@@ -84,8 +84,9 @@ import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { type Heap, heapOf } from "../heap";
-import { type Kit, open, ROOT, type Spec } from "../kit";
+import { open, ROOT } from "../kit";
 import { machineQuiet, quietLeg, VoidTry } from "../quiet";
+import type { Kit, Spec } from "../spec";
 import {
   type Cost,
   census,

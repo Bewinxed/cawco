@@ -69,7 +69,7 @@ import type { SshJoinJob } from "../../../packages/core/src/join";
 import { shellQuote } from "../../../packages/core/src/shell-quote";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The German words a translated git says for what these legs make it say. */
 const GERMAN_GIT = String.raw`#!${systemProgram("sh")}

@@ -27,7 +27,7 @@
  */
 import { chmod, lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The fleets' name: the same for both, so the second removes the first's (`removeKept`). */
 const NAME = "fleet-kept-removal-leg";
@@ -145,8 +145,10 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The probe kit's own rig",
   name: "fleet-kept-removal",
   run,
-} satisfies Spec;
+};
+
+export default spec;

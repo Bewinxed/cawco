@@ -22,13 +22,14 @@
  *   bun scripts/probe-kit/run.ts web drawn-wait
  */
 import type { Page } from "playwright-core";
-import { type Kit, type Spec, settle } from "../../kit";
+import { settle } from "../../kit";
 import {
   RenderedChecks,
   RULES,
   saidOfDrawn,
   untilDrawn,
 } from "../../rendered-checks";
+import type { Kit, Spec } from "../../spec";
 
 /** The bound the made-up pages wait to: theirs, not the read's 30s. */
 const SHORT = { bound: 3000 };

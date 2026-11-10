@@ -51,9 +51,10 @@ import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { until } from "../../scratch-fleet";
 import { outpostTo, scratchCertificate } from "../cloudflare-front";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import { open, settle } from "../kit";
 import { PASS_DOMAIN, PASS_HOSTS } from "../pass-legs";
 import { writePagePins } from "../pins";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;

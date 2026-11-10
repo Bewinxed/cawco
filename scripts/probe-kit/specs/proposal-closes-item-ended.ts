@@ -25,7 +25,8 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { delegateStarted, type Kit, open, type Spec } from "../kit";
+import { delegateStarted, open } from "../kit";
+import type { Kit, Spec } from "../spec";
 import {
   commitDesign,
   leaves,

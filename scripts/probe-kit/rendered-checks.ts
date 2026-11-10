@@ -77,7 +77,8 @@ import type { Page } from "playwright-core";
 import { userSkillLayers } from "../../packages/core/src/paths/fleet";
 import { capture, type Raster } from "./ink";
 import { scan } from "./journeys/scan";
-import { devtoolsPort, installRuns, type Kit, ROOT, Run, settle } from "./kit";
+import { devtoolsPort, installRuns, ROOT, Run, settle } from "./kit";
+import type { Kit } from "./spec";
 
 export type CheckName =
   | "overflow"
@@ -5670,7 +5671,7 @@ async function impeccable(page: Page): Promise<{
     // fleet places skills. A workspace's boundary reads every one of those
     // layers (core paths/fleet.ts `fleetSyncedPaths`), so inside one the answer is
     // the host's. Said as not run here, as a spec that runs on the host is
-    // (kit.ts `Spec.host`).
+    // (spec.ts `Spec.host`).
     const why = `$IMPECCABLE is unset and none of the fleet's skill layers holds ${IMPECCABLE_LAUNCHER}: ${userSkillLayers().join(", ")}`;
     return {
       ran: false,

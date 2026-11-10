@@ -20,7 +20,8 @@ import { join } from "node:path";
 import { askWords } from "../../../packages/core/src/words/asks";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const run = async (kit: Kit): Promise<void> => {
   const fleet = await kit.fleet((): Reply => ({ everyMs: 5, words: ["ok"] }));

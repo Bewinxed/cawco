@@ -43,7 +43,8 @@ import { connectWords } from "../../../packages/core/src/words/connect";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const APP = join(ROOT, "apps/dashboard");
 /** The scratch stories' folder, under `src/` (SvelteKit serves only that); gone when the spec ends. */

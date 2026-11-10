@@ -25,7 +25,7 @@ import {
   type TargetMap,
 } from "../../../packages/hub/src/app-targets";
 import { readGate } from "../../../packages/hub/src/gate-file";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 /** The targets a step's command builds: what the hub put in `{targets}`. */

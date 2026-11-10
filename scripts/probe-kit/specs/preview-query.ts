@@ -61,7 +61,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Socket } from "bun";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** Host mode's listener: the first of the preview ports this spec gives its hub. Our pick, clear of a hub's default range. */
 const HOST_PORT = 47_460;

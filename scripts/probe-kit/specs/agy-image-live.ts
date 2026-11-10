@@ -24,7 +24,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { generateImage } from "../../../packages/agent/src/image-generation";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The one reference as the provider writes it in agy's own folder. */
 const WRITTEN_REFERENCE = /\/cawco-agy-image-[^/]+\/reference-1\.png$/u;
@@ -96,7 +96,7 @@ const transcriptOf = async (
   return { calls, subagent };
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "agy-image-live",
   host: "it runs the machine's own agy, signed in to Google in the person's keyring, which no workspace boundary reaches, and spends one image of that plan's quota",
@@ -204,4 +204,6 @@ export default {
       JSON.stringify(paths)
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

@@ -35,7 +35,7 @@ import { join } from "node:path";
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { delay } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const OTHER = "late-answer-other";
 /** The hub's read deadline (machine-read-timeouts.ts `READ_TIMEOUT_MS`). */
@@ -51,7 +51,7 @@ const FREEZE_HUB_AT_MS = 8000;
 /** How long the hub stays frozen: across the deadline, with the agent's whole answer sent meanwhile. */
 const HUB_FROZEN_MS = 4000;
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "late-answer",
   run: async (kit: Kit) => {
@@ -136,4 +136,6 @@ export default {
       `${got.status}, ${got.size} bytes after ${spent} ms; late ${JSON.stringify(lateC)}; unrouted ${JSON.stringify(unroutedC)}`
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

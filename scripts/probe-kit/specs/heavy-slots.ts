@@ -58,7 +58,7 @@ import {
   type SlotPlace,
 } from "../../../packages/core/src/heavy-slots";
 import { queueWords } from "../../../packages/core/src/words/queue";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const CHILD = join(import.meta.dir, "..", "slot-child.ts");

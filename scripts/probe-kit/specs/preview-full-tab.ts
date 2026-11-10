@@ -25,7 +25,7 @@ import type { Socket, TCPSocketListener } from "bun";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { previewPortWords } from "../../../packages/core/src/words/preview-ports";
 import { type Reply, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** What the decision page's frame draws once its host has loaded. */
 const QUESTION = "Which word reads right?";

@@ -18,7 +18,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { cloneHolding } from "../../../packages/agent/src/workspace-records";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** Workspace `id`'s records under the scratch HOME, its `create.json` naming `path`, and a folder inside `path`. */
 const recorded = async (id: string, path: string): Promise<string> => {

@@ -38,8 +38,8 @@ import { join } from "node:path";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate, JS_GATE } from "../gate";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-GATE-([ABPN])/u;
@@ -410,9 +410,11 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "landing-gate",
   host: "it delegates, so its fleet cuts workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

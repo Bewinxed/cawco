@@ -58,8 +58,9 @@ import {
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import { open, settle } from "../kit";
 import { pagePins, writePagePins } from "../pins";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const CREATE = "mcp__cawco__artifact_create";
 const REPLY_TOOL = "mcp__cawco__comment_reply";
@@ -1152,8 +1153,10 @@ const run = async (kit: Kit) => {
   await legW(kit, fleet, session);
 };
 
-export default {
+const spec: Spec = {
   group: "Previews, pages and comments",
   name: "pane-refusal",
   run,
-} satisfies Spec;
+};
+
+export default spec;

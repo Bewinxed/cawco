@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import type { Browser } from "playwright-core";
 import { readWithin } from "../../packages/core/src/bounded";
 import type { CappedBrowser } from "./browser-cap";
-import type { Engine, Spec } from "./kit";
+import type { Engine, Spec } from "./spec";
 
 const { Run } = await import("./kit");
 

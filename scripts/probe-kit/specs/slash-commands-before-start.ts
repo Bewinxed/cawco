@@ -23,7 +23,7 @@ import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import { CONTROL_SUPPORTED_COMMANDS } from "../../../packages/core/src/session/controls";
 import type { SlashCommand } from "../../../packages/core/src/session-messages";
 import { MACHINE, MODEL, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const SKILL = "probe-folder-skill";
 const COMMAND = "probe-folder-command";

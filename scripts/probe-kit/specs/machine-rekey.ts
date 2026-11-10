@@ -27,7 +27,7 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { MACHINE, until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const PHRASE = "rekey probe phrase";
 /** What makes the mock say {@link PHRASE}; anything else it answers `ok`. */
@@ -226,8 +226,10 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "machine-rekey",
   run,
-} satisfies Spec;
+};
+
+export default spec;

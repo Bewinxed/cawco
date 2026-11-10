@@ -63,14 +63,8 @@ import { machineFaultWords } from "../../../packages/core/src/words/machine-name
 import { MACHINE, until } from "../../scratch-fleet";
 import { writeClaudeTranscript } from "../claude-transcripts";
 import { scan } from "../journeys/scan";
-import {
-  COMPOSER,
-  type Kit,
-  kitsOwnMessage,
-  open,
-  type Spec,
-  settle,
-} from "../kit";
+import { COMPOSER, kitsOwnMessage, open, settle } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** B's turn: long enough to stream through every reload. */
 const WORDS = Array.from({ length: 4000 }, (_, at) => `word${at}`);
@@ -639,8 +633,10 @@ const run = async (kit: Kit): Promise<void> => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "console-quiet",
   run,
-} satisfies Spec;
+};
+
+export default spec;

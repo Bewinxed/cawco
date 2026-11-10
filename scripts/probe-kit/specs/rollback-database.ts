@@ -36,7 +36,7 @@ import {
   releaseDatabase,
 } from "../../../packages/core/src/db-lock";
 import { useWal } from "../../../packages/hub/src/db/wal";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const DB_LOCK = join(ROOT, "packages", "core", "src", "db-lock.ts");

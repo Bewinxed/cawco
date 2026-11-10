@@ -78,8 +78,8 @@ import { projectClaudeDir } from "../../../packages/core/src/paths/claude";
 import { isAlive, listedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { BEFORE_PREFIX, legacyClaudeOptions } from "../legacy-claude";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const FIXTURE = join(import.meta.dir, "..", "fixtures", "where-mcp-server.ts");

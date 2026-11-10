@@ -28,7 +28,8 @@ import { loopWords } from "../../../packages/core/src/words/loop";
 import { startedPath } from "../../../packages/core/src/workspace-needs";
 import { HOLD_MS, SECTION } from "../../binary/proof-loop-held";
 import { compileBinary, prepareAssets, TARGETS } from "../../build-binary";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** This machine's binary target, as build-binary.ts names it. */
 const hostTarget = (): string => {
@@ -39,7 +40,7 @@ const hostTarget = (): string => {
   return target;
 };
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "loop-held-said",
   run: async (kit: Kit) => {
@@ -114,4 +115,6 @@ export default {
       JSON.stringify(lines)
     );
   },
-} satisfies Spec;
+};
+
+export default spec;

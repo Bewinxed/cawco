@@ -68,8 +68,8 @@ import {
   until,
 } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const SKILL = "probe-reads";
 /** The same files, bound to the project and placed in each clone. */

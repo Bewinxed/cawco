@@ -37,7 +37,7 @@ import { join } from "node:path";
 import { BACK_MESSAGE } from "../../../packages/core/src/injected";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "../../../packages/core/src/time";
 import { noticeWords } from "../../../packages/core/src/words/notices";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "machine-list-sessions";
 

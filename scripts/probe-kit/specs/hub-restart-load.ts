@@ -35,7 +35,7 @@ import { readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { MACHINE, MODEL } from "../../scratch-fleet";
 import { type HubAsk, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 /** The trial's probe: once a second; each request here given 3 s, three times the bar. */
 const PROBE_EVERY_MS = 1000;
@@ -448,8 +448,10 @@ async function run(kit: Kit): Promise<void> {
   );
 }
 
-export default {
+const spec: Spec = {
   group: "Speed",
   name: "hub-restart-load",
   run,
-} satisfies Spec;
+};
+
+export default spec;

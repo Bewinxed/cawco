@@ -65,8 +65,8 @@ import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { unreportedHarnessRefusal } from "../../../packages/hub/src/placement";
 import { toolWords } from "../../lib/tool-call";
 import { ACCOUNT, type Fleet, MACHINE, until } from "../../scratch-fleet";
-import type { KitFleet, Spec } from "../kit";
 import { atRest } from "../phone";
+import type { KitFleet, Spec } from "../spec";
 
 const SLOW_S = 30;
 const ONLINE_MS = 3000;

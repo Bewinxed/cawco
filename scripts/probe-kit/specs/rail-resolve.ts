@@ -21,18 +21,9 @@ import type { Pin } from "../../../packages/core/src/comments/model";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import {
-  COMPOSER,
-  type Engine,
-  type Kit,
-  kitsOwnMessage,
-  open,
-  type Spec,
-  settle,
-  VIEWS,
-  type View,
-} from "../kit";
+import { COMPOSER, kitsOwnMessage, open, settle } from "../kit";
 import { writePagePins } from "../pins";
+import { type Engine, type Kit, type Spec, VIEWS, type View } from "../spec";
 
 const FRAME = 'iframe[title="Preview"]';
 const RAIL = '[data-slot="comment-rail"]';

@@ -32,7 +32,7 @@ import {
   idOf,
   startDecisionStage,
 } from "../decision-embeds";
-import type { Engine, Kit, Spec } from "../kit";
+import type { Engine, Kit, Spec } from "../spec";
 
 /** Two canvases of the dashboard, a story each. */
 const CANVASES = [

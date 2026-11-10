@@ -29,7 +29,8 @@ import type { Page } from "playwright-core";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import type { Reply, Seen } from "../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { open, settle } from "../kit";
+import type { Kit, Spec } from "../spec";
 import { startsWith } from "../words";
 
 /** A replaced selector and the attribute that says the same, on one kind of element. */

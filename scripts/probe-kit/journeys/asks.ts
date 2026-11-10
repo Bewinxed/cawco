@@ -1,5 +1,5 @@
 import type { Reply, Seen } from "../../scratch-fleet";
-import type { KitFleet } from "../kit";
+import type { KitFleet } from "../spec";
 import { eventually, waiting } from "./suite";
 
 const ASK = /JOURNEY-ASK (\S+)/u;

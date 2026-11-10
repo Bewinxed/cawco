@@ -47,7 +47,7 @@ import {
 } from "../../../packages/core/src/signal-wall";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const HOST = join(ROOT, "packages/agent/src/boundary-host.ts");

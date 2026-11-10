@@ -179,15 +179,9 @@ import type { ArtifactTool } from "../../../packages/hub/src/artifacts/tools";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { pageHub } from "../hub";
-import {
-  type Kit,
-  type KitFleet,
-  open,
-  pressIn,
-  type Spec,
-  settle,
-} from "../kit";
+import { open, pressIn, settle } from "../kit";
 import { writePagePins } from "../pins";
+import type { Kit, KitFleet, Spec } from "../spec";
 import { shaped } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";

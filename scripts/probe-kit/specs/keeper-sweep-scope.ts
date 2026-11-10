@@ -61,7 +61,7 @@ import {
   startedAt,
   startKeeperUnit,
 } from "../keeper-unit";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** The sweep's grace (sessiond server.ts `SWEEP_GRACE_MS`) and room past it. */
 const AFTER_SWEEP_MS = 5000;

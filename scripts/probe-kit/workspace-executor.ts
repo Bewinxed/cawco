@@ -9,7 +9,7 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { systemProgram } from "../../packages/core/src/workspace-needs";
-import type { Kit } from "./kit";
+import type { Kit } from "./spec";
 
 export interface StoodExecutor {
   /** One command through the executor, run in the clone, with `caller` over this process's environment: what it printed. */

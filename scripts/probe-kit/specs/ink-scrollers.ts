@@ -46,7 +46,7 @@
  */
 import type { Frame, Page } from "playwright-core";
 import { bundleOverlay } from "../../../packages/preview/src/proxy";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 import { dragFromIcon } from "./ink";
 
 const ARTIFACT = "11111111-2222-4333-8444-555555555555";

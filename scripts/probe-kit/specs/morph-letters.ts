@@ -20,7 +20,8 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { bundled } from "../../../packages/core/src/bundled";
 import { Clock } from "../anim";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MORPH = join(
   ROOT,

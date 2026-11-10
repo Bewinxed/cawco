@@ -65,8 +65,8 @@ import { AGENT_RESTARTING } from "../../../packages/core/src/binary-updates";
 import { listedPid } from "../../../packages/core/src/signal";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = "PROBE-CUT-M";

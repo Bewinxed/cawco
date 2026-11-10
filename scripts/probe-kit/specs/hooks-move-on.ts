@@ -23,7 +23,7 @@ import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hu
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
 import { type HubAsk, handled, said } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-hooks-machine";
 
@@ -253,7 +253,7 @@ const routineTasks = async (db: Db) => {
   });
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "hooks-move-on",
   ownProcess:
@@ -273,4 +273,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

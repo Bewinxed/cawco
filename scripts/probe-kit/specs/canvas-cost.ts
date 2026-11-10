@@ -90,8 +90,9 @@ import {
   embedOrigin,
   startDecisionStage,
 } from "../decision-embeds";
-import { type Engine, type Kit, ROOT, type Spec, safariParity } from "../kit";
+import { ROOT, safariParity } from "../kit";
 import { type SafariPage, safariBridge } from "../safari-bridge";
+import type { Engine, Kit, Spec } from "../spec";
 
 const APP = join(ROOT, "apps/dashboard");
 

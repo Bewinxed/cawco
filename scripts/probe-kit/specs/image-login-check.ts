@@ -34,7 +34,7 @@ import { generateImage } from "../../../packages/agent/src/image-generation";
 import { accountCredentialPath } from "../../../packages/core/src/paths/claude";
 import { DAY_MS } from "../../../packages/core/src/time";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** A 1×1 PNG, as ChatGPT's image endpoints answer one. */
 const PNG_1X1 =
@@ -93,7 +93,7 @@ interface Asked {
   path: string;
 }
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "image-login-check",
   ownHome:
@@ -251,4 +251,6 @@ export default {
       delete process.env.CAWCO_CHATGPT_BASE_URL;
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

@@ -51,8 +51,9 @@
 import type { Page } from "playwright-core";
 import { commentWords } from "../../../../packages/core/src/words/comments";
 import { readBreath } from "../../breath";
-import type { Kit, Spec, View } from "../../kit";
-import { open, readMotion, THEMES } from "../../kit";
+import { open, readMotion } from "../../kit";
+import type { Kit, Spec, View } from "../../spec";
+import { THEMES } from "../../spec";
 
 const VIEWS_READ: { view: View; width: number }[] = [
   { view: "phone", width: 390 },

@@ -31,7 +31,7 @@ import type { HubClient } from "../../../packages/agent/src/hub-client";
 import type { MoveEstimate } from "../../../packages/core/src/move";
 import { spawnWords } from "../../../packages/core/src/words/spawn";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 import { shaped } from "../words";
 
 const B = "probe-settled-b";
@@ -223,8 +223,10 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "move-settled",
   run,
-} satisfies Spec;
+};
+
+export default spec;

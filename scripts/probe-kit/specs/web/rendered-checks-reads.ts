@@ -82,12 +82,12 @@
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
 
-import type { Spec } from "../../kit";
 import {
   type CheckName,
   type CheckOptions,
   RenderedChecks,
 } from "../../rendered-checks";
+import type { Spec } from "../../spec";
 
 const BASE = `<!doctype html>
 <meta name="viewport" content="width=device-width">

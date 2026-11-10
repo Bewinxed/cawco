@@ -29,7 +29,7 @@ import {
   CANVAS_EMBED_SIZE,
 } from "../../../../packages/core/src/stage";
 import { APP, STAGE_START_MS, startDecisionStage } from "../../decision-embeds";
-import type { Kit, Spec } from "../../kit";
+import type { Kit, Spec } from "../../spec";
 
 /** How long one states file may take to say its shape or why not, its graph's first transform inside it. Ours. */
 const SAY_MS = 90_000;

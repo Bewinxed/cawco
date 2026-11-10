@@ -68,7 +68,7 @@ import {
   needOf,
 } from "../../../packages/hub/src/artifacts/needs";
 import type { ArtifactRow } from "../../../packages/hub/src/db/artifacts";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CAW = "caw-session";
 const OTHER = "other-session";
@@ -137,7 +137,7 @@ const needs = (...items: (ArtifactNeed | null)[]): ArtifactNeed[] =>
 
 const said = (waiting: Set<string>): string => JSON.stringify([...waiting]);
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "waiting-on-you",
   // Nothing here waits: each leg is the hub's rule and the core's, called.
@@ -291,4 +291,6 @@ export default {
     );
     return Promise.resolve();
   },
-} satisfies Spec;
+};
+
+export default spec;

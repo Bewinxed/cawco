@@ -43,8 +43,8 @@ import { dataOf } from "../../../packages/agent/src/hub-client";
 import { carryElsewhere } from "../../../packages/agent/src/hub-loopback";
 import { until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { freePort } from "../socket-served";
+import type { Kit, Spec } from "../spec";
 import {
   devServerOn3000,
   holdersOf3000,

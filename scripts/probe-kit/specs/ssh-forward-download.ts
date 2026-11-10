@@ -56,7 +56,8 @@ import type { SshJoinJob } from "../../../packages/core/src/join";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { until } from "../../scratch-fleet";
 import { heldProxy } from "../held-proxy";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { ROOT } from "../kit";
+import type { Kit, Spec } from "../spec";
 import { keyAccepted, machineBin, serveTarget, WAYS } from "../ssh-target";
 
 const USER = "probe";
@@ -349,8 +350,10 @@ console.log(JSON.stringify({ settings: settings.status, status, fetching, sha256
   }
 }
 
-export default {
+const spec: Spec = {
   group: "Release checks",
   name: "ssh-forward-download",
   run,
-} satisfies Spec;
+};
+
+export default spec;

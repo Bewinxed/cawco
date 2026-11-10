@@ -46,7 +46,8 @@ import type { Page } from "playwright-core";
 import type { HubClient } from "../../../packages/agent/src/hub-client";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import { type Kit, open, type Spec } from "../kit";
+import { open } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const LINKS = "PROBE-LINKS";

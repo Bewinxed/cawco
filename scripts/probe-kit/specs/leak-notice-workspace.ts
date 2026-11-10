@@ -74,8 +74,8 @@ import {
 } from "../../../packages/core/src/signal";
 import { leakWords } from "../../../packages/core/src/words/leaks";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 
 const THRESHOLD_GIB = 0.25;
 const MEMORY_WAIT_MS = 180_000;

@@ -40,9 +40,9 @@ import { dataOf, hubPath } from "../../../packages/agent/src/hub-client";
 import { dashboardRelay } from "../../../packages/hub/src/tailnet-https";
 import { scratchCertificate } from "../cloudflare-front";
 import { hubAt } from "../hub";
-import type { Kit, Spec } from "../kit";
 import { oauthProvider } from "../oauth-provider";
 import { freePort, publishBuild, serveUnder } from "../socket-served";
+import type { Kit, Spec } from "../spec";
 
 /** The fleet's OAuth MCP server, as the person named it. */
 const SERVER = "ProbeOAuth";

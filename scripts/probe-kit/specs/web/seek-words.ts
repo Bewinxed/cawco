@@ -41,7 +41,8 @@
  */
 import type { Page } from "playwright-core";
 import { SCROLLER } from "../../frames";
-import { open, type Spec } from "../../kit";
+import { open } from "../../kit";
+import type { Spec } from "../../spec";
 
 /** The bar over the transcript's top: a docked pane's head, near enough. */
 const HEAD = 56;

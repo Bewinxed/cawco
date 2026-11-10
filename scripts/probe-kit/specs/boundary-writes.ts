@@ -69,8 +69,8 @@ import { RELAY_URL } from "../../../packages/agent/src/proxy-relay";
 import { isAlive, signal } from "../../../packages/core/src/signal";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { copyPath, gitInCopy, inCopyExists } from "../copy";
-import type { Kit, Spec } from "../kit";
 import { delegateStarted } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 /** A cold install fetches every package into the scratch fleet's empty cache. */
@@ -624,9 +624,11 @@ const checkEngineCache = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "boundary-writes",
   host: "it delegates, so its fleet cuts workspaces",
   run,
-} satisfies Spec;
+};
+
+export default spec;

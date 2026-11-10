@@ -34,7 +34,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MINUTE_MS } from "../../../packages/core/src/time";
 import type { TranscriptDoc } from "../../../packages/jsonl-parser/src/text";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 /** What each grown transcript gains: two of them pass the sync's write batch (fts5.ts `WRITE_BATCH_BYTES`, 32 MB), one doesn't. */
 const TAIL_MB = 20;

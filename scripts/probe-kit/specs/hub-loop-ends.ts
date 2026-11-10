@@ -26,7 +26,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LoopEndedSchema } from "../../../packages/core/src/loop-watch-shared";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const CHILD = join(import.meta.dir, "..", "hub-loop-child.ts");
 /** The bound the child's watch ends it at. The watch calls a loop held from 10 s, so past that. */
@@ -68,7 +68,7 @@ const runChild = async (
   };
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "hub-loop-ends",
   run: async (kit: Kit) => {
@@ -125,4 +125,6 @@ export default {
       await rm(dir, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

@@ -35,7 +35,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { serveGitHttp } from "../git-http";
-import type { Spec } from "../kit";
+import type { Spec } from "../spec";
 
 const ORIGIN = "probe/origin.git";
 /** The repository the proxy's receive-pack answers from in (c): origin's main and one commit more. */

@@ -29,7 +29,7 @@ import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hu
 import type { TaskView } from "../../../packages/hub/src/tasks";
 import { type ToolSession, toolWords } from "../../lib/tool-call";
 import { answerText, type HubAsk, handled } from "../hub";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const MACHINE = "probe-start-moves-machine";
 
@@ -236,7 +236,7 @@ const run = async (
   );
 };
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "session-start-moves",
   ownProcess:
@@ -256,4 +256,6 @@ export default {
       await rm(scratch, { recursive: true, force: true });
     }
   },
-} satisfies Spec;
+};
+
+export default spec;

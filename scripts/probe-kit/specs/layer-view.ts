@@ -52,7 +52,7 @@ import {
 } from "../../../packages/agent/src/layer";
 import { cloneDenies } from "../../../packages/core/src/clone-denies";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const linux = process.platform === "linux";
 
@@ -306,11 +306,13 @@ const run = async (kit: Kit) => {
   await walkTimed(kit, home);
 };
 
-export default {
+const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "layer-view",
   host: "it mounts a Linux view (an overlay in a user namespace), which no workspace boundary allows inside it",
   ownHome:
     "its layers' records and upper dirs are under ~/.cawco, which must be its own",
   run,
-} satisfies Spec;
+};
+
+export default spec;

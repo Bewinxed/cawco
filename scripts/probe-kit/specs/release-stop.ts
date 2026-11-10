@@ -48,7 +48,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
-import type { Kit, Spec } from "../kit";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = resolve(import.meta.dir, "..", "..", "..");
 /** How long a leg waits for the point it stops at. Our call: the trees take seconds, the draft follows the install. */

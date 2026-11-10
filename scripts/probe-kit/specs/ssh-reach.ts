@@ -138,7 +138,7 @@ import {
 } from "../../../packages/core/src/workspace-needs";
 import { ACCOUNT, until } from "../../scratch-fleet";
 import { answerText, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../spec";
 import { machineBin } from "../ssh-target";
 
 /** The box's OpenSSH sshd, its sshd that refuses forwarding, its sshd that binds forwards wide, and its password target, on the box's loopback. */
@@ -1894,9 +1894,11 @@ async function run(kit: Kit): Promise<void> {
   }
 }
 
-export default {
+const spec: Spec = {
   group: "The hub and machines",
   name: "ssh-reach",
   host: "it gives the box a network of its own (bwrap --unshare-net), which no workspace boundary starts",
   run,
-} satisfies Spec;
+};
+
+export default spec;

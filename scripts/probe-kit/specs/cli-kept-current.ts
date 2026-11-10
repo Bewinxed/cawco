@@ -119,8 +119,9 @@ import {
 } from "../../../packages/hub/src/tool-releases";
 import { delay, MACHINE, until } from "../../scratch-fleet";
 import { hubAt } from "../hub";
-import { type Kit, open, type Spec, settle } from "../kit";
+import { open, settle } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
+import type { Kit, Spec } from "../spec";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
