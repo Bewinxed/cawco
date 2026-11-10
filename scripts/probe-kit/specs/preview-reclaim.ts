@@ -58,7 +58,7 @@ const DASHBOARD = "http://127.0.0.1:3455";
 /** A decision page that stood on the port that moved. */
 const PAGE = "00000000-0000-4000-8000-00000000c0f0";
 
-/** Artifact `n`'s id, and its origin's key (hub preview.ts `embedKey`). */
+/** Artifact `n`'s id, and its origin's key (hub db/previews.ts `artifactOrigin`). */
 const artifact = (n: number) =>
   `00000000-0000-4000-8000-00000000c1${String(n).padStart(2, "0")}`;
 const key = (n: number) =>

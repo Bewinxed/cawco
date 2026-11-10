@@ -17,14 +17,13 @@ import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { isFolderGone, startRefused } from "@cawco/preview/proxy";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
-import { originOfKey } from "./db/previews";
+import { artifactOrigin, originOfKey } from "./db/previews";
 import {
   loadedOnce,
   type MachineRow,
   type PreviewReach,
   servedByMachine,
 } from "./preview";
-import { embedKey } from "./preview-origin";
 
 /** What a machine's agent answered a control call. */
 interface Answered {
@@ -102,7 +101,7 @@ const keyOf = (row: MachineRow): SourceKey =>
  * against another copy ({@link reconcile}).
  */
 export function createPreviewService(deps: PreviewServiceDeps) {
-  /** Each origin's upstream, by its key ({@link embedKey}). */
+  /** Each origin's upstream, by its key ({@link artifactOrigin}). */
   const upstreams = new Map<string, Upstream>();
   /**
    * Each origin's start in flight, by its key: one per origin and source
@@ -248,7 +247,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
 
   /** Origin `key`'s upstream, when it is for what `row` names now. */
   const upstreamOf = (row: MachineRow): Upstream | undefined => {
-    const held = upstreams.get(embedKey(row.origin));
+    const held = upstreams.get(artifactOrigin(row.origin));
     return held?.for === keyOf(row) ? held : undefined;
   };
 
@@ -284,7 +283,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
    * went, its row moved) answers with where the origin is served now.
    */
   const reach = (row: MachineRow): Promise<PreviewReach> => {
-    const key = embedKey(row.origin);
+    const key = artifactOrigin(row.origin);
     const want = keyOf(row);
     const held = upstreams.get(key);
     if (held?.for === want) {
@@ -470,7 +469,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
      * a start in flight is voided. The one end of an artifact's origin.
      */
     end: (origin: string): void => {
-      const key = embedKey(origin);
+      const key = artifactOrigin(origin);
       deps.release(key);
       starting.delete(key);
       const held = upstreams.get(key);
@@ -491,7 +490,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
     moved: async ({ id, before }: SourceMoved): Promise<void> => {
       const row = deps.row(id);
       if (row && servedByMachine(row)) {
-        const key = embedKey(row.origin);
+        const key = artifactOrigin(row.origin);
         const want = keyOf(row);
         const held = upstreams.get(key);
         if (held && held.for !== want) {
