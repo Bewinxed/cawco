@@ -161,7 +161,7 @@ function layoutBoxes(): (element: HTMLElement) => Box {
     if (known) {
       return known;
     }
-    const up = at.offsetParent as HTMLElement | null;
+    const up = at.offsetParent instanceof HTMLElement ? at.offsetParent : null;
     const base = up ? placed(up) : null;
     const corner = {
       left:
@@ -1423,7 +1423,10 @@ function fly(
   const options = { capture: true, passive: true } as const;
   const scrolled = ({ target }: Event) => {
     // Another pane scrolling moves nothing of the group.
-    if (target === document || (target as Node).contains(group)) {
+    if (
+      target === document ||
+      (target instanceof Node && target.contains(group))
+    ) {
       for (const animation of buildSeen(pieces, viewOf(group))) {
         animation.startTime = start;
         flight.animations.push(animation);

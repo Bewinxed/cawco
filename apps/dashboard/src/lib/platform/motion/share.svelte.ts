@@ -125,7 +125,8 @@ export function carry(within: Element, by: number): void {
   // A flight is one or two effects (its move and its cut): each target carried once.
   const carried = new Set<Element>();
   for (const flight of within.getAnimations({ subtree: true })) {
-    const effect = flight.effect as KeyframeEffect | null;
+    const effect =
+      flight.effect instanceof KeyframeEffect ? flight.effect : null;
     const target = effect?.target;
     const total = Number(effect?.getComputedTiming().duration);
     const at = Number(flight.currentTime);
@@ -184,9 +185,10 @@ if (typeof document !== "undefined") {
   document.addEventListener(
     "click",
     (event) => {
-      const source = (event.target as Element | null)?.closest?.<HTMLElement>(
-        "[data-share]"
-      );
+      const source =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>("[data-share]")
+          : null;
       if (source) {
         depart(source);
       }
@@ -276,7 +278,7 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
     // The source's box laid over the anchor, their starts and middles lined
     // up, in the destination's own coordinates.
     const part = anchor
-      ? (node.querySelector(anchor) as HTMLElement).getBoundingClientRect()
+      ? (node.querySelector(anchor)?.getBoundingClientRect() ?? to)
       : to;
     const left = part.left - to.left;
     const top = part.top - to.top + (part.height - from.rect.height) / 2;

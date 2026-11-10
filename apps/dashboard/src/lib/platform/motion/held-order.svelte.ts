@@ -94,7 +94,7 @@ function withArrivals(kept: string[], computed: string[]): string[] {
     }
     let slot = 0;
     for (let back = at - 1; back >= 0; back -= 1) {
-      const before = out.indexOf(computed[back] as string);
+      const before = out.indexOf(computed[back] ?? "");
       if (before !== -1) {
         slot = before + 1;
         break;
@@ -173,7 +173,7 @@ export function heldOrder<T>(
   const byId = new Map(rows.map((row) => [id(row), row]));
   return handBack(
     list,
-    held.map((row) => byId.get(row) as T)
+    held.flatMap((row) => byId.get(row) ?? [])
   );
 }
 
@@ -201,7 +201,9 @@ export function holdWhileInside(scope: string): Attachment<HTMLElement> {
       sync();
     };
     const focusOut = (event: FocusEvent) => {
-      focus = node.contains(event.relatedTarget as Node | null);
+      focus = node.contains(
+        event.relatedTarget instanceof Node ? event.relatedTarget : null
+      );
       sync();
     };
     node.addEventListener("pointerenter", enter);

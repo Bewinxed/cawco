@@ -300,7 +300,10 @@ const deliver = (entries: ResizeObserverEntry[]) => {
 };
 
 const sharedObserver = (): Shared => {
-  shared ??= new (Native as NativeClass)(deliver);
+  if (!Native) {
+    throw new TypeError("ResizeObserver is not available");
+  }
+  shared ??= new Native(deliver);
   return shared;
 };
 
@@ -383,7 +386,7 @@ class ForeignResizeObserver {
   constructor(callback: ResizeObserverCallback) {
     const site: Site = {
       delivered: [],
-      foreign: (entries) => callback(entries, this as unknown as Shared),
+      foreign: (entries) => callback(entries, this),
       options: {},
       reported: new WeakSet(),
       take: () => undefined,
@@ -411,7 +414,7 @@ class ForeignResizeObserver {
  * can make one.
  */
 if (Native && typeof window !== "undefined") {
-  window.ResizeObserver = ForeignResizeObserver as unknown as NativeClass;
+  window.ResizeObserver = ForeignResizeObserver;
 }
 
 /**
