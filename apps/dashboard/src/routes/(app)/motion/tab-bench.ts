@@ -2,8 +2,6 @@
  * What the tab strip benches share (folder-proof, head-tint): the group
  * they draw, and the clicks the bench takes from the strip.
  */
-import type { PulseFrame } from "@cawco/core/frames";
-import type { blankSession } from "#lib/cawco/stores/sessions.svelte.js";
 import type { LeafNode } from "#lib/cawco/workspace/tree.js";
 
 /**
@@ -11,17 +9,7 @@ import type { LeafNode } from "#lib/cawco/workspace/tree.js";
  * (dev's `__cawcoDebug`, set when client.svelte.ts loads, which a bench
  * page imports ahead of its script): what a bench seeds its sessions into.
  */
-export const benchDebug = () =>
-  (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        frame: (frame: PulseFrame) => void;
-        sessionsState: {
-          sessions: Record<string, ReturnType<typeof blankSession>>;
-        };
-      };
-    }
-  ).__cawcoDebug;
+export const benchDebug = () => window.__cawcoDebug;
 
 /** The bench's group: every tab, the one `?at=` names (`at`, 1 by default) in front. */
 export function benchLeaf(

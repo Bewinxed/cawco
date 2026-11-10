@@ -175,7 +175,7 @@
   draft.text = "Check the push probe next";
 
   const find = findIn(MAIN);
-  (globalThis as unknown as { __find: unknown }).__find = find;
+  window.__find = find;
 
   onMount(() => {
     // The frame reads no hub: the shell's hub band, which would say so over

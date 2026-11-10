@@ -59,7 +59,10 @@
   } from "#lib/cawco/project/setup.fixtures.js";
   import { setupProgressOf } from "#lib/cawco/project/setup-progress.js";
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
-  import { projectsStore } from "#lib/cawco/stores/projects.svelte.js";
+  import {
+    type ProjectRow,
+    projectsStore,
+  } from "#lib/cawco/stores/projects.svelte.js";
   import {
     blankSession,
     sessionsStore,
@@ -164,24 +167,11 @@
     "first-run": [],
   };
 
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        frame: (frame: PulseFrame) => void;
-        projectsState: { projects: unknown[] };
-        sessionsState: {
-          sessions: Record<string, ReturnType<typeof blankSession>>;
-        };
-        adoptInstances: (rows: InstanceRow[]) => void;
-        standHub: (
-          answer: (instanceId: string, kind: string, intent: unknown) => void
-        ) => void;
-        leaveHub: () => void;
-      };
-    }
-  ).__cawcoDebug;
+  const debug = window.__cawcoDebug;
 
-  const row = {
+  const row: ProjectRow = {
+    account: null,
+    accountAtLimit: "wait",
     id: PROJECT,
     name,
     cawHarness: "claude",
