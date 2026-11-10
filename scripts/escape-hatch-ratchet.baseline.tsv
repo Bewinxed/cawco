@@ -197,7 +197,6 @@ as-unknown-as	{ cawcoArtifact: { doc: { getMap: (name: string) => { toJSON: () =
 as-unknown-as	{ cawcoArtifact: { doc: PageDoc } }	scripts/probe-kit/pins.ts	2
 as-unknown-as	{ cawcoArtifact: { subscribe: ( h: (hold: { link: { state: string } }) =	scripts/probe-kit/specs/comment-link.ts	1
 as-unknown-as	{ cawcoArtifact: { subscribe: ( hear: (hold: { link: { state: string } }	scripts/probe-kit/specs/preview-restart.ts	1
-as-unknown-as	{ cawcoArtifact: ArtifactGlobal }	packages/agent/src/canvas-host/replica.ts	1
 as-unknown-as	{ cawcoArtifact: object; cawcoCanvasDoc: object; }	scripts/probe-kit/specs/canvas.ts	1
 as-unknown-as	{ cawcoArtifact?: { doc?: unknown } }	scripts/probe-kit/specs/app-comment-mode.ts	2
 as-unknown-as	{ cawcoArtifact?: { doc?: unknown } }	scripts/probe-kit/specs/artifact-resize-loop.ts	2
@@ -293,7 +292,6 @@ as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
 as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
 as-unknown-as	CommandLifecycle	packages/agent/src/harnesses/claude.ts	2
 as-unknown-as	Component<ElementProps>	apps/dashboard/src/lib/cawco/references.ts	1
-as-unknown-as	ConstructorParameters<typeof ExcalidrawBinding>[3]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Credential	packages/agent/src/provider-accounts.ts	3
 as-unknown-as	Db	scripts/probe-kit/specs/preview-query.ts	1
 as-unknown-as	Db	scripts/probe-kit/specs/preview-reclaim.ts	1
@@ -303,7 +301,6 @@ as-unknown-as	DocMap<T>	packages/preview/src/overlay/mirror.ts	1
 as-unknown-as	DocMeta["drawn"]	scripts/probe-kit/specs/answered-pages.ts	1
 as-unknown-as	DocumentRequests	scripts/probe-kit/specs/canvas-cost.ts	3
 as-unknown-as	ElementNode	apps/dashboard/src/lib/cawco/decisions/host/Decisions.svelte	1
-as-unknown-as	ExcalidrawElementSkeleton[]	packages/agent/src/canvas-host/scene.ts	2
 as-unknown-as	FleetHarnessConfig	packages/hub/src/server.ts	1
 as-unknown-as	FleetMcpConfig	packages/hub/src/routes/fleet-mcp.ts	1
 as-unknown-as	Freshable[]	packages/core/src/usage/windows.ts	1
@@ -377,7 +374,6 @@ as-unknown-as	SessionMessage[]	scripts/probe-kit/specs/transcript-windows.ts	1
 as-unknown-as	SessionStoreEntry	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	Shared	apps/dashboard/src/lib/platform/frame-observer.ts	1
 as-unknown-as	Shift[]	scripts/probe-kit/specs/live-perf.ts	1
-as-unknown-as	Skeleton[]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Slot["holder"]	packages/hub/scripts/openapi.ts	2
 as-unknown-as	StateCard	apps/dashboard/src/lib/cawco/graph/StateNode.svelte	1
 as-unknown-as	StoredPiEntry | undefined	packages/agent/src/harnesses/pi-services.ts	1
