@@ -19,7 +19,11 @@ export interface FollowedTabs {
 let tabs: FollowedTabs = {
   openIds: [],
   named: () => true,
-  machineOf: () => undefined,
+  machineOf: () => {
+    throw new Error(
+      "follows: tabMachine was called before the workspace registered its tabs (followTabs)"
+    );
+  },
 };
 
 /** The workspace's tabs, followed: what it says from here on (workspace.svelte.ts). */
