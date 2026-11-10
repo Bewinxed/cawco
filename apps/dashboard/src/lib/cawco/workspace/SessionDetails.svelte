@@ -19,6 +19,7 @@
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { z } from "zod";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
@@ -296,9 +297,10 @@
    * under the head where it was pressed, with Try again and the text under
    * Show details; never a toast.
    */
+  const CopyAskedSchema = z.object({ what: z.string(), text: z.string() });
   const copyKey = $derived(`copy:details:${sessionId}`);
   const copyFault = $derived(
-    refusals.get(copyKey)?.asked as { what: string; text: string } | undefined
+    CopyAskedSchema.safeParse(refusals.get(copyKey)?.asked).data
   );
   async function copy(what: string, text: string): Promise<void> {
     const key = copyKey;
