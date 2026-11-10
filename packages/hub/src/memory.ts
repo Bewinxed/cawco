@@ -175,7 +175,7 @@ import {
   YOU,
 } from "./project-folder";
 import { appliesNow } from "./proposal-base";
-import { refusal } from "./refusal";
+import { type Refused, refusal } from "./refusal";
 import { roleOf } from "./roles";
 import { redactSecrets } from "./secret-filter";
 import { listOf, scalarOf } from "./task-file";
@@ -1668,7 +1668,8 @@ export interface MemoryDeps {
    * routines are made after this module.
    */
   readonly curator: () => {
-    ensure: (projectId: string) => void;
+    /** routines.ts `ensureCurator`, plain-typed: typing it from there closes memory → routines → memory. */
+    ensure: (projectId: string) => Refused | undefined;
     inboxPassed: (projectId: string) => void;
   };
   readonly db: Pick<
@@ -1882,7 +1883,10 @@ export const createMemory = ({
     if (written instanceof ElysiaStatus) {
       return written;
     }
-    curator().ensure(projectId);
+    const unensured = curator().ensure(projectId);
+    if (unensured) {
+      return unensured;
+    }
     const waiting = await candidates(projectId);
     if (waiting instanceof ElysiaStatus) {
       return waiting;
