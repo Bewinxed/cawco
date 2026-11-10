@@ -69,13 +69,16 @@ function inView(
   top: number,
   box: number
 ): [number, number] {
-  const probe = layer.cloneNode(false) as HTMLElement;
+  const probe = layer.cloneNode(false);
+  if (!(probe instanceof HTMLElement)) {
+    throw new Error("cloneNode of an element is not an element");
+  }
   probe.removeAttribute("data-rest");
   probe.removeAttribute("style");
   probe.style.visibility = "hidden";
-  probe.textContent = text;
+  const glyphs = document.createTextNode(text);
+  probe.append(glyphs);
   layer.after(probe);
-  const glyphs = probe.firstChild as Text;
   const origin = probe.getBoundingClientRect().top;
   const range = document.createRange();
   /** The foot of the line character `at` is on. */
@@ -376,8 +379,11 @@ export class FieldFlight {
     };
     this.#flightFrame = requestAnimationFrame((began) => {
       // Both are on the page: the overlay rendered with the switch.
-      const node = this.#parts.field() as HTMLDivElement;
-      const layer = this.flightIn as HTMLElement;
+      const node = this.#parts.field();
+      const layer = this.flightIn;
+      if (!(node && layer)) {
+        return;
+      }
       const ms = heightMs(node);
       // The words arriving wrap where the field, now in its new row, does;
       // set before the layer is measured.
