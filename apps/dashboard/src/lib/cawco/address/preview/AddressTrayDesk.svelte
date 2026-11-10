@@ -108,8 +108,9 @@
 
   /** A press anywhere on the page but the tray (or the story's control) puts it back. */
   function onpointerdown(event: PointerEvent): void {
-    const target = event.target as Node;
+    const { target } = event;
     if (
+      target instanceof Node &&
       tray.open &&
       trayEl &&
       !trayEl.contains(target) &&
