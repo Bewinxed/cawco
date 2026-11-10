@@ -3,7 +3,6 @@ import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type CommandQueue,
-  type CommandQueueFrame,
   type CommandResult,
   type CommandRun,
   QUEUE_MARKER,
@@ -31,6 +30,7 @@ import { DAY_MS } from "@cawco/core/time";
 import { queueWords } from "@cawco/core/words/queue";
 import type { WorkspaceRef } from "@cawco/core/workspace/controls";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import type { AgentPorts } from "./agent-ports";
 import { whileSandboxDown } from "./boundary/control";
 import { ensureBoundary } from "./boundary/ensure";
 import { agentCommandStarted } from "./boundary/work";
@@ -73,12 +73,9 @@ export const commandsRunning = (): string[] =>
  */
 const cancelledEarly = new Map<string, number>();
 
-/** Where queue frames go: the daemon's socket. */
-let sendQueue: (frame: CommandQueueFrame) => void = () => undefined;
-export const setCommandQueue = (
-  send: (frame: CommandQueueFrame) => void
-): void => {
-  sendQueue = send;
+/** A run the hub follows ({@link CommandRun}), with where each change of its wait is told. */
+type Followed = CommandRun & {
+  readonly ports: Pick<AgentPorts, "commandQueue">;
 };
 
 /**
@@ -136,13 +133,17 @@ const QUEUE_LINE = new RegExp(
 
 /** One run's wait, to the hub under its id; nothing for a run the hub did not name. */
 const tellWait = (
-  run: CommandRun | undefined,
+  run: Followed | undefined,
   queue: CommandQueue | null
 ): void => {
-  if (run) {
-    sendQueue({ kind: "command_queue", runId: run.id, queue });
-  }
+  run?.ports.commandQueue({ kind: "command_queue", runId: run.id, queue });
 };
+
+/** The run the hub named in a command's arguments, with where its waits are told; none when it named none. */
+const followedOf = (
+  run: unknown,
+  ports: Pick<AgentPorts, "commandQueue">
+): Followed | undefined => (isCommandRun(run) ? { ...run, ports } : undefined);
 
 /**
  * The command each folder runs now: the machine runs a folder's commands one
@@ -175,11 +176,12 @@ const runningFor = (since: number): string => {
  */
 export function folderTurn(
   args: readonly unknown[] | undefined,
-  behind: boolean
+  behind: boolean,
+  ports: Pick<AgentPorts, "commandQueue">
 ): { end: () => void; start: () => void } {
   const folder = String(args?.[0]);
   const cmd = typeof args?.[1] === "string" ? args[1] : "";
-  const run = isCommandRun(args?.[4]) ? args[4] : undefined;
+  const run = followedOf(args?.[4], ports);
   if (behind) {
     const ahead = folderRunning.get(folder);
     tellWait(run, {
@@ -216,7 +218,7 @@ const BOUNDARY_QUIET_MS = 2000;
  */
 const boundaryExec = async (
   workspace: WorkspaceRef,
-  run: CommandRun | undefined
+  run: Followed | undefined
 ): Promise<string> => {
   let waiting = false;
   const timer = setTimeout(() => {
@@ -240,7 +242,7 @@ const boundaryExec = async (
 const commandLine = async (
   cmd: string,
   workspace: unknown,
-  run: CommandRun | undefined
+  run: Followed | undefined
 ): Promise<[string, string[]]> =>
   isWorkspaceRef(workspace)
     ? [await boundaryExec(workspace, run), [cmd]]
@@ -350,7 +352,7 @@ const lines = (each: (line: string) => void) => {
  */
 const underSlot = async (
   who: string,
-  run: CommandRun | undefined,
+  run: Followed | undefined,
   go: (words: string) => Promise<CommandResult>
 ): Promise<CommandResult> => {
   const stop = new AbortController();
@@ -429,15 +431,46 @@ const underSlot = async (
  * is the runner's shell in the sandbox, which the executor outside it never
  * reaches.
  */
+export async function runFollowedCommand(
+  cwd: unknown,
+  cmd: unknown,
+  timeoutMs: unknown,
+  workspace: unknown,
+  run: unknown,
+  ports: Pick<AgentPorts, "commandQueue">
+): Promise<CommandResult> {
+  return await runCommand(
+    cwd,
+    cmd,
+    timeoutMs,
+    workspace,
+    followedOf(run, ports)
+  );
+}
+
+/**
+ * {@link runFollowedCommand} for a command the agent runs on its own account
+ * (no run the hub follows, so no wait to tell it), `heavy` naming one that
+ * takes a heavy-work slot.
+ */
 export async function runHubCommand(
   cwd: unknown,
   cmd: unknown,
   timeoutMs: unknown,
   workspace?: unknown,
-  run?: unknown,
   heavy?: string
 ): Promise<CommandResult> {
-  const named = isCommandRun(run) ? run : undefined;
+  return await runCommand(cwd, cmd, timeoutMs, workspace, undefined, heavy);
+}
+
+async function runCommand(
+  cwd: unknown,
+  cmd: unknown,
+  timeoutMs: unknown,
+  workspace: unknown,
+  named: Followed | undefined,
+  heavy?: string
+): Promise<CommandResult> {
   if (
     typeof cwd !== "string" ||
     !cwd.startsWith("/") ||
@@ -491,7 +524,7 @@ interface Spawned {
   readonly cwd: string;
   readonly env: Readonly<Record<string, string>>;
   readonly file: string;
-  readonly named: CommandRun | undefined;
+  readonly named: Followed | undefined;
   readonly timeoutMs: unknown;
   readonly workspace: unknown;
 }
@@ -572,11 +605,7 @@ const spawned = ({
         said = why;
         running.stop("expired");
       },
-      (queue) => {
-        if (named) {
-          sendQueue({ kind: "command_queue", runId: named.id, queue });
-        }
-      }
+      (queue) => tellWait(named, queue)
     );
     const collect = (into: Buffer[]) => {
       const scan = lines((line) => clock.line(line));
@@ -764,7 +793,7 @@ const movedCommand = async (
   cmd: string,
   timeoutMs: unknown,
   workspace: WorkspaceRef,
-  run: CommandRun
+  run: Followed
 ): Promise<CommandResult> => {
   const target = run.moves ?? "";
   if (!MOVE_TARGET.test(target)) {
@@ -802,7 +831,7 @@ const movedCommand = async (
   const { moves: _moved, ...plain } = run;
   const ran =
     writes.length === 0
-      ? await runHubCommand(cwd, cmd, timeoutMs, workspace, plain)
+      ? await runCommand(cwd, cmd, timeoutMs, workspace, plain)
       : await onHost(cwd, cmd, timeoutMs, workspace, run, writes);
   if (ran.exitCode !== 0 || ran.cancelled) {
     return ran;
@@ -843,7 +872,7 @@ const onHost = async (
   cmd: string,
   timeoutMs: unknown,
   workspace: WorkspaceRef,
-  run: CommandRun,
+  run: Followed,
   writes: readonly string[]
 ): Promise<CommandResult> => {
   if (!cmd.startsWith(SAFE_GIT_SHELL)) {

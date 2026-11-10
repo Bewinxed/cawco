@@ -38,8 +38,8 @@ import { cpus } from "node:os";
 import { join } from "node:path";
 import {
   cancelCommand,
+  runFollowedCommand,
   runHubCommand,
-  setCommandQueue,
 } from "../../../packages/agent/src/hub-command";
 import type {
   CommandQueueFrame,
@@ -196,13 +196,20 @@ const endAll = async (runs: Started[]): Promise<void> => {
 /** Each run's queue frames, by run id. */
 const frames = new Map<string, CommandQueueFrame["queue"][]>();
 
+/** What the agent's runner tells a run's waits through: kept here by run id. */
+const ports = {
+  commandQueue: (frame: CommandQueueFrame): void => {
+    frames.set(frame.runId, [...(frames.get(frame.runId) ?? []), frame.queue]);
+  },
+};
+
 const mergeCheck = (
   id: string,
   cmd: string,
   gate: string
 ): Promise<CommandResult> => {
   const run: CommandRun = { id, queueMaxMs: 60_000, gate };
-  return runHubCommand(ROOT, cmd, 120_000, undefined, run);
+  return runFollowedCommand(ROOT, cmd, 120_000, undefined, run, ports);
 };
 
 async function inLine(kit: Kit, place: SlotPlace): Promise<void> {
@@ -363,13 +370,10 @@ async function childPriority(
   run: CommandRun | undefined
 ): Promise<{ io: string; nice: number; pid: number }> {
   const file = join(kit.out, `${name}.pid`);
-  const ran = runHubCommand(
-    ROOT,
-    `sleep 3 & echo $! > ${file}; wait`,
-    30_000,
-    undefined,
-    run
-  );
+  const sleeping = `sleep 3 & echo $! > ${file}; wait`;
+  const ran = run
+    ? runFollowedCommand(ROOT, sleeping, 30_000, undefined, run, ports)
+    : runHubCommand(ROOT, sleeping, 30_000);
   await until(
     () => existsSync(file) && readFileSync(file, "utf8").trim() !== ""
   );
@@ -423,12 +427,6 @@ const spec: Spec = {
   ownHome:
     "its heavy-work slots are a pool of its own under a scratch HOME, so no real run on the machine is held up and none holds it up",
   run: async (kit) => {
-    setCommandQueue((frame) => {
-      frames.set(frame.runId, [
-        ...(frames.get(frame.runId) ?? []),
-        frame.queue,
-      ]);
-    });
     const place = machinePlace();
     kit.check(
       "the spec's pool is under its scratch HOME, with the machine's count",
