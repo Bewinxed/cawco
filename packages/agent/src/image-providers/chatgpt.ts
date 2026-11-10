@@ -6,6 +6,7 @@ import {
   imageGenerationWords,
 } from "@cawco/core/words/image-generation";
 import { z } from "zod";
+import type { AgentPorts } from "../agent-ports";
 import { chatgptStanding, freshen, readHeld } from "../provider-accounts";
 import { chatgptBaseUrl, chatgptClaims } from "../usage/chatgpt";
 import type { ImageJob, ImageProvider, MadeImage } from "./provider";
@@ -68,7 +69,8 @@ const NO_IMAGES_PLAN = "free";
  * grant is kept or refreshed here.
  */
 async function standingOf(
-  accountId: string
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
 ): Promise<{ auth: ChatgptAuth } | { blocked: BlockedLogin }> {
   const before = readHeld(accountId);
   const claims = chatgptClaims(
@@ -78,7 +80,7 @@ async function standingOf(
     blocked: { block, email: claims.email, plan },
   });
   try {
-    await freshen(accountId);
+    await freshen(accountId, ports);
   } catch (cause) {
     return blocked({
       kind: "renew",
@@ -235,14 +237,16 @@ async function askImage(
  * order, each judged by {@link standingOf}); none, and the refusal names
  * each login, what stops it and its fix, before any image request is sent.
  */
-async function readiness(): ReturnType<ImageProvider["readiness"]> {
+async function readiness(
+  ports: Pick<AgentPorts, "borrowAsk">
+): ReturnType<ImageProvider["readiness"]> {
   const accounts = chatgptAccounts();
   if (!accounts.length) {
     return { ready: false, reason: imageGenerationWords.noLogin() };
   }
   const blocked: BlockedLogin[] = [];
   for (const accountId of accounts) {
-    const standing = await standingOf(accountId);
+    const standing = await standingOf(accountId, ports);
     if ("auth" in standing) {
       const { auth } = standing;
       return {

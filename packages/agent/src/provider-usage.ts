@@ -15,6 +15,7 @@ import type { ProviderAccountReading } from "@cawco/core/accounts";
 import { credentialAccountIds } from "@cawco/core/paths/claude";
 import type { SpawnPayload } from "@cawco/core/protocol";
 import type { LimitWindow } from "@cawco/core/usage/types";
+import type { AgentPorts } from "./agent-ports";
 import type { HarnessContext } from "./harness";
 import { freshen, readHeld } from "./provider-accounts";
 import { chatgptClaims, readChatgptUsage } from "./usage/chatgpt";
@@ -28,14 +29,6 @@ const AFTER_TURN_MS = 3000;
 
 /** The providers whose windows CawCo can read. */
 const METERED = new Set(["openai-codex", "opencode-go"]);
-
-type Sink = (readings: ProviderAccountReading[]) => void;
-let sink: Sink | undefined;
-
-/** Where readings made after a turn go: the daemon's socket to the hub. */
-export const setProviderReadingSink = (send: Sink): void => {
-  sink = send;
-};
 
 const last = new Map<string, ProviderAccountReading>();
 const attempted = new Map<string, number>();
@@ -59,13 +52,16 @@ type Read =
   | { ok: true; plan: string | null; windows: LimitWindow[] }
   | { ok: false; error: string };
 
-const readWindows = async (accountId: string): Promise<Read | undefined> => {
+const readWindows = async (
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
+): Promise<Read | undefined> => {
   const held = readHeld(accountId);
   if (!(held && METERED.has(held.provider))) {
     return undefined;
   }
   if (held.provider === "openai-codex") {
-    await freshen(accountId, true).catch(() => undefined);
+    await freshen(accountId, ports, true).catch(() => undefined);
     const now = readHeld(accountId);
     if (now?.credential.type !== "oauth") {
       return { ok: false, error: "the account holds no ChatGPT sign-in here" };
@@ -90,13 +86,16 @@ const readWindows = async (accountId: string): Promise<Read | undefined> => {
 
 /** Reads one account's windows now; undefined for a provider with none. */
 const readOne = async (
-  accountId: string
+  accountId: string,
+  ports: Pick<AgentPorts, "borrowAsk">
 ): Promise<ProviderAccountReading | undefined> => {
   attempted.set(accountId, Date.now());
-  const read = await readWindows(accountId).catch((error: unknown): Read => ({
-    ok: false,
-    error: error instanceof Error ? error.message : String(error),
-  }));
+  const read = await readWindows(accountId, ports).catch(
+    (error: unknown): Read => ({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  );
   if (!read) {
     return undefined;
   }
@@ -122,28 +121,40 @@ const readOne = async (
 };
 
 /** Every metered account whose last read is 5 minutes old or more, read now. */
-export const readDueProviderAccounts = async (): Promise<
-  ProviderAccountReading[]
-> => {
+export const readDueProviderAccounts = async (
+  ports: Pick<AgentPorts, "borrowAsk">
+): Promise<ProviderAccountReading[]> => {
   const due = credentialAccountIds().filter(
     (accountId) =>
       Date.now() - (attempted.get(accountId) ?? 0) >= PROVIDER_READ_INTERVAL_MS
   );
-  const readings = await Promise.all(due.map(readOne));
+  const readings = await Promise.all(
+    due.map((accountId) => readOne(accountId, ports))
+  );
   return readings.filter(
     (one): one is ProviderAccountReading => one !== undefined
   );
 };
 
-/** A turn on the account just ended: its windows are read shortly, once for a burst. */
-const readAccountSoon = (accountId: string): void => {
+/** A turn on the account just ended: its windows are read shortly, once for a burst, and sent on `emit`, the session's line to the hub. */
+const readAccountSoon = (
+  accountId: string,
+  emit: HarnessContext["emit"]
+): void => {
   clearTimeout(soon.get(accountId));
   const timer = setTimeout(() => {
     soon.delete(accountId);
-    readOne(accountId)
+    readOne(accountId, {
+      borrowAsk: (frame) =>
+        emit({ verb: "frames", machineId: "", payload: frame }),
+    })
       .then((reading) => {
         if (reading) {
-          sink?.([reading]);
+          emit({
+            verb: "usage",
+            machineId: "",
+            payload: { accounts: [reading] },
+          });
         }
       })
       .catch((error: unknown) =>
@@ -180,7 +191,7 @@ export const withAccountReads = (
         busy: (active) => {
           ctx.busy(active);
           if (!active) {
-            readAccountSoon(account);
+            readAccountSoon(account, ctx.emit);
           }
         },
       }

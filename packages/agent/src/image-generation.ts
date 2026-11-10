@@ -17,6 +17,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { imageSize } from "image-size";
 import { z } from "zod";
+import type { AgentPorts } from "./agent-ports";
 import { isWorkspaceRef } from "./hub-command";
 import type {
   ImageProvider,
@@ -287,6 +288,7 @@ async function made(
  * ({@link referenceImages}).
  */
 export async function generateImage(
+  ports: Pick<AgentPorts, "borrowAsk">,
   cwd: string,
   input: unknown,
   bound: unknown = null,
@@ -309,7 +311,7 @@ export async function generateImage(
     );
   }
   // Before any reference is read or any image request goes out.
-  const readiness = await provider.readiness();
+  const readiness = await provider.readiness(ports);
   if (!readiness.ready) {
     throw refusal(provider, readiness.reason);
   }

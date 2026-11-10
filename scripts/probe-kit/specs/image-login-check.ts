@@ -36,6 +36,9 @@ import { DAY_MS } from "../../../packages/core/src/time";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import type { Kit, Spec } from "../kit";
 
+/** This probe's machine has no hub: a borrowed sign-in's ask goes nowhere. */
+const NO_HUB = { borrowAsk: (): void => undefined };
+
 /** A 1×1 PNG, as ChatGPT's image endpoints answer one. */
 const PNG_1X1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -140,7 +143,7 @@ export default {
       await hold(held);
       n += 1;
       try {
-        await generateImage(out, {
+        await generateImage(NO_HUB, out, {
           prompt: "a probe",
           output_path: `image-${n}.png`,
         });

@@ -118,7 +118,13 @@ export default {
       setConnectedHub(hubId());
       const { startMcpGateway } =
         await import("../../../packages/agent/src/mcp-oauth");
-      await startMcpGateway(() => base);
+      const { freshen } =
+        await import("../../../packages/agent/src/provider-accounts");
+      await startMcpGateway(() => base, {
+        freshen: (accountId) =>
+          freshen(accountId, { borrowAsk: () => undefined }),
+        supervisorHolds: () => undefined,
+      });
       const { readUpdateSettings } =
         await import("../../../packages/agent/src/binary-update");
       const { callDelegationTool, delegationTools, TOOL_DOOR } =
