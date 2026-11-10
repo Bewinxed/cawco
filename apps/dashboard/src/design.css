@@ -121,25 +121,6 @@
   inherits: false;
   initial-value: 1;
 }
-/* Where a list's hover ghost or selection pill stands, and whether it
-   shows (components/ui/highlight), for the same reason: they sit under the
-   rows, and lifted onto the compositor to glide or fade they took the rows
-   over them along. */
-@property --hl-x {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-@property --hl-y {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-@property --hl-show {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 0;
-}
 /* How chosen a folder tab is (components/ui/fluid-tabs TabItem, `--pick`),
    typed so a choice interpolates the one number and everything drawn from
    it follows on its clock. Set on the tab and handed down only along the
