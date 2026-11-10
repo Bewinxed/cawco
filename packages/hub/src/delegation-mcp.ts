@@ -4,7 +4,6 @@ import { isAdminWrite, PROJECT_SETTINGS } from "@cawco/core/asks";
 import type { Kind } from "@cawco/core/decides";
 import { parseConnectionTool } from "@cawco/core/delegate-types";
 import { detach } from "@cawco/core/detach";
-import type { AcceptResult } from "@cawco/core/frames";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
@@ -60,6 +59,7 @@ import { MEMORY_TOOLS, type Memory } from "./memory";
 import {
   mayMakeProject,
   PROJECT_FROM_SESSION,
+  type ProjectOffers,
   projectFromSessionTool,
 } from "./project-offers";
 import type { ProjectSettings } from "./project-settings";
@@ -311,7 +311,9 @@ export function createDelegationMcp(options: {
   /** Retries a task whose last attempt failed, for `task_retry` (dispatch.ts). */
   retryAttempt?: Dispatcher["retryAttempt"];
   /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
-  projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
+  projectFromSession?: (
+    actor: InstanceRow
+  ) => ReturnType<ProjectOffers["accept"]>;
   /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`). */
   artifactNamed?: (instanceId: string, asked: string) => string;
   /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
