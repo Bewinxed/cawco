@@ -34,11 +34,7 @@ import { Elysia, ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import { projectDesign } from "./landed";
 import { projectRoot } from "./project-folder";
-import {
-  ProjectRefusal,
-  projectAttempt,
-  projectRefusalOf,
-} from "./project-refusal";
+import { refusal } from "./refusal";
 import type { TaskActor, TaskEvent, Tasks, TaskView } from "./tasks";
 
 /** The templates whose work calls for a design system. */
@@ -138,12 +134,12 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
   /** Projects being looked at now, so a burst of moves asks once. */
   const looking = new Set<string>();
 
-  /** What a build would read, in words, from what the project holds. */
-  const sourcesOf = (projectId: string): string[] => {
+  /** What a build would read, in words, from what the project holds; the folder's refusal when its id names no folder. */
+  const sourcesOf = (projectId: string) => {
     const project = db.project(projectId);
     const folder = projectRoot(projectId);
     if (folder instanceof ElysiaStatus) {
-      throw projectRefusalOf(folder);
+      return folder;
     }
     const has = (path: string) => existsSync(join(folder, path));
     return [
@@ -160,7 +156,7 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
   const building = async (projectId: string) => {
     const list = await tasks.list(projectId);
     if (list instanceof ElysiaStatus) {
-      throw projectRefusalOf(list);
+      return list;
     }
     return list.tasks.find(
       (task) =>
@@ -179,58 +175,89 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
     projectId: string,
     actor: TaskActor,
     stage?: string
-  ): Promise<TaskView> => {
+  ) => {
     const open = await building(projectId);
+    if (open instanceof ElysiaStatus) {
+      return open;
+    }
     if (open) {
-      throw new ProjectRefusal(
+      return refusal(
         409,
+        "design-build-open",
         `${open.id} already builds this project's design system.`
       );
     }
-    if ((await projectDesign(deps, projectId)).hasDesign === true) {
-      throw new ProjectRefusal(
+    const design = await projectDesign(deps, projectId);
+    if (design instanceof ElysiaStatus) {
+      return design;
+    }
+    if (design.hasDesign === true) {
+      return refusal(
         409,
+        "design-system-present",
         "This project has a design system already (design/ on its default branch, or in its folder): a change to it is a design_write proposal, not a build."
       );
     }
     const view = await tasks.stages(projectId);
     if (view instanceof ElysiaStatus) {
-      throw projectRefusalOf(view);
+      return view;
+    }
+    const sources = sourcesOf(projectId);
+    if (sources instanceof ElysiaStatus) {
+      return sources;
     }
     const first =
       stage ?? view.stages.find((each) => each.kind === "todo")?.name;
-    const task = await tasks.create(
+    return await tasks.create(
       projectId,
       {
-        ...buildWords(sourcesOf(projectId)),
+        ...buildWords(sources),
         ...(first ? { stage: first } : {}),
       },
       actor
     );
-    if (task instanceof ElysiaStatus) {
-      throw projectRefusalOf(task);
-    }
-    return task;
   };
 
-  const offer = async (projectId: string, taskId: string): Promise<void> => {
+  /** Whether nothing builds the project's system and it has none; a refused read's refusal. */
+  const unbuilt = async (projectId: string) => {
+    const open = await building(projectId);
+    if (open) {
+      return open instanceof ElysiaStatus ? open : false;
+    }
+    const design = await projectDesign(deps, projectId);
+    if (design instanceof ElysiaStatus) {
+      return design;
+    }
+    return design.hasDesign === false;
+  };
+
+  /** Raises the offer for a task entering an active stage, when nothing builds a system and none is there; a refused read's refusal. */
+  const offer = async (projectId: string, taskId: string) => {
     const project = db.project(projectId);
     if (!project?.eventsOn || db.designOffers.of(projectId)) {
       return;
     }
     const task = await tasks.get(projectId, taskId);
     if (task instanceof ElysiaStatus) {
-      throw projectRefusalOf(task);
+      return task;
     }
     if (
       task.kind !== "active" ||
-      !designShaped(project.template ?? null, task) ||
-      (await building(projectId)) ||
-      (await projectDesign(deps, projectId)).hasDesign !== false
+      !designShaped(project.template ?? null, task)
     ) {
       return;
     }
+    const wanted = await unbuilt(projectId);
+    if (wanted instanceof ElysiaStatus) {
+      return wanted;
+    }
+    if (!wanted) {
+      return;
+    }
     const sources = sourcesOf(projectId);
+    if (sources instanceof ElysiaStatus) {
+      return sources;
+    }
     const line = `This work needs a design system. Build one${sources.length ? ` from ${listed(sources)}` : ""}?`;
     // One project is looked at once at a time (`looking`), and the row was
     // absent above: the card and its row go together.
@@ -246,24 +273,36 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       return;
     }
     looking.add(projectId);
+    const warn = (words: string) =>
+      console.warn(`[design-offers] ${projectId}: ${words}`);
     offer(projectId, taskId)
+      .then((refused) => refused && warn(refused.response.detail))
       .catch((error: unknown) =>
-        console.warn(
-          `[design-offers] ${projectId}: ${error instanceof Error ? error.message : String(error)}`
-        )
+        warn(error instanceof Error ? error.message : String(error))
       )
       .finally(() => looking.delete(projectId));
   };
 
-  const answerable = (projectId: string) => {
-    const row = db.designOffers.of(projectId);
-    if (!row) {
-      throw new ProjectRefusal(
-        404,
-        "This project was never offered a design system."
-      );
+  /** The project's offer as recorded, or its refusal (design-offer-unknown). */
+  const answerable = (projectId: string) =>
+    db.designOffers.of(projectId) ??
+    refusal(
+      404,
+      "design-offer-unknown",
+      "This project was never offered a design system."
+    );
+
+  /** Where the project's offer stands, or its refusal. */
+  const state = (projectId: string) => {
+    const row = answerable(projectId);
+    if (row instanceof ElysiaStatus) {
+      return row;
     }
-    return row;
+    const standing: DesignOfferState = {
+      answer: row.answer ?? "open",
+      builtTaskId: row.builtTaskId,
+    };
+    return standing;
   };
 
   return {
@@ -275,34 +314,31 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
     },
 
     /** Where the project's offer stands. */
-    state(projectId: string): DesignOfferState {
-      const row = answerable(projectId);
-      return { answer: row.answer ?? "open", builtTaskId: row.builtTaskId };
-    },
+    state,
 
     /** "Not now": recorded, so Caw never asks this project again. */
-    dismiss(projectId: string): DesignOfferState {
+    dismiss(projectId: string) {
       const row = answerable(projectId);
-      if (row.answer) {
-        return this.state(projectId);
+      if (row instanceof ElysiaStatus || row.answer) {
+        return state(projectId);
       }
       db.designOffers.answer(projectId, "dismissed");
       deps.declined(projectId);
-      return this.state(projectId);
+      return state(projectId);
     },
 
     /** "Build": files "Build the design system" in the first to-do stage ({@link fileBuild}). */
-    async build(
-      projectId: string,
-      actor: TaskActor
-    ): Promise<DesignOfferState> {
+    async build(projectId: string, actor: TaskActor) {
       const row = answerable(projectId);
-      if (row.answer) {
-        return this.state(projectId);
+      if (row instanceof ElysiaStatus || row.answer) {
+        return state(projectId);
       }
       const task = await fileBuild(projectId, actor);
+      if (task instanceof ElysiaStatus) {
+        return task;
+      }
       db.designOffers.answer(projectId, "built", task.id);
-      return this.state(projectId);
+      return state(projectId);
     },
 
     /** Caw's `task_create` of "Build the design system" (task-tools.ts): the hub's words, not his. */
@@ -316,11 +352,11 @@ export type DesignOffers = ReturnType<typeof createDesignOffers>;
 export const designOfferRoutes = (offers: DesignOffers, you: TaskActor) =>
   new Elysia()
     .get("/api/projects/:id/design-offer", ({ params }) =>
-      projectAttempt(() => offers.state(params.id))
+      offers.state(params.id)
     )
     .post("/api/projects/:id/design-offer/dismiss", ({ params }) =>
-      projectAttempt(() => offers.dismiss(params.id))
+      offers.dismiss(params.id)
     )
     .post("/api/projects/:id/design-offer/build", ({ params }) =>
-      projectAttempt(() => offers.build(params.id, you))
+      offers.build(params.id, you)
     );
