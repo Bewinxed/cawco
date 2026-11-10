@@ -1,6 +1,7 @@
 /**
  * The pane's own line: what last went wrong in the frame, and an act of the pane's own the hub refused (a show from the artifacts' menu) with its Try again.
  */
+import { z } from "zod";
 import { failureClause } from "#lib/platform/hub-read.js";
 import { showArtifact } from "../artifact-api";
 import { refusals } from "../refusals.svelte";
@@ -15,11 +16,11 @@ interface Failure {
  * menu): said on the same line, with Try again, kept through a reload
  * (refusals.svelte.ts), until a try goes.
  */
-interface PaneAct {
-  act: "show";
-  id: string;
-  title: string;
-}
+const PaneActSchema = z.object({
+  act: z.literal("show"),
+  id: z.string(),
+  title: z.string(),
+});
 export interface PaneNoticeDeps {
   readonly instanceId: () => string;
   readonly paneSubject: PaneSubject;
@@ -45,7 +46,7 @@ export class PaneNotice {
   rerunning = $state(false);
 
   rerun = async (): Promise<void> => {
-    const asked = this.paneRefused?.asked as PaneAct | undefined;
+    const { data: asked } = PaneActSchema.safeParse(this.paneRefused?.asked);
     if (!asked) {
       return;
     }
