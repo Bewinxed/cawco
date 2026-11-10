@@ -550,7 +550,6 @@ import {
   onPlacesChanged,
   placesChanged,
 } from "./project-placements";
-import { projectRefusalOf } from "./project-refusal";
 import {
   createProjectSettings,
   type ProjectSettings,
@@ -6184,7 +6183,7 @@ export const createServer = (
       );
       return;
     }
-    const refuse = (why: string): void => {
+    const failRestore = (why: string): void => {
       // Custody also inspects failed OpenCode handles. A row the hub already
       // refused to start stays failed until its account or settings can run,
       // rather than failing each boot.
@@ -6197,12 +6196,12 @@ export const createServer = (
     };
     const unsigned = accountStartRefusal(row.machineId, row, sessionName(row));
     if (unsigned) {
-      refuse(unsigned);
+      failRestore(unsigned);
       return;
     }
     const settled = settleMode(row.machineId, asked, reviveMode(row));
     if ("refusal" in settled) {
-      refuse(settled.refusal);
+      failRestore(settled.refusal);
       return;
     }
     const { payload } = settled;
@@ -8529,13 +8528,7 @@ export const createServer = (
     // Its row goes once its machine confirms the end (session-lifecycle.ts).
     discard: (instanceId) =>
       endSession(instanceId, "delete", { kind: "session", name: "Caw" }),
-    task: async (projectId, id) => {
-      const task = await tasks.get(projectId, id);
-      if (task instanceof ElysiaStatus) {
-        throw projectRefusalOf(task);
-      }
-      return task;
-    },
+    task: (projectId, id) => tasks.get(projectId, id),
     // The routines are made further down; a turn ends only once the hub is up.
     turnEnded: (instanceId, why, gone) =>
       routines.turnEnded(instanceId, why, gone),
@@ -10581,10 +10574,13 @@ export const createServer = (
             { cause: error }
           );
         });
-        // This call's failures are thrown (WorkItemRefusal's family): the
-        // answer's problem goes on in the same words.
+        // The answer's problem goes on in its status and code, said for
+        // the delegate the target named.
         if (answered) {
-          throw new Error(said(answered.response.detail));
+          return problem(answered.status, {
+            code: answered.response.code,
+            detail: said(answered.response.detail),
+          });
         }
         return;
       }

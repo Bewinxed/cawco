@@ -961,8 +961,8 @@ export default {
       const { db, hub } = await hubInProcess(dbPath, join(scratch, "home"));
       const { PROJECT_TRASH_DIR } =
         await import("../../../packages/hub/src/project-folder");
-      const { projectRootOf } =
-        await import("../../../packages/hub/src/project-refusal");
+      const { storedProjectRoot } =
+        await import("../../../packages/hub/src/project-folder");
       const raw = new Database(dbPath);
       raw.run("PRAGMA busy_timeout = 5000");
       const rig: Rig = {
@@ -1001,7 +1001,7 @@ export default {
         journal,
         kit,
         raw,
-        root: projectRootOf,
+        root: (id: string) => storedProjectRoot({ id }),
         trash: async () =>
           (await readdir(PROJECT_TRASH_DIR).catch(() => [] as string[])).sort(),
         trashDir: PROJECT_TRASH_DIR,

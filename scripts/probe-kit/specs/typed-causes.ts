@@ -508,9 +508,9 @@ const trailerless = async (kit: Kit, scratch: string): Promise<void> => {
     throw new Error(committed.response.detail);
   }
   // A commit with the words hubs once wrote, and no trailers.
-  const { projectRootOf } =
-    await import("../../../packages/hub/src/project-refusal");
-  const root = projectRootOf(projectId);
+  const { storedProjectRoot } =
+    await import("../../../packages/hub/src/project-folder");
+  const root = storedProjectRoot({ id: projectId });
   await writeFile(join(root, path), "---\nstage: review\n---\n# Probe\n");
   await shell(
     root,
