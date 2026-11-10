@@ -436,7 +436,10 @@ async function board(kit: Kit, fleet: KitFleet) {
     );
     projects.push({ cwd, id: made.id });
   }
-  const first = projects[0] as { cwd: string; id: string };
+  const [first] = projects;
+  if (!first) {
+    throw new Error("no project was made");
+  }
   const template = await answered(fleet, "Template", first.cwd, first.id);
   const l1 = await answered(fleet, "Live one", first.cwd, first.id);
   const l2 = await answered(fleet, "Live two", first.cwd, first.id);

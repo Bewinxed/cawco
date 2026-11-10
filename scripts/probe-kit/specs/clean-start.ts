@@ -48,8 +48,8 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { answerText, hubAt } from "../hub";
-import type { Kit, KitFleet, Spec } from "../kit";
+import { hubAt, said as saidOf } from "../hub";
+import { delegateStarted, type Kit, type KitFleet, type Spec } from "../kit";
 
 /**
  * The skill a delegate type loads, in each harness's own skills folder. Its
@@ -306,11 +306,11 @@ const spawnRefusal = async (
 const delegate = async (
   fleet: KitFleet,
   body: Record<string, unknown> & { parentInstanceId: string }
-): Promise<{ status: number; text: string }> => {
+) => {
   const response = await hubAt(fleet.base).api["work-items"].post(
     body as never
   );
-  return { status: response.status, text: answerText(response) };
+  return saidOf(response);
 };
 
 /** The delegate type each harness's delegates run as: its skill is {@link SKILL}. */
@@ -377,12 +377,12 @@ const delegates = async (
       cwd: src,
       ...(leg === "clean" ? { clean: true } : {}),
     });
-    if (answer.status !== 200) {
+    if (answer.refused || answer.status !== 200) {
       throw new Error(
         `${legs[leg]}: the ${leg} delegate on ${harness} was refused: ${answer.status} ${answer.text}`
       );
     }
-    started[leg] = JSON.parse(answer.text) as { instanceId?: string };
+    started[leg] = delegateStarted(answer.json);
   }
   compare(
     kit,
