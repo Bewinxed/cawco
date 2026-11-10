@@ -147,7 +147,7 @@ export function watchEdgeFades(root: ParentNode = document): () => void {
     attributes: true,
     attributeFilter: ["class"],
   });
-  found(root as Node);
+  found(root);
   return () => {
     changes.disconnect();
     sizes.disconnect();

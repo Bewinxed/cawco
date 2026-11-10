@@ -39,8 +39,8 @@ function styledData(): Set<string> {
         }
       }
       // @media, @layer, @supports, @container, and nested style rules.
-      if ("cssRules" in rule) {
-        read((rule as CSSGroupingRule).cssRules);
+      if (rule instanceof CSSGroupingRule) {
+        read(rule.cssRules);
       }
     }
   };
@@ -355,9 +355,13 @@ const valuesOf = (frame: ComputedKeyframe): Keyframe => {
 
 /** An animation's keyframes, each at its place and on its curve, to make it again. */
 const framesOf = (animation: Animation): Keyframe[] =>
-  ((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? []).map(
-    ({ computedOffset, ...frame }) => ({ ...frame, offset: computedOffset })
-  );
+  (animation.effect instanceof KeyframeEffect
+    ? animation.effect.getKeyframes()
+    : []
+  ).map(({ computedOffset, ...frame }) => ({
+    ...frame,
+    offset: computedOffset,
+  }));
 
 /**
  * An animation held at its first frame until the batch starts, then run
@@ -374,7 +378,8 @@ export function heldToTravel(
     if (animation.playState !== "paused") {
       return;
     }
-    const effect = animation.effect as KeyframeEffect | null;
+    const effect =
+      animation.effect instanceof KeyframeEffect ? animation.effect : null;
     if (effect && distance !== undefined && (pace.speed || pace.close)) {
       const [first, ...after] = effect.getKeyframes();
       const move = paced(
@@ -445,7 +450,8 @@ function boxesIn(node: HTMLElement) {
     if (known !== undefined) {
       return known;
     }
-    const parent = at.offsetParent as HTMLElement | null;
+    const parent =
+      at.offsetParent instanceof HTMLElement ? at.offsetParent : null;
     let corner: { x: number; y: number } | null = null;
     if (parent === node) {
       corner = { x: at.offsetLeft, y: at.offsetTop };
@@ -684,7 +690,10 @@ function departure(
   at: { x: number; y: number },
   still: boolean
 ) {
-  const copy = element.cloneNode(true) as HTMLElement;
+  const copy = element.cloneNode(true);
+  if (!(copy instanceof HTMLElement)) {
+    return;
+  }
   anonymous(copy);
   Object.assign(copy.style, {
     position: "absolute",
@@ -804,7 +813,8 @@ function drawnBy(
   animation: Animation,
   pick: (frame: ComputedKeyframe) => number | null
 ): number | null {
-  const effect = animation.effect as KeyframeEffect | null;
+  const effect =
+    animation.effect instanceof KeyframeEffect ? animation.effect : null;
   const frames = effect?.getKeyframes() ?? [];
   const timed = effect?.getComputedTiming().progress;
   const progress = timed ?? (animation.playState === "finished" ? 1 : 0);
@@ -1795,7 +1805,7 @@ const reflowSizes = (): FrameObserver => {
       const reported = new Set<Element>();
       for (const entry of entries) {
         reported.add(entry.target);
-        const state = states.get(entry.target as HTMLElement);
+        const state = states.get(entry.target);
         const { width } = entry.contentRect;
         if (state && widths.get(entry.target) !== width) {
           widths.set(entry.target, width);
@@ -1844,7 +1854,7 @@ export function beforeReflow(settle: () => void): void {
 }
 
 /** Each `reflow` container's state, by its element (`skippedAt`). */
-const states = new WeakMap<HTMLElement, Reflow>();
+const states = new WeakMap<Element, Reflow>();
 
 /**
  * Tells a `reflow` container its contents are being handed over: what it
