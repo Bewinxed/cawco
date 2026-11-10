@@ -52,8 +52,10 @@ export interface ScrollPinHost {
   readonly arrivals: {
     readonly tickets: Map<string, Ticket>;
   };
-  readonly jumping: boolean;
-  readonly jumpScrolled: (node: HTMLElement) => void;
+  readonly jumper: {
+    readonly jumping: boolean;
+    readonly jumpScrolled: (node: HTMLElement) => void;
+  };
   readonly keeper: {
     holdUntil: number;
     keptPlace: { block: string; into: number } | null;
@@ -337,8 +339,8 @@ export class ScrollPin {
     // Wherever the view now is, and whoever moved it: near the first rows
     // held, the page before them is asked for.
     this.#host.older.askOlder(this.lastTop - this.listStart);
-    if (this.#host.jumping) {
-      this.#host.jumpScrolled(this.scroller);
+    if (this.#host.jumper.jumping) {
+      this.#host.jumper.jumpScrolled(this.scroller);
       return;
     }
     // Every write this component makes is tagged with the position it wrote.
@@ -428,7 +430,7 @@ export class ScrollPin {
    * they stay where they are.
    */
   onscrollend = (): void => {
-    if (this.restsAtTail === null || this.#host.jumping) {
+    if (this.restsAtTail === null || this.#host.jumper.jumping) {
       return;
     }
     const tail = this.restsAtTail;
@@ -597,7 +599,7 @@ export class ScrollPin {
   readonly pinned = (): boolean =>
     this.#host.landed &&
     this.atBottom &&
-    !this.#host.jumping &&
+    !this.#host.jumper.jumping &&
     (this.#host.active || !this.#host.shown);
 
   /**
@@ -624,7 +626,7 @@ export class ScrollPin {
   readonly awayAtTail = (): boolean =>
     this.#host.landed &&
     this.atBottom &&
-    !this.#host.jumping &&
+    !this.#host.jumper.jumping &&
     !this.#host.visible;
 
   landingAway: ReturnType<typeof setTimeout> | undefined;
@@ -720,7 +722,7 @@ export class ScrollPin {
   endMoved(shift: number): void {
     if (
       !(this.scroller && this.#host.landed) ||
-      this.#host.jumping ||
+      this.#host.jumper.jumping ||
       Math.abs(shift) < 0.5
     ) {
       return;
