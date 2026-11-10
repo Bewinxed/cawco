@@ -217,6 +217,7 @@ import type { ProjectTrash } from "./project-trash";
 import type { createProviderRetries } from "./provider-retries";
 import type { createPush } from "./push";
 import type { ForecastRead } from "./rebalance";
+import type { Refused } from "./refusal";
 import type { RegistryShape } from "./registry";
 import type { createRelayControl } from "./relay-control";
 import type { createRelayJourney } from "./relay-journey";
@@ -481,7 +482,8 @@ export interface HubContext {
     typeof createContinuations
   >["continuationsWhole"];
   continuationTable: () => ContinuationJob[];
-  createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade>;
+  /** project-joining.ts `createOrJoinProject`, plain-typed: typing it from there closes project-joining → hub-context → project-joining. */
+  createOrJoinProject: (asked: ProjectAsk) => Promise<ProjectMade | Refused>;
   credentialTurns: Set<string>;
   cutTasksWords: (how: string, cut: readonly EndedTask[]) => string;
   cutTurn: (instanceId: string, cause: string) => void;
