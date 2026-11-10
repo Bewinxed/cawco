@@ -69,7 +69,7 @@ import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { githubTarget, type WaitTarget } from "@cawco/core/wait-targets";
 import { configurePage } from "@cawco/core/words/configure";
 import { taskLinkWords } from "@cawco/core/words/task-links";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
 import type { ProjectEvent } from "./caw";
@@ -804,6 +804,12 @@ export const createIngress = ({
     if (event.kind === "pr.merged" && url) {
       detach(
         dispatcher.pullRequestMerged(url).then((moved) => {
+          if (moved instanceof ElysiaStatus) {
+            console.warn(
+              `[pull request ${url} merged] failed: ${moved.response.detail}`
+            );
+            return;
+          }
           if (moved) {
             console.log(
               `[ingress] ${url} merged: ${moved.task} is in ${moved.stage}`

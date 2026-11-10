@@ -59,6 +59,7 @@ import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { shellQuote } from "@cawco/core/shell-quote";
 import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
+import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { DesignCheckRow } from "./db/design-checks";
 import type { WorkItemRow } from "./db/project-work";
@@ -70,6 +71,7 @@ import type {
 import { designShaped } from "./design-offers";
 import { designOnBase, ownLandings, type Run } from "./design-system";
 import type { DesignVerdict } from "./hub-tools";
+import { projectRefusalOf } from "./project-refusal";
 import { hubActor, type Tasks } from "./tasks";
 import { isLive, type Parent, verifierParent } from "./work-item-state";
 import type { WorkItemRequest, WorkItemStart } from "./work-items";
@@ -294,18 +296,29 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
     };
   };
 
-  const comment = (
+  const comment = async (
     check: Pick<DesignCheckRow, "projectId" | "taskId">,
     text: string,
     why: string
-  ) =>
-    deps.tasks
-      .comment(check.projectId, check.taskId, text, hubActor(why))
-      .catch((error: unknown) =>
-        console.warn(
-          `[design-verify] ${check.taskId}: its comment was not written: ${error instanceof Error ? error.message : String(error)}`
-        )
+  ): Promise<void> => {
+    const unwritten = (words: string) =>
+      console.warn(
+        `[design-verify] ${check.taskId}: its comment was not written: ${words}`
       );
+    try {
+      const written = await deps.tasks.comment(
+        check.projectId,
+        check.taskId,
+        text,
+        hubActor(why)
+      );
+      if (written instanceof ElysiaStatus) {
+        unwritten(written.response.detail);
+      }
+    } catch (error) {
+      unwritten(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   /** The verifier's brief: the work, the system, how to judge, how to answer. */
   const briefOf = (
@@ -421,6 +434,9 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
   ): Promise<string> => {
     const project = db.project(item.projectId);
     const task = await deps.tasks.get(item.projectId, item.taskId);
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
     const check: DesignCheckRow = {
       id: crypto.randomUUID(),
       projectId: item.projectId,
@@ -510,6 +526,9 @@ export const createDesignVerify = (deps: DesignVerifyDeps) => {
       return;
     }
     const task = await deps.tasks.get(projectId, taskId);
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
     const [workspace] = db.workspacesNamed(item.workspaceId);
     if (!(workspace && designShaped(project.template ?? null, task))) {
       return;

@@ -9,7 +9,6 @@ import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { LONG_CALLS } from "@cawco/core/long-calls";
 import type { MachinePath } from "@cawco/core/machine-path";
 import type { Envelope, InstanceRow, SendPayload } from "@cawco/core/protocol";
-import type { AttemptStart } from "@cawco/core/task-views";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -18,6 +17,7 @@ import {
   CancelledNotificationSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
 import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking } from "./admin-tools";
@@ -50,6 +50,7 @@ import type {
   DelegateListQuery,
   DelegatePeek,
 } from "./delegation-tree";
+import type { Dispatcher } from "./dispatch";
 import type { FleetWatch } from "./fleet-watch";
 import { type createHubTools, DESIGN_VERDICT, HUB_TOOLS } from "./hub-tools";
 import { INGRESS_TOOLS, type Ingress } from "./ingress";
@@ -284,7 +285,10 @@ export function createDelegationMcp(options: {
   /** Where a task a session files was found (tasks.ts `found_in`): its work item's task, else the pin thread its ask came from. */
   foundIn?: (actor: InstanceRow) => string | null;
   /** A plan step's wait as a session writes it, read as a task's wait is and kept as a file keeps it (task-waits.ts `readWait`). */
-  stepWait?: (actor: InstanceRow, written: string) => Promise<string>;
+  stepWait?: (
+    actor: InstanceRow,
+    written: string
+  ) => ReturnType<Tasks["keptWait"]>;
   /** Where a work item lands: what its session's finish_item says happens. */
   workItemLands?: (workItemId: string) => ItemEnd | undefined;
   /** "Build the design system" filed in the hub's words (design-offers.ts `fileBuild`). */
@@ -303,13 +307,9 @@ export function createDelegationMcp(options: {
     projectId: string,
     ref: string,
     parent: InstanceRow
-  ) => Promise<AttemptStart>;
+  ) => ReturnType<Dispatcher["startAttempt"]>;
   /** Retries a task whose last attempt failed, for `task_retry` (dispatch.ts). */
-  retryAttempt?: (
-    projectId: string,
-    ref: string,
-    parent: InstanceRow
-  ) => Promise<AttemptStart>;
+  retryAttempt?: Dispatcher["retryAttempt"];
   /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
   /** The whole id of the artifact a session names by its name, handle or id (artifacts/service.ts `named`). */
@@ -698,12 +698,15 @@ export function createDelegationMcp(options: {
 
   /** An attempt's start, its session or its queued start stopped if the call is cut ({@link startedBy}). */
   const attemptCut = (
-    start: TaskToolContext["startAttempt"],
+    start: typeof options.startAttempt,
     started: (thing: Started) => void
   ): TaskToolContext["startAttempt"] =>
     start &&
     (async (projectId, ref, parent) => {
       const attempt = await start(projectId, ref, parent);
+      if (attempt instanceof ElysiaStatus) {
+        return attempt;
+      }
       if (attempt.instanceId) {
         started({ kind: "session", instanceId: attempt.instanceId });
       } else if (attempt.queued) {

@@ -81,7 +81,7 @@ import {
   type TrackerView,
 } from "@cawco/core/trackers";
 import { connectionsWords } from "@cawco/core/words/connections";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, t } from "elysia";
 import { appServiceOf, type Connections } from "./connections";
 import type { TrackerCursor, TrackerSynced } from "./db/stored-types";
 import type { ItemKey, TaskLinkRow, TaskLinksDb } from "./db/task-links";
@@ -94,6 +94,7 @@ import type {
 import type { ExternalItems } from "./external-items";
 import type { HubLifetimeShape } from "./lifetime";
 import { turnTaker } from "./project-folder";
+import { projectRefusalOf } from "./project-refusal";
 import { refusal } from "./refusal";
 import type { TaskActor, TaskPatch, Tasks, TaskView } from "./tasks";
 import {
@@ -752,8 +753,16 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     const { provider } = sync.binding;
+    const unwritten = (why: string) =>
+      round.said.push(
+        fail(
+          sync,
+          link.taskId,
+          `${link.ref}'s change on ${TRACKER_NAMES[provider]} could not be written into ${link.taskId}: ${why}`
+        )
+      );
     try {
-      await own(sync.projectId, link.taskId, () =>
+      const updated = await own(sync.projectId, link.taskId, () =>
         tasks.update(
           sync.projectId,
           link.taskId,
@@ -761,15 +770,13 @@ export const createTrackers = (deps: TrackersDeps) => {
           actorOf(provider, `${link.ref} changed on ${TRACKER_NAMES[provider]}`)
         )
       );
+      if (updated instanceof ElysiaStatus) {
+        unwritten(updated.response.detail);
+        return;
+      }
       Object.assign(round.next, pull);
     } catch (error) {
-      round.said.push(
-        fail(
-          sync,
-          link.taskId,
-          `${link.ref}'s change on ${TRACKER_NAMES[provider]} could not be written into ${link.taskId}: ${wordsOf(error)}`
-        )
-      );
+      unwritten(wordsOf(error));
     }
   };
 
@@ -784,8 +791,16 @@ export const createTrackers = (deps: TrackersDeps) => {
       round.held ??
       round.statusWhy ??
       `${link.ref} is “${issue.state.name}” on ${TRACKER_NAMES[provider]}`;
+    const unmoved = (why: string) =>
+      round.said.push(
+        fail(
+          sync,
+          link.taskId,
+          `${where}, and ${link.taskId} could not move to ${moveTo}: ${why}`
+        )
+      );
     try {
-      await own(sync.projectId, link.taskId, () =>
+      const moved = await own(sync.projectId, link.taskId, () =>
         tasks.move(
           sync.projectId,
           link.taskId,
@@ -793,16 +808,14 @@ export const createTrackers = (deps: TrackersDeps) => {
           actorOf(provider, where)
         )
       );
+      if (moved instanceof ElysiaStatus) {
+        unmoved(moved.response.detail);
+        return;
+      }
       round.next.state = issue.state.token;
       round.next.stage = moveTo;
     } catch (error) {
-      round.said.push(
-        fail(
-          sync,
-          link.taskId,
-          `${where}, and ${link.taskId} could not move to ${moveTo}: ${wordsOf(error)}`
-        )
-      );
+      unmoved(wordsOf(error));
     }
   };
 
@@ -951,6 +964,9 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     const task = await tasks.get(sync.projectId, link.taskId);
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
     const round: Round = {
       sync,
       link,
@@ -998,6 +1014,14 @@ export const createTrackers = (deps: TrackersDeps) => {
       return;
     }
     const { provider } = sync.binding;
+    const unheld = (why: string) =>
+      db.trackers.updateLink(sync.projectId, link.taskId, {
+        problem: fail(
+          sync,
+          link.taskId,
+          `A comment on ${link.ref} could not be added to ${link.taskId}, or its task held for you: ${why}`
+        ),
+      });
     try {
       const filed = await own(sync.projectId, link.taskId, () =>
         deps.externalItems.fileComment(
@@ -1022,7 +1046,7 @@ export const createTrackers = (deps: TrackersDeps) => {
       const { task } = filed;
       // Their words are in its file now: an agent reads them only once you say so.
       if (comment.unvouched && unattended(sync, task.stage)) {
-        await own(sync.projectId, link.taskId, () =>
+        const held = await own(sync.projectId, link.taskId, () =>
           tasks.move(
             sync.projectId,
             link.taskId,
@@ -1033,15 +1057,12 @@ export const createTrackers = (deps: TrackersDeps) => {
             )
           )
         );
+        if (held instanceof ElysiaStatus) {
+          unheld(held.response.detail);
+        }
       }
     } catch (error) {
-      db.trackers.updateLink(sync.projectId, link.taskId, {
-        problem: fail(
-          sync,
-          link.taskId,
-          `A comment on ${link.ref} could not be added to ${link.taskId}, or its task held for you: ${wordsOf(error)}`
-        ),
-      });
+      unheld(wordsOf(error));
     }
   };
 
@@ -1176,7 +1197,7 @@ export const createTrackers = (deps: TrackersDeps) => {
   };
 
   /** A task with no issue: one made for it, linked, and what the tracker made of its words taken back. */
-  const fileIssue = async (sync: Sync, task: TaskView): Promise<void> => {
+  const fileIssue = async (sync: Sync, task: TaskView) => {
     const { provider, targetName } = sync.binding;
     const current = stageOf(sync, task.stage);
     const state = current ? stateFor(current, sync.states) : undefined;
@@ -1209,25 +1230,26 @@ export const createTrackers = (deps: TrackersDeps) => {
         (field) => [field, remote[field]]
       )
     ) as TaskPatch;
-    await own(sync.projectId, task.id, async () => {
-      await tasks.setIssue(
+    const written = await own(sync.projectId, task.id, async () => {
+      const named = await tasks.setIssue(
         sync.projectId,
         task.id,
         issue.url,
         actorOf(provider, `${issue.ref} made on ${TRACKER_NAMES[provider]}`)
       );
-      if (Object.keys(back).length > 0) {
-        await tasks.update(
-          sync.projectId,
-          task.id,
-          back,
-          actorOf(
-            provider,
-            `${issue.ref} as ${TRACKER_NAMES[provider]} keeps it`
-          )
-        );
+      if (named instanceof ElysiaStatus || Object.keys(back).length === 0) {
+        return named;
       }
+      return await tasks.update(
+        sync.projectId,
+        task.id,
+        back,
+        actorOf(provider, `${issue.ref} as ${TRACKER_NAMES[provider]} keeps it`)
+      );
     });
+    if (written instanceof ElysiaStatus) {
+      return written;
+    }
     console.info(
       `[tracker] ${sync.projectId} ${task.id} → ${issue.ref} on ${targetName}`
     );
@@ -1236,15 +1258,39 @@ export const createTrackers = (deps: TrackersDeps) => {
   /** A task with no issue yet: the issue its file names, linked, or one made; a refusal is the binding's to say, and the next sync tries again. */
   const fileOrRelink = async (sync: Sync, taskId: string): Promise<void> => {
     const task = await tasks.get(sync.projectId, taskId);
+    if (task instanceof ElysiaStatus) {
+      throw projectRefusalOf(task);
+    }
     try {
       const named = task.links.find((link) => link.mode === "record")?.url;
-      await (named ? relink(sync, task, named) : fileIssue(sync, task));
+      const refused = await (named
+        ? relink(sync, task, named)
+        : fileIssue(sync, task));
+      if (refused) {
+        fail(sync, taskId, refused.response.detail);
+      }
     } catch (error) {
       if (stopsSync(error)) {
         throw error;
       }
       fail(sync, taskId, problemOf(error));
     }
+  };
+
+  /** The stage an issue is filed in: its Project status's, while that agrees with its state; else its state's. */
+  const issueStage = (
+    sync: Sync,
+    issue: Issue,
+    optionId: string | null | undefined
+  ) => {
+    const byStatus =
+      sync.onProject && optionId
+        ? stageForStatus(sync, sync.onProject.project, optionId, "")
+        : undefined;
+    return byStatus &&
+      stateFor(byStatus, sync.states)?.token === issue.state.token
+      ? byStatus
+      : stageFor(issue.state, undefined, sync.stages, sync.states);
   };
 
   /**
@@ -1257,14 +1303,7 @@ export const createTrackers = (deps: TrackersDeps) => {
     const { provider, targetName } = sync.binding;
     const { unvouched } = issue.opener;
     const item = sync.onProject?.read.items.get(issue.key);
-    const byStatus =
-      sync.onProject && item?.optionId
-        ? stageForStatus(sync, sync.onProject.project, item.optionId, "")
-        : undefined;
-    const placed =
-      byStatus && stateFor(byStatus, sync.states)?.token === issue.state.token
-        ? byStatus
-        : stageFor(issue.state, undefined, sync.stages, sync.states);
+    const placed = issueStage(sync, issue, item?.optionId);
     if (!placed) {
       sync.problems.set(
         `issue:${issue.key}`,
@@ -1281,12 +1320,21 @@ export const createTrackers = (deps: TrackersDeps) => {
         ? heldWords(issue.ref, unvouched, stage.name)
         : `${issue.ref} opened on ${TRACKER_NAMES[provider]} by ${issue.opener.name}`
     );
+    const unfiled = (why: string) =>
+      sync.problems.set(
+        `issue:${issue.key}`,
+        `${issue.ref} on ${targetName} could not be filed as a task: ${why}`
+      );
     try {
       const task = await tasks.create(
         sync.projectId,
         { ...fields, stage: stage.name },
         actor
       );
+      if (task instanceof ElysiaStatus) {
+        unfiled(task.response.detail);
+        return;
+      }
       putLink(
         sync,
         task,
@@ -1299,17 +1347,18 @@ export const createTrackers = (deps: TrackersDeps) => {
         new Date(issue.createdAt),
         unvouched
       );
-      await own(sync.projectId, task.id, () =>
+      const named = await own(sync.projectId, task.id, () =>
         tasks.setIssue(sync.projectId, task.id, issue.url, actor)
       );
+      if (named instanceof ElysiaStatus) {
+        unfiled(named.response.detail);
+        return;
+      }
       console.info(
         `[tracker] ${sync.projectId} ${issue.ref} on ${targetName} → ${task.id}`
       );
     } catch (error) {
-      sync.problems.set(
-        `issue:${issue.key}`,
-        `${issue.ref} on ${targetName} could not be filed as a task: ${wordsOf(error)}`
-      );
+      unfiled(wordsOf(error));
     }
   };
 
@@ -1320,6 +1369,9 @@ export const createTrackers = (deps: TrackersDeps) => {
       adapter.states(),
       tasks.stages(binding.projectId),
     ]);
+    if (stagesView instanceof ElysiaStatus) {
+      throw projectRefusalOf(stagesView);
+    }
     if (stagesView.problems.length > 0) {
       throw new TrackerRefusal(
         "input",
@@ -1544,7 +1596,11 @@ export const createTrackers = (deps: TrackersDeps) => {
             : []
         );
         const comments = await carryIn(sync, cursor);
-        const { tasks: board } = await tasks.list(projectId);
+        const list = await tasks.list(projectId);
+        if (list instanceof ElysiaStatus) {
+          throw projectRefusalOf(list);
+        }
+        const board = list.tasks;
         await reconcileLinks(sync, board, moved, marked);
         await fileNewTasks(sync, moved);
         await fileNewIssues(sync, board);
@@ -1636,7 +1692,11 @@ export const createTrackers = (deps: TrackersDeps) => {
     }
     const asked = askedOf({ ...input, tracker: input.tracker });
     // Nothing is bound where the tracker's unvouched issues could not wait for you.
-    if (!holdOf((await tasks.stages(projectId)).stages)) {
+    const staged = await tasks.stages(projectId);
+    if (staged instanceof ElysiaStatus) {
+      throw projectRefusalOf(staged);
+    }
+    if (!holdOf(staged.stages)) {
       throw new TrackerProblem(noHoldWords(asked.tracker));
     }
     const connection = connectionNamed(asked.connection);
