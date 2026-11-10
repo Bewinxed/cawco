@@ -33,8 +33,7 @@
    * scrolled it blurs and fades beneath it, as a transcript does under its
    * pane's bar. A page in a frame that is not CawCo's own document stands
    * under the room instead (PreviewPane): its layout is not ours to push
-   * down. A card hung beside the well (`besideRoom`) floats too, the well stopping
-   * short of it.
+   * down.
    *
    * Expanded over the whole split, the card meets its edges: no corner or
    * shadow; so does a bench of it shown in CawCo's own artifact panel (the
@@ -91,7 +90,6 @@
     mode,
     well = $bindable(),
     section = $bindable(),
-    besideRoom = 0,
     children,
   }: {
     /** What the card is, read out. */
@@ -145,11 +143,6 @@
     mode?: "interact" | "comment" | "draw";
     well?: HTMLDivElement;
     section?: HTMLElement;
-    /**
-     * The room a card hung beside the well takes at the card's end, px (the
-     * preview's Comments): the page narrows to meet it. 0: none.
-     */
-    besideRoom?: number;
     /** The well's content. */
     children: Snippet;
   } = $props();
@@ -751,9 +744,8 @@
          the pressed segment), the edge easing in and out except while the
          split slides, and points a crosshair. -->
     <div
-      class="relative flex min-h-0 flex-1 bg-surface-well *:data-side-well:me-(--beside-room) *:data-side-well:transition-[margin] *:data-side-well:duration-(--dur-panel) *:data-side-well:ease-drawer"
+      class="relative flex min-h-0 flex-1 bg-surface-well"
       data-slot="well-row"
-      style:--beside-room="{besideRoom}px"
     >
       <div
         data-side-well

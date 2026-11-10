@@ -90,7 +90,9 @@
     dur,
     easeDrawer,
     easeOut,
+    lifting,
     motionOk,
+    pinned,
     reveal,
     revealOut,
   } from "../motion/curves.svelte";
@@ -213,20 +215,35 @@
   let searching = $state(false);
   /**
    * The search field opens from Search's place at the bar's trailing end,
-   * across to its leading end (a clip drawn back from the leading side, on
-   * the drawer's curve over --dur-panel), as Safari's and Mail's search
-   * fields grow out of their button; with reduced motion it fades, as
+   * across to its leading end, and the bar it replaces is wiped away by the
+   * same edge: one clip on the drawer's curve over --dur-panel, the field's
+   * from its leading side and the bar's from its trailing side, so at every
+   * frame each stands where the other doesn't and nothing stands on
+   * anything (as Safari's and Mail's search fields grow out of their
+   * button). Closing runs it back. With reduced motion they cross-fade, as
    * every swap does.
    */
-  const fieldIn = (_node: Element) =>
+  const wipe = (from: "start" | "end") => (t: number) =>
+    `clip-path: inset(0 ${from === "end" ? ((1 - t) * 100).toFixed(2) : 0}% 0 ${from === "start" ? ((1 - t) * 100).toFixed(2) : 0}% round var(--radius-pill))`;
+  const wiping = (from: "start" | "end") => ({
+    duration: dur("--dur-panel"),
+    easing: easeDrawer,
+    css: wipe(from),
+  });
+  /** The field: drawn from the trailing end. */
+  const fieldIn = (node: Element) =>
+    motionOk.current ? wiping("start") : crossIn(node);
+  const fieldOut = (node: HTMLElement) =>
     motionOk.current
-      ? {
-          duration: dur("--dur-panel"),
-          easing: easeDrawer,
-          css: (t: number) =>
-            `opacity: ${Math.min(1, t * 2)}; clip-path: inset(0 0 0 ${((1 - t) * 100).toFixed(2)}% round var(--radius-pill))`,
-        }
-      : crossIn(_node);
+      ? lifting(node, pinned(node), wiping("start"))
+      : crossOut(node);
+  /** The bar: put away toward its leading end as the field comes. */
+  const barIn = (node: Element) =>
+    motionOk.current ? wiping("end") : crossIn(node);
+  const barOut = (node: HTMLElement) =>
+    motionOk.current
+      ? lifting(node, pinned(node), wiping("end"))
+      : crossOut(node);
   /** The floating stack's height over the rows, px (its bar, the lists and what opens under them): the rows' top padding. */
   let headHeight = $state(0);
   /**
@@ -854,12 +871,12 @@
     >
       {#if searching}
         <!-- The field opens from where Search stood, at the bar's trailing
-             end, across the bar (`fieldIn`); what stood there fades. -->
+             end, across the bar, the bar wiped away by the same edge (`wipe`). -->
         <div
           class="flex min-w-0 flex-1 items-center gap-space-1 coarse:gap-space-5"
           data-slot="search-row"
           in:fieldIn
-          out:crossOut
+          out:fieldOut
         >
           <InputGroup.Root class="flex-1" look="bar">
             <InputGroup.Addon><IconSearch /></InputGroup.Addon>
@@ -914,8 +931,8 @@
         <div
           class="flex min-w-0 flex-1 items-center gap-space-1 coarse:gap-space-5"
           data-slot="bar-row"
-          in:crossIn
-          out:crossOut
+          in:barIn
+          out:barOut
         >
           <!-- Leading: Close, on the phone's sheet (HIG, Sheets: a sheet's
              Cancel or Close leads its bar); a cell as wide as the trailing

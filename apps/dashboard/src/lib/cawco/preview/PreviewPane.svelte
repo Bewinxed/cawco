@@ -117,7 +117,6 @@
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
-  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
   import {
@@ -1626,8 +1625,8 @@
     watch.observe(pane);
     return () => watch.disconnect();
   });
-  /** The hung Comments card: its height, down to the side card's foot, and the room it takes from the page at the card's end, px. */
-  let railReach = $state({ height: 0, room: 0 });
+  /** The hung Comments card: its height, down to the side card's foot, px. It floats over the page, which keeps its width. */
+  let railReach = $state({ height: 0 });
   /** The hung column measured last: Comments and Tune swap, and the one closing never zeroes the one opening. */
   let reaching: HTMLElement | null = null;
   const reachRail = (node: HTMLElement) => {
@@ -1644,15 +1643,13 @@
       if (!(card && glass)) {
         return;
       }
-      const railInset = numberOf("--space-2");
       const reach = {
-        height: Math.max(0, Math.round(card.bottom - glass.bottom - railInset)),
-        room: Math.max(
+        height: Math.max(
           0,
-          Math.round(card.right - (glass.right - node.offsetWidth) + railInset)
+          Math.round(card.bottom - glass.bottom - numberOf("--space-2"))
         ),
       };
-      if (reach.height !== railReach.height || reach.room !== railReach.room) {
+      if (reach.height !== railReach.height) {
         railReach = reach;
       }
     };
@@ -1667,7 +1664,7 @@
       watch.disconnect();
       if (reaching === node) {
         reaching = null;
-        railReach = { height: 0, room: 0 };
+        railReach = { height: 0 };
       }
     };
   };
@@ -3971,19 +3968,6 @@
     }
   }
 
-  /**
-   * The page narrows to meet the Comments card where what is left of it
-   * still holds a page (`c-graph-stage-min`); in a narrower pane the card
-   * stands over the page's end, as Caw's card stands over what is under it.
-   * Read off the pane's own width, which the narrowing never changes.
-   */
-  const railBesidePage = $derived(
-    listOpen &&
-      railPlaced &&
-      !isCanvas &&
-      !railSheet &&
-      paneW - railReach.room >= (browser ? numberOf("--c-graph-stage-min") : 0)
-  );
   /** The head's controls in head order, each standing by the head's priority rule while there is room (side/head.ts). */
   const headItems = $derived.by(() => {
     const all: HeadItem[] = [];
@@ -4024,12 +4008,12 @@
         words: true,
       });
     }
-    // An artifact's document commands (Reload, Undock, Open in new tab,
-    // Map, Verify) stand in its title's menu (ArtifactMenu `commands`; HIG,
-    // Toolbars: "a document menu that contains standard and app-specific
-    // commands that affect the document as a whole"); a page with no title
-    // menu keeps them in the glass.
-    const documentMenu = !!artifact;
+    // What acts on an artifact as a whole (the design graph's components
+    // and view, Undock, a canvas's view) stands in the head's More, last in
+    // the glass; More stands only while it holds one of them, never as an
+    // empty menu (a page or a preview has none of the graph's).
+    const documentMenu =
+      !!artifact && (!!graphHead || canUndock || !!canvasView);
     if (canUndock && !documentMenu) {
       all.push({
         key: "undock",
@@ -4434,7 +4418,13 @@
 {#snippet hungThread()}
   {#if hungPin && drafts}
     {#key hungPin.id}
-      <div class="flex w-c-comments-w min-h-0 flex-col" data-slot="thread-card">
+      <!-- The thread's card, padded and scrolling as the floating thread
+           is (PinFloat's surface): the thread's rows scroll, the card never
+           sideways. -->
+      <div
+        class="flex w-c-comments-w min-h-0 flex-col gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain p-space-3"
+        data-slot="thread-card"
+      >
         {@render thread(hungPin, drafts.draft(hungPin.id), false)}
       </div>
     {/key}
@@ -4613,7 +4603,6 @@
     subtitleId={`${paneId}-line`}
     {switcher}
     {switcherAt}
-    besideRoom={railBesidePage ? railReach.room : 0}
     bind:section
     bind:well
   >

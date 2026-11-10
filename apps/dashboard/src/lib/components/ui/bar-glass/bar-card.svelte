@@ -86,7 +86,7 @@
       aria-label={besideLabel}
       class={cn(
         floatingSurface({ motion: "pop" }),
-        "absolute end-full top-0 flex max-h-full min-h-0 flex-col overflow-auto rounded-e-none p-0"
+        "absolute end-full top-0 flex max-h-full min-h-0 flex-col overflow-hidden rounded-e-none p-0"
       )}
       data-side="left"
       data-slot="bar-card-beside"
