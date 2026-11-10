@@ -1,6 +1,5 @@
 <script lang="ts">
   import { bringIntoView } from "@cawco/core/bring-into-view";
-  import { detach } from "@cawco/core/detach";
   import { questionsOf } from "@cawco/core/question";
   import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
@@ -12,7 +11,7 @@
    * genuine arrivals — and blocked-on-you — through a dedicated live region
    * beside the log, never through the virtualized container itself.
    */
-  import { type Snippet, setContext, tick, untrack } from "svelte";
+  import { type Snippet, setContext, untrack } from "svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -48,14 +47,14 @@
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import ConnectCard from "./ConnectCard.svelte";
-  import { compactionMarkComing } from "./compaction-mark";
   import { paneDrafts } from "./composer-draft.svelte";
   import { connectReveal } from "./connect-sign-ins.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
-  import { KeptPlace, LANDING_HOLD_MS } from "./kept-place.svelte";
+  import { KeptPlace } from "./kept-place.svelte";
   import Latest from "./Latest.svelte";
   import LiveRow from "./LiveRow.svelte";
+  import { ListLanding } from "./list-landing.svelte";
   import { ListWhole } from "./list-whole.svelte";
   import MessageRow from "./MessageRow.svelte";
   import { MountedRows } from "./mounted-rows.svelte";
@@ -204,9 +203,6 @@
     get findHere() {
       return findHere;
     },
-    get followBottom() {
-      return followBottom;
-    },
     get isFocused() {
       return isFocused;
     },
@@ -219,8 +215,11 @@
     get landed() {
       return landed;
     },
-    get landingFrame() {
-      return landingFrame;
+    set landed(value) {
+      landed = value;
+    },
+    get onlanded() {
+      return onlanded;
     },
     get parkedHeight() {
       return parkedHeight;
@@ -230,6 +229,9 @@
     },
     get shown() {
       return shown;
+    },
+    set shown(value) {
+      shown = value;
     },
     get visible() {
       return visible;
@@ -263,6 +265,9 @@
     },
     get seek(): RecordSeek {
       return seek;
+    },
+    get landing(): ListLanding {
+      return landing;
     },
   };
 
@@ -322,308 +327,7 @@
 
   const pin = new ScrollPin(host);
 
-  let landingFrame: number | null = null;
-
-  /**
-   * THE REVEAL. A transcript opening draws its rows once, where they stay.
-   *
-   * virtua renders a row it has not measured yet under `visibility: hidden`,
-   * at an estimated offset, and shows it the moment it is measured — at its
-   * real offset, in the same frame as the landing's scroll. Chrome counts a
-   * hidden box that moves and appears in one frame as a layout shift, from
-   * wherever it was laid out while hidden: on a cold load that was the whole
-   * tail jumping from the top of the list to its place (CLS 0.62 at 1440).
-   *
-   * So the list's own box stays unpainted until the transcript has landed
-   * and every row in the viewport is drawn and measured, and is drawn a
-   * frame later — any change to the rows in between starts the wait again —
-   * so the frame that shows the rows is never the frame that moved them.
-   * Meanwhile a cold load's rows stand on screen as the server drew them
-   * (`servedRows`), and go in that frame. It waits for the newest page and for
-   * nothing older — with one exception, the reader's own place (below).
-   * What arrives after the reveal — a read again, an older page in front —
-   * keeps the rows on screen measured and in place: see `frontOnly` and the
-   * two steps in `build`.
-   */
-  $effect(() => {
-    const node = pin.scroller;
-    const container = pin.listing?.firstElementChild;
-    // The newest page under way replaces these rows when they are the
-    // server's stand-in for it (see `SessionPane`): the store's session takes
-    // their place the moment its read is in, with the turn in flight on the
-    // end. Drawn first, they would be moved under the reader.
-    const store = sessionsStore.session(session.instanceId);
-
-    const reading =
-      session.loading || (store !== null && store !== session && store.loading);
-    track(seek.asked);
-
-    if (shown || reading || !(landed && node && container)) {
-      return;
-    }
-    // THE READER'S PLACE IS READ BACK TO. A place kept at a row older than
-    // the rows held (a reload far up: the first rows are the newest page) is
-    // not given up for the tail: the pages before them are read, one at a
-    // time, until one holds that row or the conversation's start is in hand,
-    // and the list is drawn there. A page that cannot be read ends the
-    // search: the list is drawn with what it holds, the failure said at its
-    // top. Each page is asked for once the last one is in the rows searched:
-    // a pane off screen builds its rows on its scheduler turn, and asking on
-    // the page's landing alone read on past the place before it was looked for.
-    const own = older.paged();
-    if (keeper.resume && !keeper.resume.tail && keeper.anchorIndex() < 0) {
-      // The place is looked for only among rows built from the store's
-      // session as it stands: not while a build's second step is still to
-      // come (`pending`) or the rows lag what the store holds, and not among
-      // the server's stand-in rows once the store has rows to take their
-      // place (`SessionPane`). Concluded not found there, the list was drawn
-      // at another row with the place a moment from arriving above it
-      // (transcript-holds, its reload legs).
-      if (
-        rowBuild.pending !== null ||
-        untrack(rowBuild.printOf) !== rowBuild.builtPrint ||
-        (store !== null && store !== session && store.messages.length > 0)
-      ) {
-        return;
-      }
-      if (own?.cursor && !own.olderFault) {
-        if (!own.hydrating) {
-          detach(
-            untrack(() => readOlderPage(own.instanceId)),
-            "untrack"
-          );
-        }
-        return;
-      }
-    }
-    let frame: number | null = null;
-    /** This reveal is still the one being waited for. */
-    let live = true;
-    /**
-     * Every row in the viewport is drawn and measured: virtua has rendered
-     * the rows the scroll offset covers — they abut, with no gap, from the
-     * top of the viewport down — and none of them is still hidden awaiting
-     * its size.
-     */
-    const measured = (): boolean => {
-      const view = node.getBoundingClientRect();
-      const boxes: DOMRect[] = [];
-      for (const item of container.children) {
-        const box = item.getBoundingClientRect();
-        if (box.bottom > view.top && box.top < view.bottom) {
-          if ((item as HTMLElement).style.visibility === "hidden") {
-            return false;
-          }
-          boxes.push(box);
-        }
-      }
-      boxes.sort((a, b) => a.top - b.top);
-      if (node.scrollTop > 0 && (boxes[0]?.top ?? view.bottom) > view.top + 1) {
-        return false;
-      }
-      return boxes.every(
-        (box, i) => i === 0 || box.top <= boxes[i - 1].bottom + 1
-      );
-    };
-    // Measured in the next frame's callbacks, never in the task that
-    // changed the rows (a tab switch landing a pane among them): reading
-    // the rows there lays the page out mid-task. The callbacks run before
-    // that frame's layout, so the rows are shown in the frame they are
-    // found measured, as before.
-    const wait = (): void => {
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-      }
-      frame = requestAnimationFrame(() => {
-        frame = null;
-        if (keeper.restore()) {
-          wait();
-          return;
-        }
-        if (!measured()) {
-          return;
-        }
-        // A list that opens on a compaction is shown with Caw beside the
-        // word, not a frame or two before him: it waits for his picture
-        // (bounded, see `compactionMarkComing`), then measures again.
-        const caw = rowDraw.renderedRows.some(
-          (row) => row.kind === "compaction"
-        )
-          ? compactionMarkComing()
-          : null;
-        if (caw) {
-          caw.then(() => {
-            if (live) {
-              wait();
-            }
-          });
-          return;
-        }
-        drawAtLanding();
-      });
-    };
-    const changes = new MutationObserver(wait);
-    changes.observe(container, {
-      attributes: true,
-      attributeFilter: ["style"],
-      childList: true,
-      subtree: true,
-    });
-    wait();
-    return () => {
-      live = false;
-      changes.disconnect();
-      if (frame !== null) {
-        cancelAnimationFrame(frame);
-      }
-    };
-  });
-
-  /**
-   * The list drawn where its landing put it. A record asked for is said to
-   * be reached (`arrived`); a place read back to stays the place while the
-   * rows around it go on measuring (`holdPlace`): drawn at it, the list
-   * moved off it by what the rows above measured to after the reveal.
-   */
-  function drawAtLanding(): void {
-    const sought =
-      keeper.resume && "at" in keeper.resume ? keeper.resume.at : null;
-    const kept =
-      keeper.resume && !keeper.resume.tail && "block" in keeper.resume
-        ? { block: keeper.resume.block, into: keeper.resume.into }
-        : null;
-    keeper.resume = null;
-    shown = true;
-    if (sought !== null) {
-      seek.arrived(sought);
-    }
-    if (kept) {
-      keeper.keptPlace = kept;
-      keeper.holdUntil = performance.now() + LANDING_HOLD_MS;
-      keeper.holdPlace();
-    }
-  }
-
-  /**
-   * Put the view at the tail in the next frame, before it paints: the
-   * reader's own scroll came to rest there (`onscrollend`). Nothing is read
-   * in the task that called it; the frame's callbacks read the scroller
-   * anyway, before its layout.
-   */
-  function followBottom(): void {
-    if (!pin.scroller || pin.following !== null) {
-      return;
-    }
-    pin.following = requestAnimationFrame(() => {
-      pin.following = null;
-      if (pin.atBottom) {
-        pin.pinBottom();
-      }
-    });
-  }
-
-  function land(): void {
-    if (!landed) {
-      // A place the rows do not hold yet — a reload's first rows are the
-      // newest page — is read back to before the list is drawn (the reveal).
-      // The tail is the pin's: put there now, at the rows' estimated sizes,
-      // and put back on every measurement that follows (`onresize`) until the
-      // list is drawn, focused or not (`pinned`).
-      landed = true;
-      if (keeper.anchorIndex() >= 0) {
-        keeper.restore();
-      } else {
-        pin.atBottom = true;
-        pin.pinBottom();
-      }
-      settle();
-      return;
-    }
-    // Measured in the next frame's callbacks, never in the task that called
-    // for the land: that can be a finger lifting off a switch between
-    // groups, and reading the scroller there forced a layout into it. The
-    // callbacks run before that frame's layout, so what they write is what
-    // the frame paints.
-    if (landingFrame !== null) {
-      cancelAnimationFrame(landingFrame);
-    }
-    landingFrame = requestAnimationFrame(landInFrame);
-    pin.atBottom = true;
-    pin.farFromLatest = false;
-  }
-
-  /** The already-landed half of `land`, in the frame after it was called for. */
-  function landInFrame(): void {
-    landingFrame = null;
-    // A tail far off — a tab back from a long absence, the jump back from far
-    // up — lands at the rows' estimated sizes; the rows it lands among are
-    // measured in that frame's layout, and the pin puts the view back on the
-    // true end before the frame is painted (`onresize`).
-    if (!(pin.scroller && active && pin.atBottom)) {
-      return;
-    }
-    pin.pinBottom();
-    settle();
-  }
-
-  /** Fire `onlanded` once, the first time the transcript has content. */
-  let landingTold = false;
-  function settle(): void {
-    if (landingTold) {
-      return;
-    }
-    landingTold = true;
-    onlanded?.();
-  }
-
-  // A conversation with nothing in it never lands — `land` needs a row to
-  // scroll to — so the handshake would never be answered and a pane waiting on
-  // it would hold an invisible transcript for good. An empty read that has
-  // finished IS settled; say so.
-  $effect(() => {
-    if (session.loading || rowBuild.rows.length > 0) {
-      return;
-    }
-    landed = true;
-    settle();
-  });
-
-  // The landings: the first, once there are rows, and the pane coming back to
-  // be worked in at the tail, once, as `active` rises — the rows it caught up
-  // on while it was not were measured with no pin running (`pinned`), so it
-  // is put on their end. Nothing else lands here: what grows the tail while
-  // the reader is at it — a row, a streamed word, the composer column's
-  // clearance — is the pin's, in the frame it grew (`onresize`). This effect
-  // used to re-land on every row and every streamed frame, a frame behind
-  // the pin, a second writer of the same offset.
-  //
-  // A landed pane depends on `active` alone, never on its rows or its
-  // stream: an off-screen pane re-runs nothing as its session streams.
-  $effect(() => {
-    if (landed) {
-      if (active && untrack(() => pin.atBottom)) {
-        detach(
-          tick().then(() => {
-            if (active && pin.atBottom) {
-              land();
-            }
-          }),
-          "tick"
-        );
-      }
-      return;
-    }
-    if (rowBuild.rows.length > 0) {
-      detach(
-        tick().then(() => {
-          if (!landed) {
-            land();
-          }
-        }),
-        "tick"
-      );
-    }
-  });
+  const landing = new ListLanding(host);
 
   provideLedger({
     take(id) {
@@ -674,7 +378,7 @@
       // Landed in the click itself, not in `land`'s next frame: a re-armed
       // `land` (the rows effect) can push that frame back one more.
       pin.atBottom = true;
-      landInFrame();
+      landing.landInFrame();
       return;
     }
     pin.stopFollow();
