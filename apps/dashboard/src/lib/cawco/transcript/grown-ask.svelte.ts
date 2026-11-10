@@ -92,12 +92,7 @@ export class GrownAsk {
   /** The questions the parked ask puts, if it is a question. */
   readonly askQuestions = $derived.by(() => {
     const ask = this.#parts.ask();
-    return ask
-      ? questionsOf(
-          ask.request.toolName,
-          ask.request.input as Record<string, unknown>
-        )
-      : null;
+    return ask ? questionsOf(ask.request.toolName, ask.request.input) : null;
   });
   /** The parked ask can fold to its bar: a question. */
   readonly askParks = $derived(!!this.askQuestions);
