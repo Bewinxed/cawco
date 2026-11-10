@@ -21,6 +21,7 @@ import type { FolderSkillBody, SessionLocation } from "./hub-shapes";
 import type { ControlResult } from "./machine-answers";
 import { machineSkillFiles } from "./machine-answers";
 import { READ_TIMEOUT_MS } from "./machine-read-timeouts";
+import { refusal } from "./refusal";
 import { sessionControl } from "./session-word";
 import type { CheckedFolder, SkillFolderReader } from "./skills";
 import {
@@ -393,21 +394,18 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
    * read and checked through its agent before anything is stored: refused
    * in its words when it can't be, and when it no longer holds the files the
    * person approved (`contentHash`, skills.ts `FOLDER_CHANGED`). The PUT
-   * route's way in for such a source, its refusals as `refuse` answers
-   * them; undefined for any other source.
+   * route's way in for such a source, which answers its refusals; undefined
+   * for any other source.
    */
-  const installFromFolder = async <Refused>(
-    name: string,
-    body: FolderSkillBody,
-    refuse: (code: 400 | 409, said: string) => Refused
-  ): Promise<FleetSkillMeta | Refused | undefined> => {
+  const installFromFolder = async (name: string, body: FolderSkillBody) => {
     if (parseSkillSource(body.source)?.kind !== "file") {
       return;
     }
     const folder = folderOf(body.source);
     if (!folder) {
-      return refuse(
+      return refusal(
         400,
+        "skill-folder-unnamed",
         `${body.source} names no machine: write it as file://<machine>/<path>`
       );
     }
@@ -419,13 +417,14 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
         readSkillFolder
       );
     } catch (error) {
-      return refuse(
+      return refusal(
         400,
+        "skill-folder-unread",
         error instanceof Error ? error.message : String(error)
       );
     }
     if (body.contentHash !== undefined && body.contentHash !== read.hash) {
-      return refuse(409, FOLDER_CHANGED);
+      return refusal(409, "skill-folder-changed", FOLDER_CHANGED);
     }
     const skill = ctx.db.putSkill({
       name,
@@ -443,7 +442,8 @@ export const createMachineCalls = (ctx: MachineCallsContext) => {
     });
     ctx.skillChoices.delete(name);
     ctx.fleetChanged();
-    return skill;
+    const installed: FleetSkillMeta = skill;
+    return installed;
   };
 
   /**

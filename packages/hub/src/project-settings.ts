@@ -806,7 +806,11 @@ export const createProjectSettings = ({
         return await editSaid(change, project.id, { review: change.review });
       case "create_repo": {
         // A publish links what it made, as its repository's copy.
-        const { full, from } = await publish.publish(project, change);
+        const published = await publish.publish(project, change);
+        if (published instanceof ElysiaStatus) {
+          return published;
+        }
+        const { full, from } = published;
         const refused2 = linkable(project, `github.com/${full}`);
         if (refused2 instanceof ElysiaStatus) {
           return refused2;
