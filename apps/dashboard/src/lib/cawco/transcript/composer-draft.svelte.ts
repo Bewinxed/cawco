@@ -413,8 +413,8 @@ export class ComposerDraft {
     const id = newId();
     let preview: string | undefined;
     let pixels: { height: number; width: number } | null = null;
-    if (as === "image") {
-      const read = await readImage(file as File);
+    if (as === "image" && file instanceof File) {
+      const read = await readImage(file);
       preview = `data:${read.mediaType};base64,${read.data}`;
       pixels = await pixelsOf(preview);
     }

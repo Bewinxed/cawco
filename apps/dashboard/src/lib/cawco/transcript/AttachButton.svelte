@@ -53,8 +53,8 @@
     }
   });
 
-  function onpick(event: Event): void {
-    const picker = event.currentTarget as HTMLInputElement;
+  function onpick(event: Event & { currentTarget: HTMLInputElement }): void {
+    const picker = event.currentTarget;
     if (picker.files?.length) {
       // Copied first: `picker.files` is live, and clearing the input below
       // empties it while the reads are still walking it — a pick of several

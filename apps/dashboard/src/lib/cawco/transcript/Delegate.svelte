@@ -110,9 +110,7 @@
 
   const toolInput = $derived.by((): Record<string, unknown> => {
     const raw = meta.toolInput;
-    return typeof raw === "object" && raw !== null && !Array.isArray(raw)
-      ? (raw as Record<string, unknown>)
-      : {};
+    return raw && !Array.isArray(raw) ? raw : {};
   });
 
   /**

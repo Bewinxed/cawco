@@ -36,17 +36,15 @@ export function nameParts(name: string): { head: string; tail: string } {
   return { head: name.slice(0, cut), tail: name.slice(cut) };
 }
 
+const GLYPHS: Record<string, Component> = {
+  md: IconFileMarkdown,
+  markdown: IconFileMarkdown,
+  json: IconFileCode,
+  csv: IconFileTable,
+  log: IconFileLog,
+};
+
 /** The kind's glyph, by the file's extension; a document for any other. */
 export function glyphOf(name: string): Component {
-  return (
-    (
-      {
-        md: IconFileMarkdown,
-        markdown: IconFileMarkdown,
-        json: IconFileCode,
-        csv: IconFileTable,
-        log: IconFileLog,
-      } as Record<string, Component>
-    )[extensionOf(name)] ?? IconDocument
-  );
+  return GLYPHS[extensionOf(name)] ?? IconDocument;
 }

@@ -4,9 +4,10 @@
  * (`TranscriptBuilder`, @cawco/core). Which tools draw a picture or a
  * preview is the tool presentation's (@cawco/core tool-presentation).
  */
+import { isObject } from "@cawco/core/comments/model";
 import { getToolGlance } from "@cawco/core/transcript-rules";
 import type { SubagentState } from "#lib/utils/flow-types.js";
-import type { JsonValue, Message } from "../types";
+import type { Message } from "../types";
 
 /**
  * Whether a parked ask was routed to its parent session rather than to the
@@ -151,21 +152,14 @@ const ASK_BODY_PATTERN = /^([A-Za-z_][\w-]*) — (\{.*\})$/su;
 
 function askBodyParts(
   body: string
-): { tool: string; input: Record<string, JsonValue> } | null {
+): { tool: string; input: Record<string, unknown> } | null {
   const match = ASK_BODY_PATTERN.exec(body);
   if (!match) {
     return null;
   }
   try {
     const parsed: unknown = JSON.parse(match[2]);
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      Array.isArray(parsed)
-    ) {
-      return null;
-    }
-    return { tool: match[1], input: parsed as Record<string, JsonValue> };
+    return isObject(parsed) ? { tool: match[1], input: parsed } : null;
   } catch {
     return null;
   }
@@ -177,26 +171,16 @@ function askBodyParts(
  * how the callers below tell a question ask from a tool ask.
  */
 function questionBlocks(input: Record<string, unknown>): string[] {
-  // It came over the wire, so it is JSON.
-  const { questions } = input as Record<string, JsonValue>;
+  const { questions } = input;
   if (!Array.isArray(questions)) {
     return [];
   }
-  return questions.map((entry, index) => {
-    const question =
-      typeof entry === "object" && entry !== null && !Array.isArray(entry)
-        ? entry
-        : {};
+  return questions.map((entry: unknown, index) => {
+    const question: Record<string, unknown> = isObject(entry) ? entry : {};
     const text = typeof question.question === "string" ? question.question : "";
     const options = Array.isArray(question.options)
       ? question.options
-          .map((option) =>
-            typeof option === "object" &&
-            option !== null &&
-            !Array.isArray(option)
-              ? option.label
-              : null
-          )
+          .map((option: unknown) => (isObject(option) ? option.label : null))
           .filter((label): label is string => typeof label === "string")
           .map((label) => `- ${label}`)
           .join("\n")

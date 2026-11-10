@@ -209,7 +209,7 @@
    */
   const lead =
     ticket?.kind === "arrive" && ticket.start !== null
-      ? ticket.lead - ((document.timeline.currentTime as number) - ticket.start)
+      ? ticket.lead - (Number(document.timeline.currentTime) - ticket.start)
       : 0;
   let node = $state<HTMLElement>();
   /**

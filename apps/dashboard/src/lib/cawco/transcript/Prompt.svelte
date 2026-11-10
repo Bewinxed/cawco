@@ -175,7 +175,7 @@
 
   /** Names each question's lede, which labels its option group. */
   const claimId = $props.id();
-  const input = $derived(request.input as Record<string, unknown>);
+  const input = $derived(request.input);
   const questions = $derived(questionsOf(request.toolName, input));
   /**
    * The questions the "Other" line answers: a question card's, or a
