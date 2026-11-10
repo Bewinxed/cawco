@@ -97,14 +97,15 @@ const send = (socket: Socket<Pipe>, bytes: Uint8Array): void => {
 };
 
 const drain = (socket: Socket<Pipe>): void => {
-  while (socket.data.pending.length > 0) {
-    const next = socket.data.pending[0] as Uint8Array;
+  let [next] = socket.data.pending;
+  while (next) {
     const wrote = socket.write(next);
     if (wrote < next.length) {
       socket.data.pending[0] = next.subarray(Math.max(0, wrote));
       return;
     }
     socket.data.pending.shift();
+    [next] = socket.data.pending;
   }
 };
 
