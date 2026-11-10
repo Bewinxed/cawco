@@ -192,9 +192,10 @@ import {
   opencodeModels,
 } from "./opencode-models";
 import {
-  buildPluginSource,
+  buildPlugin,
   OPENCODE_DIR,
   OPENCODE_QUIET_DIR,
+  pluginSource,
   prunePlugins,
   retireV1Plugins,
   writePlugin,
@@ -335,7 +336,7 @@ const serverLaunch = async (
     },
   },
   flags: {
-    [GATE_FORM_ENV]: gateForm("opencode", buildPluginSource()),
+    [GATE_FORM_ENV]: gateForm("opencode", pluginSource(await buildPlugin())),
     [PLUGIN_FLAG]: pluginDir,
     [CONFIG_FLAG]: `${diskHash ?? "none"}/${createHash("sha256").update(JSON.stringify(config)).digest("hex").slice(0, 16)}`,
   },
@@ -4622,7 +4623,8 @@ export class OpencodeHarness implements Harness<"opencode"> {
   #pluginWrite: Promise<string> | null = null;
 
   #plugin(): Promise<string> {
-    this.#pluginWrite ??= writePlugin(buildPluginSource())
+    this.#pluginWrite ??= buildPlugin()
+      .then(writePlugin)
       .then((dir) => {
         this.#pluginDir = dir;
         return dir;
