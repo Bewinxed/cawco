@@ -49,10 +49,10 @@ import {
   RELAY_HEADER,
 } from "@cawco/preview/proxy";
 import type { ServerWebSocket } from "bun";
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus } from "elysia";
 import { problemResponse } from "elysia/error";
 import { z } from "zod";
-import { answered, BrowserRefusal } from "./browsers";
+import { answered } from "./browsers";
 import type { ArtifactRow } from "./db/artifacts";
 import { hidden } from "./hidden";
 import type { Caller } from "./hub-auth";
@@ -71,6 +71,14 @@ const VIEWERS_MS = 30_000;
 const BASE = "/ws/browser";
 
 const HOP = "hub browser relay";
+
+/** Machine `machine`, which the hub does not reach now: its browser's refusal. */
+export const browserUnreached = (machine: string) =>
+  refusal(
+    503,
+    "browser-machine-unreached",
+    `${machine} is not connected, so its browser could not be reached. Try again once it is back.`
+  );
 
 /** The bytes a WebSocket close reason may take (RFC 6455 §5.5: a control frame's payload is 125 bytes, two of them the code). */
 const REASON_BYTES = 123;
@@ -93,11 +101,13 @@ export interface BrowserStreamDeps {
   machineName: (machineId: string) => string;
   /** A credential of the fleet's stream relay, or null while it has none (stream-relay.ts). */
   mint: (userId: string, ttlMs: number) => BrowserRelay | null;
-  /** Where the hub reaches a port of the machine's: its address, or the hub's end of its SSH connection (ssh-tunnels.ts). */
+  /** Where the hub reaches a port of the machine's: its address, or the hub's end of its SSH connection (ssh-tunnels.ts); refused ({@link browserUnreached}) when it is not connected. */
   reach: (
     machineId: string,
     port: number
-  ) => Promise<{ address: string; port: number }>;
+  ) => Promise<
+    { address: string; port: number } | ReturnType<typeof browserUnreached>
+  >;
 }
 
 /** The browser an artifact shows, and the machine it runs on. */
@@ -208,18 +218,18 @@ const frameOf = (message: unknown): string | Buffer<ArrayBuffer> => {
 export const createBrowserStream = (deps: BrowserStreamDeps) => {
   /** Each machine's browser listener as the hub reaches it, and the starts in flight. */
   const reached = new Map<string, Upstream>();
-  const reaching = new Map<string, Promise<Upstream>>();
-  /** Each viewer's neko session; `ready` once it was answered. */
+  const reaching = new Map<string, ReturnType<typeof listenOn>>();
+  /** Each viewer's neko session, or its refusal; `ready` once it was answered. */
   const viewers = new Map<
     string,
-    { place: Place; ready: boolean; session: Promise<BrowserViewerSession> }
+    { place: Place; ready: boolean; session: ReturnType<typeof sessionOf> }
   >();
   /** How many views each browser has open now. */
   const views = new Map<string, number>();
   const sockets = new Map<string, Relayed>();
 
   /** The browser artifact `artifact` of session `instance`; refused when it is no such thing. */
-  const placeOf = (instance: string, artifact: string): Place => {
+  const placeOf = (instance: string, artifact: string) => {
     const row = deps.artifact(artifact);
     const page =
       row && "page" in row.source ? (row.source.page as unknown) : undefined;
@@ -229,9 +239,14 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       row.machineId &&
       isBrowserKey(page)
     )) {
-      throw new BrowserRefusal(404, "This session has no such browser.");
+      return refusal(
+        404,
+        "browser-unknown",
+        "This session has no such browser."
+      );
     }
-    return { key: page, machineId: row.machineId };
+    const place: Place = { key: page, machineId: row.machineId };
+    return place;
   };
 
   /**
@@ -251,7 +266,26 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       named ?? "",
     ]);
 
-  const listenerOf = (machineId: string): Upstream | Promise<Upstream> => {
+  /** The machine's browser listener started and reached, or the refusal of either. */
+  const listenOn = async (machineId: string) => {
+    const token = randomUUID();
+    const listened = answered<{ port: number }>(
+      await deps.call(machineId, BROWSER_LISTEN, [{ token }], LISTEN_MS),
+      deps.machineName(machineId),
+      "be reached"
+    );
+    if (listened instanceof ElysiaStatus) {
+      return listened;
+    }
+    const at = await deps.reach(machineId, listened.port);
+    if (at instanceof ElysiaStatus) {
+      return at;
+    }
+    const upstream: Upstream = { ...at, token };
+    return upstream;
+  };
+
+  const listenerOf = (machineId: string) => {
     const known = reached.get(machineId);
     if (known) {
       return known;
@@ -260,20 +294,15 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     if (inFlight !== undefined) {
       return inFlight;
     }
-    const start = (async (): Promise<Upstream> => {
-      const token = randomUUID();
-      const { port } = answered<{ port: number }>(
-        await deps.call(machineId, BROWSER_LISTEN, [{ token }], LISTEN_MS),
-        deps.machineName(machineId),
-        "be reached"
-      );
-      return { ...(await deps.reach(machineId, port)), token };
-    })();
+    const start = listenOn(machineId);
     reaching.set(machineId, start);
     start
       .then(
         (upstream) => {
-          if (reaching.get(machineId) === start) {
+          if (
+            reaching.get(machineId) === start &&
+            !(upstream instanceof ElysiaStatus)
+          ) {
             reached.set(machineId, upstream);
           }
         },
@@ -294,37 +323,39 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     }
   };
 
-  const viewerOf = (
-    viewerId: string,
-    place: Place
-  ): Promise<BrowserViewerSession> => {
+  /** A neko session of `place`'s browser for one viewer, or its machine's refusal. */
+  const sessionOf = async (place: Place) =>
+    answered<BrowserViewerSession>(
+      await deps.call(
+        place.machineId,
+        BROWSER_VIEWER_TOKEN,
+        [{ key: place.key }],
+        VIEWER_MS
+      ),
+      deps.machineName(place.machineId),
+      "be viewed"
+    );
+
+  const viewerOf = (viewerId: string, place: Place) => {
     const held = viewers.get(viewerId);
     if (held) {
       return held.session;
     }
-    const session = (async () =>
-      answered<BrowserViewerSession>(
-        await deps.call(
-          place.machineId,
-          BROWSER_VIEWER_TOKEN,
-          [{ key: place.key }],
-          VIEWER_MS
-        ),
-        deps.machineName(place.machineId),
-        "be viewed"
-      ))();
+    const session = sessionOf(place);
     const entry = { place, ready: false, session };
     viewers.set(viewerId, entry);
-    session.then(
-      () => {
-        entry.ready = true;
-      },
-      () => {
-        if (viewers.get(viewerId) === entry) {
-          viewers.delete(viewerId);
-        }
+    const forget = () => {
+      if (viewers.get(viewerId) === entry) {
+        viewers.delete(viewerId);
       }
-    );
+    };
+    session.then((answer) => {
+      if (answer instanceof ElysiaStatus) {
+        forget();
+      } else {
+        entry.ready = true;
+      }
+    }, forget);
     return session;
   };
 
@@ -389,9 +420,6 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
   const shut = (socket: ViewSocket, code: number, why: string): void =>
     socket.close(code, reasonOf(why));
 
-  const refusalCode = (error: unknown): number =>
-    error instanceof BrowserRefusal ? 4000 + error.status : 1011;
-
   /**
    * The view's socket as the preview relay's socket (core `previewWebSocket`):
    * to the machine's listener at `at`, with the viewer's neko session; each
@@ -454,32 +482,52 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       return;
     }
     try {
-      const place = placeOf(socket.instance, socket.artifact);
-      const viewerId = viewerIdOf(caller, socket.artifact, socket.token);
-      const viewer =
-        kind === "api" ? await viewerOf(viewerId, place) : undefined;
-      const at = await listenerOf(place.machineId);
-      if (entry.closed) {
-        return;
+      const relayed = await relay(socket, kind, caller, entry);
+      // A refusal closes the view with its status, in its words.
+      if (relayed instanceof ElysiaStatus) {
+        shut(socket, 4000 + relayed.status, relayed.response.detail);
       }
-      const adapter = relayTo(
-        socket,
-        { at, kind, place },
-        viewer ? { id: viewerId, session: viewer } : undefined
-      );
-      entry.adapter = adapter;
-      previewWebSocket.open?.(adapter);
-      for (const frame of entry.early.splice(0)) {
-        previewWebSocket.message(adapter, frame);
-      }
-      entry.counted = place;
-      count(place, 1);
     } catch (error) {
-      if (!(error instanceof BrowserRefusal)) {
-        console.warn(`[browser] ${path} was not relayed: ${causeOf(error)}`);
-      }
-      shut(socket, refusalCode(error), causeOf(error));
+      console.warn(`[browser] ${path} was not relayed: ${causeOf(error)}`);
+      shut(socket, 1011, causeOf(error));
     }
+  };
+
+  /** The view's socket relayed to its machine's listener, the frames sent early first; the refusal of its browser, viewer or listener. */
+  const relay = async (
+    socket: ViewSocket,
+    kind: "api" | "cdp",
+    caller: Caller,
+    entry: Relayed
+  ) => {
+    const place = placeOf(socket.instance, socket.artifact);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
+    const viewerId = viewerIdOf(caller, socket.artifact, socket.token);
+    const viewer = kind === "api" ? await viewerOf(viewerId, place) : undefined;
+    if (viewer instanceof ElysiaStatus) {
+      return viewer;
+    }
+    const at = await listenerOf(place.machineId);
+    if (at instanceof ElysiaStatus) {
+      return at;
+    }
+    if (entry.closed) {
+      return;
+    }
+    const adapter = relayTo(
+      socket,
+      { at, kind, place },
+      viewer ? { id: viewerId, session: viewer } : undefined
+    );
+    entry.adapter = adapter;
+    previewWebSocket.open?.(adapter);
+    for (const frame of entry.early.splice(0)) {
+      previewWebSocket.message(adapter, frame);
+    }
+    entry.counted = place;
+    count(place, 1);
   };
 
   const message = (socket: ViewSocket, sent: unknown): void => {
@@ -516,8 +564,11 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     request: Request,
     instance: string,
     artifact: string
-  ): Promise<Response> => {
+  ) => {
     const place = placeOf(instance, artifact);
+    if (place instanceof ElysiaStatus) {
+      return place;
+    }
     const url = new URL(request.url);
     const viewerId = viewerIdOf(
       deps.callerOf(request),
@@ -525,7 +576,13 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
       clientToken(request.headers.get("authorization"), url)
     );
     const viewer = await viewerOf(viewerId, place);
+    if (viewer instanceof ElysiaStatus) {
+      return viewer;
+    }
     const at = await listenerOf(place.machineId);
+    if (at instanceof ElysiaStatus) {
+      return at;
+    }
     // `/ws/browser/<instance>/<artifact>/api/<rest>`, as the client wrote it.
     const rest = url.pathname.split("/").slice(6).join("/");
     url.searchParams.delete("token");
@@ -664,18 +721,6 @@ export const browserStreamRoutes = (stream: BrowserStream) =>
       `${BASE}/:instance/:artifact/api/*`,
       // Bodies stream on to neko; neko's own REST is no route of the hub's API.
       { ...hidden, parse: "none" },
-      async ({ request, params }) => {
-        try {
-          return await stream.forward(
-            request,
-            params.instance,
-            params.artifact
-          );
-        } catch (error) {
-          if (error instanceof BrowserRefusal) {
-            return refusal(error.status, "browser-refused", error.message);
-          }
-          throw error;
-        }
-      }
+      ({ request, params }) =>
+        stream.forward(request, params.instance, params.artifact)
     );

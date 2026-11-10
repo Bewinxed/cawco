@@ -49,6 +49,7 @@ import {
   type WorkspaceArchive,
 } from "@cawco/core/workspace/controls";
 import { ElysiaStatus } from "elysia";
+import type { Browsers } from "./browsers";
 import type { DbShape } from "./db";
 import type { HeldSession, HeldWorkspace } from "./db/project-work";
 import { deleteProjectFolder } from "./project-folder";
@@ -60,6 +61,14 @@ import {
   trashedProject,
 } from "./project-trash";
 import { refusal } from "./refusal";
+
+/** A failure's words: a refusal's detail, an error's message, else the value said. */
+const wordsOf = (error: unknown): string => {
+  if (error instanceof ElysiaStatus) {
+    return error.response.detail;
+  }
+  return error instanceof Error ? error.message : String(error);
+};
 
 /** What a delete removed on one machine, by kind. */
 export interface MachineRemoved {
@@ -97,6 +106,7 @@ class AgentTooOld extends Error {
 interface Removal {
   kind: Exclude<keyof MachineRemoved, "sessions">;
   machineId: string;
+  /** Removes it; what it answers is read only for a refusal, which fails it as a throw does. */
   run: () => Promise<unknown>;
   /** What it removes, as the refusal names it. */
   what: string;
@@ -125,8 +135,8 @@ export interface ProjectDeleteDeps {
   ) => void;
   machineName: (machineId: string) => string;
   online: (machineId: string) => boolean;
-  /** A browser removed on its machine, its profile with it (browsers.ts `remove`). */
-  removeBrowser: (key: BrowserKey, machineId: string) => Promise<void>;
+  /** A browser removed on its machine, its profile with it, or its refusal (browsers.ts `remove`). */
+  removeBrowser: Browsers["remove"];
   /** How many of the project's sessions still run (project-stops.ts). */
   stillRunning: (projectId: string) => number;
 }
@@ -257,6 +267,18 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
     }
   };
 
+  /** Why `removal` failed: what it threw, or the refusal it answered; undefined once it ran. */
+  const failureOf = async (
+    removal: Removal
+  ): Promise<{ error: unknown } | undefined> => {
+    try {
+      const ran = await removal.run();
+      return ran instanceof ElysiaStatus ? { error: ran } : undefined;
+    } catch (error) {
+      return { error };
+    }
+  };
+
   /** Each removal `plan` holds, on its machine, the first that fails the delete's refusal in words; what went, by machine. */
   const removeOnMachines = async (
     name: string,
@@ -276,9 +298,9 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
       return counts;
     };
     for (const removal of removalsOf(plan, fromDisk)) {
-      try {
-        await removal.run();
-      } catch (error) {
+      const failed = await failureOf(removal);
+      if (failed) {
+        const { error } = failed;
         const machine = deps.machineName(removal.machineId);
         return error instanceof AgentTooOld
           ? refusal(
@@ -293,7 +315,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
                 name,
                 removal.what,
                 machine,
-                error instanceof Error ? error.message : String(error)
+                wordsOf(error)
               )
             );
       }
