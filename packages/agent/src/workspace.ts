@@ -165,6 +165,7 @@ import {
   withoutCredential,
 } from "./move";
 import { removeTree } from "./remove-tree";
+import { repoTop } from "./repo-top";
 import { keeperChildren } from "./sessiond-client";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { workspaceModulesRoot } from "./workspace-modules";
@@ -992,7 +993,7 @@ export const createWorkspace = async (
   }
   const asked: CreateAsked = { account, at, first, placeRows, projectId };
   await unfinishedCleared;
-  const found = await kindAt(dir, gitUntil(deadline));
+  const found = await kindAt(dir, deadline);
   return found.kind === "repo"
     ? await cutClone(id, found.folder, deadline, cut, asked)
     : await makeFolderLayer(id, found.folder, cut, asked);
@@ -1004,24 +1005,26 @@ const realFolder = (path: string): Promise<string> =>
 
 /**
  * THE ONE CHOICE OF A WORKSPACE'S KIND: the folder a session at `dir` is
- * in, read by git. A folder git finds a work tree's top level for (the
- * repository's root, a linked worktree's, or the top level above a folder in
- * its work tree) is a repository's, and that top level is what is cloned;
- * any other folder is a folder, itself at its real path. Refused for a path
- * that is no folder.
+ * in, read by git (repo-top.ts `repoTop`). A folder git finds a work tree's
+ * top level for (the repository's root, a linked worktree's, or the top
+ * level above a folder in its work tree) is a repository's, and that top
+ * level is what is cloned; a folder git finds in no repository is a folder,
+ * itself at its real path. Refused for a path that is no folder, and for a
+ * folder in a repository git does not read as a checkout (its config says
+ * bare, its `.git` unreadable) or that git could not answer for in time:
+ * none of those is a plain folder, whose workspace is a view of the live
+ * folder itself.
  */
 const kindAt = async (
   dir: string,
-  git: Git
+  deadline: number
 ): Promise<{ folder: string; kind: WorkspaceKind }> => {
   const real = await realFolder(dir);
   const info = await stat(real).catch(() => undefined);
   if (!info?.isDirectory()) {
     throw new Error(`${dir} is not a folder, so it cannot have a workspace`);
   }
-  const top = await git(real, "rev-parse", "--show-toplevel").catch(
-    () => undefined
-  );
+  const top = await repoTop(real, deadline);
   return top ? { kind: "repo", folder: top } : { kind: "folder", folder: real };
 };
 

@@ -27,7 +27,7 @@
  */
 import { lstat, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import {
   credentialIn,
   LARGE_FILE_BYTES,
@@ -47,6 +47,7 @@ import { refuseShortOfWorkspace } from "@cawco/core/workspace-needs";
 import type { Subprocess } from "bun";
 import { configEnv } from "./git-credential";
 import { LFS_FILTERS } from "./move";
+import { repoTop } from "./repo-top";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
 const AUTHOR = [
@@ -55,47 +56,6 @@ const AUTHOR = [
   "-c",
   "user.email=noreply@cawco.invalid",
 ];
-
-/**
- * git's exit for a folder in no repository: `die()` (usage.c) exits 128, and
- * `rev-parse --is-inside-work-tree` dies so when discovery finds none
- * (setup.c). Every other fatal setup error exits the same, so a 128 is read
- * with the folders above the place ({@link gitAbove}).
- */
-const NOT_A_REPO_EXIT = 128;
-
-/** git that failed: its argv, its exit status, and its stderr as it said it. */
-class GitFailed extends Error {
-  readonly code: number;
-  constructor(args: readonly string[], code: number, stderr: string) {
-    super(`git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`);
-    this.name = "GitFailed";
-    this.code = code;
-  }
-}
-
-/**
- * The nearest `.git` at `root` or above it on its filesystem, when one is
- * there: git's 128 there is a repository it would not read (a damaged one,
- * someone else's), never a folder in none. Discovery stops where git's does,
- * at a filesystem boundary (`GIT_DISCOVERY_ACROSS_FILESYSTEM` unset): a
- * `.git` past it is one git rightly does not look for.
- */
-const gitAbove = async (root: string): Promise<string | undefined> => {
-  const device = (await stat(root)).dev;
-  for (let at = root; ; at = dirname(at)) {
-    if ((await stat(at).catch(() => undefined))?.dev !== device) {
-      return;
-    }
-    const dotGit = join(at, ".git");
-    if (await lstat(dotGit).then(Boolean, () => false)) {
-      return dotGit;
-    }
-    if (dirname(at) === at) {
-      return;
-    }
-  }
-};
 
 /** How much of a file the credential scan reads for a NUL, to tell text from binary. */
 const BINARY_PROBE = 8000;
@@ -198,7 +158,9 @@ const failed = (
     throw new Error(`git ${args[0]} was ended by ${child.signalCode}`);
   }
   if (code !== 0) {
-    throw new GitFailed(args, code, stderr);
+    throw new Error(
+      `git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`
+    );
   }
 };
 
@@ -833,42 +795,6 @@ export const notAProject = (path: string): string | undefined => {
 };
 
 /**
- * The top of the git checkout `path` is in, or undefined when it is in
- * none. Throws when git can't tell, or when `path` is inside a
- * repository's own directory rather than a checkout of it.
- */
-const repoTop = async (path: string, git: Git): Promise<string | undefined> => {
-  const couldNotTell = (error: Error): Error =>
-    new Error(
-      `CawCo couldn't tell whether ${path} is in a git repository: ${error.message}`,
-      { cause: error }
-    );
-  const inside = await git(path, "rev-parse", "--is-inside-work-tree").then(
-    (out) => out.trim(),
-    (error: Error) => {
-      if (error instanceof GitFailed && error.code === NOT_A_REPO_EXIT) {
-        return;
-      }
-      throw couldNotTell(error);
-    }
-  );
-  if (inside === undefined) {
-    return undefined;
-  }
-  if (inside !== "true") {
-    throw new Error(
-      `${path} is inside a git repository's own directory, not a checkout of it, so CawCo leaves the folder as it is.`
-    );
-  }
-  return await git(path, "rev-parse", "--show-toplevel").then(
-    (out) => out.trim(),
-    (error: Error) => {
-      throw couldNotTell(error);
-    }
-  );
-};
-
-/**
  * {@link CONTROL_REPO_ROOT}: the top of the git checkout the folder at
  * `path` is in, or null when it is in none. Reads only; a folder that is
  * not there is refused. Asked only before a workspace is cut (hub
@@ -882,10 +808,7 @@ export const repoRoot = async (path: unknown): Promise<string | null> => {
   if (!info?.isDirectory()) {
     throw new Error(`${folder} is not a folder on this machine.`);
   }
-  return (
-    (await repoTop(folder, gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS))) ??
-    null
-  );
+  return (await repoTop(folder, Date.now() + WORKSPACE_GIT_TIMEOUT_MS)) ?? null;
 };
 
 const placeRepoNow = async (root: string): Promise<PlaceRepo> => {
@@ -895,8 +818,10 @@ const placeRepoNow = async (root: string): Promise<PlaceRepo> => {
       `${root} is not a folder on this machine, so CawCo can't make it a git repository.`
     );
   }
-  const git = gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
-  const top = await repoTop(root, git);
+  const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
+  // A `.git` git cannot read is someone's, and a failed run would take it
+  // back with its own: the reading refuses it, and the place is left alone.
+  const top = await repoTop(root, deadline);
   if (top !== undefined) {
     return { state: "checkout", root: top };
   }
@@ -904,14 +829,7 @@ const placeRepoNow = async (root: string): Promise<PlaceRepo> => {
   if (refused) {
     throw new Error(refused);
   }
-  // One git cannot read is someone's, and a failed run would take it back
-  // with its own: it is left alone, and so is the place.
-  const unread = await gitAbove(root);
-  if (unread) {
-    throw new Error(
-      `${root} is under ${unread}, which git does not read as a repository, so CawCo leaves the folder as it is. Repair or remove that .git, and start the work again.`
-    );
-  }
+  const git = gitIn(deadline);
   const plan = await planOf(root, git).catch((error: Error) => {
     throw new Error(
       `CawCo couldn't read ${root} to make it a git repository: ${error.message}`,
