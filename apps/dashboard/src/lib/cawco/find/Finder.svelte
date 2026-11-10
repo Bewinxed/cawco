@@ -37,7 +37,6 @@
     IconServerAlt as Server,
   } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import { cawco, loadCatalog } from "../client.svelte";
   import Choice from "../config/Choice.svelte";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
@@ -369,30 +368,21 @@
   }
 
   /**
-   * Each online machine whose last listing of its stored transcripts left a
-   * harness out (not in time, or its listing threw), in the machine's
-   * words: said at the head of the sessions found by name, where its stored
-   * transcripts stand, with Try again, which lists that machine again
-   * (client `loadCatalog`); never a toast (DESIGN.md, The Work Outlives Its
-   * Surface Rule).
+   * Each online machine whose last listing of its stored transcripts, the
+   * one the hub's find answers them from, left a harness out (not in time,
+   * or its listing threw), in the machine's words: said at the head of the
+   * sessions found by name, where its stored transcripts stand, with Try
+   * again, which has the hub list that machine again and answers the names
+   * from it ({@link FinderState.relist}); never a toast (DESIGN.md, The
+   * Work Outlives Its Surface Rule).
    */
   const leftOut = $derived(
-    cawco.machines.flatMap((machine): Item[] => {
-      const said =
-        machine.status === "online"
-          ? cawco.catalogLeftOutOf(machine.machineId)
-          : [];
-      return said.length > 0
-        ? [
-            {
-              t: "leftout",
-              key: `leftout:${machine.machineId}`,
-              machineId: machine.machineId,
-              words: said.join(" "),
-            },
-          ]
-        : [];
-    })
+    finder.leftOut.map((each): Item => ({
+      t: "leftout",
+      key: `leftout:${each.machineId}`,
+      machineId: each.machineId,
+      words: each.words.join(" "),
+    }))
   );
 
   function typed(): Section[] {
@@ -438,7 +428,9 @@
   /** The list, in drawn order: a hairline between sections that hold something. */
   const items = $derived.by((): Item[] => {
     if (finder.typed && finder.nothing) {
-      return [{ t: "nothing", key: "nothing" }];
+      // A listing that left a harness out may be why nothing was found: its
+      // line stays, with Try again.
+      return [...leftOut, { t: "nothing", key: "nothing" }];
     }
     const sections = (finder.typed ? typed() : doorway()).filter(
       (s) => s.lead.length + s.units.length > 0
@@ -791,7 +783,7 @@
   {:else if item.t === "leftout"}
     <div data-flip>
       <RowFault
-        again={() => loadCatalog(item.machineId)}
+        again={() => finder.relist(item.machineId)}
         data-catalog-left-out={item.machineId}
         end="var(--space-3)"
         indent="var(--space-3)"

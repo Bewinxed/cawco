@@ -22,10 +22,18 @@
  * (r4) one behind a session pressed Done stays hidden;
  * (r5) a stored row is Your turn, not unread, and offers no Done.
  *
- * Jump on the bench (its find answered by the same hub find):
+ * Jump on the bench (its find answered by the same hub find), the hub's
+ * first listing of obelisk leaving OpenCode out (it didn't answer in time),
+ * OpenCode answering from then on:
+ * (j0) the hub's answer says obelisk's listing left OpenCode out, and finds
+ *      none of OpenCode's transcripts; within the minute its listing stands
+ *      for, asking again changes neither;
  * (f1) a stored result stands among the sessions found by name;
- * (f2) a machine whose last listing left a harness out says so there, in
- *      the machine's words, with Try again.
+ * (f2) the left-out line stands there, in the machine's words, with Try
+ *      again;
+ * (f3) Try again has the hub list obelisk again: with no wait for the
+ *      minute, Jump finds the OpenCode transcript the first listing missed,
+ *      and the line is gone.
  *
  * One screenshot at 1440 shows a stored row in Recent and a stored result
  * in Jump: `<out>/stored-transcripts-1440.png`.
@@ -44,6 +52,8 @@ import {
 } from "../../../apps/dashboard/src/routes/(app)/motion/recent/stored-listing";
 import type { FindAnswer } from "../../../packages/core/src/find";
 import type { NeutralSessionInfo } from "../../../packages/core/src/harness";
+import { machineLabel } from "../../../packages/core/src/machine-names";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { catalogWords } from "../../../packages/core/src/words/catalog";
 import { configureWords } from "../../../packages/core/src/words/configure";
 import { sidebarWords } from "../../../packages/core/src/words/sidebar";
@@ -62,7 +72,9 @@ const RECENT = '[data-slot="recent"]';
 /** The hub's find, over a scratch database holding the bench's two machines and its two sessions with a stored transcript. */
 async function hubFind(
   scratch: string,
-  listing: Record<string, NeutralSessionInfo[]>
+  listing: Record<string, NeutralSessionInfo[]>,
+  /** Whether obelisk's OpenCode answers its listing: false, it is left out (not in time). */
+  answering: { opencode: boolean }
 ) {
   const dbPath = join(scratch, "hub", "hub.db");
   const { hubInProcess } =
@@ -108,11 +120,19 @@ async function hubFind(
     artifactNeeds: () => ({ needs: [], notices: [] }) as never,
     stageKinds: async () => new Map(),
     tasksWaiting: async () => ({ missing: [], tasks: [] }),
-    listStored: async (machineId) => ({
-      sessions: listing[machineId] ?? [],
-      unanswered: [],
-      failed: [],
-    }),
+    listStored: (machineId) => {
+      const sessions = listing[machineId] ?? [];
+      const out = machineId === OBELISK && !answering.opencode;
+      return Promise.resolve({
+        sessions: out
+          ? sessions.filter((info) => info.harness !== "opencode")
+          : sessions,
+        unanswered: out
+          ? [{ harness: "opencode" as const, after: 10_000 }]
+          : [],
+        failed: [],
+      });
+    },
     askMachine: async () => ({
       catchingUp: false,
       conversations: [],
@@ -121,10 +141,21 @@ async function hubFind(
       syncMs: 0,
     }),
   });
-  const ask = (q: string, transcripts = false): Promise<FindAnswer> =>
-    answerFind(find, { q, transcripts: transcripts ? "1" : "0" }, false, {
-      caller: "stored-transcripts",
-    });
+  const ask = (
+    q: string,
+    transcripts = false,
+    relist?: string
+  ): Promise<FindAnswer> =>
+    answerFind(
+      find,
+      {
+        q,
+        transcripts: transcripts ? "1" : "0",
+        ...(relist ? { relist } : {}),
+      },
+      false,
+      { caller: "stored-transcripts" }
+    );
   // The first find reads each machine's listing in the background, as the
   // hub's does; the names hold its transcripts once it has answered.
   for (let tries = 0; tries < 50; tries += 1) {
@@ -221,11 +252,47 @@ function readRecent(list: string) {
   return out;
 }
 
+/** What obelisk's left-out line says: its OpenCode didn't list within 10 s. */
+const LEFT_OUT = catalogWords.harnessDidntAnswer(
+  accountsWords.harnesses.opencode,
+  machineLabel(OBELISK),
+  10
+);
+
+/** (j0): the hub's answer, while obelisk's listing left OpenCode out. */
+async function leftOutHeld(
+  kit: Kit,
+  ask: (q: string) => Promise<FindAnswer>,
+  answering: { opencode: boolean }
+) {
+  const { check } = kit;
+  const first = await ask("Carousel captions");
+  check(
+    "j0: the hub's answer says obelisk's listing left OpenCode out, and finds none of OpenCode's transcripts",
+    first.leftOut.some(
+      (one) => one.machineId === OBELISK && one.words.includes(LEFT_OUT)
+    ) && !storedIn(first).includes(STORED.inSocials),
+    JSON.stringify({ leftOut: first.leftOut, found: storedIn(first) })
+  );
+  // OpenCode answers from now on; the listing stands for its minute.
+  answering.opencode = true;
+  const again = await ask("Carousel captions");
+  check(
+    "j0: within the minute that listing stands for, asking again changes neither",
+    again.leftOut.length === 1 && !storedIn(again).includes(STORED.inSocials),
+    JSON.stringify({ leftOut: again.leftOut, found: storedIn(again) })
+  );
+}
+
 async function recent(
   kit: Kit,
   bench: string,
   listing: Record<string, NeutralSessionInfo[]>,
-  ask: (q: string, transcripts?: boolean) => Promise<FindAnswer>
+  ask: (
+    q: string,
+    transcripts?: boolean,
+    relist?: string
+  ) => Promise<FindAnswer>
 ) {
   const { check } = kit;
   const page = await kit.page("desk");
@@ -241,7 +308,8 @@ async function recent(
     const url = new URL(route.request().url());
     const answer = await ask(
       url.searchParams.get("q") ?? "",
-      url.searchParams.get("transcripts") !== "0"
+      url.searchParams.get("transcripts") !== "0",
+      url.searchParams.get("relist") ?? undefined
     );
     await route.fulfill({ json: answer });
   });
@@ -308,30 +376,6 @@ async function recent(
     JSON.stringify(stood)
   );
 
-  // A machine whose last listing left a harness out: online, its OpenCode
-  // not listed in time.
-  const words = catalogWords.harnessDidntAnswer("OpenCode", OBELISK, 10);
-  await page.evaluate(
-    ({ machine, sessions, said }) => {
-      const debug = (
-        globalThis as unknown as {
-          __cawcoDebug: {
-            standCatalog: (m: string, s: unknown[], l: string[]) => void;
-            state: { machines: { machineId: string; status: string }[] };
-          };
-        }
-      ).__cawcoDebug;
-      debug.state.machines = debug.state.machines.map((one) =>
-        one.machineId === machine ? { ...one, status: "online" } : one
-      );
-      debug.standCatalog(machine, sessions, [said]);
-    },
-    {
-      machine: OBELISK,
-      sessions: listing[OBELISK],
-      said: words,
-    }
-  );
   await page.keyboard.press("ControlOrMeta+k");
   const field = page.locator('[data-slot="finder-field"] input').first();
   await field.waitFor();
@@ -350,12 +394,37 @@ async function recent(
   const faultText = (await fault.count()) > 0 ? await fault.innerText() : "";
   check(
     "f2: the machine whose listing left OpenCode out says so beside the results, in its words, with Try again",
-    faultText.includes(words) && faultText.includes(configureWords.tryAgain),
+    faultText.includes(LEFT_OUT) && faultText.includes(configureWords.tryAgain),
     faultText
   );
   const shot = join(kit.out, "stored-transcripts-1440.png");
   await page.screenshot({ path: shot });
   kit.note(`the screenshot at 1440: ${shot}`);
+
+  // (f3) What the first listing missed, after Try again, with no wait.
+  const socials = listing[OBELISK].find(
+    (info) => info.sessionId === STORED.inSocials
+  )?.customTitle;
+  await field.fill(socials ?? "");
+  await settle(page);
+  const missed = page
+    .locator("[data-find-row]")
+    .filter({ hasText: socials ?? "" });
+  const before = await missed.count();
+  const pressed = Date.now();
+  kit.note(
+    `f3: before Try again, ${await fault.count()} left-out line(s) and ${before} row(s) for the OpenCode transcript`
+  );
+  await fault.locator("[data-again]").click();
+  await missed.first().waitFor({ timeout: 10_000 });
+  await fault.waitFor({ state: "detached", timeout: 10_000 });
+  check(
+    `f3: Try again has the hub list obelisk again: in ${Date.now() - pressed} ms, with no wait for the minute, Jump finds the OpenCode transcript the first listing missed (${before} before), and the line is gone`,
+    before === 0 &&
+      (await missed.count()) > 0 &&
+      (await fault.count()) === 0 &&
+      Date.now() - pressed < 60_000
+  );
   await page.context().close();
 }
 
@@ -370,10 +439,15 @@ export default {
     );
     try {
       const listing = storedListing(Date.now(), CHECKOUT, DONE);
-      const ask = await hubFind(scratch, listing);
-      await search(kit, ask);
+      // The bench first: it takes longer to stand than the minute a
+      // machine's listing stands for, and the Jump leg reads the hub's
+      // first listing of obelisk, OpenCode left out.
       const bench = await kit.bench();
+      const answering = { opencode: false };
+      const ask = await hubFind(scratch, listing, answering);
+      await leftOutHeld(kit, ask, answering);
       await recent(kit, bench, listing, ask);
+      await search(kit, ask);
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }

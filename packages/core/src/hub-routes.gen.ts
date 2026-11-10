@@ -472,6 +472,7 @@ export interface components {
         kinds?: string;
         limit?: string;
         q?: string;
+        relist?: string;
         transcripts?: "0" | "1";
       };
     };

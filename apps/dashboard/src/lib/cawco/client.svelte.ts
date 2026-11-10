@@ -166,7 +166,6 @@ import type { StagesTemplate } from "@cawco/core/views";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { askWords } from "@cawco/core/words/asks";
-import { catalogWords } from "@cawco/core/words/catalog";
 import { machineWords } from "@cawco/core/words/machine";
 import { offerWords } from "@cawco/core/words/offers";
 import { projectWords } from "@cawco/core/words/project";
@@ -769,8 +768,6 @@ export interface SessionState {
  * paid for, with nothing ever mutating a row in place.
  */
 let catalog = $state.raw<Record<string, NeutralSessionInfo[]>>({});
-/** Per machine, a sentence for each harness its last listing left out: not in time ({@link harnessDidntAnswer}) or failed ({@link harnessCouldntList}). */
-let catalogLeftOut = $state.raw<Record<string, string[]>>({});
 /** The machines whose stored sessions have been asked for and answered, or failed. */
 const catalogsTried = $state<Record<string, true>>({});
 
@@ -1333,17 +1330,11 @@ if (import.meta.env.DEV) {
 }
 
 /**
- * Stands a machine's stored sessions in as its listing answered them, the
- * sentences for any harness it left out with them (dev only: a bench's, on
- * its hub; {@link loadCatalog} is the real read).
+ * Stands a machine's stored sessions in as its listing answered them (dev
+ * only: a bench's, on its hub; {@link loadCatalog} is the real read).
  */
-function standCatalog(
-  machineId: string,
-  sessions: NeutralSessionInfo[],
-  leftOut: string[] = []
-): void {
+function standCatalog(machineId: string, sessions: NeutralSessionInfo[]): void {
   catalog = { ...catalog, [machineId]: sessions };
-  catalogLeftOut = { ...catalogLeftOut, [machineId]: leftOut };
   catalogsTried[machineId] = true;
 }
 
@@ -7903,37 +7894,6 @@ export function answeredOr<T>(
   }
 }
 
-/**
- * What the person reads when one harness on `machineId` didn't list its
- * stored sessions in time, in {@link didntAnswer}'s voice: its sessions are
- * the ones it listed last.
- */
-function harnessDidntAnswer(
-  machineId: string,
-  { harness, after }: HarnessUnanswered
-): string {
-  return catalogWords.harnessDidntAnswer(
-    accountsWords.harnesses[harness] ?? harness,
-    machineName(machineId),
-    secondsOf(after)
-  );
-}
-
-/**
- * What the person reads when one harness on `machineId` couldn't list its
- * stored sessions (its listing threw), in {@link harnessDidntAnswer}'s voice.
- */
-function harnessCouldntList(
-  machineId: string,
-  { harness, error }: HarnessFailed
-): string {
-  return catalogWords.harnessCouldntList(
-    accountsWords.harnesses[harness] ?? harness,
-    machineName(machineId),
-    error
-  );
-}
-
 /** A `listSessions` answer's harnesses it left out: not answered in time, or their listing threw. */
 interface LeftOut {
   failed: HarnessFailed[];
@@ -7942,11 +7902,10 @@ interface LeftOut {
 
 /**
  * The machine's stored sessions, newest first. A harness that did not list
- * in time, or whose listing threw, keeps the sessions it listed last; it is
- * kept on {@link catalogLeftOut} in {@link harnessDidntAnswer}'s and
- * {@link harnessCouldntList}'s words, for wherever the stored sessions
- * are listed to say, with Try again, until a load leaves none out; never a
- * toast (DESIGN.md, The Work Outlives Its Surface Rule).
+ * in time, or whose listing threw, keeps the sessions it listed last. What
+ * a listing left out is said to the person where the hub's find answers
+ * stored sessions, from the hub's own listing (Jump's left-out line, hub
+ * find.ts `leftOut`); here it is only logged.
  */
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
@@ -7983,15 +7942,17 @@ export async function loadCatalog(machineId: string): Promise<void> {
         const kept = (catalog[machineId] ?? []).filter((info) =>
           silent.has(info.harness)
         );
-        const said = [
-          ...unanswered.map((one) => harnessDidntAnswer(machineId, one)),
-          ...failed.map((one) => harnessCouldntList(machineId, one)),
-        ];
-        for (const sentence of said) {
-          console.warn(`[cawco] ${sentence}`);
+        for (const { harness, after } of unanswered) {
+          console.warn(
+            `[cawco] listSessions on ${machineId}: ${harness} didn't answer within ${secondsOf(after)} s; its sessions as listed last stand`
+          );
+        }
+        for (const { harness, error } of failed) {
+          console.warn(
+            `[cawco] listSessions on ${machineId}: ${harness} couldn't list (${error}); its sessions as listed last stand`
+          );
         }
         catalog = { ...catalog, [machineId]: [...sessions, ...kept] };
-        catalogLeftOut = { ...catalogLeftOut, [machineId]: said };
         break;
       }
       default:
@@ -9678,9 +9639,6 @@ export const cawco = {
   /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),
-  /** The harnesses on `machineId` its last listing left out (not in time, or failed), each as a sentence, for wherever the stored sessions are listed to say. */
-  catalogLeftOutOf: (machineId: string): string[] =>
-    catalogLeftOut[machineId] ?? [],
   /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
   hasStored: (machineId: string): boolean =>
     (catalog[machineId] ?? []).some(listedInHistory),

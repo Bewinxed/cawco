@@ -2,10 +2,10 @@
  * What the person reads when a machine's listing of its stored sessions left
  * a harness out, for the dashboard and the native app alike.
  *
- * The dashboard imports this module; `bun run words` writes it into the app
- * as `Words.Catalog` (CawCoCore/Words.generated.swift), and `words:check`
- * fails the typecheck chain when that file is stale. So a word is changed
- * here or nowhere.
+ * The hub's find says it in its answer (find.ts `leftOut`), which Jump
+ * draws; `bun run words` writes it into the app as `Words.Catalog`
+ * (CawCoCore/Words.generated.swift), and `words:check` fails the typecheck
+ * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const catalogWords = {
   /** One harness on `machine` didn't list in time: its sessions are the ones it listed last. */

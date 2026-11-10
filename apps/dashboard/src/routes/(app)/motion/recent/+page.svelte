@@ -35,11 +35,7 @@
     areas: { areas: { id: string; name: string; position: number }[] };
     frame: (frame: PulseFrame | PermissionRequestFrame | object) => void;
     leaveHub: () => void;
-    standCatalog: (
-      machineId: string,
-      sessions: NeutralSessionInfo[],
-      leftOut?: string[]
-    ) => void;
+    standCatalog: (machineId: string, sessions: NeutralSessionInfo[]) => void;
     standHub: (answer: () => void) => void;
     state: { machines: unknown[]; projects: unknown[]; projectsRead: boolean };
   }

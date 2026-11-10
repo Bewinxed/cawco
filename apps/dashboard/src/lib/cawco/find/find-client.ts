@@ -30,6 +30,7 @@ export type {
   FindConversation,
   FindCoverage,
   FindKind,
+  FindLeftOut,
   FindLiveState,
   FindMachine,
   FindMoment,
@@ -95,16 +96,23 @@ export interface Ask {
   by?: FindBy | null;
   kinds?: readonly FindKind[];
   limit?: number;
+  /** A machine whose stored sessions the hub lists again before it answers (Try again on its left-out line). */
+  relist?: string;
   signal?: AbortSignal;
 }
 
-const query = (q: string, { by, kinds, limit }: Ask, transcripts: boolean) =>
+const query = (
+  q: string,
+  { by, kinds, limit, relist }: Ask,
+  transcripts: boolean
+) =>
   hubRequest("GET /api/find", {
     query: {
       q,
       ...(limit ? { limit: String(limit) } : {}),
       ...(kinds && kinds.length > 0 ? { kinds: kinds.join(",") } : {}),
       ...(by ? { by } : {}),
+      ...(relist ? { relist } : {}),
       ...(transcripts ? {} : { transcripts: "0" as const }),
     },
   });

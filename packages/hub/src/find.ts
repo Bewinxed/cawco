@@ -31,6 +31,7 @@ import {
   type FindConversation,
   type FindCoverage,
   type FindKind,
+  type FindLeftOut,
   type FindLiveState,
   type FindMachineCoverage,
   type FindMoment,
@@ -58,8 +59,10 @@ import {
   parse,
   type Query,
 } from "@cawco/core/find-match";
-import { DAY_MS } from "@cawco/core/time";
+import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { accountsWords } from "@cawco/core/words/accounts";
+import { catalogWords } from "@cawco/core/words/catalog";
 import { status, t } from "elysia";
 import type { DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
@@ -177,6 +180,12 @@ export interface FindRequest {
   kinds?: FindKind[];
   limit?: number;
   q: string;
+  /**
+   * The machine whose stored sessions are listed again before the find
+   * answers, however fresh its listing: Try again on its left-out line
+   * (FindAnswer `leftOut`).
+   */
+  relist?: string;
   /**
    * Aborts once the asker no longer waits (the person typed on, closed
    * Find): the machines are told to stop the search (core `CONTROL_ABANDON`).
@@ -563,60 +572,100 @@ export const createFind = (deps: FindDeps) => {
       unanswered: HarnessUnanswered[];
     }
   >();
-  const storedReading = new Set<string>();
+  /** Each machine's listing under way, to wait on rather than ask twice. */
+  const storedReading = new Map<string, Promise<void>>();
   /**
-   * A machine's catalog as last read; read again in the background once
-   * stale. A harness that did not list in time, or whose listing threw,
-   * keeps the sessions it listed last, and is said by name ("claude on
-   * obelisk didn't answer within 10 s", "… couldn't list its sessions: …"):
-   * never read as having none.
+   * Lists `machine`'s stored sessions again. A harness that did not list in
+   * time, or whose listing threw, keeps the sessions it listed last, and is
+   * said by name ("claude on obelisk didn't answer within 10 s", "…
+   * couldn't list its sessions: …"): never read as having none. A listing
+   * under way is the one waited on.
+   */
+  const relist = (machine: AgentRow): Promise<void> => {
+    const { machineId } = machine;
+    const under = storedReading.get(machineId);
+    if (under !== undefined) {
+      return under;
+    }
+    const reading = deps
+      .listStored(machineId)
+      .then((answer) => {
+        if ("error" in answer) {
+          throw new Error(answer.error);
+        }
+        const known = storedCatalogs.get(machineId);
+        const silent = new Set(
+          [...answer.unanswered, ...answer.failed].map((one) => one.harness)
+        );
+        const kept = (known?.sessions ?? []).filter((info) =>
+          silent.has(info.harness)
+        );
+        const keptOf = (harness: string) =>
+          kept.filter((info) => info.harness === harness).length;
+        const name = machineLabel(machine.hostname);
+        for (const { harness, after } of answer.unanswered) {
+          console.info(
+            `[find] ${harness} on ${name} didn't answer within ${after / 1000} s; its stored sessions are kept as last read (${keptOf(harness)})`
+          );
+        }
+        for (const { harness, error } of answer.failed) {
+          console.info(
+            `[find] ${harness} on ${name} couldn't list its sessions: ${error}; its stored sessions are kept as last read (${keptOf(harness)})`
+          );
+        }
+        storedCatalogs.set(machineId, {
+          at: Date.now(),
+          failed: answer.failed,
+          sessions: [...answer.sessions, ...kept],
+          unanswered: answer.unanswered,
+        });
+        stale = true;
+      })
+      .finally(() => storedReading.delete(machineId));
+    storedReading.set(machineId, reading);
+    return reading;
+  };
+  /**
+   * A machine's catalog as last read ({@link relist}); read again in the
+   * background once stale.
    */
   const catalogOf = (machine: AgentRow, now: number) => {
-    const { machineId } = machine;
-    const known = storedCatalogs.get(machineId);
+    const known = storedCatalogs.get(machine.machineId);
     const due = !known || now - known.at > STORED_FRESH_MS;
-    if (due && deps.online(machineId) && !storedReading.has(machineId)) {
-      storedReading.add(machineId);
-      detach(
-        deps
-          .listStored(machineId)
-          .then((answer) => {
-            if ("error" in answer) {
-              throw new Error(answer.error);
-            }
-            const silent = new Set(
-              [...answer.unanswered, ...answer.failed].map((one) => one.harness)
-            );
-            const kept = (known?.sessions ?? []).filter((info) =>
-              silent.has(info.harness)
-            );
-            const keptOf = (harness: string) =>
-              kept.filter((info) => info.harness === harness).length;
-            const name = machineLabel(machine.hostname);
-            for (const { harness, after } of answer.unanswered) {
-              console.info(
-                `[find] ${harness} on ${name} didn't answer within ${after / 1000} s; its stored sessions are kept as last read (${keptOf(harness)})`
-              );
-            }
-            for (const { harness, error } of answer.failed) {
-              console.info(
-                `[find] ${harness} on ${name} couldn't list its sessions: ${error}; its stored sessions are kept as last read (${keptOf(harness)})`
-              );
-            }
-            storedCatalogs.set(machineId, {
-              at: Date.now(),
-              failed: answer.failed,
-              sessions: [...answer.sessions, ...kept],
-              unanswered: answer.unanswered,
-            });
-            stale = true;
-          })
-          .finally(() => storedReading.delete(machineId)),
-        `find: ${machineId}'s stored sessions`
-      );
+    if (due && deps.online(machine.machineId)) {
+      detach(relist(machine), `find: ${machine.machineId}'s stored sessions`);
     }
     return known?.sessions ?? [];
   };
+  /**
+   * Each online machine whose last listing left a harness out, a sentence
+   * for each in the words the person reads (core words/catalog.ts).
+   */
+  const leftOutNow = (machines: Map<string, AgentRow>): FindLeftOut[] =>
+    [...machines.values()].flatMap((machine) => {
+      const known = storedCatalogs.get(machine.machineId);
+      if (!(known && deps.online(machine.machineId))) {
+        return [];
+      }
+      const name = machineLabel(machine.hostname);
+      const words = [
+        ...known.unanswered.map(({ harness, after }) =>
+          catalogWords.harnessDidntAnswer(
+            accountsWords.harnesses[harness] ?? harness,
+            name,
+            secondsOf(after)
+          )
+        ),
+        ...known.failed.map(({ harness, error }) =>
+          catalogWords.harnessCouldntList(
+            accountsWords.harnesses[harness] ?? harness,
+            name,
+            error
+          )
+        ),
+      ];
+      return words.length > 0 ? [{ machineId: machine.machineId, words }] : [];
+    });
   /** Each ended work item's commits and files, parsed once: its report never changes. */
   const itemChanges = new Map<string, ItemChanges>();
   let changesAfter = 0;
@@ -1320,6 +1369,18 @@ export const createFind = (deps: FindDeps) => {
 
     /** One page of a find. */
     async find(request: FindRequest): Promise<FindPage> {
+      const { relist: again } = request;
+      const machine = again
+        ? db.listAgents().find((agent) => agent.machineId === again)
+        : undefined;
+      if (machine && deps.online(machine.machineId)) {
+        // Its listing as it stands now, whatever the last one left out.
+        await relist(machine).catch((error: unknown) =>
+          console.warn(
+            `[find] listing ${machine.machineId}'s stored sessions again failed: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+      }
       const started = performance.now();
       const query = parse(request.q);
       const limit = Math.min(
@@ -1351,6 +1412,7 @@ export const createFind = (deps: FindDeps) => {
         next: end < fresh.ranked.length ? cursorAt(end) : null,
         total: fresh.ranked.length,
         coverage: fresh.coverage,
+        leftOut: leftOutNow(namesNow(Date.now()).machines),
         timing: { namesMs: fresh.namesMs, transcriptsMs: fresh.transcriptsMs },
       };
     },
@@ -1568,6 +1630,8 @@ export const FIND_QUERY = t.Object({
     t.Union([t.Literal("me"), t.Literal("agent"), t.Literal("report")])
   ),
   transcripts: t.Optional(t.Union([t.Literal("0"), t.Literal("1")])),
+  /** A machine to list the stored sessions of again first: Try again on its left-out line. */
+  relist: t.Optional(t.String()),
 });
 
 /** `GET /api/find/places`' query: one conversation, by its instance id, and the words. */
@@ -1605,6 +1669,7 @@ export const answerFind = async (
     kinds?: string;
     limit?: string;
     q?: string;
+    relist?: string;
     transcripts?: "0" | "1";
   },
   /** Each moment carries the words around it, for the secret filter (find-secrets.ts). */
@@ -1619,6 +1684,7 @@ export const answerFind = async (
       ...(context ? { context: true as const } : {}),
       ...(query.limit ? { limit: Number(query.limit) || DEFAULT_LIMIT } : {}),
       ...(query.cursor ? { cursor: query.cursor } : {}),
+      ...(query.relist ? { relist: query.relist } : {}),
       ...(query.by ? { author: AUTHOR_OF[query.by] } : {}),
       kinds: kindsOf(query.kinds),
       transcripts: query.transcripts !== "0",

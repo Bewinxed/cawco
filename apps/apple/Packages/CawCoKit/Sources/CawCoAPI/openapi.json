@@ -24367,6 +24367,14 @@
                 "1"
               ]
             }
+          },
+          {
+            "name": "relist",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "operationId": "getApiFind",
@@ -55590,6 +55598,13 @@
           "coverage": {
             "$ref": "#/components/schemas/FindCoverage"
           },
+          "leftOut": {
+            "description": "Each online machine whose last listing of its stored sessions left a harness out.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindLeftOut"
+            }
+          },
           "next": {
             "description": "The cursor for the next page; null on the last.",
             "type": [
@@ -55629,6 +55644,7 @@
         },
         "required": [
           "coverage",
+          "leftOut",
           "next",
           "query",
           "results",
@@ -55710,6 +55726,26 @@
           "name",
           "reason",
           "tookMs"
+        ]
+      },
+      "FindLeftOut": {
+        "description": "A machine whose last listing of its stored sessions, the one find answers\nstored conversations from, left a harness out (not in time, or its\nlisting threw): that harness's sessions are the ones it listed before.",
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string"
+          },
+          "words": {
+            "description": "A sentence for each harness left out (core words/catalog.ts).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "machineId",
+          "words"
         ]
       },
       "FindResult": {

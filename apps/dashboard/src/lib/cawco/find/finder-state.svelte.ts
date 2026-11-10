@@ -24,6 +24,7 @@ import {
   type FindBy,
   type FindConversation,
   type FindCoverage,
+  type FindLeftOut,
   type FindMoment,
   type FindResult,
   findEverywhere,
@@ -367,6 +368,15 @@ export class FinderState {
     this.everywhere.state === "ok" ? this.everywhere.value.query : this.asked
   );
 
+  /**
+   * Each online machine whose last listing of its stored sessions, the one
+   * the hub's find answers them from, left a harness out: from the names
+   * answer, as it reads the stored sessions it found.
+   */
+  leftOut = $derived<FindLeftOut[]>(
+    this.names.state === "ok" ? this.names.value.leftOut : []
+  );
+
   coverage = $derived<FindCoverage | null>(
     this.everywhereShown?.coverage ?? null
   );
@@ -548,7 +558,16 @@ export class FinderState {
     }
   }
 
-  async #askNames(words: string) {
+  /**
+   * Try again on a machine's left-out line: the hub lists its stored
+   * sessions again before it answers the names, so what the listing missed
+   * is found, and the line goes once nothing is left out.
+   */
+  relist(machineId: string): Promise<void> {
+    return this.#askNames(this.asked, machineId);
+  }
+
+  async #askNames(words: string, relist?: string) {
     this.#namesAbort?.abort();
     const abort = new AbortController();
     this.#namesAbort = abort;
@@ -567,7 +586,11 @@ export class FinderState {
     } else {
       this.names = { state: "asking", for: key, since: Date.now() };
     }
-    const asked = await findNames(words, { limit: 20, signal: abort.signal });
+    const asked = await findNames(words, {
+      limit: 20,
+      signal: abort.signal,
+      ...(relist ? { relist } : {}),
+    });
     if (asked.kind === "superseded" || n !== this.#namesAsk) {
       return;
     }

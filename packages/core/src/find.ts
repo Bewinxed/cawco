@@ -473,9 +473,22 @@ export interface FindCoverage {
   machines: FindMachineCoverage[];
 }
 
+/**
+ * A machine whose last listing of its stored sessions, the one find answers
+ * stored conversations from, left a harness out (not in time, or its
+ * listing threw): that harness's sessions are the ones it listed before.
+ */
+export interface FindLeftOut {
+  machineId: string;
+  /** A sentence for each harness left out (core words/catalog.ts). */
+  words: string[];
+}
+
 /** `GET /api/find`'s answer. */
 export interface FindAnswer {
   coverage: FindCoverage;
+  /** Each online machine whose last listing of its stored sessions left a harness out. */
+  leftOut: FindLeftOut[];
   /** The cursor for the next page; null on the last. */
   next: string | null;
   /** The words as the hub read them, after any kind words. */
