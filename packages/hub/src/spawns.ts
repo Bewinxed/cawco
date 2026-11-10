@@ -5,7 +5,6 @@ import type { PlacementStrategy } from "@cawco/core/accounts/kinds";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import { HARNESSES, harnessNamed } from "@cawco/core/harness/kinds";
 import { traitsOf } from "@cawco/core/harness/traits";
-import type { MachinePath } from "@cawco/core/machine-path";
 import { MachinePathRefused } from "@cawco/core/machine-path";
 import type {
   Envelope,
@@ -19,7 +18,7 @@ import type {
 import { CONTROL_GET_SESSION_INFO } from "@cawco/core/session/controls";
 import type { SentMessage } from "@cawco/core/session-messages";
 import { secondsOf } from "@cawco/core/time";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { StartsHeld } from "./continuations";
 import { peek } from "./cut-turns";
 import type { DbShape } from "./db/index";
@@ -43,8 +42,6 @@ import { kindBurn, readForecast } from "./rebalance";
 import { UNREAD } from "./sends";
 import { TaskDoc } from "./task-file";
 import { unreachable } from "./unreachable";
-import { WorkItemRefusal } from "./work-item-state";
-import type { ItemPlacement } from "./work-items";
 
 /**
  * What a request to a machine gets when its own deadline passes with the
@@ -827,22 +824,27 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return "refusal" in asked ? { ...asked, status: 503 } : asked;
   };
 
-  /** {@link placeSpawn} for a path that refuses by throwing: its refusal is a 400, a deleted project's a 404. */
-  const placedOrRefused = (
+  /** {@link placeSpawn} as a problem a caller passes up: a deleted project's is a 404, any other a 400. */
+  const placedOrProblem = (
     machineId: string,
     payload: NamedSpawn,
     task?: { projectId?: string | null; taskId?: string | null }
-  ): { accountId?: string } => {
+  ) => {
     const placed = placeSpawn(machineId, payload, task);
     if ("refusal" in placed) {
-      throw new WorkItemRefusal(placed.status ?? 400, placed.refusal);
+      return placed.status === 404
+        ? problem(404, {
+            code: "spawn-project-deleted",
+            detail: placed.refusal,
+          })
+        : problem(400, { code: "spawn-not-placed", detail: placed.refusal });
     }
     return placed;
   };
 
   /**
    * A new workspace's first session placed before the workspace is cut
-   * (work-items `ItemPlacement`): its account by {@link placedOrRefused}, and
+   * (work-items `ItemPlacement`): its account by {@link placedOrProblem}, and
    * the Claude account its launch runs on as `grantLaunch` will name it
    * ({@link launchAccount} on the row it opens with: the machine's own login
    * while that moves into CawCo, else its account). The agent adds that one
@@ -853,8 +855,11 @@ export const createSpawns = (ctx: SpawnsContext) => {
     machineId: string,
     session: Omit<NamedSpawn, "cwd">,
     task: { projectId: string | null; taskId?: string }
-  ): ItemPlacement => {
-    const placed = placedOrRefused(machineId, { ...session, cwd: "" }, task);
+  ) => {
+    const placed = placedOrProblem(machineId, { ...session, cwd: "" }, task);
+    if (placed instanceof ElysiaStatus) {
+      return placed;
+    }
     if (!traitsOf(session.harness).accountDir) {
       return placed;
     }
@@ -969,12 +974,12 @@ export const createSpawns = (ctx: SpawnsContext) => {
     payload: NamedSpawn,
     workItemId: string | undefined,
     placedAhead: { accountId?: string } | undefined
-  ): { accountId?: string } => {
+  ) => {
     if (placedAhead) {
       return placedAhead;
     }
     const item = workItemId ? ctx.db.workItem(workItemId) : undefined;
-    return placedOrRefused(machineId, payload, {
+    return placedOrProblem(machineId, payload, {
       projectId: item?.projectId,
       taskId: item?.taskId,
     });
@@ -1056,24 +1061,29 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return projectAtFolder(machineId, cwd);
   };
 
-  /** Sends a spawn and opens its row, on the account {@link spawnPlacement} gives. */
-  const issueSpawn = (
+  /**
+   * What a hub-issued spawn is cleared to be before its row opens: its
+   * mode and directory settled ({@link settleSpawn}), the project its row
+   * opens in, and the account it opens on ({@link spawnPlacement}); or the
+   * problem that stops it, said before anything is written.
+   */
+  const clearedToStart = (
     machineId: string,
     asked: NamedSpawn,
-    /** Who asked for it: its row's origin. */
-    by: SessionOrigin,
-    workItemId?: string,
-    fallbackMode?: string | null,
-    placedAhead?: { accountId?: string }
-  ): Envelope | undefined => {
-    const agent = ctx.registry.agent(machineId);
+    workItemId: string | undefined,
+    fallbackMode: string | null | undefined,
+    placedAhead: { accountId?: string } | undefined
+  ) => {
     const refused = startRefusal(machineId, Boolean(asked.requestId));
     if (refused) {
       throw new Error(refused);
     }
     const settled = settleSpawn(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
-      throw new WorkItemRefusal(400, settled.refusal);
+      return problem(400, {
+        code: "spawn-not-settled",
+        detail: settled.refusal,
+      });
     }
     const { parentInstanceId } = peekParent(settled.payload);
     // Its machine is handed the project its row opens in, as every revive
@@ -1088,6 +1098,22 @@ export const createSpawns = (ctx: SpawnsContext) => {
       ),
     };
     const placed = spawnPlacement(machineId, payload, workItemId, placedAhead);
+    if (placed instanceof ElysiaStatus) {
+      return placed;
+    }
+    return { payload, permissionMode: settled.permissionMode, placed };
+  };
+
+  /** Opens the row of a start {@link clearedToStart} and sends its spawn. */
+  const sendCleared = (
+    machineId: string,
+    cleared: Extract<ReturnType<typeof clearedToStart>, { payload: unknown }>,
+    /** Who asked for it: its row's origin. */
+    by: SessionOrigin,
+    workItemId: string | undefined
+  ) => {
+    const { payload, permissionMode, placed } = cleared;
+    const agent = ctx.registry.agent(machineId);
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
     ctx.forgetPending(payload.instanceId, UNREAD.restarted, false, "all");
@@ -1101,7 +1127,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
       projectId: payload.projectId,
       title: payload.title,
       kind: peekKind(payload),
-      permissionMode: settled.permissionMode,
+      permissionMode,
       model: payload.model,
       mayStart: payload.mayStart,
       ...peekParent(payload),
@@ -1123,6 +1149,9 @@ export const createSpawns = (ctx: SpawnsContext) => {
       instanceId: payload.instanceId,
       payload,
     } satisfies Envelope<SpawnPayload>);
+    if (sent instanceof ElysiaStatus) {
+      return sent;
+    }
     if (awaitsItsName(payload)) {
       ctx.awaitingFirstTurn.add(payload.instanceId);
     }
@@ -1136,6 +1165,28 @@ export const createSpawns = (ctx: SpawnsContext) => {
     return sent;
   };
 
+  /** Sends a spawn and opens its row, on the account {@link spawnPlacement} gives. */
+  const issueSpawn = (
+    machineId: string,
+    asked: NamedSpawn,
+    /** Who asked for it: its row's origin. */
+    by: SessionOrigin,
+    workItemId?: string,
+    fallbackMode?: string | null,
+    placedAhead?: { accountId?: string }
+  ) => {
+    const cleared = clearedToStart(
+      machineId,
+      asked,
+      workItemId,
+      fallbackMode,
+      placedAhead
+    );
+    return cleared instanceof ElysiaStatus
+      ? cleared
+      : sendCleared(machineId, cleared, by, workItemId);
+  };
+
   /**
    * An in-process spawn, issued. One that carries a `requestId` (start_session's)
    * is held until its machine says the session is in place, and answers with
@@ -1147,34 +1198,52 @@ export const createSpawns = (ctx: SpawnsContext) => {
     asked: NamedSpawn,
     by: SessionOrigin,
     fallbackMode?: string
-  ): Promise<{ code: number; message: string } | undefined> => {
+  ) => {
     const payload = await ctx.piDefaultFor(machineId, asked);
     if ("refusal" in payload) {
-      return { code: 503, message: payload.refusal };
+      return problem(503, {
+        code: "spawn-default-unnamed",
+        detail: payload.refusal,
+      });
+    }
+    // Cleared before it waits on anything: what stops a start is said here.
+    const cleared = clearedToStart(
+      machineId,
+      payload,
+      undefined,
+      fallbackMode,
+      undefined
+    );
+    if (cleared instanceof ElysiaStatus) {
+      return cleared;
     }
     const { requestId } = payload;
+    // Sent in the step that starts the wait: nothing it answers is read before.
+    const sent = sendCleared(machineId, cleared, by, undefined);
+    if (sent instanceof ElysiaStatus) {
+      return sent;
+    }
     if (!requestId) {
-      issueSpawn(machineId, payload, by, undefined, fallbackMode);
       return;
     }
     const reply = await ctx.awaitStart(
       machineId,
       payload.instanceId,
       requestId,
-      () => issueSpawn(machineId, payload, by, undefined, fallbackMode)
+      () => sent
     );
     switch (reply.kind) {
       case "unanswered":
-        return {
-          code: 504,
-          message: `the session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)} s`,
-        };
+        return problem(504, {
+          code: "spawn-start-unanswered",
+          detail: `the session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)} s`,
+        });
       case "answered":
         if (!reply.value.ok) {
-          return {
-            code: 422,
-            message: reply.value.error ?? "the session failed to start",
-          };
+          return problem(422, {
+            code: "spawn-start-failed",
+            detail: reply.value.error ?? "the session failed to start",
+          });
         }
         return;
       default:
@@ -1193,24 +1262,33 @@ export const createSpawns = (ctx: SpawnsContext) => {
     /** Who asked for it: its row's origin. */
     by: SessionOrigin,
     fallbackMode?: string
-  ): Promise<MachinePath> => {
+  ) => {
     const named = namedSpawn(payload);
     if ("refusal" in named) {
-      throw new WorkItemRefusal(400, named.refusal);
+      return problem(400, {
+        code: "spawn-payload-unnamed",
+        detail: named.refusal,
+      });
     }
     const listed = (id: string) => ctx.db.listedInstancesByIds([id])[0];
-    const refusal = enforceRowSessionKey(listed(named.instanceId), named);
-    if (refusal) {
-      throw new WorkItemRefusal(409, refusal);
+    const keyHeld = enforceRowSessionKey(listed(named.instanceId), named);
+    if (keyHeld) {
+      return problem(409, {
+        code: "spawn-session-key-held",
+        detail: keyHeld,
+      });
     }
     if (
       !ctx.registry.agent(machineId) &&
       ctx.startHold(machineId)?.kind !== "away"
     ) {
-      throw new WorkItemRefusal(404, ctx.machineFault(machineId, "offline"));
+      return problem(404, {
+        code: "spawn-machine-offline",
+        detail: ctx.machineFault(machineId, "offline"),
+      });
     }
     const { parentInstanceId } = peekParent(named);
-    const refused = await relaySpawn(
+    const relayed = await relaySpawn(
       machineId,
       named,
       by,
@@ -1219,8 +1297,8 @@ export const createSpawns = (ctx: SpawnsContext) => {
           ? resolveDelegatePermissionMode(listed, parentInstanceId)
           : undefined)
     );
-    if (refused) {
-      throw new Error(refused.message);
+    if (relayed instanceof ElysiaStatus) {
+      return relayed;
     }
     const [row] = ctx.db.getInstancesByIds([payload.instanceId]);
     if (!row) {
@@ -1298,7 +1376,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     workItemId?: string,
     /** The session it goes on from: its type and set carry over ({@link carriedFrom}). */
     continues?: CarriedSource
-  ): Promise<void> => {
+  ) => {
     const agent = ctx.registry.agent(machineId);
     if (!agent) {
       throw ctx.awayError(machineId);
@@ -1328,7 +1406,10 @@ export const createSpawns = (ctx: SpawnsContext) => {
         settled.payload.cwd
       ),
     };
-    const placed = placedOrRefused(machineId, payload);
+    const placed = placedOrProblem(machineId, payload);
+    if (placed instanceof ElysiaStatus) {
+      return placed;
+    }
     const requestId = crypto.randomUUID();
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
@@ -1351,6 +1432,11 @@ export const createSpawns = (ctx: SpawnsContext) => {
       ...ctx.forkedFromOf(payload),
     });
     ctx.publishInstances(machineId);
+    // Bound in the step that starts the wait: a launch that may run on no account goes nowhere.
+    const bound = ctx.bounded(payload);
+    if (bound instanceof ElysiaStatus) {
+      return bound;
+    }
     const reply = await ctx.awaitStart(
       machineId,
       payload.instanceId,
@@ -1360,13 +1446,22 @@ export const createSpawns = (ctx: SpawnsContext) => {
           verb: "spawn",
           machineId,
           instanceId: payload.instanceId,
-          payload: { ...ctx.bounded(payload), requestId },
+          payload: { ...bound, requestId },
         } satisfies Envelope<SpawnPayload>)
     );
+    return startedOrThrown(reply, machineId, payload.harness);
+  };
+
+  /** A hub start's answer from its machine: nothing when the session is in place; else its failure thrown in the machine's words. */
+  const startedOrThrown = (
+    reply: Awaited<ReturnType<typeof ctx.awaitStart>>,
+    machineId: string,
+    harness: string
+  ): undefined => {
     switch (reply.kind) {
       case "unanswered":
         throw new Error(
-          `the ${payload.harness} session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)}s`
+          `the ${harness} session on ${ctx.machineName(machineId)} did not start within ${secondsOf(reply.after)}s`
         );
       case "answered":
         if (!reply.value.ok) {
@@ -1395,7 +1490,7 @@ export const createSpawns = (ctx: SpawnsContext) => {
     /** Who it is from, as its row says; absent, `from` as a peer. */
     origin?: SentMessage["origin"]
   ): void => {
-    ctx.deliverSend({
+    const sent = ctx.deliverSend({
       verb: "send",
       machineId,
       instanceId,
@@ -1419,6 +1514,9 @@ export const createSpawns = (ctx: SpawnsContext) => {
         },
       },
     } satisfies Envelope<SendPayload>);
+    if (sent instanceof ElysiaStatus) {
+      console.warn(`[hub] a hub word was not sent: ${sent.response.detail}`);
+    }
   };
 
   return {

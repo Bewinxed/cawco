@@ -1560,7 +1560,7 @@ export const createLandingRun = ({
     gate: Gate,
     submission: WorkItemSubmission,
     earlier: GateRun
-  ): Promise<{ done: boolean; text: string }> => {
+  ) => {
     const unready = await outputsUnready(workspace, item);
     if (unready) {
       return unready;
@@ -1589,7 +1589,7 @@ export const createLandingRun = ({
     workspace: WorkspaceRow,
     submission: WorkItemSubmission,
     landing: Exclude<Landed, { kind: "retry" }>
-  ): Promise<{ done: boolean; text: string }> => {
+  ) => {
     // Its stop settled the row already.
     if (landing.kind === "stopped") {
       console.log(
@@ -1604,10 +1604,15 @@ export const createLandingRun = ({
     // its workspace, $TMPDIR with it, goes once nothing holds it.
     const collected = await collectOutputs(workspace, item);
     const failure = failureOf(landing, collected);
-    const shipped =
+    const shipping =
       landing.kind === "done" && !failure && submission.ship
-        ? `\n\n${await shipWords(item, landing, submission.ship.notes)}`
-        : "";
+        ? await shipWords(item, landing, submission.ship.notes)
+        : undefined;
+    // Its Ship: command's file does not read: the landing's failure, which finish_item answers.
+    if (shipping instanceof ElysiaStatus) {
+      return shipping;
+    }
+    const shipped = shipping === undefined ? "" : `\n\n${shipping}`;
     const body = finishedReport(
       submission.summary,
       landing,
@@ -1643,16 +1648,14 @@ export const createLandingRun = ({
     item: WorkItemRow,
     landing: Extract<Landed, { kind: "done" }>,
     notes: string
-  ): Promise<string> => {
+  ) => {
     const sha = landing.landed?.sha;
     if (!(item.lands === "main" && landing.landed?.onto && sha)) {
       return "Not shipped: only work that lands on main ships, and this item put nothing there.";
     }
     const ship = item.projectId ? await projectShip(item.projectId) : undefined;
     if (ship instanceof ElysiaStatus) {
-      // The landing's failure, as its other failures are thrown: its words
-      // are what finish_item answers.
-      throw new Error(ship.response.detail);
+      return ship;
     }
     if (!(ship && item.projectId)) {
       return `Not shipped: this project's ${GATE_FILE} declares no Ship: command, so the hub has nothing to ship it with. The nightly ships it.`;
@@ -1684,17 +1687,23 @@ export const createLandingRun = ({
    * it pushes. A gate that fails hands the item back to its
    * session with the failing output; one that passes lands it and reports.
    * Either way the row stops landing — also when a step cannot run at all,
-   * which throws. Answers the text the delegate reads, and whether the item
-   * is done.
+   * which throws, or the project's gate.md or Ship: cannot be read, which
+   * answers the folder's problem. Answers the text the delegate reads, and
+   * whether the item is done.
    */
   const settleLanding = async (
     item: WorkItemRow,
     submission: WorkItemSubmission
-  ): Promise<{ done: boolean; text: string }> => {
+  ) => {
     const stop = new AbortController();
     landingStops.set(item.id, stop);
     try {
-      return await landSubmitted(item, submission);
+      const settled = await landSubmitted(item, submission);
+      // A problem ends the landing, as a step that cannot run at all does.
+      if (settled instanceof ElysiaStatus) {
+        endLanding(item.id);
+      }
+      return settled;
     } catch (error) {
       endLanding(item.id);
       if (error instanceof CommandStopped) {
@@ -1743,7 +1752,7 @@ export const createLandingRun = ({
     row: InstanceRow,
     workspace: WorkspaceRow,
     submission: WorkItemSubmission
-  ): Promise<{ done: boolean; text: string }> => {
+  ) => {
     const unready = await outputsUnready(workspace, item);
     if (unready) {
       return unready;
@@ -1761,13 +1770,16 @@ export const createLandingRun = ({
   const landSubmitted = async (
     item: WorkItemRow,
     submission: WorkItemSubmission
-  ): Promise<{ done: boolean; text: string }> => {
+  ) => {
     const [row] = db.getInstancesByIds([item.instanceId]);
     const [workspace] = db.workspacesNamed(item.workspaceId);
     if (isHostFolder(workspace)) {
       return await reportHost(item, row, workspace, submission);
     }
     const gate = await gateRun.gateSteps(workspace, item);
+    if (gate instanceof ElysiaStatus) {
+      return gate;
+    }
     if ("refusal" in gate) {
       const refused = endLanding(item.id) ?? item;
       // No machine a due step needs is online: the item waits for one, never

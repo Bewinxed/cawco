@@ -284,7 +284,7 @@ const standIn = (
       facts: () => Promise.resolve(new Map()),
     },
     formerIds: () => ({}),
-    forward: () => Promise.resolve(),
+    forward: () => Promise.resolve(undefined),
     callKeys: { once: (_actor, _name, _key, run) => run() },
     projectAt: () => undefined,
     spawn: () => Promise.reject(new Error("A budget read starts nothing")),

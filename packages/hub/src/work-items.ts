@@ -113,7 +113,7 @@ import {
   IGNORED_STATUS,
   stageCloneId,
 } from "@cawco/core/workspace-policy";
-import { ElysiaStatus } from "elysia";
+import { ElysiaStatus, problem } from "elysia";
 import { briefingFor } from "./briefings";
 import type { DbShape } from "./db";
 import type {
@@ -155,7 +155,7 @@ import { machineName } from "./machine-name";
 import { signedInOn } from "./placement";
 import { handle } from "./presenters/words";
 import { folderPath } from "./project-folder";
-import type { AnyProblem } from "./refusal";
+import type { AnyProblem, ProblemStatus } from "./refusal";
 import { chatPointer, chatPointerRefusal } from "./report-pointer";
 import { sessionWord } from "./session-word";
 import type { Todo } from "./task-file";
@@ -169,11 +169,9 @@ import {
   type Parent,
   WAIT_ITEM_LIMIT,
   WAIT_ITEM_MAX_MINUTES,
-  WorkItemRefusal,
 } from "./work-item-state";
 import type { WorkPlace } from "./work-place";
 import {
-  type ArchivedWorkspace,
   createWorkspaces,
   GIT_TIMEOUT_MS,
   type HeldWork,
@@ -230,35 +228,17 @@ export const mayStartRefusal = (
 };
 
 /**
- * A start turned down because a live item owns files this one would own too
- * ({@link globsOverlap}): the caller queues it until `blocker` ends.
+ * What a start that waits for a machine's pause says after the pause's
+ * words ({@link notPaused}): `delegate` queues it, and it starts once the
+ * pause ends; anything else is told.
  */
-export class OwnsOverlap extends WorkItemRefusal {
-  readonly blocker: { id: string; title: string };
-  constructor(blocker: { id: string; title: string }, globs: string) {
-    super(
-      409,
-      `${blocker.title} (work item ${blocker.id}) is live and owns files this work owns too (${globs}); one writer per file, so this waits until it ends.`
-    );
-    this.blocker = blocker;
-  }
-}
+const PAUSED_TAIL =
+  ", and nothing starts on it until then. Wait for it, or start this on another machine.";
 
-/**
- * A start turned down because the machine it runs on is paused
- * (machine-pause.ts), `words` saying which and until when: `delegate`
- * queues it, and it starts once the pause ends; anything else is refused.
- */
-class MachinePaused extends WorkItemRefusal {
-  readonly words: string;
-  constructor(words: string) {
-    super(
-      409,
-      `${words}, and nothing starts on it until then. Wait for it, or start this on another machine.`
-    );
-    this.words = words;
-  }
-}
+/** Whether a start's problem is one `delegate` queues the start for: a live item owns files it owns too, or its machine is paused. */
+const queuesStart = (stopped: { response: { code: string } }): boolean =>
+  stopped.response.code === "work-item-owns-overlap" ||
+  stopped.response.code === "work-item-machine-paused";
 
 // --- file ownership ------------------------------------------------------------
 
@@ -426,20 +406,17 @@ export const DEFAULT_DELEGATE_TYPE = "medium";
 export const resolveSpawnType = (
   types: DelegateType[],
   request: { type?: string; harness?: HarnessKind; model?: string }
-): { type?: DelegateType; harness: HarnessKind; model: string } => {
-  const named = (name: string): DelegateType => {
-    const found = types.find((entry) => entry.name === name);
-    if (!found) {
-      const names =
-        types.map((entry) => entry.name).join(", ") || "none are configured";
-      throw new WorkItemRefusal(
-        400,
-        `No delegate type "${name}". Available: ${names}.`
-      );
-    }
-    return found;
-  };
-  const type = named(request.type ?? DEFAULT_DELEGATE_TYPE);
+) => {
+  const name = request.type ?? DEFAULT_DELEGATE_TYPE;
+  const type = types.find((entry) => entry.name === name);
+  if (!type) {
+    const names =
+      types.map((entry) => entry.name).join(", ") || "none are configured";
+    return problem(400, {
+      code: "work-item-type-unknown",
+      detail: `No delegate type "${name}". Available: ${names}.`,
+    });
+  }
   if (request.type || !request.harness || request.harness === type.harness) {
     return {
       type,
@@ -448,12 +425,12 @@ export const resolveSpawnType = (
     };
   }
   if (!request.model) {
-    throw new WorkItemRefusal(
-      400,
-      `No type was named, and the default type '${type.name}' runs on ${type.harness}, not ${request.harness}. Name a type, or a model for ${request.harness}.`
-    );
+    return problem(400, {
+      code: "work-item-harness-needs-type",
+      detail: `No type was named, and the default type '${type.name}' runs on ${type.harness}, not ${request.harness}. Name a type, or a model for ${request.harness}.`,
+    });
   }
-  return { harness: request.harness, model: request.model };
+  return { type: undefined, harness: request.harness, model: request.model };
 };
 
 /**
@@ -483,12 +460,12 @@ const NO_INPUTS: Inputs = {
   held: [],
 };
 
-/** A sentence's closing stops and space, which an inputs refusal ends once. */
+/** A sentence's closing stops and space, which an inputs line ends once. */
 const CLOSED = /[.\s]+$/u;
 
-/** A refusal of a delegation's inputs, in `words` closed by one full stop. */
-const inputsRefused = (words: string, options?: ErrorOptions) =>
-  new WorkItemRefusal(400, `inputs: ${words.replace(CLOSED, "")}.`, options);
+/** What a delegation's inputs are told in `words`, closed by one full stop. */
+const inputsLine = (words: string): string =>
+  `inputs: ${words.replace(CLOSED, "")}.`;
 
 /** What the hub writes is its reader's to read and write. */
 const HELD_MODE = 0o600;
@@ -734,12 +711,12 @@ interface WorkItemDeps extends Pick<
    * landing gate runs: the words the call answers while a verifier session
    * judges the result against its project's design system, or nothing when
    * the item goes on (not design work, no system to judge against, or passed
-   * at its commit).
+   * at its commit); or its project's task, which could not be read.
    */
   readonly designHold: (
     item: WorkItemRow,
     submission: WorkItemSubmission
-  ) => Promise<string | undefined>;
+  ) => Promise<string | undefined | AnyProblem>;
   /**
    * The {@link WorkItems.finishingFor} hold on `instanceId` is over: what it
    * kept at the hub goes now, in order (sends.ts `releaseOwed`).
@@ -802,13 +779,20 @@ interface WorkItemDeps extends Pick<
   /**
    * A new workspace's first session placed before the workspace is cut
    * ({@link ItemPlacement}), on the project and task its item will name.
-   * Throws the refusal its start would.
+   * The problem its start would answer when it cannot be placed.
    */
   readonly placeAhead: (
     machineId: string,
     session: Omit<NamedSpawn, "cwd">,
     task: { projectId: string | null; taskId?: string }
-  ) => ItemPlacement;
+  ) =>
+    | ItemPlacement
+    | ReturnType<
+        typeof problem<404, { code: "spawn-project-deleted"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<400, { code: "spawn-not-placed"; detail: string }>
+      >;
   /**
    * The session's plan steps as its plan panel reads them (plans.ts):
    * CawCo's list, `todo_write`'s session scope. The plan ↔ to-do link reads
@@ -881,7 +865,23 @@ interface WorkItemDeps extends Pick<
     workItemId: string,
     fallbackMode: PermissionMode,
     placed?: { accountId?: string }
-  ) => void;
+  ) =>
+    | undefined
+    | ReturnType<
+        typeof problem<400, { code: "spawn-not-settled"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<404, { code: "spawn-project-deleted"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<400, { code: "spawn-not-placed"; detail: string }>
+      >
+    | ReturnType<
+        typeof problem<
+          409,
+          { code: "launch-account-unavailable"; detail: string }
+        >
+      >;
   /**
    * An item's session was filed under its parent's turn (memory.ts
    * `TurnWatch.spawned`): a routine run's turn makes its children the run's.
@@ -908,13 +908,13 @@ interface WorkItemDeps extends Pick<
    * and tick or propose them as the hub. Without it the link is off.
    */
   readonly todos?: {
-    read: (projectId: string, taskId: string) => Promise<Todo[]>;
+    read: (projectId: string, taskId: string) => Promise<Todo[] | AnyProblem>;
     write: (
       projectId: string,
       taskId: string,
       changes: TodoChanges,
       reason: string
-    ) => Promise<unknown>;
+    ) => Promise<AnyProblem | undefined>;
   };
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
@@ -1353,33 +1353,34 @@ const OUTPUTS_LIMIT = 50;
  * none. Refused when one could reach outside the clone or into its history,
  * the same rules a path in the project's folder follows (where they go).
  */
-const outputsOf = (outputs: string[] | undefined): string[] | null => {
+const outputsOf = (outputs: string[] | undefined) => {
   if (!outputs?.length) {
     return null;
   }
   if (outputs.length > OUTPUTS_LIMIT) {
-    throw new WorkItemRefusal(
-      400,
-      workWords.inputsLimits.outputs(outputs.length, OUTPUTS_LIMIT)
-    );
+    return problem(400, {
+      code: "work-item-outputs-too-many",
+      detail: workWords.inputsLimits.outputs(outputs.length, OUTPUTS_LIMIT),
+    });
   }
-  const paths = outputs.map((raw) => {
+  const paths = new Set<string>();
+  for (const raw of outputs) {
     const path = folderPathOf(raw.trim());
     if (path === undefined) {
-      throw new WorkItemRefusal(
-        400,
-        `outputs: “${raw}” is not a path inside the workspace. Name each file or folder from the workspace's root, like report.md or docs/notes/: no leading "/", no "..", nothing under .git.`
-      );
+      return problem(400, {
+        code: "work-item-outputs-path-unfit",
+        detail: `outputs: “${raw}” is not a path inside the workspace. Name each file or folder from the workspace's root, like report.md or docs/notes/: no leading "/", no "..", nothing under .git.`,
+      });
     }
     if (!path) {
-      throw new WorkItemRefusal(
-        400,
-        `outputs: “${raw}” names the workspace itself; name a file or folder in it, like report.md.`
-      );
+      return problem(400, {
+        code: "work-item-outputs-path-root",
+        detail: `outputs: “${raw}” names the workspace itself; name a file or folder in it, like report.md.`,
+      });
     }
-    return path;
-  });
-  return [...new Set(paths)];
+    paths.add(path);
+  }
+  return [...paths];
 };
 
 /** How an item lands, as its session is told. */
@@ -1518,17 +1519,16 @@ export const createWorkItems = ({
     quiet.delete(id);
   };
   /**
-   * Refuses a start whose project was deleted while its workspace was being
-   * made: called in the synchronous step before its item is filed.
+   * The problem of a start whose project was deleted while its workspace was
+   * being made: asked in the synchronous step before its item is filed.
    */
-  const projectStands = (projectId: string): void => {
-    if (!db.project(projectId)) {
-      throw new WorkItemRefusal(
-        404,
-        `The project "${projectId}" was deleted, so the work item can't start in it. Pick another.`
-      );
-    }
-  };
+  const projectStands = (projectId: string) =>
+    db.project(projectId)
+      ? undefined
+      : problem(404, {
+          code: "work-item-project-deleted",
+          detail: `The project "${projectId}" was deleted, so the work item can't start in it. Pick another.`,
+        });
   /**
    * The {@link finishingFor} hold on `item` ends if nothing keeps it: not
    * its landing, and not its session's last turn (`lastTurnAt`, stored),
@@ -1758,23 +1758,27 @@ export const createWorkItems = ({
 
   /**
    * The item the reader says took over `item`'s work: a later one of the
-   * same parent, or of the same project. Its id, or a throw with why not.
+   * same parent, or of the same project. Its id, or why not.
    */
   const replacementOf = (
     item: WorkItemRow,
     { replacedBy }: { replacedBy: string }
-  ): string => {
+  ) => {
     const by = replacedBy === item.id ? undefined : db.workItem(replacedBy);
     if (!by) {
-      throw new Error(`There is no later work item ${replacedBy}.`);
+      return problem(409, {
+        code: "work-item-replacement-unknown",
+        detail: `There is no later work item ${replacedBy}.`,
+      });
     }
     const kin =
       by.parentInstanceId === item.parentInstanceId ||
       (item.projectId !== null && by.projectId === item.projectId);
     if (!kin || by.createdAt.getTime() <= item.createdAt.getTime()) {
-      throw new Error(
-        `${by.title} (${by.id}) was not delegated after ${item.title} by the same session, so it cannot have replaced it.`
-      );
+      return problem(409, {
+        code: "work-item-replacement-not-later",
+        detail: `${by.title} (${by.id}) was not delegated after ${item.title} by the same session, so it cannot have replaced it.`,
+      });
     }
     return by.id;
   };
@@ -1928,14 +1932,14 @@ export const createWorkItems = ({
 
   /**
    * Holds a start's owned files from its check until its item is filed;
-   * refused with {@link OwnsOverlap} while a live item's overlap them. The
+   * stopped with the overlap's problem while a live item's overlap them. The
    * check and the hold are one step. Answers the release.
    */
   const claimOwns = (
     request: WorkItemRequest,
     parent: Parent,
     projectId: string | null
-  ): (() => void) => {
+  ) => {
     const owns = request.owns ?? [];
     if (owns.length === 0) {
       return () => undefined;
@@ -1943,7 +1947,10 @@ export const createWorkItems = ({
     const repo = repoOfRequest(request, parent, projectId);
     const blocker = ownsBlocker(repo, owns);
     if (blocker) {
-      throw new OwnsOverlap(blocker.item, blocker.globs);
+      return problem(409, {
+        code: "work-item-owns-overlap",
+        detail: `${blocker.item.title} (work item ${blocker.item.id}) is live and owns files this work owns too (${blocker.globs}); one writer per file, so this waits until it ends.`,
+      });
     }
     const key = Symbol("owns");
     reserved.set(key, { repo, owns });
@@ -2455,7 +2462,9 @@ export const createWorkItems = ({
    * ({@link proposeLeftovers}) and completed after it went on. One read of
    * the ledger and, when something is to tick, one commit.
    */
-  const syncPlan = async (item: WorkItemRow): Promise<void> => {
+  const syncPlan = async (
+    item: WorkItemRow
+  ): Promise<AnyProblem | undefined> => {
     const planned = await taskPlan(item);
     if (!planned) {
       return;
@@ -2473,21 +2482,26 @@ export const createWorkItems = ({
     if (completed.size === 0 && said.size === 0) {
       return;
     }
-    const open = (await ledger.read(task.projectId, task.taskId)).filter(
+    const listed = await ledger.read(task.projectId, task.taskId);
+    if (!Array.isArray(listed)) {
+      return listed;
+    }
+    const open = listed.filter(
       (todo) =>
         !todo.done &&
         todo.id &&
         (completed.has(todo.id) ||
           (todo.proposed && said.has(planWords(todo.text))))
     );
-    if (open.length > 0) {
-      await ledger.write(
-        task.projectId,
-        task.taskId,
-        { tick: open.map((todo) => todo.id as string) },
-        `attempt ${item.id.slice(0, 8)}'s plan completed them`
-      );
+    if (open.length === 0) {
+      return undefined;
     }
+    return await ledger.write(
+      task.projectId,
+      task.taskId,
+      { tick: open.map((todo) => todo.id as string) },
+      `attempt ${item.id.slice(0, 8)}'s plan completed them`
+    );
   };
 
   /** {@link syncPlan} off the turn's path; a machine that cannot answer is logged, not fatal. */
@@ -2495,10 +2509,18 @@ export const createWorkItems = ({
     if (!(taskOf(item) && LIVE.has(item.state))) {
       return;
     }
-    syncPlan(item).catch((error: unknown) =>
-      console.warn(
-        `[work-items] ${item.id}: its plan was not read: ${error instanceof Error ? error.message : String(error)}`
-      )
+    syncPlan(item).then(
+      (unsynced) => {
+        if (unsynced) {
+          console.warn(
+            `[work-items] ${item.id}: its plan was not read: ${unsynced.response.detail}`
+          );
+        }
+      },
+      (error: unknown) =>
+        console.warn(
+          `[work-items] ${item.id}: its plan was not read: ${error instanceof Error ? error.message : String(error)}`
+        )
     );
   };
 
@@ -2507,18 +2529,23 @@ export const createWorkItems = ({
    * open (whose id is no to-do's) become proposed to-dos on its task — a line
    * each, `(proposed)`, skipping words the task already has.
    */
-  const proposeLeftovers = async (item: WorkItemRow): Promise<void> => {
+  const proposeLeftovers = async (
+    item: WorkItemRow
+  ): Promise<AnyProblem | undefined> => {
     const planned = await taskPlan(item);
     if (!planned) {
-      return;
+      return undefined;
     }
     const { task, plan, ledger } = planned;
-    await syncPlan(item);
-    const known = new Set(
-      (await ledger.read(task.projectId, task.taskId)).map((todo) =>
-        planWords(todo.text)
-      )
-    );
+    const unsynced = await syncPlan(item);
+    if (unsynced) {
+      return unsynced;
+    }
+    const listed = await ledger.read(task.projectId, task.taskId);
+    if (!Array.isArray(listed)) {
+      return listed;
+    }
+    const known = new Set(listed.map((todo) => planWords(todo.text)));
     const left = plan
       .filter(
         (entry) => entry.status !== "completed" && !PLAN_TODO.test(entry.id)
@@ -2526,14 +2553,15 @@ export const createWorkItems = ({
       .map((entry) => entry.content.replace(RUNS_OF_SPACE, " ").trim())
       .filter((text) => text && !known.has(planWords(text)))
       .slice(0, PROPOSALS_LIMIT);
-    if (left.length > 0) {
-      await ledger.write(
-        task.projectId,
-        task.taskId,
-        { add: [...new Set(left)].map((text) => ({ text, proposed: true })) },
-        `attempt ${item.id.slice(0, 8)} ended ${item.state} with these left open in its plan`
-      );
+    if (left.length === 0) {
+      return undefined;
     }
+    return await ledger.write(
+      task.projectId,
+      task.taskId,
+      { add: [...new Set(left)].map((text) => ({ text, proposed: true })) },
+      `attempt ${item.id.slice(0, 8)} ended ${item.state} with these left open in its plan`
+    );
   };
 
   /** Items whose session was asked once, at finish_item, about the task's unticked to-dos. */
@@ -2552,16 +2580,24 @@ export const createWorkItems = ({
       return;
     }
     try {
-      await syncPlan(item);
+      const unsynced = await syncPlan(item);
+      if (unsynced) {
+        console.warn(
+          `[work-items] ${item.id}: its plan was not read at finish_item: ${unsynced.response.detail}`
+        );
+      }
     } catch (error) {
       console.warn(
         `[work-items] ${item.id}: its plan was not read at finish_item: ${error instanceof Error ? error.message : String(error)}`
       );
     }
     // A task that cannot be read (deleted, a folder that refuses) asks nothing.
-    const open = (
-      await todos.read(task.projectId, task.taskId).catch(() => [])
-    ).filter((todo) => !(todo.done || todo.proposed || todo.promoted));
+    const listed = await todos
+      .read(task.projectId, task.taskId)
+      .catch(() => []);
+    const open = (Array.isArray(listed) ? listed : []).filter(
+      (todo) => !(todo.done || todo.proposed || todo.promoted)
+    );
     if (open.length === 0) {
       return;
     }
@@ -2574,6 +2610,44 @@ export const createWorkItems = ({
       .join(
         "\n"
       )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call runs the merge checks whatever is ticked.`;
+  };
+
+  /**
+   * What holds a `finish_item` back before the item ends, in words or as the
+   * problem that stopped it, or nothing when it goes on: the task's unticked
+   * to-dos once, the design check's verdict pending (neither asked of a
+   * blocked finish), and what its clone holds outside its commits.
+   */
+  const finishHeld = async (item: WorkItemRow, request: WorkItemSubmission) => {
+    if (!request.blocked) {
+      // The task's to-dos first: unticked ones are listed once, to tick or
+      // explain; the next call goes on.
+      const unticked = await untickedText(item);
+      if (unticked) {
+        return unticked;
+      }
+      // Design work in a project with a design system: a verifier session
+      // judges the working tree as it stands, committed or not
+      // (design-verify.ts), and its pass runs this again. Holding ends
+      // nothing, so it comes before the leftovers below.
+      const held = await designHold(item, request);
+      // Said again across the import cycle the design check is made through (design-verify.ts).
+      if (held !== undefined && typeof held !== "string") {
+        return problem<ProblemStatus, { code: string; detail: string }>(
+          held.status,
+          {
+            code: held.response.code,
+            detail: held.response.detail,
+          }
+        );
+      }
+      if (held) {
+        return held;
+      }
+    }
+    // The item ends past here, blocked or landed: nothing outside its
+    // commits may be left in its clone.
+    return await leftoversIn(item);
   };
 
   /** What follows an item's end, off the step that ended it. */
@@ -2591,10 +2665,18 @@ export const createWorkItems = ({
       )
     );
     if (taskOf(item)) {
-      proposeLeftovers(item).catch((error: unknown) =>
-        console.warn(
-          `[work-items] ${item.id}: its plan's open items were not proposed: ${error instanceof Error ? error.message : String(error)}`
-        )
+      proposeLeftovers(item).then(
+        (unproposed) => {
+          if (unproposed) {
+            console.warn(
+              `[work-items] ${item.id}: its plan's open items were not proposed: ${unproposed.response.detail}`
+            );
+          }
+        },
+        (error: unknown) =>
+          console.warn(
+            `[work-items] ${item.id}: its plan's open items were not proposed: ${error instanceof Error ? error.message : String(error)}`
+          )
       );
     }
   };
@@ -2663,18 +2745,23 @@ export const createWorkItems = ({
       return;
     }
     startingQueued.add(queued.id);
-    try {
-      await start(request);
-      db.dropQueuedWorkItem(queued.id);
-    } catch (error) {
-      if (error instanceof OwnsOverlap || error instanceof MachinePaused) {
-        return;
-      }
+    /** The queued delegate leaves without starting, and its parent is told why. */
+    const couldNotStart = (why: string): void => {
       unqueue(queued);
       tell(
         parent,
-        `Your queued delegate “${queued.title}” could not start: ${error instanceof Error ? error.message : String(error)}`
+        `Your queued delegate “${queued.title}” could not start: ${why}`
       );
+    };
+    try {
+      const started = await start(request);
+      if (!(started instanceof ElysiaStatus)) {
+        db.dropQueuedWorkItem(queued.id);
+      } else if (!queuesStart(started)) {
+        couldNotStart(started.response.detail);
+      }
+    } catch (error) {
+      couldNotStart(error instanceof Error ? error.message : String(error));
     } finally {
       startingQueued.delete(queued.id);
     }
@@ -2755,30 +2842,33 @@ export const createWorkItems = ({
   };
 
   /** A new workspace's machine; a remote one needs its own repository and cannot fork. */
-  const targetMachine = (request: WorkItemRequest, parent: Parent): string => {
+  const targetMachine = (request: WorkItemRequest, parent: Parent) => {
     const machineId = request.machineId ?? parent.machineId;
     if (machineId !== parent.machineId) {
       if (request.fork) {
-        throw new WorkItemRefusal(
-          400,
-          "A fork copies a conversation stored on the parent's machine; drop machine, or delegate without fork."
-        );
+        return problem(400, {
+          code: "work-item-fork-machine",
+          detail:
+            "A fork copies a conversation stored on the parent's machine; drop machine, or delegate without fork.",
+        });
       }
       if (!(request.host || request.cwd?.trim())) {
-        throw new WorkItemRefusal(
-          400,
-          "A delegate on another machine needs cwd: the repository's absolute path on that machine."
-        );
+        return problem(400, {
+          code: "work-item-machine-needs-cwd",
+          detail:
+            "A delegate on another machine needs cwd: the repository's absolute path on that machine.",
+        });
       }
     }
     return machineId;
   };
 
-  const settingsOf = (request: WorkItemRequest, parent: Parent): Settings => {
-    const { type, harness, model } = resolveSpawnType(
-      types(parent.projectId),
-      request
-    );
+  const settingsOf = (request: WorkItemRequest, parent: Parent) => {
+    const resolved = resolveSpawnType(types(parent.projectId), request);
+    if (resolved instanceof ElysiaStatus) {
+      return resolved;
+    }
+    const { type, harness, model } = resolved;
     const skills = request.skills?.length ? request.skills : type?.skills;
     const settings: Settings = {
       type,
@@ -2794,19 +2884,18 @@ export const createWorkItems = ({
       ...(request.account ? { account: request.account } : {}),
       ...(request.role ? { role: request.role } : {}),
     };
-    return request.fork
-      ? { ...settings, ...forkOf(request, parent) }
-      : settings;
+    if (!request.fork) {
+      return settings;
+    }
+    const forked = forkOf(request, parent);
+    return forked instanceof ElysiaStatus ? forked : { ...settings, ...forked };
   };
 
   /**
    * The delegate a `delegate` call briefs: a follow-up's, the session its
    * workspace continues; any other's, the type and model it starts on.
    */
-  const briefTarget = (
-    request: WorkItemRequest,
-    parent: Parent
-  ): BriefTarget => {
+  const briefTarget = (request: WorkItemRequest, parent: Parent) => {
     if (request.workspace) {
       const [named] = db.workspacesNamed(request.workspace.trim());
       const previous = named ? db.workItemsIn(named.id)[0] : undefined;
@@ -2814,17 +2903,22 @@ export const createWorkItems = ({
         ? db.getInstancesByIds([previous.instanceId])
         : [];
       if (session) {
-        return {
+        const target: BriefTarget = {
           delegateType: session.delegateType ?? null,
           model: session.model ?? "",
         };
+        return target;
       }
     }
     const settings = settingsOf(request, parent);
-    return {
+    if (settings instanceof ElysiaStatus) {
+      return settings;
+    }
+    const target: BriefTarget = {
       delegateType: settings.type?.name ?? null,
       model: settings.model ?? "",
     };
+    return target;
   };
 
   /**
@@ -2832,12 +2926,15 @@ export const createWorkItems = ({
    * delegate (briefings.ts), recorded as handed; nothing when it has read
    * it, or when the call is one {@link start} refuses in its own words.
    */
-  const briefingOf = (request: WorkItemRequest): string | undefined => {
+  const briefingOf = (request: WorkItemRequest) => {
     const [parent] = db.getInstancesByIds([request.parentInstanceId]);
     if (!parent) {
-      return undefined;
+      return;
     }
     const target = briefTarget(request, parent);
+    if (target instanceof ElysiaStatus) {
+      return target;
+    }
     return mayStartRefusal(parent, target.delegateType)
       ? undefined
       : briefingFor(db, parent.id, target);
@@ -2849,34 +2946,38 @@ export const createWorkItems = ({
    * fork onto anything else would re-read the whole history at full price;
    * asking for one is refused rather than quietly overridden.
    */
-  const forkOf = (
-    request: WorkItemRequest,
-    parent: Parent
-  ): Pick<Settings, "forkOf" | "harness" | "model"> => {
+  const forkOf = (request: WorkItemRequest, parent: Parent) => {
     const { harness } = parent;
     if (!(parent.sessionId && harness)) {
-      throw new WorkItemRefusal(
-        409,
-        "This session has not named its conversation yet, so there is nothing to fork. Delegate without fork."
-      );
+      return problem(409, {
+        code: "work-item-fork-unnamed",
+        detail:
+          "This session has not named its conversation yet, so there is nothing to fork. Delegate without fork.",
+      });
     }
     const model = parent.model ?? undefined;
     if (request.account) {
-      throw new WorkItemRefusal(
-        400,
-        "A fork runs on its parent's account, which is what keeps the prompt cache. Drop account, or delegate without fork."
-      );
+      return problem(400, {
+        code: "work-item-fork-account",
+        detail:
+          "A fork runs on its parent's account, which is what keeps the prompt cache. Drop account, or delegate without fork.",
+      });
     }
     if (
       (request.harness && request.harness !== harness) ||
       (request.model && request.model !== model)
     ) {
-      throw new WorkItemRefusal(
-        400,
-        `A fork runs on its parent's harness and model (${harness}${model ? `, ${model}` : ""}), which is what keeps the prompt cache. Drop harness/model, or delegate without fork.`
-      );
+      return problem(400, {
+        code: "work-item-fork-settings",
+        detail: `A fork runs on its parent's harness and model (${harness}${model ? `, ${model}` : ""}), which is what keeps the prompt cache. Drop harness/model, or delegate without fork.`,
+      });
     }
-    return { forkOf: parent.sessionId, harness, model };
+    const forked: Pick<Settings, "forkOf" | "harness" | "model"> = {
+      forkOf: parent.sessionId,
+      harness,
+      model,
+    };
+    return forked;
   };
 
   /**
@@ -2917,7 +3018,7 @@ export const createWorkItems = ({
     parent: Parent,
     request: WorkItemRequest,
     inputs: Inputs
-  ): WorkItemStart => {
+  ) => {
     const item = fileItem(workspace.machineId, {
       // A queued follow-up's item takes the id its chip stood under.
       id: request.queuedAs?.id ?? crypto.randomUUID(),
@@ -2960,10 +3061,13 @@ export const createWorkItems = ({
         error: sent.reason,
         endedAt: new Date(),
       });
-      throw new Error(sent.reason ?? `could not reach ${session.id}`);
+      return problem(502, {
+        code: "work-item-session-unreached",
+        detail: sent.reason ?? `could not reach ${session.id}`,
+      });
     }
     const label = sessionLabel(session).tag;
-    return {
+    const continued: WorkItemStart = {
       item,
       workspace,
       text:
@@ -2972,6 +3076,7 @@ export const createWorkItems = ({
         `${REPORT_ARRIVES} Guide it, or continue it after it ` +
         `reports, with handoff("${label}", ...).${extrasLine(item)}${inputsSaid(inputs)}`,
     };
+    return continued;
   };
 
   /**
@@ -2985,7 +3090,7 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     parent: Parent,
     inputs: Inputs
-  ): WorkItemStart | WorkspaceRow => {
+  ) => {
     if (
       request.type ||
       request.model ||
@@ -2994,12 +3099,16 @@ export const createWorkItems = ({
       request.machineId !== undefined ||
       request.skills?.length
     ) {
-      throw new WorkItemRefusal(
-        400,
-        "a follow-up continues the same session; delegate without workspace for a different model or machine"
-      );
+      return problem(400, {
+        code: "work-item-follow-up-settings",
+        detail:
+          "a follow-up continues the same session; delegate without workspace for a different model or machine",
+      });
     }
     const claimed = workspaces.claim(needle);
+    if (claimed instanceof ElysiaStatus) {
+      return claimed;
+    }
     const { previous } = claimed;
     // Continuing a held workspace ends its hold: its work is live again.
     const workspace = workspaces.continued(claimed.workspace);
@@ -3026,10 +3135,10 @@ export const createWorkItems = ({
   /**
    * Stops the sessions of a workspace's earlier items as `stop_delegate`
    * does (`end`: the stored stop, then the machine's confirmation), so a
-   * retry's fresh session is the only one there. Refused when a machine does
-   * not confirm: no fresh session starts beside one still running.
+   * retry's fresh session is the only one there. Stopped with a problem when a
+   * machine does not confirm: no fresh session starts beside one still running.
    */
-  const endEarlierSessions = async (workspace: WorkspaceRow): Promise<void> => {
+  const endEarlierSessions = async (workspace: WorkspaceRow) => {
     const up = sessionsUpIn(workspace.id);
     const stops = await Promise.allSettled(up.map((row) => end(row.id)));
     const unconfirmed = stops.find(
@@ -3037,10 +3146,10 @@ export const createWorkItems = ({
     );
     if (unconfirmed) {
       const { reason } = unconfirmed;
-      throw new WorkItemRefusal(
-        409,
-        `The last attempt's session in workspace ${handle(workspace.id)} was told to stop and has not confirmed it, so no fresh session starts beside it: ${reason instanceof Error ? reason.message : String(reason)} Retry once its machine has ended it.`
-      );
+      return problem(409, {
+        code: "work-item-earlier-session-unconfirmed",
+        detail: `The last attempt's session in workspace ${handle(workspace.id)} was told to stop and has not confirmed it, so no fresh session starts beside it: ${reason instanceof Error ? reason.message : String(reason)} Retry once its machine has ended it.`,
+      });
     }
     if (up.length > 0) {
       console.log(
@@ -3054,9 +3163,7 @@ export const createWorkItems = ({
    * cut again (workspaces.ts `recut`); one that never retired as it stands, while
    * its clone is on its machine. Undefined when that clone is gone.
    */
-  const withClone = async (
-    workspace: WorkspaceRow
-  ): Promise<WorkspaceRow | undefined> => {
+  const withClone = async (workspace: WorkspaceRow) => {
     // A host-scope row's folder is the machine's own: there is no clone.
     if (isHostFolder(workspace)) {
       return workspace;
@@ -3081,61 +3188,81 @@ export const createWorkItems = ({
    * Undefined when its work was discarded, its clone is gone from a
    * workspace that never retired, its machine cannot say, or it is on none
    * of the machines `on` names (the request's `reuseOn`), and the retry cuts
-   * a new workspace. Refused while an item there is live.
+   * a new workspace. Stopped with a problem while an item there is live.
    */
-  const reusable = async (
-    id: string,
-    on: string[] | undefined
-  ): Promise<WorkspaceRow | undefined> => {
+  const reusable = async (id: string, on: string[] | undefined) => {
     const [workspace] = db.workspacesNamed(id);
     if (!workspace || (on && !on.includes(workspace.machineId))) {
       return;
     }
-    const busy = (): void => {
-      const live = db
-        .workItemsIn(workspace.id)
-        .find((item) => LIVE.has(item.state));
-      if (live) {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${handle(workspace.id)} already has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. A workspace runs one work item at a time.`
-        );
-      }
-    };
-    busy();
-    // Before anything reaches the machine, as a new clone is refused.
-    notPaused(workspace.machineId);
+    // Before anything reaches the machine, as a new clone is stopped.
+    const stopped = busyProblem(workspace) ?? notPaused(workspace.machineId);
+    if (stopped) {
+      return stopped;
+    }
     if (workspace.state === "archived" && !workspaces.recuttable(workspace)) {
       return;
     }
-    try {
-      await endEarlierSessions(workspace);
-      const here = await withClone(workspace);
-      if (!here) {
-        return;
-      }
-      const boundaryPid = (await call(
-        here.machineId,
-        CONTROL_WORKSPACE_BOUNDARY,
-        [refOf(here)]
-      )) as number;
-      // Awaited above: the one-writer check again, in the step that files the item.
-      busy();
-      return (
-        db.updateWorkspace(workspaces.continued(here).id, {
-          boundaryPid,
-          state: "active",
-        }) ?? here
-      );
-    } catch (error) {
-      if (error instanceof WorkItemRefusal) {
-        throw error;
-      }
+    return await readyAgain(workspace);
+  };
+
+  /**
+   * A retired or stopped attempt's workspace made ready for its retry: its
+   * earlier sessions stopped, its clone there, its boundary started and the
+   * workspace filed active; nothing when it cannot be used again, and the
+   * retry cuts a new one.
+   */
+  const readyAgain = async (workspace: WorkspaceRow) => {
+    /** The workspace is not used again: the retry cuts a new one. */
+    const unusable = (why: string): undefined => {
       console.warn(
-        `[work-items] workspace ${workspace.id} cannot be used again, so a new one is cut: ${error instanceof Error ? error.message : String(error)}`
+        `[work-items] workspace ${workspace.id} cannot be used again, so a new one is cut: ${why}`
       );
-      return undefined;
+    };
+    try {
+      const unconfirmed = await endEarlierSessions(workspace);
+      if (unconfirmed) {
+        return unconfirmed;
+      }
+      const here = await withClone(workspace);
+      if (here instanceof ElysiaStatus) {
+        return unusable(here.response.detail);
+      }
+      return here ? await filedActive(workspace, here) : undefined;
+    } catch (error) {
+      return unusable(error instanceof Error ? error.message : String(error));
     }
+  };
+
+  /** The problem of a workspace that already has a live work item: a workspace runs one at a time. */
+  const busyProblem = (workspace: WorkspaceRow) => {
+    const live = db
+      .workItemsIn(workspace.id)
+      .find((item) => LIVE.has(item.state));
+    return live
+      ? problem(409, {
+          code: "work-item-workspace-busy",
+          detail: `Workspace ${handle(workspace.id)} already has a live work item: ${live.title} (${handle(live.id)}) is ${live.state}. A workspace runs one work item at a time.`,
+        })
+      : undefined;
+  };
+
+  /** A retry's workspace `here`, its clone there, filed active again with its boundary started (a held one's hold ends). */
+  const filedActive = async (workspace: WorkspaceRow, here: WorkspaceRow) => {
+    const boundaryPid = (await call(
+      here.machineId,
+      CONTROL_WORKSPACE_BOUNDARY,
+      [refOf(here)]
+    )) as number;
+    // Awaited above: the one-writer check again, in the step that files the item.
+    return (
+      busyProblem(workspace) ??
+      db.updateWorkspace(workspaces.continued(here).id, {
+        boundaryPid,
+        state: "active",
+      }) ??
+      here
+    );
   };
 
   /**
@@ -3144,35 +3271,36 @@ export const createWorkItems = ({
    * list names, judged by the type this start runs as (a follow-up's, its
    * session's). A card-settling start is the hub's, whoever asks.
    */
-  const mayStartIt = (request: WorkItemRequest, parent: Parent): void => {
+  const mayStartIt = (request: WorkItemRequest, parent: Parent) => {
     if (request.settlesCards || startsAny(sessionMayStart(parent))) {
       return;
     }
-    const refused = mayStartRefusal(
-      parent,
-      briefTarget(request, parent).delegateType
-    );
-    if (refused) {
-      throw new WorkItemRefusal(403, refused);
+    const target = briefTarget(request, parent);
+    if (target instanceof ElysiaStatus) {
+      return target;
     }
+    const refused = mayStartRefusal(parent, target.delegateType);
+    return refused
+      ? problem(403, { code: "work-item-may-not-start", detail: refused })
+      : undefined;
   };
 
   /**
    * The request as {@link start} files it (its outputs as paths), its parent,
-   * and the project it works for; refused when any of it cannot stand.
+   * and the project it works for; the problem when any of it cannot stand.
    */
   const admitted = (
     asked: WorkItemRequest,
     /** The parent when it is no session (a routine's): read off the hub otherwise. */
     given?: Parent
-  ): {
-    parent: Parent;
-    projectId: string | null;
-    request: WorkItemRequest;
-  } => {
+  ) => {
+    const outputs = outputsOf(asked.outputs);
+    if (outputs instanceof ElysiaStatus) {
+      return outputs;
+    }
     const request = {
       ...asked,
-      outputs: outputsOf(asked.outputs) ?? undefined,
+      outputs: outputs ?? undefined,
       owns: asked.owns?.length
         ? [...new Set(asked.owns.map(globOf))]
         : undefined,
@@ -3181,29 +3309,56 @@ export const createWorkItems = ({
       ? [given]
       : db.getInstancesByIds([request.parentInstanceId]);
     if (!parent) {
-      throw new WorkItemRefusal(
-        404,
-        `unknown session ${request.parentInstanceId}`
-      );
+      return problem(404, {
+        code: "work-item-parent-unknown",
+        detail: `unknown session ${request.parentInstanceId}`,
+      });
     }
-    mayStartIt(request, parent);
-    const problem = requestProblem(request);
-    if (problem) {
-      throw new WorkItemRefusal(400, problem);
+    const stopped = admissionProblem(request, parent);
+    if (stopped) {
+      return stopped;
+    }
+    const admittedStart: {
+      parent: Parent;
+      projectId: string | null;
+      request: WorkItemRequest;
+    } = {
+      request,
+      parent,
+      projectId: request.task?.projectId ?? parent.projectId ?? null,
+    };
+    return admittedStart;
+  };
+
+  /**
+   * The problem that stops `parent` starting `request`: it may not start
+   * that type, the request does not stand, its task's project holds its
+   * attempts, or its outputs have no project's folder to go to.
+   */
+  const admissionProblem = (request: WorkItemRequest, parent: Parent) => {
+    const unmayed = mayStartIt(request, parent);
+    if (unmayed) {
+      return unmayed;
+    }
+    const unfit = requestProblem(request);
+    if (unfit) {
+      return problem(400, { code: "work-item-request-unfit", detail: unfit });
     }
     // An attempt spends the project's money: none starts past its cap.
     const capped = request.task ? pauses(request.task.projectId) : undefined;
     if (capped) {
-      throw new WorkItemRefusal(409, capped);
+      return problem(409, {
+        code: "work-item-attempts-paused",
+        detail: capped,
+      });
     }
-    const projectId = request.task?.projectId ?? parent.projectId ?? null;
-    if (request.outputs && !projectId) {
-      throw new WorkItemRefusal(
-        400,
-        "outputs are copied into the project's folder, and this session belongs to no project. Drop outputs, or delegate from a session in a project."
-      );
-    }
-    return { request, parent, projectId };
+    return request.outputs && !(request.task?.projectId ?? parent.projectId)
+      ? problem(400, {
+          code: "work-item-outputs-need-project",
+          detail:
+            "outputs are copied into the project's folder, and this session belongs to no project. Drop outputs, or delegate from a session in a project.",
+        })
+      : undefined;
   };
 
   /**
@@ -3219,7 +3374,7 @@ export const createWorkItems = ({
     paths: string[],
     reader: Pick<Parent, "machineId" | "projectId">,
     bound: WorkspaceRef | null
-  ): Promise<InputNamed[]> => {
+  ) => {
     if (paths.length === 0) {
       return [];
     }
@@ -3229,40 +3384,46 @@ export const createWorkItems = ({
       reader.projectId ?? null,
     ])) as InputsAdmitted;
     if ("refused" in judged) {
-      throw inputsRefused(judged.refused);
+      return problem(400, {
+        code: "work-item-inputs-unadmitted",
+        detail: inputsLine(judged.refused),
+      });
     }
     return judged.files;
   };
 
   /**
    * What `held` names, resolved now and read for `reader` (handed-inputs.ts):
-   * refused in words naming it when it names nothing `reader` may read, or
+   * a problem in words naming it when it names nothing `reader` may read, or
    * as soon as what has been read passes {@link INPUTS_LIMIT_BYTES}.
    */
-  const resolveHeld = async (
-    held: HeldInput[],
-    reader: InstanceRow
-  ): Promise<HandedFile[]> => {
+  const resolveHeld = async (held: HeldInput[], reader: InstanceRow) => {
     const resolved: HandedFile[] = [];
     let bytes = 0;
     for (const input of held) {
-      // A handed input's refusal is the delegate's, thrown as its refusals are.
+      // A handed input's problem is the delegate's, said in the words that name the input.
       const files = await resolveHanded(reader, input);
       if (files instanceof ElysiaStatus) {
-        throw inputsRefused(files.response.detail);
+        return problem(400, {
+          code: "work-item-inputs-unresolved",
+          detail: inputsLine(files.response.detail),
+        });
       }
       for await (const file of files) {
         if (file instanceof ElysiaStatus) {
-          throw inputsRefused(file.response.detail);
+          return problem(400, {
+            code: "work-item-inputs-unresolved",
+            detail: inputsLine(file.response.detail),
+          });
         }
         // What is made for its reader as it is written (a preview's pass)
         // is a few hundred bytes: what is in hand now is what counts.
         bytes += typeof file.bytes === "function" ? 0 : file.bytes.length;
         if (bytes > INPUTS_LIMIT_BYTES) {
-          throw new WorkItemRefusal(
-            400,
-            workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB)
-          );
+          return problem(400, {
+            code: "work-item-inputs-held-limit",
+            detail: workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB),
+          });
         }
         resolved.push(file);
       }
@@ -3270,16 +3431,16 @@ export const createWorkItems = ({
     return resolved;
   };
 
-  /** Refuses two inputs that would land under one name in `inputs/`. */
-  const oneNameEach = (files: InputNamed[]): void => {
+  /** The problem of two inputs that would land under one name in `inputs/`. */
+  const oneNameEach = (files: InputNamed[]) => {
     const landing = new Map<string, string>();
     for (const file of files) {
       const twin = landing.get(file.name);
       if (twin !== undefined) {
-        throw new WorkItemRefusal(
-          400,
-          `inputs: ${twin} and ${file.from} would both land as ${file.name} in the inputs folder; hand one under another name.`
-        );
+        return problem(400, {
+          code: "work-item-inputs-name-twice",
+          detail: `inputs: ${twin} and ${file.from} would both land as ${file.name} in the inputs folder; hand one under another name.`,
+        });
       }
       landing.set(file.name, file.from);
     }
@@ -3298,55 +3459,93 @@ export const createWorkItems = ({
   const readInputs = async (
     entries: unknown[] | undefined,
     reader: Pick<Parent, "id" | "machineId" | "projectId">
-  ): Promise<Inputs> => {
+  ) => {
     if (!entries?.length) {
       return NO_INPUTS;
     }
     const checked = handedInputs(entries);
     if ("refused" in checked) {
-      throw inputsRefused(checked.refused);
+      return problem(400, {
+        code: "work-item-inputs-unfit",
+        detail: inputsLine(checked.refused),
+      });
     }
     const paths = checked.inputs.filter(
       (input): input is string => typeof input === "string"
     );
-    if (isHubParent(reader.id)) {
-      if (paths.length < checked.inputs.length) {
-        throw new WorkItemRefusal(
-          400,
-          "inputs: the hub's own work hands paths only; what the hub holds by name is read for a session."
-        );
-      }
-      const files = await admitPaths(paths, reader, null);
-      oneNameEach(files);
-      return {
-        paths,
-        bound: null,
-        project: reader.projectId ?? null,
-        machineId: reader.machineId,
-        files,
-        held: [],
-      };
+    return isHubParent(reader.id)
+      ? await hubInputsOf(reader, checked.inputs, paths)
+      : await sessionInputsOf(reader, checked.inputs, paths);
+  };
+
+  /** What the hub's own reader hands: paths only, admitted on its machine for its project. */
+  const hubInputsOf = async (
+    reader: Pick<Parent, "machineId" | "projectId">,
+    inputs: unknown[],
+    paths: string[]
+  ) => {
+    if (paths.length < inputs.length) {
+      return problem(400, {
+        code: "work-item-inputs-hub-paths-only",
+        detail:
+          "inputs: the hub's own work hands paths only; what the hub holds by name is read for a session.",
+      });
     }
+    const files = await admitPaths(paths, reader, null);
+    if (files instanceof ElysiaStatus) {
+      return files;
+    }
+    const twice = oneNameEach(files);
+    if (twice) {
+      return twice;
+    }
+    const hubInputs: Inputs = {
+      paths,
+      bound: null,
+      project: reader.projectId ?? null,
+      machineId: reader.machineId,
+      files,
+      held: [],
+    };
+    return hubInputs;
+  };
+
+  /** What a session hands: paths admitted against its boundary, and what the hub holds by name, resolved for it. */
+  const sessionInputsOf = async (
+    reader: Pick<Parent, "id" | "machineId">,
+    inputs: unknown[],
+    paths: string[]
+  ) => {
     const [row] = db.getInstancesByIds([reader.id]);
     if (!row) {
-      throw new WorkItemRefusal(404, `unknown session ${reader.id}`);
+      return problem(404, {
+        code: "work-item-inputs-session-unknown",
+        detail: `unknown session ${reader.id}`,
+      });
     }
     const bound = boundOf(row) ?? null;
     const [pathFiles, hubFiles] = await Promise.all([
       admitPaths(paths, row, bound),
       resolveHeld(
-        checked.inputs.filter(
-          (input): input is HeldInput => typeof input !== "string"
-        ),
+        inputs.filter((input): input is HeldInput => typeof input !== "string"),
         row
       ),
     ]);
+    if (pathFiles instanceof ElysiaStatus) {
+      return pathFiles;
+    }
+    if (hubFiles instanceof ElysiaStatus) {
+      return hubFiles;
+    }
     const files: InputNamed[] = [
       ...pathFiles,
       ...hubFiles.map(({ name, from }) => ({ name, from, mode: HELD_MODE })),
     ];
-    oneNameEach(files);
-    return {
+    const twice = oneNameEach(files);
+    if (twice) {
+      return twice;
+    }
+    const sessionInputs: Inputs = {
       paths,
       bound,
       project: row.projectId ?? null,
@@ -3354,6 +3553,7 @@ export const createWorkItems = ({
       files,
       held: hubFiles,
     };
+    return sessionInputs;
   };
 
   /**
@@ -3365,13 +3565,14 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     inputs: Inputs,
     receiver: InstanceRow
-  ): Promise<void> => {
-    await handInto(
+  ) => {
+    const handed = await handInto(
       workspace.machineId,
       scratchRefOf(workspace),
       inputs,
       receiver
     );
+    return handed instanceof ElysiaStatus ? handed : undefined;
   };
 
   /**
@@ -3392,7 +3593,7 @@ export const createWorkItems = ({
     place: InputsPlace,
     inputs: Inputs,
     receiver: InstanceRow
-  ): Promise<string | undefined> => {
+  ) => {
     let folder: string | undefined;
     if (inputs.held.length > 0) {
       const files = await Promise.all(
@@ -3423,7 +3624,10 @@ export const createWorkItems = ({
         inputs.project,
       ])) as InputsAdmitted;
       if ("refused" in copied) {
-        throw inputsRefused(copied.refused);
+        return problem(400, {
+          code: "work-item-inputs-uncopied",
+          detail: inputsLine(copied.refused),
+        });
       }
       return copied.folder ?? folder;
     }
@@ -3433,7 +3637,10 @@ export const createWorkItems = ({
       inputs.project,
     ])) as InputsRead;
     if ("refused" in read) {
-      throw inputsRefused(read.refused);
+      return problem(400, {
+        code: "work-item-inputs-unread",
+        detail: inputsLine(read.refused),
+      });
     }
     const landed = (await call(machineId, CONTROL_INPUTS_WRITE, [
       place,
@@ -3443,22 +3650,32 @@ export const createWorkItems = ({
   };
 
   /**
-   * Files and spawns an item. Refused with {@link OwnsOverlap} while a live
+   * Files and spawns an item. Stopped with the overlap's problem while a live
    * item owns files it owns too; the files it owns are held from that check
    * until its item is filed, so two starts never both pass it. Its inputs are
-   * read first: one that may not go refuses the start before anything is cut.
+   * read first: one that may not go stops the start before anything is cut.
    */
-  const start = async (
-    asked: WorkItemRequest,
-    given?: Parent
-  ): Promise<WorkItemStart> => {
-    const { request, parent, projectId } = admitted(asked, given);
+  const start = async (asked: WorkItemRequest, given?: Parent) => {
+    const cleared = admitted(asked, given);
+    if (cleared instanceof ElysiaStatus) {
+      return cleared;
+    }
+    const { request, parent, projectId } = cleared;
     // A session a stop walks starts nothing more: its tree is ending.
     if (db.treeStops.get(parent.id)) {
-      throw new WorkItemRefusal(409, workWords.stoppingRefused);
+      return problem(409, {
+        code: "work-item-tree-stopping",
+        detail: workWords.stoppingRefused,
+      });
     }
     const inputs = await readInputs(request.inputs, parent);
+    if (inputs instanceof ElysiaStatus) {
+      return inputs;
+    }
     const release = claimOwns(request, parent, projectId);
+    if (release instanceof ElysiaStatus) {
+      return release;
+    }
     try {
       return await startAdmitted(request, parent, projectId, inputs);
     } finally {
@@ -3466,20 +3683,23 @@ export const createWorkItems = ({
     }
   };
 
-  /** Refuses a start on a machine the owner paused ({@link MachinePaused}). */
-  const notPaused = (machineId: string): void => {
+  /** The problem of a start on a machine the owner paused, `delegate` queues it ({@link PAUSED_TAIL}). */
+  const notPaused = (machineId: string) => {
     const paused = machinePaused(machineId);
-    if (paused) {
-      throw new MachinePaused(paused);
-    }
+    return paused
+      ? problem(409, {
+          code: "work-item-machine-paused",
+          detail: `${paused}${PAUSED_TAIL}`,
+        })
+      : undefined;
   };
 
-  /** Refuses settings whose model the machine does not run ({@link WorkItemDeps.modelRefusal}). */
-  const modelOffered = (machineId: string, settings: Settings): void => {
-    const refusal = modelRefusal(machineId, settings.harness, settings.model);
-    if (refusal) {
-      throw new WorkItemRefusal(400, refusal);
-    }
+  /** The problem of settings whose model the machine does not run ({@link WorkItemDeps.modelRefusal}). */
+  const modelOffered = (machineId: string, settings: Settings) => {
+    const unlisted = modelRefusal(machineId, settings.harness, settings.model);
+    return unlisted
+      ? problem(400, { code: "work-item-model-unavailable", detail: unlisted })
+      : undefined;
   };
 
   const startAdmitted = async (
@@ -3487,13 +3707,20 @@ export const createWorkItems = ({
     parent: Parent,
     projectId: string | null,
     inputs: Inputs
-  ): Promise<WorkItemStart> => {
+  ) => {
     if (request.reuse) {
       const again = await reusable(request.reuse, request.reuseOn);
+      if (again instanceof ElysiaStatus) {
+        return again;
+      }
       if (again) {
+        const settings = settingsOf(request, parent);
+        if (settings instanceof ElysiaStatus) {
+          return settings;
+        }
         return spawnIn(
           again,
-          settingsOf(request, parent),
+          settings,
           parent,
           await briefedFrom(request, again),
           inputs
@@ -3566,15 +3793,19 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     parent: Parent,
     inputs: Inputs
-  ): Promise<WorkItemStart> => {
-    const machineId = targetMachine(request, parent);
-    notPaused(machineId);
-    const settings = settingsOf(request, parent);
-    modelOffered(machineId, settings);
+  ) => {
+    const readied = readiedOn(request, request, parent);
+    if (readied instanceof ElysiaStatus) {
+      return readied;
+    }
+    const { machineId, settings } = readied;
     const path = workspaces.cwdOn(machineId, request.cwd?.trim() || "~");
+    if (path instanceof ElysiaStatus) {
+      return path;
+    }
     const cloned = await hostFolderProblem(machineId, path);
     if (cloned) {
-      throw new WorkItemRefusal(400, cloned);
+      return problem(400, { code: "work-item-host-in-clone", detail: cloned });
     }
     const workspace = db.createWorkspace({
       id: crypto.randomUUID(),
@@ -3604,22 +3835,25 @@ export const createWorkItems = ({
     parent: Parent,
     projectId: string | null,
     inputs: Inputs
-  ): Promise<WorkItemStart> => {
+  ) => {
     const source = asked.from
       ? workspaces.fromSource(asked.from, parent)
       : undefined;
+    if (source instanceof ElysiaStatus) {
+      return source;
+    }
     const request = source ? asked : onProjectAccount(asked, parent, projectId);
-    const machineId = targetMachine(
+    const readied = readiedOn(
       source
         ? { ...request, machineId: source.machineId, cwd: source.repoRoot }
         : request,
+      request,
       parent
     );
-    // Before anything reaches the machine: a paused one cuts no clone.
-    notPaused(machineId);
-    const settings = settingsOf(request, parent);
-    // Before the clone is cut: a model the machine does not run starts nothing.
-    modelOffered(machineId, settings);
+    if (readied instanceof ElysiaStatus) {
+      return readied;
+    }
+    const { machineId, settings } = readied;
     // Placed before the clone is cut: the boundary starts with the account
     // the session launches on, and the session opens on that same account.
     const instanceId = request.queuedAs?.instanceId ?? crypto.randomUUID();
@@ -3628,29 +3862,16 @@ export const createWorkItems = ({
       sessionOf(instanceId, request.title.trim(), parent, settings),
       { projectId, taskId: request.task?.id }
     );
-    const workspace = await workspaces.openWorkspace(
-      parent.id,
-      workspaces.cwdOn(
-        machineId,
-        source?.repoRoot ?? request.cwd ?? parent.cwd
-      ),
+    if (placement instanceof ElysiaStatus) {
+      return placement;
+    }
+    const workspace = await cutFresh(request, parent, projectId, source, {
       machineId,
-      projectId,
-      {
-        account: placement.launchesOn,
-        first: { instanceId, harness: settings.harness, resume: null },
-      }
-    );
-    if (source) {
-      await workspaces.cutFrom(workspace, source);
-    }
-    if (request.detachAt) {
-      await workspaces.detachNew(workspace, request.detachAt);
-    }
-    if (projectId) {
-      workspaces.recordRepository(projectId, workspace);
-      // The machine placed the project's rows in the clone as it cut it.
-      projectStands(projectId);
+      placement,
+      first: { instanceId, harness: settings.harness, resume: null },
+    });
+    if (workspace instanceof ElysiaStatus) {
+      return workspace;
     }
     // In its scratch dir before its session starts ({@link spawnIn}).
     return spawnIn(
@@ -3661,6 +3882,99 @@ export const createWorkItems = ({
       inputs,
       { instanceId, placement }
     );
+  };
+
+  /**
+   * The machine a new workspace is cut on and the settings its session runs
+   * on, before anything reaches the machine: `placed` names the machine
+   * (the request, or the workspace it is cut from), `request` the settings.
+   * The problem when the machine is paused, which cuts no clone, or does not
+   * run the model, which starts nothing.
+   */
+  const readiedOn = (
+    placed: WorkItemRequest,
+    request: WorkItemRequest,
+    parent: Parent
+  ) => {
+    const machineId = targetMachine(placed, parent);
+    if (machineId instanceof ElysiaStatus) {
+      return machineId;
+    }
+    const paused = notPaused(machineId);
+    if (paused) {
+      return paused;
+    }
+    const settings = settingsOf(request, parent);
+    if (settings instanceof ElysiaStatus) {
+      return settings;
+    }
+    const unlisted = modelOffered(machineId, settings);
+    if (unlisted) {
+      return unlisted;
+    }
+    const readied: { machineId: string; settings: Settings } = {
+      machineId,
+      settings,
+    };
+    return readied;
+  };
+
+  /**
+   * A new workspace for a fresh item, cut on `machineId` from the request's
+   * folder (the parent's by default, or `source`'s repository), moved to
+   * `source`'s head or the commit the request names, and recorded as its
+   * project's repository; or the problem that stopped it.
+   */
+  const cutFresh = async (
+    request: WorkItemRequest,
+    parent: Parent,
+    projectId: string | null,
+    source: WorkspaceRow | undefined,
+    {
+      machineId,
+      placement,
+      first,
+    }: {
+      first: { harness: HarnessKind; instanceId: string; resume: null };
+      machineId: string;
+      placement: ItemPlacement;
+    }
+  ) => {
+    const cwd = workspaces.cwdOn(
+      machineId,
+      source?.repoRoot ?? request.cwd ?? parent.cwd
+    );
+    if (cwd instanceof ElysiaStatus) {
+      return cwd;
+    }
+    const workspace = await workspaces.openWorkspace(
+      parent.id,
+      cwd,
+      machineId,
+      projectId,
+      { account: placement.launchesOn, first }
+    );
+    if (workspace instanceof ElysiaStatus) {
+      return workspace;
+    }
+    if (source) {
+      const cut = await workspaces.cutFrom(workspace, source);
+      if (cut) {
+        return cut;
+      }
+    }
+    if (request.detachAt) {
+      await workspaces.detachNew(workspace, request.detachAt);
+    }
+    if (projectId) {
+      workspaces.recordRepository(projectId, workspace);
+      // The machine placed the project's rows in the clone as it cut it.
+      const gone = projectStands(projectId);
+      if (gone) {
+        return gone;
+      }
+    }
+    return workspace;
   };
 
   /** The request with its brief written from its clone, when it asks for that ({@link WorkItemRequest.briefFromClone}). */
@@ -3691,34 +4005,63 @@ export const createWorkItems = ({
    * session, its item filed in that step and its inputs written for it
    * once it stands, as every new delegate's are.
    */
-  const startFollowUp = (
+  const startFollowUp = async (
     needle: string,
     request: WorkItemRequest,
     parent: Parent,
     inputs: Inputs
-  ): Promise<WorkItemStart> => {
+  ) => {
     const named = workspaces.namedWorkspace(needle);
-    notPaused(named.machineId);
-    return workspaces.goOnIn(named.id, async () => {
-      await workspaces.boundaryUp(needle);
-      const { workspace, previous } = workspaces.claim(needle);
-      const [resumed] = previous
-        ? db.getInstancesByIds([previous.instanceId])
-        : [];
-      if (resumed?.sessionId && inputs.files.length > 0) {
-        await handIn(workspace, inputs, resumed);
+    if (named instanceof ElysiaStatus) {
+      return named;
+    }
+    const paused = notPaused(named.machineId);
+    if (paused) {
+      return paused;
+    }
+    return await workspaces.goOnIn(named.id, () =>
+      followedUp(needle, request, parent, inputs)
+    );
+  };
+
+  /**
+   * The follow-up in its workspace's turn: its boundary up, its claim made,
+   * its inputs written for the session it continues, then its item filed
+   * ({@link followUp}) or a new session spawned there.
+   */
+  const followedUp = async (
+    needle: string,
+    request: WorkItemRequest,
+    parent: Parent,
+    inputs: Inputs
+  ) => {
+    await workspaces.boundaryUp(needle);
+    const claimed = workspaces.claim(needle);
+    if (claimed instanceof ElysiaStatus) {
+      return claimed;
+    }
+    const { workspace, previous } = claimed;
+    const [resumed] = previous
+      ? db.getInstancesByIds([previous.instanceId])
+      : [];
+    if (resumed?.sessionId && inputs.files.length > 0) {
+      const unhanded = await handIn(workspace, inputs, resumed);
+      if (unhanded) {
+        return unhanded;
       }
-      const followed = followUp(needle, request, parent, inputs);
-      return "item" in followed
-        ? followed
-        : spawnIn(
-            followed,
-            settingsOf(request, parent),
-            parent,
-            request,
-            inputs
-          );
-    });
+    }
+    const followed = followUp(needle, request, parent, inputs);
+    if (followed instanceof ElysiaStatus) {
+      return followed;
+    }
+    if ("item" in followed) {
+      return followed;
+    }
+    const settings = settingsOf(request, parent);
+    if (settings instanceof ElysiaStatus) {
+      return settings;
+    }
+    return spawnIn(followed, settings, parent, request, inputs);
   };
 
   /**
@@ -3815,6 +4158,53 @@ export const createWorkItems = ({
   };
 
   /**
+   * The session of a filed item spawned, its row standing from now as its
+   * item does: a live item whose session has no row is one whose session is
+   * gone ({@link followSessions}). The item fails in the words it got when
+   * its session does not start, and those words are the problem; a machine's
+   * failure is a 502.
+   */
+  const spawnItemSession = (
+    item: WorkItemRow,
+    workspace: WorkspaceRow,
+    settings: Settings,
+    parent: Parent,
+    ahead: { placement: ItemPlacement } | undefined
+  ) => {
+    /** Its session did not start: the item fails in the words it was told. */
+    const notStarted = (message: string): void => {
+      update(item.id, {
+        state: "failed",
+        error: `Its session did not start: ${message}`,
+        endedAt: new Date(),
+      });
+    };
+    try {
+      const spawned = spawn(
+        workspace.machineId,
+        spawnOf(item.instanceId, item.title, parent, workspace, settings),
+        item.id,
+        // Autonomous by definition: it must never sit waiting on a tool
+        // permission prompt nobody is watching for. Questions still ask.
+        // Its parent caused it: Full Send only when the parent is in it now,
+        // read off its row as it stands after the workspace was cut.
+        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
+        ahead && { accountId: ahead.placement.accountId }
+      );
+      if (spawned instanceof ElysiaStatus) {
+        notStarted(spawned.response.detail);
+        return spawned;
+      }
+    } catch (error) {
+      // An Error with no message still names its kind: String() gives "TypeError".
+      const message =
+        (error instanceof Error && error.message) || String(error);
+      notStarted(message);
+      return problem(502, { code: "work-item-spawn-failed", detail: message });
+    }
+  };
+
+  /**
    * A new session in `workspace`, running a new item from the request's
    * brief; `inputs` are put in for it once it stands, after the item is
    * answered and before its brief ({@link handIn}). `ahead`: its id and
@@ -3828,9 +4218,13 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     inputs: Inputs,
     ahead?: { instanceId: string; placement: ItemPlacement }
-  ): WorkItemStart => {
-    notPaused(workspace.machineId);
-    modelOffered(workspace.machineId, settings);
+  ) => {
+    const unready =
+      notPaused(workspace.machineId) ??
+      modelOffered(workspace.machineId, settings);
+    if (unready) {
+      return unready;
+    }
     const { harness, mayStart } = settings;
     // A queued delegate's session and item take the ids its chip stood under.
     const instanceId =
@@ -3856,31 +4250,15 @@ export const createWorkItems = ({
 
     // A fork opens with what it is.
     const fork = settings.forkOf ? forkLine(workspace) : "";
-    try {
-      // Its session's row stands from now, as its item does: a live item
-      // whose session has no row is one whose session is gone
-      // ({@link followSessions}).
-      spawn(
-        workspace.machineId,
-        spawnOf(instanceId, item.title, parent, workspace, settings),
-        item.id,
-        // Autonomous by definition: it must never sit waiting on a tool
-        // permission prompt nobody is watching for. Questions still ask.
-        // Its parent caused it: Full Send only when the parent is in it now,
-        // read off its row as it stands after the workspace was cut.
-        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
-        ahead && { accountId: ahead.placement.accountId }
-      );
-    } catch (error) {
-      // An Error with no message still names its kind: String() gives "TypeError".
-      const message =
-        (error instanceof Error && error.message) || String(error);
-      update(item.id, {
-        state: "failed",
-        error: `Its session did not start: ${message}`,
-        endedAt: new Date(),
-      });
-      throw error;
+    const notStarted = spawnItemSession(
+      item,
+      workspace,
+      settings,
+      parent,
+      ahead
+    );
+    if (notStarted) {
+      return notStarted;
     }
     /** Its first message, which names its inputs: sent once they are in. */
     const brief = (): void => {
@@ -3946,7 +4324,10 @@ export const createWorkItems = ({
         ? handIn(workspace, inputs, receiver)
         : Promise.reject(new Error(`its session ${instanceId} has no row`))
       )
-        .then(brief, notIn)
+        .then(
+          (unhanded) => (unhanded ? notIn(unhanded.response.detail) : brief()),
+          notIn
+        )
         .catch((stopped: unknown) =>
           console.warn(
             `[work-items] ${item.id}: its session, whose inputs did not go in, is told to stop and has not confirmed it: ${stopped instanceof Error ? stopped.message : String(stopped)}`
@@ -4059,7 +4440,7 @@ export const createWorkItems = ({
   const landOrComplete = async (
     item: WorkItemRow,
     request: WorkItemSubmission
-  ): Promise<string> => {
+  ) => {
     const group = ownedLive(item.instanceId);
     if (group.length > 0) {
       update(item.id, {
@@ -4074,7 +4455,8 @@ export const createWorkItems = ({
       return completingText(group);
     }
     update(item.id, { submission: request, landingSince: new Date() });
-    return (await landingRun.settleLanding(item, request)).text;
+    const settled = await landingRun.settleLanding(item, request);
+    return settled instanceof ElysiaStatus ? settled : settled.text;
   };
 
   /**
@@ -4089,23 +4471,28 @@ export const createWorkItems = ({
     submission: WorkItemSubmission
   ): void => {
     const [row] = db.getInstancesByIds([item.instanceId]);
+    /** The merge checks could not run: logged, and the session told to call finish_item again. */
+    const notRun = (reason: string): void => {
+      console.error(`[work-items] ${item.id}: ${reason}`);
+      if (row) {
+        tell(
+          row,
+          `The merge checks of your work item could not run: ${reason}. Call finish_item again.`
+        );
+      }
+    };
     landingRun
       .settleLanding(item, submission)
-      .then(({ done, text }) => {
-        if (!done && row) {
-          tell(row, text);
+      .then((settled) => {
+        if (settled instanceof ElysiaStatus) {
+          notRun(settled.response.detail);
+        } else if (!settled.done && row) {
+          tell(row, settled.text);
         }
       })
-      .catch((error: unknown) => {
-        const reason = error instanceof Error ? error.message : String(error);
-        console.error(`[work-items] ${item.id}: ${reason}`);
-        if (row) {
-          tell(
-            row,
-            `The merge checks of your work item could not run: ${reason}. Call finish_item again.`
-          );
-        }
-      });
+      .catch((error: unknown) =>
+        notRun(error instanceof Error ? error.message : String(error))
+      );
   };
 
   /**
@@ -4516,13 +4903,14 @@ export const createWorkItems = ({
    * ({@link rerun}), and this call lands that work: on 2026-10-17 a
    * follow-up commit could not land, the call answering the old report.
    */
-  const finishable = async (
-    instanceId: string
-  ): Promise<{ row: InstanceRow; item: WorkItemRow } | string> => {
+  const finishable = async (instanceId: string) => {
     const [row] = db.getInstancesByIds([instanceId]);
     const item = row ? itemOf(row) : undefined;
     if (!(row && item)) {
-      throw new WorkItemRefusal(409, "No work item is open on this session.");
+      return problem(409, {
+        code: "work-item-none-open",
+        detail: "No work item is open on this session.",
+      });
     }
     if (item.state === "done") {
       if (!(await followsUp(item))) {
@@ -4531,37 +4919,47 @@ export const createWorkItems = ({
       console.log(
         `[work-items] ${item.id}: finish_item on done work whose workspace holds work since it landed: it runs again to land it`
       );
-      return { row, item: rerun(item) };
+      const again: { row: InstanceRow; item: WorkItemRow } = {
+        row,
+        item: rerun(item),
+      };
+      return again;
     }
     if (!LIVE.has(item.state)) {
-      throw new WorkItemRefusal(
-        409,
-        `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`
-      );
+      return problem(409, {
+        code: "work-item-not-live",
+        detail: `${item.title} (${handle(item.id)}) is ${item.state}; finish_item finishes live work only.`,
+      });
     }
     const hold = itemHold(item, ["stopping", "landing", "finishing"], {
       finishing: () => landingRun.landingRuns(item.id),
     });
     if (hold === "stopping") {
-      throw new WorkItemRefusal(409, workWords.stoppingRefused);
+      return problem(409, {
+        code: "work-item-stopping",
+        detail: workWords.stoppingRefused,
+      });
     }
     // A completing item's submission waits on its own delegates: a new
     // call replaces it ({@link completeIfDrained}).
     if (hold === "landing") {
-      throw new WorkItemRefusal(
-        409,
-        "the merge checks already run for this item; their outcome comes to you when they end"
-      );
+      return problem(409, {
+        code: "work-item-landing-runs",
+        detail:
+          "the merge checks already run for this item; their outcome comes to you when they end",
+      });
     }
     // A stop cancels every command its landing has running (landingStops);
     // the landing settles once they answer, and one runs at a time per item.
     if (hold === "finishing") {
-      throw new WorkItemRefusal(
-        409,
-        "the landing this item's stop cut short is still ending (its commands are being cancelled); call finish_item again in a minute"
-      );
+      return problem(409, {
+        code: "work-item-landing-ending",
+        detail:
+          "the landing this item's stop cut short is still ending (its commands are being cancelled); call finish_item again in a minute",
+      });
     }
-    return { row, item };
+    const open: { row: InstanceRow; item: WorkItemRow } = { row, item };
+    return open;
   };
 
   /**
@@ -4660,8 +5058,7 @@ export const createWorkItems = ({
         "parentInstanceId" | "workspace" | "fork" | "reuse"
       >,
       parent: Parent
-    ): Promise<WorkItemStart> =>
-      start({ ...request, parentInstanceId: parent.id }, parent),
+    ) => start({ ...request, parentInstanceId: parent.id }, parent),
 
     /** What an item's session has spent since the item began (its budget's dollars). */
     spentBy: (item: WorkItemRow): number => usedBy(item).usd,
@@ -4715,7 +5112,7 @@ export const createWorkItems = ({
      * a `delegate` naming its task, which starts on the dispatcher's path
      * (dispatch.ts `AttemptAsk`), is refused with first, as any is here.
      */
-    briefing(request: WorkItemRequest): string | undefined {
+    briefing(request: WorkItemRequest) {
       return briefingOf(request);
     },
 
@@ -4725,49 +5122,51 @@ export const createWorkItems = ({
      * its parent's tray from now on under the ids its item and session take
      * when it starts. Every other refusal is the caller's.
      */
-    async delegate(
-      called: WorkItemRequest
-    ): Promise<WorkItemStart | { queued: string; text: string }> {
+    async delegate(called: WorkItemRequest) {
       // A role is the hub's to give (a curator run's), never a caller's.
       const { role: _role, ...asked } = called;
       // The fleet's guidance for briefing this delegate, before anything
       // starts, when the caller has not read it since its start or its
       // last compaction (briefings.ts).
       const guide = briefingOf(asked);
+      if (guide instanceof ElysiaStatus) {
+        return guide;
+      }
       if (guide) {
-        throw new WorkItemRefusal(409, guide);
+        return problem(409, {
+          code: "work-item-briefing-first",
+          detail: guide,
+        });
       }
       const unclean = cleanProblem(asked);
       if (unclean) {
-        throw new WorkItemRefusal(400, unclean);
+        return problem(400, { code: "work-item-clean-unfit", detail: unclean });
       }
-      try {
-        return await start(asked);
-      } catch (error) {
-        if (!(error instanceof OwnsOverlap || error instanceof MachinePaused)) {
-          throw error;
-        }
-        const id = crypto.randomUUID();
-        const request: QueuedRequest = {
-          ...asked,
-          queuedAs: { id, instanceId: crypto.randomUUID() },
-        };
-        const queued = db.queueWorkItem({
-          id,
-          parentInstanceId: asked.parentInstanceId,
-          request,
-          title: asked.title.trim(),
-        });
-        publish(queuedSummaryOf(queued));
-        const until =
-          error instanceof MachinePaused
-            ? `${error.words}. It waits in your delegate tray and starts there when the pause ends`
-            : `${error.message} It waits in your delegate tray and starts when no live item owns its files any more`;
-        return {
-          queued: queued.id,
-          text: `Queued “${queued.title}” (${queued.id.slice(0, 8)}): ${until}; its report reaches you as any delegate's does.`,
-        };
+      const started = await start(asked);
+      if (!(started instanceof ElysiaStatus && queuesStart(started))) {
+        return started;
       }
+      const id = crypto.randomUUID();
+      const request: QueuedRequest = {
+        ...asked,
+        queuedAs: { id, instanceId: crypto.randomUUID() },
+      };
+      const queued = db.queueWorkItem({
+        id,
+        parentInstanceId: asked.parentInstanceId,
+        request,
+        title: asked.title.trim(),
+      });
+      publish(queuedSummaryOf(queued));
+      const { code, detail } = started.response;
+      const until =
+        code === "work-item-machine-paused"
+          ? `${detail.slice(0, -PAUSED_TAIL.length)}. It waits in your delegate tray and starts there when the pause ends`
+          : `${detail} It waits in your delegate tray and starts when no live item owns its files any more`;
+      return {
+        queued: queued.id,
+        text: `Queued “${queued.title}” (${queued.id.slice(0, 8)}): ${until}; its report reaches you as any delegate's does.`,
+      };
     },
 
     /**
@@ -4803,7 +5202,7 @@ export const createWorkItems = ({
      * refuses a session that is not theirs. Undefined when `target` names no
      * queued delegate, so the caller looks among sessions.
      */
-    withdrawQueued(from: string, target: string): string | undefined {
+    withdrawQueued(from: string, target: string) {
       const named = (rows: QueuedWorkItemRow[]) =>
         byId(target, rows, (row) => row.id);
       const mine = named(queuedFor(from));
@@ -4811,26 +5210,25 @@ export const createWorkItems = ({
         const theirs = named(db.queuedWorkItems()).some(
           (row) => !db.workItem(row.id)
         );
-        if (theirs) {
-          throw new WorkItemRefusal(
-            403,
-            `"${target}" is not your delegate — you can only stop or interrupt your own delegates.`
-          );
-        }
-        return;
+        return theirs
+          ? problem(403, {
+              code: "work-item-queued-not-yours",
+              detail: `"${target}" is not your delegate — you can only stop or interrupt your own delegates.`,
+            })
+          : undefined;
       }
       if (mine.length > 1) {
-        throw new WorkItemRefusal(
-          400,
-          `"${target}" names ${mine.length} queued delegates: ${mine.map((row) => `“${row.title}” (${row.id})`).join(", ")}. Pass the full id.`
-        );
+        return problem(400, {
+          code: "work-item-queued-ambiguous",
+          detail: `"${target}" names ${mine.length} queued delegates: ${mine.map((row) => `“${row.title}” (${row.id})`).join(", ")}. Pass the full id.`,
+        });
       }
       const [queued] = mine;
       if (startingQueued.has(queued.id)) {
-        throw new WorkItemRefusal(
-          409,
-          `Your queued delegate “${queued.title}” (${queued.id.slice(0, 8)}) is starting now that its files are free. Stop it by its id once delegate_list shows its session.`
-        );
+        return problem(409, {
+          code: "work-item-queued-starting",
+          detail: `Your queued delegate “${queued.title}” (${queued.id.slice(0, 8)}) is starting now that its files are free. Stop it by its id once delegate_list shows its session.`,
+        });
       }
       unqueue(queued);
       return `Withdrew your queued delegate “${queued.title}” (${queued.id.slice(0, 8)}): it never started, so it has no session or workspace.`;
@@ -4953,7 +5351,7 @@ export const createWorkItems = ({
     },
 
     /** Declares a bounded wait; the tray keeps it, the next actionable message summarizes it. */
-    waitItem(instanceId: string, minutes: unknown, reason: unknown): string {
+    waitItem(instanceId: string, minutes: unknown, reason: unknown) {
       if (
         typeof minutes !== "number" ||
         !Number.isInteger(minutes) ||
@@ -4962,21 +5360,25 @@ export const createWorkItems = ({
         typeof reason !== "string" ||
         !reason.trim()
       ) {
-        throw new WorkItemRefusal(400, WAIT_ITEM_LIMIT);
+        return problem(400, {
+          code: "wait-item-limit",
+          detail: WAIT_ITEM_LIMIT,
+        });
       }
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
       if (!(row && item)) {
-        throw new WorkItemRefusal(
-          409,
-          "No work item is open on this session. Start a delegate before calling wait_item."
-        );
+        return problem(409, {
+          code: "work-item-wait-none-open",
+          detail:
+            "No work item is open on this session. Start a delegate before calling wait_item.",
+        });
       }
       if (!LIVE.has(item.state) || item.landingSince) {
-        throw new WorkItemRefusal(
-          409,
-          `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "its merge checks run" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
-        );
+        return problem(409, {
+          code: "work-item-wait-not-live",
+          detail: `${item.title} (${handle(item.id)}) cannot wait while ${item.landingSince ? "its merge checks run" : `it is ${item.state}`}. Continue a live item before calling wait_item.`,
+        });
       }
       const waitReason = reason.trim().replace(/\s+/gu, " ");
       const waiting = declareWait(item, minutes, waitReason);
@@ -5055,27 +5457,29 @@ export const createWorkItems = ({
       )) {
         return;
       }
-      workspaces.recutInTurn(instanceId, workspace.id)?.then(
-        () => recutDone?.(instanceId),
-        (error: unknown) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          const wait = recutWaitsForAgent(message);
-          if (wait !== undefined) {
-            console.info(
-              `[workspaces] ${instanceId}: its workspace ${handle(workspace.id)} is not cut again yet, its machine's agent answering "${message}"; what was sent to it is kept at the hub, and the cut is asked again ${wait === "fenced" ? `once the agent is back (at the latest in ${RESTART_RECUT_MS / 1000} s)` : "now"}`
-            );
-            if (wait === "fenced") {
-              lifetime.after(RESTART_RECUT_MS, () => recutKept?.(instanceId));
-            } else {
-              recutKept?.(instanceId);
-            }
-            return;
+      /** The cut was not made, for `message`: asked again once its agent is back, or failed. */
+      const notCut = (message: string): void => {
+        const wait = recutWaitsForAgent(message);
+        if (wait !== undefined) {
+          console.info(
+            `[workspaces] ${instanceId}: its workspace ${handle(workspace.id)} is not cut again yet, its machine's agent answering "${message}"; what was sent to it is kept at the hub, and the cut is asked again ${wait === "fenced" ? `once the agent is back (at the latest in ${RESTART_RECUT_MS / 1000} s)` : "now"}`
+          );
+          if (wait === "fenced") {
+            lifetime.after(RESTART_RECUT_MS, () => recutKept?.(instanceId));
+          } else {
+            recutKept?.(instanceId);
           }
-          const reason = `Its workspace ${handle(workspace.id)} retired and could not be cut again: ${message}`;
-          console.warn(`[workspaces] ${instanceId}: ${reason}`);
-          recutFailed?.(instanceId, reason);
+          return;
         }
+        const reason = `Its workspace ${handle(workspace.id)} retired and could not be cut again: ${message}`;
+        console.warn(`[workspaces] ${instanceId}: ${reason}`);
+        recutFailed?.(instanceId, reason);
+      };
+      workspaces.recutInTurn(instanceId, workspace.id)?.then(
+        (stopped) =>
+          stopped ? notCut(stopped.response.detail) : recutDone?.(instanceId),
+        (error: unknown) =>
+          notCut(error instanceof Error ? error.message : String(error))
       );
     },
 
@@ -5365,12 +5769,9 @@ export const createWorkItems = ({
      * this lands ({@link finishable}); one landing already is refused.
      * Answers what the tool returns.
      */
-    async finishItem(
-      instanceId: string,
-      request: WorkItemSubmission
-    ): Promise<string> {
+    async finishItem(instanceId: string, request: WorkItemSubmission) {
       const open = await finishable(instanceId);
-      if (typeof open === "string") {
+      if (typeof open === "string" || open instanceof ElysiaStatus) {
         return open;
       }
       const { row, item } = open;
@@ -5382,27 +5783,9 @@ export const createWorkItems = ({
         return chatPointerRefusal(pointer);
       }
       clearWait(item);
-      if (!request.blocked) {
-        // The task's to-dos first: unticked ones are listed once, to tick or
-        // explain; the next call goes on.
-        const unticked = await untickedText(item);
-        if (unticked) {
-          return unticked;
-        }
-        // Design work in a project with a design system: a verifier session
-        // judges the working tree as it stands, committed or not
-        // (design-verify.ts), and its pass runs this again. Holding ends
-        // nothing, so it comes before the leftovers below.
-        const held = await designHold(item, request);
-        if (held) {
-          return held;
-        }
-      }
-      // The item ends past here, blocked or landed: nothing outside its
-      // commits may be left in its clone.
-      const left = await leftoversIn(item);
-      if (left) {
-        return left;
+      const held = await finishHeld(item, request);
+      if (held !== undefined) {
+        return held;
       }
 
       if (request.blocked) {
@@ -5544,25 +5927,36 @@ export const createWorkItems = ({
       from: string,
       entries: unknown[],
       sendLanded: (landed: HandoffInputs) => T
-    ): Promise<T> {
+    ) {
       const [row] = db.getInstancesByIds([instanceId]);
       const [caller] = db.getInstancesByIds([from]);
       if (!row) {
-        throw new WorkItemRefusal(404, `unknown session ${instanceId}`);
+        return problem(404, {
+          code: "work-item-handoff-target-unknown",
+          detail: `unknown session ${instanceId}`,
+        });
       }
       if (!caller) {
-        throw new WorkItemRefusal(404, `unknown session ${from}`);
+        return problem(404, {
+          code: "work-item-handoff-caller-unknown",
+          detail: `unknown session ${from}`,
+        });
       }
       const item = itemOf(row);
       if (!inputsGo(caller, row, item)) {
-        throw new WorkItemRefusal(
-          403,
-          workWords.inputsNotTheirs(sessionLink(row.id, boardTitle(row)))
-        );
+        return problem(403, {
+          code: "work-item-handoff-inputs-not-theirs",
+          detail: workWords.inputsNotTheirs(
+            sessionLink(row.id, boardTitle(row))
+          ),
+        });
       }
       // Read before a retired workspace is cut again: an input that may not
-      // go refuses the handoff before anything is cut.
+      // go stops the handoff before anything is cut.
       const inputs = await readInputs(entries, caller);
+      if (inputs instanceof ElysiaStatus) {
+        return inputs;
+      }
       const named = inputs.files.map(({ name, from: read }) => ({
         name,
         from: read,
@@ -5574,11 +5968,14 @@ export const createWorkItems = ({
           inputs,
           row
         );
+        if (folder instanceof ElysiaStatus) {
+          return folder;
+        }
         if (!folder) {
-          throw new WorkItemRefusal(
-            409,
-            `${sessionLink(row.id, boardTitle(row))} runs on ${machineName(db, row.machineId)}, whose agent keeps no inputs folder for a session with no work item: update it, or hand off without inputs.`
-          );
+          return problem(409, {
+            code: "work-item-handoff-no-inputs-folder",
+            detail: `${sessionLink(row.id, boardTitle(row))} runs on ${machineName(db, row.machineId)}, whose agent keeps no inputs folder for a session with no work item: update it, or hand off without inputs.`,
+          });
         }
         return sendLanded({ folder, inputs: named, cut: false });
       }
@@ -5586,12 +5983,15 @@ export const createWorkItems = ({
         item.workspaceId,
         async (workspace, cut) => {
           if (!workspace || workspace.state === "archived") {
-            throw new WorkItemRefusal(
-              409,
-              `${item.title} (${handle(item.id)}) is in workspace ${handle(item.workspaceId)}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`
-            );
+            return problem(409, {
+              code: "work-item-handoff-workspace-gone",
+              detail: `${item.title} (${handle(item.id)}) is in workspace ${handle(item.workspaceId)}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`,
+            });
           }
-          await handIn(workspace, inputs, row);
+          const unhanded = await handIn(workspace, inputs, row);
+          if (unhanded) {
+            return unhanded;
+          }
           return sendLanded({
             folder: `$TMPDIR/${INPUTS_DIR}/`,
             inputs: named,
@@ -5773,17 +6173,20 @@ export const createWorkItems = ({
 
     /**
      * What a held workspace holds that is nowhere else, as its machine read
-     * it once its boundary was closed ({@link HeldWork}). Refused for one
+     * it once its boundary was closed ({@link HeldWork}). The problem for one
      * that is not held: what a workspace holds is read as it is settled,
      * never while its boundary may run.
      */
-    held(needle: string): HeldWork {
+    held(needle: string) {
       const workspace = workspaces.namedWorkspace(needle);
+      if (workspace instanceof ElysiaStatus) {
+        return workspace;
+      }
       if (!workspaces.isHeld(workspace)) {
-        throw new WorkItemRefusal(
-          409,
-          `Workspace ${handle(workspace.id)} is ${workspace.state}, not held: what a workspace holds is read on its machine once its work has ended and its boundary is closed, and kept with it while it is held.`
-        );
+        return problem(409, {
+          code: "workspace-not-held",
+          detail: `Workspace ${handle(workspace.id)} is ${workspace.state}, not held: what a workspace holds is read on its machine once its work has ended and its boundary is closed, and kept with it while it is held.`,
+        });
       }
       return workspaces.heldWork(workspace);
     },
@@ -5894,11 +6297,11 @@ export const createWorkItems = ({
      * holds that is nowhere else, and deletes the clone. Refused while an
      * item there is live — stop it first — and for a workspace already
      * archived. A clone that holds work that is nowhere else is kept and the
-     * workspace held (workspaces.ts `WorkspaceHoldsWork`), unless `discard`: a
+     * workspace held (workspaces.ts `holdsWorkWords`), unless `discard`: a
      * person chose to let it go, and its machine saves it to a carry before
      * deleting anything.
      */
-    archive(
+    async archive(
       needle: string,
       {
         discard = false,
@@ -5908,16 +6311,18 @@ export const createWorkItems = ({
         /** The person confirmed it, knowing what still waits on him ({@link waiting}). */
         anyway?: boolean;
       } = {}
-    ): Promise<ArchivedWorkspace> {
+    ) {
+      const workspace = workspaces.namedWorkspace(needle);
+      if (workspace instanceof ElysiaStatus) {
+        return workspace;
+      }
       // In its turn: no settle, bundle or read meets this close.
-      return workspaces.inWorkspaceTurn(
-        workspaces.namedWorkspace(needle).id,
-        () =>
-          workspaces.archiveNow(
-            needle,
-            discard,
-            anyway ? undefined : workWords.servesWaitingConfirm
-          )
+      return await workspaces.inWorkspaceTurn(workspace.id, () =>
+        workspaces.archiveNow(
+          needle,
+          discard,
+          anyway ? undefined : workWords.servesWaitingConfirm
+        )
       );
     },
 
@@ -5927,16 +6332,21 @@ export const createWorkItems = ({
      * discard of it waits on, which the person's confirm names and an
      * approval ask shows.
      */
-    waiting(needle: string): { id: string; title: string }[] {
-      return workspaces
-        .waitingFrom(workspaces.namedWorkspace(needle))
+    waiting(needle: string) {
+      const workspace = workspaces.namedWorkspace(needle);
+      if (workspace instanceof ElysiaStatus) {
+        return workspace;
+      }
+      const waiting: { id: string; title: string }[] = workspaces
+        .waitingFrom(workspace)
         .map((row) => ({
           id: row.id,
           title: row.title,
         }));
+      return waiting;
     },
 
-    discardable: (from: string, needle: string): WorkspaceRow =>
+    discardable: (from: string, needle: string) =>
       workspaces.discardable(from, needle),
 
     /**
@@ -5947,13 +6357,16 @@ export const createWorkItems = ({
      * its two ways forward, unless `approved`: the person approved that
      * session's ask to discard it anyway (server.ts, the approve ask's run).
      */
-    discardFor(
+    async discardFor(
       from: string,
       needle: string,
       { approved = false }: { approved?: boolean } = {}
-    ): Promise<ArchivedWorkspace> {
+    ) {
       const workspace = workspaces.discardable(from, needle);
-      return workspaces.inWorkspaceTurn(workspace.id, () =>
+      if (workspace instanceof ElysiaStatus) {
+        return workspace;
+      }
+      return await workspaces.inWorkspaceTurn(workspace.id, () =>
         workspaces.archiveNow(
           workspace.id,
           true,
@@ -6009,21 +6422,21 @@ export const createWorkItems = ({
      * work (`replacedBy`), which must exist and have been made after it. A
      * dismissed item that is still live is over: cancelled, and its session
      * ended if it still has a process. One whose landing this hub runs now
-     * ends with it. Throws with the sentence when the replacement is not
-     * one.
+     * ended with it. Answers the problem when the replacement is not one.
      */
-    dismiss(
-      id: string,
-      why: { reason: string } | { replacedBy: string }
-    ): WorkItemSummary | undefined {
+    dismiss(id: string, why: { reason: string } | { replacedBy: string }) {
       const item = db.workItem(id);
       if (!item) {
-        return undefined;
+        return;
+      }
+      const replacement = "reason" in why ? null : replacementOf(item, why);
+      if (replacement instanceof ElysiaStatus) {
+        return replacement;
       }
       const said =
         "reason" in why
           ? { dismissReason: why.reason, replacedBy: null }
-          : { dismissReason: null, replacedBy: replacementOf(item, why) };
+          : { dismissReason: null, replacedBy: replacement };
       const dismissedAt = new Date();
       if (!LIVE.has(item.state) || landingRun.landingRuns(item.id)) {
         const kept = update(id, { dismissedAt, ...said });

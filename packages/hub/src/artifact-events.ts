@@ -37,7 +37,6 @@ import type { Caw } from "./caw";
 import { stagePlaceRef } from "./caw";
 import { peek } from "./cut-turns";
 import type { ArtifactRow } from "./db/artifacts";
-import type { SentMessageRow } from "./db/sends";
 import type { HubContext } from "./hub-context";
 import type { HubTimer } from "./lifetime";
 import { externalizeImages } from "./media";
@@ -217,7 +216,7 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     images: { data: string; mediaType: string }[],
     replaces: string | undefined,
     attachments: SendAttachment[] = []
-  ): SentMessageRow | undefined =>
+  ) =>
     ctx.deliverSend({
       verb: "send",
       machineId: instance.machineId,
@@ -284,20 +283,13 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       next: next?.id,
     });
     await artifactInOrder(`${artifact.id}:handed`, () => {
-      try {
-        const record = sendArtifactEvent(parent, text, [], undefined);
-        if (record?.state === "failed") {
-          console.warn(
-            `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate handed it up: ${record.reason ?? "the send failed"}`
-          );
-        }
-      } catch (error) {
-        // A refusal the send path throws (a conversation gone) keeps no record of its own.
-        recordUndelivered(
-          parent,
-          text,
-          [],
-          error instanceof Error ? error.message : String(error)
+      const record = sendArtifactEvent(parent, text, [], undefined);
+      if (record instanceof ElysiaStatus) {
+        // A problem the send path answers (a conversation gone) keeps no record of its own.
+        recordUndelivered(parent, text, [], record.response.detail);
+      } else if (record?.state === "failed") {
+        console.warn(
+          `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate handed it up: ${record.reason ?? "the send failed"}`
         );
       }
       return Promise.resolve();
@@ -320,18 +312,18 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
           (one) => parseArtifactResponses(one.text)?.since ?? since
         )
       );
-      sendArtifactEvent(
-        instance,
-        artifactResponsesNotice({
-          id: artifact.id,
-          kind: artifact.kind,
-          name: artifact.name,
-          title: artifact.title,
-          since: earliest,
-        }),
-        [],
-        replaces
-      );
+      const notice = artifactResponsesNotice({
+        id: artifact.id,
+        kind: artifact.kind,
+        name: artifact.name,
+        title: artifact.title,
+        since: earliest,
+      });
+      const sent = sendArtifactEvent(instance, notice, [], replaces);
+      if (sent instanceof ElysiaStatus) {
+        // A problem the send path answers (a conversation gone) keeps no record of its own.
+        recordUndelivered(instance, notice, [], sent.response.detail);
+      }
     });
   /**
    * The person's marks on an artifact (artifacts/service.ts
@@ -468,12 +460,16 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
       ...withdrawn.flatMap((one) => one.attachments),
       ...attachments,
     ];
-    let record: SentMessageRow | undefined;
-    try {
-      record = sendArtifactEvent(instance, words, pictures, replaces, carried);
-    } catch (error) {
-      // A refusal the send path throws (a conversation gone) keeps no record of its own.
-      const reason = error instanceof Error ? error.message : String(error);
+    const record = sendArtifactEvent(
+      instance,
+      words,
+      pictures,
+      replaces,
+      carried
+    );
+    if (record instanceof ElysiaStatus) {
+      // A problem the send path answers (a conversation gone) keeps no record of its own.
+      const reason = record.response.detail;
       recordUndelivered(instance, words, pictures, reason, carried);
       return { ok: false, reason };
     }
@@ -738,10 +734,14 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     from: string,
     id: string,
     { approved = false }: { approved?: boolean } = {}
-  ): Promise<string> => {
-    const { workspace, carry } = await ctx.workItems.discardFor(from, id, {
+  ) => {
+    const archived = await ctx.workItems.discardFor(from, id, {
       approved,
     });
+    if (archived instanceof ElysiaStatus) {
+      return archived;
+    }
+    const { workspace, carry } = archived;
     ctx.workspaceArchived(workspace);
     return `${
       carry
@@ -766,7 +766,13 @@ export const createArtifactEvents = (ctx: ArtifactEventsContext) => {
     reason: string | undefined
   ) => {
     const asked = ctx.workItems.discardable(from, id);
+    if (asked instanceof ElysiaStatus) {
+      return asked;
+    }
     const stillWaiting = ctx.workItems.waiting(asked.id);
+    if (stillWaiting instanceof ElysiaStatus) {
+      return stillWaiting;
+    }
     const goes: { recorded: string } | { approved: boolean } = {
       approved: false,
     };
