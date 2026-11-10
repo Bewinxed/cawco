@@ -70,7 +70,12 @@ const ownerMayRemoveSync = (dir: string): void => {
 
 /** Whether `error` is `rm`'s refusal by a folder on the way ({@link REFUSED}); any other is thrown. */
 const refused = (error: unknown): true => {
-  if (!REFUSED.has((error as NodeJS.ErrnoException).code ?? "")) {
+  if (!(
+    error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    REFUSED.has(error.code)
+  )) {
     throw error;
   }
   return true;

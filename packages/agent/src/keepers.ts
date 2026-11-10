@@ -25,7 +25,10 @@ import {
 /** A dial that found no keeper there: a file left by one that is gone, or none at all. */
 const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
 const nobodyThere = (error: unknown): boolean =>
-  NOBODY_THERE.has((error as NodeJS.ErrnoException).code ?? "");
+  error instanceof Error &&
+  "code" in error &&
+  typeof error.code === "string" &&
+  NOBODY_THERE.has(error.code);
 
 /** A reading that ended with no keeper there: none listened, or the one that did ended before it answered ({@link Gone}). */
 const keeperGone = (error: unknown): boolean =>
@@ -262,7 +265,7 @@ export class KeeperPool {
     console.info(
       error instanceof Gone
         ? `[sessiond] the keeper at ${endpoint} ended before it answered, and what it held ended with it`
-        : `[sessiond] ${endpoint} answers nothing (${(error as NodeJS.ErrnoException).code}): read as a file a keeper that is gone left`
+        : `[sessiond] ${endpoint} answers nothing (${error instanceof Error && "code" in error ? String(error.code) : undefined}): read as a file a keeper that is gone left`
     );
   }
 

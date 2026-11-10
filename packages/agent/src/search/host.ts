@@ -156,7 +156,8 @@ const say = (said: SearchSaid): void => {
 };
 
 const failure = (error: unknown): { code?: string; message: string } => {
-  const { code } = error as { code?: unknown };
+  const code =
+    error instanceof Error && "code" in error ? error.code : undefined;
   return {
     message: error instanceof Error ? error.message : String(error),
     ...(typeof code === "string" ? { code } : {}),
@@ -181,8 +182,10 @@ const serve = async (): Promise<void> => {
     index = new TranscriptIndex(path);
     const watermarks = new Map<string, number>();
     const rows = index.db
-      .query("SELECT key, value FROM meta WHERE key LIKE ?")
-      .all(`${WATERMARK}%`) as { key: string; value: string }[];
+      .query<{ key: string; value: string }, [string]>(
+        "SELECT key, value FROM meta WHERE key LIKE ?"
+      )
+      .all(`${WATERMARK}%`);
     for (const row of rows) {
       watermarks.set(row.key, Number(row.value));
     }

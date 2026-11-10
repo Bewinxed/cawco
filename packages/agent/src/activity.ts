@@ -152,9 +152,7 @@ const IDLE_NOTIFY = [
  * does: its `init` reads the protocol file from disk, which a compiled agent
  * does not have, so the bundled copy is loaded here instead.
  */
-const CORE = (
-  coreProtocol as { name: string; requests: { args: unknown[] }[] }[]
-).map((itf) =>
+const CORE = coreProtocol.map((itf) =>
   itf.name === "wl_registry"
     ? {
         ...itf,
@@ -175,15 +173,32 @@ const CORE = (
     : itf
 );
 
+/** The `wl_display` object, as far as opening the connection uses it: the library's protocol typings import a path its package does not ship. */
+interface WlDisplay extends Wl_interface {
+  get_registry: () => Promise<Wl_interface>;
+  name: "wl_display";
+  sync: () => Promise<void>;
+}
+
+/** The `ext_idle_notifier_v1` global, which wayland-client's bundled protocol does not type. */
+interface ExtIdleNotifier extends Wl_interface {
+  get_idle_notification: (
+    timeout: number,
+    seat: Wl_interface
+  ) => Promise<Wl_interface>;
+  get_input_idle_notification: (
+    timeout: number,
+    seat: Wl_interface
+  ) => Promise<Wl_interface>;
+  name: "ext_idle_notifier_v1";
+}
+
 /** The compositor's connection: wayland-client's display, opened from the bundled protocol. */
 class Compositor extends Display {
   async open(): Promise<void> {
     await this.load(CORE);
     await this.load(IDLE_NOTIFY);
-    const display = this.registerInterface(1, "wl_display") as Wl_interface & {
-      get_registry: () => Promise<Wl_interface>;
-      sync: () => Promise<void>;
-    };
+    const display = this.registerInterface<WlDisplay>(1, "wl_display");
     this._bindRegistry(await display.get_registry());
     await display.sync();
   }
@@ -288,18 +303,9 @@ const waylandIdle = async (): Promise<IdleSource | undefined> => {
       return;
     }
     const seat = await compositor.bind("wl_seat", 1);
-    const notifier = (await compositor.bind(
+    const notifier = await compositor.bind<ExtIdleNotifier>(
       "ext_idle_notifier_v1"
-    )) as Wl_interface & {
-      get_idle_notification: (
-        timeout: number,
-        seat: Wl_interface
-      ) => Promise<Wl_interface>;
-      get_input_idle_notification: (
-        timeout: number,
-        seat: Wl_interface
-      ) => Promise<Wl_interface>;
-    };
+    );
     const input = notifier.version >= 2;
     const notification = await (input
       ? notifier.get_input_idle_notification(IDLE_AFTER_MS, seat)

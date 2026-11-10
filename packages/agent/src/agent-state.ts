@@ -75,7 +75,9 @@ export const recordAgentState = <Key extends keyof AgentState>(
   key: Key,
   value: NonNullable<AgentState[Key]>
 ): Promise<void> => {
-  held[key] = { ...value, agent: process.pid, at: Date.now() } as Recorded[Key];
+  Object.assign(held, {
+    [key]: { ...value, agent: process.pid, at: Date.now() },
+  });
   const path = join(cawcoDataDir(), AGENT_STATE_FILE);
   writes = writes
     .then(() => writeStateFile(path, `${JSON.stringify(held)}\n`))

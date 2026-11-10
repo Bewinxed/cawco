@@ -16,6 +16,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { constants } from "node:os";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { systemProgram } from "@cawco/core/workspace-needs";
+import { z } from "zod";
 import { LOG_FRAME, logFrame, logRefusal } from "./boundary-log-protocol";
 
 /** Where the shims reach the agent. */
@@ -33,28 +34,26 @@ async function* framesOf(
   proc: Bun.Subprocess<"ignore", "pipe", "pipe">
 ): AsyncGenerator<Uint8Array> {
   const stdout = proc.stdout.getReader();
-  const readers = new Map<number, typeof stdout>([
-    [LOG_FRAME.stdout, stdout],
-    [LOG_FRAME.stderr, proc.stderr.getReader()],
+  const next = (kind: number, reader: typeof stdout) =>
+    reader.read().then((result) => ({ kind, reader, result }));
+  const reads = new Map<number, ReturnType<typeof next>>([
+    [LOG_FRAME.stdout, next(LOG_FRAME.stdout, stdout)],
+    [LOG_FRAME.stderr, next(LOG_FRAME.stderr, proc.stderr.getReader())],
   ]);
-  const next = (kind: number) =>
-    (readers.get(kind) as typeof stdout)
-      .read()
-      .then((result) => ({ kind, result }));
-  const reads = new Map([...readers.keys()].map((kind) => [kind, next(kind)]));
   while (reads.size > 0) {
-    const { kind, result } = await Promise.race(reads.values());
+    const { kind, reader, result } = await Promise.race(reads.values());
     if (result.done) {
       reads.delete(kind);
       continue;
     }
-    reads.set(kind, next(kind));
+    reads.set(kind, next(kind, reader));
     yield logFrame(kind, result.value);
   }
   await proc.exited;
-  const signal = proc.signalCode
-    ? constants.signals[proc.signalCode as keyof typeof constants.signals]
-    : undefined;
+  const signal =
+    typeof proc.signalCode === "string"
+      ? constants.signals[proc.signalCode]
+      : undefined;
   const status = signal ? 128 + signal : (proc.exitCode ?? 1);
   yield logFrame(LOG_FRAME.exit, encoder.encode(String(status)));
 }
@@ -69,10 +68,8 @@ const refused = (why: string): Response =>
   );
 
 const argvOf = (body: unknown): string[] | undefined => {
-  const argv = (body as { argv?: unknown } | null)?.argv;
-  return Array.isArray(argv) && argv.every((word) => typeof word === "string")
-    ? argv
-    : undefined;
+  const asked = z.object({ argv: z.array(z.string()) }).safeParse(body);
+  return asked.success ? asked.data.argv : undefined;
 };
 
 const start = (): LogRelay => {

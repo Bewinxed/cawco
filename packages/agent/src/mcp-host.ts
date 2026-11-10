@@ -625,10 +625,7 @@ class Hosted {
     if (!kept) {
       return;
     }
-    const capabilities = (kept.initialize.capabilities ?? {}) as Record<
-      string,
-      unknown
-    >;
+    const capabilities = asRecord(kept.initialize.capabilities) ?? {};
     for (const method of methods) {
       const { items, capability } = LIST_METHODS[method] ?? {};
       if (items && capability && capabilities[capability]) {
@@ -726,6 +723,13 @@ class Hosted {
   }
 }
 
+const RECORD = z.record(z.string(), z.unknown());
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined => {
+  const record = RECORD.safeParse(value);
+  return record.success ? record.data : undefined;
+};
+
 /**
  * Capabilities as a session reads them: no list-changed, no resource
  * subscriptions and no logging, since a session holds no stream the host
@@ -734,16 +738,14 @@ class Hosted {
  */
 const quiet = (capabilities: unknown): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(
-    (capabilities ?? {}) as Record<string, unknown>
-  )) {
+  for (const [name, value] of Object.entries(asRecord(capabilities) ?? {})) {
     if (name === "logging") {
       continue;
     }
     out[name] =
       value && typeof value === "object"
         ? {
-            ...(value as Record<string, unknown>),
+            ...asRecord(value),
             ...("listChanged" in value ? { listChanged: false } : {}),
             ...("subscribe" in value ? { subscribe: false } : {}),
           }
@@ -751,6 +753,8 @@ const quiet = (capabilities: unknown): Record<string, unknown> => {
   }
   return out;
 };
+
+const MESSAGES = z.array(JsonRpcMessageSchema).min(1);
 
 /** The JSON-RPC message or batch a POST carries, or why it carries none. */
 const messagesOf = (
@@ -765,11 +769,8 @@ const messagesOf = (
     return { error: rpcError(null, PARSE_ERROR, "The body is not JSON.") };
   }
   const batch = Array.isArray(parsed);
-  const messages = (batch ? parsed : [parsed]) as unknown[];
-  if (
-    messages.length === 0 ||
-    messages.some((one) => !one || typeof one !== "object")
-  ) {
+  const messages = MESSAGES.safeParse(batch ? parsed : [parsed]);
+  if (!messages.success) {
     return {
       error: rpcError(
         null,
@@ -778,7 +779,7 @@ const messagesOf = (
       ),
     };
   }
-  return { batch, messages: messages as JsonRpcMessage[] };
+  return { batch, messages: messages.data };
 };
 
 /** The machine's shared servers, by name. */
