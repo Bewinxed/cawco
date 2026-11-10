@@ -82,7 +82,7 @@ export const workspacePath = async (
 };
 
 const scan = async (): Promise<Scan> => {
-  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const ids = await readdir(workspacesDir()).catch(() => []);
   const found = await Promise.all(
     ids.map(async (id) => ({ id, path: await pathOf(id) }))
   );
