@@ -63,8 +63,6 @@ export interface ScrollPinHost {
   };
   readonly landed: boolean;
   readonly landingFrame: number | null;
-  readonly letGo: () => void;
-  readonly marked: { key: string; state: "on" | "off" } | null;
   readonly mounted: {
     readonly aside: ReadonlyMap<string, number>;
     awayScroll: number;
@@ -82,12 +80,16 @@ export interface ScrollPinHost {
   readonly rowDraw: {
     readonly renderedRows: Row[];
   };
+  readonly seek: {
+    readonly letGo: () => void;
+    readonly marked: { key: string; state: "on" | "off" } | null;
+    readonly unfound: "gone" | "unread" | null;
+  };
   readonly session: SessionState;
   readonly shown: boolean;
   readonly slides: {
     readonly carrySlides: (scrolled: number) => void;
   };
-  readonly unfound: "gone" | "unread" | null;
   readonly visible: boolean;
   readonly whole: {
     readonly keepWhole: () => boolean;
@@ -378,8 +380,8 @@ export class ScrollPin {
     // A row the reader scrolls to is not arriving, whenever it came in: what
     // is still waiting to mount is theirs to read, not ours to play.
     this.#host.arrivals.tickets.clear();
-    if (this.#host.marked?.state === "on" || this.#host.unfound) {
-      this.#host.letGo();
+    if (this.#host.seek.marked?.state === "on" || this.#host.seek.unfound) {
+      this.#host.seek.letGo();
     }
     // The reader's scroll has the screen until it comes to rest: nothing
     // writes the scroll offset under a finger, its momentum or its bounce,
