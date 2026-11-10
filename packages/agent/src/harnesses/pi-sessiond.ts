@@ -215,14 +215,8 @@ class PiRemoteSession implements HarnessSession {
   readonly #epoch: string;
   readonly #recoveryHead: number;
   #seq: number;
-  #readyValue = false;
-  get #ready(): boolean {
-    return this.#readyValue;
-  }
-  #busyValue = false;
-  get #busy(): boolean {
-    return this.#busyValue;
-  }
+  #ready: boolean;
+  #busy: boolean;
   #exited = false;
   /** The gate form the host reports it started on ({@link PiHostState.gateForm}). */
   #hostForm: string | undefined;
@@ -263,6 +257,8 @@ class PiRemoteSession implements HarnessSession {
   ) {
     this.#client = client;
     this.#ctx = ctx;
+    this.#ready = false;
+    this.#busy = false;
     this.#pid = pid;
     this.#epoch = procEpoch(client.epoch as string, pid);
     this.#seq = afterSeq;
@@ -382,7 +378,7 @@ class PiRemoteSession implements HarnessSession {
   }
 
   #setBusy(active: boolean): void {
-    this.#busyValue = active;
+    this.#busy = active;
     if (this.sessionId) {
       if (active) {
         piOpenTurns.add(this.sessionId);
@@ -435,7 +431,7 @@ class PiRemoteSession implements HarnessSession {
   }
 
   attached(): void {
-    this.#readyValue = true;
+    this.#ready = true;
     for (const { seq, event } of this.#early.splice(0)) {
       this.#inOrder(seq, event);
     }
