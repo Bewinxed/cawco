@@ -152,7 +152,8 @@ export function takePermissionRequest(
   frame: FrameOf<"permission_request">
 ): void {
   const target = session(frame.instanceId);
-  const { routedTo } = frame as { routedTo?: "parent" };
+  const routedTo =
+    "routedTo" in frame && frame.routedTo === "parent" ? "parent" : undefined;
   // An ask is parked in one session: one the hub parked again under
   // another (its session folded into the one it went on in) leaves
   // the session it stood in.

@@ -54,7 +54,9 @@ export interface TrayChild {
  * of one): it names its starter and runs no work item, the one thing that
  * tells it from a delegate (core `InstanceRow.workItemId`).
  */
-const isStarted = (row: InstanceRow): boolean =>
+const isStarted = (
+  row: InstanceRow
+): row is InstanceRow & { parentInstanceId: string } =>
   !!row.parentInstanceId && !row.workItemId;
 
 /** The sessions each session started that run no work item, by their starter. */
@@ -62,7 +64,7 @@ const startedBy = $derived.by(() => {
   const by = new Map<string, InstanceRow[]>();
   for (const row of boardStore.instances) {
     if (isStarted(row)) {
-      const parent = row.parentInstanceId as string;
+      const parent = row.parentInstanceId;
       by.set(parent, [...(by.get(parent) ?? []), row]);
     }
   }
