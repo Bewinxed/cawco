@@ -192,7 +192,7 @@ export async function hubJson<T>(
  */
 async function jsonOf<T>(response: Response): Promise<T> {
   try {
-    return (await response.json()) as T;
+    return await response.json();
   } catch (error) {
     // A read cut off (its signal aborted, the network gone) rejects as it is.
     if (!(error instanceof SyntaxError)) {

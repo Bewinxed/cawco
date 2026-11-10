@@ -167,7 +167,7 @@
     tip = hit;
   }
 
-  function tabKey(event: KeyboardEvent) {
+  function tabKey(event: KeyboardEvent & { currentTarget: HTMLElement }) {
     const enabled = items.filter((entry) => !entry.disabled);
     const to = arrowStep(
       event,
@@ -177,7 +177,7 @@
     const next = to === null ? undefined : enabled[to];
     if (next) {
       onpick(next.id);
-      (event.currentTarget as HTMLElement)
+      event.currentTarget
         .querySelector<HTMLButtonElement>(
           `[data-rail-item="${CSS.escape(next.id)}"]`
         )

@@ -328,7 +328,6 @@ as-unknown-as	Listeners[3]	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	Listeners[4]	scripts/probe-kit/specs/preview-burst.ts	1
 as-unknown-as	MetaMap	packages/core/src/doc-meta.ts	1
 as-unknown-as	MirrorMap<unknown>	packages/preview/src/overlay/mirror.ts	2
-as-unknown-as	NativeClass	apps/dashboard/src/lib/platform/frame-observer.ts	1
 as-unknown-as	NeutralAssistantMessage	packages/hub/src/sends.ts	1
 as-unknown-as	NeutralMessage	packages/agent/src/harnesses/claude.ts	7
 as-unknown-as	NeutralMessage	scripts/probe-kit/specs/find-places.ts	1
@@ -382,7 +381,6 @@ as-unknown-as	ServerWebSocket<ArtifactSocket>	packages/hub/src/preview-routes.ts
 as-unknown-as	ServerWebSocket<PreviewSocket>	packages/hub/src/browser-routes.ts	1
 as-unknown-as	SessionMessage[]	scripts/probe-kit/specs/transcript-windows.ts	1
 as-unknown-as	SessionStoreEntry	packages/agent/src/harnesses/claude.ts	1
-as-unknown-as	Shared	apps/dashboard/src/lib/platform/frame-observer.ts	1
 as-unknown-as	Shift[]	scripts/probe-kit/specs/live-perf.ts	1
 as-unknown-as	Skeleton[]	packages/agent/src/canvas-host/scene.ts	1
 as-unknown-as	Slot["holder"]	packages/hub/scripts/openapi.ts	2
