@@ -1107,7 +1107,7 @@
                     >Sort sessions by</DropdownMenu.GroupHeading
                   >
                   <DropdownMenu.RadioGroup
-                    onValueChange={(value) => rail.setSort(value as RailSort)}
+                    onValueChange={(value) => rail.setSort(value)}
                     value={rail.sort}
                   >
                     <DropdownMenu.RadioItem value="recent"
@@ -1284,10 +1284,12 @@
                         <Sidebar.MenuSubItem data-flip>
                           <Sidebar.MenuSubButton
                             data-branch-item
-                            onclick={(event: MouseEvent) =>
+                            onclick={(
+                              event: MouseEvent & { currentTarget: HTMLElement }
+                            ) =>
                               newSession(
                                 { projectId: project.id },
-                                event.currentTarget as HTMLElement
+                                event.currentTarget
                               )}
                             row="compact"
                             tone="muted"

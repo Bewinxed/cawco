@@ -1,9 +1,5 @@
 <script lang="ts">
-  import {
-    DRAFT_LIMITS,
-    type InstallRoute,
-    type InstallSignIn,
-  } from "@cawco/core/install";
+  import { DRAFT_LIMITS, type InstallSignIn } from "@cawco/core/install";
   /**
    * Reach: the window's details for a machine not yet added, under the two
    * ways in as tabs (Over SSH, By a command), the one the entry point
@@ -189,7 +185,7 @@
           : {}),
       });
     } catch (error) {
-      refused = (error as Error).message;
+      refused = error instanceof Error ? error.message : String(error);
       shake(targetField);
     } finally {
       pending = false;
@@ -269,7 +265,7 @@
       await connect.start({ route: "command", address }, dur("--dur-hold"));
     } catch (error) {
       copied = false;
-      refused = (error as Error).message;
+      refused = error instanceof Error ? error.message : String(error);
     } finally {
       pending = false;
     }
@@ -330,7 +326,10 @@
     onValueChange={(next) => {
       said = "";
       refused = "";
-      connect.chooseTab(next as InstallRoute);
+      const way = CONNECT_WAYS.find((one) => one.route === next);
+      if (way) {
+        connect.chooseTab(way.route);
+      }
     }}
     value={route}
     values={CONNECT_WAYS.map((way) => way.route)}

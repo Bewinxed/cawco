@@ -114,11 +114,13 @@ function contextCell(read: ContextRead): string {
 export async function sessionsCsv(spend: SessionSpend): Promise<string> {
   const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const seen = new Set<string>();
-  const running = boardStore.runningInstances;
   const reads = await Promise.all(
-    running.map((row) => refreshContext(row.id, row.machineId))
+    boardStore.runningInstances.map(async (row) => ({
+      row,
+      read: await refreshContext(row.id, row.machineId),
+    }))
   );
-  const live = running.map((row, index) => {
+  const live = reads.map(({ row, read }) => {
     const stats = sessionsStore.statsOf(row.id);
     const at = lastAt(row);
     const { harness } = row;
@@ -130,7 +132,7 @@ export async function sessionsCsv(spend: SessionSpend): Promise<string> {
       machineName(row.machineId),
       HARNESS[harness] ?? harness,
       stats.turns === null ? "" : String(stats.turns),
-      contextCell(reads[index] as ContextRead),
+      contextCell(read),
       at ? new Date(at).toISOString() : "",
       stateOf(row.id, isFailed(row)),
       ...spendCells(row.sessionId ? spend.get(row.sessionId) : undefined),

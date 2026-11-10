@@ -48,7 +48,7 @@ export const LOST_REFUSES_MS = 5000;
 
 /** The page's doc's link to the hub, as its `cawco:sync` says (artifact.ts `Link`). */
 export type Link = "connecting" | "synced" | "lost";
-const LINKS = new Set<string>(["connecting", "synced", "lost"]);
+const LINKS: readonly Link[] = ["connecting", "synced", "lost"];
 
 export interface Box {
   height: number;
@@ -193,10 +193,10 @@ export class Stage {
 
   /** The page's word on its link (`cawco:sync`): a lost one keeps the time it was first lost. */
   heardLink(state: unknown, error: unknown): void {
-    if (typeof state !== "string" || !LINKS.has(state)) {
+    const link = LINKS.find((one) => one === state);
+    if (!link) {
       return;
     }
-    const link = state as Link;
     if (link === "synced") {
       this.hasSynced = true;
     }

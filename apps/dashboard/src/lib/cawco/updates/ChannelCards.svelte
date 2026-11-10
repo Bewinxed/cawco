@@ -83,7 +83,7 @@
     aria-label="Channel"
     class="relative grid w-(--cards-w) grid-cols-(--cols) gap-space-3"
     onValueChange={(next) => {
-      chosen = next as Channel;
+      chosen = CARDS.find((card) => card.channel === next)?.channel ?? chosen;
     }}
     orientation="horizontal"
     value={chosen}

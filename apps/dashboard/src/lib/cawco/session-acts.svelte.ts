@@ -45,12 +45,11 @@ export function sessionAct(id: string): SessionAct | undefined {
 }
 
 function put(id: string, change: Partial<SessionAct>): void {
-  const next: SessionAct = { ...acts.get(id), ...change };
-  for (const key of Object.keys(next) as (keyof SessionAct)[]) {
-    if (next[key] === undefined) {
-      delete next[key];
-    }
-  }
+  const next: SessionAct = Object.fromEntries(
+    Object.entries({ ...acts.get(id), ...change }).filter(
+      ([, value]) => value !== undefined
+    )
+  );
   if (Object.keys(next).length === 0) {
     acts.delete(id);
   } else {

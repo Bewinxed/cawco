@@ -100,8 +100,8 @@ function fillDescendants<T extends TreeRow>(lines: TreeLine<T>[]): void {
     // Read in place: a copy of the rest for every line made a list of a
     // thousand rows copy half a million.
     for (let next = at + 1; next < lines.length; next += 1) {
-      const below = lines[next] as TreeLine<T>;
-      if (below.depth <= line.depth) {
+      const below = lines[next];
+      if (!below || below.depth <= line.depth) {
         break;
       }
       if (!below.context) {
