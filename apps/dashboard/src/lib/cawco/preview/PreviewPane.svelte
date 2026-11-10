@@ -15,7 +15,7 @@
     PREVIEW_LOCKED_MESSAGE,
   } from "@cawco/core/preview/routes";
   import type { PaneKey } from "@cawco/core/shell-shortcuts";
-  import { canvasOf, STAGE_READY_MS } from "@cawco/core/stage";
+  import { STAGE_READY_MS } from "@cawco/core/stage";
   import {
     STAGE_DIALS_WRITTEN,
     STAGE_DIFFERENCES,
@@ -87,12 +87,10 @@
   import { formatTimestamp } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import AskHere from "../AskHere.svelte";
-  import { keepThumbnail, writeSheet } from "../artifact-api";
+  import { keepThumbnail } from "../artifact-api";
   import { openAsked, takeOpen } from "../artifact-names.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
-  import { besideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
-  import { inspectKept, StageLink } from "../graph/stage-link.svelte";
   import {
     type MarkdownFleet,
     markdownFleetAbove,
@@ -119,7 +117,6 @@
   import CommentRail from "./CommentRail.svelte";
   import CommentsButton from "./CommentsButton.svelte";
   import CoverState from "./CoverState.svelte";
-  import { CanvasViewState } from "./canvas-view.svelte";
   import type { CommentDrafts } from "./comment-drafts.svelte";
   import {
     commentAttachments,
@@ -137,11 +134,11 @@
   import { PaneLayout } from "./pane-layout.svelte";
   import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
   import { PaneSend } from "./pane-send.svelte";
+  import { PaneSheet } from "./pane-sheet.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
   import { frameError, PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
-  import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
   import { errorPlace, errorTitle, StageCover } from "./stage-cover.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
   import {
@@ -264,6 +261,14 @@
     previewFrame,
     paneDoc,
   });
+  const paneSheet = new PaneSheet({
+    instanceId: () => instanceId,
+    paneSubject,
+    paneLayout,
+    previewReach,
+    previewFrame,
+    paneDoc,
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /**
@@ -303,23 +308,6 @@
   let pinsShown = $state(true);
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
-  /** His dial values as the artifact's doc keeps them (`dials`), by name: the design graph stands them again on open. */
-  const keptDials = $derived.by(() => {
-    const kept = paneDoc.view?.choices.dials?.value;
-    return kept && typeof kept === "object" && !Array.isArray(kept)
-      ? (kept as Record<string, number | string | boolean>)
-      : {};
-  });
-  /** His tuning of every move as the artifact's doc keeps it (its `tuned` map): the design graph puts it back on each move's first read. */
-  const keptTuned = $derived(paneDoc.view?.tuned ?? []);
-  /** The design graph's room face the address names (`?face=move`, `map` or `dials`), opened on: the states when it names none. */
-  const GRAPH_FACES = ["map", "move", "dials"] as const;
-  const startFace =
-    typeof location === "undefined"
-      ? undefined
-      : GRAPH_FACES.find(
-          (one) => one === new URL(location.href).searchParams.get("face")
-        );
   /**
    * The page's answer to a write the pane sent it: the pin as the page now
    * holds it, drawn again; a refusal under the open card, a reply's words
@@ -366,51 +354,6 @@
       ? "Comments (⇧C hides the pins)"
       : "Comments (⇧C shows the pins)";
   });
-  /*
-   * A sheet's inspector (live components spec §5): the chosen story's props
-   * as controls, from the sheet its page says (`cawco:sheet`). Opened from
-   * the head's Inspect and kept per session, as Comments is; a right panel
-   * beside the page on a desk and a tablet, a sheet over the page's foot on
-   * a phone. One per sheet: another sheet starts with nothing unsaved.
-   */
-  let inspectOpen = $state(false);
-  const inspectKey = $derived(`cawco-preview-inspect:${instanceId}`);
-  $effect.pre(() => {
-    const key = inspectKey;
-    untrack(() => {
-      inspectOpen = stored("local", key) === "open";
-    });
-  });
-  function showInspector(open: boolean) {
-    inspectOpen = open;
-    store("local", inspectKey, open ? "open" : "shut");
-  }
-  const inspector = $derived.by(() => {
-    const id = paneSubject.artifactId;
-    const session = instanceId;
-    return id && paneSubject.isSheet
-      ? new Inspector(
-          previewFrame.post,
-          (change) => writeSheet(session, id, change),
-          // A story he picked in the inspector: the design graph keeps its state.
-          (file, story) => link?.want(file, story)
-        )
-      : null;
-  });
-  const inspecting = $derived(!!inspector && inspectOpen);
-  /**
-   * The inspector stands in the design graph's room, under its states,
-   * where the room stands beside the stage (a desk's wide pane): the states
-   * and the props stand together, and the stage keeps its width. Elsewhere
-   * it is the pane's own panel or sheet.
-   */
-  const inspectorInRoom = $derived(
-    paneSubject.isSheet &&
-      inspecting &&
-      paneLayout.inspectorLayout === "panel" &&
-      paneLayout.wellW > 0 &&
-      paneLayout.wellW >= besideLine()
-  );
   /**
    * What the sheet covers told again as it comes to rest (ThreadSheet
    * `onmoved`): measured as it mounts it stood below the well, covering
@@ -1821,7 +1764,7 @@
           previewFrame.readyFrom = event.origin;
           previewFrame.connected = true;
           // A new page holds no drawing: the design graph reaches its state again.
-          link?.loaded();
+          paneSheet.link?.loaded();
           previewFrame.refusedEntries = 0;
           // It was let in: a later turn-away is a pass lost since, which a new entry answers.
           previewFrame.frameSince = performance.now();
@@ -2016,8 +1959,8 @@
         // Close or Esc alone. The design graph's open layers close on it, a
         // press on its stage being outside them.
         cancelComposer();
-        if (link) {
-          link.presses += 1;
+        if (paneSheet.link) {
+          paneSheet.link.presses += 1;
         }
         break;
       case "cawco:pin-at": {
@@ -2074,55 +2017,55 @@
         // A sheet's page said its stories and props: the inspector's controls, and the design graph's model.
         const said = previewSheet(message.sheet);
         if (said) {
-          link?.heardSheet(said);
+          paneSheet.link?.heardSheet(said);
         }
         break;
       }
       case STAGE_REACHED: {
         // The stage reached the state the design graph asked for.
         const said = stageReachedOf(message);
-        if (said && link) {
-          link.reached = said;
+        if (said && paneSheet.link) {
+          paneSheet.link.reached = said;
         }
         break;
       }
       case STAGE_LAID: {
         // The stage laid its drawing out: the design graph's split gives it what it needs.
         const said = stageLaidOf(message);
-        if (said && link) {
-          link.laid = said;
+        if (said && paneSheet.link) {
+          paneSheet.link.laid = said;
         }
         break;
       }
       case STAGE_FAULT: {
         // The component threw as it mounted: the page says so in the stage.
         const said = stageFaultOf(message);
-        if (said && link) {
-          link.fault = said;
+        if (said && paneSheet.link) {
+          paneSheet.link.fault = said;
         }
         break;
       }
       case STAGE_DIFFERENCES: {
         // What differs from the state the design graph compares with: its lines at the stage's head.
         const said = stageDifferencesOf(message);
-        if (said && link) {
-          link.heardDifferences(said);
+        if (said && paneSheet.link) {
+          paneSheet.link.heardDifferences(said);
         }
         break;
       }
       case STAGE_TIME: {
         // The move's clock: the Animation face's playhead runs from it.
         const said = stageTimeOf(message);
-        if (said && link) {
-          link.heardTime(said);
+        if (said && paneSheet.link) {
+          paneSheet.link.heardTime(said);
         }
         break;
       }
       case STAGE_DIALS_WRITTEN: {
         // The agent's dials as written, read off the drawing: the Dials face stands on them.
         const said = stageDialsWrittenOf(message);
-        if (said && link) {
-          link.dialsWritten = said.values;
+        if (said && paneSheet.link) {
+          paneSheet.link.dialsWritten = said.values;
         }
         break;
       }
@@ -2306,43 +2249,6 @@
       closing = false;
     }
   }
-  /** A component artifact's view in the head (Map, Verify), one for its head button and More's submenu alike. */
-  const canvasView = $derived.by(() => {
-    const session = instanceId;
-    // Built untracked: the view depends on the session and the kind alone,
-    // never on the state it holds (nightly 4202's crash was a view's effect
-    // re-running on the state it wrote).
-    return paneSubject.isSheet
-      ? untrack(() => new CanvasViewState(session))
-      : null;
-  });
-  /**
-   * A component artifact's design graph's line to its stage page: what the
-   * page said (its sheets, its drawing, its answers), and what the graph
-   * asks of it, through `post`. One per session and kind, as the view.
-   */
-  const link = $derived.by(() => {
-    const session = instanceId;
-    return paneSubject.isSheet && session
-      ? untrack(() => new StageLink(previewFrame.post))
-      : null;
-  });
-  // The inspector's controls are for the story the stage stands at.
-  inspectKept(
-    () => link,
-    () => inspector
-  );
-  /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
-  const sheetCanvas = $derived(
-    paneSubject.isSheet ? canvasOf(previewReach.startAt) : null
-  );
-  /**
-   * The frame stands in the design graph's stage, under the stage's own
-   * head: the head's room is the graph page's, never the frame's.
-   */
-  const inGraph = $derived(
-    paneSubject.isSheet && !!paneSubject.artifact && !!link && !!sheetCanvas
-  );
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
     interact: IconInteractLinear,
@@ -2414,7 +2320,7 @@
         menu: openMenu,
       });
     }
-    if (canvasView) {
+    if (paneSheet.canvasView) {
       all.push({
         key: "view",
         priority: HEAD_PRIORITY.view,
@@ -2423,7 +2329,7 @@
         group: true,
       });
     }
-    if (inspector) {
+    if (paneSheet.inspector) {
       all.push({
         key: "inspect",
         priority: HEAD_PRIORITY.inspect,
@@ -2690,32 +2596,32 @@
 {/snippet}
 
 {#snippet viewBar()}
-  {#if canvasView}
+  {#if paneSheet.canvasView}
     <!-- A component artifact's view: Map and Verify. -->
     <CanvasView
       onverify={paneNotice.verify}
-      view={canvasView}
+      view={paneSheet.canvasView}
       verifying={paneNotice.verifying}
     />
   {/if}
 {/snippet}
 {#snippet viewMenu()}
-  {#if canvasView}
+  {#if paneSheet.canvasView}
     <CanvasView
       as="sub"
       onverify={paneNotice.verify}
-      view={canvasView}
+      view={paneSheet.canvasView}
       verifying={paneNotice.verifying}
     />
   {/if}
 {/snippet}
 
 {#snippet roomInspector()}
-  {#if inspector}
+  {#if paneSheet.inspector}
     <SheetInspector
-      {inspector}
+      inspector={paneSheet.inspector}
       layout="room"
-      onclose={() => showInspector(false)}
+      onclose={() => paneSheet.showInspector(false)}
     />
   {/if}
 {/snippet}
@@ -2723,19 +2629,19 @@
 {#snippet inspectBar()}
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
   <BarItem
-    aria-pressed={inspectOpen}
+    aria-pressed={paneSheet.inspectOpen}
     icon={IconTuningLinear}
     label={artifactWords.inspect}
-    onclick={() => showInspector(!inspectOpen)}
-    open={inspectOpen}
+    onclick={() => paneSheet.showInspector(!paneSheet.inspectOpen)}
+    open={paneSheet.inspectOpen}
     tip={artifactWords.inspectTitle}
   />
 {/snippet}
 {#snippet inspectMenu()}
   <!-- Its glyph as the bar's, so its words start where More's other entries' do. -->
   <DropdownMenu.CheckboxItem
-    checked={inspectOpen}
-    onCheckedChange={(open) => showInspector(open)}
+    checked={paneSheet.inspectOpen}
+    onCheckedChange={(open) => paneSheet.showInspector(open)}
     ><IconTuning /><span>{artifactWords.inspect}</span
     ></DropdownMenu.CheckboxItem
   >
@@ -3030,12 +2936,12 @@
     <iframe
       data-ready={!current || previewFrame.loaded || undefined}
       data-panel-inspector={(!paneSubject.isSheet &&
-        inspecting &&
+        paneSheet.inspecting &&
         paneLayout.inspectorLayout === "panel") ||
         undefined}
       class="absolute inset-x-0 top-(--page-top) block h-(--page-h) w-full scheme-light scheme-dark:scheme-dark bg-system-canvas border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
       style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
-      style:--page-top={previewFrame.headRoomTaken || inGraph
+      style:--page-top={previewFrame.headRoomTaken || paneSheet.inGraph
         ? "0px"
         : "var(--side-room, 0px)"}
       style:--page-h="calc(100% - var(--page-top))"
@@ -3159,12 +3065,12 @@
          meanwhile. A component artifact's frame stands in its design graph's
          stage (the graph's chrome round it, the panel's DOM), the inspector's
          panel beside the graph. -->
-    {#if inGraph && paneSubject.artifact && link && sheetCanvas}
+    {#if paneSheet.inGraph && paneSubject.artifact && paneSheet.link && paneSheet.sheetCanvas}
       <div
         data-slot="graph-host"
-        data-panel-inspector={(inspecting &&
+        data-panel-inspector={(paneSheet.inspecting &&
           paneLayout.inspectorLayout === "panel" &&
-          !inspectorInRoom) ||
+          !paneSheet.inspectorInRoom) ||
           undefined}
         class="absolute inset-0 data-panel-inspector:w-(--frame-w)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
@@ -3173,14 +3079,14 @@
              takes its room on its own page (DesignGraph). -->
         <DesignGraph
           ask={paneSubject.artifact.ask ?? ""}
-          files={sheetCanvas.files}
+          files={paneSheet.sheetCanvas.files}
           frame={frameTags}
-          inspector={inspectorInRoom ? roomInspector : undefined}
-          {link}
-          {keptDials}
+          inspector={paneSheet.inspectorInRoom ? roomInspector : undefined}
+          link={paneSheet.link}
+          keptDials={paneSheet.keptDials}
           memory={`cawco-graph-kept:${paneSubject.artifact.id}`}
-          {keptTuned}
-          {startFace}
+          keptTuned={paneSheet.keptTuned}
+          startFace={paneSheet.startFace}
           ondials={(values) => {
             // His dial values are the artifact's: its doc's `dials`, which
             // the panel's Send counts and artifact_read answers.
@@ -3196,9 +3102,10 @@
               paneNotice.say({ message: refused, again: null });
             }
           }}
-          onroom={() => showInspector(false)}
-          paneSheet={inspecting && paneLayout.inspectorLayout === "sheet"}
-          spec={sheetCanvas.spec}
+          onroom={() => paneSheet.showInspector(false)}
+          paneSheet={paneSheet.inspecting &&
+            paneLayout.inspectorLayout === "sheet"}
+          spec={paneSheet.sheetCanvas.spec}
           stale={paneDoc.linkDown !== null}
         />
       </div>
@@ -3249,15 +3156,16 @@
         <CoverState waiting={stageCover.stageWaiting} />
       {/if}
     </div>
-    {#if canvasView?.map && paneSubject.artifact && paneSubject.isSheet}
+    {#if paneSheet.canvasView?.map && paneSubject.artifact && paneSubject.isSheet}
       <!-- Map mode: the canvas's component among what renders it and what it renders, over the page, which stays loaded under it. -->
       <CanvasMap
         address={previewReach.paneOrigin
           ? `${previewReach.paneOrigin}${previewReach.startAt}`
           : null}
         artifactId={paneSubject.artifact.id}
-        component={link?.front
-          ? (link.sheets[link.front]?.meta.component ?? null)
+        component={paneSheet.link?.front
+          ? (paneSheet.link.sheets[paneSheet.link.front]?.meta.component ??
+            null)
           : null}
         {instanceId}
         ready={previewFrame.loaded}
@@ -3449,11 +3357,11 @@
       </EmptyState>
     </div>
   {/if}
-  {#if inspector && inspecting && !previewReach.unreached && !inspectorInRoom}
+  {#if paneSheet.inspector && paneSheet.inspecting && !previewReach.unreached && !paneSheet.inspectorInRoom}
     <SheetInspector
-      {inspector}
+      inspector={paneSheet.inspector}
       layout={paneLayout.inspectorLayout}
-      onclose={() => showInspector(false)}
+      onclose={() => paneSheet.showInspector(false)}
     />
   {/if}
   {#if previewFrame.picking}
