@@ -52,7 +52,6 @@ import { ElysiaStatus } from "elysia";
 import type { DbShape } from "./db";
 import type { HeldSession, HeldWorkspace } from "./db/project-work";
 import { deleteProjectFolder } from "./project-folder";
-import { projectRefusalOf } from "./project-refusal";
 import {
   type DiskPlace,
   diskPlaces,
@@ -60,7 +59,7 @@ import {
   recordedPlaces,
   trashedProject,
 } from "./project-trash";
-import { StatusRefusal } from "./refusal";
+import { refusal } from "./refusal";
 
 /** What a delete removed on one machine, by kind. */
 export interface MachineRemoved {
@@ -86,9 +85,6 @@ export interface ProjectDeleted {
   machines: Record<string, MachineRemoved>;
   name: string;
 }
-
-/** A delete the hub turns down: its status, and the words the caller reads. */
-export class DeleteRefusal extends StatusRefusal<404 | 409 | 502> {}
 
 /** A machine kept a workspace's clone: its agent predates deleting one (`held`), so it is updated first. */
 class AgentTooOld extends Error {
@@ -266,7 +262,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
     name: string,
     plan: Plan,
     fromDisk: boolean
-  ): Promise<Map<string, MachineRemoved>> => {
+  ) => {
     const removed = new Map<string, MachineRemoved>();
     const on = (machineId: string): MachineRemoved => {
       const counts = removed.get(machineId) ?? {
@@ -284,19 +280,22 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
         await removal.run();
       } catch (error) {
         const machine = deps.machineName(removal.machineId);
-        // biome-ignore lint/style/useErrorCause: the cause rides the refusal's options, its third argument.
-        throw new DeleteRefusal(
-          error instanceof AgentTooOld ? 409 : 502,
-          error instanceof AgentTooOld
-            ? projectTrashWords.agentTooOld(name, removal.what, machine)
-            : projectTrashWords.notRemoved(
+        return error instanceof AgentTooOld
+          ? refusal(
+              409,
+              "delete-agent-too-old",
+              projectTrashWords.agentTooOld(name, removal.what, machine)
+            )
+          : refusal(
+              502,
+              "delete-not-removed",
+              projectTrashWords.notRemoved(
                 name,
                 removal.what,
                 machine,
                 error instanceof Error ? error.message : String(error)
-              ),
-          { cause: error }
-        );
+              )
+            );
       }
       on(removal.machineId)[removal.kind] += 1;
     }
@@ -322,64 +321,82 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
     );
     const folder = await deleteProjectFolder(id);
     if (folder instanceof ElysiaStatus) {
-      throw projectRefusalOf(folder);
+      return folder;
     }
     const trash = await purgeTrash(id);
     return { folder, rows, trash };
   };
 
+  /** Why `plan`'s delete may not go now: a place it would remove from disk another live project holds, or a machine it needs away. */
+  const heldBack = (name: string, plan: Plan, fromDisk: boolean) => {
+    const shared = fromDisk
+      ? plan.places.find((place) => place.refusedBy)
+      : undefined;
+    if (shared?.refusedBy) {
+      const { name: holder, path, same } = shared.refusedBy;
+      const machine = deps.machineName(shared.machineId);
+      return refusal(
+        409,
+        "delete-place-held",
+        same
+          ? projectTrashWords.placeShared(name, shared.path, machine, holder)
+          : projectTrashWords.placeHolds(
+              name,
+              shared.path,
+              machine,
+              holder,
+              path
+            )
+      );
+    }
+    const away = [...needed(plan, fromDisk)].filter(
+      (machineId) => !deps.online(machineId)
+    );
+    if (away.length > 0) {
+      return refusal(
+        409,
+        "delete-machines-away",
+        projectTrashWords.machinesAway(name, away.map(deps.machineName))
+      );
+    }
+  };
+
   return {
-    /** Deletes project `id` for good, live or in the trash (`fromDisk`: its places and transcripts too). Throws a {@link DeleteRefusal}. */
-    async delete(
-      id: string,
-      { fromDisk }: { fromDisk: boolean }
-    ): Promise<ProjectDeleted> {
+    /** Deletes project `id` for good, live or in the trash (`fromDisk`: its places and transcripts too); refused in the hub's words, each cause its own code. */
+    async delete(id: string, { fromDisk }: { fromDisk: boolean }) {
       const live = db.project(id);
       const trashed = await trashedProject(id);
       if (!(live || trashed)) {
-        throw new DeleteRefusal(404, projectTrashWords.noProject(id));
+        return refusal(
+          404,
+          "delete-project-unknown",
+          projectTrashWords.noProject(id)
+        );
       }
       const name = live?.name ?? trashed?.name ?? id;
       const running = live ? deps.stillRunning(id) : 0;
       if (running > 0) {
-        throw new DeleteRefusal(
+        return refusal(
           409,
+          "delete-sessions-run",
           projectTrashWords.stillRuns(name, running)
         );
       }
       const plan = planOf(id, trashed);
-      const shared = fromDisk
-        ? plan.places.find((place) => place.refusedBy)
-        : undefined;
-      if (shared?.refusedBy) {
-        const { name: holder, path, same } = shared.refusedBy;
-        const machine = deps.machineName(shared.machineId);
-        throw new DeleteRefusal(
-          409,
-          same
-            ? projectTrashWords.placeShared(name, shared.path, machine, holder)
-            : projectTrashWords.placeHolds(
-                name,
-                shared.path,
-                machine,
-                holder,
-                path
-              )
-        );
-      }
-      const away = [...needed(plan, fromDisk)].filter(
-        (machineId) => !deps.online(machineId)
-      );
-      if (away.length > 0) {
-        throw new DeleteRefusal(
-          409,
-          projectTrashWords.machinesAway(name, away.map(deps.machineName))
-        );
+      const held = heldBack(name, plan, fromDisk);
+      if (held) {
+        return held;
       }
       const removed = await removeOnMachines(name, plan, fromDisk);
+      if (removed instanceof ElysiaStatus) {
+        return removed;
+      }
       // The hub's own, once nothing of it stands on a machine.
       const hub = await forgetOnHub(id, Boolean(live), plan);
-      return {
+      if (hub instanceof ElysiaStatus) {
+        return hub;
+      }
+      const deleted: ProjectDeleted = {
         fromDisk,
         hub,
         id,
@@ -391,6 +408,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
         ),
         name,
       };
+      return deleted;
     },
   };
 };
