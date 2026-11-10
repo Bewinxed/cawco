@@ -129,9 +129,7 @@
     return out;
   }
   const text = () =>
-    serialize(element as Node)
-      .replace(/ /gu, " ")
-      .trim();
+    (element ? serialize(element) : "").replace(/ /gu, " ").trim();
 
   function closeMenu() {
     if (menu) {
@@ -161,7 +159,11 @@
       return;
     }
     const [, , trigger, query] = match;
-    const type = trigger as "@" | "/";
+    if (trigger !== "@" && trigger !== "/") {
+      closeMenu();
+      return;
+    }
+    const type = trigger;
     const next = menuItems(type, query);
     menuIdx = Math.min(menu ? menuIdx : 0, Math.max(0, next.length - 1));
     menu = {
@@ -208,7 +210,10 @@
       dropLead(current);
       return;
     }
-    const { harness, key, label, title } = lead as LeadChip;
+    if (!lead) {
+      return;
+    }
+    const { harness, key, label, title } = lead;
     const chip = makeChip({
       icon: HarnessLogo,
       key,
@@ -225,7 +230,10 @@
     if (next instanceof Text) {
       next.textContent = (next.textContent ?? "").replace(LEADING_SPACE, "");
     }
-    unmount(chips.get(chip) as Record<string, unknown>);
+    const instance = chips.get(chip);
+    if (instance) {
+      unmount(instance);
+    }
     chips.delete(chip);
     chip.remove();
   }

@@ -134,12 +134,14 @@
    * The fold moved what follows it with no change to the DOM: every `reflow`
    * around it reads its rows where they now stand (motion/fold `rereadOnEnd`).
    */
-  function settled(event: TransitionEvent): void {
+  function settled(
+    event: TransitionEvent & { currentTarget: HTMLElement }
+  ): void {
     if (
       event.target === event.currentTarget &&
       event.propertyName === "grid-template-rows"
     ) {
-      reread(reflowsFrom((event.currentTarget as HTMLElement).parentElement));
+      reread(reflowsFrom(event.currentTarget.parentElement));
     }
   }
 

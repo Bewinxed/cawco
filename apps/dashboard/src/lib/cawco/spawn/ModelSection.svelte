@@ -122,7 +122,7 @@
       id: tab.id,
       label: tab.name,
       soon: tab.soon,
-      disabled: tab.soon || !installed.includes(tab.id as HarnessKind),
+      disabled: tab.soon || !installed.some((kind) => kind === tab.id),
     }))
   );
   let accountOpen = $state(false);
@@ -324,14 +324,19 @@
         stagger
         items={railItems}
         label={spawnWords.model.harness}
-        onpick={(id: string) => onharness(id as HarnessKind)}
+        onpick={(id: string) => {
+          const picked = TABS.find((tab) => tab.id === id);
+          if (picked && picked.id !== "codex") {
+            onharness(picked.id);
+          }
+        }}
         value={harness}
       >
         {#snippet item(tab: (typeof railItems)[number])}
           {#if tab.id === "codex"}
             <ProviderLogo class="flex-none" provider="openai" size="control" />
           {:else}
-            <HarnessLogo harness={tab.id as HarnessKind} />
+            <HarnessLogo harness={tab.id} />
           {/if}
           {#if tab.disabled}
             <span class="sr-only"
