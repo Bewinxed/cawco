@@ -73,6 +73,8 @@ declare global {
     __longPressInstalled?: boolean;
     /** The /motion/skeleton bench's two states, for the spec to drive. */
     __skeletonBench: { load: () => void; wait: () => void };
+    /** Dev only: how many times each transcript, by session id, has built its rows (row-build.svelte.ts `countBuild`); a probe counts them. */
+    __transcriptBuilds?: Record<string, number>;
     /** The decision overlay's bridge, once its script has run (decisions/host/page.svelte.ts). */
     cawco?: import("./lib/cawco/decisions/host/page.svelte.js").Bridge;
     /** Chromium's Idle Detection (wicg.github.io/idle-detection), where the browser has it (lib/cawco/presence.ts). */
