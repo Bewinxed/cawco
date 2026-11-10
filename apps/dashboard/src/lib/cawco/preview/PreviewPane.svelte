@@ -122,6 +122,7 @@
   import { PaneSheet } from "./pane-sheet.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
   import { PinComposer } from "./pin-composer.svelte";
+  import { PinPeek } from "./pin-peek.svelte";
   import { frameError, PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
   import SheetInspector from "./SheetInspector.svelte";
@@ -130,7 +131,6 @@
   import {
     type PreviewPinAt,
     pageMessage,
-    previewBox,
     previewCompose,
     previewError,
     previewErrorOf,
@@ -269,6 +269,12 @@
   const paneMode = new PaneMode({
     instanceId: () => instanceId,
     previewFrame,
+    paneDoc,
+    pinComposer,
+    openPin: () => openPin,
+  });
+  const pinPeek = new PinPeek({
+    paneLayout,
     paneDoc,
     pinComposer,
     openPin: () => openPin,
@@ -937,7 +943,7 @@
   /** Pin `id`'s thread opens; `via`, a key or a press. A composer standing goes, and another thread closes. */
   function openCard(id: string, via: "key" | "pointer" = "pointer") {
     commentKit.loadKit();
-    dropPeek();
+    pinPeek.dropPeek();
     if (closingPin) {
       // Another pin's card going back into its pill goes at once; its own turns back.
       if (closingPin !== id) {
@@ -1210,67 +1216,6 @@
     closeCard();
     return Promise.resolve();
   }
-  /**
-   * The pill the pointer rests on, its peek beside it: its thread's card
-   * holding his words and the latest reply (PinCard `peek`), after
-   * `--dur-peek` the first time, at once while one is up or just went;
-   * never under a finger. The pointer may leave the pill for the peek: it
-   * goes `--dur-peek` after the pointer left them both.
-   */
-  let peekAt = $state<{ id: string; mark: PreviewPinAt["mark"] } | null>(null);
-  let peekTimer: ReturnType<typeof setTimeout> | undefined;
-  /** When the last peek went: the next within `--dur-peek` comes at once. */
-  let peekWent = 0;
-  /** The pointer rests on the peek itself. */
-  let onPeek = false;
-  function heardPeek(message: Record<string, unknown>) {
-    clearTimeout(peekTimer);
-    const id = previewPinId(message.id);
-    const mark = previewBox(message.mark);
-    // None under a finger, and none while a thread or a composer stands.
-    if (paneLayout.coarse.current || openPin || pinComposer.composing) {
-      dropPeek();
-      return;
-    }
-    if (!(id && mark)) {
-      // Off its pill: onto the peek, which stays, or away.
-      if (peekAt && !onPeek) {
-        peekTimer = setTimeout(dropPeek, dur("--dur-peek"));
-      }
-      return;
-    }
-    const wait = dur("--dur-peek");
-    if (peekAt || performance.now() - peekWent < wait) {
-      peekAt = { id, mark };
-      return;
-    }
-    peekTimer = setTimeout(() => {
-      peekAt = { id, mark };
-    }, wait);
-  }
-  /** The pointer came onto the peek (it stays) or left it (it goes after `--dur-peek`, unless the pointer is back on its pill). */
-  function restOnPeek(on: boolean) {
-    onPeek = on;
-    clearTimeout(peekTimer);
-    if (!on) {
-      peekTimer = setTimeout(dropPeek, dur("--dur-peek"));
-    }
-  }
-  /** Every peek goes as a thread or a composer opens: one left up would stand over what it opens on. */
-  function dropPeek() {
-    clearTimeout(peekTimer);
-    if (peekAt) {
-      peekWent = performance.now();
-    }
-    peekAt = null;
-    onPeek = false;
-  }
-  /** No peek while a thread or a composer stands: the card is what the person reads then. */
-  const peekPin = $derived(
-    peekAt && !openPin && !pinComposer.composing
-      ? (paneDoc.pins.find((pin) => pin.id === peekAt?.id) ?? null)
-      : null
-  );
   /** What holds the focus as a control: a key it takes is its own. */
   const PANE_CONTROL =
     'button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"]';
@@ -1550,7 +1495,7 @@
           closeCard();
         }
         commentKit.loadKit();
-        dropPeek();
+        pinPeek.dropPeek();
         // The press was the page's, which the host never hears: the page's last input is it.
         lastInput.current = message.via === "key" ? "key" : "pointer";
         pinComposer.composing = {
@@ -1589,7 +1534,7 @@
         break;
       }
       case "cawco:peek":
-        heardPeek(message);
+        pinPeek.heardPeek(message);
         break;
       case "cawco:change-stops":
         pageStops = changeStopsOf(message.stops);
@@ -3244,23 +3189,27 @@
     {/if}
     <!-- The rested-on pin's peek: the same card beside its pill, his words
          and the latest reply alone; a press on it opens the whole thread. -->
-    {#if peekPin && peekAt && commentKit.drafts}
-      {#key peekPin.id}
+    {#if pinPeek.peekPin && pinPeek.peekAt && commentKit.drafts}
+      {#key pinPeek.peekPin.id}
         <PinFloat
-          label={`Comment ${peekPin.number}`}
-          mark={peekAt.mark}
+          label={`Comment ${pinPeek.peekPin.number}`}
+          mark={pinPeek.peekAt.mark}
           onpress={() => {
-            const id = peekPin?.id;
+            const id = pinPeek.peekPin?.id;
             if (id) {
               openCard(id);
             }
           }}
-          onrest={restOnPeek}
-          pin={peekPin.number}
+          onrest={pinPeek.restOnPeek}
+          pin={pinPeek.peekPin.number}
           room={{ w: roomW, h: roomH }}
           slot="pin-peek"
         >
-          {@render thread(peekPin, commentKit.drafts.draft(peekPin.id), true)}
+          {@render thread(
+            pinPeek.peekPin,
+            commentKit.drafts.draft(pinPeek.peekPin.id),
+            true
+          )}
         </PinFloat>
       {/key}
     {/if}
