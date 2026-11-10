@@ -293,9 +293,9 @@
           label={fleet === "none"
             ? onboardingWords.addMachine
             : onboardingWords.checkMachines}
-          onclick={(event: MouseEvent) =>
+          onclick={(event) =>
             onmachines(
-              event.currentTarget as HTMLElement,
+              event.currentTarget,
               fleet === "none" ? "none" : "offline"
             )}
           size="sm"

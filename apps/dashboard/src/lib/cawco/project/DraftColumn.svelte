@@ -129,13 +129,12 @@
         aria-label={setupPageWords.stageName(at + 1)}
         look="inline"
         measure="shrink"
-        oninput={(event: Event) =>
-          onchange({ name: (event.currentTarget as HTMLInputElement).value })}
-        onkeydown={(event: KeyboardEvent) => {
+        oninput={(event) => onchange({ name: event.currentTarget.value })}
+        onkeydown={(event) => {
           // Enter ends the rename, as a list's row name does.
           if (event.key === "Enter") {
             event.preventDefault();
-            (event.currentTarget as HTMLInputElement).blur();
+            event.currentTarget.blur();
           }
         }}
         text="label"

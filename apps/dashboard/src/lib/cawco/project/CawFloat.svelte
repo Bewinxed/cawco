@@ -122,7 +122,7 @@
       }
       event.preventDefault();
       lead.open = false;
-      lead.anchor?.focus({ focusVisible: false } as FocusOptions);
+      lead.anchor?.focus({ focusVisible: false });
     };
     node.addEventListener("keydown", onEscape);
     return () => node.removeEventListener("keydown", onEscape);
@@ -152,9 +152,9 @@
         // opened, a selected chip to the eye (cold review 78bedc47). A
         // screen reader still lands in the sheet; Tab goes on from there.
         event.preventDefault();
-        (event.currentTarget as HTMLElement | null)?.focus({
-          focusVisible: false,
-        } as FocusOptions);
+        if (event.currentTarget instanceof HTMLElement) {
+          event.currentTarget.focus({ focusVisible: false });
+        }
       }}
       ownHead
       pad="none"
