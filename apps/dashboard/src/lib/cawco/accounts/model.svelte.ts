@@ -111,7 +111,7 @@ export function machinesFor(provider: AccountProvider) {
   const harnesses = providerHarnesses(provider);
   return boardStore.machines.filter((machine) =>
     machine.harnesses?.some((entry) =>
-      harnesses.includes(entry.harness as HarnessKind)
+      harnesses.some((kind) => kind === entry.harness)
     )
   );
 }

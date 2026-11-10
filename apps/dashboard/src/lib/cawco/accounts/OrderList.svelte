@@ -36,13 +36,18 @@
   let held = $state<string | null>(null);
   let carried = $state(0);
 
-  function grab(event: PointerEvent, id: string) {
+  function grab(
+    event: PointerEvent & { currentTarget: HTMLElement },
+    id: string
+  ) {
     if (event.button !== 0 || !list) {
       return;
     }
     event.preventDefault();
-    const row = event.currentTarget as HTMLElement;
-    const items = [...list.children] as HTMLElement[];
+    const row = event.currentTarget;
+    const items = [...list.children].filter(
+      (one) => one instanceof HTMLElement
+    );
     const step =
       items.length > 1
         ? items[1].offsetTop - items[0].offsetTop
