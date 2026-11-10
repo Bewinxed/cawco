@@ -29,6 +29,7 @@ import {
   IconToolTerminal,
   IconUser,
 } from "#lib/icons.js";
+import { browser } from "$app/env";
 import { cawco } from "../client.svelte";
 import { cawOf } from "../session-status";
 import { askOpenAt } from "../transcript/open-at.svelte";
@@ -684,15 +685,19 @@ export function askPlacesWith(ask: AskPlaces): void {
  * to another pane) they would answer their last value for good, a filter
  * pressed and the list unchanged. It stands as long as the page does, as
  * each pane's composer layer does (composer-layer.svelte.ts).
+ *
+ * A server render makes one for that render alone and holds none: no
+ * effect root runs there (`$effect.root` compiles to nothing), nothing
+ * there unmounts, and a module-level find would outlive the request into
+ * the next person's page.
  */
 export function findIn(viewId: string): ConversationFind {
   const held = finds.get(viewId);
   if (held) {
     return held;
   }
-  const made: { find?: ConversationFind } = {};
-  $effect.root(() => {
-    made.find = new ConversationFind(
+  const make = (): ConversationFind =>
+    new ConversationFind(
       viewId,
       (id, words, signal) => asker(id, words, signal),
       () =>
@@ -700,11 +705,13 @@ export function findIn(viewId: string): ConversationFind {
           ? speakerName(cawco.session(viewId)?.harness)
           : "Caw"
     );
-  });
-  const { find } = made;
-  if (!find) {
-    throw new Error(`find for ${viewId} was not made`);
+  if (!browser) {
+    return make();
   }
+  let find!: ConversationFind;
+  $effect.root(() => {
+    find = make();
+  });
   finds.set(viewId, find);
   return find;
 }
