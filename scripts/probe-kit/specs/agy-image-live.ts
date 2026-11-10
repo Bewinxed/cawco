@@ -26,6 +26,9 @@ import { generateImage } from "../../../packages/agent/src/image-generation";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import type { Kit, Spec } from "../kit";
 
+/** This probe's machine has no hub: a borrowed sign-in's ask goes nowhere. */
+const NO_HUB = { borrowAsk: (): void => undefined };
+
 /** The one reference as the provider writes it in agy's own folder. */
 const WRITTEN_REFERENCE = /\/cawco-agy-image-[^/]+\/reference-1\.png$/u;
 
@@ -107,7 +110,7 @@ export default {
     const started = Date.now();
     let made: Awaited<ReturnType<typeof generateImage>> | undefined;
     try {
-      made = await generateImage(out, {
+      made = await generateImage(NO_HUB, out, {
         prompt:
           "A small ceramic crow figurine on a wooden desk beside a coffee mug, soft morning window light, photographic.",
         output_path: "agy-live.png",
@@ -152,7 +155,7 @@ export default {
     const guidedStart = Date.now();
     let guided: Awaited<ReturnType<typeof generateImage>> | undefined;
     try {
-      guided = await generateImage(out, {
+      guided = await generateImage(NO_HUB, out, {
         prompt:
           "Image 1: the brand board whose style to follow: its flat chunky shapes, thick ink-black outlines, and only its colours (ink black, ivory, vermilion #E65D46, butter #F2D36B). A crow mascot perched on a stack of three books, square, on an ivory ground, no text.",
         output_path: "agy-live-guided.png",

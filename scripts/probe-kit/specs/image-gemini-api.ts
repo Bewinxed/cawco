@@ -45,6 +45,9 @@ import { unhandled } from "../../../packages/core/src/unhandled";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import type { Kit, Spec } from "../kit";
 
+/** This probe's machine has no hub: a borrowed sign-in's ask goes nowhere. */
+const NO_HUB = { borrowAsk: (): void => undefined };
+
 /** A 1×1 PNG. */
 const PNG_1X1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -160,7 +163,10 @@ export default {
       try {
         return {
           ok: true,
-          image: await generateImage(out, { prompt: "a probe", ...input }),
+          image: await generateImage(NO_HUB, out, {
+            prompt: "a probe",
+            ...input,
+          }),
         };
       } catch (error) {
         return {

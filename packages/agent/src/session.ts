@@ -639,7 +639,7 @@ export const resumableSessions = async (
  * Owns every live session on this machine and pumps their messages at the hub.
  */
 /** What the supervisor sends through, or hands to the work it starts: a command's queue, a preview's stage and browser. */
-type SupervisorPorts = Pick<AgentPorts, "commandQueue">;
+type SupervisorPorts = Pick<AgentPorts, "borrowAsk" | "commandQueue">;
 
 export class SessionSupervisor {
   #stopSequence = 0;
@@ -978,7 +978,7 @@ export class SessionSupervisor {
       call: (_instanceId, cwd, input, bound, project) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : generateImage(cwd as string, input, bound, project),
+          : generateImage(this.#ports, cwd as string, input, bound, project),
     },
     [PREVIEW_START]: {
       call: (options) =>
