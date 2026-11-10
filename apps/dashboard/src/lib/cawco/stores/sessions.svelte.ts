@@ -326,8 +326,10 @@ export interface SessionState {
   workingSince: number | null;
 }
 
-export const sessionsState = $state({
-  sessions: {} as Record<string, SessionState>,
+export const sessionsState = $state<{
+  sessions: Record<string, SessionState>;
+}>({
+  sessions: {},
 });
 
 /**

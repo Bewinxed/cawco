@@ -10,13 +10,15 @@ import { hub } from "#lib/platform/hub.js";
 import { hubDone } from "#lib/platform/hub-read.js";
 import type { FrameOf } from "../hub/frames";
 
-const browsersState = $state({
+const browsersState = $state<{
   /**
    * Every machine's browsers as the hub lists them: the `browser_list`
    * frame the socket opens with, then each one on a change; undefined until
    * the first.
    */
-  browsers: undefined as ListedBrowser[] | undefined,
+  browsers: ListedBrowser[] | undefined;
+}>({
+  browsers: undefined,
 });
 
 // A browser changed (a take-over, its state, its page's origin): every view of one follows.
