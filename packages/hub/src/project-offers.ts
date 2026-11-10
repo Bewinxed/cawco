@@ -31,7 +31,7 @@ import type { ProjectNote } from "@cawco/core/project-conversation";
 import type { InstanceRow } from "@cawco/core/protocol";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
-import { Elysia } from "elysia";
+import { Elysia, ElysiaStatus } from "elysia";
 import { z } from "zod";
 import type { DbShape } from "./db";
 import type { ProjectOfferRow, ProjectRow } from "./db/projects";
@@ -193,7 +193,11 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
           { title, labels: [PROPOSED_LABEL] },
           actor
         );
-        filed.push({ id: task.id, title: task.title });
+        if (task instanceof ElysiaStatus) {
+          unfiled.push({ title, why: task.response.detail });
+        } else {
+          filed.push({ id: task.id, title: task.title });
+        }
       } catch (error) {
         unfiled.push({
           title,
