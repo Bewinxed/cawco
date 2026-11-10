@@ -33,7 +33,6 @@ import { noticeWords } from "@cawco/core/words/notices";
 import { ElysiaStatus } from "elysia";
 import type { Caw, PersonsSend } from "./caw";
 import type { DbShape } from "./db";
-import { projectRefusalOf } from "./project-refusal";
 import type { TaskEvent, Tasks } from "./tasks";
 
 export interface TaskApprovalDeps {
@@ -72,12 +71,12 @@ export const createTaskApproval = ({
   sendYours,
   tasks,
 }: TaskApprovalDeps) => {
-  /** An approval, to its filer; to Caw, while he is on, when he filed it or its filer takes no input now. */
-  const approved = async (approval: Approval): Promise<void> => {
+  /** An approval, to its filer; to Caw, while he is on, when he filed it or its filer takes no input now; the task's refused read. */
+  const approved = async (approval: Approval) => {
     const { projectId, id } = approval;
     const task = await tasks.get(projectId, id);
     if (task instanceof ElysiaStatus) {
-      throw projectRefusalOf(task);
+      return task;
     }
     const by = task.createdBy;
     if (by?.mover !== "session") {
@@ -121,11 +120,14 @@ export const createTaskApproval = ({
       if (event.kind !== "moved" || !event.approved) {
         return;
       }
+      const unheard = (why: string) =>
+        console.warn(
+          `[tasks] ${event.id} in ${event.projectId} was approved; its filer did not hear it: ${why}`
+        );
       detach(
-        approved(event).catch((error: unknown) =>
-          console.warn(
-            `[tasks] ${event.id} in ${event.projectId} was approved; its filer did not hear it: ${words(error)}`
-          )
+        approved(event).then(
+          (unread) => unread && unheard(unread.response.detail),
+          (error: unknown) => unheard(words(error))
         ),
         "task approved"
       );
