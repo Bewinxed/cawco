@@ -905,8 +905,6 @@ public enum Size {
     public static let cBtnMinW: Double = 96
     /// A button's icon-to-label gap (DESIGN.md Buttons: "an 8px gap").
     public static let cBtnGap: Double = 8
-    /// A pending label's outgoing words go soft as they fade (DESIGN.md Buttons, Pending: "a 2px blur where motion is welcome").
-    public static let cBtnWordsBlur: Double = 2
     /// The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer.
     public static let cPointerFloor: Double = 24
     /// The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`.

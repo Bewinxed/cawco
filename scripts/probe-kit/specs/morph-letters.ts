@@ -1,9 +1,8 @@
 /**
- * A morph step puts into the page only the letters that arrive and the ones
- * that leave (going after the words); a letter that stays where it stood is
- * never put in again. Each element put in under the root, the body or a
- * floating wrapper restyled its subject when a `:has()` sat there (tab-return
- * 2d: "Node was inserted into tree on SPAN 52x").
+ * A morph step puts into the page one element: its layer of letters, in the
+ * box's one cell, never a letter at a time. Each element put in under the
+ * root, the body or a floating wrapper restyled its subject when a `:has()`
+ * sat there (tab-return 2d: "Node was inserted into tree on SPAN 52x").
  *
  *   bun scripts/probe-kit/run.ts morph-letters
  *
@@ -53,17 +52,17 @@ const CASES: Case[] = [
 /** MorphText's letters' box, as its style draws it (morph-text.svelte). */
 const STYLE = `
 body { margin: 0; font: 16px/1.5 sans-serif; }
-.letters { display: inline-block; position: relative; overflow-x: clip; white-space: nowrap; }
-.letters > :not(br) { display: inline-block; white-space: pre; }
-.letters > [data-roll] { clip-path: inset(0 -100vw); }
-.letters > [data-roll] > span { display: inline-block; }
+.letters { display: inline-grid; overflow-x: clip; }
+.letters > * { grid-area: 1 / 1; }
+.letters > [data-layer] { white-space: nowrap; }
+.letters > [data-layer] > :not(br) { display: inline-block; white-space: pre; }
+.letters > [data-layer] > [data-roll] { overflow-x: visible; overflow-y: clip; }
+.letters > [data-layer] > [data-roll] > span { display: inline-block; }
 `;
 
 interface Put {
-  /** Letters put in, by what they say. */
+  /** Elements put in under the root, by what they say. */
   put: string[];
-  /** Of them, letters that were drawn before and stay in the words. */
-  stayed: string[];
 }
 
 const run = async (kit: Kit) => {
@@ -92,79 +91,86 @@ const run = async (kit: Kit) => {
       const root = document.getElementById("root") as HTMLElement;
       const box = root.getBoundingClientRect();
       return {
-        hold: [root.style.minInlineSize, root.style.minBlockSize],
-        letters: [...root.children].map((el) => {
-          const at = el.getBoundingClientRect();
-          const style = getComputedStyle(el);
-          const inner = el.firstElementChild;
-          return {
-            said: el.textContent,
-            x: Math.round((at.left - box.left) * 100) / 100,
-            y: Math.round((at.top - box.top) * 100) / 100,
-            transform: style.transform,
-            opacity: style.opacity,
-            position: style.position,
-            roll: inner ? getComputedStyle(inner).transform : null,
-          };
-        }),
+        box: [box.width, box.height],
+        letters: [...root.querySelectorAll("[data-layer] > :not(br)")].map(
+          (el) => {
+            const at = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            const inner = el.firstElementChild;
+            return {
+              said: el.textContent,
+              x: Math.round((at.left - box.left) * 100) / 100,
+              y: Math.round((at.top - box.top) * 100) / 100,
+              transform: style.transform,
+              opacity: style.opacity,
+              position: style.position,
+              roll: inner ? getComputedStyle(inner).transform : null,
+            };
+          }
+        ),
       };
     });
 
-  /** Starts a step to `value`, counting what it put in. */
-  const step = (value: string) =>
-    page.evaluate((to) => {
-      const w = window as unknown as {
-        __morph: { to: (value: string) => Promise<boolean> };
-      };
-      const root = document.getElementById("root") as HTMLElement;
-      const before = new Set(root.children);
-      const watch = new MutationObserver(() => undefined);
-      watch.observe(root, { childList: true });
-      w.__morph.to(to);
-      const records = watch.takeRecords();
-      watch.disconnect();
-      const added = records.flatMap((record) =>
-        [...record.addedNodes].filter((node) => node instanceof Element)
-      ) as HTMLElement[];
-      return {
-        put: added.map((el) => el.textContent ?? ""),
-        stayed: added
-          .filter((el) => before.has(el) && el.style.position !== "absolute")
-          .map((el) => el.textContent ?? ""),
-      };
-    }, value);
+  /** Starts a step to `value` (the first from `from`), counting what it put in. */
+  const step = (value: string, from: string | null) =>
+    page.evaluate(
+      ({ to, was }) => {
+        const w = window as unknown as {
+          __morph: {
+            start: (from: string, to: string) => Promise<boolean>;
+            to: (value: string) => Promise<boolean>;
+          };
+        };
+        const root = document.getElementById("root") as HTMLElement;
+        const watch = new MutationObserver(() => undefined);
+        watch.observe(root, { childList: true });
+        if (was === null) {
+          w.__morph.to(to);
+        } else {
+          w.__morph.start(was, to);
+        }
+        const records = watch.takeRecords();
+        watch.disconnect();
+        const added = records.flatMap((record) =>
+          [...record.addedNodes].filter((node) => node instanceof Element)
+        ) as HTMLElement[];
+        return { put: added.map((el) => el.textContent ?? "") };
+      },
+      { to: value, was: from }
+    );
 
   const out: Record<string, unknown[]> = {};
   for (const one of CASES) {
     const [first, ...rest] = one.steps;
     await page.evaluate(
-      ({ duration, easing, fade, text }) => {
+      ({ duration, easing, fade }) => {
         const root = document.getElementById("root") as HTMLElement;
         root.replaceChildren();
-        root.removeAttribute("style");
         const w = window as unknown as {
           Morph: new (
             root: HTMLElement,
-            options: { duration: number; easing: string; fade: boolean }
-          ) => { show: (v: string, hold: object) => void };
+            options: {
+              duration: number;
+              easing: string;
+              fade: boolean;
+              wrap: boolean;
+            }
+          ) => unknown;
           __morph: unknown;
         };
-        const morph = new w.Morph(root, { duration, easing, fade });
-        morph.show(text, { width: 0, height: 0 });
-        w.__morph = morph;
+        w.__morph = new w.Morph(root, { duration, easing, fade, wrap: false });
       },
       {
         duration: DURATION,
         easing: EASING,
         fade: one.fade ?? false,
-        text: first,
       }
     );
     const read1: unknown[] = [];
     for (const [i, value] of rest.entries()) {
-      let put: Put = { put: [], stayed: [] };
+      let put: Put = { put: [] };
       await clock.catchRuns(async () => {
-        put = await step(value);
+        put = await step(value, i === 0 ? first : null);
       }, "#root");
       const { faults } = clock.oneClock();
       const frames: unknown[] = [];
@@ -174,9 +180,9 @@ const run = async (kit: Kit) => {
       }
       read1.push({ to: value, put: put.put.length, frames, faults });
       kit.check(
-        `${one.name}, to "${value}": no letter that stays in the words is put in again, and the step runs on one clock`,
-        put.stayed.length === 0 && faults.length === 0,
-        `put in ${put.put.length} (${put.put.map((said) => JSON.stringify(said)).join(" ")}); again, staying: ${put.stayed.length}${faults.length ? `; ${faults.join("; ")}` : ""}`
+        `${one.name}, to "${value}": the step puts in its one layer, and runs on one clock`,
+        put.put.length === (i === 0 ? 2 : 1) && faults.length === 0,
+        `put in ${put.put.length} (${put.put.map((said) => JSON.stringify(said)).join(" ")})${faults.length ? `; ${faults.join("; ")}` : ""}`
       );
       // The next step lands on this one held mid-step, or once it has settled.
       if (one.mid && i + 1 < rest.length) {

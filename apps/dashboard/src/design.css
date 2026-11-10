@@ -119,19 +119,10 @@
   inherits: true;
   initial-value: 0px;
 }
-/* A swap between two things in one slot (`.icon-swap`, a tree mark's count
-   and its chevron), a turn and a press, each as one number the transition
-   moves, registered so it can be moved. What is drawn (opacity, scale, blur,
-   rotate) is worked out from the number every frame, with the rest of the
-   page. Transitioned directly, each of those properties is animated by the
-   compositor, which first lifts the element onto a layer of its own, and
-   the frame the lift lands on is drawn before the new layer has been
-   painted: the icon was absent for one frame on every press. */
-@property --swap-away {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 0;
-}
+/* A tree mark's chevron turn and its tile's press, each as one number the
+   transition moves, registered so it can be moved. What is drawn (rotate,
+   scale) is worked out from the number every frame, with the rest of the
+   page. */
 @property --swap-turn {
   syntax: "<angle>";
   inherits: false;
@@ -810,9 +801,6 @@
 }
 @utility press-by-* {
   --press-by: --value([*]);
-}
-@utility swap-away-* {
-  --swap-away: --value(integer);
 }
 @utility fade-inset-end-* {
   --fade-inset-end: --value([*]);
@@ -2064,11 +2052,12 @@
   }
 }
 
-/* Two things sharing one slot; the outgoing one animates out too. How far
-   each has given way (--swap-away, 0 shown to 1 gone) is the one thing that
-   transitions; it fades and blurs by it, and where motion is welcome
-   shrinks by it to a quarter (DESIGN.md, Tree mark: "scale 0.25 to 1, blur
-   4px to 0"). */
+/* Two things sharing one slot; the outgoing one animates out too. Each
+   cross-fades on opacity and, where motion is welcome, shrinks to a quarter
+   on scale, the two the compositor runs off the main thread: a frame of the
+   page's own work never holds them. The one leaving is drawn over the whole
+   of its first frame (opacity 1 at 0ms) and the pair is never both near
+   gone (each at 0.5 where they cross). */
 @utility icon-swap {
   /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
   :where(&) {
@@ -2078,17 +2067,17 @@
   :where(& > *) {
     display: inline-flex;
     grid-area: 1 / 1;
-    opacity: calc(1 - var(--swap-away));
-    filter: blur(calc(var(--space-1) * var(--swap-away)));
-    transition: --swap-away var(--icon-swap-dur, var(--dur-pop)) var(--ease-out);
-
-    @media (prefers-reduced-motion: no-preference) {
-      scale: calc(1 - 0.75 * var(--swap-away));
-    }
+    transition-property: opacity, scale;
+    transition-duration: var(--icon-swap-dur, var(--dur-pop));
+    transition-timing-function: var(--ease-out);
   }
   :where(&) > :where([data-active="false"]) {
-    --swap-away: 1;
+    opacity: 0;
     pointer-events: none;
+
+    @media (prefers-reduced-motion: no-preference) {
+      scale: 0.25;
+    }
   }
   /* Its baseline is a line of words at its centre, zero wide and zero tall:
      its glyphs have none, so a box made of them took its bottom edge for
@@ -2102,6 +2091,27 @@
     inline-size: 0;
     line-height: 0;
   }
+}
+
+/* The same swap for two things that say which of them shows by a state of
+   their own (a tree mark's face and its chevron): each moves on
+   `swap-move`, and the one that has given way is `swap-gone`; a variant
+   brings it back with `swap-shown`. */
+@utility swap-move {
+  transition-property: opacity, scale;
+  transition-duration: var(--icon-swap-dur, var(--dur-pop));
+  transition-timing-function: var(--ease-out);
+}
+@utility swap-gone {
+  opacity: 0;
+
+  @media (prefers-reduced-motion: no-preference) {
+    scale: 0.25;
+  }
+}
+@utility swap-shown {
+  opacity: 1;
+  scale: 1;
 }
 
 /* What stands behind a colour with an alpha: a checkerboard of the recess

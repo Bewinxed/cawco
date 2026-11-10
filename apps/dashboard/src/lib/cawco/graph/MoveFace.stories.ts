@@ -72,7 +72,7 @@ const formMove: Clip[] = [
     button,
     "Button “Create routine”",
     "changes",
-    "--swap-away",
+    "--press-by",
     24,
     180,
     "--dur-morph"
@@ -90,7 +90,7 @@ const formMove: Clip[] = [
     button,
     "Button “Create routine”",
     "changes",
-    "--swap-away",
+    "--press-by",
     626,
     180,
     "--dur-morph"
@@ -250,7 +250,7 @@ export const TwoRuns = { args: { selected: "1" } };
 
 /** One animation of a two-run row chosen: its own settings under it. */
 export const TwoRunsOneChosen = {
-  args: { selected: "1/1/--swap-away" },
+  args: { selected: "1/1/--press-by" },
 };
 
 /** Playing: the playhead 700 ms in, Pause in Play's place. */

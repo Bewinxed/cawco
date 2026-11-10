@@ -151,7 +151,6 @@ const twMergeConfig = {
       "hit-gap-y": [{ "hit-gap-y": arbitrary }],
       "caw-neck": [{ "caw-neck": arbitrary }],
       "press-by": [{ "press-by": arbitrary }],
-      "swap-away": [{ "swap-away": [validators.isInteger] }],
       "rail-step": [{ "rail-step": arbitrary }],
       "prompt-fs": [{ "prompt-fs": arbitrary }],
       "fade-inset-end": [{ "fade-inset-end": arbitrary }],
@@ -209,7 +208,6 @@ const twMerge = extendTailwindMerge<
   | "hit-gap-y"
   | "caw-neck"
   | "press-by"
-  | "swap-away"
   | "rail-step"
   | "prompt-fs"
   | "fade-inset-end"

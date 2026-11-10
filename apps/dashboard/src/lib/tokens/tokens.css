@@ -1108,8 +1108,6 @@
     --c-btn-min-w: 96px;
     /* A button's icon-to-label gap (DESIGN.md Buttons: "an 8px gap"). */
     --c-btn-gap: 8px;
-    /* A pending label's outgoing words go soft as they fade (DESIGN.md Buttons, Pending: "a 2px blur where motion is welcome"). */
-    --c-btn-words-blur: 2px;
     /* The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer. */
     --c-pointer-floor: 24px;
     /* The 44 Touch Rule's floor (DESIGN.md Focus and hit areas): every control's least hit box under a coarse pointer, reached through `touch-hit`. */
@@ -1813,10 +1811,6 @@
     --transition-fold-fade:
       opacity var(--dur-exit) var(--ease-out),
       filter var(--dur-exit) var(--ease-out);
-    /* A pending button's label and spinner cross-fading and cross-blurring as one replaces the other (the kit's pending-content), where motion is wanted. A transitioned filter can hang WebKit (scripts/probe-kit/specs/web/safari-blurs.ts); no other element takes this. */
-    --transition-morph-fade:
-      opacity var(--dur-morph) var(--ease-out),
-      filter var(--dur-morph) var(--ease-out);
     /* The connection band (HubBand) going, with less motion: its fade and its visibility on the exit's beat, its tint and ink on the control's. */
     --transition-band-hide:
       opacity var(--dur-exit) var(--ease-out),

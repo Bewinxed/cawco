@@ -189,13 +189,11 @@
   <!-- What the tile shows: its face, or its count, and the chevron either
        gives way to. The echo is the bare tile: only what grows past the
        tile is ever seen of it. Both stay in the tile; the one leaving
-       shrinks and blurs out as the other grows and sharpens in, by
-       transitions, so a pointer that turns back mid-way turns them with it.
-       Which of the two shows is --swap-away (1 for the one that has given
-       way): that number is what transitions (app.css); the swap is by
-       opacity, the shrink and the blur are motion and ride on it only where
-       motion is welcome. The chevron's turn and the tile's press are
-       numbers of the same kind. Open, the chevron stands in the face's
+       fades and shrinks out as the other fades and grows in, by
+       transitions, so a pointer that turns back mid-way turns them with it
+       (design.css `swap-move`, `swap-gone`): opacity and scale, on the
+       compositor; the shrink is motion and only where motion is welcome.
+       The chevron's turn and the tile's press are registered numbers. Open, the chevron stands in the face's
        place, unless the count is the parent's own status (`countIsStatus`):
        then only a pointer brings it. With a dot the face is cut away round
        it: a hole in its mask, filled while a working mark's echo beats
@@ -216,10 +214,8 @@
   >
     <span
       data-slot="tree-mark-rest"
-      class="col-start-1 row-start-1 inline-grid place-items-center opacity-(--swap-shown) transition-[--swap-away] duration-(--dur-control) ease-out motion-safe:scale-(--swap-scale) motion-safe:blur-(--swap-blur) group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-away-1 group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-away-1"
-      style:--swap-shown="calc(1 - var(--swap-away))"
-      style:--swap-scale="calc(1 - 0.75 * var(--swap-away))"
-      style:--swap-blur="calc(var(--space-1) * var(--swap-away))"
+      style:--icon-swap-dur="var(--dur-control)"
+      class="col-start-1 row-start-1 inline-grid place-items-center swap-move group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-gone group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-gone"
     >
       {#if has && !faceAlways}
         <!-- The count's box is fixed, and the morph (which animates its own
@@ -237,10 +233,8 @@
     {#if parent && !faceAlways}
       <span
         data-slot="chev"
-        class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm opacity-(--swap-shown) transition-[--swap-away] duration-(--dur-control) ease-out motion-safe:scale-(--swap-scale) motion-safe:blur-(--swap-blur) swap-away-1 group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-away-0 group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-away-0"
-        style:--swap-shown="calc(1 - var(--swap-away))"
-        style:--swap-scale="calc(1 - 0.75 * var(--swap-away))"
-        style:--swap-blur="calc(var(--space-1) * var(--swap-away))"
+        style:--icon-swap-dur="var(--dur-control)"
+        class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm swap-move swap-gone group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-shown group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-shown"
         ><!-- Open, the chevron points down at the rows. --><ChevronIcon
           aria-hidden="true"
           class="size-full rotate-(--swap-turn) motion-safe:transition-[--swap-turn] motion-safe:duration-(--dur-toggle) motion-safe:ease-out"

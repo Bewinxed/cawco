@@ -487,7 +487,6 @@ export type TokenSize =
   | "size.c-port-field-w"
   | "size.c-btn-min-w"
   | "size.c-btn-gap"
-  | "size.c-btn-words-blur"
   | "size.c-pointer-floor"
   | "size.c-touch-floor"
   | "size.c-screen-margin"

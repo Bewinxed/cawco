@@ -155,11 +155,22 @@
    class from the markup that hosts them. Each is anchored on the host's own
    hook. */
 @layer components {
-  /* The letters the morph (ui/morph-text/morph.ts) writes into its box:
-     each a box of its own on one line, broken only at "\n". A digit rolls in
-     a slot that clips it on the block axis only (clip, unlike hidden, keeps
-     the text's baseline), so a glyph's overhang is never shaved. */
-  [data-slot="letters"] {
+  /* The layers the morph (ui/morph-text/morph.ts) writes into its box, all
+     in its one cell, each step's letters on its lines, broken only at "\n":
+     each letter a box of its own. A paragraph's words written as text to
+     read where they wrap (`data-probe`) wrap as the text at rest does,
+     unseen. A digit rolls in a slot that clips it on the block axis only
+     (clip, unlike hidden, keeps the text's baseline), so a glyph's overhang
+     is never shaved. */
+  [data-slot="letters"] > * {
+    grid-area: 1 / 1;
+  }
+  [data-slot="letters"] > [data-probe] {
+    visibility: hidden;
+  }
+  [data-slot="letters"] > [data-layer] {
+    white-space: nowrap;
+
     > :not(br) {
       display: inline-block;
       white-space: pre;

@@ -31,7 +31,7 @@
    *   span); its lane. A thing that moves more than once has a disclosure
    *   triangle at its leading edge (an outline's, as Motion Studio's tracks
    *   open into their properties), opening one row per animation named by
-   *   the property it animates ("opacity", "--swap-away").
+   *   the property it animates ("opacity", "--press-by").
    * - **A press on a row, or on its bar**, selects it: the house Selected
    *   wash (coral is the selected row's alone), its bar ringed, its three
    *   settings opened under it (ClipSettings, his pick: a clip is adjusted
@@ -422,7 +422,7 @@
   /**
    * What an animation changes, in words: the property's own name where
    * the words have one ("Opacity", "Position"), else the property's name
-   * said plainly ("--swap-away" is "Swap away"), never the CSS in code type.
+   * said plainly ("--press-by" is "Press by"), never the CSS in code type.
    */
   const LEADING_DASHES = /^-+/u;
   const JOINERS = /[-_]+/gu;

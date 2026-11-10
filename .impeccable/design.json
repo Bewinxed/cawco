@@ -3073,11 +3073,6 @@
         "purpose": "A fold's inner panel fading and cross-blurring out of --fold-blur as it opens and shuts (UpdateCard, MovedLogins, RecordCard; the open state stretches it to the panel's beat). A transitioned filter can hang WebKit; these folds are each driven on WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other element takes this."
       },
       {
-        "name": "transition-morph-fade",
-        "value": "opacity var(--dur-morph) var(--ease-out), filter var(--dur-morph) var(--ease-out)",
-        "purpose": "A pending button's label and spinner cross-fading and cross-blurring as one replaces the other (the kit's pending-content), where motion is wanted. A transitioned filter can hang WebKit (scripts/probe-kit/specs/web/safari-blurs.ts); no other element takes this."
-      },
-      {
         "name": "transition-band-hide",
         "value": "opacity var(--dur-exit) var(--ease-out), visibility var(--dur-exit) linear, background-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out)",
         "purpose": "The connection band (HubBand) going, with less motion: its fade and its visibility on the exit's beat, its tint and ink on the control's."

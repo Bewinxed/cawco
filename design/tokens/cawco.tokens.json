@@ -5330,14 +5330,6 @@
       },
       "$description": "A button's icon-to-label gap (DESIGN.md Buttons: \"an 8px gap\")."
     },
-    "c-btn-words-blur": {
-      "$type": "dimension",
-      "$value": {
-        "value": 2,
-        "unit": "px"
-      },
-      "$description": "A pending label's outgoing words go soft as they fade (DESIGN.md Buttons, Pending: \"a 2px blur where motion is welcome\")."
-    },
     "c-pointer-floor": {
       "$type": "dimension",
       "$value": {
@@ -8182,23 +8174,6 @@
       "$extensions": {
         "dev.cawco": {
           "css": "opacity {motion.dur-exit} {motion.ease-out}, filter {motion.dur-exit} {motion.ease-out}"
-        }
-      }
-    },
-    "transition-morph-fade": {
-      "$type": "transition",
-      "$value": {
-        "duration": "{motion.dur-morph}",
-        "delay": {
-          "value": 0,
-          "unit": "ms"
-        },
-        "timingFunction": "{motion.ease-out}"
-      },
-      "$description": "A pending button's label and spinner cross-fading and cross-blurring as one replaces the other (the kit's pending-content), where motion is wanted. A transitioned filter can hang WebKit (scripts/probe-kit/specs/web/safari-blurs.ts); no other element takes this.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "opacity {motion.dur-morph} {motion.ease-out}, filter {motion.dur-morph} {motion.ease-out}"
         }
       }
     },

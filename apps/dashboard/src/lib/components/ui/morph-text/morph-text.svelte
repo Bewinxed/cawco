@@ -1,64 +1,3 @@
-<script lang="ts" module>
-  /**
-   * `text` with a "\n" wherever it wraps in `host` at the width `host` is
-   * laid out at, read off a hidden copy of it: the morph lays its text on one
-   * line and breaks lines only at "\n", so a wrapped paragraph handed to it
-   * plain would morph on one long line and jump back to its lines when the
-   * morph ends.
-   */
-  const TRAILING_SPACE = / $/u;
-
-  /** `text` with a "\n" wherever it wraps in `probe`, laid out already. */
-  function linesIn(probe: HTMLElement, text: string): string {
-    const node = probe.firstChild as Text | null;
-    if (!node) {
-      return text;
-    }
-    const range = document.createRange();
-    let out = "";
-    let top: number | null = null;
-    for (let i = 0; i < text.length; i += 1) {
-      if (text[i] !== " " && (i === 0 || text[i - 1] === " ")) {
-        range.setStart(node, i);
-        range.setEnd(node, i + 1);
-        const y = Math.round(range.getBoundingClientRect().top);
-        if (top !== null && y > top + 1) {
-          out = `${out.replace(TRAILING_SPACE, "")}\n`;
-        }
-        top = y;
-      }
-      out += text[i];
-    }
-    return out;
-  }
-
-  /**
-   * Each of `texts` broken where it wraps at `width`, the host's: every copy
-   * put in at once and read together, one layout for them all.
-   */
-  function broken(host: HTMLElement, width: number, texts: string[]): string[] {
-    const parent = host.parentElement;
-    if (!parent) {
-      return texts;
-    }
-    const probes = texts.map((text) => {
-      const probe = host.cloneNode(false) as HTMLElement;
-      // Its width to the subpixel: rounded down, a line that just fits at
-      // rest wrapped in the copy, and the morph broke it where it never
-      // breaks.
-      probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;inset-inline-start:0;inset-block-start:0;inline-size:${width}px`;
-      probe.textContent = text;
-      return probe;
-    });
-    parent.append(...probes);
-    const out = texts.map((text, i) => linesIn(probes[i], text));
-    for (const probe of probes) {
-      probe.remove();
-    }
-    return out;
-  }
-</script>
-
 <script lang="ts">
   /**
    * The one way the product swaps words in place: text that morphs from the
@@ -70,15 +9,16 @@
    * The letters are drawn only for the length of a swap: a mounted morph per
    * row costs script on every row of a long list, and it draws its text
    * twice (a plain copy for screen readers beside its aria-hidden letters).
-   * It lays out the words the text had and starts the morph to the new ones
-   * in the same frame, and the plain text returns once the morph has
-   * settled. The first draw never morphs: the text is just the text. With
+   * It writes the words the text had and the new ones in the same frame,
+   * each a layer in the letters' one cell, and the morph reads them once
+   * that frame is laid out (morph.ts): nothing here reads a box. The plain
+   * text returns once the morph has settled. The first draw never morphs: the text is just the text. With
    * less motion nothing moves: the old words fade out and the new ones in,
    * in the same held box, opacity only, over --dur-morph.
    *
    * `wrap`: the text is a paragraph that wraps. It stands in a block of its
-   * own, and each side of the morph is handed over broken where it wraps at
-   * that block's width, so the morph keeps the lines the text has at rest.
+   * own, and each side of the morph is broken where it wraps as text in that
+   * block (morph.ts), so the morph keeps the lines the text has at rest.
    *
    * `still`: this change lands without a morph (a figure that changed because
    * the clock moved, not because something happened).
@@ -94,43 +34,47 @@
     still = false,
   }: { text: string; wrap?: boolean; still?: boolean } = $props();
 
-  let host = $state<HTMLElement | null>(null);
-
   let morphMs = $state(0);
   $effect(() => {
     morphMs = dur("--dur-morph");
   });
   let morphing = $state(false);
   /**
-   * The swap the letters are mounted for: the words they start from, the
-   * box those were drawn in, and the words they morph to.
+   * The plain text came back at the size the letters' box was drawn at
+   * (`Morph.landsInPlace`): a `morph()` around it hears no change of size
+   * (`data-in-place`), and measures nothing. A measure there laid the page
+   * out again after every swap.
    */
-  let swap = { from: "", to: "", width: 0, height: 0 };
+  let landed = $state(false);
+  /** The swap the letters are mounted for: the words they start from and the ones they morph to. */
+  let swap = { from: "", to: "" };
   let morph: Morph | null = null;
   let shownText = untrack(() => text);
 
   /** One step of the morph; the plain text returns once the last one settles. */
-  function step(drawn: Morph, value: string): void {
-    drawn.to(value).then((settled) => {
-      if (settled && morph === drawn) {
+  function step(drawn: Morph, settled: Promise<boolean>): void {
+    settled.then((done) => {
+      if (done && morph === drawn) {
+        landed = drawn.landsInPlace;
         morphing = false;
       }
     });
   }
 
-  // The old words are laid out as letters and the morph to the new ones
-  // starts in the same frame, so the box takes its held size in one step.
+  // The old words and the new ones are written in the same frame, and read
+  // once it is laid out, so the box takes its size in one step.
   const letters: Attachment<HTMLElement> = (root) =>
     untrack(() => {
       const drawn = new Morph(root, {
         duration: morphMs,
         easing: CURVE.out,
         fade: !motionOk.current,
+        wrap,
       });
-      drawn.show(swap.from, swap);
       morph = drawn;
-      step(drawn, swap.to);
+      step(drawn, drawn.start(swap.from, swap.to));
       return () => {
+        drawn.stop();
         morph = null;
       };
     });
@@ -146,44 +90,30 @@
       morphing = false;
       return;
     }
-    const paragraph = untrack(() => wrap);
     if (morph) {
-      // Mid-morph: the next step starts from what is drawn; a paragraph's
-      // words are broken at the host's width first.
-      const [to] =
-        paragraph && host
-          ? broken(host, host.getBoundingClientRect().width, [next])
-          : [next];
-      step(morph, to);
+      // Mid-morph: the next step starts from what is drawn.
+      step(morph, morph.to(next));
       return;
     }
-    if (!host) {
-      return;
-    }
-    // The host read once: its box is what the swap holds, and its width is
-    // what a paragraph's two sides are broken at, read together.
-    const box = host.getBoundingClientRect();
-    const [from, to] = paragraph
-      ? broken(host, box.width, [was, next])
-      : [was, next];
-    // Inline, its rect is the run of its words; its height is the font's,
-    // not the line's, so only a block (a paragraph) holds its height.
-    swap = { from, to, width: box.width, height: paragraph ? box.height : 0 };
+    swap = { from: was, to: next };
+    landed = false;
     morphing = true;
   });
 </script>
 
-<!-- The letters' box: one line broken only at "\n", the morph holding its
-     size. Nothing it draws reaches past the box on the inline axis; clip
-     (unlike hidden) keeps its text baseline. The letters the morph writes
-     into it are drawn by the theme's `morph-letters` component rule. -->
+<!-- The letters' box: one grid cell the morph stands each step's layer of
+     letters in (morph.ts), so it is the larger of the words drawn and the
+     words coming; on one line, or a paragraph's block (`wrap`). Nothing it
+     draws reaches past the box on the inline axis; clip (unlike hidden)
+     keeps its text baseline. The layers and their letters are drawn by the
+     theme's `morph-letters` component rule. -->
 <span
   data-slot="morph-text"
   class="data-wrap:block"
+  data-in-place={landed || undefined}
   data-wrap={wrap || undefined}
-  bind:this={host}
   >{#if morphing}<span
-      class="relative inline-block overflow-x-clip whitespace-nowrap"
+      class={[wrap ? "grid" : "inline-grid", "overflow-x-clip"]}
       aria-hidden="true"
       data-slot="letters"
       {@attach letters}

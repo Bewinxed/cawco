@@ -48,10 +48,10 @@ function clip(
   };
 }
 
-/** The label's swap: its old words out and its new in, on the morph. */
+/** The button's press and its label's swap: its old words out and its new in, on the morph. */
 const swap = (start: number): ClipRead[] => [
-  clip(BUTTON, "Button “Create routine”", "--swap-away", start, "--dur-morph", [
-    { property: "--swap-away", from: "0", to: "1" },
+  clip(BUTTON, "Button “Create routine”", "--press-by", start, "--dur-morph", [
+    { property: "--press-by", from: "1", to: "0.97" },
   ]),
   clip(BUTTON, "Button “Create routine”", "opacity", start, "--dur-morph", [
     { property: "opacity", from: "1", to: "0" },

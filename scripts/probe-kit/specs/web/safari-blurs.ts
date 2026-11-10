@@ -19,9 +19,6 @@
  *  - the queued edit's row, rising out of a 4px blur (Composer `[data-slot="edit-row"]`);
  *  - a minimized question's bar, coming up out of a 4px blur, and the card
  *    again (Composer `askedIn`);
- *  - a tree mark's face and chevron swapping as its rows open and fold
- *    (TreeMark), in the phone's sidebar sheet;
- *  - the theme switch's icons (app.css `.icon-swap`), in the same sheet;
  *  - the keychain unlock's result mark (MachineAuthStatus `mark-in`);
  *  - a decision record's fold (RecordCard);
  *  - a skeleton handing its place to its content, out of and into the
@@ -36,7 +33,6 @@
  */
 import type { Page } from "playwright-core";
 import { readWithin } from "../../../../packages/core/src/bounded";
-import { hubRequest } from "../../../../packages/core/src/hub-request";
 import { machineWords } from "../../../../packages/core/src/words/machine";
 import { seedDecisions } from "../../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
@@ -453,63 +449,6 @@ async function composerCases(kit: Kit, fleet: KitFleet, base: string) {
   await page.close();
 }
 
-async function sheetCases(kit: Kit, fleet: KitFleet, base: string) {
-  const project = await fleet.api<{ id: string }>(
-    hubRequest("POST /api/projects", {
-      body: {
-        name: "Harbour",
-        machineId: MACHINE,
-        cwd: fleet.repo,
-        caw: false,
-      },
-    })
-  );
-  for (const title of ["Alpha", "Beta"]) {
-    await fleet.spawn("claude", title, fleet.repo, { projectId: project.id });
-  }
-  const page = await phone(kit);
-  await open(page, `${base}/session`, '[data-slot="burger"]', 90_000);
-  await settle(page);
-  await page.tap('[data-slot="burger"]');
-  const row = page.locator(
-    `[data-rail-sheet] a[data-sidebar="menu-button"][href="/project/${project.id}"]`
-  );
-  await row.waitFor();
-  await settle(page);
-  await drive(
-    kit,
-    page,
-    "a tree mark's face and chevron swap as its rows fold and open",
-    async () => {
-      const hit = row.locator('[data-tree-mark] [data-slot="hit"]');
-      const flips: string[] = [];
-      for (const _press of [1, 2]) {
-        await hit.tap();
-        await page.waitForTimeout(700);
-        flips.push(String(await hit.getAttribute("aria-expanded")));
-      }
-      return {
-        happened: flips[0] !== flips[1],
-        detail: `aria-expanded ${flips.join(" → ")}`,
-      };
-    }
-  );
-  await drive(kit, page, "the theme switch's icons swap", async () => {
-    const before = await page.evaluate(() =>
-      document.documentElement.classList.contains("dark")
-    );
-    await page.tap(
-      '[data-slot="sheet-content"] button[aria-label$="mode"], [data-slot="sheet-content"] button[aria-label="System"]'
-    );
-    await page.waitForTimeout(800);
-    const after = await page.evaluate(() =>
-      document.documentElement.classList.contains("dark")
-    );
-    return { happened: before !== after, detail: `dark ${before} → ${after}` };
-  });
-  await page.close();
-}
-
 /**
  * The keychain unlock's result: its mark comes in out of a 4px blur
  * (MachineAuthStatus `mark-in`). Only a Mac whose logins are unreadable
@@ -726,7 +665,6 @@ const spec: Spec = {
     const base = await fleet.dashboard();
     await loads(kit, fleet, base);
     await composerCases(kit, fleet, base);
-    await sheetCases(kit, fleet, base);
     await unlockMark(kit, base);
     await recordFold(kit, fleet, base);
   },

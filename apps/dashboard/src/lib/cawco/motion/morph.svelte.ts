@@ -24,7 +24,15 @@
  * What a child placed out of the flow by its own style does (contents
  * fading out as others come in, lifted out where they stood) is no change
  * to the natural size: its going, and anything inside it, starts no tween
- * and retargets none in flight.
+ * and retargets none in flight. Nor is what is put in or taken out in place
+ * of what stood there at its size (`data-in-place`, on what is put in or
+ * on the element changed: a MorphText paragraph's letters taking its
+ * text's place, written inside a ResizeObserver delivery, morph-text/
+ * morph.ts; a MorphText's plain text coming back at the size its letters'
+ * box was drawn at, morph-text.svelte): measured there, the page was laid
+ * out again for nothing. A MorphText's swap is measured where it starts, the
+ * box taking the larger of its two sides, and where its text comes back at
+ * another size.
  *
  * The one ResizeObserver here watches the container itself and only reads:
  * the size it was laid out at, the size a tween starts from. A size change
@@ -407,10 +415,15 @@ export function morph({
     };
     const blank = (one: Node) =>
       one.nodeType === Node.COMMENT_NODE ||
-      (one.nodeType === Node.TEXT_NODE && !one.textContent?.trim());
+      (one.nodeType === Node.TEXT_NODE && !one.textContent?.trim()) ||
+      (one instanceof HTMLElement && one.dataset.inPlace !== undefined);
     /** A change that can move the box's natural size. */
     const sizes = (record: MutationRecord) =>
-      !outOfFlow(record.target) &&
+      !(
+        outOfFlow(record.target) ||
+        (record.target instanceof HTMLElement &&
+          record.target.dataset.inPlace !== undefined)
+      ) &&
       (record.type !== "childList" ||
         ![...record.addedNodes, ...record.removedNodes].every(
           (one) => blank(one) || outOfFlow(one)

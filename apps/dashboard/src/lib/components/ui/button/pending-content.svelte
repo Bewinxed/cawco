@@ -308,17 +308,17 @@
           >{pendingLabel}</span
         >
       {:else if swapsLabel}
-        <!-- The wording that steps out goes soft (DESIGN.md, Buttons: Pending). -->
+        <!-- The wording that steps out fades as the other fades in, in one cell (DESIGN.md, Buttons: Pending). -->
         <span class="inline-grid justify-items-center" data-slot="words"
           ><span
             {@attach measureRest}
             aria-hidden={pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
+            class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out active-false:opacity-0"
             data-active={!pending}><MorphText text={label} /></span
           ><span
             {@attach measurePending}
             aria-hidden={!pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
+            class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out active-false:opacity-0"
             data-active={pending}>{pendingLabel}</span
           ></span
         >
