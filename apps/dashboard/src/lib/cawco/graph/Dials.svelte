@@ -30,10 +30,10 @@
    */
   import { graphWords } from "@cawco/core/words/graph";
   import { MediaQuery } from "svelte/reactivity";
-  import Choice from "#lib/cawco/config/Choice.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
-  import { IconReset } from "#lib/icons.js";
+  import { IconChevronDown, IconReset } from "#lib/icons.js";
   import DialRow from "./DialRow.svelte";
   import {
     changedOf,
@@ -288,41 +288,63 @@
             ]}
             data-slot="dials-props"
           >
-            {@render partHead(title)}
-            <!-- The props' own control, not one of them: in the section's
-                 head band, under its title, a segmented switch of the
-                 kit's (its thumb sliding between cases) led by what it
-                 does, across the card rather than in the props' columns,
-                 a part's gap above the props it fills. -->
-            {#if own.content && own.content.cases.length > 0}
-              {@const pick = own.content}
-              <div
-                class="col-span-full mb-space-2 flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1"
-                data-slot="dials-content"
-              >
-                <span class="flex-none text-ink-muted type-meta"
-                  >{words.dials.content}</span
-                >
-                <Choice
-                  label={words.dials.content}
-                  onchange={(next) =>
-                    pick.onpick(
-                      pick.cases.find((one) => one.label === next)?.fill ?? null
-                    )}
-                  options={[
-                    {
-                      value: words.dials.cases.saved,
-                      label: words.dials.cases.saved,
-                    },
-                    ...pick.cases.map((one) => ({
-                      value: one.label,
-                      label: one.label,
-                    })),
-                  ]}
-                  value={contentPicked}
-                />
-              </div>
-            {/if}
+            <!-- The part's head carries the props' own control on its line,
+                 at its end, out of the props' columns: it acts on all of
+                 them, so it stands with what names them, not among them
+                 (the owner's pin 12: it read as "another option in the
+                 picker, not a feature of the picker"). -->
+            <div
+              class="col-span-full flex min-w-0 flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
+              data-slot="dials-props-head"
+            >
+              <h3 class="m-0 min-w-0 text-ink-strong type-row text-pretty">
+                {title}
+              </h3>
+              {#if own.content && own.content.cases.length > 0}
+                {@const pick = own.content}
+                <!-- A menu, as the last resort a dropdown is: six cases
+                     beside the part's title have no room on its line, and
+                     drawn in place they read as one more prop. -->
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger>
+                    {#snippet child({ props })}
+                      <Button
+                        {...props}
+                        data-slot="dials-content"
+                        size="sm"
+                        variant="ghost"
+                        >{words.dials.contentNow(contentPicked)}<IconChevronDown
+                          data-icon="inline-end"
+                        /></Button
+                      >
+                    {/snippet}
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content
+                    align="end"
+                    aria-label={words.dials.content}
+                    width="compact"
+                  >
+                    <DropdownMenu.Label
+                      >{words.dials.content}</DropdownMenu.Label
+                    >
+                    <DropdownMenu.RadioGroup
+                      onValueChange={(next: string) =>
+                        pick.onpick(
+                          pick.cases.find((one) => one.label === next)?.fill ??
+                            null
+                        )}
+                      value={contentPicked}
+                    >
+                      {#each [words.dials.cases.saved, ...pick.cases.map((one) => one.label)] as label (label)}
+                        <DropdownMenu.RadioItem value={label}
+                          >{label}</DropdownMenu.RadioItem
+                        >
+                      {/each}
+                    </DropdownMenu.RadioGroup>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
+              {/if}
+            </div>
             <div
               class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
             >

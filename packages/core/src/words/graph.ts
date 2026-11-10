@@ -365,6 +365,8 @@ export const graphWords = {
     propsHead: (component: string) => `${component} props`,
     /** The props' one switch of words, led by what it does: each case fills every text prop it reaches at once. */
     content: "Fill all text with",
+    /** That switch in the props' head: the case every text prop stands in now. */
+    contentNow: (pick: string) => `Text: ${pick}`,
     cases: {
       saved: "Saved",
       empty: "Empty",
