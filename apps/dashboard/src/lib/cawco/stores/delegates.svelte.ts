@@ -139,20 +139,24 @@ const sessionChild = (row: InstanceRow): TrayChild => {
   };
 };
 
-const delegatesState = $state({
+const delegatesState = $state<{
   /**
    * What the hub summed up of each delegate whose card came on screen, keyed
    * by the delegate ({@link readDelegate}). Kept apart from the session it
    * belongs to because the reader of this traffic is the *parent*: a
    * delegate card renders its child's exchange, not its own.
    */
-  delegateRead: {} as Record<string, DelegateSummary>,
+  delegateRead: Record<string, DelegateSummary>;
+
   /**
    * The delegate events pushed while this page stood, keyed by the delegate
    * they are about, in id order; those a later read already counts are
    * dropped as it lands.
    */
-  delegateHeard: {} as Record<string, DelegateEvent[]>,
+  delegateHeard: Record<string, DelegateEvent[]>;
+}>({
+  delegateRead: {},
+  delegateHeard: {},
 });
 
 /**

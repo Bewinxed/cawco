@@ -42,7 +42,11 @@ export const tabMachine = (id: string): string | undefined =>
   tabs.machineOf(id);
 
 /** The session the board is peeking — subscribed for frames, like an open tab. */
-export const peek = $state({ id: null as string | null });
+export const peek = $state<{
+  id: string | null;
+}>({
+  id: null,
+});
 
 /**
  * Delegates something on screen is reading live: an expanded card, the tray's

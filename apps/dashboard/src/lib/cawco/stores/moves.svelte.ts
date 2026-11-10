@@ -2,12 +2,14 @@
 import type { MoveJob } from "@cawco/core/move";
 import type { BoardFrame, FrameOf } from "../hub/frames";
 
-const movesState = $state({
+const movesState = $state<{
   /**
    * The project moves the hub is carrying (core move.ts), whole: handed on
    * connect in the `instances` frame, then replaced by each `moves` frame.
    */
-  moves: [] as MoveJob[],
+  moves: MoveJob[];
+}>({
+  moves: [],
 });
 
 /**

@@ -220,21 +220,28 @@ const listedById = $derived(
 
 const staleInstances = $derived.by(keepsLast(() => instances.filter(isStale)));
 
-export const boardState = $state({
+export const boardState = $state<{
   /** The board's snapshot and the first read of the projects after it are in. */
-  fleetRead: false,
-  machines: [] as Machine[],
+  fleetRead: boolean;
+  machines: Machine[];
+
   /**
    * What the hub itself is running, carried on `instances` frames (C2 reads
    * it against every machine's own {@link Machine.build} — a hub older than
    * this field simply never sends it, and the comparison has nothing to say).
    */
-  hubBuild: undefined as BuildInfo | undefined,
+  hubBuild: BuildInfo | undefined;
+
   /**
    * The socket's first full `instances` frame has landed: the hub's own
    * now-state (pulses) for every session is in, so "nothing is working" can
    * be believed. The REST read alone cannot say what is mid-turn.
    */
+  liveRead: boolean;
+}>({
+  fleetRead: false,
+  machines: [],
+  hubBuild: undefined,
   liveRead: false,
 });
 
