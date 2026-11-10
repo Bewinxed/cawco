@@ -102,6 +102,10 @@ as-unknown-as	Record<string, unknown>	packages/core/src/fleet-secrets.ts	1
 as-unknown-as	Record<string, unknown>	packages/hub/src/routes/fleet-mcp.ts	2
 as-unknown-as	Record<string, unknown>	packages/hub/src/transcript.ts	2
 as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte	1
+as-unknown-as	Record<string, unknown>	scripts/probe-kit/frames.ts	1
+as-unknown-as	Redraw	scripts/probe-kit/specs/comments.ts	3
+as-unknown-as	ReturnType<typeof setTimeout>	apps/dashboard/src/lib/cawco/stores/ledger.svelte.ts	1
+as-unknown-as	RouteData	apps/dashboard/src/lib/cawco/graph/RouteEdge.svelte	1
 as-unknown-as	RuleDraft	packages/hub/src/routes/rules.ts	2
 as-unknown-as	SDKUserMessage	packages/agent/src/harnesses/claude.ts	1
 as-unknown-as	SendPayload	packages/hub/src/stream.ts	1
