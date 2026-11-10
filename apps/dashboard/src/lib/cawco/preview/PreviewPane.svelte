@@ -65,14 +65,8 @@
     IconUndock,
     IconUndockLinear,
   } from "#lib/icons.js";
-  import { frameObserver } from "#lib/platform/frame-observer.js";
   import { failureWords } from "#lib/platform/hub-read.js";
-  import {
-    appear,
-    dur,
-    numberOf,
-    revealOn,
-  } from "#lib/platform/motion/curves.svelte.js";
+  import { appear, dur, revealOn } from "#lib/platform/motion/curves.svelte.js";
   import { landKey } from "#lib/platform/motion/keyed.svelte.js";
   import { closeInto } from "#lib/platform/motion/share.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -114,6 +108,7 @@
   import CanvasMap from "./map/CanvasMap.svelte";
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
+  import { PageCover } from "./page-cover.svelte";
   import { PaneCanvas } from "./pane-canvas.svelte";
   import { lostWhy, PaneDoc, pageRepliesOf } from "./pane-doc.svelte";
   import { PaneLayout } from "./pane-layout.svelte";
@@ -304,122 +299,18 @@
     pinPeek,
     changeTour,
   });
+  const pageCover = new PageCover({
+    inset: () => inset,
+    paneLayout,
+    previewFrame,
+    pinComposer,
+    changeTour,
+    pinThread,
+  });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
   /** The rail, for `/`: its search field takes the keyboard. */
   let rail = $state<ReturnType<typeof CommentRail>>();
-  /**
-   * What the sheet covers told again as it comes to rest (ThreadSheet
-   * `onmoved`): measured as it mounts it stood below the well, covering
-   * nothing, so no pin was lifted clear of it.
-   */
-  let sayCovered: (() => void) | null = null;
-  /**
-   * What the host's chrome covers of the page, told to its overlay
-   * (`cawco:covered`, the page's viewport px): on a phone, the thread or the
-   * composer standing at the well's foot; at every width, Changed since you
-   * looked floating at the foot. A pin the pane opens is brought out from
-   * under them (pins.ts `reveal`). Told again as any resizes, and as
-   * nothing once none stands. The rail's foot sheet holding its list is a
-   * layer over the page that never moves it, so no pin is brought out from
-   * under it; holding a thread (`threadPushed`), it is told, so that
-   * thread's pin is.
-   */
-  $effect(() => {
-    const frame = previewFrame.iframe;
-    const floating = paneLayout.floatSheet
-      ? (pinThread.cardFloat ?? pinComposer.composerFloat ?? null)
-      : null;
-    const sheetCard = pinThread.threadPushed
-      ? (pinThread.railSurface ?? null)
-      : floating;
-    if (!(frame && previewFrame.connected)) {
-      return;
-    }
-    const covering = [sheetCard, changeTour.changesTag].filter(
-      (el): el is HTMLElement => !!el
-    );
-    if (covering.length === 0) {
-      previewFrame.post({ type: "cawco:covered", boxes: [] });
-      return;
-    }
-    // Said in the next frame (frameObserver), whatever moved it.
-    const sayNow = () => {
-      const framed = frame.getBoundingClientRect();
-      const left = framed.left + frame.clientLeft;
-      const top = framed.top + frame.clientTop;
-      previewFrame.post({
-        type: "cawco:covered",
-        boxes: covering.map((el) => {
-          const r = el.getBoundingClientRect();
-          return { x: r.left - left, y: r.top - top, w: r.width, h: r.height };
-        }),
-      });
-    };
-    const sized = frameObserver(sayNow);
-    for (const el of covering) {
-      sized.observe(el);
-    }
-    sized.request();
-    sayCovered = sayNow;
-    return () => {
-      sayCovered = null;
-      sized.disconnect();
-    };
-  });
-  /**
-   * Room under the page's foot while Changed since you looked floats over it
-   * (`cawco:foot-room`, px): from the tag's top to the frame's foot and a
-   * gap, so the page scrolls that much further and its last line comes clear
-   * of the tag, as iOS insets content under a floating bottom bar; none once
-   * the tag goes.
-   */
-  $effect(() => {
-    const frame = previewFrame.iframe;
-    const tag = changeTour.changesTag;
-    if (!(frame && previewFrame.connected)) {
-      return;
-    }
-    if (!tag) {
-      previewFrame.post({ type: "cawco:foot-room", px: 0 });
-      return;
-    }
-    const gap = numberOf("--space-2");
-    const sayNow = () => {
-      const foot = frame.getBoundingClientRect().bottom - frame.clientTop;
-      previewFrame.post({
-        type: "cawco:foot-room",
-        px: Math.max(
-          0,
-          Math.ceil(foot - tag.getBoundingClientRect().top + gap)
-        ),
-      });
-    };
-    const sized = frameObserver(sayNow);
-    sized.observe(tag);
-    sized.observe(frame);
-    sized.request();
-    return () => sized.disconnect();
-  });
-  /**
-   * The head's room over the page's top as the head is laid out now
-   * (`cawco:head-room`, px), said again as it changes size (a finger's
-   * taller controls): a document CawCo draws pads its scroller by it.
-   */
-  $effect(() => {
-    const head = paneLayout.section?.querySelector<HTMLElement>(
-      '[data-slot="side-head"]'
-    );
-    if (!(previewFrame.iframe && previewFrame.connected && head && !inset)) {
-      return;
-    }
-    const sized = frameObserver(() =>
-      previewFrame.post({ type: "cawco:head-room", px: head.offsetHeight })
-    );
-    sized.observe(head);
-    sized.request();
-    return () => sized.disconnect();
-  });
   /** What holds the focus as a control: a key it takes is its own. */
   const PANE_CONTROL =
     'button, a[href], summary, [role="button"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"]';
@@ -2237,7 +2128,7 @@
           pinThread.railSheetDrawn = false;
         }
       }}
-      onmoved={() => sayCovered?.()}
+      onmoved={() => pageCover.sayCovered?.()}
       open={pinThread.railSheetOpen}
       short={pinThread.railShort}
       tall={sheet && !pinThread.railShort}
@@ -2320,7 +2211,7 @@
                 pinThread.closingPin = null;
               }
             }}
-            onmoved={() => sayCovered?.()}
+            onmoved={() => pageCover.sayCovered?.()}
             open={pinThread.openPin !== null}
             short={pinThread.placingThread}
             bind:surface={pinThread.cardFloat}
