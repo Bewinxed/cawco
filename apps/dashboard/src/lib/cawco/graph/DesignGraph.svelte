@@ -911,9 +911,12 @@
 
   onMount(() => {
     const key = (event: KeyboardEvent) => {
-      const field = (event.target as HTMLElement | null)?.closest(
-        "input, textarea, select, [contenteditable='true']"
-      );
+      const field =
+        event.target instanceof Element
+          ? event.target.closest(
+              "input, textarea, select, [contenteditable='true']"
+            )
+          : null;
       if (
         event.key === "Escape" &&
         event.isTrusted &&
@@ -1007,7 +1010,7 @@
    * focus into it. A press on a control still focuses that control.
    */
   const keepFocusOnPage = (event: MouseEvent) => {
-    if (!(event.target as Element | null)?.closest(FOCUSABLE)) {
+    if (!(event.target instanceof Element && event.target.closest(FOCUSABLE))) {
       event.preventDefault();
     }
   };
@@ -1255,7 +1258,7 @@
       return;
     }
     event.preventDefault();
-    to?.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
+    to?.focus({ preventScroll: true, focusVisible: false });
   };
   let menuTrigger = $state<HTMLElement | null>(null);
   let viewTrigger = $state<HTMLElement | null>(null);

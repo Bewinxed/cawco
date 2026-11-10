@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /** A move's arrow on the whole set's map, as dagre routed it (layout.ts). */
-  export interface RouteData {
+  export interface RouteData extends Record<string, unknown> {
     /** What a person does to make the move ("Try again"), when the agent named it. */
     label: string | null;
     labelAt: { x: number; y: number } | null;
@@ -22,10 +22,9 @@
    * (a band `--space-5` wide along it, the line itself being 1.5px) or on
    * its act opens its move.
    */
-  import { EdgeLabel, type EdgeProps } from "@xyflow/svelte";
+  import { type Edge, EdgeLabel, type EdgeProps } from "@xyflow/svelte";
 
-  let { id, data, markerEnd }: EdgeProps = $props();
-  const route = $derived(data as unknown as RouteData);
+  let { id, data: route, markerEnd }: EdgeProps<Edge<RouteData>> = $props();
 
   /** d3-shape's curveBasis, written out: a uniform B-spline through the points, ending on the last. */
   function basis(points: readonly { x: number; y: number }[]): string {
@@ -55,29 +54,31 @@
     parts.push(`L${x1},${y1}`);
     return parts.join(" ");
   }
-  const path = $derived(basis(route.points));
 </script>
 
-<path
-  class="fill-none stroke-transparent stroke-(length:--space-5)"
-  d={path}
-  data-slot="route-hit"
-/>
-<path
-  {id}
-  class="pointer-events-none fill-none stroke-border-contrast stroke-(length:--c-graph-edge)"
-  d={path}
-  data-played={route.played ? "played" : "named"}
-  marker-end={markerEnd}
-  stroke-dasharray={route.played ? undefined : "4 4"}
-/>
-{#if route.label && route.labelAt}
-  <EdgeLabel transparent x={route.labelAt.x} y={route.labelAt.y}>
-    <button
-      class="pointer-hit block max-w-c-graph-label rounded-sm border border-border-hairline bg-surface-raised px-space-1 text-start type-meta text-ink-row transition-control can-hover:hover:bg-surface-hover"
-      onclick={route.open}
-      tabindex="-1"
-      type="button">{route.label}</button
-    >
-  </EdgeLabel>
+{#if route}
+  {@const path = basis(route.points)}
+  <path
+    class="fill-none stroke-transparent stroke-(length:--space-5)"
+    d={path}
+    data-slot="route-hit"
+  />
+  <path
+    {id}
+    class="pointer-events-none fill-none stroke-border-contrast stroke-(length:--c-graph-edge)"
+    d={path}
+    data-played={route.played ? "played" : "named"}
+    marker-end={markerEnd}
+    stroke-dasharray={route.played ? undefined : "4 4"}
+  />
+  {#if route.label && route.labelAt}
+    <EdgeLabel transparent x={route.labelAt.x} y={route.labelAt.y}>
+      <button
+        class="pointer-hit block max-w-c-graph-label rounded-sm border border-border-hairline bg-surface-raised px-space-1 text-start type-meta text-ink-row transition-control can-hover:hover:bg-surface-hover"
+        onclick={route.open}
+        tabindex="-1"
+        type="button">{route.label}</button
+      >
+    </EdgeLabel>
+  {/if}
 {/if}
