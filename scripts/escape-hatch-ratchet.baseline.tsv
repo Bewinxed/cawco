@@ -355,7 +355,6 @@ as-unknown-as	Record< string, (...a: unknown[]) => unknown >	packages/agent/src/
 as-unknown-as	Record<Phase, { own: number; pane: number }[]>	scripts/probe-kit/specs/two-pane-perf.ts	1
 as-unknown-as	Record<string, { prototype?: object } | undefined>	scripts/probe-kit/frames.ts	1
 as-unknown-as	Record<string, Fiber>	packages/preview/src/overlay/page.ts	1
-as-unknown-as	Record<string, string>	apps/dashboard/src/lib/cawco/accounts/figure.ts	1
 as-unknown-as	Record<string, unknown[]>	scripts/probe-kit/specs/graph-stage.ts	1
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/lib/cawco/graph/WholeSet.svelte	2
 as-unknown-as	Record<string, unknown>	apps/dashboard/src/routes/(app)/motion/traffic/+page.svelte	1
