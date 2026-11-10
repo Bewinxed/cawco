@@ -177,10 +177,10 @@ function pull(list: Message[], id: string): Message | undefined {
  */
 export function take(
   target: SessionState,
-  block: TranscriptBlock,
+  block: Message,
   into: "blocks" | "queued" | "removed"
 ): Message {
-  const fresh = block as Message;
+  const fresh: Message = block;
   const mine = pull(target.local, block.id);
   if (into === "removed") {
     return (
@@ -402,7 +402,7 @@ function updateBlock(target: SessionState, block: TranscriptBlock): void {
   if (!held) {
     return;
   }
-  if (adopt(held, block as Message) && !block.parentToolUseId) {
+  if (adopt(held, block) && !block.parentToolUseId) {
     target.rev += 1;
   }
 }
@@ -436,7 +436,7 @@ function putBlock(
   if (block.parentToolUseId) {
     const branch = branchOf(target, block.parentToolUseId);
     if (!branch.messages.some((one) => one.id === block.id)) {
-      branch.messages.push(block as Message);
+      branch.messages.push(block);
     }
     return Number.POSITIVE_INFINITY;
   }
@@ -612,7 +612,7 @@ function mergeRows(
       next.push(...front);
     }
     const word = fresh.get(message.id);
-    if (word && adopt(message, word as Message)) {
+    if (word && adopt(message, word)) {
       target.rev += 1;
     }
     next.push(
@@ -645,7 +645,7 @@ export function adoptTranscriptPage(
   // thing a later resume is sent under, and the hub resolved it.
   target.machineId ||= where.machineId;
   target.cwd ||= where.cwd;
-  target.harness = where.harness as HarnessKind;
+  target.harness = where.harness;
   if (where.sessionKey) {
     target.sessionId = where.sessionKey;
   }
@@ -710,7 +710,7 @@ function pageBranch(
   { blocks, ...branch }: TranscriptPageBranch,
   streaming: string
 ): SubagentState {
-  return branchState(branch, blocks as Message[], streaming);
+  return branchState(branch, blocks, streaming);
 }
 
 /** An older page, in front of what is on screen, with its branches. */
