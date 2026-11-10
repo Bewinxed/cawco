@@ -50,6 +50,7 @@ import type {
   Credential,
   CredentialInfo,
   CredentialStore,
+  OAuthCredential,
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
@@ -227,13 +228,13 @@ class AccountStore implements CredentialStore {
       // Copilot refresh keeps its GitHub token). A new sign-in written over
       // it is someone to be asked about again.
       const kept = was ? keptIdentity(was) : undefined;
-      const sameGrant =
+      const written =
+        kept &&
         was?.type === "oauth" &&
         next?.type === "oauth" &&
-        was.refresh === next.refresh;
-      const written =
-        next !== undefined && kept && sameGrant && !keptIdentity(next)
-          ? ({ ...next, [IDENTITY]: kept } as Credential)
+        was.refresh === next.refresh &&
+        !keptIdentity(next)
+          ? { ...next, [IDENTITY]: kept }
           : next;
       if (written !== undefined) {
         await writeHeld(this.#account, {
@@ -349,17 +350,20 @@ const keyIdentity = (key: string): AccountIdentity =>
  */
 const IDENTITY = "cawcoIdentity";
 
+const KEPT_IDENTITY = z.object({ email: z.string(), organization: z.string() });
+
 const keptIdentity = (credential: Credential): AccountIdentity | undefined => {
-  const kept = (credential as Record<string, unknown>)[IDENTITY] as
-    AccountIdentity | undefined;
-  return kept && typeof kept.email === "string"
-    ? providerIdentity(kept.email, kept.organization)
+  const kept = KEPT_IDENTITY.safeParse(
+    credential.type === "oauth" ? credential[IDENTITY] : undefined
+  );
+  return kept.success
+    ? providerIdentity(kept.data.email, kept.data.organization)
     : undefined;
 };
 
 /** GitHub's host for a Copilot sign-in: github.com, or its Enterprise domain (pi-ai's `normalizeDomain`). */
-const githubDomain = (credential: Credential): string => {
-  const enterprise = (credential as { enterpriseUrl?: unknown }).enterpriseUrl;
+const githubDomain = (credential: OAuthCredential): string => {
+  const enterprise = credential.enterpriseUrl;
   return typeof enterprise === "string" && enterprise.trim()
     ? enterprise.trim().replace(LEADING_SCHEME, "").replace(TRAILING_PATH, "")
     : "github.com";
@@ -376,12 +380,15 @@ const TRAILING_PATH = /\/.*$/u;
  */
 const GITHUB_IDENTITY_MS = 15_000;
 
+/** GitHub's answer to who a token is: the login is all that is read. */
+const GITHUB_USER = z.object({ login: z.unknown() });
+
 const githubIdentity = async (
-  credential: Credential
+  credential: OAuthCredential
 ): Promise<AccountIdentity> => {
   const domain = githubDomain(credential);
-  const token = (credential as { refresh?: unknown }).refresh;
-  if (typeof token !== "string" || !token) {
+  const token = credential.refresh;
+  if (!token) {
     throw new Error("The Copilot sign-in holds no GitHub token.");
   }
   const read = await readWithin(GITHUB_IDENTITY_MS, async (signal) => {
@@ -399,9 +406,9 @@ const githubIdentity = async (
         `GitHub (${domain}) answered ${response.status} when asked who the Copilot sign-in is.`
       );
     }
-    return (await response.json()) as { login?: unknown };
+    return GITHUB_USER.parse(await response.json());
   });
-  let user: { login?: unknown };
+  let user: z.infer<typeof GITHUB_USER>;
   switch (read.kind) {
     case "answered":
       user = read.value;
@@ -432,10 +439,7 @@ const withIdentity = async (
   provider === "github-copilot" &&
   credential.type === "oauth" &&
   !keptIdentity(credential)
-    ? ({
-        ...credential,
-        [IDENTITY]: await githubIdentity(credential),
-      } as Credential)
+    ? { ...credential, [IDENTITY]: await githubIdentity(credential) }
     : credential;
 
 /** Who a credential is, as far as it says. */
@@ -522,21 +526,23 @@ const lenderOf = (credential: Credential): string | undefined => {
   if (credential.type !== "oauth" || credential.refresh !== BORROWED_REFRESH) {
     return undefined;
   }
-  const lender = (credential as Record<string, unknown>)[LENDER];
+  const lender = credential[LENDER];
   return typeof lender === "string" && lender ? lender : undefined;
 };
 
 /** A lent access token as the borrower's store keeps it: no refresh token, ever. */
-const borrowedCredential = (lender: string, lent: LentAccess): Credential =>
-  ({
-    type: "oauth",
-    access: lent.access,
-    refresh: BORROWED_REFRESH,
-    expires: lent.expires,
-    ...(lent.accountId ? { accountId: lent.accountId } : {}),
-    [IDENTITY]: lent.identity,
-    [LENDER]: lender,
-  }) as unknown as Credential;
+const borrowedCredential = (
+  lender: string,
+  lent: LentAccess
+): OAuthCredential => ({
+  type: "oauth",
+  access: lent.access,
+  refresh: BORROWED_REFRESH,
+  expires: lent.expires,
+  ...(lent.accountId ? { accountId: lent.accountId } : {}),
+  [IDENTITY]: lent.identity,
+  [LENDER]: lender,
+});
 
 /** How long the hub gets to bring a lender's fresh access token. */
 const LEND_WAIT_MS = 60_000;
@@ -1102,11 +1108,11 @@ const piCredentialOf = (
       ? undefined
       : { type: "api_key", key: entry.key };
   }
-  return entry.type === "oauth" &&
-    typeof entry.access === "string" &&
-    typeof entry.refresh === "string"
-    ? (entry as unknown as Credential)
-    : undefined;
+  if (entry.type !== "oauth") {
+    return undefined;
+  }
+  const oauth = CredentialSchema.safeParse(entry);
+  return oauth.success ? oauth.data : undefined;
 };
 
 /**
@@ -1133,7 +1139,7 @@ const opencodeCredentialFrom = (
       type: "api_key",
       key: value.key,
       ...(metadata ? { metadata } : {}),
-    } as Credential;
+    };
   }
   if (
     value.type === "oauth" &&
@@ -1149,7 +1155,7 @@ const opencodeCredentialFrom = (
       access: value.access,
       refresh: value.refresh,
       expires: value.expires,
-    } as unknown as Credential;
+    };
   }
   return undefined;
 };
@@ -1692,7 +1698,7 @@ const opencodeCredentialUnder = (
 ): OpencodeCredential | undefined => {
   const { credential } = held;
   if (credential.type === "api_key") {
-    const { metadata } = credential as { metadata?: unknown };
+    const metadata = "metadata" in credential ? credential.metadata : undefined;
     return credential.key
       ? {
           integrationID,
@@ -1709,7 +1715,7 @@ const opencodeCredentialUnder = (
     return { integrationID, value: { type: "key", key: credential.access } };
   }
   if (integrationID === "github-copilot") {
-    const { enterpriseUrl } = credential as { enterpriseUrl?: unknown };
+    const { enterpriseUrl } = credential;
     return {
       integrationID,
       value: {
@@ -1815,16 +1821,13 @@ const DEVICE_CODE = new Set([
 export const piProviders = async () => {
   const runtime = await ModelRuntime.create({ refreshOnCreate: false });
   return runtime.getProviders().map((provider) => {
-    const { auth } = provider as {
-      auth?: { oauth?: unknown; apiKey?: unknown };
-    };
-    const oauth = Boolean(auth?.oauth) && provider.id !== "openai";
+    const oauth = Boolean(provider.auth.oauth) && provider.id !== "openai";
     return {
       id: provider.id,
-      name: String((provider as { name?: unknown }).name ?? provider.id),
+      name: provider.name || provider.id,
       oauth,
       deviceCode: oauth && DEVICE_CODE.has(provider.id),
-      key: Boolean(auth?.apiKey),
+      key: Boolean(provider.auth.apiKey),
     };
   });
 };

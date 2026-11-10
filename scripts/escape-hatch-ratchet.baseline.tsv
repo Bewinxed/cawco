@@ -282,14 +282,12 @@ as-unknown-as	ArtifactsDb	scripts/probe-kit/specs/answered-pages.ts	1
 as-unknown-as	ArtifactsDb	scripts/probe-kit/specs/web/page-faults.ts	1
 as-unknown-as	AskRecord	apps/dashboard/src/routes/(app)/motion/onboarding/+page.svelte	1
 as-unknown-as	Base64Image["source"]	packages/hub/src/media.ts	1
-as-unknown-as	Buffer	packages/agent/src/browser/relay.ts	1
 as-unknown-as	BuildInfo	packages/core/src/agent-frame.ts	1
 as-unknown-as	CawLead	apps/dashboard/src/lib/cawco/decides/preview/SetupFixture.svelte	1
 as-unknown-as	ClaudeModelUsage	packages/hub/src/turn-usage.ts	1
 as-unknown-as	CommandEnvelope	packages/hub/src/stream.ts	1
 as-unknown-as	CommandLifecycle	packages/agent/src/harnesses/claude.ts	2
 as-unknown-as	Component<ElementProps>	apps/dashboard/src/lib/cawco/references.ts	1
-as-unknown-as	Credential	packages/agent/src/provider-accounts.ts	3
 as-unknown-as	Db	scripts/probe-kit/specs/preview-query.ts	1
 as-unknown-as	Db	scripts/probe-kit/specs/preview-reclaim.ts	1
 as-unknown-as	Deps	scripts/probe-kit/specs/preview-query.ts	1

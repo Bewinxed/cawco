@@ -139,19 +139,26 @@ interface Page {
   url: string;
 }
 
+/** A target of Chromium's list that is a page. */
+const PAGE_TARGET = z.object({
+  targetId: z.string(),
+  type: z.literal("page"),
+  url: z.string().optional(),
+});
+
 /** The browser's pages, as Chromium lists them. */
 const pagesOf = async (link: CdpLink): Promise<Page[]> => {
   const { targetInfos } = await link.call("Target.getTargets");
-  return (Array.isArray(targetInfos) ? targetInfos : [])
-    .filter(
-      (info): info is { targetId: string; type: string; url?: string } =>
-        !!info &&
-        typeof info === "object" &&
-        typeof (info as { targetId?: unknown }).targetId === "string" &&
-        (info as { type?: unknown }).type === "page"
-    )
-    .map((info) => ({ targetId: info.targetId, url: info.url ?? "" }));
+  return (Array.isArray(targetInfos) ? targetInfos : []).flatMap((info) => {
+    const page = PAGE_TARGET.safeParse(info);
+    return page.success
+      ? [{ targetId: page.data.targetId, url: page.data.url ?? "" }]
+      : [];
+  });
 };
+
+/** A navigation-history entry, as Chromium lists it. */
+const HISTORY_ENTRY = z.object({ url: z.string().optional() });
 
 /**
  * The page a take-over brings to the front. A browser ask's is the page it
@@ -480,12 +487,12 @@ const reloadFront = async (
     }
     const session = await link.attach(page.targetId);
     const history = await link.call("Page.getNavigationHistory", {}, session);
-    const entries = Array.isArray(history.entries)
-      ? (history.entries as { url?: string }[])
-      : [];
     const index =
       typeof history.currentIndex === "number" ? history.currentIndex : -1;
-    const url = entries[index]?.url ?? page.url;
+    const current = Array.isArray(history.entries)
+      ? HISTORY_ENTRY.safeParse(history.entries[index]).data
+      : undefined;
+    const url = current?.url ?? page.url;
     if (!url || url === "about:blank") {
       return null;
     }
