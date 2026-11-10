@@ -72,7 +72,7 @@ import { taskLinkWords } from "@cawco/core/words/task-links";
 import { Elysia, ElysiaStatus, problem, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
-import type { ProjectEvent } from "./caw";
+import type { Caw, ProjectEvent } from "./caw";
 import { readsOnly } from "./connection-writes";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
@@ -482,13 +482,14 @@ export interface IngressDeps {
   /** Runs a routine once with an event as its input (routines.ts). */
   readonly routines: Pick<Routines, "runForEvent">;
   /**
-   * One send to a project's conversation (caw.ts `tell`): whether it took
-   * it. Read late: the conversation is made after ingress.
+   * One send to a project's conversation (caw.ts `tell`): its session and
+   * the send, or why it did not take it. Read late: the conversation is made
+   * after ingress.
    */
   readonly tell: (
     projectId: string,
     event: ProjectEvent
-  ) => Promise<{ woke: boolean }>;
+  ) => ReturnType<Caw["tell"]>;
   /** A run a project waits on changed state: its tasks look again (tasks.ts `waitsMoved`). */
   readonly waitsMoved?: (projectId: string) => void;
 }
@@ -736,7 +737,7 @@ export const createIngress = ({
       trigger: `${row.source} sent ${row.kind}${url ? ` (${url})` : ""}, and no route took it`,
       text: eventData(row),
     });
-    if (told.woke) {
+    if (!(told instanceof ElysiaStatus)) {
       store.setEvent(row.id, { handledAt: new Date() });
     }
   };
@@ -758,8 +759,8 @@ export const createIngress = ({
         : "inbound-event",
       trigger: `${inbox.length} inbound event${inbox.length === 1 ? "" : "s"} no route took waited for the conversation to start`,
       text: inboxText(inbox),
-    }).catch(() => ({ woke: false }));
-    if (!told.woke) {
+    }).catch(() => undefined);
+    if (!told || told instanceof ElysiaStatus) {
       store.releaseInbox(inbox.map((each) => each.id));
     }
   };

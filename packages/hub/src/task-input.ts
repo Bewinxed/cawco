@@ -147,9 +147,9 @@ export const createTaskInput = ({
       projectId,
       inputEvent(projectId, task, written)
     );
-    if (!told.woke) {
+    if (told instanceof ElysiaStatus) {
       console.warn(
-        `[tasks] what you wrote on ${taskId} in ${projectId} did not reach its conversation: ${told.why}`
+        `[tasks] what you wrote on ${taskId} in ${projectId} did not reach its conversation: ${told.response.detail}`
       );
     }
   };

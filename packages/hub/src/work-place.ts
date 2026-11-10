@@ -21,14 +21,19 @@
  */
 import type { AccountSignin } from "@cawco/core/accounts";
 import { machinesCalled } from "@cawco/core/machine-names";
+import { ElysiaStatus } from "elysia";
 import type { ProjectRow } from "./db/projects";
 import { onAccountMachines } from "./placement";
+import type { projectRoot } from "./project-folder";
 import { fits, type MachineFacts, runsOnWords } from "./runs-on";
+
+/** The full stop a problem's sentence ends in, which a clause of a longer one drops. */
+const TRAILING_STOP = /\.$/u;
 
 /** What the rule reads of the fleet, read by the caller now. */
 export interface WorkFleet {
-  /** The project's folder on the hub, absolute on the hub's machine (project-folder.ts `projectRoot`). */
-  hubFolder: (projectId: string) => string;
+  /** The project's folder on the hub, absolute on the hub's machine (project-folder.ts `projectRoot`): its problem when the id is no project's. */
+  hubFolder: (projectId: string) => ReturnType<typeof projectRoot>;
   /** The machine the hub runs on; undefined before it is read. */
   hubMachine: string | undefined;
   /** Every machine the hub knows, online or not. */
@@ -103,7 +108,15 @@ export const workPlace = (
   const repository = project.places.some((place) => place.kind === "checkout");
   const hub = fleet.hubMachine;
   if (!repository && hub && fleet.online(hub) && allowed(hub)) {
-    return { kind: "hub", machineId: hub, cwd: fleet.hubFolder(project.id) };
+    const folder = fleet.hubFolder(project.id);
+    // A folder the hub cannot name is nowhere the work could run.
+    return folder instanceof ElysiaStatus
+      ? {
+          kind: "none",
+          why: folder.response.detail.replace(TRAILING_STOP, ""),
+          fix: "start the work in a project the hub keeps",
+        }
+      : { kind: "hub", machineId: hub, cwd: folder };
   }
   return { kind: "none", ...missing(project, fleet, runsOn, fitting) };
 };

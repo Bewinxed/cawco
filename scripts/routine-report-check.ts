@@ -6,7 +6,7 @@
  *
  * - A delivered result: one `tell`, kind `routine-report`, and no note.
  * - `NO_REPLY` (outcome `silent`): no `tell`, no note, no push.
- * - A `tell` that answers `woke: false`: a note naming why.
+ * - A `tell` that answers a problem: a note naming why.
  * - A first failure retries; a second one notes, pushes and needs you.
  * - A routine in no project pushes its result; a conversation run's result
  *   and the memory curator's are notes.
@@ -128,8 +128,19 @@ const drive = async (
   return did;
 };
 
-const WOKE: Told = { woke: true, instanceId: "caw-1", send: "send-1" };
-const OFF: Told = { woke: false, why: "the project's Caw is off" };
+const WOKE: Told = { instanceId: "caw-1", send: "send-1" };
+// Elysia as the hub loads it (the root declares none): a problem is told
+// from a status by the class the hub's own modules hold.
+const { problem } = await import(
+  import.meta.resolveSync(
+    "elysia",
+    new URL("../packages/hub/src/", import.meta.url).pathname
+  )
+);
+const OFF: Told = problem(409, {
+  code: "caw-spend-capped",
+  detail: "the project's Caw is off",
+});
 
 const wrong: string[] = [];
 const expect = (name: string, ok: boolean, got: unknown) => {
@@ -178,7 +189,7 @@ const expect = (name: string, ok: boolean, got: unknown) => {
       did.notes.length === 1 &&
       noted?.phase === "delivered" &&
       !!noted.body?.includes(DELIVERED.output ?? "") &&
-      !!noted.body?.includes(OFF.woke ? "" : OFF.why),
+      !!noted.body?.includes("the project's Caw is off"),
     did
   );
 }

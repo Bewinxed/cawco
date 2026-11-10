@@ -50,6 +50,7 @@ import { decisionLink, sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
 import { routeLine } from "@cawco/core/words/decides-lines";
+import type { TellProblem } from "./caw-problems";
 import type { ArtifactRow } from "./db/artifacts";
 import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
 import { decidesTable } from "./decides-file";
@@ -116,7 +117,7 @@ export interface SettlingDeps {
   readonly tellCaw: (
     projectId: string,
     event: { text: string; trigger: string }
-  ) => Promise<{ instanceId: string } | { why: string }>;
+  ) => Promise<{ instanceId: string } | TellProblem>;
   /** Whether session `id` is live and its prompt cache warm (keep-alive.ts `cacheWarmNow`). */
   readonly warm: (id: string) => boolean;
 }
@@ -414,8 +415,8 @@ export const createSettling = (deps: SettlingDeps) => {
       ),
       text: briefOf(fleet, BUILT_IN.caw, null, asker, [page], false),
     });
-    if ("why" in told) {
-      return { state: "failed", why: told.why };
+    if (told instanceof ElysiaStatus) {
+      return { state: "failed", why: told.response.detail };
     }
     deps.db.putSettlings(
       page.cards.map((card) =>

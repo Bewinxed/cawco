@@ -10,7 +10,6 @@ import { onAccountMachines } from "./placement";
 import { listFolder, projectRoot } from "./project-folder";
 import type { ProjectAsk, ProjectMade } from "./project-making";
 import { placesChanged } from "./project-placements";
-import { projectRootOf } from "./project-refusal";
 import { NOTHING_READ, readCheckout } from "./projects";
 
 import type { WorkAsk, WorkPlace } from "./work-place";
@@ -42,7 +41,8 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * agent; else `~/.cawco/caw/<projectId>`, made on the first machine that is
    * online. Undefined while no machine is. Among the machines where the
    * project's account is signed in, when any is (placement.ts
-   * `onAccountMachines`). The folder's refusal of the hub's folder.
+   * `onAccountMachines`). The folder's problem for the hub's folder, and a
+   * machine that does not say where its home is.
    */
   const leadHome = async (projectId: string) => {
     const machines = onAccountMachines(
@@ -75,9 +75,10 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     );
     const path = home.stdout.trim();
     if (home.exitCode !== 0 || !path.startsWith("/")) {
-      throw new Error(
-        `${ctx.machineName(machineId)} did not say where its home folder is, so Caw has no folder there: ${home.stderr.trim() || `exit ${home.exitCode}`}`
-      );
+      return problem(502, {
+        code: "caw-home-unsaid",
+        detail: `${ctx.machineName(machineId)} did not say where its home folder is, so Caw has no folder there: ${home.stderr.trim() || `exit ${home.exitCode}`}`,
+      });
     }
     return { machineId, cwd: posix.join(path, cawHome(projectId)) };
   };
@@ -91,7 +92,7 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
     workPlace(
       project,
       {
-        hubFolder: projectRootOf,
+        hubFolder: projectRoot,
         hubMachine: ctx.ownMachineIdRead,
         machines: ctx.db.listAgents(),
         online: (machineId) => Boolean(ctx.registry.agent(machineId)),
@@ -244,13 +245,19 @@ export const createProjectJoining = (ctx: ProjectJoiningContext) => {
    * your prompt, started as the project is answered and carrying on after:
    * the person's press answers once the project is made, and its page shows
    * Caw starting (his view's `starting`, his session's row) and why he
-   * could not (his view's `problem`, caw.ts `startRefusals`). Your prompt
+   * could not (his view's `problem`, caw.ts `startProblems`). Your prompt
    * sets the project up whether its Caw is on or off.
    */
   const startProject = (created: ProjectRow, asked: ProjectAsk): void => {
     if (asked.setup) {
       detach(
-        ctx.caw.setup(created.id, asked.setup),
+        ctx.caw.setup(created.id, asked.setup).then((set) => {
+          if (set instanceof ElysiaStatus) {
+            console.warn(
+              `[project-joining] ${created.id}: Caw did not set it up: ${set.response.detail}`
+            );
+          }
+        }),
         `set up ${created.id} with Caw`
       );
     }
