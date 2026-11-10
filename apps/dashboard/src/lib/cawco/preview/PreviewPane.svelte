@@ -5,9 +5,7 @@
     type Pin,
     type PreviewMode,
     pinHeld,
-    pinUnsent,
     previewMode,
-    writeAgain,
   } from "@cawco/core/comments/model";
   import { pinProblem } from "@cawco/core/comments/validate";
   import { detach } from "@cawco/core/detach";
@@ -117,12 +115,7 @@
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import { afterPaint } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
-  import {
-    askAgain,
-    NOT_REACHING,
-    retryComment,
-    sendArtifact,
-  } from "./artifact-doc";
+  import { askAgain, NOT_REACHING } from "./artifact-doc";
   import BrowserAddress from "./BrowserAddress.svelte";
   import BrowserView from "./BrowserView.svelte";
   import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
@@ -150,6 +143,7 @@
   import { lostWhy, PaneDoc, pageRepliesOf } from "./pane-doc.svelte";
   import { PaneLayout } from "./pane-layout.svelte";
   import { type PaneAct, PaneNotice } from "./pane-notice.svelte";
+  import { PaneSend } from "./pane-send.svelte";
   import { PaneSubject } from "./pane-subject.svelte";
   import { frameError, PreviewFrame } from "./preview-frame.svelte";
   import { PreviewReach } from "./preview-reach.svelte";
@@ -261,6 +255,13 @@
     previewReach,
     previewFrame,
     writeLooks: () => writeLooks(),
+  });
+  const paneSend = new PaneSend({
+    instanceId: () => instanceId,
+    paneSubject,
+    paneNotice,
+    previewFrame,
+    paneDoc,
   });
   /** The cover (its skeleton) stood over the frame, so its going is the skeleton's reveal. */
   let coverStood = false;
@@ -599,129 +600,6 @@
    * nothing, so no pin was lifted clear of it.
    */
   let sayCovered: (() => void) | null = null;
-  let sending = $state(false);
-  /*
-   * The setup page is done once the person sends it from the page (its own
-   * `cawco.send`, which stamps the doc's `sentAt`): on a phone its sheet
-   * stands over the thread, where Caw answers with the files and "Open the
-   * board". The `sentAt` it opened with is not a send.
-   */
-  /**
-   * Send: the hub's send, which applies a setup page's name, shape and
-   * place first and tells the session of the page's picks. A refusal is
-   * said in the band over the page, and the picks stay unsent.
-   */
-  async function sendAll(control: "panel-head" | "panel-more") {
-    if (!paneSubject.artifact || sending) {
-      return;
-    }
-    sending = true;
-    try {
-      await sendArtifact(instanceId, paneSubject.artifact.id, control);
-    } catch (error) {
-      paneNotice.say({ message: failureWords(error), again: null });
-    } finally {
-      sending = false;
-    }
-  }
-  /** The comments whose Try again is on its way. */
-  let pinsRetrying = $state.raw<ReadonlySet<string>>(new Set());
-  /**
-   * Why comment `id` hasn't reached the session, in words, when it is
-   * owed for a reason: a delivery of it no one took (the hub's `notSent`),
-   * or it stands only in the page's doc while the page's link has stood down
-   * past its grace ({@link linkDown}): the hub can't be reached, and it goes
-   * once the hub is back. Inside the grace a reopening link says nothing,
-   * and no close code is ever his to read here. Said while it is unsent,
-   * and on a sent one too while a resolve, reopen or delete of it the hub
-   * refused is kept (core `keepAside`): that act hasn't reached the hub.
-   */
-  const notSentWhy = (pin: Pin): string | null => {
-    const kept = paneDoc.refusedReplies[pin.id] ?? paneDoc.pageReplies[pin.id];
-    if (kept && (kept.resolved !== undefined || kept.deleted)) {
-      return kept.why;
-    }
-    if (pin.resolvedAt || !pinUnsent(pin)) {
-      return null;
-    }
-    return (
-      kept?.why ??
-      pin.notSent?.why ??
-      (paneDoc.onlyOnPage(pin.id) && paneDoc.linkDown
-        ? commentWords.hubUnreached
-        : null)
-    );
-  };
-  /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
-  const REACH_HUB_MS = 10_000;
-  /** Resolves once the pane's doc holds comment `id` (the page's link carried it to the hub); rejects, saying why, when it doesn't within {@link REACH_HUB_MS}. */
-  const reachedHub = (id: string) =>
-    new Promise<void>((resolve, reject) => {
-      const started = Date.now();
-      const look = setInterval(() => {
-        if (paneDoc.view?.pins.some((pin) => pin.id === id)) {
-          clearInterval(look);
-          resolve();
-        } else if (Date.now() - started > REACH_HUB_MS) {
-          clearInterval(look);
-          reject(new Error(commentWords.notReachedHub));
-        }
-      }, 200);
-    });
-  /**
-   * A comment's Try again (its row's, its thread's), for one not sent. One
-   * only the page holds yet has its link opened again, and goes by itself
-   * once it is on the hub. One whose delivery no one took goes now. A Try
-   * again no one took says why on the pin itself (the hub's `notSent`,
-   * which the doc brings back) as well as in the band over the page.
-   */
-  async function retryPin(id: string) {
-    if (!paneSubject.artifact || pinsRetrying.has(id)) {
-      return;
-    }
-    pinsRetrying = new Set([...pinsRetrying, id]);
-    try {
-      if (paneDoc.refusedReplies[id] || paneDoc.pageReplies[id]) {
-        // The page's are written into its doc again, which tells what it still keeps; the pane's into the pane's.
-        if (paneDoc.pageReplies[id]) {
-          previewFrame.post({ type: "cawco:resend-pin", id });
-        }
-        if (paneDoc.refusedReplies[id]) {
-          retryRefused(paneSubject.artifact.id, id);
-        }
-      } else if (paneDoc.onlyOnPage(id)) {
-        // One the hub refused is written into the page's doc again; one its link held back goes as the link opens.
-        previewFrame.post({ type: "cawco:resend-pin", id });
-        paneDoc.relink();
-        await reachedHub(id);
-      } else {
-        await retryComment(instanceId, paneSubject.artifact.id, id);
-      }
-    } catch (error) {
-      paneNotice.say({ message: failureWords(error), again: null });
-    } finally {
-      pinsRetrying = new Set([...pinsRetrying].filter((one) => one !== id));
-    }
-  }
-  /**
-   * A refused write's Try again on pin `id`: its delete, or its resolve or
-   * reopen, and each of its replies' words written into the pane's doc
-   * again, now the hub's (artifact-doc.ts `again`), and let go of once
-   * written; one still refused stays with why.
-   */
-  function retryRefused(artifactKey: string, id: string) {
-    const kept = paneDoc.refusedReplies[id];
-    if (!(kept && paneDoc.doc)) {
-      throw new Error(
-        "The pane lost the page's document, so it wasn't written again. Reload, then try again."
-      );
-    }
-    const { left, why } = writeAgain(paneDoc.refusedReplies, id, paneDoc.doc);
-    paneDoc.keepReplies(artifactKey, left);
-    if (why) {
-      throw new Error(why);
-    }
-  }
   /** The pane's mode, kept for the session and told to the page; `place` is the moved pin the next tap in Comment places again. */
   function setMode(next: PreviewMode, place: string | null = null) {
     // A mode switch leaves nothing of a comment being written.
@@ -2878,12 +2756,12 @@
   <Button
     data-slot="send"
     aria-label={`${commentWords.send}, ${paneDoc.unsentCount} unsent`}
-    onclick={() => sendAll("panel-head")}
-    pending={sending}
+    onclick={() => paneSend.sendAll("panel-head")}
+    pending={paneSend.sending}
     shape="capsule"
     title="Send what the session hasn't heard"
   >
-    <PendingContent icon={IconSend} pending={sending} />
+    <PendingContent icon={IconSend} pending={paneSend.sending} />
     <span data-slot="send-label" class="in-form-compact:hidden"
       >{commentWords.send}</span
     ><span data-slot="send-count" class="num">{paneDoc.unsentCount}</span>
@@ -2891,10 +2769,10 @@
 {/snippet}
 {#snippet sendMenu()}
   <DropdownMenu.Item
-    disabled={sending}
+    disabled={paneSend.sending}
     onSelect={whileIdle(
-      () => sending,
-      () => sendAll("panel-more")
+      () => paneSend.sending,
+      () => paneSend.sendAll("panel-more")
     )}
   >
     <IconSend /><span>{commentWords.sendCount(paneDoc.unsentCount)}</span>
@@ -3245,14 +3123,14 @@
     pageOpen={pageHung}
     onresolve={(id, resolved) => resolvePin(resolved, id)}
     onretry={paneDoc.relink}
-    onretrypin={retryPin}
+    onretrypin={paneSend.retryPin}
     onshown={(ids) => {
       railOrder = ids;
     }}
     open={openPin}
-    whyNotSent={notSentWhy}
+    whyNotSent={paneSend.notSentWhy}
     pins={paneDoc.pins}
-    retrying={pinsRetrying}
+    retrying={paneSend.pinsRetrying}
     {unread}
     bind:filter={listFilter}
     bind:scroll={listScroll}
@@ -3798,15 +3676,15 @@
         onhold={(text) => reply(text, true)}
         onreply={(text) => reply(text)}
         onresolve={(resolved) => resolvePin(resolved)}
-        onretry={() => retryPin(pin.id)}
+        onretry={() => paneSend.retryPin(pin.id)}
         parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
         {peek}
         {pin}
         placing={placing === pin.id}
         problem={peek ? null : cardError}
         sending={!peek && replying}
-        retrying={pinsRetrying.has(pin.id)}
-        whyNotSent={notSentWhy(pin)}
+        retrying={paneSend.pinsRetrying.has(pin.id)}
+        whyNotSent={paneSend.notSentWhy(pin)}
       />
     {/if}
   {/snippet}
