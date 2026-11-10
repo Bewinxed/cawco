@@ -47,7 +47,6 @@ import {
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
   CONTROL_FORGET_CREDENTIALS,
-  INSTALL_SESSION_CREDENTIAL,
   LEAK_ENDED,
   LEAK_FOUND,
   type LeakFound,
@@ -56,7 +55,6 @@ import {
   RATE_LIMIT_READ,
   ROOM_HELD,
   SESSION_DIR_READ,
-  VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core/harness";
 import type { HarnessKind } from "@cawco/core/harness/kinds";
 import {
@@ -210,6 +208,11 @@ import {
   SessionAddressRefused,
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
+import {
+  installCredential,
+  installOf,
+  verifyHeldCredential,
+} from "./harnesses/credential-controls";
 import { hostScratchReady } from "./host-scratch";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
@@ -2306,14 +2309,11 @@ export class SessionSupervisor {
         session,
         (async () => {
           await applyStoredPermissionMode(session, mode);
-          const held = (await session.control(
-            VERIFY_SESSION_CREDENTIAL,
-            []
-          )) as { credential?: string; refused?: boolean } | undefined;
-          if (held?.credential) {
+          const held = await verifyHeldCredential(session);
+          if (held.credential) {
             rememberCredential(instanceId, held.credential);
           }
-          refused = held?.refused === true;
+          ({ refused } = held);
         })(),
         stopped
       );
@@ -4860,8 +4860,9 @@ export class SessionSupervisor {
     }
     // A credential the hub installs in a live session is known before the
     // process can print it, as a launch's is ({@link #granted}).
-    if (method === INSTALL_SESSION_CREDENTIAL) {
-      rememberCredential(instanceId, String(args[0]));
+    const installing = installOf(method, args);
+    if (installing) {
+      rememberCredential(instanceId, installing.credential);
     }
     return await session.control(method, args);
   }
@@ -5151,10 +5152,7 @@ async function admit(
 ): Promise<void> {
   try {
     // Remembered for redaction as it was granted ({@link #granted}).
-    await session.control(INSTALL_SESSION_CREDENTIAL, [
-      launched.credential,
-      "initial",
-    ]);
+    await installCredential(session, launched.credential);
   } catch (problem) {
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
     await session.stop().catch(() => {});
