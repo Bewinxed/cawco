@@ -1623,6 +1623,8 @@
     --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;
     --dur-panel: 280ms;
+    /* A panel the width of the sidebar leaving on --ease-drawer, the curve it came in on: shorter than --dur-panel (The Fast Exit Rule), long enough that its slide reads as one motion. */
+    --dur-panel-exit: 220ms;
     /* A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is. */
     --dur-pick-up: calc(var(--dur-panel) * 0.6);
     /* The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited. */

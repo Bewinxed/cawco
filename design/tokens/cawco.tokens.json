@@ -7463,6 +7463,14 @@
         "unit": "ms"
       }
     },
+    "dur-panel-exit": {
+      "$type": "duration",
+      "$value": {
+        "value": 220,
+        "unit": "ms"
+      },
+      "$description": "A panel the width of the sidebar leaving on --ease-drawer, the curve it came in on: shorter than --dur-panel (The Fast Exit Rule), long enough that its slide reads as one motion."
+    },
     "dur-pick-up": {
       "$type": "duration",
       "$value": {

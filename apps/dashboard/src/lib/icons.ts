@@ -15,5 +15,6 @@ export { default as IconInfo } from "#lib/components/icons/Info.svelte";
 export { default as IconNotYet } from "#lib/components/icons/NotYet.svelte";
 export { default as IconToolMcp } from "#lib/components/icons/Plug.svelte";
 export { default as IconPlus } from "#lib/components/icons/Plus.svelte";
+export { default as IconSidebarToggleLinear } from "#lib/components/icons/SidebarToggle.svelte";
 export { default as IconSubagent } from "#lib/components/icons/Subagent.svelte";
 export { default as IconTick } from "#lib/components/icons/Tick.svelte";

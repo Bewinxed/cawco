@@ -2763,6 +2763,11 @@
         "purpose": "Dialogs and sheets entering, list movement, toasts rising, badge tint changes."
       },
       {
+        "name": "dur-panel-exit",
+        "value": "220ms",
+        "purpose": "A panel the width of the sidebar leaving on --ease-drawer, the curve it came in on: shorter than --dur-panel (The Fast Exit Rule), long enough that its slide reads as one motion."
+      },
+      {
         "name": "dur-pick-up",
         "value": "calc(var(--dur-panel) * 0.6)",
         "purpose": "A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is."

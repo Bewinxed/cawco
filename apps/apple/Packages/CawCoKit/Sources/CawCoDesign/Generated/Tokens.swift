@@ -1448,6 +1448,9 @@ public enum Motion {
     public static let durPop: TimeInterval = 0.26
     /// In seconds.
     public static let durPanel: TimeInterval = 0.28
+    /// A panel the width of the sidebar leaving on --ease-drawer, the curve it came in on: shorter than --dur-panel (The Fast Exit Rule), long enough that its slide reads as one motion.
+    /// In seconds.
+    public static let durPanelExit: TimeInterval = 0.22
     /// A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is.
     /// In seconds.
     public static let durPickUp: TimeInterval = 0.168

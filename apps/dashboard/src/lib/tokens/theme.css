@@ -676,6 +676,7 @@
   --duration-wait-grace: var(--dur-wait-grace);
   --duration-pop: var(--dur-pop);
   --duration-panel: var(--dur-panel);
+  --duration-panel-exit: var(--dur-panel-exit);
   --duration-pick-up: var(--dur-pick-up);
   --duration-grow: var(--dur-grow);
   --duration-grow-exit: var(--dur-grow-exit);

@@ -42,8 +42,7 @@
     IconChevronLeft,
     IconSearch,
     IconSidebar,
-    IconSidebarHideLinear,
-    IconSidebarShowLinear,
+    IconSidebarToggleLinear,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { fieldKeeps } from "#lib/utils/typing.js";
@@ -359,9 +358,10 @@
    * Hides or shows the sidebar. The page is laid out at its new width once,
    * and then only transforms move: the rail slides between
    * `translateX(-100%)` and its place (mirrored right to left) and the page
-   * slides from where it was drawn to its own place. Showing is an entrance,
-   * over `--dur-panel` on `--ease-drawer`; hiding is the rail's exit, over
-   * `--dur-exit` on `--ease-out` (DESIGN.md, The Fast Exit Rule). A press
+   * slides from where it was drawn to its own place, on one curve both
+   * ways, `--ease-drawer`: showing is an entrance, over `--dur-panel`;
+   * hiding is the rail's exit, over the shorter `--dur-panel-exit`
+   * (DESIGN.md, The Fast Exit Rule). A press
    * mid-slide turns both back from where they are drawn, never from the
    * slide's start (The Interruptible Rule). The rail's width and the page's
    * place are never animated: each frame of that laid out the transcript
@@ -369,8 +369,9 @@
    *
    * The toggle never moves (macOS's sidebar toggle): the rail and the page
    * slide out from under it, its glass forms round it or fades away, and
-   * its glyph turns from Hide sidebar's to Show sidebar's, the two its own
-   * transitions, all on the slide's clock from the frame of the press
+   * its glyph's chevron turns to point out of the panel or back into it,
+   * the two its own transitions, all on the slide's clock from the frame of
+   * the press
    * (`railTurn`). The top bar makes room for it, or closes it, as a reflow
    * (`data-flip`). What is drawn is read before the press changes
    * anything, on the last frame's layout.
@@ -458,11 +459,11 @@
    */
   const railClock = (hide: boolean) =>
     hide
-      ? { duration: dur("--dur-exit"), easing: ease("--ease-out") }
+      ? { duration: dur("--dur-panel-exit"), easing: ease("--ease-drawer") }
       : { duration: dur("--dur-panel"), easing: ease("--ease-drawer") };
 
   /**
-   * The toggle's glyph turning and its glass fading (the corner's own CSS
+   * The toggle's chevron turning and its glass fading (the corner's own CSS
    * transitions, started by the press's new state) put on the slide's
    * clock: its start, its length and its curve. A turn turned back mid-way
    * would otherwise run back only as far as CSS shortens a reversed
@@ -473,7 +474,7 @@
       (run) =>
         run instanceof CSSTransition &&
         (run.transitionProperty === "opacity" ||
-          run.transitionProperty === "scale")
+          run.transitionProperty === "rotate")
     );
     const clock = railClock(hide);
     for (const run of runs) {
@@ -1829,20 +1830,18 @@
          (Sidebar `toggleRoom`) and the bar keeping its room while the
          sidebar is away (`rail-show`). While the sidebar is away its glass
          (a group's capsule) stands round it, faded in as the sidebar hides
-         and out as it shows; its glyph turns from Hide sidebar's to Show
-         sidebar's (`.icon-swap`); both on the slide's clock (`railTurn`).
-         Its glyphs mirror right to left, as the sidebar's side does. -->
+         and out as it shows; its glyph's chevron turns half a turn to point
+         out of the panel, or back into it, its frame still (SidebarToggle);
+         both on the slide's clock (`railTurn`). Its glyph mirrors right to
+         left, as the sidebar's side does. -->
     {#if railed && !full}
       <div
         data-slot="rail-toggle"
         data-away={railHidden || undefined}
-        class="absolute top-0 start-0 z-(--layer-bar) flex items-center h-c-top-bar-h ps-space-2 pointer-events-none *:pointer-events-auto *:data-[slot=tools]:before:transition-[opacity] *:data-[slot=tools]:before:duration-(--icon-swap-dur) *:data-[slot=tools]:before:ease-(--icon-swap-ease) not-data-away:*:data-[slot=tools]:before:opacity-0"
-        style:--icon-swap-dur={railHidden
-          ? "var(--dur-exit)"
+        class="absolute top-0 start-0 z-(--layer-bar) flex items-center h-c-top-bar-h ps-space-2 pointer-events-none *:pointer-events-auto *:data-[slot=tools]:before:transition-[opacity] *:data-[slot=tools]:before:duration-(--turn-dur) *:data-[slot=tools]:before:ease-drawer not-data-away:*:data-[slot=tools]:before:opacity-0"
+        style:--turn-dur={railHidden
+          ? "var(--dur-panel-exit)"
           : "var(--dur-panel)"}
-        style:--icon-swap-ease={railHidden
-          ? "var(--ease-out)"
-          : "var(--ease-drawer)"}
         bind:this={railCorner}
       >
         <BarGlass form="group">
@@ -1852,18 +1851,11 @@
               : sidebarWords.hideSidebar}
             onclick={toggleRail}
           >
-            <span aria-hidden="true" class="icon-swap" data-slot="bar-symbol">
-              <span data-active={!railHidden}
-                ><IconSidebarHideLinear
-                  class="size-c-bar-symbol rtl:-scale-x-100"
-                /></span
-              >
-              <span data-active={railHidden}
-                ><IconSidebarShowLinear
-                  class="size-c-bar-symbol rtl:-scale-x-100"
-                /></span
-              >
-            </span>
+            <IconSidebarToggleLinear
+              away={railHidden}
+              class="rtl:-scale-x-100"
+              data-slot="bar-symbol"
+            />
           </BarItem>
         </BarGlass>
       </div>
