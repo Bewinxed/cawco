@@ -371,44 +371,56 @@
   let railFlights = 0;
 
   /**
+   * The toggle's flight's timing (motion/share `land`), set for each press
+   * to the slide it runs with (`railClock`) before the flight lands.
+   */
+  const railFlightTiming = { now: true, ms: 0, easing: "" };
+
+  /**
    * Hides or shows the sidebar. The page is laid out at its new width once,
    * and then only transforms move: the rail slides between
    * `translateX(-100%)` and its place (mirrored right to left) and the page
-   * slides from the rail's width off to its own place, on the one clock
-   * (`--dur-panel`, `--ease-drawer`). The rail's width and the page's
+   * slides from where it was drawn to its own place. Showing is an entrance,
+   * over `--dur-panel` on `--ease-drawer`; hiding is the rail's exit, over
+   * `--dur-exit` on `--ease-out` (DESIGN.md, The Fast Exit Rule). A press
+   * mid-slide turns both back from where they are drawn, never from the
+   * slide's start (The Interruptible Rule). The rail's width and the page's
    * place are never animated: each frame of that laid out the transcript
    * and the panes. With less motion the rail fades instead.
    *
    * The toggle that was pressed is the one that arrives (DESIGN.md, The One
    * Object Rule): its glyph flies from where it was drawn to its other place
-   * on that clock (`flyRailToggle`), turning from Hide sidebar's glyph to
-   * Show sidebar's on the way (`.icon-swap` on the slide's clock), and the
+   * on the slide's clock (`flyRailToggle`), turning from Hide sidebar's
+   * glyph to Show sidebar's on the way (`.icon-swap` on that clock), and the
    * top bar's glass group fades in round it as it lands, or fades out where
    * it stood, sliding with the page, as the glyph leaves (`liftedGlass`).
    * The top bar makes room for it, or closes it, as a reflow (`data-flip`).
-   * Everything is read before the press changes anything, on the last
-   * frame's layout, but where the glyph lands, which the flight reads once
-   * the page stands at its new width.
+   * What is drawn is read before the press changes anything, on the last
+   * frame's layout; where things rest is read once, the page at its new
+   * width and nothing sliding yet.
    */
   function toggleRail(): void {
     const rail = railBox;
     const main = mainBox;
     const hide = !railHidden;
-    for (const move of railMoves) {
-      move.cancel();
-    }
-    railMoves = [];
-    const width = drawnWidth();
     const rtl = main ? getComputedStyle(main).direction === "rtl" : false;
     const glyph = document.querySelector<HTMLElement>("[data-rail-glyph]");
     // Pressed again mid-flight, the glyph is where its flight has it.
     const from = (
       document.querySelector<HTMLElement>("[data-rail-stand-in]") ?? glyph
     )?.getBoundingClientRect();
+    // Where the rail and the page are drawn now, mid-slide or at rest; a
+    // rail put away is not drawn at all.
+    const railWas = drawnLeft(rail);
+    const mainWas = drawnLeft(main);
     const focused =
       glyph?.closest("button") === document.activeElement &&
       document.activeElement !== null;
     const leftGlass = hide ? null : liftedGlass();
+    for (const move of railMoves) {
+      move.cancel();
+    }
+    railMoves = [];
     railHidden = hide;
     railLeaving = hide && motionOk.current && rail !== null && main !== null;
     // The page takes its new width in this one layout, before anything moves.
@@ -416,6 +428,11 @@
     leftGlass?.row.append(leftGlass.copy);
     store("local", RAIL_HIDDEN_KEY, hide ? "1" : "0");
     keepPrefs({ "cawco-rail-hidden": hide ? "1" : null });
+    // Each slides from where it was drawn to where it now rests.
+    const starts = {
+      rail: offFrom(rail, railWas),
+      main: offFrom(main, mainWas) ?? 0,
+    };
     flyRailToggle(from, hide);
     if (focused) {
       document
@@ -437,21 +454,20 @@
       }
       return;
     }
-    railMoves = slideRail(rail, main, hide, rtl ? -width : width);
-    if (hide) {
-      railMoves[0]?.finished.then(
-        () => {
-          railLeaving = false;
-        },
-        () => {
-          railLeaving = false;
-        }
-      );
-    }
+    railMoves = slideRail(rail, main, hide, rtl, starts);
+    // Out of the page's way once its own slide away has ended: a slide a
+    // later press cancelled leaves that press's state as it set it.
+    const [slide] = railMoves;
+    const gone = () => {
+      if (hide && railMoves[0] === slide) {
+        railLeaving = false;
+      }
+    };
+    slide?.finished.then(gone, gone);
     if (leftGlass) {
       const { copy } = leftGlass;
       const fade = copy.animate([{ opacity: 1 }, { opacity: 0 }], {
-        ...railClock(),
+        ...railClock(hide),
         fill: "forwards",
       });
       fade.finished.then(
@@ -462,45 +478,57 @@
     }
   }
 
-  /** The sidebar's slide: its own clock, which the toggle's flight, glyph and glass share. */
-  const railClock = () => ({
-    duration: dur("--dur-panel"),
-    easing: ease("--ease-drawer"),
-  });
+  /** Where an element's leading box edge is drawn, its slide included; null when it is not drawn. */
+  const drawnLeft = (node: HTMLElement | null): number | null => {
+    const rect = node?.getBoundingClientRect();
+    return rect && rect.width > 0 ? rect.left : null;
+  };
+
+  /** How far from its place an element was drawn at `was` (`drawnLeft`), read where it now rests. */
+  const offFrom = (node: HTMLElement | null, was: number | null) =>
+    node && was !== null ? was - node.getBoundingClientRect().left : null;
 
   /**
-   * The rail and the page slide `width` px (signed by the page's direction)
-   * between their places, and the bar's glass, new round the toggle that
-   * lands in it, fades in as they go.
+   * The sidebar's slide, which the toggle's flight, glyph and glass share:
+   * hiding is its exit, showing its entrance (DESIGN.md, The Fast Exit Rule).
+   */
+  const railClock = (hide: boolean) =>
+    hide
+      ? { duration: dur("--dur-exit"), easing: ease("--ease-out") }
+      : { duration: dur("--dur-panel"), easing: ease("--ease-drawer") };
+
+  /**
+   * The rail and the page slide from `starts` (px off their places, as
+   * drawn when pressed; a rail that was not drawn starts put away) to their
+   * places, the rail to its place or away. The bar's glass, new round the
+   * toggle that lands in it, fades in as they go.
    */
   function slideRail(
     rail: HTMLElement,
     main: HTMLElement,
     hide: boolean,
-    width: number
+    rtl: boolean,
+    starts: { main: number; rail: number | null }
   ): Animation[] {
-    const timing = railClock();
-    const away = `translateX(${width > 0 ? -100 : 100}%)`;
-    if (!hide) {
-      return [
-        rail.animate([{ transform: away }, { transform: "none" }], timing),
-        main.animate(
-          [{ transform: `translateX(${-width}px)` }, { transform: "none" }],
-          timing
-        ),
-      ];
-    }
-    // Out of the layout at once, drawn where it stood, sliding away.
+    const timing = railClock(hide);
+    const away = `translateX(${rtl ? 100 : -100}%)`;
+    const railFrom =
+      starts.rail === null ? away : `translateX(${starts.rail}px)`;
     const moves = [
-      rail.animate([{ transform: "none" }, { transform: away }], timing),
+      rail.animate(
+        [{ transform: railFrom }, { transform: hide ? away : "none" }],
+        timing
+      ),
       main.animate(
-        [{ transform: `translateX(${width}px)` }, { transform: "none" }],
+        [{ transform: `translateX(${starts.main}px)` }, { transform: "none" }],
         timing
       ),
     ];
-    const glass = document.querySelector<HTMLElement>(
-      '[data-slot="rail-show"] [data-slot="tools"]'
-    );
+    const glass = hide
+      ? document.querySelector<HTMLElement>(
+          '[data-slot="rail-show"] [data-slot="tools"]'
+        )
+      : null;
     if (glass) {
       moves.push(
         glass.animate([{ opacity: 0 }, { opacity: 1 }], {
@@ -518,7 +546,9 @@
    * and the page (`railStandIn`), mounted showing the glyph it was pressed
    * on, styled so, then turned, so the turn is a transition from there. The
    * toggle's own glyph shows once it has landed. The rest it lands on is
-   * read here, the page at its new width and nothing sliding yet.
+   * read here, the page at its new width and nothing sliding yet. Pressed
+   * again mid-flight, the stand-in stays: its flight is let go of where it
+   * is drawn and flies again from there, and its turn turns back.
    */
   function flyRailToggle(from: DOMRect | undefined, hide: boolean): void {
     const landing = document.querySelector<HTMLElement>("[data-rail-glyph]");
@@ -526,7 +556,17 @@
       railStandIn = null;
       return;
     }
+    for (const run of document
+      .querySelector("[data-rail-stand-in]")
+      ?.getAnimations() ?? []) {
+      if (run.id === "share-flight") {
+        run.cancel();
+      }
+    }
     const to = landing.getBoundingClientRect();
+    const clock = railClock(hide);
+    railFlightTiming.ms = clock.duration;
+    railFlightTiming.easing = clock.easing;
     railFlights += 1;
     const flight = railFlights;
     railFlight = `rail-toggle:${flight}`;
@@ -555,7 +595,7 @@
     const flying = document
       .querySelector("[data-rail-stand-in]")
       ?.getAnimations()
-      .find((run) => run.id === "share-flight");
+      .find((run) => run.id === "share-flight" && run.playState === "running");
     if (flying) {
       flying.finished.then(landed, landed);
     } else {
@@ -1533,9 +1573,13 @@
         data-rail-stand-in
         style:--landing-x="{railStandIn.left}px"
         style:--landing-y="{railStandIn.top}px"
-        style:--icon-swap-dur="var(--dur-panel)"
-        style:--icon-swap-ease="var(--ease-drawer)"
-        {@attach land(() => railFlight, { now: true })}
+        style:--icon-swap-dur={railStandIn.away
+          ? "var(--dur-exit)"
+          : "var(--dur-panel)"}
+        style:--icon-swap-ease={railStandIn.away
+          ? "var(--ease-out)"
+          : "var(--ease-drawer)"}
+        {@attach land(() => railFlight, railFlightTiming)}
       >
         <span data-active={!railStandIn.away}
           ><IconSidebarHide class="{railStandIn.size} rtl:-scale-x-100" /></span
