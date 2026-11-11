@@ -103,4 +103,6 @@ export const delegateTypesWords = {
     "starting_set lists its skills and servers on indented lines under it, like “  skills: [grill]” and “  servers: [exa]”",
   problemCuratorRole:
     "role curator is the memory curator's: the hub starts that run itself, and it denies shell, edit and web tools",
+  problemTrimmerRole:
+    "role trimmer is the unused skills and servers routine's: the hub starts that run itself, and it denies shell, edit and web tools",
 };

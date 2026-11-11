@@ -187,7 +187,8 @@ export const isProjectConversation = (
 /**
  * A spawn as it reaches a machine: an overseer row's (a fleet-watch triage
  * run, fleet-watch.ts) denies the board-only list; a curator row's (a
- * project's memory curator run) that and the web, whatever else it denies.
+ * project's memory curator run) and a trimmer row's (a run of the unused
+ * skills and servers routine) that and the web, whatever else it denies.
  * Each says it is fenced ({@link SpawnPayload.fence}): CawCo's MCP server
  * and no other. Any other row's spawn says it is not, whatever its caller
  * sent.
@@ -201,7 +202,8 @@ export const fencedSpawn = (
   let denied: readonly string[];
   if (row.role === "overseer") {
     denied = boardOnlyDenied(harness);
-  } else if (row.role === "curator") {
+  } else if (row.role === "curator" || row.role === "trimmer") {
+    // A trim run reads the hub's count and asks; nothing else, as the curator.
     denied = curatorDenied(harness);
   } else {
     return asked;

@@ -225,6 +225,7 @@ typeOverrides:
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
     TrashKind: OpenEnums.TrashKind
+    UnlistedRowKind: OpenEnums.UnlistedRowKind
     Verb: OpenEnums.Verb
     WaitKind: OpenEnums.WaitKind
     WaitReason: OpenEnums.WaitReason

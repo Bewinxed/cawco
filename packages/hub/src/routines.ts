@@ -62,6 +62,14 @@
  *   delegate run in the `curator` role, its brief the inbox as it stands
  *   after the routine's prompt. You can pause it, move its schedule or
  *   change its prompt as any routine's; its target stays `curator`.
+ * - **The unused skills and servers routine** (unused-trim.ts) is a routine
+ *   the hub makes when the person turns it on from Caw's suggestion, or
+ *   in every project and once in no project by the fleet switch: target
+ *   `trim`, weekly, kept, with no test run. Its run reads the count first;
+ *   with nothing to propose it ends delivered with that said, else it is a
+ *   delegate run in the `trimmer` role, its brief the hub's findings, which
+ *   proposes each trimmed set through that set's own approval. Its result is
+ *   a note, as the curator's is. Its target stays `trim`.
  * - **Changes** (`routine_update`, `PATCH /api/routines/:id`) take any field
  *   but its project: its target, delegate type, landing and budget too,
  *   each checked as a new routine's is. A delete takes the event routes
@@ -121,6 +129,7 @@ import type { Push } from "./push";
 import { refusalAttempt, refuser, StatusRefusal } from "./refusal";
 import { budgetParameter } from "./task-tools";
 import { BUDGET, LANDS, MODE } from "./tasks";
+import { TRIM_CRON, TRIM_NAME, TRIM_PROMPT } from "./unused-trim";
 import {
   budgetProblem,
   DEFAULT_DELEGATE_TYPE,
@@ -188,6 +197,22 @@ When asked below: fold a file past its budget (shorten or drop its \`Why:\` line
 A dated question needs no tool: what was true on a day is the lines whose \`since\` is on or before it and whose \`until\` is after it, in knowledge/ and knowledge/archive/; what the project knew on a day is the file at that day's commit (git).
 
 Nothing you propose changes a file until the person approves it. Finish with finish_item, its headline ${NO_REPLY} when you proposed nothing, else one line naming what you proposed.`;
+
+/** Why a change of target is refused: the memory curator's and the trim routine's stay the hub's. */
+const targetStays = (
+  from: RoutineTarget,
+  to: RoutineTarget
+): string | undefined => {
+  if (from === to) {
+    return;
+  }
+  if (from === "curator" || to === "curator") {
+    return routineToolWords.curatorStays;
+  }
+  if (from === "trim" || to === "trim") {
+    return routineToolWords.trimStays;
+  }
+};
 
 /** A refusal, with the status a route answers and the words a tool returns. */
 class RoutineRefusal extends StatusRefusal {}
@@ -327,7 +352,13 @@ export interface RoutineDeps {
   >;
   readonly db: Pick<
     DbShape,
-    "accounts" | "ingress" | "project" | "routines" | "workItem"
+    | "accounts"
+    | "ingress"
+    | "listProjects"
+    | "project"
+    | "routines"
+    | "trim"
+    | "workItem"
   >;
   /**
    * Where a routine in no project runs: the hub's machine and the checkout
@@ -344,6 +375,13 @@ export interface RoutineDeps {
   readonly push: Pick<Push, "routine" | "routineMade">;
   /** Why the project's spend cap keeps its Caw from waking, or nothing (project-caps.ts). */
   readonly quiets: (projectId: string) => string | undefined;
+  /**
+   * A trim run's findings (unused-trim.ts `brief`): `none` with what it
+   * says when nothing is to be proposed, else the brief its delegate reads.
+   */
+  readonly trimBrief: (
+    projectId: string | null
+  ) => { kind: "none"; said: string } | { kind: "run"; text: string };
   /** The delegate types a project's sessions see (the fleet's without one). */
   readonly types: (projectId?: string | null) => DelegateType[];
   readonly workItems: Pick<WorkItems, "archive" | "spentBy" | "startForHub">;
@@ -554,14 +592,16 @@ const clipReason = (words: string): string => {
  * conversation run's result is Caw's own answer. The memory curator's
  * result reaches the person as a memory proposal waiting on their approval
  * (Needs you), so Caw has nothing to act on and a wake would cost a turn for
- * nothing. A routine in no project has no lead.
+ * nothing; so do the trim routine's proposals (unused-trim.ts). A routine in
+ * no project has no lead.
  */
 const reportsToLead = (
   routine: Pick<RoutineRow, "projectId" | "target">
 ): boolean =>
   !!routine.projectId &&
   routine.target !== "conversation" &&
-  routine.target !== "curator";
+  routine.target !== "curator" &&
+  routine.target !== "trim";
 
 /** What a delegate run is told about its output, after the routine's prompt: one that reports to Caw is told so. */
 const contractOf = (
@@ -692,6 +732,7 @@ export const createRoutines = ({
   anyOnline,
   caw,
   curatorBrief,
+  trimBrief,
   db,
   hubCheckout,
   jevAccess,
@@ -1241,6 +1282,28 @@ export const createRoutines = ({
     await fireDelegate(routine, run, { input: brief.text, role: "curator" });
   };
 
+  /**
+   * A trim run (unused-trim.ts): the count read first; nothing to propose
+   * ends it delivered with that said, else its delegate starts in the
+   * `trimmer` role.
+   */
+  const fireTrim = async (
+    routine: RoutineRow,
+    run: RoutineRunRow
+  ): Promise<void> => {
+    const brief = trimBrief(routine.projectId);
+    if (brief.kind === "none") {
+      settle(run.id, {
+        outcome: "delivered",
+        output: brief.said,
+        reason: null,
+        usd: null,
+      });
+      return;
+    }
+    await fireDelegate(routine, run, { input: brief.text, role: "trimmer" });
+  };
+
   /** Starts a run filed `starting`; one that cannot start ends failed, as any failure. */
   const fire = (routine: RoutineRow, run: RoutineRunRow): void => {
     let go: Promise<void>;
@@ -1248,6 +1311,8 @@ export const createRoutines = ({
       go = fireLead(routine, run);
     } else if (routine.target === "curator") {
       go = fireCurator(routine, run);
+    } else if (routine.target === "trim") {
+      go = fireTrim(routine, run);
     } else if (routine.target === "orchestrator") {
       go = fireOrchestrator(routine, run);
     } else {
@@ -2103,6 +2168,8 @@ export const createRoutines = ({
 
   const tick = (now: number = Date.now()): RoutineRunRow[] => {
     expire(now);
+    // A project made while the fleet switch is on gets the trim routine.
+    everyProjectTrimmed();
     const filed: RoutineRunRow[] = [];
     for (const routine of store.list()) {
       const run =
@@ -2281,11 +2348,9 @@ export const createRoutines = ({
     const row = routineOf(id);
     mayTouch(by, row);
     const next = merged(row, patch);
-    if (
-      next.target !== row.target &&
-      (row.target === "curator" || next.target === "curator")
-    ) {
-      refuse(400, routineToolWords.curatorStays);
+    const stays = targetStays(row.target, next.target);
+    if (stays) {
+      refuse(400, stays);
     }
     checked(next);
     const now = Date.now();
@@ -2367,28 +2432,22 @@ export const createRoutines = ({
       : undefined;
   };
 
-  /** The project's memory curator routine, when it has one. */
-  const curatorOf = (projectId: string): RoutineRow | undefined =>
-    store.list(projectId).find((row) => row.target === "curator");
-
   /**
-   * Makes the project's memory curator routine when it has none (its first
-   * inbox note): daily, kept, made by the hub, with no test run.
+   * A routine the hub makes itself (the memory curator, the trim routine):
+   * on, kept, landing nothing, in the hub's own zone, its first slot its
+   * schedule's next.
    */
-  const ensureCurator = (projectId: string): void => {
-    if (curatorOf(projectId)) {
-      return;
-    }
+  const hubRoutine = (
+    projectId: string | null,
+    made: Pick<RoutineRow, "cron" | "name" | "prompt" | "target">
+  ): RoutineRow => {
     const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
     const now = new Date();
-    const row = store.create({
+    return store.create({
+      ...made,
       id: crypto.randomUUID(),
       projectId,
-      name: CURATOR_NAME,
-      cron: CURATOR_CRON,
       timeZone,
-      target: "curator",
-      prompt: CURATOR_PROMPT,
       delegateType: null,
       lands: "none",
       budget: null,
@@ -2404,13 +2463,118 @@ export const createRoutines = ({
       keep: true,
       expiresAt: null,
       lastSlot: null,
-      nextSlot: Cron.next(cronOf(CURATOR_CRON, timeZone), now),
+      nextSlot: Cron.next(cronOf(made.cron, timeZone), now),
       createdAt: now,
+    });
+  };
+
+  /** The project's memory curator routine, when it has one. */
+  const curatorOf = (projectId: string): RoutineRow | undefined =>
+    store.list(projectId).find((row) => row.target === "curator");
+
+  /**
+   * Makes the project's memory curator routine when it has none (its first
+   * inbox note): daily, kept, made by the hub, with no test run.
+   */
+  const ensureCurator = (projectId: string): void => {
+    if (curatorOf(projectId)) {
+      return;
+    }
+    const row = hubRoutine(projectId, {
+      name: CURATOR_NAME,
+      cron: CURATOR_CRON,
+      target: "curator",
+      prompt: CURATOR_PROMPT,
     });
     console.log(
       `[routines] ${CURATOR_NAME} made for project ${projectId}: ${row.cron} (${row.timeZone})`
     );
     schedule();
+  };
+
+  /** The trim routine of `projectId` (null: the fleet-level one), when there is one. */
+  const trimOf = (projectId: string | null): RoutineRow | undefined =>
+    store.list(projectId).find((row) => row.target === "trim");
+
+  /**
+   * Makes the trim routine of `projectId` (null: the fleet-level one) when
+   * there is none (unused-trim.ts): weekly, kept, made by the hub, with no
+   * test run. Answers it.
+   */
+  const ensureTrim = (projectId: string | null): RoutineRow => {
+    const had = trimOf(projectId);
+    if (had) {
+      return had;
+    }
+    const row = hubRoutine(projectId, {
+      name: TRIM_NAME,
+      cron: TRIM_CRON,
+      target: "trim",
+      prompt: TRIM_PROMPT,
+    });
+    console.log(
+      `[routines] ${TRIM_NAME} made for ${projectId ? `project ${projectId}` : "the fleet"}: ${row.cron} (${row.timeZone})`
+    );
+    schedule();
+    return row;
+  };
+
+  /**
+   * Whether Caw suggests the trim routine in `projectId`: the person never
+   * answered his suggestion there and the project has none.
+   */
+  const trimOffered = (projectId: string): boolean => {
+    projectOf(projectId);
+    return !(db.trim.answerOf(projectId) || trimOf(projectId));
+  };
+
+  /**
+   * The person's answer to Caw's suggestion: Turn on makes the routine and
+   * answers it; Not now waves the suggestion away and makes nothing. Either
+   * is kept, so he never suggests it there again.
+   */
+  const answerTrim = (
+    projectId: string,
+    answer: "on" | "dismissed"
+  ): RoutineView | null => {
+    projectOf(projectId);
+    db.trim.answer(projectId, answer);
+    return answer === "on" ? viewOf(ensureTrim(projectId)) : null;
+  };
+
+  /** The fleet switch: on while the fleet-level trim routine exists. */
+  const fleetTrim = (): boolean => !!trimOf(null);
+
+  /**
+   * The fleet switch flipped: on makes the fleet-level run and turns the
+   * routine on in every project that has none; off deletes the fleet-level
+   * run, and each project's stays its own, paused or removed from its row.
+   */
+  const setFleetTrim = (on: boolean): boolean => {
+    if (!on) {
+      const fleet = trimOf(null);
+      if (fleet) {
+        store.delete(fleet.id);
+        schedule();
+      }
+      return false;
+    }
+    ensureTrim(null);
+    everyProjectTrimmed();
+    return true;
+  };
+
+  /** While the fleet switch is on, every project has the routine: each tick looks, so a project made since gets it. */
+  const everyProjectTrimmed = (): void => {
+    if (!trimOf(null)) {
+      return;
+    }
+    for (const project of db.listProjects()) {
+      if (!trimOf(project.id)) {
+        db.trim.answer(project.id, "on");
+        ensureTrim(project.id);
+      }
+    }
   };
 
   /**
@@ -2600,8 +2764,10 @@ export const createRoutines = ({
   };
 
   return {
+    answerTrim,
     create,
     ensureCurator,
+    fleetTrim,
     get,
     inboxPassed,
     itemEnded,
@@ -2612,8 +2778,10 @@ export const createRoutines = ({
     runForEvent,
     said,
     runNow,
+    setFleetTrim,
     start,
     tick,
+    trimOffered,
     tools,
     update,
   };
@@ -2715,4 +2883,27 @@ export const routineRoutes = (routines: Routines) =>
     )
     .post("/api/routines/:id/run", ({ params }) =>
       answered(() => routines.runNow(params.id, "owner"))
+    )
+    // Caw's suggestion of the unused skills and servers routine (unused-trim.ts).
+    .get("/api/projects/:id/trim-routine", ({ params }) =>
+      answered(() => ({ offered: routines.trimOffered(params.id) }))
+    )
+    .post(
+      "/api/projects/:id/trim-routine",
+      {
+        body: t.Object({
+          answer: t.Union([t.Literal("on"), t.Literal("dismissed")]),
+        }),
+      },
+      ({ params, body }) =>
+        answered(() => ({
+          routine: routines.answerTrim(params.id, body.answer),
+        }))
+    )
+    // Its fleet switch (Configure › Skills).
+    .get("/api/trim-routine/fleet", () => ({ on: routines.fleetTrim() }))
+    .put(
+      "/api/trim-routine/fleet",
+      { body: t.Object({ on: t.Boolean() }) },
+      ({ body }) => answered(() => ({ on: routines.setFleetTrim(body.on) }))
     );

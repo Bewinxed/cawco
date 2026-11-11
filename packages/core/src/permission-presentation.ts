@@ -32,6 +32,7 @@ import {
   projectSettingsWords,
   type SettingsBudget,
 } from "./words/project-settings";
+import { routinesWords } from "./words/routines";
 
 /** One file or document the call changes: both sides, for the diff renderers. */
 export interface PermissionChange {
@@ -76,7 +77,101 @@ export interface PermissionPresentation {
    * two commits are on origin/main"), its command under it in `command`.
    */
   summary: string;
+  /**
+   * What a change to a starting set takes out of it, with what its sessions
+   * called of each (hub unused-trim.ts): drawn as a table. Absent when the
+   * call changes no starting set, or takes nothing out of one.
+   */
+  unlisted?: UnlistedTable;
 }
+
+/** One skill or server a change takes out of a starting set, as the set's sessions called it. */
+export interface UnlistedRow {
+  kind: "skill" | "server";
+  /** Its last call in the window, ms epoch; null when no session of the set called it. */
+  lastAt: number | null;
+  /** A skill as a listing names it (`plugin:skill`), a server by its fleet name. */
+  name: string;
+  /** How many of the set's sessions called it in the window. */
+  sessions: number;
+}
+
+/** What leaves a starting set, row by row: the never-called first, then the longest unused. */
+export interface UnlistedTable {
+  /** The window the count covers, in days. */
+  days: number;
+  rows: UnlistedRow[];
+  /** The set, as the person knows it: "Cawco-Dev's own set", "the build type's set". */
+  set: string;
+}
+
+/** Whose starting set a change writes: the asker's project's own, or a delegate type's. */
+export type SetOwner = { kind: "project" } | { kind: "type"; name: string };
+
+/** A starting set as the hub reads it now, and what its sessions called of what it lists. */
+export interface SetStanding {
+  /** Its sessions' calls in the window, of the items they called. */
+  calls: (UnlistedRow & { lastAt: number })[];
+  days: number;
+  /** The set, as the person knows it. */
+  label: string;
+  /** The set; null when there is none, and its sessions start with everything. */
+  set: StartingSet | null;
+}
+
+/**
+ * What going from `standing`'s set to `after` takes out, each item with its
+ * calls; undefined when nothing leaves (`after` null starts with everything).
+ */
+export const unlistedOf = (
+  standing: SetStanding | undefined,
+  after: StartingSet | null | undefined
+): UnlistedTable | undefined => {
+  const before = standing?.set;
+  if (!(standing && before && after)) {
+    return;
+  }
+  const leaving = [
+    ...before.skills
+      .filter((name) => !after.skills.includes(name))
+      .map((name) => ({ kind: "skill" as const, name })),
+    ...before.servers
+      .filter((name) => !after.servers.includes(name))
+      .map((name) => ({ kind: "server" as const, name })),
+  ];
+  if (leaving.length === 0) {
+    return;
+  }
+  const rows: UnlistedRow[] = leaving.map((item) => {
+    const called = standing.calls.find(
+      (call) => call.kind === item.kind && call.name === item.name
+    );
+    return {
+      ...item,
+      lastAt: called?.lastAt ?? null,
+      sessions: called?.sessions ?? 0,
+    };
+  });
+  rows.sort(
+    (a, b) =>
+      (a.lastAt ?? 0) - (b.lastAt ?? 0) ||
+      a.kind.localeCompare(b.kind) ||
+      a.name.localeCompare(b.name)
+  );
+  return { set: standing.label, days: standing.days, rows };
+};
+
+/** A trim's own lines: how many items leave which set, and of what kinds. */
+const unlistedWords = (
+  table: UnlistedTable
+): Pick<PermissionPresentation, "detail" | "summary" | "unlisted"> => {
+  const skills = table.rows.filter((row) => row.kind === "skill").length;
+  return {
+    summary: routinesWords.unlistSummary(table.rows.length, table.set),
+    detail: routinesWords.unlistDetail(skills, table.rows.length - skills),
+    unlisted: table,
+  };
+};
 
 /** Who asks and where, as an ask's head names them: "Caw · cockpit". */
 export const askerLine = (presentation: PermissionPresentation): string =>
@@ -146,6 +241,12 @@ export interface PresentationContext {
   projectName: (id: string) => string | undefined;
   /** An install's or a link's source, read when it was proposed; undefined for any other call. */
   source?: SourceFacts;
+  /**
+   * A starting set as it stands and its sessions' calls (hub
+   * unused-trim.ts): what a change to it is drawn against. Undefined where
+   * the hub reads none.
+   */
+  startingSet?: (owner: SetOwner) => SetStanding | undefined;
 }
 
 // ── line changes ─────────────────────────────────────────────────────────
@@ -998,6 +1099,14 @@ function delegateTypesWrite(
     DELEGATE_TYPE_FIELDS.map((key) => [key, before[key] ?? null])
   );
   const changed = changedFields(kept, after, context);
+  // What leaves its starting set is a table of its sessions' calls.
+  const unlisted = unlistedOf(
+    context.startingSet?.({ kind: "type", name }),
+    (input.startingSet as StartingSet | undefined) ?? null
+  );
+  if (unlisted) {
+    return { ...unlistedWords(unlisted), changes: [], fields: changed };
+  }
   return {
     summary: `Change delegate type ${name}`,
     detail: changeDetail(changed),
@@ -1434,8 +1543,25 @@ const settingChanges = (input: Record<string, unknown>) =>
   );
 
 /** A project setting change Caw asked about: each change in plain words, what a publish takes, and why. */
-function projectSettings(input: Record<string, unknown>): Presented {
+function projectSettings(
+  input: Record<string, unknown>,
+  context: PresentationContext
+): Presented {
   const changes = settingChanges(input);
+  const trim =
+    changes.length === 1 && changes[0]?.kind === "set_starting_set"
+      ? unlistedOf(
+          context.startingSet?.({ kind: "project" }),
+          changes[0].startingSet
+        )
+      : undefined;
+  if (trim) {
+    return {
+      ...unlistedWords(trim),
+      changes: [],
+      fields: fieldsOf(input, ["changes", "ask", "project"]),
+    };
+  }
   const published = changes.find(
     (one): one is Extract<ProjectSettingChange, { kind: "create_repo" }> =>
       one.kind === "create_repo"
@@ -1657,7 +1783,7 @@ export function presentPermission(
     return { ...who, ...designProposal(input) };
   }
   if (toolName === PROJECT_SETTINGS_TOOL) {
-    return { ...who, ...projectSettings(input) };
+    return { ...who, ...projectSettings(input, context) };
   }
   // A browser ask reads as its reason, the page's origin under it.
   if (toolName === BROWSER_ASK_TOOL) {

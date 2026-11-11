@@ -4233,6 +4233,35 @@ export const designOffers = sqliteTable("design_offers", {
 });
 
 /**
+ * Caw's suggestion of the unused skills and servers routine (unused-trim.ts),
+ * one row per project once the person answered it: `on` (Turn on, or the
+ * fleet switch) or `dismissed` (Not now). Either way it is never suggested
+ * again in that project, removing the routine included.
+ */
+export const trimOffers = sqliteTable("trim_offers", {
+  projectId: text("project_id").primaryKey(),
+  answer: text("answer").$type<"on" | "dismissed">().notNull(),
+  answeredAt: timestamp("answered_at").notNull(),
+});
+
+/**
+ * What the person kept listed by rejecting a trim proposal (unused-trim.ts):
+ * the routine never proposes it for that set again. `set` is `project:<id>`
+ * for a project's own set, `type:<name>` for a delegate type's, `fleet` for
+ * what the fleet-level run proposes turning off.
+ */
+export const trimKept = sqliteTable(
+  "trim_kept",
+  {
+    set: text("set").notNull(),
+    kind: text("kind").$type<"skill" | "server">().notNull(),
+    name: text("name").notNull(),
+    keptAt: timestamp("kept_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.set, table.kind, table.name] })]
+);
+
+/**
  * Git LFS offered for the large files a place's first commit left out
  * (lfs-offers.ts): one row per offer, written as it is made. `answer` stays
  * null while the card stands; `tracked` once its files are committed

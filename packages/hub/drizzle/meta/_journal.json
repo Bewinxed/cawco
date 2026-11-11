@@ -2675,6 +2675,13 @@
       "when": 1794400373109,
       "tag": "0389_capability_calls",
       "breakpoints": true
+    },
+    {
+      "idx": 390,
+      "version": "6",
+      "when": 1794403363546,
+      "tag": "0390_trim_routine",
+      "breakpoints": true
     }
   ]
 }

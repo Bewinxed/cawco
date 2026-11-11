@@ -40,6 +40,11 @@
    * the soonest next run. The row opens its detail in place (RoutineDetail).
    * On a narrow ledger Last and Next fold into the schedule's line.
    *
+   * Under the ledger's last row (or the empty state, with none), Caw suggests
+   * the unused skills and servers routine (suggestions/CawSuggests) until the
+   * person answers: Turn on makes it, a row like the others; Not now waves
+   * it away; either keeps it gone from this project (hub unused-trim.ts).
+   *
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
    * starters written for the project from what it repeats or waits on over
    * the session Composer to Caw (words alone), whose words start a
@@ -72,6 +77,7 @@
     routineRefusals,
   } from "#lib/cawco/routines/refusals.svelte.js";
   import {
+    answerTrimOffer,
     deleteRoutine,
     type Poll,
     type Routine,
@@ -86,6 +92,7 @@
   import { exactOf, scheduleOf, whenOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import { GLYPHS } from "#lib/cawco/starter-glyphs.js";
+  import CawSuggests from "#lib/cawco/suggestions/CawSuggests.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -241,6 +248,31 @@
     }, 60_000);
     return () => clearInterval(minute);
   });
+
+  // --- Caw's suggestion: the unused skills and servers routine -------------------
+
+  const offered = $derived(page?.trimOffered ?? false);
+  /** The answer on its way to the hub; null at rest. */
+  let answering = $state<"on" | "dismissed" | null>(null);
+  /** Why the hub refused the last answer, said under the suggestion until the next. */
+  let trimRefused = $state<string | null>(null);
+  async function answerTrim(answer: "on" | "dismissed") {
+    if (answering) {
+      return;
+    }
+    answering = answer;
+    try {
+      await answerTrimOffer(project.id, answer);
+      trimRefused = null;
+    } catch (error) {
+      trimRefused = (
+        answer === "on" ? words.refusedTrimOn : words.refusedTrimNotNow
+      )(message(error));
+    } finally {
+      answering = null;
+      await read();
+    }
+  }
 
   // --- the three blocks: their counts and what waits on you -----------------------
 
@@ -1004,6 +1036,22 @@
   </Collapsible.Root>
 {/snippet}
 
+<!-- Caw's suggestion, and why the hub refused an answer to it, under it. -->
+{#snippet trimSuggestion()}
+  <CawSuggests
+    act={words.trimTurnOn}
+    dismiss={words.trimNotNow}
+    label={words.trimLabel}
+    onaccept={() => answerTrim("on")}
+    ondismiss={() => answerTrim("dismissed")}
+    reason={words.trimReason}
+    title={words.trimName}
+  />
+  {#if trimRefused}
+    <RowFault reason={trimRefused} />
+  {/if}
+{/snippet}
+
 {#snippet routinesBody()}
   {#if empty}
     <div data-slot="starters" class="w-full max-w-c-starters-w p-space-3">
@@ -1073,6 +1121,11 @@
         </EmptyState>
       {/if}
     </div>
+    {#if offered}
+      <div data-slot="trim-offer" class="w-full p-space-3">
+        {@render trimSuggestion()}
+      </div>
+    {/if}
   {:else}
     {#if asking}
       <!-- Ask Caw: the composer stands over the ledger it will land in. -->
@@ -1120,6 +1173,16 @@
         {#each sorted as routine (routine.id)}
           {@render routineRows(routine)}
         {/each}
+        {#if offered}
+          <!-- Not a routine yet: the ledger's whole width, none of its columns. -->
+          <Table.Body data-slot="trim-offer">
+            <Table.Row variant="unruled">
+              <Table.Cell colspan={span} rule="top" variant="across">
+                {@render trimSuggestion()}
+              </Table.Cell>
+            </Table.Row>
+          </Table.Body>
+        {/if}
       </Table.Root>
     </div>
   {/if}

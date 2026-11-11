@@ -20,6 +20,9 @@
  * - `calls_by_role`, for `GET /api/capability-calls`: which skills and MCP
  *   servers each role's sessions called (capability-calls.ts), a project
  *   named by its name too.
+ * - `trim_propose`: a run of the unused skills and servers routine puts the
+ *   hub's trimmed starting sets to the person, each through its set's own
+ *   approval (unused-trim.ts), and is told the headline to finish with.
  *
  * One list, made here: the MCP server lists it to sessions (server.ts) and
  * the role budgets measure it (role-budgets.ts).
@@ -39,7 +42,7 @@ import {
 } from "./design-system";
 import { FIND_TOOL, type FindTool, findToolDefinition } from "./find-tool";
 import { hubHttpUrl, selfFetch } from "./hub-self";
-import { tool } from "./mcp-tool";
+import { sentence, tool } from "./mcp-tool";
 import {
   capabilityCallsWords,
   designVerdictWords,
@@ -47,6 +50,7 @@ import {
   machinesUpdatedWords,
 } from "./presenters/hub";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
+import { TRIM_PROPOSE } from "./unused-trim";
 
 /** One `find` for a session: its input, and the form it asked. */
 type FindCall = (
@@ -66,6 +70,7 @@ export const HUB_TOOLS: ReadonlySet<string> = new Set([
   DESIGN_VERDICT,
   FIND_TOOL,
   "calls_by_role",
+  TRIM_PROPOSE,
 ]);
 
 /** A verifier's verdict as `design_verdict` takes it. */
@@ -167,6 +172,11 @@ export interface HubToolsDeps {
   pairing: () => boolean;
   /** The projects, by id and name. */
   projects: () => { id: string; name: string }[];
+  /** A trim run's proposals put to the person (unused-trim.ts `propose`): the headline it finishes with. */
+  trimPropose: (
+    actor: InstanceRow,
+    toolUseId: string | undefined
+  ) => Promise<string>;
 }
 
 /** The project `asked` names, by id or name; undefined for every project. */
@@ -333,6 +343,13 @@ export const createHubTools =
             openWorldHint: false,
           },
         }
+      ),
+      tool(
+        TRIM_PROPOSE,
+        "Put this run's trimmed starting sets to the person, each through its set's own approval; nothing changes until they approve. Call once; it answers the headline to finish with.",
+        {},
+        () => deps.trimPropose(me(), toolUseId),
+        sentence
       ),
     ];
   };

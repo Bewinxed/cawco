@@ -27,13 +27,17 @@
  *   inbox, proposes changes to AGENTS.md and `knowledge/` for you to approve,
  *   archives the notes that are not lasting facts, and finishes. No edit,
  *   shell or web tools in its harness either (caw.ts `fencedSpawn`).
+ * - **trimmer**: a run of the unused skills and servers routine
+ *   (unused-trim.ts): it reads the count (`calls_by_role`), puts the hub's
+ *   trimmed sets to you once with `trim_propose`, and finishes. Fenced as
+ *   the curator is.
  *
  * A session's scope is its folder and, when its row has a `projectId`, its
  * project. A project's own tools ({@link PROJECT_TOOLS}: its views, its
  * folder on the hub, its Setup's steps and settings, a routine run's answer,
  * memory writes) follow that scope, never the folder: a worker in a project
  * has them wherever it works. A role with a closed list (delegate, overseer,
- * web-facing, curator) has only its list. The session a project's events
+ * web-facing, curator, trimmer) has only its list. The session a project's events
  * reach is a worker like any other; the project's row points at it.
  *
  * Every session that works (the worker, the delegate) searches what was
@@ -147,6 +151,9 @@ export const TRIAGE_TOOLS = ["triage_decide"] as const;
 /** A memory curator run's own (memory.ts): never a worker's. */
 const CURATOR_OWN = ["memory_read", "memory_classify"] as const;
 
+/** A trim run's own (unused-trim.ts): never a worker's. */
+const TRIMMER_OWN = ["trim_propose"] as const;
+
 /**
  * The task tools a delegate lists only when it orchestrates
  * ({@link orchestrates}): it changes any of its project's tasks, and starts
@@ -221,14 +228,22 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "memory_propose",
     ...CURATOR_OWN,
   ]),
+  trimmer: new Set([
+    "set_title",
+    "finish_item",
+    // The count its findings come from (capability-calls.ts).
+    "calls_by_role",
+    ...TRIMMER_OWN,
+  ]),
 };
 
 /**
- * What a worker never has: the curator's own, triage's, and a design check's
+ * What a worker never has: the curator's own, the trim run's, triage's, and a design check's
  * verdict.
  */
 const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
   ...CURATOR_OWN,
+  ...TRIMMER_OWN,
   ...TRIAGE_TOOLS,
   // A design check's verifier's alone, which is a delegate (design-verify.ts).
   "design_verdict",
@@ -340,11 +355,16 @@ export const refusal = (row: InstanceRow, name: string): string => {
         : `${name} isn't available here: a delegate or work item files no tasks and changes no fleet settings. Hand the change to the session that started it.`;
     case "curator":
       return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
+    case "trimmer":
+      return `${name} isn't available to the unused skills and servers routine: it proposes with trim_propose, and finishes.`;
     case "worker":
       break;
   }
   if (TRIAGE_TOOLS.includes(name as (typeof TRIAGE_TOOLS)[number])) {
     return `${name} belongs to a fleet-watch triage run.`;
+  }
+  if (TRIMMER_OWN.includes(name as (typeof TRIMMER_OWN)[number])) {
+    return `${name} belongs to a run of the unused skills and servers routine.`;
   }
   return CURATOR_OWN.includes(name as (typeof CURATOR_OWN)[number])
     ? `${name} belongs to a project's memory curator.`

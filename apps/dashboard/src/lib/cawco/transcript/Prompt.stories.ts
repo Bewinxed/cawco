@@ -10,6 +10,7 @@
 import { presentPermission } from "@cawco/core/permission-presentation";
 import { hubAs } from "../hub-stand-in";
 import Prompt from "./Prompt.svelte";
+import { TRIM_REQUEST } from "./unlisted-fixture";
 
 const input = {
   command: "bun run --cwd apps/dashboard build",
@@ -84,4 +85,12 @@ export const Reconnecting = { decorators: [hubAs("connecting")] };
 export const AQuestionWithNoOptions = {
   name: "A question with no options",
   args: { request: openRequest },
+};
+
+/**
+ * The unused skills and servers routine asks to trim Cawco-Dev's starting
+ * set: what leaves it, 43 items, as the table of its sessions' calls.
+ */
+export const Trim = {
+  args: { request: TRIM_REQUEST, asker: "Unused skills and servers" },
 };

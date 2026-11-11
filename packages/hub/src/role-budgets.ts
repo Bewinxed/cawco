@@ -112,6 +112,8 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * `starting_set`: the skills and servers a project's sessions start with
  * (tsk-336), changed as the project's other settings are (worker 30,465
  * measured).
+ * 2026-11-11: trimmer, a run of the unused skills and servers routine
+ * (unused-trim.ts): set_title, finish_item, calls_by_role and trim_propose.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 30_500,
@@ -119,6 +121,7 @@ const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
+  trimmer: 1400,
 };
 
 /**
@@ -140,6 +143,13 @@ const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
   "web-facing": {
     role: "web-facing",
     parentInstanceId: "parent",
+    workItemId: "item",
+    mayStart: [],
+  },
+  trimmer: {
+    role: "trimmer",
+    projectId: "project",
+    parentInstanceId: "routine:trim",
     workItemId: "item",
     mayStart: [],
   },
@@ -311,6 +321,9 @@ export const standIn = (
         anyOnline: () => false,
         caw: {} as never,
         curatorBrief: () => Promise.reject(new Error("measuring")),
+        trimBrief: () => {
+          throw new Error("measuring");
+        },
         db: {} as never,
         hubCheckout: () => Promise.reject(new Error("measuring")),
         jevAccess: () => undefined,
@@ -415,6 +428,7 @@ export const standIn = (
         throw new Error("measuring");
       },
       projects: () => [],
+      trimPropose: () => Promise.reject(new Error("measuring")),
     }),
     // The browser ask, from the one list the server gives sessions.
     browserTools: (actor) =>

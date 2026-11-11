@@ -14426,6 +14426,270 @@
         }
       }
     },
+    "/api/projects/{id}/trim-routine": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdTrimRoutine",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdTrimRoutine 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdTrimRoutine200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdTrimRoutine 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdTrimRoutine 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdTrimRoutine 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdTrimRoutine 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answer": {
+                    "type": "string",
+                    "enum": [
+                      "on",
+                      "dismissed"
+                    ]
+                  }
+                },
+                "required": [
+                  "answer"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdTrimRoutine",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTrimRoutine 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdTrimRoutine200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTrimRoutine 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTrimRoutine 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTrimRoutine 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTrimRoutine 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTrimRoutine 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trim-routine/fleet": {
+      "get": {
+        "operationId": "getApiTrimRoutineFleet",
+        "responses": {
+          "200": {
+            "description": "getApiTrimRoutineFleet 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiTrimRoutineFleet200"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "on": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "on"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiTrimRoutineFleet",
+        "responses": {
+          "200": {
+            "description": "putApiTrimRoutineFleet 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiTrimRoutineFleet200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiTrimRoutineFleet 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiTrimRoutineFleet 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiTrimRoutineFleet 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiTrimRoutineFleet 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiTrimRoutineFleet 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/connections": {
       "get": {
         "operationId": "getApiConnections",
@@ -32480,6 +32744,47 @@
           "routes"
         ]
       },
+      "getApiProjectsByIdTrimRoutine200": {
+        "type": "object",
+        "properties": {
+          "offered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "offered"
+        ]
+      },
+      "postApiProjectsByIdTrimRoutine200": {
+        "type": "object",
+        "properties": {
+          "routine": {
+            "$ref": "#/components/schemas/RoutineView"
+          }
+        }
+      },
+      "getApiTrimRoutineFleet200": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ]
+      },
+      "putApiTrimRoutineFleet200": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on"
+        ]
+      },
       "getApiConnections200": {
         "type": "object",
         "properties": {
@@ -38135,6 +38440,7 @@
               "curator",
               "delegate",
               "overseer",
+              "trimmer",
               "web-facing",
               "worker"
             ],
@@ -47980,13 +48286,14 @@
         ]
       },
       "RoutineTarget": {
-        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, or the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes.",
+        "description": "What a run starts: a fresh delegate, a fresh orchestrator (a session that\nmay delegate, in the project's checkout: routines.ts `fireOrchestrator`),\na message to the project's conversation, Caw, the project's memory curator\n(memory.ts), a delegate in the `curator` role that only the hub makes, or\nthe unused skills and servers routine (hub unused-trim.ts), a delegate in\nthe `trimmer` role that only the hub makes too.",
         "type": "string",
         "enum": [
           "conversation",
           "curator",
           "delegate",
-          "orchestrator"
+          "orchestrator",
+          "trim"
         ]
       },
       "ConnectionView": {
@@ -65544,6 +65851,10 @@
           "summary": {
             "description": "What will happen and why, in one line: \"Change the fleet's CLAUDE.md\";\nfor a shell call, the session's own reason for it (\"Check whether the\ntwo commits are on origin/main\"), its command under it in `command`.",
             "type": "string"
+          },
+          "unlisted": {
+            "$ref": "#/components/schemas/UnlistedTable",
+            "description": "What a change to a starting set takes out of it, with what its sessions\ncalled of each (hub unused-trim.ts): drawn as a table. Absent when the\ncall changes no starting set, or takes nothing out of one."
           }
         },
         "required": [
@@ -65600,6 +65911,61 @@
         "required": [
           "key",
           "value"
+        ]
+      },
+      "UnlistedTable": {
+        "description": "What leaves a starting set, row by row: the never-called first, then the longest unused.",
+        "type": "object",
+        "properties": {
+          "days": {
+            "description": "The window the count covers, in days.",
+            "type": "number"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnlistedRow"
+            }
+          },
+          "set": {
+            "description": "The set, as the person knows it: \"Cawco-Dev's own set\", \"the build type's set\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "days",
+          "rows",
+          "set"
+        ]
+      },
+      "UnlistedRow": {
+        "description": "One skill or server a change takes out of a starting set, as the set's sessions called it.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/UnlistedRowKind"
+          },
+          "lastAt": {
+            "description": "Its last call in the window, ms epoch; null when no session of the set called it.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "name": {
+            "description": "A skill as a listing names it (`plugin:skill`), a server by its fleet name.",
+            "type": "string"
+          },
+          "sessions": {
+            "description": "How many of the set's sessions called it in the window.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "lastAt",
+          "name",
+          "sessions"
         ]
       },
       "PermissionUpdate": {
@@ -67444,6 +67810,7 @@
           "curator",
           "delegate",
           "overseer",
+          "trimmer",
           "web-facing",
           "worker"
         ]
@@ -68041,6 +68408,13 @@
           "text",
           "thinking",
           "tool"
+        ]
+      },
+      "UnlistedRowKind": {
+        "type": "string",
+        "enum": [
+          "server",
+          "skill"
         ]
       },
       "WorkspaceToolNeed": {

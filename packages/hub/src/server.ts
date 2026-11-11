@@ -1113,6 +1113,7 @@ import { createTreeStops } from "./tree-stops";
 import { turnState } from "./turn-state";
 import { turnUsageOf } from "./turn-usage";
 import { unknownFieldsOf } from "./unknown-fields";
+import { createTrim } from "./unused-trim";
 import { unwatchedMode } from "./unwatched-mode";
 import { TOOL_RELEASES } from "./upstreams";
 import { UsageCounter } from "./usage-count";
@@ -3934,6 +3935,8 @@ export const createServer = (
       if (name === PROJECT_SETTINGS) {
         projectSettings?.runDeclined(asker, input);
       }
+      // A trim run's proposal rejected: its items stay listed (unused-trim.ts).
+      trim.declined(name, input, asker);
     },
     // Not kept with the session asks: its row is (pending.ts `askEnvelope`).
     // A delegate's question reaches its parent too, which may answer it.
@@ -25589,8 +25592,35 @@ export const createServer = (
   // hub's connection (delegate-types.ts) and a route group, mounted rather
   // than folded into the routes below.
   const { delegateTypes } = db;
+  // The unused skills and servers routine's findings, proposals and kept
+  // items (unused-trim.ts): its proposals asked through each set's own write.
+  const trim = createTrim({
+    calls: (asked) => capabilityCalls(db, asked),
+    db,
+    projectSet: (projectId) => projectStartingSet(projectId).set ?? null,
+    types: delegateTypes,
+    askAdmin: (actor, name, input, toolUseId) =>
+      hubAsks.ask(actor, name, input, toolUseId),
+    askProjectSet: async (actor, set, reason, toolUseId) => {
+      if (!projectSettings) {
+        throw new Error("The hub's project settings aren't made yet.");
+      }
+      const result = await projectSettings.tool(actor, toolUseId).call({
+        changes: [{ kind: "set_starting_set", starting_set: set }],
+        reason,
+        ask: true,
+      });
+      return (result.content ?? [])
+        .map((part) => (part.type === "text" ? (part.text ?? "") : ""))
+        .join("\n");
+    },
+  });
   // What each ask says on every surface, read as it parks (ask-presentation.ts).
-  pending.presentWith(createAskPresenter(db, delegateTypes));
+  pending.presentWith(
+    createAskPresenter(db, delegateTypes, (owner, projectId) =>
+      trim.standing(owner, projectId)
+    )
+  );
   // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.
   const projectTypes = makeProjectDelegateTypes(
     delegateTypes,
@@ -28105,6 +28135,8 @@ export const createServer = (
     caw,
     // A curator run's inbox, sorted first (memory.ts).
     curatorBrief: (projectId) => projectMemory.curatorBrief(projectId),
+    // A trim run's findings, read before any model is asked (unused-trim.ts).
+    trimBrief: (projectId) => trim.brief(projectId),
     db,
     lifetime,
     anyOnline: () => onlineMachines().length > 0,
@@ -28785,6 +28817,7 @@ export const createServer = (
         id: project.id,
         name: project.name,
       })),
+    trimPropose: (actor, toolUseId) => trim.propose(actor, toolUseId),
   });
   // A relayed tool call sent again under its key is answered, not run again.
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });

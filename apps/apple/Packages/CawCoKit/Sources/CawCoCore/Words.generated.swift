@@ -3052,6 +3052,67 @@ public enum Words {
             "From \(who)"
         }
 
+        public static let trimName = "Unused skills and servers"
+
+        public static let trimReason = "Each Monday, counts what this project's sessions call and proposes unlisting what nobody has called in 30 days."
+
+        public static let trimLabel = "Caw suggests a routine"
+
+        public static let trimTurnOn = "Turn on"
+
+        public static let trimNotNow = "Not now"
+
+        public static func refusedTrimOn(why: String) -> String {
+            "The routine wasn't turned on. \(why)"
+        }
+
+        public static func refusedTrimNotNow(why: String) -> String {
+            "The suggestion is still here. \(why)"
+        }
+
+        public static func unlistSummary(count: Int, set: String) -> String {
+            "Unlist \(count) \(count == 1 ? "item" : "items") from \(set)"
+        }
+
+        public static func unlistDetail(skills: Int, servers: Int) -> String {
+            "\(skills > 0 ? "\(skills) \(skills == 1 ? "skill" : "skills")" : "")\(skills > 0 && servers > 0 ? " and " : "")\(servers > 0 ? "\(servers) \(servers == 1 ? "server" : "servers")" : "") \(skills + servers == 1 ? "leaves" : "leave") it. Each stays installed."
+        }
+
+        /// A starting set, as a trim's approval names it.
+        public static func projectSet(project: String) -> String {
+            "\(project)'s starting set"
+        }
+
+        public static func typeSet(type: String) -> String {
+            "the \(type) type's starting set"
+        }
+
+        public static func unlistedCaption(days: Int) -> String {
+            "What leaves the set, by its sessions' calls in the last \(days) days"
+        }
+
+        public static let columnItem = "Skill or server"
+
+        public static let columnLastCall = "Last call"
+
+        public static let columnSessions = "Sessions"
+
+        public static let kindSkill = "Skill"
+
+        public static let kindServer = "Server"
+
+        public static func noCallIn(days: Int) -> String {
+            "None in \(days) days"
+        }
+
+        public static let fleetTrimLabel = "Find unused skills and servers in every project"
+
+        public static let fleetTrimHint = "Turns the weekly routine on in each project, and adds a fleet-wide run that proposes turning off what every machine has installed and no project called. Nothing changes until you approve."
+
+        public static func refusedFleetTrim(why: String) -> String {
+            "The switch didn't change. \(why)"
+        }
+
         /// How long ago (rules.ts `since`): under a minute, then minutes, hours, days.
         public static let justNow = "just now"
 
@@ -3749,6 +3810,8 @@ public enum Words {
         public static let problemStartingSetForm = "starting_set lists its skills and servers on indented lines under it, like “  skills: [grill]” and “  servers: [exa]”"
 
         public static let problemCuratorRole = "role curator is the memory curator's: the hub starts that run itself, and it denies shell, edit and web tools"
+
+        public static let problemTrimmerRole = "role trimmer is the unused skills and servers routine's: the hub starts that run itself, and it denies shell, edit and web tools"
 
         // packages/core/src/harness.ts `EFFORT_LEVELS`
         /// Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read.

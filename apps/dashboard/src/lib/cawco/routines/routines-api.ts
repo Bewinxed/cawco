@@ -78,6 +78,12 @@ export interface RoutinesPage {
   relays: RelayView[];
   routes: EventRoute[];
   routines: Routine[];
+  /**
+   * Caw suggests the unused skills and servers routine here: the person
+   * never answered his suggestion in this project, and it has no such
+   * routine (hub unused-trim.ts).
+   */
+  trimOffered: boolean;
 }
 
 /** What the page reads of `GET /api/projects/:id/ingress`. */
@@ -107,21 +113,29 @@ export async function readRoutinesPage(
   projectId: string
 ): Promise<RoutinesPage> {
   const id = encodeURIComponent(projectId);
-  const [routines, ingress, relays, actions, connections] = await Promise.all([
-    send<Routine[]>(
-      hubRequest("GET /api/routines", { query: { projectId: id } })
-    ),
-    send<IngressRead>(
-      hubRequest("GET /api/projects/:id/ingress", { path: { id: projectId } })
-    ),
-    send<RelayView[]>(
-      hubRequest("GET /api/projects/:id/relays", { path: { id: projectId } })
-    ),
-    send<{ actions: ApprovedActionView[] }>(
-      hubRequest("GET /api/actions", { query: { projectId: id } })
-    ),
-    send<{ connections: ConnectionView[] }>(hubRequest("GET /api/connections")),
-  ]);
+  const [routines, ingress, relays, actions, connections, trim] =
+    await Promise.all([
+      send<Routine[]>(
+        hubRequest("GET /api/routines", { query: { projectId: id } })
+      ),
+      send<IngressRead>(
+        hubRequest("GET /api/projects/:id/ingress", { path: { id: projectId } })
+      ),
+      send<RelayView[]>(
+        hubRequest("GET /api/projects/:id/relays", { path: { id: projectId } })
+      ),
+      send<{ actions: ApprovedActionView[] }>(
+        hubRequest("GET /api/actions", { query: { projectId: id } })
+      ),
+      send<{ connections: ConnectionView[] }>(
+        hubRequest("GET /api/connections")
+      ),
+      send<{ offered: boolean }>(
+        hubRequest("GET /api/projects/:id/trim-routine", {
+          path: { id: projectId },
+        })
+      ),
+    ]);
   /** Each connection by its name: what polls and `conn:` sources name it by. */
   const connectionOf = new Map(
     connections.connections.map((each) => [each.name, each])
@@ -164,6 +178,7 @@ export async function readRoutinesPage(
     polls,
     relays,
     actions: actions.actions,
+    trimOffered: trim.offered,
   };
 }
 
@@ -261,3 +276,26 @@ export const deleteRoutine = (
   routineId: string
 ): Promise<{ deleted: boolean }> =>
   send(hubRequest("DELETE /api/routines/:id", { path: { id: routineId } }));
+
+/**
+ * The person's answer to Caw's suggestion of the unused skills and servers
+ * routine: `on` makes it, answered; `dismissed` waves the suggestion away.
+ */
+export const answerTrimOffer = (
+  projectId: string,
+  answer: "on" | "dismissed"
+): Promise<{ routine: Routine | null }> =>
+  send(
+    hubRequest("POST /api/projects/:id/trim-routine", {
+      path: { id: projectId },
+      body: { answer },
+    })
+  );
+
+/** The fleet switch for the routine (Configure › Skills): whether it is on. */
+export const readFleetTrim = (): Promise<{ on: boolean }> =>
+  send(hubRequest("GET /api/trim-routine/fleet"));
+
+/** Flips the fleet switch: on turns the routine on in every project. */
+export const setFleetTrim = (on: boolean): Promise<{ on: boolean }> =>
+  send(hubRequest("PUT /api/trim-routine/fleet", { body: { on } }));

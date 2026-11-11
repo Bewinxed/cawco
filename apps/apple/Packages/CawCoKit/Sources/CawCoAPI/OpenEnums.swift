@@ -2410,6 +2410,7 @@ public enum OpenEnums {
         case curator
         case delegate
         case overseer
+        case trimmer
         case webFacing
         case worker
         /// A value this app does not know: a newer hub's.
@@ -2420,6 +2421,7 @@ public enum OpenEnums {
             case "curator": self = .curator
             case "delegate": self = .delegate
             case "overseer": self = .overseer
+            case "trimmer": self = .trimmer
             case "web-facing": self = .webFacing
             case "worker": self = .worker
             default: self = .unrecognized(rawValue)
@@ -2431,6 +2433,7 @@ public enum OpenEnums {
             case .curator: "curator"
             case .delegate: "delegate"
             case .overseer: "overseer"
+            case .trimmer: "trimmer"
             case .webFacing: "web-facing"
             case .worker: "worker"
             case let .unrecognized(rawValue): rawValue
@@ -2441,7 +2444,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.curator, .delegate, .overseer, .webFacing, .worker]
+        public static let allCases: [Self] = [.curator, .delegate, .overseer, .trimmer, .webFacing, .worker]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -7578,6 +7581,7 @@ public enum OpenEnums {
         case curator
         case delegate
         case orchestrator
+        case trim
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -7587,6 +7591,7 @@ public enum OpenEnums {
             case "curator": self = .curator
             case "delegate": self = .delegate
             case "orchestrator": self = .orchestrator
+            case "trim": self = .trim
             default: self = .unrecognized(rawValue)
             }
         }
@@ -7597,6 +7602,7 @@ public enum OpenEnums {
             case .curator: "curator"
             case .delegate: "delegate"
             case .orchestrator: "orchestrator"
+            case .trim: "trim"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -7605,7 +7611,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.conversation, .curator, .delegate, .orchestrator]
+        public static let allCases: [Self] = [.conversation, .curator, .delegate, .orchestrator, .trim]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -9595,6 +9601,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.agent, .connection, .delegateType, .harnessConfig, .hook, .marketplace, .mcp, .memory, .memoryDoc, .plugin, .rule, .skill]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/UnlistedRowKind`.
+    public enum UnlistedRowKind: OpenEnum {
+        case server
+        case skill
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "server": self = .server
+            case "skill": self = .skill
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .server: "server"
+            case .skill: "skill"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.server, .skill]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

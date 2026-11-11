@@ -14,6 +14,8 @@ import {
   presentPermission,
   questionsOf,
   redact,
+  type SetOwner,
+  type SetStanding,
   type SourceFacts,
 } from "@cawco/core";
 import type { DbShape } from "./db";
@@ -74,7 +76,15 @@ export const answeredWithOriginal = (
 
 export const createAskPresenter = (
   db: DbShape,
-  delegateTypes: DelegateTypesShape
+  delegateTypes: DelegateTypesShape,
+  /**
+   * A starting set as it stands and its sessions' calls, for an asker in
+   * `projectId` (unused-trim.ts `standing`): what a trim is drawn against.
+   */
+  standing: (
+    owner: SetOwner,
+    projectId: string | null
+  ) => SetStanding | undefined
 ) => {
   /**
    * The session that asked, as the board names it (a project's conversation is Caw;
@@ -196,11 +206,14 @@ export const createAskPresenter = (
       proposer?: unknown;
       sourceFacts?: SourceFacts;
     };
+    const instanceId = envelope.instanceId ?? payload.instanceId;
+    const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
     payload.presentation = presentPermission(payload.toolName, payload.input, {
-      ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
+      ...askerOf(instanceId, payload),
       memory,
       current,
       projectName,
+      startingSet: (owner) => standing(owner, row?.projectId ?? null),
       ...(payload.sourceFacts ? { source: payload.sourceFacts } : {}),
     });
   };

@@ -248,6 +248,41 @@ export const routinesWords = {
   actionCancelled: "Cancelled",
   from: (who: string) => `From ${who}`,
 
+  // Caw's suggestion of the unused skills and servers routine, at the
+  // Routines ledger's foot (hub unused-trim.ts).
+  trimName: "Unused skills and servers",
+  trimReason:
+    "Each Monday, counts what this project's sessions call and proposes unlisting what nobody has called in 30 days.",
+  trimLabel: "Caw suggests a routine",
+  trimTurnOn: "Turn on",
+  trimNotNow: "Not now",
+  refusedTrimOn: (why: string) => `The routine wasn't turned on. ${why}`,
+  refusedTrimNotNow: (why: string) => `The suggestion is still here. ${why}`,
+
+  // A trim's approval: what leaves a starting set, as a table (core
+  // permission-presentation.ts `unlisted`).
+  unlistSummary: (count: number, set: string) =>
+    `Unlist ${count} ${count === 1 ? "item" : "items"} from ${set}`,
+  unlistDetail: (skills: number, servers: number) =>
+    `${skills > 0 ? `${skills} ${skills === 1 ? "skill" : "skills"}` : ""}${skills > 0 && servers > 0 ? " and " : ""}${servers > 0 ? `${servers} ${servers === 1 ? "server" : "servers"}` : ""} ${skills + servers === 1 ? "leaves" : "leave"} it. Each stays installed.`,
+  /** A starting set, as a trim's approval names it. */
+  projectSet: (project: string) => `${project}'s starting set`,
+  typeSet: (type: string) => `the ${type} type's starting set`,
+  unlistedCaption: (days: number) =>
+    `What leaves the set, by its sessions' calls in the last ${days} days`,
+  columnItem: "Skill or server",
+  columnLastCall: "Last call",
+  columnSessions: "Sessions",
+  kindSkill: "Skill",
+  kindServer: "Server",
+  noCallIn: (days: number) => `None in ${days} days`,
+
+  // Configure › Skills: the fleet's switch for the routine.
+  fleetTrimLabel: "Find unused skills and servers in every project",
+  fleetTrimHint:
+    "Turns the weekly routine on in each project, and adds a fleet-wide run that proposes turning off what every machine has installed and no project called. Nothing changes until you approve.",
+  refusedFleetTrim: (why: string) => `The switch didn't change. ${why}`,
+
   /** How long ago (rules.ts `since`): under a minute, then minutes, hours, days. */
   justNow: "just now",
   ago: (span: string) => `${span} ago`,
@@ -293,4 +328,7 @@ export const routineToolWords = {
   /** The memory curator routine's target is the hub's. */
   curatorStays:
     "The memory curator routine is the hub's: its target stays curator.",
+  /** The unused skills and servers routine's target is the hub's too. */
+  trimStays:
+    "The unused skills and servers routine is the hub's: its target stays trim.",
 };

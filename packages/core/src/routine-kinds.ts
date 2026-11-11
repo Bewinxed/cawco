@@ -4,16 +4,19 @@ export const ROUTINE_TARGETS = [
   "orchestrator",
   "conversation",
   "curator",
+  "trim",
 ] as const;
 /**
  * What a run starts: a fresh delegate, a fresh orchestrator (a session that
  * may delegate, in the project's checkout: routines.ts `fireOrchestrator`),
- * a message to the project's conversation, Caw, or the project's memory curator
- * (memory.ts), a delegate in the `curator` role that only the hub makes.
+ * a message to the project's conversation, Caw, the project's memory curator
+ * (memory.ts), a delegate in the `curator` role that only the hub makes, or
+ * the unused skills and servers routine (hub unused-trim.ts), a delegate in
+ * the `trimmer` role that only the hub makes too.
  */
 export type RoutineTarget = (typeof ROUTINE_TARGETS)[number];
 
-/** The targets an agent may make a routine for: every one but the curator, which only the hub makes. */
+/** The targets an agent may make a routine for: every one but the curator and the trim, which only the hub makes. */
 export const MADE_ROUTINE_TARGETS = [
   "delegate",
   "orchestrator",

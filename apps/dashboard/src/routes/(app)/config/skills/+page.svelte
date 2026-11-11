@@ -9,6 +9,7 @@
     isLoopbackSource,
     type MarketplacePluginInfo,
   } from "@cawco/core/fleet";
+  import { routinesWords } from "@cawco/core/words/routines";
   import { skillsWords as words } from "@cawco/core/words/skills";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import {
@@ -34,6 +35,7 @@
   import SectionRow, {
     type RowNote,
   } from "#lib/cawco/config/SectionRow.svelte";
+  import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import {
@@ -60,6 +62,10 @@
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import {
+    readFleetTrim,
+    setFleetTrim,
+  } from "#lib/cawco/routines/routines-api.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -100,6 +106,36 @@
       cawco.machines.map((machine) => machine.fleet)
     )
   );
+
+  // The unused skills and servers routine in every project (hub
+  // unused-trim.ts): one switch, read from the hub; null until read.
+  let fleetTrim = $state<boolean | null>(null);
+  /** Why the hub refused the last flip, said under the switch until the next. */
+  let trimRefused = $state<string | null>(null);
+  /** A refused flip draws the switch again at the hub's word. */
+  let trimKey = $state(0);
+  $effect(() => {
+    if (cawco.status !== "connected") {
+      return;
+    }
+    readFleetTrim().then(
+      (read) => {
+        fleetTrim = read.on;
+      },
+      (error: unknown) => {
+        trimRefused = message(error);
+      }
+    );
+  });
+  async function flipTrim(next: boolean) {
+    try {
+      fleetTrim = (await setFleetTrim(next)).on;
+      trimRefused = null;
+    } catch (error) {
+      trimRefused = routinesWords.refusedFleetTrim(message(error));
+      trimKey += 1;
+    }
+  }
 
   let busy = $state<Record<string, boolean>>({});
   let browsing = $state<string | null>(null);
@@ -563,6 +599,20 @@
     {/if}
     {@render linkMarketplace("head")}
   {/snippet}
+
+  <div data-slot="group" class="flex flex-col gap-space-2">
+    {#key trimKey}
+      <SwitchField
+        checked={fleetTrim ?? false}
+        disabled={fleetTrim === null}
+        hint={routinesWords.fleetTrimHint}
+        id="fleet-trim"
+        label={routinesWords.fleetTrimLabel}
+        onchange={flipTrim}
+      />
+    {/key}
+    <RowFault data-setting-refusal="fleet-trim" reason={trimRefused} />
+  </div>
 
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconBolt} label={words.skills} />

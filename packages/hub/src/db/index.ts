@@ -300,6 +300,7 @@ import { type ToolCallKeysDb, toolCallKeysDb } from "./tool-call-keys";
 import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
 import { type TreeStopsDb, treeStopsDb } from "./tree-stops";
+import { type TrimDb, trimDb } from "./trim";
 import { type TurnCutsDb, turnCutsDb } from "./turn-cuts";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 import { closeWal, useWal } from "./wal";
@@ -2581,6 +2582,8 @@ export interface DbShape {
   readonly trayItemsOf: (sessionId: string, endedSince: Date) => WorkItemRow[];
   /** The stops that walk a delegation tree, a row per session until it ended (tree-stops.ts). */
   readonly treeStops: TreeStopsDb;
+  /** The unused skills and servers routine's suggestion answers and kept items (unused-trim.ts). */
+  readonly trim: TrimDb;
   /** Every turn the hub cut, and why (turn-cuts.ts). */
   readonly turnCuts: TurnCutsDb;
   /** Each completed turn's tokens, on the account it ran on. */
@@ -10550,6 +10553,7 @@ const make = async (path: string): Promise<DbShape> => {
     atLimit: atLimitDb(db),
     designChecks: designChecksDb(db),
     designOffers: designOffersDb(db),
+    trim: trimDb(db),
     lfsOffers: lfsOffersDb(db),
     blocks: blocksDb(db),
     decides: decidesDb(db, delegateTypes),

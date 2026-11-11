@@ -357,7 +357,8 @@ export const PERSON_AND_READ_TOOLS = [
  * role: `web-facing` a session that reads the outside world and so gets no
  * posting or admin tools, `overseer` fleet-watch
  * triage, `curator` a project's memory curator run (the hub starts it, never
- * a type). A row with none is a `delegate` when something delegated it, else
+ * a type), `trimmer` a run of the unused skills and servers routine (the hub
+ * starts it too, never a type). A row with none is a `delegate` when something delegated it, else
  * a `worker` (a session you or another session started).
  */
 export const SESSION_ROLES = [
@@ -366,6 +367,7 @@ export const SESSION_ROLES = [
   "overseer",
   "web-facing",
   "curator",
+  "trimmer",
 ] as const;
 export type SessionRole = (typeof SESSION_ROLES)[number];
 

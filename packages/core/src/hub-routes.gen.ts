@@ -877,6 +877,11 @@ export interface components {
         id: string | number;
       };
     };
+    "GET /api/projects/:id/trim-routine": {
+      path: {
+        id: string | number;
+      };
+    };
     "GET /api/projects/:id/views": {
       path: {
         id: string | number;
@@ -925,6 +930,7 @@ export interface components {
     "GET /api/stream-relay/try": Record<string, never>;
     "GET /api/tailnet-https": Record<string, never>;
     "GET /api/tools": Record<string, never>;
+    "GET /api/trim-routine/fleet": Record<string, never>;
     "GET /api/usage/limits": Record<string, never>;
     "GET /api/usage/limits/history": {
       query: {
@@ -2783,6 +2789,14 @@ export interface components {
         id: string | number;
       };
     };
+    "POST /api/projects/:id/trim-routine": {
+      body: {
+        answer: "on" | "dismissed";
+      };
+      path: {
+        id: string | number;
+      };
+    };
     "POST /api/projects/:id/view-requests": {
       body: {
         page?: "board" | "table" | "pipeline" | "routines";
@@ -3643,6 +3657,11 @@ export interface components {
       };
       path: {
         id: string | number;
+      };
+    };
+    "PUT /api/trim-routine/fleet": {
+      body: {
+        on: boolean;
       };
     };
     "PUT /git/:repo/info/lfs/objects/:oid": {
@@ -5350,6 +5369,7 @@ export interface components {
       /** @description For nudge and tell: what the steward or the person reads. */
       words?: string;
     };
+    "tool trim_propose": Record<string, never>;
     "tool update_machines": {
       check_only?: boolean;
       /** @description A machine id; every online machine when left out. */

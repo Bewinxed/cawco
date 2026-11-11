@@ -166,6 +166,7 @@ const targetWords = (routine: RoutineView): string => {
       return `an orchestrator${typed} in the project's checkout, which delegates its work`;
     case "delegate":
     case "curator":
+    case "trim":
       return `a delegate${typed}, lands ${routine.lands}`;
   }
 };

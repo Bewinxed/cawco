@@ -1,12 +1,14 @@
 /**
  * `bun scripts/type-roles-check.ts`: a project's delegate type file
  * (hub project-delegate-types.ts `typeFileProblem`) may name every session
- * role but `curator`. That role is the memory curator run's alone: the hub
- * starts it itself, and it denies shell, edit and web tools, so a type that
- * took it would give its sessions no shell.
+ * role but `curator` and `trimmer`. Those are the memory curator's run's and
+ * the unused skills and servers routine's run's alone: the hub starts each
+ * itself, and each denies shell, edit and web tools, so a type that took
+ * one would give its sessions no shell.
  *
  * - `role: curator` is refused with core words/delegate-types.ts
- *   `problemCuratorRole`, word for word.
+ *   `problemCuratorRole`, word for word; `role: trimmer` with
+ *   `problemTrimmerRole`.
  * - Every other role in core `SESSION_ROLES` makes a whole type.
  *
  * Run by `bun run check` (scripts/check.ts); it fails naming each role
@@ -22,8 +24,10 @@ const typeFile = (role: string) =>
 const wrong: string[] = [];
 for (const role of SESSION_ROLES) {
   const problem = typeFileProblem("delegates/keeper.md", typeFile(role));
-  const expected =
-    role === "curator" ? delegateTypesWords.problemCuratorRole : undefined;
+  const expected = {
+    curator: delegateTypesWords.problemCuratorRole,
+    trimmer: delegateTypesWords.problemTrimmerRole,
+  }[role as string];
   if (problem !== expected) {
     wrong.push(
       `role ${role}: expected ${expected ? `“${expected}”` : "a whole type"}, got ${problem ? `“${problem}”` : "a whole type"}`
@@ -36,5 +40,5 @@ if (wrong.length > 0) {
   process.exit(1);
 }
 console.log(
-  `type-roles-check: ${SESSION_ROLES.length} roles, curator refused, the rest whole`
+  `type-roles-check: ${SESSION_ROLES.length} roles, curator and trimmer refused, the rest whole`
 );
