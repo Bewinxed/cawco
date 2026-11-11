@@ -21,19 +21,27 @@
  *   version's row into view (`reveal`, read by Transcript as it reads
  *   `trayReveal`), and that block is marked for a moment (`marked`).
  */
+
+import { fnv1a } from "@cawco/core/fnv1a";
 import {
   type InlineBlockFence,
   inlineBlockSlug,
   inlineBlocksIn,
 } from "@cawco/core/inline-blocks";
 import type { ArtifactSummary } from "@cawco/core/protocol";
-import { getContext, setContext } from "svelte";
+import {
+  type Component,
+  type ComponentProps,
+  getContext,
+  setContext,
+} from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import type { SessionState } from "../client.svelte";
 import { artifactsOf, readArtifacts } from "../files/files.svelte";
 import { LIVE_REPLY as LIVE } from "../markdown-blocks";
 import { dur } from "../motion/curves.svelte";
 import type { Message } from "../types";
+import type InlineBlock from "./InlineBlock.svelte";
 
 /** Where a block stands in its conversation: its reply, and which fence of its name in it. */
 export interface BlockPlace {
@@ -78,7 +86,7 @@ const same = (a: BlockPlace, b: BlockPlace): boolean =>
 export const blockKey = (session: string, place: BlockPlace): string =>
   `${session}\u0000${place.at}\u0000${place.name}\u0000${place.nth}`;
 
-/** What the reader's screen keeps of one block, by its key. */
+/** What the reader's screen keeps of one block, by its key and its program. */
 interface Kept {
   /** Its replaced drawing, as plain markup: cloned in, never drawn again. */
   frozen?: Element;
@@ -87,12 +95,17 @@ interface Kept {
 }
 const kept = new Map<string, Kept>();
 
-/** A block's reader state: its height and its frozen drawing, kept outside its row. */
-export const keptOf = (key: string): Kept => {
-  let one = kept.get(key);
+/**
+ * A block's reader state: its height and its frozen drawing, kept outside
+ * its row, by its key and its program (a reply being written is `live` for
+ * every turn, so its place alone names more than one block).
+ */
+export const keptOf = (key: string, source: string): Kept => {
+  const at = `${key}\u0000${fnv1a(source).toString(36)}`;
+  let one = kept.get(at);
   if (!one) {
     one = {};
-    kept.set(key, one);
+    kept.set(at, one);
   }
   return one;
 };
@@ -219,7 +232,7 @@ export class ConversationBlocks {
           this.marked = null;
         }
       }, dur("--dur-panel"));
-    }, dur("--dur-mark-hold"));
+    }, dur("--dur-hold"));
   }
 }
 
@@ -233,3 +246,24 @@ export function provideInlineBlocks(blocks: ConversationBlocks): void {
 /** The conversation's blocks here, or none outside a transcript (a block there stays code). */
 export const inlineBlocksHere = (): ConversationBlocks | undefined =>
   getContext<ConversationBlocks | undefined>(KEY);
+
+/**
+ * InlineBlock, with the block library and lang-core's runtime it draws
+ * with, once the first block of the session has come near the view
+ * (TranscriptBlock): a transcript with no block loads none of it.
+ */
+export const loadedBlock = $state<{
+  InlineBlock: Component<ComponentProps<typeof InlineBlock>> | null;
+}>({ InlineBlock: null });
+let asked = false;
+
+/** Loads InlineBlock once; {@link loadedBlock} holds it when it has come. */
+export const loadInlineBlock = (): void => {
+  if (asked) {
+    return;
+  }
+  asked = true;
+  import("./InlineBlock.svelte").then((module) => {
+    loadedBlock.InlineBlock = module.default;
+  });
+};

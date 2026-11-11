@@ -42,7 +42,7 @@
 <div
   data-slot="msg"
   data-wrap={wrap === "pretty" ? "pretty" : undefined}
-  class="max-w-c-measure text-size-body leading-body font-normal text-ink-strong"
+  class="max-w-c-measure has-[[data-block-key]]:max-w-none text-size-body leading-body font-normal text-ink-strong"
 >
   <Markdown blocksAt={at} {fades} {said} {source} {streaming} />
 </div>
