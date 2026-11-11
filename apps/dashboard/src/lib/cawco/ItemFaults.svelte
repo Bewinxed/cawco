@@ -8,16 +8,20 @@
    * told and recoverable). 141 items that failed for one reason read as one
    * failure (niftybot.art, 2026-10-23).
    */
-  import type { FleetItemStatus } from "@cawco/core/fleet";
-  import { failureDetails, failureGroups, failureReason } from "./convergence";
+  import {
+    type FleetFault,
+    failureDetails,
+    failureGroups,
+    failureReason,
+  } from "./convergence";
   import RowFault from "./RowFault.svelte";
 
   let {
     items,
     retry,
   }: {
-    /** The machine's items as it reported each one; only the failed are drawn. */
-    items: readonly FleetItemStatus[];
+    /** The machine's items that didn't set up (convergence.ts `fleetFaults`). */
+    items: readonly FleetFault[];
     /** Sends these items again. */
     retry: (ids: string[]) => unknown;
   } = $props();

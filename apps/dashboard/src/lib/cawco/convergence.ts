@@ -195,6 +195,20 @@ function itemWords(id: string): string {
   }
 }
 
+/** A fleet item that didn't set up on its machine: what its fault line says it by. */
+export type FleetFault = Pick<FleetItemStatus, "error" | "id">;
+
+/** A machine's fleet items that didn't set up (`fleetItems`), each as its fault line reads it. */
+export function fleetFaults(
+  items: Record<string, FleetItemStatus> | undefined
+): FleetFault[] {
+  return Object.values(items ?? {}).flatMap((item) =>
+    item.state === "failed"
+      ? [{ id: item.id, ...(item.error ? { error: item.error } : {}) }]
+      : []
+  );
+}
+
 /**
  * A machine's failed items gathered by the cause it gave for each, the
  * group with most items first: 141 items that failed for one reason are one
@@ -204,14 +218,12 @@ export interface FailureGroup {
   /** What the machine said, word for word; `undefined` when it said nothing. */
   cause: string | undefined;
   /** The items, in their words' order. */
-  items: FleetItemStatus[];
+  items: FleetFault[];
 }
 
-export function failureGroups(
-  items: Iterable<FleetItemStatus>
-): FailureGroup[] {
+export function failureGroups(faults: readonly FleetFault[]): FailureGroup[] {
   const byCause = Map.groupBy(
-    [...items].filter((item) => item.state === "failed"),
+    faults,
     (item) => item.error?.trim() || undefined
   );
   return [...byCause]

@@ -17,6 +17,7 @@ import type {
   StoredRecent,
 } from "@cawco/core/protocol";
 import type { Machine, ProjectRow } from "./client.svelte";
+import { type FleetFault, fleetFaults } from "./convergence";
 import type { Area } from "./home/areas.svelte";
 
 /**
@@ -59,7 +60,9 @@ type FirstPaintRow = Pick<InstanceRow, (typeof ROW_KEYS)[number]>;
  * A machine's fields the first paint reads: who and where it is, its status
  * and build, its pause, and the faults its row says (its update, its last
  * fleet change, what a workspace there lacks). Not its harnesses, its fleet
- * report or each fleet item's converge, the most of a machine's row.
+ * report or each fleet item's converge, the most of a machine's row: the
+ * items that didn't set up go as their fault lines read them
+ * (`fleetFaults`).
  */
 const MACHINE_KEYS = [
   "machineId",
@@ -80,7 +83,10 @@ const MACHINE_KEYS = [
   "machineCapabilities",
 ] as const satisfies readonly (keyof Machine)[];
 
-type FirstPaintMachine = Pick<Machine, (typeof MACHINE_KEYS)[number]>;
+type FirstPaintMachine = Pick<Machine, (typeof MACHINE_KEYS)[number]> & {
+  /** Its fleet items that didn't set up (convergence.ts `fleetFaults`). */
+  fleetFaults: FleetFault[];
+};
 
 /** Recent's stored transcripts, the older sessions among them cut as every row is. */
 interface FirstPaintStored extends Omit<StoredRecent, "rows"> {
@@ -126,7 +132,10 @@ export function servedBoardOf(read: {
   return {
     areas: read.areas,
     instances: read.instances.map(firstPaintRow),
-    machines: read.machines.map((machine) => cut(machine, MACHINE_KEYS)),
+    machines: read.machines.map((machine) => ({
+      ...cut(machine, MACHINE_KEYS),
+      fleetFaults: fleetFaults(machine.fleetItems),
+    })),
     projects: read.projects,
     pulses: read.pulses,
     stored: { ...read.stored, rows: read.stored.rows.map(firstPaintRow) },

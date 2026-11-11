@@ -403,7 +403,7 @@
               : undefined}
           />
           <ItemFaults
-            items={Object.values(machine.fleetItems ?? {})}
+            items={cawco.fleetFaultsOf(machine.machineId)}
             retry={(ids) => retryFleetItems(machine.machineId, ids)}
           />
         {/if}

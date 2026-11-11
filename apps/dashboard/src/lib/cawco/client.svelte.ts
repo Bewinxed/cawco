@@ -197,6 +197,7 @@ import { activityOf, runningSubagents, sessionActivity } from "./activity";
 import { Keyed, Pulse, type PulseReading, unlessSame } from "./board.svelte";
 import { currentClientId } from "./client-id";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
+import { type FleetFault, fleetFaults } from "./convergence";
 import { type DelegateRecord, delegateRecord } from "./delegate-record";
 import { devDebug } from "./dev-debug";
 import type { ServedBoard } from "./first-paint";
@@ -9903,6 +9904,23 @@ export const cawco = {
   /** What the hub is running; `undefined` until its first frame. */
   get hubBuild() {
     return state.hubBuild;
+  },
+  /**
+   * A machine's fleet items that didn't set up, as its fault lines read
+   * them: the served board's until the socket's first snapshot, then its
+   * row's own (`fleetItems`).
+   */
+  fleetFaultsOf(machineId: string): FleetFault[] {
+    const served = servedLive();
+    if (served) {
+      return (
+        served.machines.find((one) => one.machineId === machineId)
+          ?.fleetFaults ?? []
+      );
+    }
+    return fleetFaults(
+      state.machines.find((one) => one.machineId === machineId)?.fleetItems
+    );
   },
   get onlineMachines() {
     return machinesNow().filter((machine) => machine.status === "online");
