@@ -16,7 +16,7 @@
    */
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { sidebarWords } from "@cawco/core/words/sidebar";
-  import { type Snippet, untrack } from "svelte";
+  import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -100,7 +100,7 @@
   let {
     onsearch,
     onfiles,
-    lead,
+    toggleRoom = false,
     narrow,
     sheet = false,
     scroller,
@@ -110,12 +110,13 @@
     /** Opens Files for the conversation on screen, from the phone's Files row (Shell owns its drawer). */
     onfiles?: () => void;
     /**
-     * What leads the header's row, at its leading edge: the desk's sidebar
-     * toggle, which the Shell draws here while the sidebar stands and in
-     * its top bar while it is away. The phone's sheet has its own Close and
-     * passes none.
+     * The desk's: its sidebar toggle stands over the header's leading
+     * corner, drawn by the Shell outside the rail (Shell `rail-toggle`), so
+     * the brand row is the top bar's height from the rail's top, centred on
+     * the bar's centre line as the toggle is, and leads with the toggle's
+     * room. The phone's sheet has its own Close and none.
      */
-    lead?: Snippet;
+    toggleRoom?: boolean;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
     /**
@@ -676,16 +677,21 @@
 >
   <!-- ────────────────────── header ──────────────────────── -->
 
-  <Sidebar.Header>
-    <!-- At the leading edge on a desk, the sidebar toggle; the wordmark; and in
-         the header's corner what is started from anywhere: a session
-         (⇧⌘N). Jump lives on the tab row (Shell), beside the conversations
-         it jumps between. -->
-    <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
-      <!-- The desk's one sidebar toggle, while the sidebar stands (Shell
-           `railToggle`): Start session's twin at the row's other end, the
-           same box and glyph size. -->
-      {@render lead?.()}
+  <Sidebar.Header bar={toggleRoom}>
+    <!-- At the leading edge on a desk, the sidebar toggle's room; the
+         wordmark; and in the header's corner what is started from anywhere:
+         a session (⇧⌘N). Jump lives on the tab row (Shell), beside the
+         conversations it jumps between. -->
+    <div
+      data-slot="sidebar-brand-row"
+      data-toggled={toggleRoom || undefined}
+      class="flex items-center gap-space-1 data-toggled:h-c-top-bar-h"
+    >
+      {#if toggleRoom}
+        <!-- The room the desk's sidebar toggle stands over (Shell
+             `rail-toggle`): as wide as its glass, one bar item in its pad. -->
+        <span aria-hidden="true" class="flex-none w-c-btn-h"></span>
+      {/if}
       <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton isActive={false} row="nav">
