@@ -7,13 +7,14 @@
  * open state and a payload) is the primitive: the glass holds the Root
  * (glide-tip.svelte), and each item's Tip is a trigger of it carrying its
  * words. Entering the glass, the tooltip fades in as every tooltip does
- * (DESIGN.md, Tooltip); only moving along it glides.
+ * (DESIGN.md, Tooltip); only moving along it glides, its place, size and
+ * words together (glide-tip.svelte).
  */
 import { Tooltip as TooltipPrimitive } from "bits-ui";
 import { createContext } from "svelte";
 
 /** What one item's tip says: its words, the strong line over them, its keys, and the side it stands on. */
-interface GlideWords {
+export interface GlideWords {
   keys?: string;
   label: string;
   side: "top" | "right" | "bottom" | "left";

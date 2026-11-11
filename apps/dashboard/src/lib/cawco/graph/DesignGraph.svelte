@@ -1034,6 +1034,14 @@
     stepSwap.swap([], path.indexOf(next) > at ? 1 : -1);
     keep(next, null);
   };
+  /** Keep `next` of the states file `file`, bringing that file in front first. */
+  const stepIn = (file: string, next: string) => {
+    if (file !== frontFile) {
+      setComparing(false);
+      chosenFile = file;
+    }
+    stepTo(next);
+  };
   /** A step along the component's path from the kept state, held at its ends. */
   const stepBy = (by: number) => {
     const next = path[Math.max(0, Math.min(path.length - 1, at + by))];
@@ -1306,32 +1314,56 @@
         </DropdownMenu.Trigger>
         <!-- The stepper stands at the drawing's foot, so its list opens
              upward, over the drawing (HIG, Toolbars: a bottom toolbar's
-             menus open above it). Each state its name, then what its agent
-             wrote of it, one line, quieter. -->
+             menus open above it). The states stand in sections as the
+             canvas has them: each states file under its section's name (its
+             `title`), and a file the canvas groups into several parts each
+             part under its own name (HIG, Menus: a section's title sets
+             its items apart). Each state is one block: its name, and under
+             it what its agent wrote of it, quieter, on up to two lines, so
+             one state's words never run into the next's (the owner's pin:
+             "the nested list is unreadable, no visual hierarchy"). A state
+             of another file brings that file in front. -->
         <BarMenu label={words.statesFace} rises width="titles">
-          <DropdownMenu.RadioGroup
-            onValueChange={(next: string) => stepTo(next)}
-            value={kept.state}
-          >
-            {#each path as id (id)}
-              {@const one = review.states[id]}
-              {#if one}
-                <DropdownMenu.RadioItem row="artifact" value={id}>
-                  <span class="flex min-w-0 flex-col gap-space-1" data-box>
-                    <span
-                      class="truncate type-label font-medium text-ink-strong"
-                      >{one.name}</span
-                    >
-                    {#if one.note}
-                      <span class="truncate type-meta text-ink-muted"
-                        >{one.note}</span
-                      >
+          {#each reviews as one, at (one.file)}
+            {#if at > 0}
+              <DropdownMenu.Separator />
+            {/if}
+            {#each one.machines as machine (machine.name)}
+              <DropdownMenu.Group>
+                <DropdownMenu.GroupHeading
+                  >{one.machines.length > 1
+                    ? machine.name
+                    : one.name}</DropdownMenu.GroupHeading
+                >
+                <DropdownMenu.RadioGroup
+                  onValueChange={(next: string) => stepIn(one.file, next)}
+                  value={one.file === review.file ? kept.state : ""}
+                >
+                  {#each machine.path as id (id)}
+                    {@const state = one.states[id]}
+                    {#if state}
+                      <DropdownMenu.RadioItem row="described" value={id}>
+                        <span
+                          class="flex min-w-0 flex-col gap-space-row"
+                          data-box
+                        >
+                          <span
+                            class="truncate type-label font-medium text-ink-strong"
+                            >{state.name}</span
+                          >
+                          {#if state.note}
+                            <span class="line-clamp-2 type-meta text-ink-muted"
+                              >{state.note}</span
+                            >
+                          {/if}
+                        </span>
+                      </DropdownMenu.RadioItem>
                     {/if}
-                  </span>
-                </DropdownMenu.RadioItem>
-              {/if}
+                  {/each}
+                </DropdownMenu.RadioGroup>
+              </DropdownMenu.Group>
             {/each}
-          </DropdownMenu.RadioGroup>
+          {/each}
         </BarMenu>
       </DropdownMenu.Root>
       <BarItem

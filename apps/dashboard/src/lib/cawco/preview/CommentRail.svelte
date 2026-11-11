@@ -260,7 +260,10 @@
    * under the finger and holds its scroll (`overscroll-contain`).
    */
   let rowsFit = $state(true);
+  /** The box the rows scroll in: a swap of lists starts the new one at its top (motion/list-swap). */
+  let rowsBox: HTMLElement | null = null;
   const rowsRun: Attachment<HTMLElement> = (node) => {
+    rowsBox = node;
     const read = () => {
       rowsFit = node.scrollHeight <= node.clientHeight;
     };
@@ -270,6 +273,7 @@
     rows.observe(node, { characterData: true, childList: true, subtree: true });
     read();
     return () => {
+      rowsBox = null;
       sized.disconnect();
       rows.disconnect();
     };
@@ -972,7 +976,8 @@
                 const order = lists.map((one) => one.value);
                 listSwap.swap(
                   [],
-                  order.indexOf(next) > order.indexOf(filter) ? 1 : -1
+                  order.indexOf(next) > order.indexOf(filter) ? 1 : -1,
+                  { scroller: rowsBox }
                 );
                 filter = next;
               }}

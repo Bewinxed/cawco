@@ -108,14 +108,6 @@
   [data-bits-floating-content-wrapper][data-hang="rises"] {
     @apply clip-block-end;
   }
-  /* A glass's one tooltip (glide-tip.svelte): once it has stood, its
-     wrapper slides to the next item rather than jumping. */
-  [data-bits-floating-content-wrapper]:has(> [data-glide-tip][data-gliding]) {
-    @variant motion-safe {
-      transition: transform var(--dur-control) var(--ease-drawer);
-    }
-  }
-
   /* vaul's own slide out (slideToBottom and its siblings) sets no fill
      mode, and bits-ui unmounts the sheet a frame after it finishes: that
      frame would paint the sheet back fully open. It holds the last frame. */

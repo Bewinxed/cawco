@@ -46,6 +46,8 @@ export class ListSwap<T> {
   dir = $state(1);
   #clear: ReturnType<typeof setTimeout> | undefined;
   #idle: ReturnType<typeof setTimeout> | undefined;
+  /** How far the list the swap took away was scrolled in its box, px: where it is held (`leaveView`). */
+  #leftAt = 0;
 
   /** `enter`: the first list staggers in too, rather than standing there. */
   constructor(enter = false) {
@@ -58,12 +60,29 @@ export class ListSwap<T> {
    * Replaces the shown list: `outgoing` leaves, the new rows enter. `keep`
    * is how many leaving rows animate (the rest are dropped at once), `hold`
    * how long the leaving layer stands.
+   *
+   * `scroller`: the box the lists scroll in. The new list starts at its own
+   * top, and the view leaving is held where it was drawn (`leaveView`, off
+   * the box's top by how far it was scrolled). Without it, the box kept the
+   * old list's scroll while both stood in it, so the new list came in that
+   * far down (out of sight when it was shorter) and jumped to its top as
+   * the old one went and the box's scroll was cut to the new list's height
+   * (the Comments card's Open and Resolved, the owner: "it layout shifts
+   * when swapping").
    */
   swap(
     outgoing: T[],
     dir: number,
-    { keep = LEAVING, hold = outMs() }: { keep?: number; hold?: number } = {}
+    {
+      keep = LEAVING,
+      hold = outMs(),
+      scroller,
+    }: { keep?: number; hold?: number; scroller?: HTMLElement | null } = {}
   ): void {
+    this.#leftAt = scroller?.scrollTop ?? 0;
+    if (scroller) {
+      scroller.scrollTop = 0;
+    }
     this.dir = dir > 0 ? 1 : -1;
     this.leaving = outgoing.slice(0, keep);
     this.gen += 1;
@@ -184,11 +203,12 @@ export class ListSwap<T> {
   /**
    * The outro of a whole view swapped for the next (a project's views, the
    * decisions list and a page): the view itself, held where it stood over
-   * the pane's top, inert, leaves as the first leaving row does.
+   * the pane's top (scrolled as it was, when the swap names its `scroller`),
+   * inert, leaves as the first leaving row does.
    */
   leaveView = (node: HTMLElement): TransitionConfig => {
     node.style.position = "absolute";
-    node.style.inset = "0 0 auto";
+    node.style.inset = `${-this.#leftAt}px 0 auto`;
     node.style.pointerEvents = "none";
     node.inert = true;
     node.setAttribute("aria-hidden", "true");
