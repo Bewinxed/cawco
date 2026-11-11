@@ -19,7 +19,7 @@
    * phone in the Comments sheet, Back leading), `changes` (Changed since you
    * looked over the page's foot), `long` (150 comments), `compose` (a
    * comment on the whole page being written), `more` (the head's More open,
-   * where the head has one), `view` (the canvas view's menu open), `mode`
+   * where the head has one), `mode`
    * (the mode's one-button form open, where the head draws it), `delete`
    * (comment 4's Delete pressed: its question under the card's bar),
    * `remove` (the artifacts menu's Remove pressed: its question in the menu),
@@ -52,12 +52,10 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { pressOutside } from "#lib/cawco/press-outside.js";
-  import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
   import ChangesTag from "#lib/cawco/preview/ChangesTag.svelte";
   import CommentComposer from "#lib/cawco/preview/CommentComposer.svelte";
   import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
   import CommentsButton from "#lib/cawco/preview/CommentsButton.svelte";
-  import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
   import type { RailList, RailSort } from "#lib/cawco/preview/comment-rows.js";
   import pageDesk from "#lib/cawco/preview/fixtures/title-bars-close-desk.webp";
   import pagePhone from "#lib/cawco/preview/fixtures/title-bars-close-phone.webp";
@@ -233,8 +231,6 @@
   const heldCount = $derived(pins.filter(pinHeld).length);
   const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
   let mode = $state<"interact" | "comment" | "draw">("interact");
-  /** A canvas's view (Map, Verify), standing for a component artifact's in the head. */
-  const view = new CanvasViewState(INSTANCE);
   /** Changed since you looked: five stops, the tour not started. */
   let tourAt = $state<number | null>(null);
   /** A comment on the whole page being written. */
@@ -393,7 +389,6 @@
     sort: '[data-slot="sort"]',
     more: '[data-slot="more"]',
     fold: '[data-slot="comment-rail"] [data-slot="more"]',
-    view: '[aria-label="Canvas view"]',
     mode: '[aria-label^="Mode:"]',
     artifacts: "[data-artifact-trigger]",
     remove: "[data-artifact-trigger]",
@@ -477,12 +472,6 @@
       ><IconPen /><span>Draw</span></DropdownMenu.RadioItem
     >
   </DropdownMenu.RadioGroup>
-{/snippet}
-{#snippet viewBar()}
-  <CanvasView {view} />
-{/snippet}
-{#snippet viewMenu()}
-  <CanvasView as="sub" {view} />
 {/snippet}
 {#snippet commentsBar()}
   <CommentsButton
@@ -658,17 +647,6 @@
           bar: openBar,
           menu: openMenu,
         },
-        ...(asked === "view"
-          ? [
-              {
-                key: "view",
-                priority: HEAD_PRIORITY.view,
-                bar: viewBar,
-                menu: viewMenu,
-                group: true,
-              },
-            ]
-          : []),
       ] satisfies HeadItem[]}
       label="Preview"
       mode="interact"

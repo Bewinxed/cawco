@@ -15,7 +15,7 @@ import type {
   SessionAttachments,
   ShownFailure,
 } from "@cawco/core/protocol";
-import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
+import type { SheetRead, StoryOp } from "@cawco/core/stage";
 import { hubFetch, hubRefusal } from "#lib/cawco/hub-read.js";
 import { goto } from "$app/navigation";
 import { currentClientId } from "./client-id";
@@ -296,24 +296,6 @@ export async function writeSheet(
         hubRequest("POST /api/instances/:id/artifacts/:artifact/sheet", {
           path: { id: instanceId, artifact: id },
           body: change,
-        })
-      )
-    )
-  ).json();
-}
-
-/** A component canvas's map: its component, what renders it and what it renders, each with its states and frames in miniature. */
-export async function fetchCanvasMap(
-  instanceId: string,
-  id: string,
-  component: string | null = null
-): Promise<CanvasMap> {
-  return (
-    await ok(
-      await hubFetch(
-        hubRequest("GET /api/instances/:id/artifacts/:artifact/map", {
-          path: { id: instanceId, artifact: id },
-          ...(component ? { query: { component } } : {}),
         })
       )
     )

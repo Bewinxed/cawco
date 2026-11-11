@@ -1268,34 +1268,16 @@ export interface DesignQuery {
   dir?: string;
   limit?: number;
   query?: string;
-  /** The panel's map, never the agent's: each card's frames in miniature, and each link's own counts, states files and frames. */
-  thumbs?: boolean;
 }
 
 /** A design map's page bounds. The design's numbers. */
 export const DESIGN_MAP_LIMITS = { limit: 50, max: 200 } as const;
 
-/** A component's frames as a browser last drew them, in miniature: each one's box on its canvas and its state, from its canvas's top left. */
-export interface DesignThumb {
-  frames: { h: number; state: FrameState; w: number; x: number; y: number }[];
-  /** The canvas the frames stand on: their union's extent. */
-  h: number;
-  w: number;
-}
-
-/** How many frames a thumbnail draws. Ours: a canvas's first rows read at a node's size; more is noise. */
-export const THUMB_FRAMES = 48;
-
 /** Where a component is used, or what it renders: the other component, and the call site when a draw saw it. */
 export interface DesignLink {
   at: string | null;
-  /** With `thumbs`: its own frames drawn, states, states files and thumbnail. */
-  drawn?: number;
   file: string;
   name: string;
-  states?: number;
-  statesFiles?: string[];
-  thumb?: DesignThumb | null;
 }
 
 /** A component in the library, as the map answers it: counts, or its card. */
@@ -1319,32 +1301,7 @@ export interface DesignCard {
     label: string | null;
     name: string;
   }[];
-  /** With `thumbs`: its frames in miniature; null before a browser drew them. */
-  thumb?: DesignThumb | null;
   usedIn: number | DesignLink[];
-}
-
-/** One component on a canvas's map: what it is, where it is called, and its states as drawn. */
-export interface CanvasMapNode {
-  /** Where it is called from the canvas's component (made of) or where it calls it (used in); null when no draw saw it. */
-  at: string | null;
-  /** Frames a browser drew of its states. */
-  drawn: number;
-  file: string;
-  name: string;
-  /** Stories across its states files. */
-  states: number;
-  /** Its states files, from the toolchain root, as a canvas address names them; none, it has no canvas to draw live. */
-  statesFiles: string[];
-  /** Its frames as last drawn, in miniature; null before a browser drew them. */
-  thumb: DesignThumb | null;
-}
-
-/** A component canvas's map (component canvas §3c): its component, what renders it above, what it renders below. */
-export interface CanvasMap {
-  center: CanvasMapNode;
-  madeOf: CanvasMapNode[];
-  usedIn: CanvasMapNode[];
 }
 
 /** A page of the design map. */

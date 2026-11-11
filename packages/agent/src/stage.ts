@@ -1680,7 +1680,6 @@ export async function stageComponents(
     cursor: ask.cursor,
     limit: ask.limit === undefined ? undefined : String(ask.limit),
     detailed: ask.detailed ? "1" : undefined,
-    thumbs: ask.thumbs ? "1" : undefined,
   })) {
     if (value) {
       query.set(key, value);
@@ -1700,9 +1699,6 @@ export async function stageComponents(
           ...one,
           file: fromClone(one.file),
           at: one.at && fromClone(one.at),
-          ...(one.statesFiles
-            ? { statesFiles: one.statesFiles.map(fromClone) }
-            : {}),
         }))
       : value;
   return {

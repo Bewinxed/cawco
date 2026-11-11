@@ -779,10 +779,8 @@
     --c-canvas-skeleton-w: 240px;
     /* A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (the artifact panel's surface brief, Artifact panel, canvas and ink; Skeleton). */
     --c-canvas-skeleton-h: 96px;
-    /* An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (the artifact panel's surface brief, Artifact panel, canvas and ink). */
+    /* An edge's stroke on a graph canvas, from one card to the next (the artifact panel's surface brief, Artifact panel, canvas and ink). */
     --c-graph-edge: 1.5px;
-    /* A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (the artifact panel's surface brief, Artifact panel, canvas and ink). */
-    --c-map-node-w: 264px;
     /* The design graph's room beside its stage on a desk (DESIGN.md, Artifact panel, canvas and ink; the graph's surface brief): a state's name and its one-line note at the body size beside its glyph cell and its marks, and a clip's row with its bar under its name, without wrapping a typical note past two lines. */
     --c-graph-room-w: 400px;
     /* A state in the design graph's whole set (Svelte Flow node): its name in the label role and its note in meta over two lines, at 1:1 so no type renders under 12px; four across a desk room past 900px. */

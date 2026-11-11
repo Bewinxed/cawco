@@ -2,8 +2,7 @@
   /**
    * The whole set's cards at their real height (WholeSet): once Svelte Flow
    * has measured its nodes, each state card's height goes to the map, which
-   * lays the cards and their groups out by them (as the canvas's map takes
-   * its rows' height, MapFit). It reads the nodes as they are measured,
+   * lays the cards and their groups out by them. It reads the nodes as they are measured,
    * never the view.
    */
   import { useNodesInitialized, useSvelteFlow } from "@xyflow/svelte";

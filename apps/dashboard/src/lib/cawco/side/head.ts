@@ -28,7 +28,7 @@ export interface HeadItem {
   compact?: Snippet;
   /** Its count, said on More while this stands in it and only above 0 (Comments' open pins), beside its own `glyph` so More says what it counts, under the name `of` gives it. */
   count?: { glyph: Component; n: number; of: string };
-  /** More rules it off from its neighbours: a group of entries (the mode, the canvas view). */
+  /** More rules it off from its neighbours: a group of entries (the mode). */
   group?: boolean;
   key: string;
   /** The same control as More's entries. */
@@ -49,7 +49,7 @@ export interface HeadItem {
   words?: boolean;
 }
 
-/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, its address, Send, the mode, Comments, Expand, Reload, the canvas view, Undock, Open in new tab). The panel offers no New canvas: a canvas is made from the composer. */
+/** The order the controls give up the head, first kept first (a browser's Take over or Hand back, its address, Send, the mode, Comments, Expand, Reload, Undock, Open in new tab). The panel offers no New canvas: a canvas is made from the composer. */
 export const HEAD_PRIORITY = {
   control: 0,
   address: 1,
@@ -58,9 +58,8 @@ export const HEAD_PRIORITY = {
   comments: 4,
   expand: 5,
   reload: 6,
-  view: 7,
-  undock: 8,
-  open: 9,
+  undock: 7,
+  open: 8,
 } as const;
 
 /** The name keeps its own width up to this, in px, before any control stands. */

@@ -14,7 +14,7 @@
  * saves and compile errors go the same way once quiet {@link MARKS_QUIET_MS}.
  */
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { join, relative } from "node:path";
 import {
   type AgentRow,
   ARTIFACT_NAME,
@@ -149,13 +149,10 @@ import type {
 import {
   type CanvasDial,
   type CanvasEdge,
-  type CanvasMap,
-  type CanvasMapNode,
   type CanvasShapes,
   type CanvasSpec,
   canvasOf,
   canvasPath,
-  type DesignLink,
   type DesignMap,
   type DesignQuery,
   type EmbedShape,
@@ -920,9 +917,6 @@ const cursorOf = (row: ArtifactRow): string =>
   `${row.createdAt.getTime().toString(36)}.${row.id}`;
 
 const CURSOR = /^([0-9a-z]{1,12})\.([0-9a-f-]{36})$/u;
-/** A path's parts, by either separator: a map's component that climbs out of its toolchain root (`..`) is refused. */
-const PATH_PARTS = /[\\/]/u;
-
 /**
  * The {@link LIST_PAGE} rows of `rows` (sorted {@link newestFirst}) after
  * `cursor`, and the cursor after them. Keyed on the last row shown, not a
@@ -2835,7 +2829,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Artifact `id` for a look that changes nothing (a show, a view's word that
-   * it has it, a canvas's map): the session's own, one it made, or another
+   * it has it): the session's own, one it made, or another
    * session's of its delegation tree ({@link inTree}); refused as not there
    * otherwise. Every change keeps to {@link own}.
    */
@@ -9031,86 +9025,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /** `design_map`: the session's workspace's components, paged, or one component's card (agent stage.ts `stageComponents`). */
     designMap: (instanceId: string, ask: DesignQuery): Promise<DesignMap> =>
       deps.stageComponents({ session: sessionOf(instanceId) }, ask),
-
-    /**
-     * A component canvas's map for its panel: the component its states file
-     * mounts, with what renders it (used in) and what it renders (made of),
-     * each with its states, frames drawn, states files and frames in
-     * miniature, read on the workspace its stage runs in. `front`: the
-     * component its design graph has in front (another states file's, from
-     * the toolchain root), which the map then centres on; a path that
-     * leaves the toolchain root is no component of it.
-     */
-    mapOf: async (
-      instanceId: string,
-      id: string,
-      front?: string
-    ): Promise<CanvasMap> => {
-      const row = viewable(sessionOf(instanceId), id);
-      const sheet = sheetOf(row);
-      const first = (
-        docs.doc(row.id).getMap("meta").get("sheet") as SheetRead | undefined
-      )?.meta.component;
-      if (
-        front &&
-        (isAbsolute(front) || front.split(PATH_PARTS).includes(".."))
-      ) {
-        throw new ArtifactRefusal(
-          400,
-          `${front} is no component of ${row.name}'s toolchain.`
-        );
-      }
-      const component = front ?? first;
-      if (!(sheet && component)) {
-        throw new ArtifactRefusal(
-          409,
-          sheet
-            ? `${row.name}'s states file names no component the stage resolved, so it has no map.`
-            : `${row.name} is a ${row.kind}: a map is a component canvas's.`
-        );
-      }
-      const [card] = (
-        await deps.stageComponents(
-          { workspace: sheet.workspace },
-          {
-            dir: sheet.dir,
-            component: join(sheet.dir, component),
-            thumbs: true,
-          }
-        )
-      ).components;
-      if (!card) {
-        throw new ArtifactRefusal(
-          409,
-          `${component} is no component the stage maps.`
-        );
-      }
-      // States files as a canvas address names them: from the toolchain root.
-      const ownFiles = (files: string[] | undefined) =>
-        (files ?? []).map((file) => relative(sheet.dir, file));
-      const node = (link: DesignLink): CanvasMapNode => ({
-        name: link.name,
-        file: link.file,
-        at: link.at,
-        states: link.states ?? 0,
-        drawn: link.drawn ?? 0,
-        statesFiles: ownFiles(link.statesFiles),
-        thumb: link.thumb ?? null,
-      });
-      return {
-        center: {
-          name: card.name,
-          file: card.file,
-          at: null,
-          states: card.states,
-          drawn: card.drawn,
-          statesFiles: ownFiles(card.statesFiles),
-          thumb: card.thumb ?? null,
-        },
-        usedIn: Array.isArray(card.usedIn) ? card.usedIn.map(node) : [],
-        madeOf: Array.isArray(card.madeOf) ? card.madeOf.map(node) : [],
-      };
-    },
 
     /**
      * The artifact's doc as a person's view reads it (the dashboard pane's

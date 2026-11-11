@@ -125,12 +125,6 @@
  * 19. The sidebar's theme switch, with no reload, turns the canvas frame's
  *     `color-scheme` from light to dark, and the frame's own
  *     `prefers-color-scheme: dark` from false to true.
- * 20. A real held press on the canvas view stands it `data-pressed` in the
- *     press tint (`surface-pressed`), moving nothing, and lets it go on
- *     release; its menu opens on the press and stays open. A bar item stands
- *     grouped in its glass, so it tints and never scales (DESIGN.md, The
- *     Press Rule: "anything wide or grouped … tints to `surface-pressed`
- *     and moves nothing"; the surface brief: "a press tints").
  * 22. Once the panel has opened (its stage sized a frame at a time), the
  *     drawing stands in the middle of the design graph's stage, at the desk
  *     and at 390: measured once the drawing holds still, never mid-move.
@@ -145,10 +139,6 @@
  *     description it is read out with and its menu's first row; the title
  *     stands once across the panel and its canvas page, its slug in
  *     neither, and no text in either holds `/@cawco/`.
- * 24. The hub's map of that canvas (`GET …/artifacts/:id/map`, what the
- *     panel's Map reads) answers Card in the middle with its states, its
- *     states file from the toolchain root, and its frames' thumbnail from
- *     the panel's draw; nothing renders it and it renders nothing.
  *
  * A canvas past its stage's time (artifact purpose spec §2.5, the owner's
  * "am i supposed to do anything here? been ages"):
@@ -220,7 +210,6 @@ import {
 } from "../../../packages/core/src/process-identity";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import {
-  type CanvasMap,
   type SectionUndrawn,
   STAGE_ENSURE,
   STAGE_READY_MS,
@@ -961,7 +950,6 @@ const HEAD_ORDER = [
   "send",
   "undock",
   "open",
-  "view",
   "inspect",
   "mode",
   "comments",
@@ -1075,28 +1063,6 @@ const schemeOf = async (page: Page) => {
       : null,
   };
 };
-
-/**
- * The canvas view's trigger as a held press leaves it: `data-pressed`, its
- * transform, whether its fill is the press tint (`surface-pressed` as the
- * trigger's own scheme resolves it, read off a swatch set inside it for the
- * read and taken out), whether it is expanded and a menu stands.
- */
-const pressOf = (page: Page, selector: string) =>
-  page.locator(selector).evaluate((el) => {
-    const swatch = document.createElement("span");
-    swatch.style.backgroundColor = "var(--surface-pressed)";
-    el.append(swatch);
-    const tint = getComputedStyle(swatch).backgroundColor;
-    swatch.remove();
-    return {
-      pressed: el.getAttribute("data-pressed"),
-      transform: getComputedStyle(el).transform,
-      tinted: getComputedStyle(el).backgroundColor === tint,
-      expanded: el.getAttribute("aria-expanded"),
-      menu: !!document.querySelector('[role="menu"]'),
-    };
-  });
 
 /**
  * The canvas's name, title and ask in legs 18 and 23: words no other text
@@ -1259,7 +1225,7 @@ const describedWrong = (read: Awaited<ReturnType<typeof describedOf>>) => {
   ].filter(Boolean);
 };
 
-/** Legs 18 to 24: the first session's card in its panel on the dashboard. */
+/** Legs 18 to 23: the first session's card in its panel on the dashboard. */
 async function panelLegs(
   kit: Kit,
   call: (n: string, name: string, input: object) => Promise<string>,
@@ -1268,7 +1234,7 @@ async function panelLegs(
 ): Promise<void> {
   // The page open first, so the canvas the session makes stands in its panel.
   const desk = await panelPage(kit, base, session, "desk", "light");
-  const made = await call("18", "mcp__cawco__artifact_create", {
+  await call("18", "mcp__cawco__artifact_create", {
     kind: "component",
     name: PANEL_NAME,
     file: STORY,
@@ -1340,49 +1306,6 @@ async function panelLegs(
     `light ${JSON.stringify(light)}; dark ${JSON.stringify(dark)}; ${stayed ? "no reload" : "reloaded"}`
   );
 
-  // 20. A real held press on the canvas view, once leg 19's theme switch is
-  // over: its cross-fade is a view transition of the root, and while it runs
-  // its `::view-transition` takes every press ("The view transition fills
-  // the viewport and captures clicks", CSSWG, w3c/csswg-drafts#8278). The
-  // frame's scheme turns ~160ms into the switch's ~400ms, so a press made
-  // the moment leg 19 read it landed on the fade, by the race's luck.
-  await desk.waitForFunction(
-    () => !document.documentElement.hasAttribute("data-theme-flip")
-  );
-  const trigger = `${PANE} [data-head-item="view"] [aria-label="Canvas view"]`;
-  const box = await desk.locator(trigger).boundingBox();
-  const before = await pressOf(desk, trigger);
-  let held = before;
-  let settled = before;
-  if (box) {
-    await desk.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await desk.mouse.down();
-    await desk.waitForTimeout(60);
-    held = await pressOf(desk, trigger);
-    await desk.waitForTimeout(400);
-    settled = await pressOf(desk, trigger);
-    await desk.mouse.up();
-  }
-  await desk.waitForTimeout(300);
-  const released = await pressOf(desk, trigger);
-  kit.check(
-    "20: a held press on the canvas view stands it data-pressed in the press tint, moving nothing, lets it go on release, and its menu opens on the press and stays open",
-    before.pressed === null &&
-      !before.tinted &&
-      held.pressed === "true" &&
-      held.expanded === "true" &&
-      held.menu &&
-      settled.pressed === "true" &&
-      settled.tinted &&
-      [before, held, settled, released].every(
-        (one) => one.transform === "none"
-      ) &&
-      released.pressed === null &&
-      released.expanded === "true" &&
-      released.menu,
-    `before ${JSON.stringify(before)}; 60ms ${JSON.stringify(held)}; 460ms ${JSON.stringify(settled)}; released ${JSON.stringify(released)}`
-  );
-  await desk.keyboard.press("Escape");
   const described = { desk: await describedOf(desk) } as Record<
     string,
     Awaited<ReturnType<typeof describedOf>>
@@ -1435,36 +1358,6 @@ async function panelLegs(
         ])
       )
     )
-  );
-
-  // 24. The hub's map of the canvas, read as the panel's Map reads it.
-  const madeId = made.match(ID)?.[1];
-  const mapRead = madeId
-    ? await desk.evaluate(
-        async (request) => {
-          const answer = await fetch(request.path, request);
-          return {
-            status: answer.status,
-            body: (await answer.json().catch(() => null)) as CanvasMap | null,
-          };
-        },
-        hubRequest("GET /api/instances/:id/artifacts/:artifact/map", {
-          path: { id: session, artifact: madeId },
-        })
-      )
-    : null;
-  const center = mapRead?.body?.center;
-  kit.check(
-    "24: the hub's map of the canvas answers Card in the middle with its states, its states file from the toolchain root and its frames' thumbnail, nothing above or below it",
-    mapRead?.status === 200 &&
-      center?.name === "Card" &&
-      center.file === "src/Card.svelte" &&
-      center.statesFiles.includes(STORY) &&
-      center.states >= 1 &&
-      (center.thumb?.frames.length ?? 0) > 0 &&
-      mapRead.body?.usedIn.length === 0 &&
-      mapRead.body?.madeOf.length === 0,
-    JSON.stringify(mapRead).slice(0, 800)
   );
 }
 

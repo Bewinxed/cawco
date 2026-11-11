@@ -3,7 +3,7 @@
    * The whole set (spec, The whole set): every state of every machine and
    * every move between them on one map that pans and zooms, for judging
    * whether the set is complete. On Svelte Flow, as the project's Canvas
-   * and the canvas's map are, with their dots and zoom tools.
+   * is, with its dots and zoom tools.
    *
    * Each machine is a group round its cards (MachineNode), each state a
    * card (StateNode), laid out by dagre (layout.ts) from the cards'

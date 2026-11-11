@@ -64,8 +64,6 @@ export class StageLink {
   presses = $state(0);
   /** The state the graph keeps, as the page names it: the Dials card's props follow its story. Null until the graph has a state. */
   kept = $state<StateRef | null>(null);
-  /** The states file of the component the graph has in front; null until it has one. The panel's other views (Canvas view's Map) stand on it. */
-  front = $state<string | null>(null);
   /** A story the person added on the Dials card (Save as new state), by its states file: the graph keeps its state, then lets it go. */
   wanted = $state<{ file: string; story: string } | null>(null);
   /** The Compare the graph last asked for; null while it doesn't compare. */

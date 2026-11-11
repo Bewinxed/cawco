@@ -1188,8 +1188,7 @@
    link reaches the 24px pointer floor (DESIGN.md, The 24 Pointer Rule) and
    its ring sits on its own box. @xyflow's sheet is in `vendor`, under this. */
 @layer components {
-  :is([data-slot="view-canvas"], [data-slot="canvas-map"])
-    .svelte-flow__attribution {
+  [data-slot="view-canvas"] .svelte-flow__attribution {
     --xy-attribution-background-color: transparent;
     font: var(--type-meta);
 

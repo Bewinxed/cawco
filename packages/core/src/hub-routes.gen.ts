@@ -573,15 +573,6 @@ export interface components {
         width?: number | string;
       };
     };
-    "GET /api/instances/:id/artifacts/:artifact/map": {
-      path: {
-        artifact: string | number;
-        id: string | number;
-      };
-      query?: {
-        component?: string;
-      };
-    };
     "GET /api/instances/:id/artifacts/:artifact/view": {
       path: {
         artifact: string | number;

@@ -476,10 +476,6 @@
       keepUnder(key, held);
     }
   });
-  // The component in front, said on the line: the panel's other views (Canvas view's Map) stand on it too.
-  $effect(() => {
-    link.front = frontFile;
-  });
   /**
    * The width he drew the stage at: Adapt (the room the stage has, its
    * default: the owner, "by default u should pin the size to adapt then the

@@ -185,13 +185,11 @@
   import BrowserView from "./BrowserView.svelte";
   import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
   import { browserHead } from "./browser-head";
-  import CanvasView from "./CanvasView.svelte";
   import ChangeLines, { type ChangeLine } from "./ChangeLines.svelte";
   import ChangesTag from "./ChangesTag.svelte";
   import CommentRail from "./CommentRail.svelte";
   import CommentsButton from "./CommentsButton.svelte";
   import CoverState, { type CoverWaiting } from "./CoverState.svelte";
-  import { CanvasViewState } from "./canvas-view.svelte";
   import type { CommentDrafts } from "./comment-drafts.svelte";
   import {
     commentAttachments,
@@ -202,7 +200,6 @@
   import { loadedPanes } from "./loaded.svelte";
   import ModeButton from "./ModeButton.svelte";
   import ModeSwitch from "./ModeSwitch.svelte";
-  import CanvasMap from "./map/CanvasMap.svelte";
   import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
   import PlacePick from "./PlacePick.svelte";
@@ -3922,14 +3919,6 @@
   }
   /** What a component artifact's design graph hands the head: its state's title, its steps, its view, its components (graph-head.ts). */
   let graphHead = $state<GraphHead | null>(null);
-  /** A component artifact's view in the title's menu (Map, Verify). */
-  const canvasView = $derived.by(() => {
-    const session = instanceId;
-    // Built untracked: the view depends on the session and the kind alone,
-    // never on the state it holds (nightly 4202's crash was a view's effect
-    // re-running on the state it wrote).
-    return isSheet ? untrack(() => new CanvasViewState(session)) : null;
-  });
   /**
    * A component artifact's design graph's line to its stage page: what the
    * page said (its sheets, its drawing, its answers), and what the graph
@@ -4045,11 +4034,10 @@
       });
     }
     // What acts on an artifact as a whole (the design graph's components
-    // and view, Undock, a canvas's view) stands in the head's More, last in
+    // and view, Undock) stands in the head's More, last in
     // the glass; More stands only while it holds one of them, never as an
     // empty menu (a page or a preview has none of the graph's).
-    const documentMenu =
-      !!artifact && (!!graphHead || canUndock || !!canvasView);
+    const documentMenu = !!artifact && (!!graphHead || canUndock);
     if (canUndock && !documentMenu) {
       all.push({
         key: "undock",
@@ -4330,9 +4318,6 @@
   {/if}
   {#if canUndock}
     {@render undockMenu()}
-  {/if}
-  {#if canvasView}
-    <CanvasView as="items" view={canvasView} />
   {/if}
 {/snippet}
 
@@ -4872,19 +4857,6 @@
         <CoverState waiting={stageWaiting} />
       {/if}
     </div>
-    {#if canvasView?.map && artifact && isSheet}
-      <!-- Map mode: the canvas's component among what renders it and what it renders, over the page, which stays loaded under it. -->
-      <CanvasMap
-        address={paneOrigin ? `${paneOrigin}${startAt}` : null}
-        artifactId={artifact.id}
-        component={link?.front
-          ? (link.sheets[link.front]?.meta.component ?? null)
-          : null}
-        {instanceId}
-        ready={loaded}
-        revision={preview?.revision ?? ""}
-      />
-    {/if}
     {#if compileErrors.length > 0}
       {@const first = compileErrors[0]}
       <!-- The last good render stays under it, dimmed; the session is told of it on its own. -->
