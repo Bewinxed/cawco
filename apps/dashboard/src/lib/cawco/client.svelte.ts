@@ -78,10 +78,16 @@ import type {
   PermissionUpdate,
   SendRecord,
   SessionEffort,
+  StoredRun,
   SupportedCommands,
   WorkspaceHolding,
 } from "@cawco/core/harness";
-import { CONTROL_SUPPORTED_COMMANDS } from "@cawco/core/harness";
+import {
+  CONTROL_STORED_RUN,
+  CONTROL_SUPPORTED_COMMANDS,
+  isEffortLevel,
+  WIRE_PERMISSION_MODES,
+} from "@cawco/core/harness";
 import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { LandsMode } from "@cawco/core/injected";
 import type { LawBroken } from "@cawco/core/invariant";
@@ -172,6 +178,7 @@ import { offerWords } from "@cawco/core/words/offers";
 import { projectWords } from "@cawco/core/words/project";
 import { projectEndWords } from "@cawco/core/words/project-ends";
 import { sidebarWords } from "@cawco/core/words/sidebar";
+import { transcriptWords } from "@cawco/core/words/transcript";
 import { workWords } from "@cawco/core/words/work";
 import { flushSync, untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
@@ -1477,13 +1484,49 @@ type BenchHub = (
 ) => void;
 let benchHub: BenchHub | null = null;
 /** What a bench's hub does with a start ({@link start}): it opens the row, as the hub does when it takes one. */
-type BenchSpawn = (machineId: string, spawn: NamedSpawn) => void;
+type BenchSpawn = (
+  machineId: string,
+  spawn: NamedSpawn
+) => void | Promise<void>;
 let benchSpawn: BenchSpawn | null = null;
+/** What a bench's machines answer a control with ({@link machineControl}). */
+type BenchControl = (
+  machineId: string,
+  method: string,
+  args: unknown[]
+) => unknown;
+let benchControl: BenchControl | null = null;
+
+/**
+ * A command a bench's hub answers in place of the wire (dev only): true
+ * when one stands. A send's row is drawn as every send's is.
+ */
+function benchTook(
+  instanceId: string,
+  kind: CommandKind,
+  intent: unknown,
+  commandId: string
+): boolean {
+  if (!(import.meta.env.DEV && benchHub)) {
+    return false;
+  }
+  if (kind === "send") {
+    const { text, extras, replaces } = intent as CommandIntents["send"];
+    noteSendSubmitted(instanceId, text, extras ?? {}, commandId, replaces);
+  }
+  benchHub(instanceId, kind, intent);
+  return true;
+}
 
 /** Stands the page on a bench's hub: the socket closed, the hub said reached (dev only). */
-function standHub(answer: BenchHub, spawn: BenchSpawn | null = null): void {
+function standHub(
+  answer: BenchHub,
+  spawn: BenchSpawn | null = null,
+  control: BenchControl | null = null
+): void {
   benchHub = answer;
   benchSpawn = spawn;
+  benchControl = control;
   globalThis.__cawcoDisposing = true;
   teardown();
   state.status = "connected";
@@ -1498,6 +1541,7 @@ function standHub(answer: BenchHub, spawn: BenchSpawn | null = null): void {
 function leaveHub(): void {
   benchHub = null;
   benchSpawn = null;
+  benchControl = null;
   connect();
 }
 
@@ -4677,9 +4721,7 @@ export function submitCommand<K extends CommandKind>(
    */
   commandId = newId()
 ): string {
-  // A bench's hub answers it in place of the wire (dev only).
-  if (import.meta.env.DEV && benchHub) {
-    benchHub(instanceId, kind, intent);
+  if (benchTook(instanceId, kind, intent, commandId)) {
     return commandId;
   }
   // Everything below either reaches the ledger or becomes a record in it;
@@ -6376,7 +6418,7 @@ async function start({
   let taken: Bounded<void>;
   if (import.meta.env.DEV && benchSpawn) {
     // A bench's hub takes the start in place of the wire (dev only).
-    benchSpawn(machineId, payload);
+    await benchSpawn(machineId, payload);
     taken = { kind: "answered", value: undefined };
   } else {
     try {
@@ -6614,6 +6656,142 @@ export function withdrawFirstPrompt(
   return held;
 }
 
+/**
+ * What a stored transcript's first send resumes it with: what its machine
+ * read it ran with (core `StoredRun`), under what the person picked in its
+ * tab's details since. A value nothing names is null, and the resume names
+ * none: its harness takes its own, as resuming it there would.
+ */
+export interface ResumePlan {
+  /** The account it starts on; null: the machine's own sign-in, which the hub places. */
+  account: string | null;
+  effort: EffortLevel | null;
+  model: string | null;
+  permissionMode: PermissionMode | null;
+  /** What its machine read, each value with where it was read; null until it has answered. */
+  run: StoredRun | null;
+}
+
+/** What each stored transcript ran with, as its machine answered, by its harness key. */
+const storedRuns = $state<Record<string, StoredRun>>({});
+/** What the person picked for each one's resume since, over what it ran with. */
+const resumePicks = $state<Record<string, Partial<Omit<ResumePlan, "run">>>>(
+  {}
+);
+/** The reads asked of the machines, by harness key: each transcript is read once. */
+const storedRunAsked = new Map<string, Promise<StoredRun>>();
+
+/**
+ * Asks `source`'s machine what the transcript ran with
+ * ({@link CONTROL_STORED_RUN}), once; a read its machine refused or did not
+ * answer is asked again the next time it is wanted.
+ */
+function readStoredRun(source: ForkSource): Promise<StoredRun> {
+  const key = source.sessionId;
+  let asked = storedRunAsked.get(key);
+  if (!asked) {
+    asked = machineControl<StoredRun>(
+      source.machineId,
+      CONTROL_STORED_RUN,
+      [source.sessionId, { dir: source.cwd || undefined }],
+      undefined,
+      source.harness
+    ).then((answer) => {
+      const run = answeredOr(
+        source.machineId,
+        answer,
+        transcriptWords.ranWithUnknown
+      );
+      storedRuns[key] = run;
+      return run;
+    });
+    asked.catch(() => storedRunAsked.delete(key));
+    storedRunAsked.set(key, asked);
+  }
+  return asked;
+}
+
+const ranValue = <T extends string>(
+  value: { value: string } | undefined,
+  is: (one: unknown) => one is T
+): T | null => (value && is(value.value) ? value.value : null);
+
+/** The plan for the stored transcript `key` names, as it stands: what it ran with, under the picks. */
+function planOf(key: string): ResumePlan {
+  const run = storedRuns[key] ?? null;
+  const picks = resumePicks[key] ?? {};
+  return {
+    run,
+    account:
+      picks.account === undefined ? (run?.account ?? null) : picks.account,
+    model: picks.model ?? run?.model?.value ?? null,
+    effort: picks.effort ?? ranValue(run?.effort, isEffortLevel),
+    permissionMode:
+      picks.permissionMode ??
+      ranValue(run?.permissionMode, (one): one is PermissionMode =>
+        WIRE_PERMISSION_MODES.includes(one as PermissionMode)
+      ),
+  };
+}
+
+/**
+ * The first send on a stored transcript's page (`viewId`, a transcript no
+ * session wraps): it is resumed as a session of CawCo's, on its machine and
+ * in its folder, with what it ran with ({@link ResumePlan}), `text` its
+ * first prompt, through the one start on a stored conversation
+ * ({@link forkSession}). His words stand in the transcript at once, and a
+ * line under them says it is being resumed. Once its machine has taken the
+ * start, `land` makes the page the new session's (its tab re-addressed),
+ * where the same words stand as its first prompt. A start its machine
+ * refused or did not answer throws why, the words taken back for the
+ * caller to put in the field.
+ */
+export async function resumeStored(
+  source: ForkSource,
+  text: string,
+  extras: SendExtras,
+  commandId: string,
+  land: (instanceId: string) => void
+): Promise<void> {
+  const viewId = source.sessionId;
+  drawFirstPrompt(viewId, commandId, text, extras, source);
+  const target = session(viewId);
+  const note: Message = {
+    id: newId(),
+    instanceId: viewId,
+    type: "ui.system_note",
+    content: transcriptWords.resuming,
+    timestamp: new Date().toISOString(),
+  };
+  addNote(target, note);
+  try {
+    await readStoredRun(source);
+    const plan = planOf(viewId);
+    const resumed = await forkSession({
+      ...source,
+      prompt: text,
+      extras,
+      commandId,
+      ...(plan.account ? { account: plan.account } : {}),
+      ...(plan.model ? { model: plan.model } : {}),
+      ...(plan.effort ? { effort: plan.effort } : {}),
+      ...(plan.permissionMode ? { permissionMode: plan.permissionMode } : {}),
+    });
+    if (resumed.kind === "unchosen") {
+      // Its harness has modes and its machine named none: never guessed here.
+      throw new Error(
+        transcriptWords.noModeRead(machineName(source.machineId))
+      );
+    }
+    land(answeredOr(source.machineId, resumed, transcriptWords.resumeUnknown));
+  } finally {
+    // The words go on in the session's own transcript, or back to the field.
+    withdrawFirstPrompt(viewId, commandId);
+    target.notes = target.notes.filter((held) => held.message !== note);
+    place(target);
+  }
+}
+
 /** Where a fork branches from: the conversation, its machine, folder and harness, and the answer it branches at. */
 export interface ForkSource {
   at?: string;
@@ -6646,8 +6824,10 @@ export interface ForkSource {
  * A source that `resumes` is started the same way with the conversation
  * itself: no branch and no spin-off, a session of CawCo's on the transcript
  * where it is stored, which its machine carries into the account it runs
- * on (agent claude.ts). `commandId` is the row its first prompt was drawn
- * as, when its sender drew one.
+ * on (agent claude.ts). It is given what the transcript ran with
+ * ({@link resumeStored}), its mode among them, so it is never `unchosen`.
+ * `commandId` is the row its first prompt was drawn as, when its sender
+ * drew one.
  */
 export async function forkSession({
   machineId,
@@ -6662,6 +6842,7 @@ export async function forkSession({
   extras = {},
   resumes,
   commandId,
+  account,
 }: ForkSource & {
   permissionMode?: PermissionMode;
   model?: string;
@@ -6669,6 +6850,8 @@ export async function forkSession({
   prompt?: string;
   extras?: SendExtras;
   commandId?: string;
+  /** The account it starts on; absent: the hub places it. */
+  account?: string;
 }): Promise<Bounded<string> | { kind: "unchosen" }> {
   const source = instanceForSession(instanceIndex, sessionId, {
     machineId,
@@ -6700,6 +6883,7 @@ export async function forkSession({
       ...(at ? { atMessage: at } : {}),
     },
     ...(resumes ? {} : { scratch: {} }),
+    ...(account ? { account } : {}),
     ...(named ? { model: named } : {}),
     ...(mode ? { permissionMode: mode } : {}),
     ...(level ? { effort: level } : {}),
@@ -7082,6 +7266,13 @@ export async function machineControl<T>(
   replyTimeoutMs = CONTROL_TIMEOUT_MS,
   harness?: HarnessKind
 ): Promise<Bounded<T>> {
+  if (import.meta.env.DEV && benchControl) {
+    // A bench's machine answers it in place of the wire (dev only).
+    return {
+      kind: "answered",
+      value: benchControl(machineId, method, args) as T,
+    };
+  }
   await waitForHub();
   const requestId = newId();
   const payload: ControlPayload = {
@@ -9834,6 +10025,28 @@ export const cawco = {
       }
     }
     return null;
+  },
+  /**
+   * What view `id`, a stored transcript no session wraps, resumes with
+   * ({@link ResumePlan}), its machine asked what it ran with the first time
+   * this is read; null for any other view.
+   */
+  resumePlan(id: string): ResumePlan | null {
+    const source = cawco.storedSource(id);
+    if (!source) {
+      return null;
+    }
+    if (!(id in storedRuns) && machineConnected(source.machineId)) {
+      detach(
+        untrack(() => readStoredRun(source)),
+        "readStoredRun"
+      );
+    }
+    return planOf(id);
+  },
+  /** Picks what a stored transcript resumes with, over what it ran with. */
+  pickResume(id: string, pick: Partial<Omit<ResumePlan, "run">>): void {
+    resumePicks[id] = { ...resumePicks[id], ...pick };
   },
   /** Whether a stored transcript stands as itself: the hub said no session wraps it. */
   storedAlone: (sessionId: string): boolean => unwrapped.has(sessionId),

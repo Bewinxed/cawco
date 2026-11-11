@@ -41,12 +41,14 @@ import type {
   HarnessCapabilities,
   HarnessReport,
   ModelInfo,
+  NeutralMessage,
   NeutralSessionInfo,
   PlacedFleetConfig,
   SessionMessage,
   SignInFault,
   SlashCommand,
   SpawnPayload,
+  StoredRun,
   TranscriptWindow,
   WindowAsk,
   WorkspaceRef,
@@ -365,6 +367,8 @@ const startInputs = async (launch: ServerLaunch): Promise<string> => {
  * woken or moved straight back, and no longer is memory held for nobody.
  */
 const SERVER_IDLE_MS = 5 * 60_000;
+/** How many of a stored session's newest messages are read for the model it last answered on ({@link OpencodeHarness.storedRun}). Ours: a turn's tool calls stand between two answers. */
+const STORED_RUN_TAIL = 40;
 
 /**
  * How often the machine is read for CawCo's OpenCode servers that nothing
@@ -6073,6 +6077,30 @@ export class OpencodeHarness implements Harness {
     return (await sessionsOnMachine(dir ? { directory: dir } : {})).map(
       (session) => sessionToInfo(session, tags[session.id])
     );
+  }
+
+  /**
+   * What the stored session ran with: the model of its newest answer, the
+   * one record of a run OpenCode's database keeps. It records no permission
+   * mode, so the session starts in `default`.
+   */
+  async storedRun(sessionKey: string, dir?: string): Promise<StoredRun> {
+    const messages = await this.getSessionMessages(
+      sessionKey,
+      dir,
+      STORED_RUN_TAIL
+    );
+    let model: string | undefined;
+    for (const entry of messages) {
+      const message = entry.message as NeutralMessage;
+      if (message.type === "assistant" && message.message.model) {
+        ({ model } = message.message);
+      }
+    }
+    return {
+      permissionMode: { from: "default", value: "default" },
+      ...(model ? { model: { from: "transcript", value: model } } : {}),
+    };
   }
 
   async getSessionInfo(

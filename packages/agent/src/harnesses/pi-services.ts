@@ -16,6 +16,7 @@ import type {
   NeutralSessionInfo,
   PlacedFleetConfig,
   SessionMessage,
+  StoredRun,
   TranscriptWindow,
   WindowAsk,
 } from "@cawco/core";
@@ -23,6 +24,7 @@ import {
   CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
   CONTROL_PI_DEFAULT_MODEL,
+  isEffortLevel,
   type SupportedCommands,
   type ToolSpec,
   toolSpec,
@@ -1090,6 +1092,37 @@ export class PiProfile {
       });
     }
     return listed;
+  }
+
+  /**
+   * What the stored session ran with, as pi itself resumes it: the model
+   * and thinking level its session file's entries leave it on (pi's
+   * `buildSessionContext`). pi has no permission modes.
+   */
+  async storedRun(sessionKey: string, dir?: string): Promise<StoredRun> {
+    const sessions = dir
+      ? await SessionManager.list(dir)
+      : await SessionManager.listAll();
+    const stored = sessions.find((one) => one.id === sessionKey);
+    if (!stored) {
+      return {};
+    }
+    const { model, thinkingLevel } = SessionManager.open(
+      stored.path
+    ).buildSessionContext();
+    return {
+      ...(model
+        ? {
+            model: {
+              from: "transcript",
+              value: `${model.provider}/${model.modelId}`,
+            },
+          }
+        : {}),
+      ...(isEffortLevel(thinkingLevel)
+        ? { effort: { from: "transcript", value: thinkingLevel } }
+        : {}),
+    };
   }
 
   async getSessionInfo(

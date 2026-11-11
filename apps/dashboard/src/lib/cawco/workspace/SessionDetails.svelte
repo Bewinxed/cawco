@@ -13,6 +13,7 @@
   import { accountsWords } from "@cawco/core/words/accounts";
   import { commonWords } from "@cawco/core/words/common";
   import { spawnWords } from "@cawco/core/words/spawn";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   import { onDestroy, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -134,7 +135,19 @@
   );
   const cwd = $derived(session?.cwd || row?.cwd || context?.cwd || "");
   const stats = $derived(cawco.statsOf(sessionId));
-  const model = $derived(kept ? kept.model : (session?.model ?? null));
+  /**
+   * A transcript started outside CawCo that no session wraps: what its
+   * first message resumes it with (client `ResumePlan`), read on its
+   * machine from what it ran with. The settings below show it and pick it:
+   * a pick changes what it launches with, and asks nothing of any machine.
+   */
+  const resume = $derived(kept ? null : cawco.resumePlan(sessionId));
+  const model = $derived.by(() => {
+    if (kept) {
+      return kept.model;
+    }
+    return resume ? resume.model : (session?.model ?? null);
+  });
 
   /**
    * This session's provider limit (owner pick h): the window that stops its
@@ -175,6 +188,19 @@
     if (harness && report?.capabilities.effort === false) {
       return effortNotExposed(harness);
     }
+    if (resume) {
+      if (resume.effort) {
+        return null;
+      }
+      return resume.run
+        ? {
+            label: transcriptWords.ownDefault,
+            reason: transcriptWords.ownDefaultWhy(
+              harness ? harnessNames[harness] : ""
+            ),
+          }
+        : { label: "Effort…", reason: transcriptWords.readingRun };
+    }
     const effort = session?.effort ?? null;
     if (effort === EFFORT_NONE) {
       return {
@@ -194,6 +220,13 @@
     }
     return null;
   });
+  /** The effort the chip shows: a stored transcript's resume, else the session's. */
+  const shownEffort = $derived.by(() => {
+    if (resume) {
+      return resume.effort;
+    }
+    return isEffortLevel(session?.effort) ? session.effort : null;
+  });
   const modes = $derived(
     harness
       ? permissionModesFor(harness).filter((mode) =>
@@ -209,6 +242,8 @@
    */
   const machineAway = $derived(!(machineId && machineConnected(machineId)));
   const editable = $derived(!machineAway && cawco.liveId(sessionId));
+  /** The settings take picks: a live session's changes, or a stored transcript's resume, once its machine has said what it ran with. */
+  const settable = $derived(editable || !!resume?.run);
   /** A move can be asked: the hub takes it in any state of the session (accounts/switch.svelte.ts). */
   const accountOpen = $derived(cawco.status === "connected");
   /** Why the live controls are locked, and until when. */
@@ -415,9 +450,14 @@
       }
     });
   });
-  const shownPermission = $derived(
-    relaunching ? permissionBeforeRelaunch : (session?.permissionMode ?? null)
-  );
+  const shownPermission = $derived.by(() => {
+    if (resume) {
+      return resume.permissionMode;
+    }
+    return relaunching
+      ? permissionBeforeRelaunch
+      : (session?.permissionMode ?? null);
+  });
 
   function pending(slot: Slot) {
     if (slot === "account") {
@@ -550,12 +590,20 @@
   });
 
   function changeModel(next: string) {
+    if (resume) {
+      cawco.pickResume(sessionId, { model: next });
+      return;
+    }
     if (!(editable && machineId) || pending("model") || next === model) {
       return;
     }
     submitCommand(sessionId, machineId, "set-model", { model: next });
   }
   function changeEffort(next: EffortLevel) {
+    if (resume) {
+      cawco.pickResume(sessionId, { effort: next });
+      return;
+    }
     if (
       !(editable && machineId) ||
       pending("effort") ||
@@ -566,6 +614,10 @@
     submitCommand(sessionId, machineId, "set-effort", { effort: next });
   }
   async function changePermission(next: PermissionMode) {
+    if (resume) {
+      cawco.pickResume(sessionId, { permissionMode: next });
+      return;
+    }
     if (
       !(editable && machineId) ||
       pending("permission") ||
@@ -818,7 +870,7 @@
           data-slot="settings"
           class="session-details-chips flex min-w-0 flex-wrap items-center gap-space-1"
         >
-          {#if editable || kept}
+          {#if settable || kept}
             <NsPopover
               aria-label="Models"
               haspopup="listbox"
@@ -882,21 +934,24 @@
           <ToolChips
             closeOnCommit
             id="details"
-            readonly={!editable}
+            readonly={!settable}
             size="compact"
             tools={{
               efforts,
-              effort: isEffortLevel(session?.effort) ? session.effort : null,
+              effort: shownEffort,
               effortOff,
               oneffort: changeEffort,
               modes: modes.map((mode) => ({
                 value: mode.value,
-                disabled: !editable || pending("permission"),
+                disabled: !settable || pending("permission"),
               })),
               harness,
               permission: shownPermission,
               onpermission: changePermission,
-              restartsOnFullSend: !bypasses(session?.permissionMode),
+              // A resume starts in the mode picked: nothing runs to start again.
+              restartsOnFullSend: !(
+                resume || bypasses(session?.permissionMode)
+              ),
             }}
           />
           <!-- The account the session bills: the group's fourth setting,
@@ -907,6 +962,31 @@
               readonly={!accountOpen}
               size="compact"
             />
+          {:else if resume?.account && machineId}
+            <!-- The account its transcript is kept under, and so resumes
+                 on: a pick is the resume's, no move of any session. -->
+            <AccountSwitch
+              instance={{
+                id: sessionId,
+                machineId,
+                accountId: resume.account,
+              }}
+              onpick={(account) => cawco.pickResume(sessionId, { account })}
+              readonly={!accountOpen}
+              size="compact"
+            />
+          {:else if resume?.run?.account === null}
+            <!-- Kept under the machine's own sign-in, in no account's
+                 folder: the hub places it as it starts. -->
+            <span
+              data-tool
+              data-account-chip
+              data-variant="static"
+              class={chipVariants({ variant: "setting", size: "compact" })}
+              ><span data-slot="chip-label"
+                >{transcriptWords.machineSignIn}</span
+              ></span
+            >
           {/if}
         </div>
         <!-- One line is always held for what a change says, so its pending,
@@ -922,7 +1002,21 @@
           {@render feedback("account")}
           <!-- The held line says one thing: a change's own line outranks
                why the live controls are locked. -->
-          {#if !(editable || SLOTS.some((slot) => failure(slot) || pending(slot) || done[slot]))}
+          {#if resume && !machineAway}
+            <!-- A stored transcript's settings are what its first message
+                 resumes it with. -->
+            <p
+              data-slot="feedback"
+              data-resumes
+              class="mt-space-2 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
+              in:crossIn
+              out:crossOut
+            >
+              {resume.run
+                ? transcriptWords.resumesWith
+                : transcriptWords.readingRun}
+            </p>
+          {:else if !(editable || SLOTS.some((slot) => failure(slot) || pending(slot) || done[slot]))}
             <p
               data-slot="feedback"
               data-locked

@@ -16,11 +16,12 @@
    * and the account it runs on calls it off. Only while this tab's ask is on
    * its way to the hub does it take no picks.
    */
-  import { type BoardRow, cawco } from "../client.svelte";
+  import { cawco } from "../client.svelte";
   import NsPopover from "../spawn/NsPopover.svelte";
   import AccountName from "./AccountName.svelte";
   import { hueVar, nameOf } from "./model.svelte";
   import {
+    type AccountHolder,
     asking,
     moveTo,
     movingTo,
@@ -32,8 +33,9 @@
     instance,
     readonly,
     size = "regular",
+    onpick,
   }: {
-    instance: BoardRow;
+    instance: AccountHolder;
     /**
      * No move can be asked now: the hub is away. A session's state never
      * locks it: the account is the session's, and a sleeping, stopped or
@@ -42,6 +44,11 @@
     readonly: boolean;
     /** The chip's size: the session card's settings group is `compact`. */
     size?: ChipSize;
+    /**
+     * Takes the pick in place of a move: the account a stored transcript
+     * resumes on, which no session of the hub's runs on yet.
+     */
+    onpick?: (accountId: string) => void;
   } = $props();
   const chip = $derived(
     chipVariants({ variant: "setting", size, class: "min-w-0 max-w-full" })
@@ -61,6 +68,10 @@
 
   function pick(id: string) {
     open = false;
+    if (onpick) {
+      onpick(id);
+      return;
+    }
     detach(moveTo(instance, id), "moveTo");
   }
 </script>

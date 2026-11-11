@@ -875,6 +875,36 @@ export interface NeutralSessionInfo {
   wroteAt?: number;
 }
 
+/**
+ * Where a value a stored session ran with was read from: its transcript,
+ * the settings of the folder it ran in, the settings of the user it ran as,
+ * or, recorded nowhere, its harness's own default.
+ */
+export type RanFrom =
+  "transcript" | "project-settings" | "user-settings" | "default";
+
+/** One value of a {@link StoredRun}, with where it was read. */
+export interface RanValue {
+  from: RanFrom;
+  value: string;
+}
+
+/**
+ * What a stored session ran with, read on its machine from its own records
+ * ({@link CONTROL_STORED_RUN}; agent claude-stored-run.ts, pi-services.ts,
+ * opencode.ts): what a session of CawCo's resumes it with, so it goes on as
+ * resuming it in its own harness would. A value recorded nowhere is absent,
+ * and the resume names none: the harness takes its own.
+ */
+export interface StoredRun {
+  /** The account whose folder holds it; null: the machine's own sign-in. Absent on a harness that keeps no session by account. */
+  account?: string | null;
+  effort?: RanValue;
+  model?: RanValue;
+  /** Always said by a harness that has modes: a session of CawCo's starts in one. */
+  permissionMode?: RanValue;
+}
+
 /** A stored transcript entry. `message` is the {@link NeutralMessage} the turn wrote. */
 export interface SessionMessage {
   /**
@@ -2086,6 +2116,11 @@ export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
 export const CONTROL_LIST_SESSIONS = "listSessions";
 export const CONTROL_GET_SESSION_INFO = "getSessionInfo";
 export const CONTROL_GET_SESSION_MESSAGES = "getSessionMessages";
+/**
+ * What a stored session ran with: args `[sessionKey, dir?]`; answers a
+ * {@link StoredRun}, empty for a session its harness has no record of.
+ */
+export const CONTROL_STORED_RUN = "storedRun";
 /**
  * A window of a stored conversation, as it was said: args
  * `[sessionKey, { dir?, window: WindowAsk }]`; answers a `TranscriptWindow`

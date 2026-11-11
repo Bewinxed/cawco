@@ -8,6 +8,30 @@ export const transcriptWords = {
   /** A tab's details card, and the tabs of a pane's group. */
   sessionDetails: "Session details",
   /**
+   * A transcript started outside CawCo (in a terminal, the desktop app, an
+   * IDE), open on its page and not yet written to: the line over its
+   * composer.
+   */
+  startedOutside: "Started outside CawCo. A message resumes it here.",
+  /** The transcript's line while its first message resumes it as a session of CawCo's. */
+  resuming: "Resuming in CawCo…",
+  /** Its details card, under the settings it resumes with: what they are. */
+  resumesWith: "A message resumes it with these.",
+  /** The same line while its machine reads what it ran with. */
+  readingRun: "Reading what it ran with…",
+  /** A model or effort chip for a value nothing it stored names: its harness takes its own. */
+  ownDefault: "Default",
+  ownDefaultWhy: (harness: string) =>
+    `Nothing it stored names one, so ${harness} uses its own.`,
+  /** The account chip for a transcript kept under the machine's own sign-in, in no account's folder. */
+  machineSignIn: "This machine's sign-in",
+  /** A resume or a reading the machine did not answer in time ({@link didntAnswer}'s outcome). */
+  resumeUnknown: "whether the session was resumed is not known",
+  ranWithUnknown: "what it ran with is not known",
+  /** A resume refused here: its harness has permission modes and its machine read none to resume it in. */
+  noModeRead: (machine: string) =>
+    `${machine} read no permission mode to resume it in. Try again.`,
+  /**
    * The tab strip's name: its tabs are chats and projects alike. In a split
    * each strip says its group's number, the one Move to group names.
    */

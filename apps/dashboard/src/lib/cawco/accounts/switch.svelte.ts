@@ -21,13 +21,25 @@ import { faultOn, pendingOn } from "../session-acts.svelte";
 import { accountsOf, nameOf, signinState } from "./model.svelte";
 
 /** Session id → the account it is moving to. */
+/**
+ * What the account switch reads of the session it stands on: a row of the
+ * hub's, or a stored transcript whose resume names an account (dashboard
+ * client `ResumePlan`), which is no row yet.
+ */
+export type AccountHolder = Pick<
+  BoardRow,
+  "accountId" | "id" | "machineId" | "owedMove"
+>;
+
 const moving = new SvelteMap<string, string>();
 
 /**
  * The provider a session bills: its account's, as the hub keeps it. A session
  * with no account on record bills none the hub knows, so it is offered no move.
  */
-const providerOfSession = (instance: BoardRow): AccountProvider | undefined =>
+const providerOfSession = (
+  instance: AccountHolder
+): AccountProvider | undefined =>
   cawco.accounts?.accounts.find((one) => one.id === instance.accountId)
     ?.provider;
 
@@ -35,7 +47,7 @@ const providerOfSession = (instance: BoardRow): AccountProvider | undefined =>
  * The accounts a session can run on, in fill-first order: its provider's,
  * signed in on its machine.
  */
-export function signedInHere(instance: BoardRow): Account[] {
+export function signedInHere(instance: AccountHolder): Account[] {
   const provider = providerOfSession(instance);
   if (!provider) {
     return [];
@@ -47,7 +59,7 @@ export function signedInHere(instance: BoardRow): Account[] {
 }
 
 /** {@link signedInHere}, for the menu: empty unless there is a choice (two or more). */
-export function switchable(instance: BoardRow): Account[] {
+export function switchable(instance: AccountHolder): Account[] {
   const eligible = signedInHere(instance);
   return eligible.length > 1 ? eligible : [];
 }
@@ -57,16 +69,17 @@ export function switchable(instance: BoardRow): Account[] {
  * move this tab is asking for, else the one the hub keeps for its next
  * launch (its row's `owedMove`), which a reload reads the same.
  */
-export function movingTo(instance: BoardRow): string | undefined {
+export function movingTo(instance: AccountHolder): string | undefined {
   const target = moving.get(instance.id) ?? instance.owedMove?.accountId;
   return target && target !== instance.accountId ? target : undefined;
 }
 
 /** Whether this tab's ask for a move is on its way to the hub: no other pick goes meanwhile. */
-export const asking = (instance: BoardRow): boolean => moving.has(instance.id);
+export const asking = (instance: AccountHolder): boolean =>
+  moving.has(instance.id);
 
 /** The account a session's row draws: the one it is moving to, else its own. */
-export const shownAccount = (instance: BoardRow): string | null =>
+export const shownAccount = (instance: AccountHolder): string | null =>
   movingTo(instance) ?? instance.accountId ?? null;
 
 /**
@@ -79,7 +92,7 @@ export const shownAccount = (instance: BoardRow): string | null =>
  * the hub's (its row's `owedMove.waits`), never guessed: a session stopped
  * at its limit has no turn to end.
  */
-export function movingWords(instance: BoardRow): string | undefined {
+export function movingWords(instance: AccountHolder): string | undefined {
   const target = movingTo(instance);
   if (target === undefined) {
     return;
@@ -128,7 +141,7 @@ export function stopWords(instance: BoardRow): string | undefined {
  * stays on its rows, in the hub's words, with Try again.
  */
 export async function moveTo(
-  instance: BoardRow,
+  instance: AccountHolder,
   accountId: string
 ): Promise<void> {
   const owed = instance.owedMove?.accountId;

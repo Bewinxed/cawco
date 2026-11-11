@@ -167,6 +167,7 @@
     planRing,
     onfoot,
     placeholder,
+    note = "",
     label,
     suggest,
     recallOf,
@@ -261,6 +262,8 @@
      * width holds on one line.
      */
     placeholder?: string | { full: string; short: string };
+    /** A line over the field: what a message does in this conversation, before one is sent. */
+    note?: string;
     /**
      * What the field is called, read out, where its placeholder is not its
      * name (New project's placeholder types examples): by default the hint
@@ -3661,6 +3664,17 @@
         transition:unfold
       >
         {signInNote}
+      </p>
+    {:else if note}
+      <!-- What a message does here that it does nowhere else, said before
+           it is sent (a stored transcript's: it resumes it), on the line a
+           sign-in's note takes. -->
+      <p
+        data-slot="composer-note"
+        class="pointer-events-auto px-space-3 text-ink-muted text-size-meta font-normal"
+        transition:unfold
+      >
+        {note}
       </p>
     {/if}
 

@@ -6,6 +6,7 @@
   import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { conversationWords } from "@cawco/core/words/project-conversation";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission
@@ -30,7 +31,6 @@
    * the pane draws none of its own and leaves its scroll timeline to the
    * panel.
    */
-  import { spawnWords } from "@cawco/core/words/spawn";
   import { type Snippet, untrack } from "svelte";
   import {
     crossIn,
@@ -48,7 +48,6 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
-    answeredOr,
     cawco,
     clearReadFault,
     commandFault,
@@ -67,6 +66,7 @@
     readTranscript,
     reconnectingNow,
     refreshCommands,
+    resumeStored,
     type SendExtras,
     type ServerTail,
     type SessionState,
@@ -104,7 +104,6 @@
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
-  import { startFork } from "./spawn/new-session.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
@@ -1228,17 +1227,24 @@
     return await submitCommand(viewId, machineId, "send", { text, extras }, id);
   }
 
-  /** The first send on a stored transcript is resuming it: the composer says it is sending. */
+  /** The first message is resuming this page's stored transcript. */
   let resuming = $state(false);
+  /**
+   * This page reads a transcript started outside CawCo that no session
+   * wraps, and nothing has been sent on it: the line over its composer.
+   */
+  const storedNote = $derived(
+    !resuming && cawco.storedSource(viewId)
+      ? transcriptWords.startedOutside
+      : ""
+  );
 
   /**
-   * Resumes the stored transcript this page reads as a session of CawCo's,
-   * on its machine and in its folder, `text` its first prompt (spawn/
-   * new-session `startFork`, the one start on a stored conversation): the
-   * page becomes that session's, its tab re-addressed where it stands. With
-   * no mode to run in, the New Session form opens on it, carrying the
-   * words. A start the hub refuses, or did not answer, puts the words back
-   * in the field with its reason.
+   * The first send on the stored transcript this page reads resumes it as
+   * a session of CawCo's (client `resumeStored`), and the page becomes
+   * that session's: its tab re-addressed where it stands. A start the
+   * machine refused, or did not answer, puts the words back in the field
+   * with its reason.
    */
   async function resumeWith(
     stored: ForkSource,
@@ -1248,15 +1254,10 @@
   ): Promise<string | undefined> {
     resuming = true;
     try {
-      const resumed = await startFork(stored, null, {
-        text,
-        extras,
-        commandId: id,
-      });
-      if (resumed) {
-        answeredOr(stored.machineId, resumed, spawnWords.form.resumeUnknown);
-        return id;
-      }
+      await resumeStored(stored, text, extras, id, (instanceId) =>
+        workspace.retarget(viewId, instanceId)
+      );
+      return id;
     } catch (error) {
       draft.restore(text, extras);
       draft.notice = failureWords(error);
@@ -1362,7 +1363,10 @@
       return session?.busy ?? false;
     },
     get sending() {
-      return sends.sending || resuming;
+      return sends.sending;
+    },
+    get note() {
+      return storedNote;
     },
     get sendError() {
       return sendFailure;
@@ -1561,6 +1565,7 @@
     fleet={composerFleet}
     {agentName}
     placeholder={caw ? conversationWords.placeholder : undefined}
+    note={storedNote}
     ask={firstAsk}
     busy={session?.busy ?? false}
     {commands}
@@ -1577,7 +1582,7 @@
     recallOf={viewId}
     sendError={sendFailure}
     {faultAgain}
-    sending={sends.sending || resuming}
+    sending={sends.sending}
     showing={viewId}
     {suggest}
     trayRows={[{ delegatesOf: viewId, id: viewId, prompts: offer }]}

@@ -34,6 +34,7 @@ import type {
   SessionMessage,
   SignInFault,
   SpawnPayload,
+  StoredRun,
   TextAttachment,
   TranscriptWindow,
   WindowAsk,
@@ -469,6 +470,8 @@ export interface Harness {
     cwd: string,
     workspace: string
   ) => Promise<{ dir: string; spec: SpawnPayload }>;
+  /** What a stored session ran with, from this harness's own records (core `StoredRun`). */
+  storedRun: (sessionKey: string, dir?: string) => Promise<StoredRun>;
   /**
    * Applies the parts `parts` of the hub's fleet config (fleet-parts.ts) to
    * this harness's own files, every other part left as its last converge

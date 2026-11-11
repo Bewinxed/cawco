@@ -65,6 +65,7 @@ import type {
   SessionMessage,
   SpawnPayload,
   StartingSet,
+  StoredRun,
   TranscriptWindow,
   UserAnswers,
   UserQuestion,
@@ -267,6 +268,7 @@ import {
   writtenAt,
 } from "../wakeups";
 import { FULL_CAPABILITIES } from "./capabilities";
+import { claudeStoredRun } from "./claude-stored-run";
 import {
   CLAUDE_PROMPT_TYPES,
   claudePromptAt,
@@ -5451,6 +5453,21 @@ class ClaudeHarness implements Harness {
     }
     const info = await sessionInfoAt(file, sessionKey);
     return info ? { ...toInfo(info), ...(await wroteIn(file)) } : undefined;
+  }
+
+  /** What the stored session ran with (claude-stored-run.ts): its account is the config dir that holds its transcript. */
+  async storedRun(sessionKey: string, dir?: string): Promise<StoredRun> {
+    const file = await claudeSessionFile(sessionKey, dir);
+    if (!file) {
+      return {};
+    }
+    const configDir = dirname(dirname(dirname(file)));
+    const info = await sessionInfoAt(file, sessionKey);
+    return await claudeStoredRun(
+      file,
+      info?.cwd ?? dir,
+      accountIds().find((id) => accountConfigDir(id) === configDir) ?? null
+    );
   }
 
   async getSessionMessages(

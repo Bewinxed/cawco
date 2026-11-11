@@ -35,13 +35,15 @@ export interface ComposerBinding {
   readonly find?: ConversationFind;
   /** The conversation `@` names others from (Composer `mentionsFrom`); null names nothing. */
   readonly mentionsFrom: string | null;
+  /** The field's hint, where the agent takes no `/` or `@`. */
+  /** A line over the field: what a message does here, before one is sent (Composer `note`). */
+  readonly note?: string;
   /** What the composer stands over the transcript's foot (Composer `ComposerFoot`). */
   readonly onfoot?: (foot: ComposerFoot) => void;
   onmenu: () => void;
   onstop: () => void;
   onsubmit: (text: string, extras: SendExtras, id: string) => void;
   readonly paneVisible: boolean;
-  /** The field's hint, where the agent takes no `/` or `@`. */
   readonly placeholder?: string;
   /** The plan's ring, which opens it over the composer's row; none without a plan. */
   readonly planRing?: Snippet;
@@ -85,6 +87,7 @@ export const composerOf = (binding: ComposerBinding) => ({
   onstop: binding.onstop,
   onsubmit: binding.onsubmit,
   paneVisible: binding.paneVisible,
+  note: binding.note,
   placeholder: binding.placeholder,
   planRing: binding.planRing,
   recallOf: binding.recallOf,

@@ -374,6 +374,7 @@ for (const kind of HARNESSES) {
       newer: null,
     }),
     getSessionInfo: async () => undefined,
+    storedRun: async () => ({}),
     machine: (method: string) => {
       if (method === "inspectConfig") {
         return Promise.resolve({

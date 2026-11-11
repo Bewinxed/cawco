@@ -87,6 +87,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
   CONTROL_SPIN_OFF_HELD,
+  CONTROL_STORED_RUN,
   CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
@@ -749,6 +750,7 @@ const FINAL_STOP = /\.$/u;
 const CATALOG_METHODS = new Set([
   "listSessions",
   "getSessionInfo",
+  CONTROL_STORED_RUN,
   "getSessionMessages",
   CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_READ_CONTINUATION,
@@ -767,6 +769,7 @@ const CATALOG_METHODS = new Set([
 const CATALOG_READS = new Set([
   "listSessions",
   "getSessionInfo",
+  CONTROL_STORED_RUN,
   "getSessionMessages",
   CONTROL_READ_TRANSCRIPT_WINDOW,
   CONTROL_READ_CONTINUATION,
@@ -6723,6 +6726,8 @@ export class SessionSupervisor {
             );
             return info ? titled(info) : info;
           }
+          case CONTROL_STORED_RUN:
+            return await adapter.storedRun(args[0] as string, dirOf(args[1]));
           case CONTROL_READ_TRANSCRIPT_WINDOW: {
             const at = Date.now();
             const options = args[1] as

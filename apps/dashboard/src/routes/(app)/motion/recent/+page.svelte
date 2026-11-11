@@ -1,6 +1,12 @@
 <script lang="ts">
   import type { PermissionRequestFrame, PulseFrame } from "@cawco/core/frames";
-  import type { NeutralSessionInfo } from "@cawco/core/harness";
+  import {
+    CAPABILITIES_NONE,
+    CONTROL_STORED_RUN,
+    type NeutralSessionInfo,
+    PERMISSION_MODES,
+    type StoredRun,
+  } from "@cawco/core/harness";
   import type {
     InstanceRow,
     NamedSpawn,
@@ -9,10 +15,14 @@
     TabNamed,
   } from "@cawco/core/protocol";
   import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+  import type {
+    TranscriptBlock,
+    TranscriptPage,
+  } from "@cawco/core/transcript-types";
   import { onMount } from "svelte";
   import { z } from "zod";
   import Home from "#lib/cawco/home/Home.svelte";
-  import { MINI, OBELISK, storedListing } from "./stored-listing";
+  import { MINI, OBELISK, STORED, storedListing } from "./stored-listing";
 
   /**
    * The sidebar's one Recent list (tsk-323) on a bench: the real rail around
@@ -23,7 +33,10 @@
    * recording (`?rows=40`, the default; `?rows=10` the sketch's alone).
    *
    * `?stay` keeps the bench's hub standing once its page is left (a tab
-   * opened from the rail), until a reload. `window.__rb` drives what the
+   * opened from the rail), until a reload: its machines are then
+   * connected, the transcript typed in a terminal is read as the hub reads
+   * one, and its machine says what it ran with (`__rb.controls`), so its
+   * page is written to and its first message resumes it. `window.__rb` drives what the
    * hub would: `status(id, "working" |
    * "needs" | "yours" | "wakes")` moves a session between the list's three
    * words (a pulse, a parked ask, the turn's end, a turn that ended waiting
@@ -62,7 +75,8 @@
     standCatalog: (machineId: string, sessions: NeutralSessionInfo[]) => void;
     standHub: (
       answer: (instanceId: string, kind: string, intent: unknown) => void,
-      spawn: (machineId: string, spawn: NamedSpawn) => void
+      spawn: (machineId: string, spawn: NamedSpawn) => Promise<void>,
+      control: (machineId: string, method: string, args: unknown[]) => unknown
     ) => void;
     state: { machines: unknown[]; projects: unknown[]; projectsRead: boolean };
   }
@@ -435,9 +449,12 @@
     adopt();
   };
 
+  /** How long the bench's machine takes a start in: about a real one's. */
+  const SPAWN_MS = 1500;
   /** What the page asked the bench's hub to do: each start, and each command after it. */
   const spawns: { machineId: string; spawn: NamedSpawn }[] = [];
   const commands: { instanceId: string; kind: string; intent: unknown }[] = [];
+  const controls: { machineId: string; method: string; args: unknown[] }[] = [];
 
   /** Moves a session to one of the list's words, as the hub's frames would. */
   function status(id: string, doing: Doing) {
@@ -531,6 +548,60 @@
   }
 
   /**
+   * The transcript the person typed in a terminal in storefront's folder,
+   * as the hub reads it (`GET /api/instances/:id/transcript`): under its
+   * own key while no session wraps it, and under the session's id once its
+   * first message has resumed it.
+   */
+  const TRANSCRIPT = /\/api\/instances\/([^/?]+)\/transcript/u;
+  function answerTranscript(
+    input: RequestInfo | URL
+  ): Promise<Response> | undefined {
+    const url = input instanceof Request ? input.url : String(input);
+    const id = TRANSCRIPT.exec(url)?.[1];
+    const resumed = rows.find(
+      (row) => row.id === id && row.sessionId === STORED.inStorefront
+    );
+    if (!(id && (id === STORED.inStorefront || resumed))) {
+      return;
+    }
+    const said = (
+      n: number,
+      type: "user" | "assistant",
+      content: string
+    ): TranscriptBlock => ({
+      id: `${STORED.inStorefront}:${n}`,
+      instanceId: id,
+      type,
+      content,
+      timestamp: new Date(now - (60 - n) * MINUTE_MS).toISOString(),
+    });
+    const page: TranscriptPage = {
+      blocks: [
+        said(
+          0,
+          "user",
+          "Stripe retries the payment_intent.succeeded webhook and we charge twice; make the handler idempotent"
+        ),
+        said(
+          1,
+          "assistant",
+          "The handler now records each event id before it charges, and a retry of one it has seen answers 200 without charging again."
+        ),
+      ],
+      branches: [],
+      cursor: null,
+      where: {
+        cwd: "/srv/storefront",
+        harness: "claude",
+        machineId: OBELISK,
+        sessionKey: STORED.inStorefront,
+      },
+    };
+    return Promise.resolve(Response.json(page));
+  }
+
+  /**
    * A live hub's own rows, when a check stands them in before the page loads
    * (`__rbReal`: `/api/instances`, `/api/projects`, `/api/agents` and
    * `/api/areas` from a hub opened on a copy of its database): the bench
@@ -567,7 +638,26 @@
       lastSeenAt: now,
       pausedUntil: null,
       pauseStopped: null,
-      status: "offline",
+      // Staying, its machines are connected and say what Claude Code takes,
+      // so a session's page can be written to and its settings picked.
+      status: stays ? "online" : "offline",
+      ...(stays
+        ? {
+            harnesses: [
+              {
+                harness: "claude",
+                capabilities: {
+                  ...CAPABILITIES_NONE,
+                  permissionModes: PERMISSION_MODES.filter(
+                    (mode) => mode !== "fullSend"
+                  ),
+                  effort: true,
+                  setModel: true,
+                },
+              },
+            ],
+          }
+        : {}),
     }));
     debug.areas.areas = AREAS;
     debug.state.projects = PROJECTS.map(([id, name, area, machineId]) => ({
@@ -627,15 +717,18 @@
       answerSeen(input, init) ??
       answerStored(input, init) ??
       answerNamed(input, init) ??
+      answerTranscript(input) ??
       fetchWas(input, init);
     debug.standHub(
       (instanceId, kind, intent) => {
         commands.push({ instanceId, kind, intent });
       },
-      (machineId, spawn) => {
-        // The hub opens the row a start asks for: a resume's on the
-        // conversation it names, the person's own.
+      async (machineId, spawn) => {
+        // The hub opens the row a start asks for, once its machine has
+        // taken it: a resume's on the conversation it names, the person's
+        // own.
         spawns.push({ machineId, spawn });
+        await new Promise((taken) => setTimeout(taken, SPAWN_MS));
         rows = [
           ...rows,
           {
@@ -651,6 +744,21 @@
           },
         ];
         adopt();
+      },
+      (machineId, method, args) => {
+        controls.push({ machineId, method, args });
+        // What the transcript typed in a terminal ran with, as its machine
+        // reads it (agent claude-stored-run.ts): its mode and model off the
+        // transcript, its effort off the user's settings, kept under the
+        // machine's own sign-in.
+        return method === CONTROL_STORED_RUN
+          ? ({
+              account: null,
+              permissionMode: { from: "transcript", value: "acceptEdits" },
+              model: { from: "transcript", value: "claude-opus-5-5" },
+              effort: { from: "user-settings", value: "high" },
+            } satisfies StoredRun)
+          : undefined;
       }
     );
     if (real) {
@@ -663,6 +771,7 @@
         SKETCH.map(([letter], n) => [letter, idOf(n + 1)])
       ),
       commands,
+      controls,
       spawns,
       done: DONE,
       failed: FAILED,
