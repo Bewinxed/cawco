@@ -66,11 +66,31 @@ export const PREVIEW_HELD_HEADER = "x-cawco-held-ms";
 const PREVIEW_HELD_MS = 1000;
 
 /**
- * Whether the server behind preview origin `origin` holds a request of its
- * page past {@link PREVIEW_HELD_MS} now, as its ping says. A ping that
- * fails or says nothing is no: the page's own wait decides then.
+ * On the ping's answer: how long ago, ms, the origin answered a page's load
+ * (a frame's or a tab's document) with a file that is no HTML page, a PDF,
+ * an image or plain text, which the browser draws itself and no overlay
+ * reaches (hub preview.ts `documents`); absent when the last document it
+ * answered was a page, or it answered none. A frame whose load said nothing
+ * within {@link PAGE_SILENT_MS} is such a file when its origin answered one
+ * since the frame last loaded, and the browser's own error page otherwise.
  */
-export async function previewHeld(origin: string): Promise<boolean> {
+export const PREVIEW_BARE_HEADER = "x-cawco-bare-ms";
+
+/** What preview origin `origin`'s ping says now ({@link previewPing}). */
+export interface PreviewPing {
+  /** How long ago it answered a load with a file the browser draws itself ({@link PREVIEW_BARE_HEADER}); null when its last load was a page's. */
+  bareAgo: number | null;
+  /** Its server holds a request of its page past {@link PREVIEW_HELD_MS}. */
+  held: boolean;
+}
+
+/**
+ * What the server behind preview origin `origin` says on its ping now:
+ * whether it holds a request of its page, and how long ago it answered a
+ * load with a file no overlay reaches. A ping that fails or says nothing is
+ * neither: the page's own wait decides then.
+ */
+export async function previewPing(origin: string): Promise<PreviewPing> {
   const read = await readWithin(PROBE_ANSWER_MS, (signal) =>
     fetch(`${origin}${PREVIEW_PING_PATH}`, {
       mode: "cors",
@@ -80,10 +100,16 @@ export async function previewHeld(origin: string): Promise<boolean> {
     })
   ).catch(() => null);
   if (read?.kind !== "answered") {
-    return false;
+    return { held: false, bareAgo: null };
   }
   await read.value.body?.cancel();
-  return Number(read.value.headers.get(PREVIEW_HELD_HEADER)) >= PREVIEW_HELD_MS;
+  const bare = read.value.headers.get(PREVIEW_BARE_HEADER);
+  return {
+    held:
+      Number(read.value.headers.get(PREVIEW_HELD_HEADER)) >= PREVIEW_HELD_MS,
+    bareAgo:
+      bare === null || !Number.isFinite(Number(bare)) ? null : Number(bare),
+  };
 }
 
 /**

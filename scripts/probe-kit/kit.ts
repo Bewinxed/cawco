@@ -341,6 +341,13 @@ interface PageOptions {
    */
   oneProcess?: boolean;
   /**
+   * Chromium only: the full Chromium build in its new headless mode
+   * (Playwright's `channel: "chromium"`), which carries Chrome's PDF viewer
+   * and draws a PDF a frame loads, as a desk's Chrome does. Unset, the
+   * headless shell, which has no viewer and downloads it instead.
+   */
+  pdfViewer?: boolean;
+  /**
    * An HTTP proxy every request of the page's context goes through, its
    * loopback ones included (Playwright bypasses none unless told): a
    * spec's stand-in for what stands between the owner's browser and his
@@ -1103,7 +1110,8 @@ export class Run {
     oneProcess = false,
     own?: string,
     hostRules?: string,
-    scrollbars = false
+    scrollbars = false,
+    pdfViewer = false
   ): Promise<Browser> {
     const key = [
       engine,
@@ -1111,6 +1119,7 @@ export class Run {
       own,
       hostRules && `hosts:${hostRules}`,
       scrollbars && "scrollbars",
+      pdfViewer && "pdf-viewer",
     ]
       .filter(Boolean)
       .join("-");
@@ -1151,6 +1160,7 @@ export class Run {
         const port = await freePort();
         const browser = await chromium.launch({
           headless: true,
+          ...(pdfViewer ? { channel: "chromium" } : {}),
           args: [
             "--no-sandbox",
             "--disable-gpu",
@@ -1351,7 +1361,8 @@ export class Run {
           options.oneProcess,
           options.browser,
           options.hostRules,
-          options.scrollbars
+          options.scrollbars,
+          options.pdfViewer
         );
         const phoneAgent = PHONE_AGENT[engine];
         const context = await browser.newContext({
@@ -1370,10 +1381,11 @@ export class Run {
         contexts.push(context);
         // Every frame runs it; one with an opaque origin (a browser error
         // page in a frame whose server went away, a sandboxed document) has
-        // no storage, and reading it there throws a SecurityError.
+        // no storage, and reading it there throws a SecurityError; Chrome's
+        // PDF viewer's own frame (`pdfViewer`) reads it as null.
         await context.addInitScript((t) => {
           if (self.origin !== "null") {
-            localStorage.setItem("cawco-theme", t);
+            localStorage?.setItem("cawco-theme", t);
           }
         }, options.theme ?? "light");
         await context.addInitScript(installRuns);

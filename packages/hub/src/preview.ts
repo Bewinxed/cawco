@@ -37,6 +37,7 @@ import {
   IMMUTABLE,
   injectOverlay,
   keyOverlay,
+  loadsDocument,
   notUpYet,
   OVERLAY_KEY,
   overlayResponse,
@@ -52,6 +53,7 @@ import {
 } from "@cawco/core/preview-proxy";
 import {
   type HubReach,
+  PREVIEW_BARE_HEADER,
   PREVIEW_HELD_HEADER,
   PREVIEW_PING_HEADER,
   PREVIEW_REACH_PATH,
@@ -570,7 +572,7 @@ const HOP = "hub listener";
 /** What every answer to the dashboard's probe carries: readable to any page, never kept, marked the hub's own. */
 const PING_HEADERS = {
   "access-control-allow-origin": "*",
-  "access-control-expose-headers": `${PREVIEW_PING_HEADER}, ${PREVIEW_HELD_HEADER}`,
+  "access-control-expose-headers": `${PREVIEW_PING_HEADER}, ${PREVIEW_HELD_HEADER}, ${PREVIEW_BARE_HEADER}`,
   "cache-control": "no-store",
   [PREVIEW_PING_HEADER]: "1",
 } as const;
@@ -1346,6 +1348,44 @@ export function createPreviewListeners(
    */
   const usedWritten = new Map<string, number>();
   /**
+   * The last document each origin answered a page's load with (a frame's or
+   * a tab's), by its key: when, on this hub's clock, and whether it was a
+   * file the browser draws itself, no HTML page (a PDF, an image, plain
+   * text), which no overlay reaches and which therefore never answers the
+   * pane's hello. The origin's ping says how long ago that was (core
+   * `PREVIEW_BARE_HEADER`), so a frame silent past `PAGE_SILENT_MS` is
+   * such a file, not the browser's own error page (dashboard PreviewPane
+   * `loadedFrame`).
+   */
+  const documents = new Map<string, { at: number; bare: boolean }>();
+  /**
+   * Origin `key`'s answer `answer` to `request`: a page's load is kept as
+   * its last document, and its ping says how long ago that was a file no
+   * overlay reaches ({@link documents}).
+   */
+  const documentHeard = (key: string, request: Request, answer: Response) => {
+    if (new URL(request.url).pathname === PREVIEW_PING_PATH) {
+      const last = documents.get(key);
+      if (last?.bare) {
+        answer.headers.set(PREVIEW_BARE_HEADER, String(Date.now() - last.at));
+      }
+      return;
+    }
+    // A redirect is followed, and a 204 or 205 leaves the frame's document
+    // as it stood: neither is the document drawn.
+    const drawn =
+      answer.status >= 200 &&
+      answer.status < 300 &&
+      answer.status !== 204 &&
+      answer.status !== 205;
+    if (loadsDocument(request) && drawn) {
+      documents.set(key, {
+        at: Date.now(),
+        bare: !answer.headers.get("content-type")?.startsWith("text/html"),
+      });
+    }
+  };
+  /**
    * Origin `key` was used (a request, a socket opened or closed): its port
    * row's `used_at` written, at most once a minute ({@link USE_WRITE_MS}).
    */
@@ -1457,6 +1497,9 @@ export function createPreviewListeners(
         deps,
         lock.domain === null
       );
+      if (answer) {
+        documentHeard(instanceId, request, answer);
+      }
       // Gzipped here, once, after the overlay tag is keyed; an immutable
       // answer once for its address on this session's origin.
       return (
@@ -2054,6 +2097,7 @@ export function createPreviewListeners(
     embeds.delete(key);
     viewers.delete(key);
     usedWritten.delete(key);
+    documents.delete(key);
     db.dropPort(key);
   };
 

@@ -31,6 +31,7 @@
   import {
     askHubReach,
     PAGE_SILENT_MS,
+    previewPing,
     previewsNeedWords,
     previewUnreachedWords,
     probePreview,
@@ -972,12 +973,20 @@
   /** The frame whose page last said anything at all to the pane (its overlay, the proxy's down page, the lock's turn-away). */
   let heardKey = $state<string | null>(null);
   /**
+   * The frame holds a file the browser draws itself, no HTML page (a PDF,
+   * an image, plain text): no overlay reaches it, so it never answers the
+   * hello, and it stands as it is, shown.
+   */
+  let bareKey = $state<string | null>(null);
+  /**
    * The frame finished loading and its page never said a word: no overlay
    * answered in PAGE_SILENT_MS and no proxy's page named a hop, though the
-   * proxy puts one or the other in every page it serves. So the browser
-   * drew its own error page (a connection closed with no answer, a refused
-   * one) or the answer was no page at all: said where the page would be,
-   * with Try again, never Chromium's grey page left standing.
+   * proxy puts one or the other in every page it serves, and its origin
+   * answered no file the browser draws itself since the frame last loaded
+   * (`bareKey`). So the browser drew its own error page (a connection
+   * closed with no answer, a refused one) or the answer was no page at all:
+   * said where the page would be, with Try again, never Chromium's grey
+   * page left standing.
    */
   const notLoaded = $derived(
     !unloaded &&
@@ -987,15 +996,49 @@
       !down
   );
   let saidFor: string | null = null;
+  /** When the frame's document before this one stood: its mount, then each load (`loadedFrame`). */
+  let lastLoadAt = 0;
+  /** Each load of the frame counted: a silence is read of the last one alone. */
+  let loads = 0;
+  /**
+   * Frame `key` finished loading. Silent past PAGE_SILENT_MS, its origin's
+   * ping says whether it answered a load with a file the browser draws
+   * itself since the frame's document before this one (hub preview.ts
+   * `documents`): the frame holds that file (`bareKey`), else nothing
+   * that is a page (`silentKey`).
+   */
   function loadedFrame(key: string) {
+    const since = lastLoadAt;
+    lastLoadAt = performance.now();
+    loads += 1;
+    const load = loads;
     loadedKey = key;
     silentKey = null;
-    setTimeout(() => {
-      if (key === frameKey && loadedKey === key && !connected && !down) {
-        silentKey = key;
-        // A Try again that loaded nothing again is over: its state says so.
-        retrying = false;
+    bareKey = null;
+    const silent = () =>
+      load === loads &&
+      key === frameKey &&
+      loadedKey === key &&
+      !connected &&
+      !down;
+    setTimeout(async () => {
+      if (!silent()) {
+        return;
       }
+      const origin = paneOrigin;
+      const { bareAgo } = origin
+        ? await previewPing(origin)
+        : { bareAgo: null };
+      if (!silent()) {
+        return;
+      }
+      if (bareAgo !== null && bareAgo <= performance.now() - since) {
+        bareKey = key;
+        return;
+      }
+      silentKey = key;
+      // A Try again that loaded nothing again is over: its state says so.
+      retrying = false;
     }, PAGE_SILENT_MS);
   }
   $effect(() => {
@@ -1010,7 +1053,7 @@
       word = stage?.connected && stage.at === "panel" ? { ok: true } : null;
     } else if (current && down) {
       word = { ok: false, error: down };
-    } else if (current && connected) {
+    } else if (current && (connected || bareKey === frameKey)) {
       word = { ok: true };
     } else if (silentKey === frameKey) {
       word = { ok: false, error: "page" };
@@ -4647,6 +4690,7 @@
         if (key === frameKey) {
           iframe = node;
           frameSince = performance.now();
+          lastLoadAt = frameSince;
         }
       }}
     ></iframe>
