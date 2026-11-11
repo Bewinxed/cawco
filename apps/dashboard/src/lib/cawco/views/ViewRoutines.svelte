@@ -57,8 +57,9 @@
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
    * starters written for the project from what it repeats or waits on over
    * the session Composer to Caw (words alone), whose words start a
-   * conversation in the project, Caw standing as its mark on the block's
-   * axis with the title, the line, the chips and the composer. A starter
+   * conversation in the project, Caw standing as its mark centred over the
+   * column, the title, the line, the chips and the composer on its left
+   * edge. A starter
    * puts its words in the composer, unsent. Where Caw
    * can't start, the way by hand: Create routine, the routine form
    * (RoutineForm) in the empty state's place. Where Caw can start, the
@@ -1121,20 +1122,19 @@
         <!-- Create routine: the form in the empty state's place. -->
         <div class="max-w-c-starters-w">{@render routineForm()}</div>
       {:else if canTalk}
-        <!-- Caw stands as the mark, and he, the title, the line, the chips
-             and his composer share the block's axis (DESIGN.md, The Caw
-             Stands On The Axis Rule), as the empty board and Decisions do. -->
+        <!-- Caw stands as the mark, centred over the column (DESIGN.md, The
+             Caw Stands On The Axis Rule); the title, the line, the chips and
+             his composer start on the column's one left edge. -->
         <div data-slot="caw-empty" class="mx-auto w-full max-w-c-starters-w">
           <EmptyState
             actionWidth="fill"
-            axis
             line={words.emptyCaw(project.name)}
             title={words.empty}
           >
             {#snippet mark()}
               <div
                 data-slot="caw-80"
-                class="mb-space-3 grid justify-items-center"
+                class="mb-space-3 grid self-center justify-items-center"
                 data-share="caw:{project.id}"
                 out:sitDown|global
               >
@@ -1155,7 +1155,7 @@
                     data-slot="routine-starters"
                     aria-label={words.startersLabel}
                     class={chipsVariants({
-                      class: "m-0 list-none justify-center p-0",
+                      class: "m-0 list-none p-0",
                     })}
                   >
                     {#each starters as starter (starter.text)}
