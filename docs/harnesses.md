@@ -66,42 +66,43 @@ Claude Code's adapter is `ClaudeHarness` (`claude.ts`), OpenCode's
 
 | Row | Claude Code | OpenCode | pi |
 |---|---|---|---|
-| `abortSession` | — (a process per session) | `opencode.ts:4997`: aborts a server-held turn | — |
-| `accountsChanged` | — (reads accounts afresh) | `opencode.ts:4537` | — |
-| `auth` | `claude.ts:4797` | `opencode.ts:1854` | `pi-services.ts:937` |
-| `authReason` | — (the report's own, `claude.ts:4823`) | `opencode.ts:3926` | `pi-services.ts:938` |
-| `busyInstances` | — | `opencode.ts:3185` | — |
-| `capabilities` | `claude.ts:4796` (`CLAUDE_CAPABILITIES`) | `opencode.ts:1853` (`OPENCODE_CAPABILITIES`) | `pi-services.ts:936` (`PI_CAPABILITIES`) |
-| `catalogFromServer` | — | `opencode.ts:1852` | — |
-| `deleteSession` | `claude.ts:5429` | `opencode.ts:6243` | `pi-services.ts:1173` |
-| `detect` | `claude.ts:4814` | `opencode.ts:3551` | `pi-services.ts:965` |
-| `dispose` | — | `opencode.ts:6279` | `pi-services.ts:1182` |
-| `endSession` | — | `opencode.ts:5030` | — |
-| `fleetHoldings` | `claude.ts:5527` | — | `pi-services.ts:1257` |
-| `fleetHome` | `claude.ts:5512` | `opencode.ts:6305` (`XDG_CONFIG_HOME`) | `pi-services.ts:1198` (`PI_CODING_AGENT_DIR`) |
-| `fleetStatus` | `claude.ts:5523` | `opencode.ts:6433` | `pi-services.ts:1264` |
-| `getSessionInfo` | `claude.ts:5359` | `opencode.ts:6078` | `pi-services.ts:1095` |
-| `getSessionMessages` | `claude.ts:5371` | `opencode.ts:6109` | `pi-services.ts:1115` |
-| `hubRestarted` | — | `opencode.ts:4497` | — |
-| `kind` | `claude.ts:4795` | `opencode.ts:1850` | `pi-services.ts:935` |
-| `listSessions` | `claude.ts:5315` | `opencode.ts:6068` | `pi-services.ts:1068` |
-| `machine` | `claude.ts:5434` | `opencode.ts:6256` | `pi-services.ts:1186` |
-| `providerList` | — | `opencode.ts:4523` | — |
-| `readTranscriptWindow` | `claude.ts:5392` | `opencode.ts:6147` | `pi-services.ts:1150` |
-| `reattach` | `claude.ts:5047` | `opencode.ts:5240` | `pi.ts:111` |
-| `renameSession` | `claude.ts:5409` | `opencode.ts:6217` | `pi-services.ts:1167` |
-| `restartHolds` | — | `opencode.ts:3152` | — |
-| `serversRunning` | — | `opencode.ts:5180` | — |
-| `sessionAddresses` | — | `opencode.ts:5190` | — |
-| `sessionPresent` | — | `opencode.ts:5142` | — |
-| `sessionsOn` | — (its procId names its one session) | `opencode.ts:5184` | — |
-| `setCustodyReadiness` | — | `opencode.ts:3108` | — |
-| `signInFaults` | — | `opencode.ts:3619` | — |
-| `spawn` | `claude.ts:4934` (Agent SDK child under sessiond) | `opencode.ts:5531` (an account's server under sessiond, over HTTP) | `pi.ts:31` (a pi host under sessiond) |
-| `spill` | `claude.ts:4912` | `opencode.ts:5523` | `pi.ts:23` |
-| `syncFleet` | `claude.ts:5516` | `opencode.ts:6309` | `pi-services.ts:1208` |
-| `tagSession` | `claude.ts:5420` | `opencode.ts:6234` (a sidecar, `opencode.ts:1155`) | `pi-services.ts:1170` |
-| `unclaimedRunners` | — | `opencode.ts:5200` | — |
+| `abortSession` | — (a process per session) | `opencode.ts:5001`: aborts a server-held turn | — |
+| `accountsChanged` | — (reads accounts afresh) | `opencode.ts:4541` | — |
+| `auth` | `claude.ts:4884` | `opencode.ts:1858` | `pi-services.ts:939` |
+| `authReason` | — (the report's own, `claude.ts:4910`) | `opencode.ts:3930` | `pi-services.ts:940` |
+| `busyInstances` | — | `opencode.ts:3189` | — |
+| `capabilities` | `claude.ts:4883` (`CLAUDE_CAPABILITIES`) | `opencode.ts:1857` (`OPENCODE_CAPABILITIES`) | `pi-services.ts:938` (`PI_CAPABILITIES`) |
+| `catalogFromServer` | — | `opencode.ts:1856` | — |
+| `deleteSession` | `claude.ts:5531` | `opencode.ts:6271` | `pi-services.ts:1206` |
+| `detect` | `claude.ts:4901` | `opencode.ts:3555` | `pi-services.ts:967` |
+| `dispose` | — | `opencode.ts:6307` | `pi-services.ts:1215` |
+| `endSession` | — | `opencode.ts:5034` | — |
+| `fleetHoldings` | `claude.ts:5629` | — | `pi-services.ts:1290` |
+| `fleetHome` | `claude.ts:5614` | `opencode.ts:6333` (`XDG_CONFIG_HOME`) | `pi-services.ts:1231` (`PI_CODING_AGENT_DIR`) |
+| `fleetStatus` | `claude.ts:5625` | `opencode.ts:6461` | `pi-services.ts:1297` |
+| `getSessionInfo` | `claude.ts:5446` | `opencode.ts:6106` | `pi-services.ts:1128` |
+| `getSessionMessages` | `claude.ts:5473` | `opencode.ts:6137` | `pi-services.ts:1148` |
+| `hubRestarted` | — | `opencode.ts:4501` | — |
+| `kind` | `claude.ts:4882` | `opencode.ts:1854` | `pi-services.ts:937` |
+| `listSessions` | `claude.ts:5402` | `opencode.ts:6072` | `pi-services.ts:1070` |
+| `machine` | `claude.ts:5536` | `opencode.ts:6284` | `pi-services.ts:1219` |
+| `providerList` | — | `opencode.ts:4527` | — |
+| `readTranscriptWindow` | `claude.ts:5494` | `opencode.ts:6175` | `pi-services.ts:1183` |
+| `reattach` | `claude.ts:5134` | `opencode.ts:5244` | `pi.ts:111` |
+| `renameSession` | `claude.ts:5511` | `opencode.ts:6245` | `pi-services.ts:1200` |
+| `restartHolds` | — | `opencode.ts:3156` | — |
+| `serversRunning` | — | `opencode.ts:5184` | — |
+| `sessionAddresses` | — | `opencode.ts:5194` | — |
+| `sessionPresent` | — | `opencode.ts:5146` | — |
+| `sessionsOn` | — (its procId names its one session) | `opencode.ts:5188` | — |
+| `setCustodyReadiness` | — | `opencode.ts:3112` | — |
+| `signInFaults` | — | `opencode.ts:3623` | — |
+| `spawn` | `claude.ts:5021` (Agent SDK child under sessiond) | `opencode.ts:5535` (an account's server under sessiond, over HTTP) | `pi.ts:31` (a pi host under sessiond) |
+| `spill` | `claude.ts:4999` | `opencode.ts:5527` | `pi.ts:23` |
+| `storedRun` | `claude.ts:5459` | `opencode.ts:6087` | `pi-services.ts:1102` |
+| `syncFleet` | `claude.ts:5618` | `opencode.ts:6337` | `pi-services.ts:1241` |
+| `tagSession` | `claude.ts:5522` | `opencode.ts:6262` (a sidecar, `opencode.ts:1159`) | `pi-services.ts:1203` |
+| `unclaimedRunners` | — | `opencode.ts:5204` | — |
 
 ### 2.2 `HarnessSession` members (`packages/agent/src/harness.ts`)
 
@@ -112,24 +113,24 @@ Claude Code's is `ClaudeSession` (`claude.ts`), OpenCode's `OpencodeSession`
 
 | Row | Claude Code | OpenCode | pi |
 |---|---|---|---|
-| `attached` | `claude.ts:3416` | `opencode-session.ts:752` | `pi-sessiond.ts:440` |
-| `control` | `claude.ts:3813` | `opencode-session.ts:3321` | `pi-sessiond.ts:513` |
-| `dispose` | `claude.ts:4636` | `opencode-session.ts:3661` | `pi-sessiond.ts:568` |
-| `endedForMove` | `claude.ts:3688` | — | — |
-| `harness` | `claude.ts:2326` | `opencode-session.ts:753` | `pi-sessiond.ts:206` |
-| `heldForLater` | `claude.ts:3652` | — | — |
-| `heldSince` | `claude.ts:3647` | — | — |
-| `holding` | `claude.ts:3604` | `opencode-session.ts:1033` | `pi-sessiond.ts:504` |
-| `interrupt` | `claude.ts:4575` | `opencode-session.ts:3551` | `pi-sessiond.ts:552` |
+| `attached` | `claude.ts:3501` | `opencode-session.ts:752` | `pi-sessiond.ts:440` |
+| `control` | `claude.ts:3898` | `opencode-session.ts:3321` | `pi-sessiond.ts:513` |
+| `dispose` | `claude.ts:4723` | `opencode-session.ts:3661` | `pi-sessiond.ts:568` |
+| `endedForMove` | `claude.ts:3773` | — | — |
+| `harness` | `claude.ts:2400` | `opencode-session.ts:753` | `pi-sessiond.ts:206` |
+| `heldForLater` | `claude.ts:3737` | — | — |
+| `heldSince` | `claude.ts:3732` | — | — |
+| `holding` | `claude.ts:3689` | `opencode-session.ts:1033` | `pi-sessiond.ts:504` |
+| `interrupt` | `claude.ts:4662` | `opencode-session.ts:3551` | `pi-sessiond.ts:552` |
 | `noteStopped` | — | `opencode-session.ts:3579` | — |
-| `outdated` | `claude.ts:2804` | — | — |
-| `processId` | `claude.ts:3525` | `opencode-session.ts:756` | `pi-sessiond.ts:256` |
-| `resolvePermission` | `claude.ts:4528` | `opencode-session.ts:2196` | `pi-sessiond.ts:556` |
-| `send` | `claude.ts:3724` | `opencode-session.ts:2865` | `pi-sessiond.ts:491` |
-| `sessionId` | `claude.ts:2327` | `opencode-session.ts:783` | `pi-sessiond.ts:207` |
-| `stop` | `claude.ts:4589` | `opencode-session.ts:3642` | `pi-sessiond.ts:562` |
-| `tables` | `claude.ts:3596` | `opencode-session.ts:1018` | — |
-| `withdrawPermission` | `claude.ts:4556` | `opencode-session.ts:2192` | `pi-sessiond.ts:559` |
+| `outdated` | `claude.ts:2889` | — | — |
+| `processId` | `claude.ts:3610` | `opencode-session.ts:756` | `pi-sessiond.ts:256` |
+| `resolvePermission` | `claude.ts:4615` | `opencode-session.ts:2196` | `pi-sessiond.ts:556` |
+| `send` | `claude.ts:3809` | `opencode-session.ts:2865` | `pi-sessiond.ts:491` |
+| `sessionId` | `claude.ts:2401` | `opencode-session.ts:783` | `pi-sessiond.ts:207` |
+| `stop` | `claude.ts:4676` | `opencode-session.ts:3642` | `pi-sessiond.ts:562` |
+| `tables` | `claude.ts:3681` | `opencode-session.ts:1018` | — |
+| `withdrawPermission` | `claude.ts:4643` | `opencode-session.ts:2192` | `pi-sessiond.ts:559` |
 
 ### 2.3 `HarnessContext` members (`packages/agent/src/harness.ts`)
 
@@ -138,29 +139,29 @@ reads or calls the member; `—` is a member it has no use for.
 
 | Row | Claude Code | OpenCode | pi |
 |---|---|---|---|
-| `boundary` | `claude.ts:1431` (`CLAUDE_CODE_SHELL_PREFIX`, and the judge hook) | — (its plugin's `shell` and judge, §2.6 `workspace-shell`) | `pi-sessiond.ts:432` |
-| `browserDoor` | `claude.ts:2023` | — | `pi-sessiond.ts:188` |
-| `busy` | `claude.ts:2985` | `opencode-session.ts:1259` | `pi-sessiond.ts:396` |
-| `closed` | `claude.ts:3141` | `opencode-session.ts:2625` | `pi-sessiond.ts:342` |
-| `containerEnv` | `claude.ts:1445` | `opencode-session.ts:3517` | `pi-sessiond.ts:601` |
-| `cwd` | `claude.ts:2135` | `opencode.ts:5771` | `pi-sessiond.ts:183` |
-| `died` | `claude.ts:356` | — | `pi-sessiond.ts:329` |
-| `emit` | — | `opencode.ts:5483` | — |
-| `failed` | `claude.ts:351` | `opencode-session.ts:952` | `pi-sessiond.ts:299` |
-| `frame` | `claude.ts:2834` | `opencode-session.ts:1044` | `pi-sessiond.ts:377` |
-| `hostTmp` | `claude.ts:1440` | `opencode-session.ts:3520` | `pi-sessiond.ts:610` |
-| `ingested` | `claude.ts:5059` | — | `pi.ts:122` |
-| `instanceId` | `claude.ts:1448` | `opencode.ts:5244` | `pi-sessiond.ts:191` |
-| `keeperRefused` | `claude.ts:2307` | — | `pi-sessiond.ts:463` |
-| `mcpGate` | `claude.ts:2013` | — (its gate form, `opencode.ts:326`) | `pi-sessiond.ts:184` |
-| `permission` | `claude.ts:2751` | `opencode-session.ts:2064` | — (no permission modes) |
-| `permissionResolved` | `claude.ts:2746` | `opencode-session.ts:1543` | — |
-| `recordSessionAddress` | — | `opencode.ts:5870` | — |
-| `refused` | `claude.ts:3377` | — | — |
-| `rejected` | `claude.ts:3728` | `opencode-session.ts:2952` | `pi-sessiond.ts:303` |
-| `session` | `claude.ts:3057` | `opencode.ts:6008` | `pi-sessiond.ts:296` |
-| `sessionCredential` | `claude.ts:1449` (an MCP config file, off argv) | — | `pi-runtime.ts:1638` |
-| `workspace` | `claude.ts:2303` | `opencode-session.ts:3521` | `pi-sessiond.ts:586` |
+| `boundary` | `claude.ts:1434` (`CLAUDE_CODE_SHELL_PREFIX`, and the judge hook) | — (its plugin's `shell` and judge, §2.6 `workspace-shell`) | `pi-sessiond.ts:432` |
+| `browserDoor` | `claude.ts:2080` | — | `pi-sessiond.ts:188` |
+| `busy` | `claude.ts:3070` | `opencode-session.ts:1259` | `pi-sessiond.ts:396` |
+| `closed` | `claude.ts:3226` | `opencode-session.ts:2625` | `pi-sessiond.ts:342` |
+| `containerEnv` | `claude.ts:1448` | `opencode-session.ts:3517` | `pi-sessiond.ts:601` |
+| `cwd` | `claude.ts:2195` | `opencode.ts:5775` | `pi-sessiond.ts:183` |
+| `died` | `claude.ts:359` | — | `pi-sessiond.ts:329` |
+| `emit` | — | `opencode.ts:5487` | — |
+| `failed` | `claude.ts:354` | `opencode-session.ts:952` | `pi-sessiond.ts:299` |
+| `frame` | `claude.ts:2919` | `opencode-session.ts:1044` | `pi-sessiond.ts:377` |
+| `hostTmp` | `claude.ts:1443` | `opencode-session.ts:3520` | `pi-sessiond.ts:610` |
+| `ingested` | `claude.ts:5146` | — | `pi.ts:122` |
+| `instanceId` | `claude.ts:1451` | `opencode.ts:5248` | `pi-sessiond.ts:191` |
+| `keeperRefused` | `claude.ts:2381` | — | `pi-sessiond.ts:463` |
+| `mcpGate` | `claude.ts:2070` | — (its gate form, `opencode.ts:328`) | `pi-sessiond.ts:184` |
+| `permission` | `claude.ts:2836` | `opencode-session.ts:2064` | — (no permission modes) |
+| `permissionResolved` | `claude.ts:2831` | `opencode-session.ts:1543` | — |
+| `recordSessionAddress` | — | `opencode.ts:5874` | — |
+| `refused` | `claude.ts:3462` | — | — |
+| `rejected` | `claude.ts:3813` | `opencode-session.ts:2952` | `pi-sessiond.ts:303` |
+| `session` | `claude.ts:3142` | `opencode.ts:6012` | `pi-sessiond.ts:296` |
+| `sessionCredential` | `claude.ts:1452` (an MCP config file, off argv) | — | `pi-runtime.ts:1638` |
+| `workspace` | `claude.ts:2377` | `opencode-session.ts:3521` | `pi-sessiond.ts:586` |
 
 ### 2.4 `SessiondAdoption` members (`packages/agent/src/session.ts`)
 
@@ -170,17 +171,17 @@ sessions live in a server the agent reattaches to instead (`reattach`).
 
 | Row | Claude Code | OpenCode | pi |
 |---|---|---|---|
-| `adopt` | `claude.ts:5131` | — (server custody) | `pi.ts:103` |
-| `custodyCandidates` | `claude.ts:5301` | — | `pi.ts:84` |
-| `custodyKeepers` | `claude.ts:5278` | — | `pi.ts:65` |
-| `custodyReading` | `claude.ts:5284` | — | `pi.ts:71` |
-| `turnRunning` | `claude.ts:5079` | — | `pi.ts:93` |
+| `adopt` | `claude.ts:5218` | — (server custody) | `pi.ts:103` |
+| `custodyCandidates` | `claude.ts:5388` | — | `pi.ts:84` |
+| `custodyKeepers` | `claude.ts:5365` | — | `pi.ts:65` |
+| `custodyReading` | `claude.ts:5371` | — | `pi.ts:71` |
+| `turnRunning` | `claude.ts:5166` | — | `pi.ts:93` |
 
 ### 2.5 `FULL_CAPABILITIES` flags (`capabilities.ts`)
 
-Claude Code's is `FULL_CAPABILITIES` itself (`claude.ts:986`); OpenCode's is
-the same but `tasks` (`opencode.ts:1150`); pi's is its own list
-(`pi-services.ts:204`). A flag that is false hides or refuses the feature for
+Claude Code's is `FULL_CAPABILITIES` itself (`claude.ts:989`); OpenCode's is
+the same but `tasks` (`opencode.ts:1154`); pi's is its own list
+(`pi-services.ts:206`). A flag that is false hides or refuses the feature for
 that harness.
 
 | Row | Claude Code | OpenCode | pi |
@@ -221,22 +222,22 @@ read this table; a new harness fills it all the same.
 
 | Row | Claude Code | OpenCode | pi |
 |---|---|---|---|
-| `workspace-shell` | the shell prefix (`CLAUDE_CODE_SHELL_PREFIX`, `claude.ts:1434`; `claudePrefixScript`, `packages/agent/src/boundary.ts:618`) | its plugin's `shell`, through the workspace's executor (`opencode-plugin.ts`) | `sessionBash` (`pi-runtime.ts:258`) |
+| `workspace-shell` | the shell prefix (`CLAUDE_CODE_SHELL_PREFIX`, `claude.ts:1437`; `claudePrefixScript`, `packages/agent/src/boundary.ts:618`) | its plugin's `shell`, through the workspace's executor (`opencode-plugin.ts`) | `sessionBash` (`pi-runtime.ts:258`) |
 | `workspace-files` | the judge hook (`packages/agent/src/boundary-judge.ts:199`) | the judge in its plugin (`opencode-plugin.ts:288`) | `boundedFileTools` (`pi-runtime.ts:291`, judging at `:306`) |
 | `workspace-config` | its entry of `HARNESS_CONFIG_EMPTY_BY` (`.claude/*`, `.mcp.json`) | its entry (`opencode.json(c)`, `.opencode`) | its entry (`.pi`, and `.agents/skills`, which OpenCode reads too) |
 | `credentials` | its entry of `HARNESS_CREDENTIALS` | its entry | its entry |
-| `mcp-gate` | `claude.ts:2013` | the gate form its plugin judges with (`opencode.ts:326`) | `pi-runtime.ts:1657` |
-| `browser-door` | `claude.ts:2023` | — | `pi-runtime.ts:1663` |
+| `mcp-gate` | `claude.ts:2070` | the gate form its plugin judges with (`opencode.ts:328`) | `pi-runtime.ts:1657` |
+| `browser-door` | `claude.ts:2080` | — | `pi-runtime.ts:1663` |
 | `sessiond-custody` | a child under sessiond (§2.4) | an account's server under sessiond (`reattach`) | a pi host under sessiond (§2.4) |
-| `permission-modes` | the SDK's `permissionMode` and `canUseTool`; `fullSend` is the CLI's `bypassPermissions` (`claude.ts:1497`) | its permission ruleset (`#rules`, `opencode-session.ts:1071`) | none |
-| `questions` | `AskUserQuestion` denied for CawCo's `ask` (`NATIVE_TOOLS.questions`, `packages/core/src/delegate-types.ts:226`) | `question`, denied the same | none |
-| `tool-denials` | `disallowedTools` (`claude.ts:2615`) | permission rules (`opencodeToolsFor`) | `piToolsFor` (`pi-runtime.ts:1701`) |
+| `permission-modes` | the SDK's `permissionMode` and `canUseTool`; `fullSend` is the CLI's `bypassPermissions` (`claude.ts:1500`) | its permission ruleset (`#rules`, `opencode-session.ts:1071`) | none |
+| `questions` | `AskUserQuestion` denied for CawCo's `ask` (`NATIVE_TOOLS.questions`, `packages/core/src/delegate-types.ts:268`) | `question`, denied the same | none |
+| `tool-denials` | `disallowedTools` (`claude.ts:2700`) | permission rules (`opencodeToolsFor`) | `piToolsFor` (`pi-runtime.ts:1701`) |
 | `cawco-mcp` | HTTP with its bearer in a private file (`packages/agent/src/claude-mcp-config.ts`) | its plugin's `cawco_*` tools | the host's own list (`pi-runtime.ts:1427`) |
 | `fleet-hooks` | settings hooks | CawCo's plugin (`HOOK_EVENTS_ON.opencode`, `opencode-plugin.ts:88`) | an inline extension (`HOOK_EVENTS_ON.pi`, `pi-runtime.ts:569`) |
-| `instruction-files` | `withInstructions` (`claude.ts:1962`) | `instructionEntries` (`opencode-session.ts:405`) | `agentsFilesOverride` (`pi-runtime.ts:1687`) |
-| `clean-session` | `CLEAN_OPTIONS`, `settingSources: []` (`claude.ts:1675`) | refused (`CLEAN_START_REFUSAL`, `packages/core/src/harness.ts:105`) | `noContextFiles` (`pi-runtime.ts:793`) |
+| `instruction-files` | `withInstructions` (`claude.ts:2018`) | `instructionEntries` (`opencode-session.ts:405`) | `agentsFilesOverride` (`pi-runtime.ts:1687`) |
+| `clean-session` | `CLEAN_OPTIONS`, `settingSources: []` (`claude.ts:1678`) | refused (`CLEAN_START_REFUSAL`, `packages/core/src/harness.ts:105`) | `noContextFiles` (`pi-runtime.ts:793`) |
 | `transcripts` | JSONL (`claude-transcript.ts`) | its database (`opencode-transcript.ts`) | session files |
-| `fork-rewind` | `resume.fork` / `resume.atMessage` (`claude.ts:2632`) | `opencode.ts:5568` | `pi-runtime.ts:1623` |
+| `fork-rewind` | `resume.fork` / `resume.atMessage` (`claude.ts:2717`) | `opencode.ts:5572` | `pi-runtime.ts:1623` |
 
 ## 3. Places outside the adapters that name a harness
 
@@ -262,10 +263,10 @@ the §2 row that says whether the new harness shares it.
 | `harness.ts:105` `CLEAN_START_REFUSAL` | why it cannot start clean, or none (`clean-session`) | typed |
 | `harness.ts:163` `PERMISSION_MODES` | nothing; which it offers is its `permissionModes` (§2.5) | per-adapter |
 | `tools.ts:358`, `:516`, `:595` `TOOL_CATALOG` entries | a catalog entry: install, version gate, sign-in probe | untyped: keyed by tool id; `HARNESS_TOOL` is the typed link to it |
-| `delegate-types.ts:211` `NATIVE_TOOLS` | its own subagent, todo and question tools, which every CawCo session is denied | typed |
-| `delegate-types.ts:339` `HARNESS_TOOLS` | its tool names per class (shell, edit, fetch, search) | typed |
-| `delegate-types.ts:441` `BOARD_ONLY_DENIED_TOOLS`, `CURATOR_DENIED_TOOLS` | its names | typed |
-| `delegate-types.ts:662` `denyToolsProblem` | how a type's denied tools map to its names | typed (switch to `unhandled`) |
+| `delegate-types.ts:253` `NATIVE_TOOLS` | its own subagent, todo and question tools, which every CawCo session is denied | typed |
+| `delegate-types.ts:381` `HARNESS_TOOLS` | its tool names per class (shell, edit, fetch, search) | typed |
+| `delegate-types.ts:483` `BOARD_ONLY_DENIED_TOOLS`, `CURATOR_DENIED_TOOLS` | its names | typed |
+| `delegate-types.ts:704` `denyToolsProblem` | how a type's denied tools map to its names | typed (switch to `unhandled`) |
 | `hooks.ts:417` `HookHarness`, `HOOK_EVENTS_ON`, `HOOK_TOOL_NAMES` | the hook events it raises and its tool names in Claude Code's words | typed (every kind but Claude Code) |
 | `hooks.ts:590` `hookUnsupported` | its name (`accountsWords.harnesses`) | typed |
 | `workspace-judge.ts:338` `SESSION_KEEPS` | what it keeps for the session to read back (its spill or transcript folder) | typed |
@@ -279,7 +280,7 @@ the §2 row that says whether the new harness shares it.
 | `accounts.ts:1100` `providersOpenedBy`, `:1125` `accountProvidersOf` | which account providers its models bill to | untyped: take any string from the wire; Claude Code's and OpenCode's own id rules |
 | `accounts.ts:1399` `AccountMove.compactBy` | nothing: every kind but Claude Code | typed (derived) |
 | `stored-shapes.ts` | the stored schemas | generated (`bun run stored-shapes` in packages/hub) |
-| `protocol.ts:720` `chosenModes`; `protocol.ts:788` `opencode: boolean` | nothing | data: absent for a harness never started; OpenCode's server custody |
+| `protocol.ts:730` `chosenModes`; `protocol.ts:798` `opencode: boolean` | nothing | data: absent for a harness never started; OpenCode's server custody |
 | `usage/types.ts:10` `UsageScanned` | whether CawCo scans its usage and limits | typed; `UsageHarness` derives from it |
 | `binary-updates.ts:108` `"opencode"` restart-hold kind | nothing | untyped: OpenCode's server operations, not a harness kind |
 | `harness-refusal.ts:86` | nothing | untyped: Claude Code's accounts sign in through its CLI |
@@ -295,11 +296,11 @@ the §2 row that says whether the new harness shares it.
 | `proc-id.ts:11` `OWN_PROCESS` | whether each session is a keeper process of its own | typed; `SessionProcKind`, `SESSION_PROC_KINDS` and `isSessionProc` derive from it |
 | `proc-id.ts:63` `procIdFor`; `parseProcId` | its procId prefix, for a kind of its own process | typed (`satisfies never`); `parseProcId` reads the prefix by hand |
 | `sessiond-custody.ts:64` `ChildActivity.read` | how its keeper's ring says a turn runs | typed (`unhandled`) |
-| `boundary.ts:6558`, `daemon.ts:1596`, `session.ts:3012`, `:3225`, `:4139`, `:4428`, `:7175` | nothing: they read `isSessionProc` | derived |
+| `boundary.ts:6558`, `daemon.ts:1596`, `session.ts:3015`, `:3228`, `:4142`, `:4431`, `:7180` | nothing: they read `isSessionProc` | derived |
 | `first-session.ts:60` `SPILLING` | whether its sessions keep a spill folder | typed |
 | `capabilities.ts:275` `harnessItems` | its CLI as a machine capability, with install advice | typed |
 | `provider-accounts.ts:1250` `STORE_ENTRY` | how an entry of its own sign-in store is read | typed |
-| `session.ts:6405` `hooksByHarness` | nothing | data: filled per harness that reported |
+| `session.ts:6408` `hooksByHarness` | nothing | data: filled per harness that reported |
 | `session.ts` (14), `daemon.ts` (5), `first-session.ts:115`, `capabilities.ts:198`, `provider-accounts.ts:1271`, `usage/scanner.ts:562` | nothing unless it shares the mechanism | untyped: one harness's own mechanism (Claude Code's result frames, version gate and first session; OpenCode's server custody and usage DB; `sessiond-custody`, `transcripts`) |
 | `stores/opencode-reads.ts`, `image-providers/antigravity.ts` | nothing | OpenCode's and Antigravity's own stores |
 
@@ -312,9 +313,9 @@ the §2 row that says whether the new harness shares it.
 | `placement.ts:115` `harnessName` | nothing: `accountsWords.harnesses` | typed |
 | `memory.ts:327` `ENDS_WITH_CALL` | whether its subagent ends with its call's result | typed |
 | `at-limit.ts:383` `OWN_COMPACT` | whether its own `/compact` runs a move's compaction | typed |
-| `server.ts:1739` `homeStore` | nothing: every `HomeStore` | typed (`everyOf`) |
+| `server.ts:1741` `homeStore` | nothing: every `HomeStore` | typed (`everyOf`) |
 | `delegation-mcp.ts:468` | nothing | untyped: OpenCode's shared discovery is a connection with no session |
-| `db/schema.ts:2464`, `db/index.ts` usage buckets | nothing | typed through `UsageHarness` |
+| `db/schema.ts:2472`, `db/index.ts` usage buckets | nothing | typed through `UsageHarness` |
 | `server.ts` (50), `session-lifecycle.ts` (5), `keep-alive.ts` (2), `accounts.ts` (2), `db/index.ts` (3) | nothing unless it shares the mechanism | untyped: one harness's own mechanism (Claude Code's moves, keep-alive, version gate, transcripts, context windows and account scope; OpenCode's server sessions) |
 | `scripts/openapi.ts` → `apps/apple/…/CawCoAPI/openapi.json` `HarnessKind` | the enum | generated |
 
@@ -324,9 +325,9 @@ the §2 row that says whether the new harness shares it.
 |---|---|---|
 | `lib/cawco/HarnessLogo.svelte:17` `MARKS` | its mark | typed |
 | `lib/cawco/permission-modes.ts:52` `DESCRIPTIONS`, `:169` `FULL_SEND` | what each mode means on it, or none | typed |
-| `lib/cawco/spawn/ToolChips.svelte:22`, `workspace/SessionDetails.svelte:223`, `transcript/speaker.ts` | its name | typed |
+| `lib/cawco/spawn/ToolChips.svelte:22`, `workspace/SessionDetails.svelte:258`, `transcript/speaker.ts` | its name | typed |
 | `accounts/AtLimitBlock.svelte:73`, `accounts/model.svelte.ts:101`, `config/editors/DelegateTypeEditor.svelte:211`, `config/editors/RuleEditor.svelte:452` | nothing: they map `HARNESSES` | derived |
-| `usage/WhereItGoes.svelte:53`, `usage/History.svelte:26`, `routes/(app)/usage/+page.svelte:102` | nothing: they read `UsageHarness` | typed (`everyOf`) / derived |
+| `usage/WhereItGoes.svelte:55`, `usage/History.svelte:26`, `routes/(app)/usage/+page.svelte:102` | nothing: they read `UsageHarness` | typed (`everyOf`) / derived |
 | `usage/History.svelte`, `usage/WhereItGoes.svelte`, `usage/forecast.svelte.ts` comparisons | its words, once its usage is scanned | untyped: two-way between Claude Code's API price and OpenCode's spend |
 | `client.svelte.ts` (2), `harness-block.svelte.ts`, `machine.ts` (2), `models.svelte.ts` (3), `session-export.ts` (2), `spawn/NewSessionForm.svelte` (2), `transcript/Composer.svelte`, `transcript/MessageRow.svelte`, `workspace/SessionDetails.svelte` (2), `decides/preview/setup-records.ts` | nothing unless it shares the mechanism | untyped: one harness's own mechanism (Claude Code's accounts, catalogs, refusal shape, queued sends and cost; OpenCode Go's limits) |
 
