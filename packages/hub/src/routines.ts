@@ -63,7 +63,10 @@
  *   after the routine's prompt. You can pause it, move its schedule or
  *   change its prompt as any routine's; its target stays `curator`.
  * - **The unused skills and servers routine** (unused-trim.ts) is a routine
- *   the hub makes when the person turns it on from Caw's suggestion, or
+ *   the hub makes when the person turns it on from Caw's suggestion, when
+ *   Caw turns it on (`routine_list` names it off while the project has
+ *   none; `routine_update` with `enabled: true` alone on its name makes it,
+ *   as the suggestion's Turn on does), or
  *   in every project and once in no project by the fleet switch: target
  *   `trim`, weekly, kept, with no test run. Its run reads the count first;
  *   with nothing to propose it ends delivered with that said, else it is a
@@ -111,7 +114,7 @@ import { HUB_DEBUG } from "./config";
 import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { WorkBudget } from "./db/schema";
-import { byHandle } from "./handles";
+import { byHandle, type Handled, namesAny } from "./handles";
 import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
@@ -2537,9 +2540,19 @@ export const createRoutines = ({
     projectId: string,
     answer: "on" | "dismissed"
   ): RoutineView | null => {
+    if (answer === "on") {
+      return trimOn(projectId);
+    }
     projectOf(projectId);
     db.trim.answer(projectId, answer);
-    return answer === "on" ? viewOf(ensureTrim(projectId)) : null;
+    return null;
+  };
+
+  /** Turn on: the answer kept, and the routine made; answers it. The page's Turn on and Caw's `routine_update` both. */
+  const trimOn = (projectId: string): RoutineView => {
+    projectOf(projectId);
+    db.trim.answer(projectId, "on");
+    return viewOf(ensureTrim(projectId));
   };
 
   /** The fleet switch: on while the fleet-level trim routine exists. */
@@ -2614,18 +2627,57 @@ export const createRoutines = ({
   const routineRef = () =>
     z.string().trim().min(1).describe("Its handle, id or name.");
 
-  /** The id of the routine `asked` names among the caller's project's: its id, handle or name (handles.ts). */
+  /** How a tool's `id` names a routine: its id, handle or name (handles.ts). */
+  const routineKeys: Handled<RoutineRow> = {
+    id: (routine) => routine.id,
+    names: (routine) => [routine.name],
+    said: (routine) => `${routine.name} ${routine.id.slice(0, 8)}`,
+  };
+
+  /** The id of the routine `asked` names among the caller's project's. */
   const routineNamed = (asked: string, caller: InstanceRow): string =>
     byHandle(
       asked,
       store.list(caller.projectId ?? null),
-      {
-        id: (routine) => routine.id,
-        names: (routine) => [routine.name],
-        said: (routine) => `${routine.name} ${routine.id.slice(0, 8)}`,
-      },
+      routineKeys,
       "routine"
     ).id;
+
+  /**
+   * The name of the hub's trim routine while `projectId` has none: Caw
+   * lists it off and turns it on (`routine_update` with `enabled: true`),
+   * whether or not the person waved the page's suggestion away.
+   */
+  const trimOff = (projectId: string | null): string | null =>
+    projectId && !trimOf(projectId) ? TRIM_NAME : null;
+
+  /** Whether `asked` names the trim routine `projectId` does not have yet, and none of its own. */
+  const namesTrimOff = (asked: string, projectId: string | null): boolean => {
+    const off = trimOff(projectId);
+    return (
+      off !== null &&
+      asked.trim().toLowerCase() === off.toLowerCase() &&
+      !namesAny(asked, store.list(projectId), routineKeys)
+    );
+  };
+
+  /**
+   * `routine_update` on the trim routine `projectId` does not have yet:
+   * `enabled: true` alone turns it on as the page's Turn on does
+   * (`answerTrim`); any other change is refused until it is on.
+   */
+  const turnTrimOn = (
+    projectId: string,
+    change: Record<string, unknown>
+  ): RoutineView => {
+    const asked = Object.entries(change).filter(
+      ([, value]) => value !== undefined
+    );
+    if (!(asked.length === 1 && change.enabled === true)) {
+      return refuse(409, routineToolWords.trimFirst(TRIM_NAME));
+    }
+    return trimOn(projectId);
+  };
 
   /**
    * The routine tools, bound to the calling session and, when its harness
@@ -2642,7 +2694,7 @@ export const createRoutines = ({
     return [
       tool(
         "routine_create",
-        `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'orchestrator': a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. target 'conversation' messages the project's conversation, Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first.`,
+        `Make a routine: a prompt the hub runs on a schedule. target 'delegate': a fresh delegate each run, its finish_item headline the output (exactly ${NO_REPLY} is silent; ${AUTOMATION_FAILED}: <why> fails it). target 'orchestrator': a fresh session that may delegate, in the project's checkout, under the same contract; it outlives you. target 'conversation' messages the project's conversation, Caw. It runs once now as a test and turns off after 7 days unless kept. The owner is told, with what you said just before: say why first. To unlist unused skills and servers, turn on the hub's routine with routine_update.`,
         {
           name: z.string().describe("3–6 plain words."),
           prompt: z.string().describe("What each run does."),
@@ -2699,14 +2751,20 @@ export const createRoutines = ({
       ),
       tool(
         "routine_list",
-        "List your project's routines with their schedule, next slot and newest runs (state, outcome, output, why skipped or failed).",
+        `List your project's routines with their schedule, next slot and newest runs (state, outcome, output, why skipped or failed), and the hub's ${TRIM_NAME} while off.`,
         {},
-        () => Promise.resolve(list(me().projectId ?? null)),
+        () => {
+          const projectId = me().projectId ?? null;
+          return Promise.resolve({
+            routines: list(projectId),
+            off: trimOff(projectId),
+          });
+        },
         routineListWords
       ),
       tool(
         "routine_update",
-        "Change a routine: pause or resume it (enabled), keep it past 7 days (only on the owner's word), or any field it was made with.",
+        `Change a routine: pause or resume it (enabled), keep it past 7 days (only on the owner's word), or any field it was made with; enabled: true alone turns on the hub's ${TRIM_NAME} while off.`,
         {
           id: routineRef(),
           enabled: z.boolean().optional(),
@@ -2721,14 +2779,21 @@ export const createRoutines = ({
           mode: z.enum(SESSION_CHOSEN_MODES).nullable().optional(),
         },
         // Left out, a field stays: the patch's own rule (`merged`).
-        ({ id, time_zone, delegate_type, ...fields }) =>
-          Promise.resolve(
+        ({ id, time_zone, delegate_type, ...fields }) => {
+          const projectId = me().projectId ?? null;
+          if (projectId && namesTrimOff(id, projectId)) {
+            return Promise.resolve(
+              turnTrimOn(projectId, { ...fields, time_zone, delegate_type })
+            );
+          }
+          return Promise.resolve(
             update(
               routineNamed(id, me()),
               { ...fields, timeZone: time_zone, delegateType: delegate_type },
               me()
             )
-          ),
+          );
+        },
         routineWords
       ),
       tool(

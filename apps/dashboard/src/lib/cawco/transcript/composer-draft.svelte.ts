@@ -205,10 +205,12 @@ export class ComposerDraft {
   /**
    * Words asked of the session from outside its composer (Files' empty
    * state, The Empty Starts Work Rule) into the field, the caret after them:
-   * nothing is sent, and they are the person's to edit.
+   * nothing is sent, and they are the person's to edit. They are no
+   * starter's, so they take the place of any starter pressed before.
    */
   ask(words: string): void {
     this.text = words;
+    this.pressed = null;
     this.focusWanted = true;
   }
 

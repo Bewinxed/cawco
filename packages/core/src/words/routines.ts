@@ -249,13 +249,19 @@ export const routinesWords = {
   from: (who: string) => `From ${who}`,
 
   // Caw's suggestion of the unused skills and servers routine, at the
-  // Routines ledger's foot (hub unused-trim.ts).
+  // Routines ledger's foot, or the empty page's last chip (hub unused-trim.ts).
   trimName: "Unused skills and servers",
   trimReason:
     "Each Monday, counts what this project's sessions call and proposes unlisting what nobody has called in 30 days.",
   trimLabel: "Caw suggests a routine",
   trimTurnOn: "Turn on",
   trimNotNow: "Not now",
+  /**
+   * The empty Routines page's last chip while Caw suggests the routine: a
+   * press puts it in his composer, unsent, and he turns it on when it goes.
+   */
+  trimAsk:
+    "Turn on Unused skills and servers: each Monday, propose unlisting what nobody calls",
   refusedTrimOn: (why: string) => `The routine wasn't turned on. ${why}`,
   refusedTrimNotNow: (why: string) => `The suggestion is still here. ${why}`,
 
@@ -345,4 +351,10 @@ export const routineToolWords = {
   /** The unused skills and servers routine's target is the hub's too. */
   trimStays:
     "The unused skills and servers routine is the hub's: its target stays trim.",
+  /** `routine_list` while the project has no unused skills and servers routine: what it does, and how Caw turns it on. */
+  trimOff: (name: string): string =>
+    `The hub's ${name} routine is off in this project: each Monday a delegate proposes unlisting the skills and servers no session called in 30 days, and nothing changes until the owner approves. To turn it on: routine_update with id "${name}" and enabled: true.`,
+  /** `routine_update` asked any other change of it while it is off. */
+  trimFirst: (name: string): string =>
+    `${name} is off. Turn it on first (routine_update with enabled: true alone), then change it.`,
 };

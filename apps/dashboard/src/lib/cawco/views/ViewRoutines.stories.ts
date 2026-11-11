@@ -4,8 +4,9 @@
  * Story Format 3, live components), through its seam (ViewRoutinesFrame),
  * each story's stand-in hub answering the page's reads (routines-fixture).
  */
+import { routinesWords } from "@cawco/core/words/routines";
 import { hubAs } from "../hub-stand-in";
-import { STATES } from "./routines-fixture";
+import { STARTERS, STATES } from "./routines-fixture";
 import ViewRoutinesFrame from "./ViewRoutinesFrame.svelte";
 
 export default {
@@ -19,7 +20,28 @@ export default {
 export const Suggested = {};
 
 /** I have no routines yet, and Caw suggests one. */
-export const NoRoutinesYet = { decorators: [hubAs("connected", STATES.empty)] };
+export const NoRoutinesYet = {
+  args: { starters: STARTERS, canTalk: true },
+  decorators: [hubAs("connected", STATES.empty)],
+};
+
+/** I pressed Caw's chip. Its ask is in the composer, unsent. */
+export const ChipPressed = {
+  args: { starters: STARTERS, canTalk: true, pressed: true },
+  decorators: [hubAs("connected", STATES.empty)],
+  from: "NoRoutinesYet",
+  play: async ({
+    canvas,
+    userEvent,
+  }: {
+    canvas: { getByRole: (role: string, options: { name: string }) => Element };
+    userEvent: { click: (el: Element) => Promise<void> };
+  }) => {
+    await userEvent.click(
+      canvas.getByRole("button", { name: routinesWords.trimAsk })
+    );
+  },
+};
 
 /** I turned it on. It sits with my other routines. */
 export const TurnedOn = { decorators: [hubAs("connected", STATES.on)] };

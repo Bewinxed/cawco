@@ -3062,6 +3062,9 @@ public enum Words {
 
         public static let trimNotNow = "Not now"
 
+        /// The empty Routines page's last chip while Caw suggests the routine: a press puts it in his composer, unsent, and he turns it on when it goes.
+        public static let trimAsk = "Turn on Unused skills and servers: each Monday, propose unlisting what nobody calls"
+
         public static func refusedTrimOn(why: String) -> String {
             "The routine wasn't turned on. \(why)"
         }

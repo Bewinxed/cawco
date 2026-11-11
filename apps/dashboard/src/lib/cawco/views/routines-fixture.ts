@@ -7,6 +7,7 @@
 import { hubRequest } from "@cawco/core/hub-request";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { routinesWords } from "@cawco/core/words/routines";
+import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
 import type { Routine, RoutineRun } from "#lib/cawco/routines/routines-api.js";
 
 export const PROJECT = { id: "70ac3d41", name: "Cawco-Dev" };
@@ -185,11 +186,35 @@ const pageAnswers = (
   };
 };
 
+/** What Cawco-Dev's empty page offers to ask Caw for: the work it repeats, written for it. */
+export const STARTERS: ProjectStarter[] = [
+  {
+    glyph: "bug",
+    text: "Every weekday at 07:00, file last night's failed checks on main as tasks",
+    reason:
+      "Failed checks on main were filed by hand on four mornings this week.",
+    sources: [{ kind: "task", ref: "tsk-412" }],
+  },
+  {
+    glyph: "triage",
+    text: "When an issue opens on Bewinxed/cawco, sort it into a stage and say why",
+    reason:
+      "Twelve issues opened this month and waited a day or more to be sorted.",
+    sources: [{ kind: "event", ref: "github:Bewinxed/cawco issue.opened" }],
+  },
+  {
+    glyph: "rocket",
+    text: "After each release, write its notes from the merged pull requests",
+    reason: "The last three releases had their notes written by hand.",
+    sources: [{ kind: "commit", ref: "0ce055687" }],
+  },
+];
+
 /** Each state of the page the suggestion meets. */
 export const STATES = {
   /** Caw suggests the routine under the routines the project has. */
   offered: pageAnswers(OWN, true),
-  /** A project with no routine yet: the suggestion is the block's whole body. */
+  /** A project with no routine yet: the suggestion is the empty state's last chip. */
   empty: pageAnswers([], true),
   /** Turned on: a routine like the others, the suggestion gone. */
   on: pageAnswers([TRIM_ON, ...OWN], false),

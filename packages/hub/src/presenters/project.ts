@@ -9,6 +9,7 @@ import {
   type RelayView,
   type RoutineRunView,
   routineLink,
+  routineToolWords,
   taskLink,
 } from "@cawco/core";
 import type {
@@ -180,15 +181,24 @@ const routineLines = (routine: RoutineView, now: number): string[] => [
     : ["  No runs yet."]),
 ];
 
-/** `routine_list`. */
-export const routineListWords = (routines: RoutineView[]): string => {
+/** `routine_list`: the project's routines, and the hub's trim routine while the project has none (`off`, its name). */
+export const routineListWords = ({
+  routines,
+  off,
+}: {
+  routines: RoutineView[];
+  off: string | null;
+}): string => {
   const now = Date.now();
-  return routines.length === 0
-    ? "No routines."
-    : lines(
-        `${count(routines.length, "routine")}; routine_update, routine_delete and routine_run_now take the handle:`,
-        routines.flatMap((routine) => routineLines(routine, now))
-      );
+  return lines(
+    routines.length === 0
+      ? "No routines."
+      : lines(
+          `${count(routines.length, "routine")}; routine_update, routine_delete and routine_run_now take the handle:`,
+          routines.flatMap((routine) => routineLines(routine, now))
+        ),
+    off !== null && routineToolWords.trimOff(off)
+  );
 };
 
 /** `routine_create` and `routine_update`: the routine as it stands. */

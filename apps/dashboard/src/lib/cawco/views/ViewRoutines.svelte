@@ -44,10 +44,12 @@
    * Under the ledger's card, Caw suggests the unused skills and servers
    * routine (suggestions/CawSuggests) as the next row the ledger would hold,
    * on the page in the suggestion's coral dotted edge, its mark, words and
-   * acts on the ledger's own columns; with no routine yet it is the block's
-   * whole body in place of the empty state. Turn on makes it, a row like the
+   * acts on the ledger's own columns. Turn on makes it, a row like the
    * others; Not now waves it away; either keeps it gone from this project
-   * (hub unused-trim.ts).
+   * (hub unused-trim.ts). With no routine yet the empty state stands whole,
+   * and the suggestion is its last chip: its ask in the composer, unsent,
+   * and Caw turns the routine on when it goes (hub routines.ts
+   * `routine_update`).
    *
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
    * starters written for the project from what it repeats or waits on over
@@ -67,6 +69,7 @@
    */
   import {
     type ProjectStarter,
+    type StarterGlyph,
     tellStarterOutcome,
   } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -258,12 +261,6 @@
   // --- Caw's suggestion: the unused skills and servers routine -------------------
 
   const offered = $derived(page?.trimOffered ?? false);
-  /**
-   * The empty state stands: no routine, and no suggestion either. With
-   * only Caw's suggestion, the suggestion is the block's body: the routine
-   * it would hold, never an empty state with a box under it.
-   */
-  const bare = $derived(empty && !offered);
   /** The answer on its way to the hub; null at rest. */
   let answering = $state<"on" | "dismissed" | null>(null);
   /** Why the hub refused the last answer, said under the suggestion until the next. */
@@ -665,6 +662,14 @@
   function pick(text: string) {
     askDraft.press(text, "routines");
   }
+  /**
+   * Caw's suggestion, the empty page's last chip: its ask in the composer
+   * as a starter's, though the page's own, so its send tells the hub no
+   * starter's outcome.
+   */
+  function suggest() {
+    askDraft.ask(words.trimAsk);
+  }
   /** Ask Caw: the composer over the ledger. */
   let asking = $state(false);
   /** Create routine: the routine form over the ledger, or in the empty state's place. */
@@ -714,8 +719,7 @@
       measure: "--c-block-routines",
       hideable: true,
       body: "capped",
-      // Caw's suggestion alone is its own row, on the page, with no card.
-      card: !(empty && offered),
+      card: true,
       // Under the ledger's card, Caw's suggestion is the next row it would
       // hold, outside the card (CawSuggests).
       ...(offered && !empty ? { foot: trimSuggestion } : {}),
@@ -803,9 +807,9 @@
   <!-- The way by hand stands here wherever the empty state doesn't offer
        it (an empty block whose Caw can start offers him); Ask Caw beside it
        once the empty state's composer is gone. -->
-  {#if !bare || canTalk}
+  {#if !empty || canTalk}
     <span class="flex flex-wrap justify-end gap-space-2">
-      {#if !bare && canTalk}
+      {#if !empty && canTalk}
         <Button
           aria-expanded={asking}
           onclick={() => {
@@ -1072,8 +1076,28 @@
   {/if}
 {/snippet}
 
+<!-- One chip of the empty state: its glyph and words, a press putting
+     them in the composer under the chips, unsent. -->
+{#snippet chip(glyph: StarterGlyph, text: string, onpress: () => void)}
+  {@const Glyph = GLYPHS[glyph]}
+  <li class="flex max-w-full">
+    <button
+      class={chipVariants({ class: "select-none" })}
+      onclick={onpress}
+      type="button"
+    >
+      <Glyph
+        data-starter-glyph
+        aria-hidden="true"
+        class="size-icon-md flex-none text-ink-muted"
+      />
+      <span>{text}</span>
+    </button>
+  </li>
+{/snippet}
+
 {#snippet routinesBody()}
-  {#if bare}
+  {#if empty}
     <div data-slot="starters" class="w-full max-w-c-starters-w p-space-3">
       {#if making}
         <!-- Create routine: the form in the empty state's place. -->
@@ -1089,7 +1113,7 @@
             <!-- The starters as the kit's option chips,
                  a press putting its words in the composer under them, unsent. -->
             <div class="flex flex-col gap-space-3">
-              {#if starters.length > 0}
+              {#if starters.length > 0 || offered}
                 <ul
                   data-slot="routine-starters"
                   aria-label={words.startersLabel}
@@ -1100,22 +1124,14 @@
                   style:--starters-inset="calc((100% - var(--c-composer-w)) / 2)"
                 >
                   {#each starters as starter (starter.text)}
-                    {@const Glyph = GLYPHS[starter.glyph]}
-                    <li class="flex max-w-full">
-                      <button
-                        class={chipVariants({ class: "select-none" })}
-                        onclick={() => pick(starter.text)}
-                        type="button"
-                      >
-                        <Glyph
-                          data-starter-glyph
-                          aria-hidden="true"
-                          class="size-icon-md flex-none text-ink-muted"
-                        />
-                        <span>{starter.text}</span>
-                      </button>
-                    </li>
+                    {@render chip(starter.glyph, starter.text, () =>
+                      pick(starter.text)
+                    )}
                   {/each}
+                  {#if offered}
+                    <!-- Caw's suggestion, after the project's own. -->
+                    {@render chip("routine", words.trimAsk, suggest)}
+                  {/if}
                 </ul>
               {/if}
               {@render askCaw()}
@@ -1149,53 +1165,47 @@
       <!-- Create routine: the form stands over the ledger it will land in. -->
       <div class="p-space-3">{@render routineForm()}</div>
     {/if}
-    {#if empty}
-      <!-- Caw's suggestion is the routine the ledger would hold: a row of
-           its own, the block's whole body, no card around it. -->
-      {@render trimSuggestion()}
-    {:else}
-      <div
-        data-slot="ledger"
-        style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
-        style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
-        {@attach countColumns}
+    <div
+      data-slot="ledger"
+      style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
+      style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
+      {@attach countColumns}
+    >
+      <Table.Root
+        data-routines
+        aria-label={words.tab}
+        ghostRows="[data-view-routines-row]"
+        layout="ledger"
+        stickyBand
       >
-        <Table.Root
-          data-routines
-          aria-label={words.tab}
-          ghostRows="[data-view-routines-row]"
-          layout="ledger"
-          stickyBand
-        >
-          <Table.Header>
-            <Table.Row variant="band">
-              {@render leadHeads(words.columnState, words.columnRoutine)}
-              <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head
-                data-col-last
-                class="z-2 w-c-routine-time-w"
-                fold="measure"
-                scope="col"
-                variant="band">{words.columnLastRun}</Table.Head
-              >
-              <Table.Head
-                class="z-2 w-c-routine-time-w"
-                fold="measure"
-                scope="col"
-                variant="band">{words.columnNextRun}</Table.Head
-              >
-              <Table.Head class="z-2 w-(--col-menu)" scope="col" variant="band"
-                ><span class="sr-only">{words.columnActions}</span></Table.Head
-              >
-              <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
-            </Table.Row>
-          </Table.Header>
-          {#each sorted as routine (routine.id)}
-            {@render routineRows(routine)}
-          {/each}
-        </Table.Root>
-      </div>
-    {/if}
+        <Table.Header>
+          <Table.Row variant="band">
+            {@render leadHeads(words.columnState, words.columnRoutine)}
+            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <Table.Head
+              data-col-last
+              class="z-2 w-c-routine-time-w"
+              fold="measure"
+              scope="col"
+              variant="band">{words.columnLastRun}</Table.Head
+            >
+            <Table.Head
+              class="z-2 w-c-routine-time-w"
+              fold="measure"
+              scope="col"
+              variant="band">{words.columnNextRun}</Table.Head
+            >
+            <Table.Head class="z-2 w-(--col-menu)" scope="col" variant="band"
+              ><span class="sr-only">{words.columnActions}</span></Table.Head
+            >
+            <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
+          </Table.Row>
+        </Table.Header>
+        {#each sorted as routine (routine.id)}
+          {@render routineRows(routine)}
+        {/each}
+      </Table.Root>
+    </div>
   {/if}
 {/snippet}
 

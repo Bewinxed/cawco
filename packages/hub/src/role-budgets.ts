@@ -118,9 +118,14 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * proposed again at any time (tsk-348), the owner's "with the option to
  * change it later" on card `role-starting-set#own-sessions` (worker 30,502
  * measured).
+ * 2026-11-11: Caw turns the hub's unused skills and servers routine on when
+ * the person sends the empty Routines page's chip for it: routine_list names
+ * it while the project has none, routine_update with enabled: true alone
+ * turns it on, and routine_create points there instead of a second routine
+ * (worker 30,579 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_550,
+  worker: 30_620,
   delegate: 11_250,
   overseer: 770,
   "web-facing": 3400,
