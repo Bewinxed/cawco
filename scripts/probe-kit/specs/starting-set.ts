@@ -55,9 +55,12 @@ import {
 } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
-const SKILLS = ["probe-set-alpha", "probe-set-beta", "probe-set-gamma"];
+export const SKILLS = ["probe-set-alpha", "probe-set-beta", "probe-set-gamma"];
 const PLUGIN = "probe-plug";
-const PLUGIN_SKILLS = [`${PLUGIN}:plug-inside`, `${PLUGIN}:plug-outside`];
+export const PLUGIN_SKILLS = [
+  `${PLUGIN}:plug-inside`,
+  `${PLUGIN}:plug-outside`,
+];
 /** The skill a `delegate` call names for its one delegate. */
 const BRIEF_SKILL = "probe-set-beta";
 const SET: StartingSet = {
@@ -69,8 +72,8 @@ const CHANGED: StartingSet = {
   ...SET,
   skills: [...SET.skills, "probe-set-gamma"],
 };
-const FLEET_SERVERS = ["probe-in", "probe-out"];
-const USER_SERVER = "probe-user";
+export const FLEET_SERVERS = ["probe-in", "probe-out"];
+export const USER_SERVER = "probe-user";
 
 const SET_TYPE = "probe-set";
 const PLAIN_TYPE = "probe-plain";
@@ -110,7 +113,7 @@ const respond = (request: Seen): Reply => {
 };
 
 /** A stdio MCP server with one tool, `ping`, named by its first argument. */
-const MCP_SERVER = `const name = process.argv[2];
+export const MCP_SERVER = `const name = process.argv[2];
 let buffer = "";
 const answer = (id, result) =>
   process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
@@ -161,7 +164,10 @@ const accountDir = (fleet: KitFleet): string =>
  * The account's skills, its plugin (installed by Claude Code itself, from a
  * marketplace in a folder) and its own MCP server.
  */
-const plantAccount = async (fleet: KitFleet, server: string): Promise<void> => {
+export const plantAccount = async (
+  fleet: KitFleet,
+  server: string
+): Promise<void> => {
   const account = accountDir(fleet);
   const market = join(fleet.sandbox, "probe-market");
   await writeAll({
@@ -253,7 +259,7 @@ const plantPi = async (fleet: KitFleet, server: string): Promise<void> => {
 };
 
 /** Every string a request's JSON body holds, joined: what its model read, escapes undone. */
-const wordsOf = (body: string): string => {
+export const wordsOf = (body: string): string => {
   const out: string[] = [];
   const walk = (value: unknown): void => {
     if (typeof value === "string") {
@@ -269,11 +275,11 @@ const wordsOf = (body: string): string => {
 };
 
 /** The requests of the session whose brief carries `tag`, with tools: its turns. */
-const turnsOf = (fleet: KitFleet, tag: string): Seen[] =>
+export const turnsOf = (fleet: KitFleet, tag: string): Seen[] =>
   fleet.seen.filter((one) => one.tools && one.all.includes(tag));
 
 /** Waits for `tag`'s session to send its model `count` turns. */
-const awaitTurns = (fleet: KitFleet, tag: string, count = 1) =>
+export const awaitTurns = (fleet: KitFleet, tag: string, count = 1) =>
   until(
     `${tag}'s turn reached the model`,
     () => turnsOf(fleet, tag),
@@ -286,7 +292,7 @@ const LISTING =
 const LISTED = /^- (\S+?)(?::\s|$)/u;
 
 /** The skills the newest listing a turn's words carry names, sorted. */
-const listingOf = (words: string): string[] => {
+export const listingOf = (words: string): string[] => {
   const blocks = [...words.matchAll(new RegExp(LISTING, "gu"))];
   const block = blocks.at(-1)?.[1] ?? "";
   return block
@@ -321,7 +327,10 @@ const piServersOf = (words: string): string[] =>
 const piNamespace = (name: string): string => name.replace(/-/gu, "_");
 
 /** The MCP servers whose tools a turn names (`mcp__<server>__<tool>`), sorted. */
-const serversOf = (words: string, offered: readonly string[]): string[] =>
+export const serversOf = (
+  words: string,
+  offered: readonly string[]
+): string[] =>
   [
     ...new Set(
       [
@@ -331,7 +340,7 @@ const serversOf = (words: string, offered: readonly string[]): string[] =>
   ].sort();
 
 /** A `delegate` as its tool posts it: the started session's id, or a throw with the hub's words. */
-const delegate = async (
+export const delegate = async (
   fleet: KitFleet,
   body: Record<string, unknown> & { parentInstanceId: string }
 ): Promise<string> => {
@@ -348,7 +357,7 @@ const delegate = async (
 };
 
 /** The set a session's row keeps. */
-const rowSet = (fleet: KitFleet, instanceId: string): unknown => {
+export const rowSet = (fleet: KitFleet, instanceId: string): unknown => {
   const [row] = fleet.query<{ starting_set: string | null }>(
     "SELECT starting_set FROM instances WHERE id = ?",
     instanceId
@@ -356,8 +365,62 @@ const rowSet = (fleet: KitFleet, instanceId: string): unknown => {
   return row?.starting_set ? JSON.parse(row.starting_set) : null;
 };
 
-const same = (a: readonly string[], b: readonly string[]): boolean =>
+export const same = (a: readonly string[], b: readonly string[]): boolean =>
   JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+
+/**
+ * A scratch fleet answering with `answer`, its machine signed in, with the
+ * probe's skills, plugin, pi agent dir and account server installed and both
+ * fleet servers synced.
+ */
+export const setUp = async (
+  kit: Kit,
+  answer: (request: Seen) => Reply
+): Promise<KitFleet> => {
+  const fleet = await kit.fleet(answer);
+  const server = join(fleet.sandbox, "probe-mcp.mjs");
+  await writeFile(server, MCP_SERVER);
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.fileAccount();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await fleet.accountSignedIn();
+  await plantAccount(fleet, server);
+  await plantPi(fleet, server);
+  for (const name of FLEET_SERVERS) {
+    await fleet.api(
+      hubRequest("PUT /api/fleet/mcp/:name", {
+        path: { name },
+        body: {
+          config: { command: process.execPath, args: [server, name] },
+          enabled: true,
+        },
+      })
+    );
+  }
+  await until(
+    "the machine's sync set both fleet servers",
+    async () =>
+      JSON.parse(
+        await readFile(
+          join(
+            fleet.env.HOME as string,
+            ".local",
+            "share",
+            "cawco",
+            "fleet-mcp-set.json"
+          ),
+          "utf8"
+        ).catch(() => "{}")
+      ) as { servers?: Record<string, unknown> },
+    (set) => FLEET_SERVERS.every((name) => set.servers?.[name]),
+    180_000
+  );
+  return fleet;
+};
 
 /** p1–p3: the set on pi, beside a pi type with none. */
 const piLegs = async (
@@ -464,50 +527,9 @@ const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "starting-set",
   run: async (kit: Kit) => {
-    const fleet = await kit.fleet(respond);
+    const fleet = await setUp(kit, respond);
     const src = join(fleet.sandbox, "set-src");
     await mkdir(src, { recursive: true });
-    const server = join(fleet.sandbox, "probe-mcp.mjs");
-    await writeFile(server, MCP_SERVER);
-    fleet.launch("sessiond");
-    await fleet.sessiondUp();
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.fileAccount();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    await fleet.accountSignedIn();
-    await plantAccount(fleet, server);
-    await plantPi(fleet, server);
-    for (const name of FLEET_SERVERS) {
-      await fleet.api(
-        hubRequest("PUT /api/fleet/mcp/:name", {
-          path: { name },
-          body: {
-            config: { command: process.execPath, args: [server, name] },
-            enabled: true,
-          },
-        })
-      );
-    }
-    await until(
-      "the machine's sync set both fleet servers",
-      async () =>
-        JSON.parse(
-          await readFile(
-            join(
-              fleet.env.HOME as string,
-              ".local",
-              "share",
-              "cawco",
-              "fleet-mcp-set.json"
-            ),
-            "utf8"
-          ).catch(() => "{}")
-        ) as { servers?: Record<string, unknown> },
-      (set) => FLEET_SERVERS.every((name) => set.servers?.[name]),
-      180_000
-    );
     const at = realpathSync(src);
     // In Full Send, so its admin write runs at once (hub asks.ts).
     const parent = await fleet.spawn("claude", "PROBE-SET-PARENT", at, {

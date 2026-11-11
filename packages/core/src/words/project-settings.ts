@@ -5,6 +5,7 @@
  * setting by the field that changes it.
  */
 
+import type { StartingSet } from "../delegate-types";
 import { areaWords } from "./areas";
 import { projectAccountWords } from "./project-account";
 
@@ -33,6 +34,10 @@ const budgetText = (budget: SettingsBudget | null): string => {
 };
 
 const onOff = (on: boolean): string => (on ? "on" : "off");
+
+/** `skills a, b and servers c`: a set's two lists, each `none` when empty. */
+const setText = (set: StartingSet): string =>
+  `skills ${set.skills.join(", ") || "none"} and servers ${set.servers.join(", ") || "none"}`;
 
 /** What the read shows: the project as the hub keeps it, and what dispatch does now. */
 export interface SettingsRead {
@@ -77,6 +82,11 @@ export interface SettingsRead {
   reviewing: number;
   reviewLimit: number;
   runsOn: string | null;
+  /**
+   * Its starting set (hub project-starting-set.ts): the set, or none, or
+   * what keeps its file from reading.
+   */
+  startingSet: StartingSet | { problems: string[] } | null;
   /** Its delegate types and where each came from: `writer (from its area Acme)`. */
   types: string[];
 }
@@ -98,6 +108,7 @@ export const projectSettingsWords = {
       `- Review before done: ${onOff(now.review)} (set_review)`,
       `- Repositories: ${now.links.length > 0 ? now.links.join(", ") : "none linked"} (link_repo, create_repo with folder)`,
       `- Connections granted: ${now.connections.length > 0 ? now.connections.join(", ") : "none"} (grant_connection)`,
+      `- ${projectSettingsWords.startingSetRead(now.startingSet)} (set_starting_set)`,
       areaWords.read(now.area),
       `${projectAccountWords.read(now.account)}, ${now.accountFrom}`,
       `${projectAccountWords.atLimit.read(now.accountAtLimit)}, ${now.accountFrom}`,
@@ -142,6 +153,23 @@ export const projectSettingsWords = {
       ? "Send your comment on a task to its attempt"
       : "Keep your comments on a task from its attempt",
 
+  /** A starting set as the read says it. */
+  startingSetRead: (
+    set: StartingSet | { problems: string[] } | null
+  ): string => {
+    if (set === null) {
+      return "Starting set: none, so its sessions start with everything installed";
+    }
+    if ("problems" in set) {
+      return `Starting set: starting-set.md does not read, so its sessions start with everything installed: ${set.problems.join(" ")}`;
+    }
+    return `Starting set: its sessions start with ${setText(set)}, besides CawCo's own and its template's starter skills, unless their delegate type names a set`;
+  },
+  startingSet: (set: StartingSet | null): string =>
+    set
+      ? `Start this project's sessions with ${setText(set)}, besides CawCo's own`
+      : "Start this project's sessions with everything installed",
+
   /** Refusals, each naming the field and how to fix it. */
   already: {
     dispatch: (on: boolean) =>
@@ -159,6 +187,7 @@ export const projectSettingsWords = {
       `Comments reaching their task's attempt is ${onOff(on)} for this project already.`,
     runsOn: (to: string | null) =>
       `This project's attempts run on ${to ?? "any machine"} already.`,
+    startingSet: "This project's sessions start with that set already.",
   },
   needs: {
     dispatch: "set_dispatch says on (dispatch: true) or off (false).",
@@ -170,6 +199,8 @@ export const projectSettingsWords = {
     hearsTasks: "set_hears_tasks says on (hears_tasks: true) or off (false).",
     attemptsHearComments:
       "set_attempts_hear_comments says on (attempts_hear_comments: true) or off (false).",
+    startingSet:
+      "set_starting_set names starting_set: { skills: [...], servers: [...] }, or null for everything.",
   },
   /** A grant of a connection the hub has none of: what it can grant instead. */
   noConnection: (name: string, grantable: string[]): string =>

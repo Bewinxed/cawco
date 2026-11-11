@@ -58,6 +58,10 @@
  *   null for none, through the person's own move (areas.ts `place`): it
  *   takes the area's settings wherever it sets none, and the note says what
  *   it takes and what falls back to the fleet's.
+ * - `set_starting_set`: the skills and MCP servers the project's sessions
+ *   start with when their delegate type names none, written to its
+ *   `starting-set.md` (project-starting-set.ts); null deletes the file, and
+ *   they start with everything. Sessions started after it take it.
  * Called with no changes, it answers the project's settings as they stand,
  * each named by the change that sets it, every setting in effect with where
  * it came from (its own, its area's, the fleet's), and what dispatch would
@@ -79,6 +83,8 @@ import {
   projectSettingWords,
   publishedWords,
   type SettingSource,
+  type StartingSet,
+  startingSetProblem,
 } from "@cawco/core";
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
 import { hubRepoSegment } from "@cawco/core/hub-repo";
@@ -102,6 +108,7 @@ import {
   type ProjectEdit,
   projectName,
 } from "./project-edit";
+import { projectStartingSet } from "./project-starting-set";
 import type { RepoPublish } from "./repo-publish";
 import { runsOnValue } from "./runs-on";
 import { budgetParameter } from "./task-tools";
@@ -174,6 +181,13 @@ const ASKED_CHANGE = z.object({
     .nullable()
     .optional()
     .describe("set_area: an area's id or name; null: none"),
+  starting_set: z
+    .object({ skills: z.array(z.string()), servers: z.array(z.string()) })
+    .nullable()
+    .optional()
+    .describe(
+      "set_starting_set: all its sessions start with, besides CawCo's own; skills named as your listing names them. null: everything"
+    ),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -235,6 +249,8 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       return { kind: change.kind, at_limit: change.atLimit };
     case "set_area":
       return { kind: change.kind, area: change.area };
+    case "set_starting_set":
+      return { kind: change.kind, starting_set: change.startingSet };
     default:
       return unhandled("project setting", change);
   }
@@ -390,6 +406,15 @@ export interface ProjectSettingsDeps {
   readonly note: (actor: InstanceRow, note: ProjectNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;
+  /**
+   * Writes the project's `starting-set.md` with `set`, by `author`, or
+   * deletes it for null (project-starting-set.ts).
+   */
+  readonly writeStartingSet: (
+    projectId: string,
+    set: StartingSet | null,
+    author: string
+  ) => Promise<unknown>;
 }
 
 export const createProjectSettings = ({
@@ -404,6 +429,7 @@ export const createProjectSettings = ({
   inEffect,
   note,
   publish,
+  writeStartingSet,
 }: ProjectSettingsDeps) => {
   /**
    * The caller's own project, and nothing else: its scope already holds
@@ -582,6 +608,33 @@ export const createProjectSettings = ({
     return { kind: "set_area", area: id, name: area?.name ?? null };
   };
 
+  /** The set its sessions start with, its names each once; refused when it is that already. */
+  const startingSetChange = (
+    project: ProjectRow,
+    asked: AskedChange
+  ): ProjectSettingChange => {
+    const wanted = asked.starting_set;
+    if (wanted === undefined) {
+      return refuse(projectSettingsWords.needs.startingSet);
+    }
+    const set = wanted && {
+      skills: [...new Set(wanted.skills.map((name) => name.trim()))],
+      servers: [...new Set(wanted.servers.map((name) => name.trim()))],
+    };
+    const problem = set ? startingSetProblem(set) : undefined;
+    if (problem) {
+      refuse(`${problem}.`);
+    }
+    const now = projectStartingSet(project.id);
+    const same = set
+      ? JSON.stringify(now.set) === JSON.stringify(set)
+      : now.text === undefined;
+    if (same) {
+      refuse(projectSettingsWords.already.startingSet);
+    }
+    return { kind: "set_starting_set", startingSet: set };
+  };
+
   /** One asked change, checked against the project as it stands, as the hub stores it. */
   const checked = async (
     project: ProjectRow,
@@ -642,6 +695,8 @@ export const createProjectSettings = ({
         return atLimitSet(project, asked);
       case "set_area":
         return areaSet(project, asked);
+      case "set_starting_set":
+        return startingSetChange(project, asked);
       case "set_lands":
         break;
       default:
@@ -675,7 +730,9 @@ export const createProjectSettings = ({
   /** Applies one checked change through its setting's own code path; answers what the note says of it. */
   const applyOne = async (
     project: ProjectRow,
-    change: ProjectSettingChange
+    change: ProjectSettingChange,
+    /** Who its file's commit is by. */
+    author: string
   ): Promise<string[]> => {
     switch (change.kind) {
       case "grant_connection": {
@@ -742,6 +799,9 @@ export const createProjectSettings = ({
         const { said } = await areas.place(project.id, change.area);
         return [projectSettingWords(change), ...said];
       }
+      case "set_starting_set":
+        await writeStartingSet(project.id, change.startingSet, author);
+        break;
       case "set_lands":
         await edit(project.id, { lands: change.lands });
         break;
@@ -754,11 +814,12 @@ export const createProjectSettings = ({
   /** Applies checked changes, each before the next. */
   const apply = async (
     project: ProjectRow,
-    changes: ProjectSettingChange[]
+    changes: ProjectSettingChange[],
+    author: string
   ): Promise<string[]> => {
     const said: string[] = [];
     for (const change of changes) {
-      said.push(...(await applyOne(project, change)));
+      said.push(...(await applyOne(project, change, author)));
     }
     console.log(`[project-settings] ${project.name}: ${said.join("; ")}`);
     return said;
@@ -805,7 +866,8 @@ export const createProjectSettings = ({
         ? { ...one, leftOut: shown.leftOut }
         : one
     );
-    const said = await apply(fresh, changes);
+    // Approved: the person's own change.
+    const said = await apply(fresh, changes, "you");
     note(actor, {
       title: "You approved a project setting",
       body: noteBody(said, changes, reason),
@@ -823,6 +885,7 @@ export const createProjectSettings = ({
     const from = (source: SettingSource) => areaWords.source(source, area);
     const { cap, cawMode, onCap } = project.inEffect;
     const folder = await inEffect(project);
+    const own = projectStartingSet(project.id);
     return projectSettingsWords.read({
       name: project.name,
       area,
@@ -851,6 +914,8 @@ export const createProjectSettings = ({
       budget: now.budget,
       lands: now.lands,
       runsOn: now.runsOn,
+      startingSet:
+        own.set ?? (own.problems ? { problems: own.problems } : null),
       review: project.review,
       links: project.links,
       connections: connections.list().flatMap((view) => {
@@ -888,7 +953,7 @@ export const createProjectSettings = ({
         (one) => one.kind === "create_repo" || one.kind === "set_review"
       );
     if (!asking) {
-      const said = await apply(project, changes);
+      const said = await apply(project, changes, boardTitle(actor));
       note(actor, {
         title: `${boardTitle(actor)} changed this project's settings`,
         body: noteBody(said, changes, reason),

@@ -698,6 +698,7 @@ import {
   browserRoutes,
   createBrowsers,
 } from "./browsers";
+import { TEMPLATE_SKILLS } from "./bundled-skills";
 import { createCallKeys } from "./call-keys";
 import { CapabilityCallsRefusal, capabilityCalls } from "./capability-calls";
 import {
@@ -1000,6 +1001,12 @@ import {
   type ProjectSettings,
 } from "./project-settings";
 import { createProjectStarters, starterRoutes } from "./project-starters";
+import {
+  projectStartingSet,
+  STARTING_SET_FILE,
+  startingSetFileProblems,
+  writeProjectStartingSet,
+} from "./project-starting-set";
 import { createProjectStops } from "./project-stops";
 import { projectTrash, RestoreRefusal } from "./project-trash";
 import { NOTHING_READ, readCheckout } from "./projects";
@@ -15742,6 +15749,9 @@ export const createServer = (
   guardFolderFile(DECIDES_FILE, (text) =>
     decidesFileProblems(text, db.decides.fleet())
   );
+  // A project's starting set reads on every write of it, so a session's
+  // start never meets one that does not (project-starting-set.ts).
+  guardFolderFile(STARTING_SET_FILE, startingSetFileProblems);
   // Picks settled before Who decides had members are named once, in their
   // pages' docs (settled-names.ts).
   const settledNamed = nameSettledOnce({
@@ -17366,6 +17376,56 @@ export const createServer = (
     return row.cwd;
   };
 
+  /** What a session goes on from, as {@link carriedFrom} reads it. */
+  type CarriedSource = Pick<
+    InstanceRow,
+    | "delegateType"
+    | "delegateTypeProject"
+    | "harness"
+    | "mayStart"
+    | "role"
+    | "startingSet"
+  >;
+  /**
+   * What a session started to go on from `source` (a continuation, a plan
+   * change's new session) carries over on the same harness: its delegate
+   * type with the tools that type denies, its toolset, the types it may
+   * start, and the starting set it began with, never one resolved anew. On
+   * another harness it is no longer that type, and carries none of it. A
+   * start that goes on from none resolves its set as any start does
+   * ({@link startingSetOf}).
+   */
+  const carriedFrom = (
+    source: CarriedSource | undefined,
+    harness: HarnessKind
+  ): {
+    row: (
+      payload: NamedSpawn
+    ) => Pick<
+      Parameters<DbShape["openInstance"]>[0],
+      "delegateType" | "mayStart" | "role" | "startingSet"
+    >;
+    spawn: Pick<SpawnPayload, "delegateType" | "denyTools" | "mayStart">;
+  } => {
+    if (!source) {
+      return { row: startingSetOf, spawn: {} };
+    }
+    if (source.harness !== harness) {
+      return { row: () => ({}), spawn: {} };
+    }
+    const type = typeSettingsOf(source);
+    const mayStart = source.mayStart ? { mayStart: source.mayStart } : {};
+    return {
+      row: () => ({
+        ...(type.delegateType ? { delegateType: type.delegateType } : {}),
+        ...(source.role ? { role: source.role } : {}),
+        ...mayStart,
+        ...(source.startingSet ? { startingSet: source.startingSet } : {}),
+      }),
+      spawn: { ...type, ...mayStart },
+    };
+  };
+
   /**
    * Spawns a session from the hub itself — a continuation's summarisers and
    * its target — recorded exactly like a dashboard's spawn, and resolved once
@@ -17380,7 +17440,9 @@ export const createServer = (
     origin: SessionOrigin,
     fallbackMode?: string,
     /** The work item its row names from its first listing on: a continuation's, taken on from its source. */
-    workItemId?: string
+    workItemId?: string,
+    /** The session it goes on from: its type and set carry over ({@link carriedFrom}). */
+    continues?: CarriedSource
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -17400,8 +17462,10 @@ export const createServer = (
     }
     // Its machine is handed the project its row opens in, as every revive
     // hands it the row's (`revivePayloadOf`).
+    const carried = carriedFrom(continues, settled.payload.harness);
     const payload = {
       ...settled.payload,
+      ...carried.spawn,
       projectId: projectOfStart(
         peekParent(settled.payload).parentInstanceId,
         settled.payload.projectId,
@@ -17427,6 +17491,7 @@ export const createServer = (
       model: payload.model,
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
+      ...carried.row(payload),
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
     });
@@ -19832,7 +19897,8 @@ export const createServer = (
       // Its row names the source's item before its process lists its tools,
       // so its first turn has finish_item; the item moves to it before its
       // opening ({@link startTarget}).
-      source?.workItemId ?? undefined
+      source?.workItemId ?? undefined,
+      source
     );
   };
 
@@ -25564,21 +25630,45 @@ export const createServer = (
     };
   }
   /**
-   * What a start of a delegate type begins with (starting-set.ts), read from
-   * the type as it stands now. Asked once, as the row first opens: the row
-   * keeps it (`db.openInstance`) and every later spawn of it carries that
-   * ({@link bounded}), never the type's set as it stands then.
+   * What a start begins with (starting-set.ts): its delegate type's set,
+   * else its project's (project-starting-set.ts), read as they stand now:
+   * every harness enforces one. A start that resumes a conversation
+   * (a fork, a stored transcript) takes the set that conversation's row
+   * began with, or none: its tools stay what its conversation began with.
+   * Asked once, as the row first opens: the row keeps it
+   * (`db.openInstance`) and every later spawn of it carries that
+   * ({@link bounded}), never the set as it stands then.
    */
   function startingSetOf(
-    payload: SpawnPayload
+    payload: Pick<
+      NamedSpawn,
+      "delegateType" | "projectId" | "resume" | "skills"
+    >
   ): Pick<Parameters<DbShape["openInstance"]>[0], "startingSet"> {
+    if (payload.resume) {
+      const began = db.instanceBySessionId(
+        payload.resume.sessionKey
+      )?.startingSet;
+      return began ? { startingSet: began } : {};
+    }
     const named = payload.delegateType;
-    const set = named
-      ? sessionStartingSet(
-          projectTypes.resolveTypeFor(named.projectId, named.name),
-          payload.skills
-        )
+    const project = payload.projectId
+      ? db.project(payload.projectId)
       : undefined;
+    const own = project ? projectStartingSet(project.id) : {};
+    if (own.problems) {
+      console.warn(
+        `[starting-set] ${project?.name}'s ${STARTING_SET_FILE} does not read, so its sessions start with everything: ${own.problems.join(" ")}`
+      );
+    }
+    const set = sessionStartingSet({
+      type: named
+        ? projectTypes.resolveTypeFor(named.projectId, named.name)?.startingSet
+        : undefined,
+      project: own.set,
+      starters: project?.template ? TEMPLATE_SKILLS[project.template] : [],
+      named: payload.skills,
+    });
     return set ? { startingSet: set } : {};
   }
   /**
@@ -27560,7 +27650,9 @@ export const createServer = (
       "mainline",
       // It goes on with the row's work, as whoever started that.
       row.origin ?? "person",
-      row.permissionMode ?? undefined
+      row.permissionMode ?? undefined,
+      undefined,
+      row
     );
     plans.copySteps(row.id, instanceId);
     const told = tellPlan(
@@ -28351,6 +28443,7 @@ export const createServer = (
         caw.notice(actor.projectId, note);
       }
     },
+    writeStartingSet: writeProjectStartingSet,
   });
   projectSettings = settings;
   // What show_image and send_to_user may show from other workspaces: its
@@ -32507,6 +32600,8 @@ export const createServer = (
       // Started clean; a row started again keeps its own word (written at
       // its first spawn alone, `db.openInstance`).
       clean: payload.clean === true,
+      // A person's start in a project takes its project's starting set.
+      ...startingSetOf({ ...payload, projectId }),
       ...parent,
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),

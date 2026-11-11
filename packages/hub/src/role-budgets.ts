@@ -108,9 +108,13 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * sessions called (capability-calls.ts), so the routine that proposes
  * trimming each role's starting set reads a count, not transcripts
  * (worker 30,358 measured; a delegate is listed none).
+ * 2026-11-11: project_settings takes set_starting_set and its
+ * `starting_set`: the skills and servers a project's sessions start with
+ * (tsk-336), changed as the project's other settings are (worker 30,465
+ * measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_400,
+  worker: 30_500,
   delegate: 11_250,
   overseer: 770,
   "web-facing": 3400,
@@ -379,6 +383,7 @@ export const standIn = (
       edit: () => Promise.reject(new Error("measuring")),
       note: () => undefined,
       publish: {} as never,
+      writeStartingSet: () => Promise.reject(new Error("measuring")),
     }),
     triageTools: (actor) =>
       createFleetWatch({

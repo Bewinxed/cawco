@@ -14,6 +14,7 @@
 
 import type { ProjectAtLimit } from "./accounts";
 import { askStanceLine } from "./asks";
+import type { StartingSet } from "./delegate-types";
 import {
   SHELL_TOOLS,
   WEB_FETCH_TOOLS,
@@ -1275,6 +1276,7 @@ export const PROJECT_SETTING_KINDS = [
   "set_account",
   "set_account_at_limit",
   "set_area",
+  "set_starting_set",
 ] as const;
 
 /**
@@ -1321,6 +1323,12 @@ export type ProjectSettingChange =
    * was checked; null: none.
    */
   | { area: string | null; kind: "set_area"; name: string | null }
+  /**
+   * What the project's sessions start with when their delegate type names
+   * no set (hub project-starting-set.ts): its `starting-set.md`; null: none,
+   * everything installed.
+   */
+  | { kind: "set_starting_set"; startingSet: StartingSet | null }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -1391,6 +1399,8 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return projectAccountWords.atLimit.change(change.atLimit);
     case "set_area":
       return areaWords.change(change.name);
+    case "set_starting_set":
+      return projectSettingsWords.startingSet(change.startingSet);
     case "set_lands":
       break;
   }

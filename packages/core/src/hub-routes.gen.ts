@@ -4932,7 +4932,8 @@ export interface components {
           | "set_attempts_hear_comments"
           | "set_account"
           | "set_account_at_limit"
-          | "set_area";
+          | "set_area"
+          | "set_starting_set";
         /** @enum {string} */
         lands?: "main" | "branch" | "pr";
         max_attempts?: number;
@@ -4941,6 +4942,11 @@ export interface components {
         review?: boolean;
         review_limit?: number;
         runs_on?: string | null;
+        /** @description set_starting_set: all its sessions start with, besides CawCo's own; skills named as your listing names them. null: everything */
+        starting_set?: {
+          servers: string[];
+          skills: string[];
+        } | null;
       }[];
       project?: string;
       reason?: string;

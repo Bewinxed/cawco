@@ -406,6 +406,10 @@ const renderItem = (value: string): string =>
     ? value
     : JSON.stringify(value);
 
+/** `[a, "b:c"]`: a list as front matter writes it, each item bare where YAML reads it back the same. */
+export const renderList = (values: readonly string[]): string =>
+  `[${values.map(renderItem).join(", ")}]`;
+
 /** An edge's target as the file writes it: a task as its bare number, any other target as kept. */
 const renderEdge = (ref: string): string =>
   String(taskNumber(ref) ?? renderItem(ref));
