@@ -34,10 +34,10 @@
  * The instance mounts once for as long as the panel stays with it (again
  * only for another states file, a reach from nothing, Try again after a
  * fault, or an edit of its states file), and a reach sets the next state's
- * args on it in place, its own motion running and read as it runs. A state
- * set in place is then held to the same state drawn afresh, hidden
- * (`landed`): where the two differ (a press outside an open column closed
- * it through the component's own handler) it is mounted anew.
+ * args on it in place, its own motion running and read as it runs. Once
+ * the person has pressed or typed in the drawing, the next reach mounts its
+ * state afresh instead: the component's own handlers may have taken it
+ * where no args say (a press outside an open column closed it).
  *
  * A reach to a state its states file plays a move into (`play`, from the
  * story's `from`) plays that move on the drawing from its from state; the
@@ -188,13 +188,6 @@ const SETTLE_MS = 1200;
 /** What a reader sees of a drawing besides its words: its controls and its pictures (stage.ts `inkOf`). */
 const INKED =
   "button, input, select, textarea, img, svg, canvas, video, [role=switch], [role=checkbox], [role=button]";
-/** What a drawing's controls say they stand at (open, pressed, checked, chosen), in order: what its words alone don't show. */
-const STATED = [
-  "aria-expanded",
-  "aria-pressed",
-  "aria-checked",
-  "aria-selected",
-];
 /** Solar's close glyph (bold duotone), the error formula's mark (DESIGN.md, Icons): the dashboard's `IconError`. */
 const ERROR_GLYPH =
   '<g fill="currentColor"><path d="M5.53717 19.5302C5.24427 19.8231 4.7694 19.8231 4.47651 19.5302C4.18361 19.2373 4.18361 18.7624 4.47651 18.4696L18.4764 4.46967C18.7693 4.17678 19.2442 4.17678 19.5371 4.46967C19.8299 4.76256 19.8299 5.23744 19.5371 5.53033L5.53717 19.5302Z" opacity=".5"/><path d="M4.46978 5.53033C4.17689 5.23744 4.17689 4.76256 4.46978 4.46967C4.76268 4.17678 5.23755 4.17678 5.53044 4.46967L19.5303 18.4696C19.8232 18.7624 19.8232 19.2373 19.5303 19.5302C19.2374 19.8231 18.7626 19.8231 18.4697 19.5302L4.46978 5.53033Z"/></g>';
@@ -332,12 +325,6 @@ function propertyOf(animation: Animation): string {
   }
   return [...keys].join(", ");
 }
-
-/** What a drawing's controls say they stand at, in order. */
-const statesOf = (root: Element): string =>
-  [...root.querySelectorAll(STATED.map((name) => `[${name}]`).join(","))]
-    .map((el) => STATED.map((name) => el.getAttribute(name) ?? "").join(""))
-    .join("|");
 
 /** A token's length on the page's own tokens, px. */
 const tokenPx = (name: string): number =>
@@ -777,6 +764,26 @@ export function bootStage(page: Page): Mode {
   /** The one drawing: the live instance of the state the panel keeps. */
   const stage = newDrawing();
   const { frame, body: drawing } = stage;
+  /**
+   * The person has pressed or typed in the drawing, or in a layer it
+   * opened, since it was last mounted: the component's own handlers may
+   * have taken it somewhere no state's args say (a press outside an open
+   * column closed it). The next reach mounts its state afresh rather than
+   * setting it in place (`standFor`). A play's own presses are not his:
+   * they are not trusted.
+   */
+  let handled = false;
+  for (const input of ["pointerdown", "keydown", "input"] as const) {
+    document.addEventListener(
+      input,
+      (event) => {
+        if (event.isTrusted) {
+          handled = true;
+        }
+      },
+      { capture: true, passive: true }
+    );
+  }
   /** Compare's rings: outside each element's box on its own shape, in a layer of the stage's own over both drawings, taking no press. */
   const rings = document.createElement("div");
   rings.className = "cawco-stage-rings";
@@ -1024,6 +1031,7 @@ export function bootStage(page: Page): Mode {
 
   /** `target` mounted in the drawing, at rest. */
   async function mount(target: Target): Promise<void> {
+    handled = false;
     replays.load([]);
     holdHeight(true);
     posed = null;
@@ -1094,46 +1102,6 @@ export function bootStage(page: Page): Mode {
     });
     layers.observe(document.body, { childList: true });
     return layers;
-  }
-
-  /**
-   * A state set in place lands whatever the component's own handlers did
-   * with the one before: the live instance is read against the state drawn
-   * afresh, hidden, and mounted anew where they differ. Its layers (a
-   * popover the state opens, portalled to the body) are hidden while it
-   * stands, never seen.
-   */
-  async function landed(target: Target): Promise<void> {
-    await holdScroll(scrolled(), () => compared(target));
-  }
-
-  /** `target` drawn afresh, hidden, read against the live instance, and mounted anew where they differ. */
-  async function compared(target: Target): Promise<void> {
-    const fresh = hiddenBody("cawco-stage-fresh");
-    dress(fresh, target);
-    const layers = hideLayers();
-    frame.insertBefore(fresh, rings);
-    const mounted = page.mountInto(
-      fresh,
-      target.section,
-      target.story.name,
-      target.args,
-      {}
-    );
-    try {
-      await restOf(fresh);
-      await frameTick();
-      if (
-        differences(fresh, drawing, 1).length > 0 ||
-        statesOf(fresh) !== statesOf(drawing)
-      ) {
-        await mount(target);
-      }
-    } finally {
-      mounted?.unmount();
-      fresh.remove();
-      layers.disconnect();
-    }
   }
 
   /** The play pressed inside the drawing: the person's focus goes back where it was, or off the drawing. */
@@ -1316,8 +1284,9 @@ export function bootStage(page: Page): Mode {
    * states file, or one from nothing mounts the component at `to`, at
    * rest; with `play`, the move into `to` plays on the drawing from `from`
    * (stood there first unless it stands there now), its timeline docked
-   * over it; else `to`'s args are set on it in place, then it is held to
-   * `to` drawn afresh. A later reach passes over one still waiting.
+   * over it; else `to`'s args are set on it in place, or, once he has
+   * pressed or typed in it, `to` is mounted afresh. A later reach passes
+   * over one still waiting.
    */
   function reach(asking: StageReach): void {
     arrivals += 1;
@@ -1443,10 +1412,14 @@ export function bootStage(page: Page): Mode {
       await open(target);
       return "opened";
     }
+    if (handled && !play) {
+      await open(target, false);
+      return "opened";
+    }
     return "acts";
   }
 
-  /** The reach done on the live instance: `to`'s play run on it, or its args set in place and held to `to` drawn afresh; what it set off, read. */
+  /** The reach done on the live instance: `to`'s play run on it, or its args set in place; what it set off, read. */
   async function actOn(
     asking: StageReach,
     target: Target,
@@ -1462,9 +1435,6 @@ export function bootStage(page: Page): Mode {
         live = { ...live, ...target };
       }
       mark(target);
-      if (!play) {
-        await landed(target);
-      }
       laid();
       // The move the face plays and scrubs: each clip on its own element as
       // the reach read it. No replay is made yet, so the drawing rests on
