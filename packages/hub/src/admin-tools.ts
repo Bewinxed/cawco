@@ -497,7 +497,11 @@ const harnessConfigHandler =
 
 /** The delegate type tool's `account` parameter, as the agent calling it reads it. */
 const TYPE_ACCOUNT_DESCRIPTION =
-  "Account id its sessions start on wherever it can take them; otherwise the provider's strategy chooses. Optional for put.";
+  "Account id its sessions start on wherever it can take them; otherwise the provider's strategy chooses.";
+
+/** The delegate type tool's `startingSet` parameter, as the agent calling it reads it. */
+const STARTING_SET_DESCRIPTION =
+  "Its sessions' only skills (plugin:skill) and fleet MCP servers, besides CawCo's. Claude only.";
 
 /**
  * A delegate types answer (the list, or one type saved) with the fleet's
@@ -548,22 +552,15 @@ export function adminTools() {
           .string()
           .optional()
           .describe("Model id for the harness. Required for put."),
-        effort: z
-          .enum(EFFORT_LEVELS)
-          .optional()
-          .describe("Reasoning effort. Optional for put."),
+        effort: z.enum(EFFORT_LEVELS).optional().describe("Reasoning effort."),
         skills: z
           .array(z.string())
           .optional()
-          .describe(
-            "Skill names loaded into delegates of this type. Optional for put."
-          ),
+          .describe("Skills its delegates load at start."),
         denyTools: z
           .array(z.string())
           .optional()
-          .describe(
-            "Tool names denied to delegates of this type. Optional for put."
-          ),
+          .describe("Tools its delegates are denied."),
         mayStart: z
           .array(z.string())
           .optional()
@@ -577,6 +574,10 @@ export function adminTools() {
             "Connections its sessions may call (admin_connections_read)."
           ),
         account: z.string().optional().describe(TYPE_ACCOUNT_DESCRIPTION),
+        startingSet: z
+          .object({ skills: z.array(z.string()), servers: z.array(z.string()) })
+          .optional()
+          .describe(STARTING_SET_DESCRIPTION),
       },
       async ({
         action,
@@ -590,6 +591,7 @@ export function adminTools() {
         mayStart,
         connections,
         account,
+        startingSet,
       }) => {
         if (action === "list") {
           return withAccountNames(await api("GET", "/api/delegate-types"));
@@ -623,6 +625,7 @@ export function adminTools() {
               mayStart,
               connections,
               account,
+              startingSet,
             }),
           }
         ).then(withAccountNames);

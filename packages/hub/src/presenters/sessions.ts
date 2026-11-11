@@ -293,6 +293,11 @@ const typeLine = (
     ...(type.effort ? [`${type.effort} effort`] : []),
     ...(type.skills?.length ? [`skills ${type.skills.join(", ")}`] : []),
     ...(type.denyTools?.length ? [`denies ${type.denyTools.join(", ")}`] : []),
+    ...(type.startingSet
+      ? [
+          `starts with only skills ${type.startingSet.skills.join(", ") || "none"} and servers ${type.startingSet.servers.join(", ") || "none"}, besides CawCo's own`,
+        ]
+      : []),
     ...(type.connections?.length
       ? [`connections ${type.connections.join(", ")}`]
       : []),

@@ -3642,6 +3642,12 @@ public enum Words {
             "“\(harness)” is not a harness a delegate type can run on"
         }
 
+        public static func problemStartingSetHarness(harness: String) -> String {
+            "a starting set is enforced on Claude Code alone so far, not on \(harness)"
+        }
+
+        public static let problemStartingSetBlank = "a starting set names no blank skill or server"
+
         public static let problemCuratorRole = "role curator is the memory curator's: the hub starts that run itself, and it denies shell, edit and web tools"
 
         // packages/core/src/harness.ts `EFFORT_LEVELS`

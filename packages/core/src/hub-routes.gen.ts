@@ -3285,6 +3285,10 @@ export interface components {
         mayStart?: string[];
         model: string;
         skills?: string[];
+        startingSet?: {
+          servers: string[];
+          skills: string[];
+        };
       };
       path: {
         name: string | number;
@@ -3750,18 +3754,18 @@ export interface components {
       response_format?: "concise" | "detailed";
     };
     "tool admin_delegate_types_write": {
-      /** @description Account id its sessions start on wherever it can take them; otherwise the provider's strategy chooses. Optional for put. */
+      /** @description Account id its sessions start on wherever it can take them; otherwise the provider's strategy chooses. */
       account?: string;
       /** @enum {string} */
       action: "put" | "delete";
       /** @description Connections its sessions may call (admin_connections_read). */
       connections?: string[];
-      /** @description Tool names denied to delegates of this type. Optional for put. */
+      /** @description Tools its delegates are denied. */
       denyTools?: string[];
       /** @description What this type is for. Required for put. */
       description?: string;
       /**
-       * @description Reasoning effort. Optional for put.
+       * @description Reasoning effort.
        * @enum {string}
        */
       effort?: "low" | "medium" | "high" | "xhigh" | "max";
@@ -3780,8 +3784,13 @@ export interface components {
       reason?: string;
       /** @enum {string} */
       response_format?: "concise" | "detailed";
-      /** @description Skill names loaded into delegates of this type. Optional for put. */
+      /** @description Skills its delegates load at start. */
       skills?: string[];
+      /** @description Its sessions' only skills (plugin:skill) and fleet MCP servers, besides CawCo's. Claude only. */
+      startingSet?: {
+        servers: string[];
+        skills: string[];
+      };
     };
     "tool admin_hooks_read": {
       /** @enum {string} */

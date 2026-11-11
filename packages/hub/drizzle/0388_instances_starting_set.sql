@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `starting_set` text;

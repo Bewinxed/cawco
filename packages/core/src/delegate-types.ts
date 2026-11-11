@@ -54,7 +54,45 @@ export interface DelegateType {
    */
   role?: SessionRole;
   skills?: string[];
+  /**
+   * The skills and MCP servers its sessions start with, and no others
+   * ({@link StartingSet}). Absent: everything installed, as before any set.
+   */
+  startingSet?: StartingSet;
 }
+
+/**
+ * What a session starts with (tsk-329): an allowlist of skills, each named
+ * as a session's listing names it (a plugin's as `plugin:skill`), and of MCP
+ * servers by their fleet name. The hub adds CawCo's own skills and server to
+ * every set (hub starting-set.ts), so a type names neither. A session's set
+ * is fixed as it starts: a later change applies to sessions started after it.
+ */
+export interface StartingSet {
+  servers: string[];
+  skills: string[];
+}
+
+/** CawCo's own MCP server, by the name every harness gives it. */
+export const CAWCO_SERVER = "cawco";
+
+/** The harnesses that enforce a {@link StartingSet} so far. */
+const STARTING_SET_HARNESSES: readonly HarnessKind[] = ["claude"];
+
+/** Why `harness` cannot carry this starting set, in a sentence, or nothing when it can. */
+export const startingSetProblem = (
+  harness: HarnessKind,
+  set: StartingSet | undefined
+): string | undefined => {
+  if (!set) {
+    return undefined;
+  }
+  if (!STARTING_SET_HARNESSES.includes(harness)) {
+    return delegateTypesWords.problemStartingSetHarness(harness);
+  }
+  const blank = [...set.skills, ...set.servers].some((name) => !name.trim());
+  return blank ? delegateTypesWords.problemStartingSetBlank : undefined;
+};
 
 /** What a name may be. Mirrors a subagent's own `AGENT_NAME` — no reason to invent a second rule. */
 export const DELEGATE_TYPE_NAME = /^[a-z][a-z0-9-]*$/u;
@@ -178,9 +216,13 @@ export const delegateTypeProblem = (
   if (badConnection !== undefined) {
     return `“${badConnection}” is not a connection name: up to 24 lowercase letters, digits and hyphens`;
   }
-  // A deny list is kept only where its harness enforces it: a type that names
-  // tools its harness cannot deny would store a promise nothing keeps.
-  return denyToolsProblem(draft.harness, draft.denyTools ?? []);
+  // A deny list and a starting set are kept only where its harness enforces
+  // them: a type that names what its harness cannot enforce would store a
+  // promise nothing keeps.
+  return (
+    denyToolsProblem(draft.harness, draft.denyTools ?? []) ??
+    startingSetProblem(draft.harness, draft.startingSet)
+  );
 };
 
 /**

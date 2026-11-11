@@ -35,6 +35,8 @@ interface DelegateTypeRow {
   model: string;
   name: string;
   skills: string | null;
+  /** Its starting set (core `StartingSet`), as JSON; NULL: none, so everything. */
+  starting_set: string | null;
 }
 
 const rowToType = (row: DelegateTypeRow): DelegateType => ({
@@ -48,6 +50,7 @@ const rowToType = (row: DelegateTypeRow): DelegateType => ({
   ...(row.may_start ? { mayStart: JSON.parse(row.may_start) } : {}),
   ...(row.account ? { account: row.account } : {}),
   ...(row.connections ? { connections: JSON.parse(row.connections) } : {}),
+  ...(row.starting_set ? { startingSet: JSON.parse(row.starting_set) } : {}),
 });
 
 export interface DelegateTypesShape {
@@ -116,6 +119,9 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
   if (!columns.includes("connections")) {
     sqlite.run("ALTER TABLE delegate_types ADD COLUMN connections TEXT");
   }
+  if (!columns.includes("starting_set")) {
+    sqlite.run("ALTER TABLE delegate_types ADD COLUMN starting_set TEXT");
+  }
   // `.as(Class)` maps rows onto instances of a given class — there is no such
   // class here, only the `DelegateTypeRow` shape, so `.all()`'s own plain
   // objects (bun:sqlite's default) are cast, not remapped through `.as()`.
@@ -141,8 +147,8 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
   const put = (draft: DelegateType): DelegateType => {
     sqlite
       .query(
-        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, may_start, account, connections, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, may_start, account, connections, starting_set, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(name) DO UPDATE SET
            description = excluded.description,
            harness = excluded.harness,
@@ -152,7 +158,8 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
            deny_tools = excluded.deny_tools,
            may_start = excluded.may_start,
            account = excluded.account,
-           connections = excluded.connections`
+           connections = excluded.connections,
+           starting_set = excluded.starting_set`
       )
       .run(
         draft.name,
@@ -165,6 +172,7 @@ export const makeDelegateTypes = (sqlite: Database): DelegateTypesShape => {
         draft.mayStart?.length ? JSON.stringify(draft.mayStart) : null,
         draft.account ?? null,
         draft.connections?.length ? JSON.stringify(draft.connections) : null,
+        draft.startingSet ? JSON.stringify(draft.startingSet) : null,
         Date.now()
       );
     return draft;
@@ -213,6 +221,12 @@ export const delegateTypesRoutes = (
           mayStart: t.Optional(t.Array(t.String())),
           account: t.Optional(t.String()),
           connections: t.Optional(t.Array(t.String())),
+          startingSet: t.Optional(
+            t.Object({
+              skills: t.Array(t.String()),
+              servers: t.Array(t.String()),
+            })
+          ),
         }),
       },
       ({ params, body, status }) => {

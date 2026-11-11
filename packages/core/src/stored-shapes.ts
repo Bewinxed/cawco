@@ -79,6 +79,7 @@ import type {
 import type {
   MayStart as MayStartType,
   SessionRole as SessionRoleType,
+  StartingSet as StartingSetType,
 } from "./delegate-types";
 import { SESSION_ROLES } from "./delegate-types";
 import type {
@@ -2649,6 +2650,12 @@ const SessionRoleShape = declared(
   "packages/core/src/delegate-types.ts"
 );
 
+const StartingSetShape = declared(
+  z.object({ servers: z.array(z.string()), skills: z.array(z.string()) }),
+  "StartingSet",
+  "packages/core/src/delegate-types.ts"
+);
+
 const WorkspaceRefShape = declared(
   z.object({ id: z.string(), path: z.string() }),
   "WorkspaceRef",
@@ -2708,6 +2715,7 @@ const SpawnPayloadShape = declared(
     scratchWorktree: ScratchWorktreeShape.optional(),
     skills: z.array(z.string()).optional(),
     spawnedBy: z.object({ instanceId: z.string() }).optional(),
+    startingSet: StartingSetShape.optional(),
     title: z.string().optional(),
     workspace: WorkspaceRefShape.optional(),
   }),
@@ -3323,6 +3331,7 @@ prove<
     Same<z.output<typeof SessionInstructionShape>, SessionInstructionType>,
     Same<z.output<typeof MayStartShape>, MayStartType>,
     Same<z.output<typeof SessionRoleShape>, SessionRoleType>,
+    Same<z.output<typeof StartingSetShape>, StartingSetType>,
     Same<z.output<typeof WorkspaceRefShape>, WorkspaceRefType>,
     Same<z.output<typeof SpawnPayloadShape>, SpawnPayloadType>,
     Same<z.output<typeof RunKindShape>, RunKindType>,

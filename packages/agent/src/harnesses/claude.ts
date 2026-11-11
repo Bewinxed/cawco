@@ -64,6 +64,7 @@ import type {
   SessionInstruction,
   SessionMessage,
   SpawnPayload,
+  StartingSet,
   TranscriptWindow,
   UserAnswers,
   UserQuestion,
@@ -1682,12 +1683,63 @@ const CLEAN_OPTIONS: Pick<SdkOptions, "settingSources"> = {
  * `--strict-mcp-config`. It keeps the servers of `agents` passed in ("and
  * servers declared by explicitly-passed agent definitions in `agents`",
  * sdk.d.ts 0.3.296), so it takes no caller's agents. A clean one reads no
- * settings file ({@link CLEAN_OPTIONS}).
+ * settings file ({@link CLEAN_OPTIONS}). One with a starting set lists its
+ * skills alone and takes its servers alone ({@link startingSetOptions}).
  */
-const isolation = (fence: boolean, clean: boolean) => ({
+const isolation = (
+  fence: boolean,
+  clean: boolean,
+  set: StartingSet | undefined
+) => ({
+  ...startingSetOptions(set),
   ...(fence ? { strictMcpConfig: true, agents: undefined } : {}),
   ...(clean ? CLEAN_OPTIONS : {}),
 });
+
+/**
+ * The `query()` options that hold a session to its starting set ({@link
+ * SpawnPayload.startingSet}).
+ *
+ * - `skills`: "`string[]`: enable only the listed skills. Names match the
+ *   SKILL.md `name` / directory name, or `plugin:skill` for plugin-qualified
+ *   skills … unlisted skills are hidden from the model's listing and
+ *   rejected by the Skill tool" (sdk.d.ts 0.3.321).
+ * - `strictMcpConfig`: "Only use MCP servers passed via the `mcpServers`
+ *   option … ignoring all other MCP configurations: project `.mcp.json`, user
+ *   settings, plugins, and on-disk agent frontmatter" (same file). The
+ *   servers passed are the set's alone ({@link sessionMcpServers}, {@link
+ *   fleetMcpFor}), and the fleet's that join later too ({@link
+ *   ClaudeSession.#configuredMcp}).
+ *
+ * The claude.ai connectors and Claude in Chrome come from neither source, so
+ * they are held off apart: {@link startingSetSettings} and {@link
+ * sessionExtraArgs}.
+ */
+const startingSetOptions = (set: StartingSet | undefined) =>
+  set ? { skills: [...set.skills], strictMcpConfig: true } : {};
+
+/**
+ * The flag settings a session with a starting set launches with besides:
+ * no claude.ai connectors, which no set names (a set names fleet servers).
+ * `strictMcpConfig` names the config sources it ignores, and the
+ * connectors are none of them: they are fetched from the account. Their
+ * own switch is `disableClaudeAiConnectors`, "claude.ai MCP cloud
+ * connectors are not auto-fetched or connected" (sdk.d.ts 0.3.321), as a
+ * fenced session's ({@link FENCE_SETTINGS}).
+ */
+const startingSetSettings = (set: StartingSet | undefined) =>
+  set ? FENCE_SETTINGS : {};
+
+/** `servers` held to a starting set's names; all of them with none. */
+const inStartingSet = <Config>(
+  servers: Record<string, Config>,
+  set: StartingSet | undefined
+): Record<string, Config> =>
+  set
+    ? Object.fromEntries(
+        Object.entries(servers).filter(([name]) => set.servers.includes(name))
+      )
+    : servers;
 
 /**
  * The SDK hooks a session's compaction runs: its open items, word for word,
@@ -1787,7 +1839,8 @@ const sessionSettingsOptions = (
   boundary: HarnessContext["boundary"],
   fence: boolean,
   placed: readonly SetHook[],
-  fleetSettings: Record<string, unknown>
+  fleetSettings: Record<string, unknown>,
+  set: StartingSet | undefined
 ) => {
   const bounded = claudeBoundaryOptions(boundary);
   // A boundary's settings carry its `hooks`; no boundary, none.
@@ -1808,6 +1861,7 @@ const sessionSettingsOptions = (
       ...SESSION_SETTINGS,
       ...("settings" in bounded ? bounded.settings : {}),
       ...(Object.keys(hooks).length > 0 ? { hooks } : {}),
+      ...startingSetSettings(set),
       ...(fence ? FENCE_SETTINGS : {}),
     },
   };
@@ -2007,9 +2061,10 @@ const withInstructions = (
  */
 const fleetMcpFor = async (
   ctx: HarnessContext,
-  workdir: string
+  workdir: string,
+  set: StartingSet | undefined
 ): Promise<{ denied: string[]; servers: Record<string, McpServerConfig> }> => {
-  const all = await fleetMcpAt(workdir);
+  const all = inStartingSet(await fleetMcpAt(workdir), set);
   if (ctx.mcpGate) {
     return { servers: throughMcpGate(all, ctx.mcpGate), denied: [] };
   }
@@ -2075,6 +2130,8 @@ interface SessionSpec {
   /** A durable CronCreate is refused it ({@link SpawnPayload.schedulesToParent}). */
   schedulesToParent: boolean;
   skills: string[] | undefined;
+  /** The only skills and servers it starts with ({@link SpawnPayload.startingSet}). */
+  startingSet: StartingSet | undefined;
 }
 
 /** `spec` as the session it starts or takes back runs it, on `account`'s config dir (none: the machine's own). */
@@ -2109,6 +2166,7 @@ const sessionSpecOf = (
     resume: spec.resume,
     schedulesToParent: spec.schedulesToParent === true,
     skills: spec.skills,
+    startingSet: spec.startingSet,
   };
 };
 
@@ -2132,7 +2190,7 @@ const launchFleet = async (
 }> => {
   const fleet = session.fence
     ? { servers: {}, denied: [] }
-    : await fleetMcpFor(ctx, ctx.cwd);
+    : await fleetMcpFor(ctx, ctx.cwd, session.startingSet);
   const set = session.fence ? undefined : await readFleetHarnessSet();
   const place = session.fence ? undefined : await placeSetAt(ctx.cwd);
   return {
@@ -2157,6 +2215,7 @@ const launchFleet = async (
 const launchSettings = (
   ctx: HarnessContext,
   fence: boolean,
+  set: StartingSet | undefined,
   launch: {
     fleetMcp?: Record<string, McpServerConfig>;
     fleetSettings?: Record<string, unknown>;
@@ -2167,7 +2226,8 @@ const launchSettings = (
     ctx.boundary,
     fence,
     launch.placedHooks ?? [],
-    launch.fleetSettings ?? {}
+    launch.fleetSettings ?? {},
+    set
   );
   return {
     options,
@@ -2213,27 +2273,37 @@ const folderLaunch = async (cwd: string, model: string | undefined) => {
       ...(set ? launchedSettings(set, await placeSetAt(cwd)) : {}),
       ...SESSION_SETTINGS,
     },
-    extraArgs: sessionExtraArgs(undefined, false),
+    extraArgs: sessionExtraArgs(undefined, false, undefined),
     ...(model ? { model } : {}),
   };
 };
 
 /**
- * The MCP servers a session launches with: the caller's and CawCo's, or
- * CawCo's alone for a fenced session.
+ * The MCP servers a session launches with: the caller's (those its starting
+ * set names, when it has one) and CawCo's, or CawCo's alone for a fenced
+ * session.
  */
 const sessionMcpServers = (
   instanceId: string,
   ctx: HarnessContext,
   options: unknown,
-  fence: boolean
+  fence: boolean,
+  set: StartingSet | undefined
 ): Record<string, McpServerConfig> => ({
   ...(fence
     ? {}
-    : ((options as { mcpServers?: Record<string, McpServerConfig> } | undefined)
-        ?.mcpServers ?? {})),
+    : inStartingSet(
+        (
+          options as
+            { mcpServers?: Record<string, McpServerConfig> } | undefined
+        )?.mcpServers ?? {},
+        set
+      )),
   [MCP_SERVER_NAME]: delegationMcp(instanceId, ctx.sessionCredential),
 });
+
+/** The MCP server Claude in Chrome's tools come from (`mcp__claude-in-chrome__*`). */
+const CLAUDE_IN_CHROME = "claude-in-chrome";
 
 /**
  * The CLI flags a session launches with besides the SDK's own.
@@ -2251,13 +2321,15 @@ const sessionMcpServers = (
  * A fenced session launches with `--no-chrome` and no caller's flags: on
  * `--chrome` the browser's MCP server joins the launch's own
  * (`le={...le,...w}`, which `--strict-mcp-config` keeps: CLI 2.1.296), and a
- * caller's `mcp-config` would add servers of its own.
+ * caller's `mcp-config` would add servers of its own. So does a session
+ * whose starting set does not name the browser's server.
  */
 const sessionExtraArgs = (
   options: unknown,
-  fence: boolean
+  fence: boolean,
+  set: StartingSet | undefined
 ): Record<string, string | null> => {
-  if (fence) {
+  if (fence || (set && !set.servers.includes(CLAUDE_IN_CHROME))) {
     return { "no-chrome": null };
   }
   const callerArgs =
@@ -2462,6 +2534,8 @@ class ClaudeSession implements HarnessSession {
   #ownedMcp: Set<string> | undefined;
   /** Launched with CawCo's MCP server alone ({@link SpawnPayload.fence}): it takes no fleet server. */
   readonly #fence: boolean;
+  /** The skills and servers it started with ({@link SpawnPayload.startingSet}): it takes no fleet server outside them. */
+  readonly #startingSet: StartingSet | undefined;
   /**
    * The flag settings its CLI holds as CawCo last set them: as launched, then
    * as each {@link #takeFleetSettings} applied them. Unknown at an attach,
@@ -2532,6 +2606,7 @@ class ClaudeSession implements HarnessSession {
       clean,
       instructions,
       schedulesToParent,
+      startingSet,
     } = session;
     // Before the `Query` below exists: an attach replays the asks the previous
     // host left open as soon as it does, and they are decided in this mode.
@@ -2539,10 +2614,17 @@ class ClaudeSession implements HarnessSession {
     const cliMode = this.#mode.cli;
     this.#launchCredential = ctx.sessionCredential;
     this.#boundaryHook = workspaceHook(ctx.boundary);
-    const mcpServers = sessionMcpServers(instanceId, ctx, options, fence);
+    const mcpServers = sessionMcpServers(
+      instanceId,
+      ctx,
+      options,
+      fence,
+      startingSet
+    );
     this.#launchMcp = new Set(Object.keys(mcpServers));
     this.#ownedMcp = fleetMcp ? new Set(Object.keys(fleetMcp)) : undefined;
     this.#fence = fence;
+    this.#startingSet = startingSet;
     this.#workdir = workdir;
     const env = sessionEnv(
       (options as { env?: Record<string, string | undefined> } | undefined)
@@ -2559,11 +2641,12 @@ class ClaudeSession implements HarnessSession {
     this.#input = input;
     const turn = new Turn();
     this.#turn = turn;
-    const extraArgs = sessionExtraArgs(options, fence);
+    const extraArgs = sessionExtraArgs(options, fence, startingSet);
 
     const { options: launchedOptions, handed } = launchSettings(
       ctx,
       fence,
+      startingSet,
       launch
     );
     this.#flagSettings = handed;
@@ -2579,7 +2662,7 @@ class ClaudeSession implements HarnessSession {
         extraArgs,
         mcpServers,
         // Set after the caller's options so none of them undoes it.
-        ...isolation(fence, clean),
+        ...isolation(fence, clean, startingSet),
         // What the CLI holds for later, said at each turn's end: the SDK's
         // `Stop` hook input lists the wake-ups the session has scheduled
         // ("Lets hooks distinguish 'session is done' from 'session is paused
@@ -3928,7 +4011,8 @@ class ClaudeSession implements HarnessSession {
 
   /** The fleet's MCP servers a session starting here now would load ({@link fleetMcpFor}). */
   async #configuredMcp(): Promise<Record<string, McpServerConfig>> {
-    return (await fleetMcpFor(this.#ctx, this.#workdir)).servers;
+    return (await fleetMcpFor(this.#ctx, this.#workdir, this.#startingSet))
+      .servers;
   }
 
   /**
@@ -4089,7 +4173,8 @@ class ClaudeSession implements HarnessSession {
       this.#ctx.boundary,
       false,
       Object.values(place?.hooks ?? {}),
-      launchedSettings(set, place)
+      launchedSettings(set, place),
+      this.#startingSet
     ).settings as Record<string, unknown>;
     const before = this.#flagSettings;
     const patch: Record<string, unknown> = Object.fromEntries(

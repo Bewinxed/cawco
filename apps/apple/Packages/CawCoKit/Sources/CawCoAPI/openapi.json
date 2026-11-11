@@ -1010,6 +1010,27 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "startingSet": {
+                    "type": "object",
+                    "properties": {
+                      "skills": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "servers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "skills",
+                      "servers"
+                    ]
                   }
                 },
                 "required": [
@@ -33343,6 +33364,27 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "startingSet": {
+                "type": "object",
+                "properties": {
+                  "servers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "skills": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "servers",
+                  "skills"
+                ]
+              },
               "status": {
                 "$ref": "#/components/schemas/InstanceStatus"
               },
@@ -33630,6 +33672,27 @@
             },
             "stalled": {
               "$ref": "#/components/schemas/Stall"
+            },
+            "startingSet": {
+              "type": "object",
+              "properties": {
+                "servers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "skills": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "servers",
+                "skills"
+              ]
             },
             "status": {
               "$ref": "#/components/schemas/InstanceStatus"
@@ -38117,6 +38180,10 @@
               "instanceId"
             ]
           },
+          "startingSet": {
+            "$ref": "#/components/schemas/StartingSet",
+            "description": "The exact skills and MCP servers the session starts with\n({@link import (\"./delegate-types\").StartingSet}): its delegate type's\nset, with CawCo's own skills and server and the skills its start named\n({@link skills}) joined. Set by the hub alone: resolved as its row first\nopens, kept on that row, and put on every spawn of it, so a wake or\nrestore starts with the set its first spawn had. Absent: everything\ninstalled."
+          },
           "title": {
             "description": "What the session is for, one line — a delegate's brief headline. Display\nonly.",
             "type": "string"
@@ -39087,6 +39154,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "startingSet": {
+            "$ref": "#/components/schemas/StartingSet",
+            "description": "The skills and MCP servers its sessions start with, and no others\n({@link StartingSet}). Absent: everything installed, as before any set."
           }
         },
         "required": [
@@ -39103,6 +39174,28 @@
           "claude",
           "opencode",
           "pi"
+        ]
+      },
+      "StartingSet": {
+        "description": "What a session starts with (tsk-329): an allowlist of skills, each named\nas a session's listing names it (a plugin's as `plugin:skill`), and of MCP\nservers by their fleet name. The hub adds CawCo's own skills and server to\nevery set (hub starting-set.ts), so a type names neither. A session's set\nis fixed as it starts: a later change applies to sessions started after it.",
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "servers",
+          "skills"
         ]
       },
       "Undoable": {
@@ -51670,13 +51763,13 @@
           "placed": {
             "type": "object",
             "properties": {
+              "skills": {
+                "type": "object"
+              },
               "mcp": {
                 "type": "object"
               },
               "harnessConfig": {
-                "type": "object"
-              },
-              "skills": {
                 "type": "object"
               },
               "hooks": {
@@ -53402,6 +53495,10 @@
             "required": [
               "words"
             ]
+          },
+          "startingSet": {
+            "description": "The skills and MCP servers it started with ({@link * SpawnPayload.startingSet}): written by its first spawn and kept, so every\nlaunch of it starts with the same set. Null: everything installed.",
+            "$ref": "#/components/schemas/StartingSet"
           },
           "status": {
             "$ref": "#/components/schemas/InstanceStatus"

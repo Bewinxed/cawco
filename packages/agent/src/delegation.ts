@@ -1,6 +1,7 @@
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  CAWCO_SERVER,
   END_TURN_META,
   mcpGatewayPort,
   readEnv,
@@ -11,7 +12,8 @@ import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
 import { unhandled } from "@cawco/core/unhandled";
 import { hubAnswer } from "./hub-away";
 
-export const MCP_SERVER_NAME = "cawco";
+/** CawCo's own MCP server, by the one name every harness and the hub give it. */
+export const MCP_SERVER_NAME = CAWCO_SERVER;
 const WS_SCHEME = /^ws/u;
 const WS_PATH = /\/ws$/u;
 export const delegationHubUrl = () =>

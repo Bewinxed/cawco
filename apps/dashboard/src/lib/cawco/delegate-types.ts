@@ -70,6 +70,8 @@ export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
         mayStart: draft.mayStart,
         account: draft.account,
         connections: draft.connections,
+        // No field draws it yet: a save carries the set the type has.
+        startingSet: draft.startingSet,
       },
     }),
     `save ${draft.name || "the delegate type"}`

@@ -300,6 +300,16 @@ export interface SpawnPayload {
    */
   spawnedBy?: { instanceId: string };
   /**
+   * The exact skills and MCP servers the session starts with
+   * ({@link import("./delegate-types").StartingSet}): its delegate type's
+   * set, with CawCo's own skills and server and the skills its start named
+   * ({@link skills}) joined. Set by the hub alone: resolved as its row first
+   * opens, kept on that row, and put on every spawn of it, so a wake or
+   * restore starts with the set its first spawn had. Absent: everything
+   * installed.
+   */
+  startingSet?: import("./delegate-types").StartingSet;
+  /**
    * What the session is for, one line — a delegate's brief headline. Display
    * only.
    */
@@ -1254,6 +1264,12 @@ export interface InstanceRow {
    * from its menu.
    */
   stalled?: { until?: number; words: string };
+  /**
+   * The skills and MCP servers it started with ({@link
+   * SpawnPayload.startingSet}): written by its first spawn and kept, so every
+   * launch of it starts with the same set. Null: everything installed.
+   */
+  startingSet?: import("./delegate-types").StartingSet | null;
   status: InstanceStatus;
   /**
    * What the session is called: the owner's rename, else the name the session

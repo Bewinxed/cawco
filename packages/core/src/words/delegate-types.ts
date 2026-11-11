@@ -89,6 +89,9 @@ export const delegateTypesWords = {
   problemModel: "a delegate type needs a model",
   problemHarness: (harness: string) =>
     `“${harness}” is not a harness a delegate type can run on`,
+  problemStartingSetHarness: (harness: string) =>
+    `a starting set is enforced on Claude Code alone so far, not on ${harness}`,
+  problemStartingSetBlank: "a starting set names no blank skill or server",
   problemCuratorRole:
     "role curator is the memory curator's: the hub starts that run itself, and it denies shell, edit and web tools",
 };

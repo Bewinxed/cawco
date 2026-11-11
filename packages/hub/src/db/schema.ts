@@ -1228,6 +1228,14 @@ export const instances = sqliteTable("instances", {
    */
   clean: integer("clean", { mode: "boolean" }).notNull().default(false),
   /**
+   * The skills and MCP servers it starts with (core `SpawnPayload.startingSet`):
+   * written by its first spawn and never after, and every spawn of the row
+   * carries it (server.ts `bounded`). Null: everything installed.
+   */
+  startingSet: storedJson(
+    z.object({ skills: z.array(z.string()), servers: z.array(z.string()) })
+  )("starting_set"),
+  /**
    * What was last *written down* about the session — history, not liveness.
    *
    * Read this column raw and you are reading a fact that was true at the moment

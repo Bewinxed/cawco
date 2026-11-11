@@ -1054,6 +1054,7 @@ import {
 } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
 import { templateOf } from "./stages";
+import { sessionStartingSet } from "./starting-set";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
@@ -8518,6 +8519,20 @@ export const createServer = (
     );
   };
 
+  /**
+   * What a session's row puts on every spawn of it, whatever its caller sent:
+   * a session refused routine_create is refused its harness's durable
+   * schedule too (`makesRoutines`); and the set its first spawn resolved
+   * ({@link startingSetOf}), so a wake or a restore starts with the tools its
+   * conversation began with. A clean session's fence is narrower still.
+   */
+  const rowKeeps = (
+    row: InstanceRow
+  ): Pick<SpawnPayload, "schedulesToParent" | "startingSet"> => ({
+    ...(makesRoutines(row) ? {} : { schedulesToParent: true as const }),
+    ...(row.startingSet && !row.clean ? { startingSet: row.startingSet } : {}),
+  });
+
   /** The boundary a session's every spawn carries: its work item's workspace; none for any other session. */
   const sessionWorkspace = (row: InstanceRow): WorkspaceRef | undefined =>
     workItems.workspaceOf(row);
@@ -8532,6 +8547,7 @@ export const createServer = (
       homeLoginMove: _callerMove,
       schedulesToParent: _callerSchedules,
       clean: _callerClean,
+      startingSet: _callerSet,
       ...asked
     } = payload;
     const owned = db.ownedInstance(payload.instanceId);
@@ -8569,9 +8585,7 @@ export const createServer = (
       ...(row.clean
         ? cleanSpawn(fencedSpawn(asked, row, harness))
         : fencedSpawn(asked, row, harness)),
-      // A session refused routine_create is refused its harness's durable
-      // schedule too, on every spawn of its row (`makesRoutines`).
-      ...(makesRoutines(row) ? {} : { schedulesToParent: true as const }),
+      ...rowKeeps(row),
       harness,
       ...effort,
       ...(owned?.scratchWorktree
@@ -17231,6 +17245,7 @@ export const createServer = (
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
       clean: payload.clean === true,
+      ...startingSetOf(payload),
       ...openedAccount(payload, placed),
       // The account its start named, as placement honoured it.
       ...(payload.account && placed.accountId
@@ -25545,6 +25560,24 @@ export const createServer = (
       },
       ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
     };
+  }
+  /**
+   * What a start of a delegate type begins with (starting-set.ts), read from
+   * the type as it stands now. Asked once, as the row first opens: the row
+   * keeps it (`db.openInstance`) and every later spawn of it carries that
+   * ({@link bounded}), never the type's set as it stands then.
+   */
+  function startingSetOf(
+    payload: SpawnPayload
+  ): Pick<Parameters<DbShape["openInstance"]>[0], "startingSet"> {
+    const named = payload.delegateType;
+    const set = named
+      ? sessionStartingSet(
+          projectTypes.resolveTypeFor(named.projectId, named.name),
+          payload.skills
+        )
+      : undefined;
+    return set ? { startingSet: set } : {};
   }
   /**
    * THE way the hub runs a command on a machine: in `cwd`, killed after
