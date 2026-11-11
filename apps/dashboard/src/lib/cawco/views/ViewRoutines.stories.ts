@@ -15,10 +15,10 @@ export default {
   parameters: { viewport: 1440 },
 };
 
-/** Caw suggests the routine at the foot of the ledger, under the project's routines. */
+/** Caw suggests the routine as the next row, under the ledger's card. */
 export const InRoutines = {};
 
-/** A project with no routine yet: the suggestion under the empty state. */
+/** A project with no routine yet: the suggestion is the block's whole body. */
 export const OfferedEmpty = { decorators: [hubAs("connected", STATES.empty)] };
 
 /** Turned on: a routine like the others, and the suggestion gone. */

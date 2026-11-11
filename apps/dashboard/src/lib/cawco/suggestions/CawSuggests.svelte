@@ -1,27 +1,30 @@
 <script lang="ts">
   /**
-   * Caw's suggestion: the way Caw offers the person something they could
-   * switch on (a routine he would run, a set he would trim). Caw himself
-   * stands at its lead, then what he suggests, why in one line, and its
-   * one act; a second, quiet act waves it away where the place lets it be
-   * waved away.
+   * Caw's suggestion: the next row a list would hold, offered (a routine he
+   * would run, a set he would trim). It stands on the page where that row
+   * would go, under the list's card, never inside it: a suggestion is not
+   * there until it is taken, so it has no card of its own, only the
+   * suggestion's edge, coral and dotted, where the card's edge would be.
+   * Solid coral is where the person acts now (DESIGN.md, The Coral Is
+   * Where You Act Rule); the dotted coral is an offer. So its act is the
+   * kit's outline button, never the coral one.
    *
-   * Its edge is the suggestion's own: coral, dotted. Solid coral is where
-   * the person acts now (DESIGN.md, The Coral Is Where You Act Rule); the
-   * dotted coral is an offer, something that is not there until they take
-   * it. So its act is the kit's outline button, never the coral one: the
-   * page keeps its one coral for what it is for.
+   * It is laid on the list's own row grid (DESIGN.md, The Row Grid Rule):
+   * Caw, its mark, centred in the 28px lead column; what he suggests and
+   * why on the text column `space-3` after it; its acts ending on the
+   * trailing edge `space-3` in. The edge is an outline drawn inside the
+   * box, so the columns stand where the card's rows put theirs. Under a
+   * phone's width its acts move under its words, still on that edge.
    *
-   * Taken, it is gone: the place draws the real thing where it stood (the
-   * routine as a row among the routines). This component holds no state of
-   * its own.
+   * Taken, it is gone: the place draws the real thing as one of its rows.
+   * This component holds no state of its own.
    */
   import type { CawStatus } from "@cawco/core/project-conversation";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
 
-  /** Side of Caw's still: three lines of the offer beside him. */
-  const CAW_SIZE = 48;
+  /** Caw's still: wider than the lead column, centred on its axis, so it stands on the marks above it. */
+  const CAW_SIZE = 40;
 
   let {
     title,
@@ -53,21 +56,23 @@
 <section
   data-slot="caw-suggests"
   aria-label={label}
-  class="@container w-full min-w-0"
+  class="@container w-full min-w-0 rounded-lg outline-2 -outline-offset-2 outline-brand-solid outline-dotted"
 >
   <div
-    class="flex flex-col gap-space-3 rounded-lg border-2 border-dotted border-brand-solid p-space-3 @phone:flex-row @phone:items-center"
+    class="grid min-h-c-ledger-row-h grid-cols-(--row-cols) items-center gap-x-space-3 gap-y-space-2 px-space-3 py-space-2 @max-phone:grid-cols-(--row-cols-phone)"
+    style:--row-cols="var(--c-row-lead) minmax(0, 1fr) auto"
+    style:--row-cols-phone="var(--c-row-lead) minmax(0, 1fr)"
   >
-    <div class="flex min-w-0 flex-1 items-center gap-space-3">
-      <div aria-hidden="true" class="shrink-0">
-        <Caw size={CAW_SIZE} status={caw} still />
-      </div>
-      <div class="flex min-w-0 flex-col gap-space-row">
-        <p class="m-0 type-label text-ink-strong">{title}</p>
-        <p class="m-0 type-meta text-pretty text-ink-muted">{reason}</p>
-      </div>
+    <div aria-hidden="true" class="flex w-c-row-lead justify-center *:shrink-0">
+      <Caw size={CAW_SIZE} status={caw} still />
     </div>
-    <div class="flex shrink-0 items-center justify-end gap-space-2">
+    <div class="flex min-w-0 flex-col gap-space-row">
+      <p class="m-0 type-label text-ink-row">{title}</p>
+      <p class="m-0 type-meta text-pretty text-ink-muted">{reason}</p>
+    </div>
+    <div
+      class="flex items-center justify-end gap-space-2 @max-phone:col-start-2"
+    >
       {#if dismiss && ondismiss}
         <Button onclick={ondismiss} size="sm" variant="ghost">{dismiss}</Button>
       {/if}

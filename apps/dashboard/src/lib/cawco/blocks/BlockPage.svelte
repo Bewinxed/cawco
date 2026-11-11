@@ -16,6 +16,8 @@
     card: boolean;
     /** The block's body, drawn with its id. */
     content: Snippet<[string]>;
+    /** Under the body, outside its card, on the page (Block `foot`). */
+    foot?: Snippet;
     glyph: Component;
     hideable: boolean;
     /** The token holding its measure, the narrowest it reads at: `--c-block-ledger`. */
@@ -250,6 +252,7 @@
     body={item.body}
     card={item.card}
     {columns}
+    foot={item.foot}
     {drag}
     first={index === 0}
     glyph={item.glyph}

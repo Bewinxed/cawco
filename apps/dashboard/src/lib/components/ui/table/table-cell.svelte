@@ -43,12 +43,6 @@
         /** A generated table's other cells whose words wrap (an agent's block), on the row's spacing. */
         "view-wraps":
           "type-label num h-c-ledger-row-h whitespace-normal border-b border-b-border-hairline px-space-3 py-space-2 text-ink-muted",
-        /**
-         * A cell across a ledger's whole width that holds a part of its own
-         * (Caw's suggestion at the Routines ledger's foot): on the row's
-         * spacing; its words wrap.
-         */
-        across: "whitespace-normal px-space-3 py-space-2",
         /** A matrix's cell, ruled from its neighbour on the left; its words wrap. */
         matrix:
           "whitespace-normal border-border border-l px-space-4 py-space-2",

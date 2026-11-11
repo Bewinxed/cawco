@@ -41,10 +41,13 @@
    * the soonest next run. The row opens its detail in place (RoutineDetail).
    * On a narrow ledger Last and Next fold into the schedule's line.
    *
-   * Under the ledger's last row (or the empty state, with none), Caw suggests
-   * the unused skills and servers routine (suggestions/CawSuggests) until the
-   * person answers: Turn on makes it, a row like the others; Not now waves
-   * it away; either keeps it gone from this project (hub unused-trim.ts).
+   * Under the ledger's card, Caw suggests the unused skills and servers
+   * routine (suggestions/CawSuggests) as the next row the ledger would hold,
+   * on the page in the suggestion's coral dotted edge, its mark, words and
+   * acts on the ledger's own columns; with no routine yet it is the block's
+   * whole body in place of the empty state. Turn on makes it, a row like the
+   * others; Not now waves it away; either keeps it gone from this project
+   * (hub unused-trim.ts).
    *
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
    * starters written for the project from what it repeats or waits on over
@@ -255,6 +258,12 @@
   // --- Caw's suggestion: the unused skills and servers routine -------------------
 
   const offered = $derived(page?.trimOffered ?? false);
+  /**
+   * The empty state stands: no routine, and no suggestion either. With
+   * only Caw's suggestion, the suggestion is the block's body: the routine
+   * it would hold, never an empty state with a box under it.
+   */
+  const bare = $derived(empty && !offered);
   /** The answer on its way to the hub; null at rest. */
   let answering = $state<"on" | "dismissed" | null>(null);
   /** Why the hub refused the last answer, said under the suggestion until the next. */
@@ -705,7 +714,11 @@
       measure: "--c-block-routines",
       hideable: true,
       body: "capped",
-      card: true,
+      // Caw's suggestion alone is its own row, on the page, with no card.
+      card: !(empty && offered),
+      // Under the ledger's card, Caw's suggestion is the next row it would
+      // hold, outside the card (CawSuggests).
+      ...(offered && !empty ? { foot: trimSuggestion } : {}),
     },
     sources: {
       title: words.sources,
@@ -790,9 +803,9 @@
   <!-- The way by hand stands here wherever the empty state doesn't offer
        it (an empty block whose Caw can start offers him); Ask Caw beside it
        once the empty state's composer is gone. -->
-  {#if !empty || canTalk}
+  {#if !bare || canTalk}
     <span class="flex flex-wrap justify-end gap-space-2">
-      {#if !empty && canTalk}
+      {#if !bare && canTalk}
         <Button
           aria-expanded={asking}
           onclick={() => {
@@ -1056,7 +1069,7 @@
 {/snippet}
 
 {#snippet routinesBody()}
-  {#if empty}
+  {#if bare}
     <div data-slot="starters" class="w-full max-w-c-starters-w p-space-3">
       {#if making}
         <!-- Create routine: the form in the empty state's place. -->
@@ -1124,11 +1137,6 @@
         </EmptyState>
       {/if}
     </div>
-    {#if offered}
-      <div data-slot="trim-offer" class="w-full p-space-3">
-        {@render trimSuggestion()}
-      </div>
-    {/if}
   {:else}
     {#if asking}
       <!-- Ask Caw: the composer stands over the ledger it will land in. -->
@@ -1137,57 +1145,53 @@
       <!-- Create routine: the form stands over the ledger it will land in. -->
       <div class="p-space-3">{@render routineForm()}</div>
     {/if}
-    <div
-      data-slot="ledger"
-      style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
-      style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
-      {@attach countColumns}
-    >
-      <Table.Root
-        data-routines
-        aria-label={words.tab}
-        ghostRows="[data-view-routines-row]"
-        layout="ledger"
-        stickyBand
+    {#if empty}
+      <!-- Caw's suggestion is the routine the ledger would hold: a row of
+           its own, the block's whole body, no card around it. -->
+      {@render trimSuggestion()}
+    {:else}
+      <div
+        data-slot="ledger"
+        style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
+        style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
+        {@attach countColumns}
       >
-        <Table.Header>
-          <Table.Row variant="band">
-            {@render leadHeads(words.columnState, words.columnRoutine)}
-            <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head
-              data-col-last
-              class="z-2 w-c-routine-time-w"
-              fold="measure"
-              scope="col"
-              variant="band">{words.columnLastRun}</Table.Head
-            >
-            <Table.Head
-              class="z-2 w-c-routine-time-w"
-              fold="measure"
-              scope="col"
-              variant="band">{words.columnNextRun}</Table.Head
-            >
-            <Table.Head class="z-2 w-(--col-menu)" scope="col" variant="band"
-              ><span class="sr-only">{words.columnActions}</span></Table.Head
-            >
-            <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
-          </Table.Row>
-        </Table.Header>
-        {#each sorted as routine (routine.id)}
-          {@render routineRows(routine)}
-        {/each}
-        {#if offered}
-          <!-- Not a routine yet: the ledger's whole width, none of its columns. -->
-          <Table.Body data-slot="trim-offer">
-            <Table.Row variant="unruled">
-              <Table.Cell colspan={span} rule="top" variant="across">
-                {@render trimSuggestion()}
-              </Table.Cell>
+        <Table.Root
+          data-routines
+          aria-label={words.tab}
+          ghostRows="[data-view-routines-row]"
+          layout="ledger"
+          stickyBand
+        >
+          <Table.Header>
+            <Table.Row variant="band">
+              {@render leadHeads(words.columnState, words.columnRoutine)}
+              <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+              <Table.Head
+                data-col-last
+                class="z-2 w-c-routine-time-w"
+                fold="measure"
+                scope="col"
+                variant="band">{words.columnLastRun}</Table.Head
+              >
+              <Table.Head
+                class="z-2 w-c-routine-time-w"
+                fold="measure"
+                scope="col"
+                variant="band">{words.columnNextRun}</Table.Head
+              >
+              <Table.Head class="z-2 w-(--col-menu)" scope="col" variant="band"
+                ><span class="sr-only">{words.columnActions}</span></Table.Head
+              >
+              <!-- biome-ignore-end lint/a11y/noHeaderScope: the heads above -->
             </Table.Row>
-          </Table.Body>
-        {/if}
-      </Table.Root>
-    </div>
+          </Table.Header>
+          {#each sorted as routine (routine.id)}
+            {@render routineRows(routine)}
+          {/each}
+        </Table.Root>
+      </div>
+    {/if}
   {/if}
 {/snippet}
 

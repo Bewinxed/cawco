@@ -189,7 +189,7 @@ const pageAnswers = (
 export const STATES = {
   /** Caw suggests the routine under the routines the project has. */
   offered: pageAnswers(OWN, true),
-  /** A project with no routine yet: the suggestion under the empty state. */
+  /** A project with no routine yet: the suggestion is the block's whole body. */
   empty: pageAnswers([], true),
   /** Turned on: a routine like the others, the suggestion gone. */
   on: pageAnswers([TRIM_ON, ...OWN], false),
