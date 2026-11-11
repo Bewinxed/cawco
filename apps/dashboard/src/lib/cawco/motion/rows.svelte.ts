@@ -231,8 +231,21 @@ interface Move {
  * its own pace.
  */
 interface Pace {
+  /** A caller's clock (`reflowOn`): every move travels on it. */
+  clock?: { duration: number; easing: string };
   close: boolean;
   speed: number | null;
+}
+
+/**
+ * A caller's clock for a container's next change (`reflowOn`): where its
+ * moves start on the document timeline, how long they take and on what
+ * curve.
+ */
+export interface ReflowClock {
+  duration: number;
+  easing: string;
+  start: number;
 }
 type Run = (at: number, pace: Pace) => void;
 interface Batch {
@@ -312,6 +325,13 @@ function paced(
   share: (progress: number) => number;
   timing: { duration: number; easing: string };
 } {
+  if (pace.clock) {
+    return {
+      frames: [from, to],
+      share: (progress) => progress,
+      timing: pace.clock,
+    };
+  }
   if (pace.speed && distance > 0) {
     const along = glide(distance, pace.speed);
     return {
@@ -368,6 +388,16 @@ export function heldToTravel(
     }
     animation.startTime = at;
   });
+  return animation;
+}
+
+/** An animation put on a caller's clock (`reflowOn`): its timing, from its start. */
+function onClock(animation: Animation, clock: ReflowClock): Animation {
+  animation.effect?.updateTiming({
+    duration: clock.duration,
+    easing: clock.easing,
+  });
+  animation.startTime = clock.start;
   return animation;
 }
 
@@ -952,6 +982,8 @@ interface Plan {
 /** One container's marked elements: where each was last laid out, and what is moving. */
 class Reflow {
   readonly #node: HTMLElement;
+  /** A caller's clock for the next change (`reflowOn`), until it has run out. */
+  #clock: ReflowClock | null = null;
   readonly #moves = new Map<HTMLElement, Move>();
   readonly #edges = new Map<HTMLElement, Animation>();
   readonly #spans = new Map<HTMLElement, Animation>();
@@ -989,6 +1021,21 @@ class Reflow {
     this.#node = node;
     this.#skipped = false;
     this.#scroll = 0;
+  }
+
+  /** The next change's moves run on `clock` (`reflowOn`). */
+  useClock(clock: ReflowClock) {
+    this.#clock = clock;
+  }
+
+  /** The caller's clock, taken by the change it was set for; none once it has run out. */
+  #takeClock(): ReflowClock | null {
+    const clock = this.#clock;
+    this.#clock = null;
+    return clock &&
+      Number(document.timeline.currentTime) < clock.start + clock.duration
+      ? clock
+      : null;
   }
 
   /**
@@ -1298,8 +1345,13 @@ class Reflow {
     ]) {
       this.#stop(element);
     }
+    // A caller's clock (`reflowOn`): every move of this change starts at
+    // its start, on its timing, rather than the batch's.
+    const clock = this.#takeClock();
+    const travels = (animation: Animation, distance: number): Animation =>
+      clock ? onClock(animation, clock) : heldToTravel(animation, distance);
     plan.slides.forEach((slide, i) => {
-      this.#slide(slide.element, slide.x, slide.y, own[i]);
+      this.#slide(slide.element, slide.x, slide.y, own[i], clock);
     });
     // What moves in this batch, for when its room is made (`arrival`).
     const moving: Animation[] = [];
@@ -1326,7 +1378,7 @@ class Reflow {
         animation.startTime = carry.start;
         ({ clip } = carry);
       } else {
-        animation = heldToTravel(
+        animation = travels(
           edgeOf(edge.element, edge.from, edge.to, shrinks[i]),
           Math.abs(edge.to - edge.from)
         );
@@ -1337,7 +1389,7 @@ class Reflow {
       trackAnimation(this.#edges, edge.element, animation);
     });
     plan.spans.forEach((span, i) => {
-      const animation = heldToTravel(
+      const animation = travels(
         spanOf(span.element, span.from, span.to, spans[i]),
         Math.abs(span.to - span.from)
       );
@@ -1510,7 +1562,13 @@ class Reflow {
   }
 
   /** `own`: its own transforms, read with its hold dropped (`change`). */
-  #slide(element: HTMLElement, x: number, y: number, own: Transforms) {
+  #slide(
+    element: HTMLElement,
+    x: number,
+    y: number,
+    own: Transforms,
+    clock: ReflowClock | null = null
+  ) {
     // The first frames hold it with a style, which their layout reads. An
     // animation started in the same update runs off the main thread, and the
     // frame is drawn, and counted as a layout shift, as though it had
@@ -1528,12 +1586,9 @@ class Reflow {
     // slides on `translate`, composed with its own: added where it has a
     // `translate`, which Chrome then runs on the page's own thread (the
     // trace's `compositeFailed` 16, `kEffectHasNonReplaceCompositeMode`).
-    element.style.translate = offsetTranslate(own.translate, x, y);
     const move: Move = { x, y, own: own.translate, bare: own.bare };
     this.#moves.set(element, move);
-    move.hold = atTravel((at, pace) => {
-      move.hold = undefined;
-      element.style.translate = "";
+    const go = (at: number, pace: Pace) => {
       const slide = own.bare
         ? paced(
             pace,
@@ -1565,6 +1620,22 @@ class Reflow {
           /* superseded by the next slide */
         }
       );
+    };
+    // On a caller's clock it starts in this delivery, where the change is
+    // read and before the frame is painted, so no hold is needed.
+    if (clock) {
+      go(clock.start, {
+        clock: { duration: clock.duration, easing: clock.easing },
+        close: false,
+        speed: null,
+      });
+      return;
+    }
+    element.style.translate = offsetTranslate(own.translate, x, y);
+    move.hold = atTravel((at, pace) => {
+      move.hold = undefined;
+      element.style.translate = "";
+      go(at, pace);
     });
   }
 
@@ -1786,6 +1857,20 @@ const states = new WeakMap<HTMLElement, Reflow>();
  */
 export function handOver(container: HTMLElement): void {
   states.get(container)?.rest();
+}
+
+/**
+ * Puts the next change a `reflow` container hears on a caller's clock: its
+ * slides, edges and spans start at `clock.start` on the document timeline
+ * and travel over `clock.duration` on `clock.easing`, rather than on the
+ * batch's start and pace, so they run as one with motion of the caller's
+ * own (the top bar making room for the sidebar's toggle as the sidebar
+ * slides). Arrivals and departures keep their own entrance and exit. A
+ * clock no change takes before it would have ended is dropped. Every other
+ * change, and every other caller's, is placed as before.
+ */
+export function reflowOn(container: HTMLElement, clock: ReflowClock): void {
+  states.get(container)?.useClock(clock);
 }
 
 /**

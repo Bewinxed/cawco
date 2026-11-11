@@ -28,7 +28,7 @@
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { reflow, reflowOn } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox, land } from "#lib/cawco/motion/share.svelte.js";
   import { keepPrefs } from "#lib/cawco/prefs.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
@@ -352,6 +352,8 @@
   let railLeaving = $state(false);
   /** The page beside the rail: it slides as the rail does. */
   let mainBox = $state<HTMLElement | null>(null);
+  /** The top bar, a reflow container: it makes the toggle's room (`reflowOn`). */
+  let topBar = $state<HTMLElement | null>(null);
   let railMoves: Animation[] = [];
   /**
    * The toggle's glyph in flight (`flyRailToggle`): where it lands, at what
@@ -403,6 +405,10 @@
     const rail = railBox;
     const main = mainBox;
     const hide = !railHidden;
+    // The one start everything this press moves runs from: the frame the
+    // press came in, so the first frame drawn after it already shows them
+    // under way together, whatever that frame costs.
+    const start = Number(document.timeline.currentTime);
     const rtl = main ? getComputedStyle(main).direction === "rtl" : false;
     const glyph = document.querySelector<HTMLElement>("[data-rail-glyph]");
     // Pressed again mid-flight, the glyph is where its flight has it.
@@ -433,7 +439,11 @@
       rail: offFrom(rail, railWas),
       main: offFrom(main, mainWas) ?? 0,
     };
-    flyRailToggle(from, hide);
+    // The top bar makes or closes the toggle's room on the slide's clock.
+    if (topBar && motionOk.current) {
+      reflowOn(topBar, { start, ...railClock(hide) });
+    }
+    flyRailToggle(from, hide, start);
     if (focused) {
       document
         .querySelector<HTMLElement>("[data-rail-glyph]")
@@ -476,7 +486,15 @@
       );
       railMoves.push(fade);
     }
+    fromStart(railMoves, start);
   }
+
+  /** Every run started at `start` on the document timeline: one clock. */
+  const fromStart = (runs: Animation[], start: number) => {
+    for (const run of runs) {
+      run.startTime = start;
+    }
+  };
 
   /** Where an element's leading box edge is drawn, its slide included; null when it is not drawn. */
   const drawnLeft = (node: HTMLElement | null): number | null => {
@@ -550,7 +568,11 @@
    * again mid-flight, the stand-in stays: its flight is let go of where it
    * is drawn and flies again from there, and its turn turns back.
    */
-  function flyRailToggle(from: DOMRect | undefined, hide: boolean): void {
+  function flyRailToggle(
+    from: DOMRect | undefined,
+    hide: boolean,
+    start: number
+  ): void {
     const landing = document.querySelector<HTMLElement>("[data-rail-glyph]");
     if (!(from && from.width > 0 && landing && motionOk.current)) {
       railStandIn = null;
@@ -592,10 +614,20 @@
         railStandIn = null;
       }
     };
-    const flying = document
-      .querySelector("[data-rail-stand-in]")
-      ?.getAnimations()
-      .find((run) => run.id === "share-flight" && run.playState === "running");
+    // Its flight and its turn (the transitions the read makes) start with
+    // the slide and run its length: a turn turned back mid-way would
+    // otherwise run back only as far as CSS shortens a reversed transition.
+    const runs =
+      document
+        .querySelector("[data-rail-stand-in]")
+        ?.getAnimations({ subtree: true }) ?? [];
+    for (const run of runs) {
+      run.effect?.updateTiming(clock);
+    }
+    fromStart(runs, start);
+    const flying = runs.find(
+      (run) => run.id === "share-flight" && run.playState === "running"
+    );
     if (flying) {
       flying.finished.then(landed, landed);
     } else {
@@ -1725,6 +1757,7 @@
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
         {@attach reflow()}
+        bind:this={topBar}
       >
         <!-- The sidebar toggle; at the 900px line the rail returns and it
              retires (`desk:hidden`). On the phone's row it is a bare
