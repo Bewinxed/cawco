@@ -276,13 +276,15 @@ export interface ArtifactsDb {
   readonly show: (
     instanceId: string,
     artifactId: string,
-    revision: string
+    revision: string,
+    show: string
   ) => void;
-  /** Every session's shown artifact, with its row and its show's revision (null on a row kept before it was): what the hub serves after a restart. */
+  /** Every session's shown artifact, with its row, its show's revision and its show (each null on a row kept before it was): what the hub serves after a restart. */
   readonly shown: () => {
     artifact: ArtifactRow;
     instanceId: string;
     revision: string | null;
+    show: string | null;
   }[];
   /** Every artifact whose doc took an update (or that changed) at or after `at`. */
   readonly touchedSince: (at: Date) => ArtifactRow[];
@@ -638,12 +640,12 @@ export const artifactsDb = (
     }
     return { row, from, to };
   },
-  show: (instanceId, artifactId, revision) => {
+  show: (instanceId, artifactId, revision, show) => {
     db.insert(shownPreviews)
-      .values({ instanceId, artifactId, revision })
+      .values({ instanceId, artifactId, revision, show })
       .onConflictDoUpdate({
         target: shownPreviews.instanceId,
-        set: { artifactId, revision },
+        set: { artifactId, revision, show },
       })
       .run();
   },
@@ -652,14 +654,16 @@ export const artifactsDb = (
       .select({
         instanceId: shownPreviews.instanceId,
         revision: shownPreviews.revision,
+        show: shownPreviews.show,
         artifact: artifacts,
       })
       .from(shownPreviews)
       .innerJoin(artifacts, eq(artifacts.id, shownPreviews.artifactId))
       .all()
-      .map(({ instanceId, revision, artifact }) => ({
+      .map(({ instanceId, revision, show, artifact }) => ({
         instanceId,
         revision,
+        show,
         artifact: artifactOf(artifact),
       })),
   touchedSince: (at) =>

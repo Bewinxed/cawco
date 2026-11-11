@@ -112,6 +112,14 @@ export interface PreviewFrame {
   project?: string;
   /** Identifies one successful open, including a rebuild of the same source. */
   revision: string;
+  /**
+   * Identifies the show: new with each show of an artifact (artifact_show,
+   * artifact_create, the person's own open), kept while that show is only
+   * published anew at a new `revision` (an update's re-show, the preview
+   * mode set again). A tab's Close holds until it moves (dashboard
+   * preview/closed-here.ts).
+   */
+  show: string;
   source?: PreviewSource;
   /**
    * A sheet's stage, or a workspace preview's server (`serve`), as its doc

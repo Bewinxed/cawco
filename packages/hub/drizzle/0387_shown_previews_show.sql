@@ -1,0 +1,1 @@
+ALTER TABLE `shown_previews` ADD `show` text;

@@ -64,6 +64,7 @@
     artifacts: [ARTIFACT],
     port,
     revision: "bench-1",
+    show: "bench-1",
     source: { port, path },
     state: "open",
   });
@@ -82,6 +83,7 @@
         },
         artifacts: [ARTIFACT, THEN],
         revision: "bench-2",
+        show: "bench-2",
         source: { port, path: then },
       };
     }, after);

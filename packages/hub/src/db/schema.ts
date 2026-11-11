@@ -4668,7 +4668,9 @@ export const artifactChanges = sqliteTable(
  * these). One per session; gone when the panel is closed or the session ends.
  * `revision` is the show's (`PreviewTarget.revision`): a panel loads its page
  * again only when it changes, so a restart that keeps it reloads no page.
- * Null on a row kept before it was; its first restore keeps one.
+ * Null on a row kept before it was; its first restore keeps one. `show` is
+ * the show's identity (`PreviewTarget.show`), which a tab's Close holds
+ * until; null on a row kept before it was, whose revision stands for it.
  */
 export const shownPreviews = sqliteTable("shown_previews", {
   instanceId: text("instance_id")
@@ -4678,6 +4680,7 @@ export const shownPreviews = sqliteTable("shown_previews", {
     .notNull()
     .references(() => artifacts.id, { onDelete: "cascade" }),
   revision: text("revision"),
+  show: text("show"),
 });
 
 /**

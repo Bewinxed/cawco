@@ -6904,7 +6904,7 @@ export function closePreview(instanceId: string): void {
   if (previous?.state !== "open") {
     return;
   }
-  closeHere(instanceId, previous.revision);
+  closeHere(instanceId, previous.show);
   state.previews[instanceId] = { ...previous, state: "closed" };
 }
 

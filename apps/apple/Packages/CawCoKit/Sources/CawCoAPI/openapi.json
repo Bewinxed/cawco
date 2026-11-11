@@ -61642,6 +61642,10 @@
             "description": "Identifies one successful open, including a rebuild of the same source.",
             "type": "string"
           },
+          "show": {
+            "description": "Identifies the show: new with each show of an artifact (artifact_show,\nartifact_create, the person's own open), kept while that show is only\npublished anew at a new `revision` (an update's re-show, the preview\nmode set again). A tab's Close holds until it moves (dashboard\npreview/closed-here.ts).",
+            "type": "string"
+          },
           "source": {
             "description": "What an artifact shows (Projects spec §5.10): a dev server or a folder on\nthe session's machine (a preview), or a page the hub built and keeps under\nits data dir at `artifacts/<id>/` and serves itself, named by the page's\nname. A dev server or folder may name `path`, the page inside it the\npreview opens at (`/motion/updates`); the root when absent.",
             "anyOf": [
@@ -61746,6 +61750,7 @@
           "instanceId",
           "kind",
           "revision",
+          "show",
           "state"
         ]
       },

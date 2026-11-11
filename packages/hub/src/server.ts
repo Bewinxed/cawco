@@ -13645,11 +13645,16 @@ export const createServer = (
    * machine's preview reached on its own origin first, its listener
    * started for what the row names (preview-service.ts `reach`), so a
    * refusal is the open's; the intent kept in the database so a hub restart
-   * serves it still, and the "open" published at a new revision.
+   * serves it still, and the "open" published at a new revision. A show
+   * (`again` false) is a new show, which opens the panel again in a tab
+   * that closed it (dashboard preview/closed-here.ts); `again`, an update's
+   * re-show of what the panel shows already keeps its show, and a tab that
+   * closed it stays closed.
    */
   const openPreview = async (
     instanceId: string,
-    asked: ArtifactRow
+    asked: ArtifactRow,
+    again = false
   ): Promise<
     | { ok: true; frame: ReturnType<typeof previewFrame> }
     | { ok: false; code: 409 | 500 | 503 | 504; error: string }
@@ -13665,9 +13670,14 @@ export const createServer = (
       };
     }
     const artifact = shownArtifact(row);
+    const before = previewTargets.get(instanceId);
     const target: PreviewTarget = {
       artifact,
       revision: crypto.randomUUID(),
+      show:
+        again && before?.artifact.id === artifact.id
+          ? before.show
+          : crypto.randomUUID(),
     };
     // Its origin first (a machine's preview its artifact's own, a project's
     // page its project's): with every port of the range taken it is not
@@ -13693,7 +13703,7 @@ export const createServer = (
       }
     }
     previewTargets.set(instanceId, target);
-    db.artifacts.show(instanceId, artifact.id, target.revision);
+    db.artifacts.show(instanceId, artifact.id, target.revision, target.show);
     const frame = await timedShowStep("publish", artifact, instanceId, () =>
       publishPreview(instanceId, "open", target)
     );
@@ -15393,14 +15403,14 @@ export const createServer = (
     tree: (instance) => treeSessions(db, instance),
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
-    open: async (artifact, panel = artifact.instanceId) => {
+    open: async (artifact, panel = artifact.instanceId, again = false) => {
       if (panel === null) {
         return {
           ok: false,
           error: `No session holds ${artifact.name} now: it is its project's page.`,
         };
       }
-      const opened = await openPreview(panel, artifact);
+      const opened = await openPreview(panel, artifact, again);
       if (!opened.ok) {
         return { ok: false, error: opened.error };
       }
@@ -15798,20 +15808,28 @@ export const createServer = (
    * board draws it, never a panel (service `boardOf`).
    */
   const restoreShownPreviews = (): void => {
-    for (const { instanceId, artifact, revision } of db.artifacts.shown()) {
+    for (const {
+      instanceId,
+      artifact,
+      revision,
+      show,
+    } of db.artifacts.shown()) {
       if (boardOf(artifact)) {
         db.artifacts.unshow(instanceId);
         continue;
       }
       // The show's own revision, so a panel open across the restart keeps
-      // its page (and a press in it) rather than loading it again.
+      // its page (and a press in it) rather than loading it again; and its
+      // own show, so a tab that closed it stays closed.
       const kept = revision ?? crypto.randomUUID();
-      if (revision === null) {
-        db.artifacts.show(instanceId, artifact.id, kept);
+      const keptShow = show ?? kept;
+      if (revision === null || show === null) {
+        db.artifacts.show(instanceId, artifact.id, kept, keptShow);
       }
       previewTargets.set(instanceId, {
         artifact: shownArtifact(artifact),
         revision: kept,
+        show: keptShow,
       });
     }
   };
@@ -21013,6 +21031,7 @@ export const createServer = (
     return {
       artifact: shownArtifact(row),
       revision: `${row.id}${served}:${mode}`,
+      show: row.id,
     };
   };
 
@@ -32675,6 +32694,7 @@ export const createServer = (
             return frameOrigin(row.instanceId ?? owner, {
               artifact: shownArtifact(row),
               revision: "",
+              show: "",
             });
           },
           panelSees: (instanceId, artifactId) =>
@@ -32692,7 +32712,12 @@ export const createServer = (
             for (const [instanceId, target] of previewTargets) {
               const moved = { ...target, revision: crypto.randomUUID() };
               previewTargets.set(instanceId, moved);
-              db.artifacts.show(instanceId, target.artifact.id, moved.revision);
+              db.artifacts.show(
+                instanceId,
+                target.artifact.id,
+                moved.revision,
+                moved.show
+              );
               publishPreview(instanceId, "open", moved);
             }
             // The board's publish carries the mode (`previewSettings`, which

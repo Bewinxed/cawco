@@ -120,6 +120,8 @@ export interface PreviewTarget {
   /** The artifact the panel shows (Projects spec §5.10). */
   artifact: PreviewFrame["artifact"];
   revision: string;
+  /** The show it is ({@link PreviewFrame.show}): new with each show, kept by an update's re-show and a republish. */
+  show: string;
 }
 
 /**
@@ -287,6 +289,7 @@ export function previewFrame(
     ...(project ? { project } : {}),
     ...(source ? { source } : {}),
     revision: target.revision,
+    show: target.show,
     ...(stage ? { stage } : {}),
   };
 }

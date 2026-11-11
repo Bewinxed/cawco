@@ -23,6 +23,16 @@
  * 3. the session shows the artifact again (the agent's artifact_show): the
  *    panel opens in both tabs.
  *
+ * Then, for a page of plain HTML, the owner's word that an edit is no show
+ * (2026-11-11: "An agent editing a page it already showed (artifact_update)
+ * is not showing something next"): Close in A, then
+ *
+ * 4. two artifact_updates of its HTML: after each, A stays closed for 3 s
+ *    and B's panel draws the new HTML;
+ * 5. the preview mode set again (every shown preview published anew,
+ *    server.ts `republish`): A stays closed for 3 s, and B keeps its panel;
+ * 6. the agent's artifact_show of it: the panel opens in A again.
+ *
  *   bun scripts/probe-kit/run.ts panel-close-per-tab
  */
 import { mkdir } from "node:fs/promises";
@@ -42,6 +52,9 @@ const PAGE_READY = "[data-files-control]";
 const WATCH_MS = 3000;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+
+const htmlPage = (heading: string) =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${heading}</title></head><body><h1>${heading}</h1></body></html>`;
 
 const folderPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Folder</title></head><body><h1 id="word">Folder</h1></body></html>`;
 
@@ -210,6 +223,93 @@ const run = async (kit: Kit) => {
     );
     await b.close();
   }
+
+  // 4–6. An edit, and a republish, are no show.
+  const edited = await make({
+    kind: "page",
+    does: "judge",
+    title: "Probe judge artifact",
+    ask: "Judge the heading",
+    name: "two-tab-edits",
+    html: htmlPage("First"),
+  });
+  const url = `${base}/session/${session}`;
+  await open(a, url, FRAME);
+  const b = await a.context().newPage();
+  await open(b, url, FRAME);
+  /** The heading B's panel draws, or null. */
+  const bHeading = () =>
+    frameOf(b)
+      .locator("h1")
+      .first()
+      .textContent({ timeout: 1000 })
+      .catch(() => null);
+  await until("B's page drawn", bHeading, (text) => text === "First", 30_000);
+  await a.bringToFront();
+  await a
+    .locator(CARD)
+    .getByRole("button", { name: "Close", exact: true })
+    .first()
+    .click();
+  await until(
+    "A's panel gone",
+    () => a.locator(CARD).count(),
+    (count) => count === 0,
+    10_000
+  );
+  for (const heading of ["Second", "Third"]) {
+    await fleet.api(
+      hubRequest("PATCH /api/instances/:id/artifacts/:artifact", {
+        path: { id: session, artifact: edited.id },
+        body: { html: htmlPage(heading) },
+      })
+    );
+    const bDraws = await until(
+      `B's panel drawing ${heading}`,
+      bHeading,
+      (text) => text === heading,
+      15_000
+    )
+      .then(() => true)
+      .catch(() => false);
+    const aReads = await watch(() => a.locator(CARD).count());
+    kit.check(
+      `edits: 4: after artifact_update to ${heading}, tab A stays closed for ${WATCH_MS} ms and tab B's panel draws ${heading}`,
+      bDraws && aReads.every((count) => count === 0),
+      JSON.stringify({ bDraws, a: aReads.join(",") })
+    );
+  }
+  const settings = await fleet.api<{ mode: "port" | "host"; pattern?: string }>(
+    hubRequest("GET /api/preview-settings")
+  );
+  await fleet.api(
+    hubRequest("PUT /api/preview-settings", {
+      body: {
+        mode: settings.mode,
+        ...(settings.pattern ? { pattern: settings.pattern } : {}),
+      },
+    })
+  );
+  const aRepublished = await watch(() => a.locator(CARD).count());
+  const bStays = await panelComes(b, "B's panel after the republish");
+  kit.check(
+    `edits: 5: the preview mode set again republishes the show: tab A stays closed for ${WATCH_MS} ms, and tab B keeps its panel`,
+    bStays && aRepublished.every((count) => count === 0),
+    JSON.stringify({ bStays, a: aRepublished.join(",") })
+  );
+  await fleet.api(
+    hubRequest("POST /api/instances/:id/artifacts/:artifact/show", {
+      path: { id: session, artifact: edited.id },
+      body: {},
+    })
+  );
+  const aShown = await panelComes(a, "A's panel back on the show");
+  kit.check(
+    "edits: 6: the agent's artifact_show of the edited page opens the panel in tab A again",
+    aShown,
+    JSON.stringify({ aShown })
+  );
+  await b.close();
 };
 
 const spec: Spec = {

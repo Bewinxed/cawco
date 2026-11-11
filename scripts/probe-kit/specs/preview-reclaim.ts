@@ -204,6 +204,7 @@ const run = async (kit: Kit) => {
           title: one,
         },
         revision: "1",
+        show: "1",
       });
     }
     // Each panel's session is one a screen follows.

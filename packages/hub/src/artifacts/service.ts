@@ -2036,11 +2036,14 @@ export interface ArtifactServiceDeps {
    * unless named: another session of its delegation tree shows it in its
    * own) at a fresh revision (the open frame every view of that session
    * hears); why not, when its server could not be started. Whether a view
-   * put it on screen is that view's word ({@link Artifacts.shown}).
+   * put it on screen is that view's word ({@link Artifacts.shown}). With
+   * `again`, an update's re-show of what the panel shows: the same show at
+   * a new revision, so a tab that closed it stays closed.
    */
   open: (
     artifact: ArtifactRow,
-    panel?: string | null
+    panel?: string | null,
+    again?: boolean
   ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
   /** The workspace a session runs in, by id; undefined outside one. */
   ownWorkspace: (instance: InstanceRow) => string | undefined;
@@ -4779,11 +4782,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * false when its server could not even be started, and nothing was
    * published. Only its own session's show marks it opened (handed, shown
    * at): another session of the tree showing it changes nothing of it.
+   * `again`: an update's re-show, the same show ({@link ArtifactServiceDeps.open}).
    */
   const show = async (
     row: ArtifactRow,
     panel = row.instanceId,
-    card: string | null = null
+    card: string | null = null,
+    again = false
   ): Promise<
     | { opened: true; started: true }
     | { opened: false; started: boolean; why: string; href?: string }
@@ -4793,7 +4798,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return { opened: false, started: true, ...landing };
     }
     const published = await timedShowStep("open", row, panel, () =>
-      deps.open(row, panel)
+      deps.open(row, panel, again)
     );
     if (!published.ok) {
       return { opened: false, why: published.error, started: false };
@@ -8948,8 +8953,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         updatedAt: new Date(),
       }) as ArtifactRow;
       stampMeta(next, null);
+      // An update of what the panel shows, not a show of it: a tab that
+      // closed it stays closed (dashboard preview/closed-here.ts).
       if (inPanel(next)) {
-        await show(next);
+        await show(next, next.instanceId, null, true);
       }
       askedNow(instance, next.id);
       return { id: next.id, revision: next.revision, spec };

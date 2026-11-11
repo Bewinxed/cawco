@@ -452,6 +452,7 @@
       origin: location.origin,
       port,
       revision: "working-area-1",
+      show: "working-area-1",
       source: { port, path },
       state: "open",
     } as PanePreview;

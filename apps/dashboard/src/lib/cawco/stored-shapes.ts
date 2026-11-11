@@ -517,6 +517,7 @@ const PreviewFrameShape = z.object({
   port: z.number().optional(),
   project: z.string().optional(),
   revision: z.string(),
+  show: z.string(),
   source: PreviewSourceShape.optional(),
   stage: StageStateShape.optional(),
   state: z.enum(["open", "closed"]),
