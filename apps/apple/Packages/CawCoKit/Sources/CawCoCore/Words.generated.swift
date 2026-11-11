@@ -3683,6 +3683,16 @@ public enum Words {
 
         public static let deniedPlaceholder = "Write, Edit, NotebookEdit"
 
+        public static let startingSkills = "Skills its sessions start with"
+
+        public static let startingSkillsPlaceholder = "svelte-foundations:coding, frontend-design"
+
+        public static let startingSetHint = "Leave both empty and its sessions start with every installed skill and server. CawCo's own are always in."
+
+        public static let startingServers = "Servers its sessions start with"
+
+        public static let startingServersPlaceholder = "context7, chrome-devtools"
+
         public static let mayStart = "Types it may start"
 
         public static let mayStartPlaceholder = "browser, research"
@@ -3706,7 +3716,11 @@ public enum Words {
             "“\(harness)” is not a harness a delegate type can run on"
         }
 
-        public static let problemStartingSetBlank = "a starting set names no blank skill or server"
+        public static let problemStartingSetBlank = "a skill or server in a starting set can't be blank"
+
+        public static func problemStartingSetName(name: String) -> String {
+            "“\(name)” is two skills or servers run together: separate them with a comma"
+        }
 
         /// A project type file's `starting_set:` with a value on its own line, or nothing under it.
         public static let problemStartingSetForm = "starting_set lists its skills and servers on indented lines under it, like “  skills: [grill]” and “  servers: [exa]”"

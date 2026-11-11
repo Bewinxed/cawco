@@ -72,6 +72,12 @@ export const delegateTypesWords = {
   skillsPlaceholder: "svelte-foundations:coding, impeccable",
   denied: "Tools denied",
   deniedPlaceholder: "Write, Edit, NotebookEdit",
+  startingSkills: "Skills its sessions start with",
+  startingSkillsPlaceholder: "svelte-foundations:coding, frontend-design",
+  startingSetHint:
+    "Leave both empty and its sessions start with every installed skill and server. CawCo's own are always in.",
+  startingServers: "Servers its sessions start with",
+  startingServersPlaceholder: "context7, chrome-devtools",
   mayStart: "Types it may start",
   mayStartPlaceholder: "browser, research",
   mayStartHint:
@@ -89,7 +95,9 @@ export const delegateTypesWords = {
   problemModel: "a delegate type needs a model",
   problemHarness: (harness: string) =>
     `“${harness}” is not a harness a delegate type can run on`,
-  problemStartingSetBlank: "a starting set names no blank skill or server",
+  problemStartingSetBlank: "a skill or server in a starting set can't be blank",
+  problemStartingSetName: (name: string) =>
+    `“${name}” is two skills or servers run together: separate them with a comma`,
   /** A project type file's `starting_set:` with a value on its own line, or nothing under it. */
   problemStartingSetForm:
     "starting_set lists its skills and servers on indented lines under it, like “  skills: [grill]” and “  servers: [exa]”",

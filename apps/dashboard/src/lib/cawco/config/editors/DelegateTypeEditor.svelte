@@ -2,6 +2,8 @@
   import {
     delegateTypeProblem,
     mayStartProblem,
+    type StartingSet,
+    startingSetProblem,
   } from "@cawco/core/delegate-types";
   import { EFFORT_LEVELS, HARNESSES } from "@cawco/core/harness";
   import { delegateTypesWords as words } from "@cawco/core/words/delegate-types";
@@ -32,19 +34,18 @@
    * The delegate-type editor. The description is the whole of how a calling
    * agent routes here, so it gets the largest field, above harness, model and
    * effort rather than beside them.
+   *
+   * It follows `type` while mounted: each field is a writable derived of it
+   * (svelte.dev/docs/svelte/$derived, "you can temporarily override their
+   * values by reassigning them"), so what the person types holds until the
+   * type itself changes, and a type set in place on a mounted editor is the
+   * one it shows. A reload that reads the same type back changes nothing.
    */
   let { type, taken }: { type: DelegateType | null; taken: string[] } =
     $props();
 
   const store = configStore();
   const HUE = "var(--hue-blue-500)";
-
-  let draft = $state<DelegateType>(
-    untrack(() => (type ? { ...type } : blankDelegateType()))
-  );
-  let skillsText = $state(untrack(() => (type?.skills ?? []).join(", ")));
-  let denyToolsText = $state(untrack(() => (type?.denyTools ?? []).join(", ")));
-  let mayStartText = $state(untrack(() => (type?.mayStart ?? []).join(", ")));
 
   const name = $derived(type?.name ?? null);
 
@@ -53,18 +54,59 @@
     skillsText: (from.skills ?? []).join(", "),
     denyToolsText: (from.denyTools ?? []).join(", "),
     mayStartText: (from.mayStart ?? []).join(", "),
+    startSkillsText: (from.startingSet?.skills ?? []).join(", "),
+    startServersText: (from.startingSet?.servers ?? []).join(", "),
   });
+  type Fields = ReturnType<typeof fieldsOf>;
+
+  /** The type as saved, by its content: a list read again with it unchanged is the same. */
+  const savedAs = $derived(JSON.stringify(type));
+  /** `type`, taken again only when its content changed: `savedAs` is the one dependency. */
+  const opened = $derived(savedAs === undefined ? null : untrack(() => type));
   /** What is saved: the fields differ from it by what is unsaved. */
-  const baseline = $derived(fieldsOf(type ? { ...type } : blankDelegateType()));
+  const baseline = $derived(
+    fieldsOf(opened ? { ...opened } : blankDelegateType())
+  );
+  /** The type the fields were last put back to (a kept draft, a save), over the saved one. */
+  let reopened = $state<DelegateType | null>(null);
+  const draft = $derived.by(() => {
+    const fields = $state<DelegateType>({
+      ...(reopened ?? baseline.draft),
+    });
+    return fields;
+  });
+  let skillsText = $derived(baseline.skillsText);
+  let denyToolsText = $derived(baseline.denyToolsText);
+  let mayStartText = $derived(baseline.mayStartText);
+  let startSkillsText = $derived(baseline.startSkillsText);
+  let startServersText = $derived(baseline.startServersText);
+
+  /** Puts every field back to `fields`. */
+  const takeFields = (fields: Fields) => {
+    reopened = fields.draft;
+    ({
+      skillsText,
+      denyToolsText,
+      mayStartText,
+      startSkillsText,
+      startServersText,
+    } = fields);
+  };
+
   const kept = keepDraft(
     page.url.pathname,
     () => {
-      const now = { draft, skillsText, denyToolsText, mayStartText };
+      const now = {
+        draft,
+        skillsText,
+        denyToolsText,
+        mayStartText,
+        startSkillsText,
+        startServersText,
+      };
       return sameFields(now, baseline) ? null : now;
     },
-    (stored) => {
-      ({ draft, skillsText, denyToolsText, mayStartText } = stored);
-    }
+    takeFields
   );
 
   const form = new EditorForm("/config/delegate-types", kept, store);
@@ -77,6 +119,28 @@
     return items.length ? items : undefined;
   };
 
+  /**
+   * A starting set's list keeps a blank between two commas, so its field can
+   * say so; a comma at either end is only trailing.
+   */
+  const setNames = (text: string): string[] => {
+    const items = text.split(",").map((item) => item.trim());
+    while (items[0] === "") {
+      items.shift();
+    }
+    while (items.at(-1) === "") {
+      items.pop();
+    }
+    return items;
+  };
+
+  /** Both lists empty is no set: its sessions start with everything installed. */
+  const startingSet = $derived.by((): StartingSet | undefined => {
+    const skills = setNames(startSkillsText);
+    const servers = setNames(startServersText);
+    return skills.length || servers.length ? { skills, servers } : undefined;
+  });
+
   const submission = $derived<DelegateType>({
     ...draft,
     name: draft.name.trim(),
@@ -85,16 +149,39 @@
     skills: parsedList(skillsText),
     denyTools: parsedList(denyToolsText),
     mayStart: parsedList(mayStartText),
+    startingSet,
   });
 
   const problem = $derived(delegateTypeProblem(submission));
+  /** The refusal each header field says, matched whole: a list's problem stays under its own field. */
+  const fieldProblems: Record<string, string> = {
+    name: words.problemName,
+    description: words.problemDescription,
+    model: words.problemModel,
+  };
   const problemFor = (field: string): string | undefined =>
-    form.seen(field) && problem?.includes(field) ? problem : undefined;
+    form.seen(field) &&
+    problem !== undefined &&
+    problem === fieldProblems[field]
+      ? problem
+      : undefined;
 
   /** The may-start list's own problem, once its field was left or Save pressed. */
   const mayStartShown = $derived(
     form.seen("mayStart")
       ? mayStartProblem(submission.mayStart ?? [])
+      : undefined
+  );
+
+  /** Each starting-set list's own problem, once its field was left or Save pressed. */
+  const startSkillsShown = $derived(
+    form.seen("startSkills")
+      ? startingSetProblem({ skills: startingSet?.skills ?? [], servers: [] })
+      : undefined
+  );
+  const startServersShown = $derived(
+    form.seen("startServers")
+      ? startingSetProblem({ skills: [], servers: startingSet?.servers ?? [] })
       : undefined
   );
 
@@ -118,9 +205,7 @@
       if (!name) {
         return saved.name;
       }
-      ({ draft, skillsText, denyToolsText, mayStartText } = fieldsOf({
-        ...saved,
-      }));
+      takeFields(fieldsOf({ ...saved }));
       return null;
     });
   }
@@ -256,6 +341,41 @@
         placeholder={words.skillsPlaceholder}
         spellcheck="false"
         bind:value={skillsText}
+      />
+    </Field>
+    <Field
+      hint={words.startingSetHint}
+      id="type-start-skills"
+      label={words.startingSkills}
+      problem={startSkillsShown}
+    >
+      <Input
+        aria-invalid={startSkillsShown ? "true" : undefined}
+        autocomplete="off"
+        id="type-start-skills"
+        onblur={() => {
+          form.touched.startSkills = true;
+        }}
+        placeholder={words.startingSkillsPlaceholder}
+        spellcheck="false"
+        bind:value={startSkillsText}
+      />
+    </Field>
+    <Field
+      id="type-start-servers"
+      label={words.startingServers}
+      problem={startServersShown}
+    >
+      <Input
+        aria-invalid={startServersShown ? "true" : undefined}
+        autocomplete="off"
+        id="type-start-servers"
+        onblur={() => {
+          form.touched.startServers = true;
+        }}
+        placeholder={words.startingServersPlaceholder}
+        spellcheck="false"
+        bind:value={startServersText}
       />
     </Field>
     <Field id="type-deny" label={words.denied}>

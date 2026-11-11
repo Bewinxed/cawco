@@ -89,15 +89,24 @@ export const inStartingSet = <Config>(
       )
     : servers;
 
-/** Why this starting set cannot be saved, in a sentence, or nothing when it can. Every harness enforces one. */
+/** A listing names a skill or server in one word: a space or comma inside is two names run together. */
+const RUN_TOGETHER = /[\s,]/u;
+
+/** Why this starting set cannot be saved (a blank name, or two run together), in a sentence, or nothing when it can. Every harness enforces one. */
 export const startingSetProblem = (
   set: StartingSet | undefined
 ): string | undefined => {
   if (!set) {
     return undefined;
   }
-  const blank = [...set.skills, ...set.servers].some((name) => !name.trim());
-  return blank ? delegateTypesWords.problemStartingSetBlank : undefined;
+  const names = [...set.skills, ...set.servers];
+  if (names.some((name) => !name.trim())) {
+    return delegateTypesWords.problemStartingSetBlank;
+  }
+  const runTogether = names.find((name) => RUN_TOGETHER.test(name.trim()));
+  return runTogether === undefined
+    ? undefined
+    : delegateTypesWords.problemStartingSetName(runTogether.trim());
 };
 
 /** What a name may be. Mirrors a subagent's own `AGENT_NAME` — no reason to invent a second rule. */
