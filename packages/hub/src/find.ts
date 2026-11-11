@@ -93,13 +93,6 @@ import { boardTitle, leafOf } from "./labels";
  */
 const NAMES_FRESH_MS = 1000;
 
-/**
- * How old a machine's catalog of the sessions it keeps may be, ms, before
- * find asks for it again, in the background: sessions run from a terminal,
- * which the hub never started, are found by name from it.
- */
-const STORED_FRESH_MS = 60_000;
-
 /** A project's stage kinds as last read, and when; read again once this old, ms. */
 const STAGES_FRESH_MS = 30_000;
 
@@ -302,12 +295,14 @@ export interface FindDeps {
   ) => Promise<TranscriptAnswer | { error: string }>;
   /** Whether artifact `id` is a kept block (hub kept-blocks.ts): a page that asks nothing, found as an artifact. */
   blockPage: (id: string) => boolean;
-  db: DbShape;
   /**
    * A machine's catalog of the sessions it keeps (`listSessions`), with the
    * harnesses that did not list in time or whose listing threw, or why it
    * gave none.
    */
+  /** A machine's catalog was read and kept: what reads it (Recent's stored list, hub stored-recent.ts) works again. */
+  catalogRead: (machineId: string) => void;
+  db: DbShape;
   listStored: (machineId: string) => Promise<
     | {
         failed: HarnessFailed[];
@@ -561,14 +556,13 @@ export const createFind = (deps: FindDeps) => {
   >();
   const stagesReading = new Set<string>();
   /**
-   * Each machine's catalog of the sessions it keeps, as last read, and when;
-   * with the harnesses that did not list in time, or whose listing threw, on
-   * that read.
+   * Each machine's catalog of the sessions it keeps, as last read; with the
+   * harnesses that did not list in time, or whose listing threw, on that
+   * read.
    */
   const storedCatalogs = new Map<
     string,
     {
-      at: number;
       failed: HarnessFailed[];
       sessions: NeutralSessionInfo[];
       unanswered: HarnessUnanswered[];
@@ -616,25 +610,26 @@ export const createFind = (deps: FindDeps) => {
           );
         }
         storedCatalogs.set(machineId, {
-          at: Date.now(),
           failed: answer.failed,
           sessions: [...answer.sessions, ...kept],
           unanswered: answer.unanswered,
         });
         stale = true;
+        deps.catalogRead(machineId);
       })
       .finally(() => storedReading.delete(machineId));
     storedReading.set(machineId, reading);
     return reading;
   };
   /**
-   * A machine's catalog as last read ({@link relist}); read again in the
-   * background once stale.
+   * A machine's catalog as last read ({@link relist}): read as it
+   * registers, and again whenever it says a transcript moved that may
+   * matter (hub stored-recent.ts); one never read yet is read now, in the
+   * background.
    */
-  const catalogOf = (machine: AgentRow, now: number) => {
+  const catalogOf = (machine: AgentRow) => {
     const known = storedCatalogs.get(machine.machineId);
-    const due = !known || now - known.at > STORED_FRESH_MS;
-    if (due && deps.online(machine.machineId)) {
+    if (!known && deps.online(machine.machineId)) {
       detach(relist(machine), `find: ${machine.machineId}'s stored sessions`);
     }
     return known?.sessions ?? [];
@@ -793,7 +788,7 @@ export const createFind = (deps: FindDeps) => {
     });
     const bySessionId = sessionIdsOf(held);
     const hubMade = db.find.hubMade();
-    const stored = storedOf(machines, bySessionId, hubMade, now);
+    const stored = storedOf(machines, bySessionId, hubMade);
     names = {
       at: now,
       bySessionId,
@@ -836,8 +831,7 @@ export const createFind = (deps: FindDeps) => {
   const storedOf = (
     machines: Map<string, AgentRow>,
     bySessionId: Map<string, string>,
-    hubMade: ReadonlySet<string>,
-    now: number
+    hubMade: ReadonlySet<string>
   ): Map<string, Entry> => {
     const stored = new Map<string, Entry>();
     for (const machine of machines.values()) {
@@ -845,7 +839,7 @@ export const createFind = (deps: FindDeps) => {
         id: machine.machineId,
         name: machineLabel(machine.hostname),
       };
-      for (const info of catalogOf(machine, now)) {
+      for (const info of catalogOf(machine)) {
         const entry =
           bySessionId.has(info.sessionId) ||
           hubMade.has(purgedKey(machine.machineId, info.sessionId))
@@ -1350,6 +1344,16 @@ export const createFind = (deps: FindDeps) => {
   };
 
   return {
+    /** One machine's catalog as last read; empty before its first read. */
+    catalogOf: (machineId: string): readonly NeutralSessionInfo[] =>
+      storedCatalogs.get(machineId)?.sessions ?? [],
+    /** Reads one machine's catalog again (a listing under way is the one waited on). */
+    relist: (machineId: string): Promise<void> => {
+      const machine = db
+        .listAgents()
+        .find((agent) => agent.machineId === machineId);
+      return machine ? relist(machine) : Promise.resolve();
+    },
     /**
      * The board's change log named these sessions: their rows are read
      * again by key (gone when no longer findable), and the names rebuilt.

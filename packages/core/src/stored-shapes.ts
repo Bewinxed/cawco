@@ -389,6 +389,35 @@ export const BrowserRowShape = declared(
   "packages/core/src/browser.ts"
 );
 
+export const HarnessKindShape = declared(
+  z.enum(HARNESSES),
+  "HarnessKind",
+  "packages/core/src/harness.ts"
+);
+
+const NeutralSessionInfoShape = declared(
+  z.object({
+    createdAt: z.number().optional(),
+    customTitle: z.string().optional(),
+    cwd: z.string().optional(),
+    fileSize: z.number().optional(),
+    firstPrompt: z.string().optional(),
+    firstTitle: z.string().optional(),
+    gitBranch: z.string().optional(),
+    harness: HarnessKindShape,
+    lastModified: z.number(),
+    sessionId: z.string(),
+    startedBy: z.enum(["person", "program"]).optional(),
+    summary: z.string().optional(),
+    tag: z.string().optional(),
+    wroteAt: z.number().optional(),
+  }),
+  "NeutralSessionInfo",
+  "packages/core/src/harness.ts"
+);
+export const NeutralSessionInfoSchema: z.ZodType<NeutralSessionInfoType> =
+  NeutralSessionInfoShape;
+
 const FaultCauseShape = declared(
   z.enum(FAULT_CAUSES),
   "FaultCause",
@@ -428,12 +457,6 @@ const FleetItemStateShape = declared(
   ]),
   "FleetItemState",
   "packages/core/src/fleet.ts"
-);
-
-export const HarnessKindShape = declared(
-  z.enum(HARNESSES),
-  "HarnessKind",
-  "packages/core/src/harness.ts"
 );
 
 const PlacedSectionShape = declared(
@@ -3098,29 +3121,6 @@ const ContinuationReadShape = declared(
 export const ContinuationReadSchema: z.ZodType<ContinuationReadType> =
   ContinuationReadShape;
 
-const NeutralSessionInfoShape = declared(
-  z.object({
-    createdAt: z.number().optional(),
-    customTitle: z.string().optional(),
-    cwd: z.string().optional(),
-    fileSize: z.number().optional(),
-    firstPrompt: z.string().optional(),
-    firstTitle: z.string().optional(),
-    gitBranch: z.string().optional(),
-    harness: HarnessKindShape,
-    lastModified: z.number(),
-    sessionId: z.string(),
-    startedBy: z.enum(["person", "program"]).optional(),
-    summary: z.string().optional(),
-    tag: z.string().optional(),
-    wroteAt: z.number().optional(),
-  }),
-  "NeutralSessionInfo",
-  "packages/core/src/harness.ts"
-);
-export const NeutralSessionInfoSchema: z.ZodType<NeutralSessionInfoType> =
-  NeutralSessionInfoShape;
-
 const WorkspaceArchivedShape = declared(
   z.object({
     carry: z.string().nullable(),
@@ -3164,10 +3164,11 @@ prove<
     Same<z.output<typeof BrowserRelayShape>, BrowserRelayType>,
     Same<z.output<typeof BrowserStateShape>, BrowserStateType>,
     Same<z.output<typeof BrowserRowShape>, BrowserRowType>,
+    Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
+    Same<z.output<typeof NeutralSessionInfoShape>, NeutralSessionInfoType>,
     Same<z.output<typeof FaultCauseShape>, FaultCauseType>,
     Same<z.output<typeof FleetFaultCauseShape>, FleetFaultCauseType>,
     Same<z.output<typeof FleetItemStateShape>, FleetItemStateType>,
-    Same<z.output<typeof HarnessKindShape>, HarnessKindType>,
     Same<z.output<typeof PlacedSectionShape>, PlacedSectionType>,
     Same<z.output<typeof FleetPlacedStatesShape>, FleetPlacedStatesType>,
     Same<z.output<typeof CliInstallShape>, CliInstallType>,
@@ -3363,7 +3364,6 @@ prove<
     Same<z.output<typeof InstallShape>, InstallType>,
     Same<z.output<typeof MoveInspectionShape>, MoveInspectionType>,
     Same<z.output<typeof ContinuationReadShape>, ContinuationReadType>,
-    Same<z.output<typeof NeutralSessionInfoShape>, NeutralSessionInfoType>,
     Same<z.output<typeof WorkspaceArchivedShape>, WorkspaceArchivedType>,
   ]
 >();

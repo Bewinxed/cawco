@@ -512,6 +512,10 @@ export const listPiFiles = async (): Promise<string[]> => {
   return files.map((file) => file.path);
 };
 
+/** The agent's index of its stored transcripts, each file's mtime and size and what a listing read of it (agent catalog-index.ts). */
+export const catalogIndexPath = (): string =>
+  join(cawcoDataDir(), "catalog-index.json");
+
 /** The agent's transcript search index. */
 export const transcriptIndexPath = (): string =>
   join(

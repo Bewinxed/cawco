@@ -172,6 +172,7 @@ import {
   workspaceHook,
 } from "../boundary";
 import { CHROME_DEVTOOLS, throughGate } from "../browser/door";
+import { indexedListing, listingRead, watchCatalogDir } from "../catalog-index";
 import { CLAUDE_QUIET_ENV } from "../claude-env";
 import {
   mcpConfigOffArgv,
@@ -792,34 +793,6 @@ const transcriptEnds = async (file: string): Promise<SessionStoreEntry[]> => {
   } finally {
     await handle.close();
   }
-};
-
-/**
- * How many transcripts a listing reads at once. Each read holds a
- * transcript's two 64 KiB ends as bytes, as text and as parsed lines; read
- * all at once, one listing of 1,500 transcripts took the agent to 977 MB RSS,
- * and it kept 932 MB after (measured on a rig at obelisk's scale).
- */
-const LISTING_READS = 8;
-
-/** `read` over every item, at most {@link LISTING_READS} at a time; results in order. */
-const listingRead = async <T, R>(
-  items: readonly T[],
-  read: (item: T) => Promise<R>
-): Promise<R[]> => {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const reader = async (): Promise<void> => {
-    while (next < items.length) {
-      const index = next;
-      next += 1;
-      results[index] = await read(items[index]);
-    }
-  };
-  await Promise.all(
-    Array.from({ length: Math.min(LISTING_READS, items.length) }, reader)
-  );
-  return results;
 };
 
 /**
@@ -5386,8 +5359,9 @@ class ClaudeHarness implements Harness {
 
   /**
    * Every stored session, in the agent's own config dir and each account's:
-   * the SDK never looks in an account's dir, so each is read here
-   * ({@link listingRead}).
+   * the SDK never looks in an account's dir, so each is read here, from the
+   * machine's index of them where a transcript has not moved
+   * (catalog-index.ts).
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
     // The dir the agent itself was started with. Scoped to a project, the SDK
@@ -5405,6 +5379,8 @@ class ClaudeHarness implements Harness {
     const files: { file: string; sessionId: string }[] = [];
     for (const configDir of configDirs) {
       const projects = join(configDir, "projects");
+      // A transcript moving there is told to the hub (catalog-index.ts).
+      watchCatalogDir(projects);
       const projectDirs = slug ? [slug] : await subdirectories(projects);
       for (const project of projectDirs) {
         for (const name of await jsonlNames(join(projects, project))) {
@@ -5415,10 +5391,15 @@ class ClaudeHarness implements Harness {
         }
       }
     }
-    const read = await listingRead(files, async ({ file, sessionId }) => {
-      const info = await sessionInfoAt(file, sessionId);
-      return info && { ...toInfo(info), ...(await wroteIn(file)) };
-    });
+    // Each transcript read again only when it moved (catalog-index.ts).
+    const { infos } = await indexedListing(
+      "claude",
+      files,
+      async ({ file, sessionId }) => {
+        const info = await sessionInfoAt(file, sessionId);
+        return info && { ...toInfo(info), ...(await wroteIn(file)) };
+      }
+    );
     const ownDated = await listingRead(own, async (info) => {
       const file = await claudeSessionFile(info.sessionId, dir);
       return {
@@ -5427,10 +5408,7 @@ class ClaudeHarness implements Harness {
         ...(file ? await wroteIn(file) : {}),
       };
     });
-    return [
-      ...ownDated,
-      ...read.filter((info): info is NeutralSessionInfo => info !== undefined),
-    ];
+    return [...ownDated, ...infos];
   }
 
   async getSessionInfo(

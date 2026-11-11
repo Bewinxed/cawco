@@ -1096,16 +1096,15 @@ class Home {
   );
 
   /**
-   * The machines that have not answered yet: offline, their stored sessions
-   * not read, or their sessions still the hub's stale copy waiting for the
-   * daemon to register. Until this is empty an empty list proves nothing,
-   * so "no sessions" is never said over it.
+   * The machines that have not answered yet: offline, or their sessions
+   * still the hub's stale copy waiting for the daemon to register. Until
+   * this is empty an empty list proves nothing, so "no sessions" is never
+   * said over it.
    */
   readonly waitingOn = $derived(
     cawco.machines.filter(
       (machine) =>
         machine.status !== "online" ||
-        !cawco.catalogRead(machine.machineId) ||
         cawco.staleInstances.some((row) => row.machineId === machine.machineId)
     )
   );
@@ -1411,14 +1410,15 @@ class Home {
   });
 
   /**
-   * Nothing to list anywhere: no session the hub lists, and no transcript
-   * stored on any machine. Asked without building a list (one look per
-   * machine), so the home's empty state costs nothing as the catalogs grow.
+   * Nothing to list anywhere: no session the hub lists, none it holds
+   * behind a stored transcript, and no stored transcript that stands as a
+   * row (the hub's `StoredRecent`).
    */
   get empty(): boolean {
     return (
       cawco.listedInstances.length === 0 &&
-      cawco.machines.every((machine) => !cawco.hasStored(machine.machineId))
+      cawco.olderInstances.length === 0 &&
+      cawco.storedTranscripts.length === 0
     );
   }
 

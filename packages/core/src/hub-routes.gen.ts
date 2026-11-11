@@ -926,6 +926,7 @@ export interface components {
     "GET /api/session-limits": Record<string, never>;
     "GET /api/spend-settings": Record<string, never>;
     "GET /api/stage-templates": Record<string, never>;
+    "GET /api/stored": Record<string, never>;
     "GET /api/stream-relay": Record<string, never>;
     "GET /api/stream-relay/try": Record<string, never>;
     "GET /api/tailnet-https": Record<string, never>;
@@ -2265,11 +2266,6 @@ export interface components {
           id: string;
           machine?: (string | null) | null;
         }[];
-      };
-    };
-    "POST /api/instances/stored": {
-      body: {
-        sessions: string[];
       };
     };
     "POST /api/instances/titles": {

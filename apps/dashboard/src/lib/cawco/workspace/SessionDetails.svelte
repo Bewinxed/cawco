@@ -142,7 +142,14 @@
    * machine from what it ran with. The settings below show it and pick it:
    * a pick changes what it launches with, and asks nothing of any machine.
    */
-  const resume = $derived(kept ? null : cawco.resumePlan(sessionId));
+  const resume = $derived(
+    kept
+      ? null
+      : cawco.resumePlan(
+          sessionId,
+          machineId && harness ? { machineId, cwd, harness } : null
+        )
+  );
   const model = $derived.by(() => {
     if (kept) {
       return kept.model;

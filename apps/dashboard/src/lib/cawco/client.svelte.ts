@@ -124,13 +124,13 @@ import type {
   SessionTooling,
   SpawnPayload,
   StopRequest,
-  StoredSessions,
+  StoredRecent,
+  StoredTranscript,
   WorkItemSummary,
 } from "@cawco/core/protocol";
 import { DELEGATE_SUMMARIES_LIMIT } from "@cawco/core/protocol";
 import { questionsOf } from "@cawco/core/question";
 import { relaunchOf } from "@cawco/core/relaunch";
-import { CAWCO_SCRATCH_TAG } from "@cawco/core/scratch-tag";
 import type { ProjectStarter, StarterPlace } from "@cawco/core/starters";
 import type {
   CommandKind,
@@ -185,7 +185,6 @@ import { SvelteMap } from "svelte/reactivity";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
-  SESSION_CATALOG_LIMIT,
   TRANSCRIPT_OLDER_PAGE,
   WS_RECONNECT_BASE_DELAY,
   WS_RECONNECT_MAX_ATTEMPTS,
@@ -302,9 +301,6 @@ export type HubState = "connected" | "connecting" | "unreachable";
  * the socket is down from the first moment, over the page.
  */
 const OUTAGE_GRACE = 4000;
-
-/** How long a change to the stored transcripts, or to the board, settles before the hub is asked of them ({@link askStoredSoon}). */
-const STORED_ASK_AFTER_MS = 300;
 
 /** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
 export type Machine = AgentRow;
@@ -476,14 +472,6 @@ export const isResumable = (row: BoardRow): boolean =>
  * carve back out of it.
  */
 export const isFailed = (row: BoardRow): boolean => row.status === "error";
-
-/**
- * A spin-off is history nobody asked for until they keep it, and the agent
- * tags its SDK session on the way out to say so. The tag is the whole test —
- * the directory a session ran in says nothing about whether it was a spin-off.
- */
-const listedInHistory = (info: NeutralSessionInfo): boolean =>
-  info.tag !== CAWCO_SCRATCH_TAG;
 
 export interface PendingPermission {
   /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Deny and Take over. */
@@ -774,14 +762,23 @@ export interface SessionState {
 }
 
 /**
- * Stored sessions per machine, newest first (`listSessions` through the
- * tunnel). Raw state: the catalogue is read whole and replaced whole, and a
- * deep proxy over its hundreds of rows was the 100ms+ flush every connect
- * paid for, with nothing ever mutating a row in place.
+ * Recent's stored transcripts as the hub last told them (core
+ * `StoredRecent`, its `stored` frame); null until the first, while the
+ * served board's stand ({@link storedNow}).
  */
-let catalog = $state.raw<Record<string, NeutralSessionInfo[]>>({});
-/** The machines whose stored sessions have been asked for and answered, or failed. */
-const catalogsTried = $state<Record<string, true>>({});
+let storedHeard = $state.raw<StoredRecent | null>(null);
+/** Who waits on the next `stored` frame ({@link olderMoved}). */
+const storedWaiters = new Set<() => void>();
+
+/**
+ * Transcripts stored on a machine that no list holds, each as its machine
+ * answered for it when a page opened on it (a search result, an old
+ * address: {@link readStoredInfo}), by session id.
+ */
+const storedInfos = new SvelteMap<
+  string,
+  { machineId: string; info: NeutralSessionInfo }
+>();
 
 /**
  * The board as this page's server load read it (the (app) layout's
@@ -801,23 +798,30 @@ export interface ServedBoard {
   machines: Machine[];
   projects: ProjectRow[];
   pulses: Record<string, SessionPulse>;
+  /** Recent's stored transcripts as the hub keeps them, drawn until its first `stored` frame. */
+  stored: StoredRecent;
 }
 
 function servedBoard(): ServedBoard | null {
   return (servedPage.data as { board?: ServedBoard | null }).board ?? null;
 }
 
+/** Recent's stored transcripts as drawn: the hub's last word, else the served board's. */
+const storedNow = (): StoredRecent =>
+  storedHeard ?? servedBoard()?.stored ?? { rows: [], transcripts: [] };
+
 /** The served board while the socket's first snapshot is not in: its rows, pulses and machines are the ones drawn. */
 const servedLive = (): ServedBoard | null =>
   state.liveRead ? null : servedBoard();
 
-/** The served rows looked up by id and by session, built once per list (on the server, once per request). */
-const servedIndexes = new WeakMap<InstanceRow[], InstanceIndex<InstanceRow>>();
-function servedIndex(rows: InstanceRow[]): InstanceIndex<InstanceRow> {
-  const held = servedIndexes.get(rows);
+/** The served rows (the board's, then the older ones its stored list holds) looked up by id and by session, built once per board (on the server, once per request). */
+const servedIndexes = new WeakMap<ServedBoard, InstanceIndex<InstanceRow>>();
+function servedIndex(board: ServedBoard): InstanceIndex<InstanceRow> {
+  const held = servedIndexes.get(board);
   if (held) {
     return held;
   }
+  const rows = [...board.instances, ...board.stored.rows];
   const byId = new Map<string, InstanceRow>();
   const bySession = new Map<string, InstanceRow[]>();
   for (const row of rows) {
@@ -830,7 +834,7 @@ function servedIndex(rows: InstanceRow[]): InstanceIndex<InstanceRow> {
     }
   }
   const index = { byId, bySession };
-  servedIndexes.set(rows, index);
+  servedIndexes.set(board, index);
   return index;
 }
 
@@ -851,16 +855,12 @@ const rowsBySession = new Keyed<readonly InstanceRow[]>();
 
 /**
  * The sessions behind the machines' stored transcripts that the board no
- * longer lists (the hub's answer, {@link readStored}): held by id and by
+ * longer lists (its `stored` frame, {@link holdStored}): held by id and by
  * session beside the board's rows, so everything that reads a session by
  * its id reads these as it reads a listed one, and in no list of the
  * board's ({@link instances}).
  */
 let olderRows = $state.raw<InstanceRow[]>([]);
-/** The stored transcripts no session of the hub wraps, by harness key ({@link readStored}). */
-let unwrapped = $state.raw<ReadonlySet<string>>(new Set());
-/** The hub has answered for the stored transcripts asked of it last. */
-const storedRead = $state({ done: false });
 
 /**
  * What each hub row's session needs from you ({@link activityNow}), held
@@ -914,31 +914,23 @@ function holdRows(
   }
   hubRows = next;
   // The board's word on a session is the newest: a row it lists now is no
-  // older one, and a transcript its session wraps is no stored one.
+  // older one.
   const listed = new Set(moved.map((row) => row.id));
   if (olderRows.some((row) => listed.has(row.id))) {
     olderRows = olderRows.filter((row) => !listed.has(row.id));
   }
-  if (moved.some((row) => row.sessionId && unwrapped.has(row.sessionId))) {
-    const wrapped = new Set(moved.map((row) => row.sessionId));
-    unwrapped = new Set([...unwrapped].filter((key) => !wrapped.has(key)));
-  }
-  // A row the board stopped listing may be one the hub still holds.
-  if (gone.length > 0) {
-    askStoredSoon();
-  }
 }
 
 /**
- * The hub's answer for the stored transcripts as `rows` and `keys` have
- * it: each older session into the index, each one it no longer answers
- * with out of it. A row the board lists is the board's.
+ * Recent's stored transcripts as the hub told them (its `stored` frame):
+ * each older session into the index, each one it no longer holds out of
+ * it. A row the board lists is the board's.
  */
-function holdStored(rows: InstanceRow[], keys: string[]): void {
+function holdStored(stored: StoredRecent): void {
   const listed = new Set(hubRows.map((row) => row.id));
   const next = reconcileRows(
     olderRows,
-    rows.filter((row) => !listed.has(row.id)),
+    stored.rows.filter((row) => !listed.has(row.id)),
     (row) => row.id
   );
   const kept = new Set(next);
@@ -959,69 +951,76 @@ function holdStored(rows: InstanceRow[], keys: string[]): void {
     }
   }
   olderRows = next;
-  unwrapped = new Set(keys.filter((key) => !rowsBySession.has(key)));
-  storedRead.done = true;
+  storedHeard = stored;
+  for (const waiter of storedWaiters) {
+    waiter();
+  }
+  storedWaiters.clear();
 }
 
-/** The stored transcripts asked of the hub last, by harness key; null until a list has asked. */
-let storedKeys: string[] | null = null;
-/** The newest ask's number: an older ask's answer is dropped. */
-let storedAsk = 0;
-let storedTimer: ReturnType<typeof setTimeout> | undefined;
-
-/**
- * Asks the hub what it holds behind the stored transcripts `storedKeys`
- * names (`POST /api/instances/stored`, core `StoredSessions`): one ask for
- * the whole list. An ask the hub did not answer leaves what it answered
- * last; the next change to the list, or to the board, asks again.
- */
-async function readStored(): Promise<void> {
-  storedAsk += 1;
-  const mine = storedAsk;
-  const keys = storedKeys ?? [];
-  if (keys.length === 0) {
-    holdStored([], []);
-    return;
-  }
-  const answer = await load<StoredSessions>(
-    hubRequest("POST /api/instances/stored", { body: { sessions: keys } })
-  );
-  if (answer && mine === storedAsk) {
-    holdStored(answer.rows, answer.unwrapped);
-  }
-  // Unanswered, the list stands on what the hub answered last.
-  storedRead.done = true;
-}
-
-/** {@link readStored}, once for every change made in the same moment. */
-function askStoredSoon(): void {
-  if (!browser || storedKeys === null) {
-    return;
-  }
-  clearTimeout(storedTimer);
-  storedTimer = setTimeout(
-    () => detach(readStored(), "readStored"),
-    STORED_ASK_AFTER_MS
-  );
-}
+/** How long a change to a session the board no longer lists waits on the hub's word on it ({@link olderMoved}). */
+const OLDER_MOVED_WAIT_MS = 5000;
 
 /**
  * A session the board no longer lists changed on the hub (Done pressed on
- * it): the board says nothing of it, so the hub's answer for the stored
- * transcripts is read again, now, and the row is as the hub has it when
- * this settles. A session the board lists is heard of on its frame.
+ * it): the board says nothing of it, so this settles with the hub's next
+ * word on the stored list, which holds it as it is now, or after
+ * {@link OLDER_MOVED_WAIT_MS} without one. A session the board lists is
+ * heard of on its frame.
  */
 async function olderMoved(id: string): Promise<void> {
-  if (olderRows.some((row) => row.id === id)) {
-    clearTimeout(storedTimer);
-    await readStored();
+  if (!olderRows.some((row) => row.id === id)) {
+    return;
   }
+  await new Promise<void>((settled) => {
+    const done = (): void => {
+      clearTimeout(timer);
+      storedWaiters.delete(done);
+      settled();
+    };
+    const timer = setTimeout(done, OLDER_MOVED_WAIT_MS);
+    storedWaiters.add(done);
+  });
 }
 
-/** The stored transcripts a list draws, by harness key: asked of the hub when they change. */
-function askStored(keys: string[]): void {
-  storedKeys = keys;
-  askStoredSoon();
+/** The stored transcripts a page asked their machine for, by session id ({@link readStoredInfo}). */
+const storedInfoAsked = new Set<string>();
+
+/** Where a page holds a stored transcript to be: its machine, its folder and its harness. */
+export interface StoredWhere {
+  cwd: string;
+  harness: HarnessKind;
+  machineId: string;
+}
+
+/**
+ * Asks the machine `where` names for the stored transcript `sessionId` a
+ * page opened on that no list holds (a search result, an old address),
+ * once: what it answers is what the page resumes it by
+ * (`cawco.storedSource`).
+ */
+function readStoredInfo(where: StoredWhere, sessionId: string): void {
+  const { machineId } = where;
+  if (storedInfoAsked.has(sessionId) || !machineConnected(machineId)) {
+    return;
+  }
+  storedInfoAsked.add(sessionId);
+  detach(
+    machineControl<NeutralSessionInfo | undefined>(
+      machineId,
+      "getSessionInfo",
+      [sessionId, { dir: where.cwd || undefined }],
+      undefined,
+      where.harness
+    ).then((answer) => {
+      if (answer.kind === "answered" && answer.value) {
+        storedInfos.set(sessionId, { machineId, info: answer.value });
+      } else {
+        storedInfoAsked.delete(sessionId);
+      }
+    }),
+    "readStoredInfo"
+  );
 }
 
 /** A row out of its session key's rows. */
@@ -1177,18 +1176,18 @@ const sessionChild = (row: InstanceRow): TrayChild => {
 const instanceIndex: InstanceIndex<BoardRow> = {
   get byId(): ReadonlyMap<string, BoardRow> {
     const served = servedLive();
-    return served ? servedIndex(served.instances).byId : rowsById;
+    return served ? servedIndex(served).byId : rowsById;
   },
   get bySession(): ReadonlyMap<string, readonly BoardRow[]> {
     const served = servedLive();
-    return served ? servedIndex(served.instances).bySession : rowsBySession;
+    return served ? servedIndex(served).bySession : rowsBySession;
   },
 };
 
 /** One hub row by its id, as {@link instanceIndex} draws it. */
 const rowById = (id: string): InstanceRow | undefined => {
   const served = servedLive();
-  return served ? servedIndex(served.instances).byId.get(id) : rowsById.get(id);
+  return served ? servedIndex(served).byId.get(id) : rowsById.get(id);
 };
 
 /** The machines as drawn: the served board's until the socket's first snapshot. */
@@ -1532,17 +1531,8 @@ if (import.meta.env.DEV) {
     frame: handleFrame,
     standHub,
     leaveHub,
-    standCatalog,
+    standStored: holdStored,
   });
-}
-
-/**
- * Stands a machine's stored sessions in as its listing answered them (dev
- * only: a bench's, on its hub; {@link loadCatalog} is the real read).
- */
-function standCatalog(machineId: string, sessions: NeutralSessionInfo[]): void {
-  catalog = { ...catalog, [machineId]: sessions };
-  catalogsTried[machineId] = true;
 }
 
 /**
@@ -3466,7 +3456,7 @@ function cancelFleetRead(): void {
  * and the socket can reopen through the dashboard before the hub answers REST:
  * those reads fail, and nothing else would read again until the next reconnect.
  * So while the socket stays open it reads again — 1s, 2s, 4s, 8s, then every
- * 10s — until the board's reads land, and only then asks for the catalogs.
+ * 10s — until the board's reads land.
  */
 function readFleet(delay = 1000): void {
   cancelFleetRead();
@@ -3477,7 +3467,6 @@ function readFleet(delay = 1000): void {
         return;
       }
       if (read) {
-        refreshCatalogs();
         return;
       }
       if (globalThis.__cawcoSocket?.readyState !== WebSocket.OPEN) {
@@ -3492,37 +3481,12 @@ function readFleet(delay = 1000): void {
   );
 }
 
-/** Every online machine's stored sessions — the sidebar's contents on arrival. */
-function refreshCatalogs(): void {
-  // What the hub holds behind them is asked again with every board read: a
-  // hub that restarted answers afresh.
-  askStoredSoon();
-  for (const machine of state.machines) {
-    if (machine.status === "online") {
-      detach(loadCatalog(machine.machineId), "loadCatalog");
-    }
-  }
-}
-
-/**
- * The hub's word on the machines, pushed with every `instances` frame. A
- * machine that comes online after the connect-time read has its stored
- * sessions read now: `refreshCatalogs` only asks the machines that were online
- * when that read landed. A hub restart is the usual case — its daemons take a
- * few seconds to register again, so a dashboard that connects in that window
- * reads every machine offline, and the board's first-read gate
- * (`cawco.catalogsRead`) then waits on catalogs nobody ever asked for.
- */
+/** The hub's word on the machines, pushed with every `instances` frame. */
 function adoptMachines(incoming: Machine[]): void {
   const next = reconcileRows(state.machines, incoming, (row) => row.machineId);
   if (next === state.machines) {
     return;
   }
-  const wasOnline = new Set(
-    state.machines
-      .filter((machine) => machine.status === "online")
-      .map((machine) => machine.machineId)
-  );
   state.machines = next;
   // A transcript whose read found its machine offline is read again once the
   // hub says it is online: across a hub restart this tab may never have seen
@@ -3530,15 +3494,6 @@ function adoptMachines(incoming: Machine[]): void {
   for (const machine of next) {
     if (machine.status === "online") {
       readBehind(machine.machineId);
-    }
-  }
-  // Before the first read the connect-time `refreshCatalogs` asks them all.
-  if (!state.fleetRead) {
-    return;
-  }
-  for (const machine of next) {
-    if (machine.status === "online" && !wasOnline.has(machine.machineId)) {
-      detach(loadCatalog(machine.machineId), "loadCatalog");
     }
   }
 }
@@ -3715,6 +3670,11 @@ function handleFrame(frame: FramePayload): void {
     ) {
       revealPreview(frame.instanceId);
     }
+    return;
+  }
+  // Recent's stored transcripts, whole, as the hub keeps them.
+  if (frame.kind === "stored") {
+    holdStored(frame.stored);
     return;
   }
   if (frame.kind === "instances" || frame.kind === "instances_delta") {
@@ -4098,6 +4058,10 @@ function handleFrame(frame: FramePayload): void {
   }
   // A place's stage clone travels machine → hub only; the hub files it as a workspace.
   if (frame.kind === "stage-clone") {
+    return;
+  }
+  // A machine's word that its transcripts moved travels machine → hub only.
+  if (frame.kind === "catalog_moved") {
     return;
   }
   // A machine's fleet report and its items' converge travel machine → hub
@@ -7312,17 +7276,15 @@ export async function keepSession(instanceId: string): Promise<Bounded<void>> {
 
   target.scratch = false;
   if (target.sessionId && target.machineId) {
-    // `null` is how the harness clears a tag; the catalog is re-read for the
-    // entry that has just stopped being hidden.
-    const untagged = await machineControl<void>(
+    // `null` is how the harness clears a tag; the machine tells the hub its
+    // transcript moved, and the stored list follows (hub stored-recent.ts).
+    return await machineControl<void>(
       target.machineId,
       "tagSession",
       [target.sessionId, null, { dir: target.cwd || undefined }],
       CONTROL_TIMEOUT_MS,
       harnessOfSession(instanceId)
     );
-    await loadCatalog(target.machineId);
-    return untagged;
   }
   return { kind: "answered", value: undefined };
 }
@@ -8118,7 +8080,8 @@ export async function pauseMachine(
  * Deletes a session's transcript on its machine — the one way a transcript is
  * deleted, from a stored row or a sleeping one. The hub sees the delete go
  * past and, once the machine confirms it, drops every row that named it; the
- * catalog is read again here so the stored list agrees.
+ * machine tells the hub its transcript went, and the stored list follows
+ * (hub stored-recent.ts).
  */
 export async function deleteTranscript(
   machineId: string,
@@ -8126,15 +8089,13 @@ export async function deleteTranscript(
   dir: string | undefined,
   harness: HarnessKind | undefined
 ): Promise<Bounded<void>> {
-  const deleted = await machineControl<void>(
+  return await machineControl<void>(
     machineId,
     "deleteSession",
     [sessionId, { dir }],
     undefined,
     harness
   );
-  await loadCatalog(machineId);
-  return deleted;
 }
 
 /**
@@ -8362,71 +8323,6 @@ export function answeredOr<T>(
 interface LeftOut {
   failed: HarnessFailed[];
   unanswered: HarnessUnanswered[];
-}
-
-/**
- * The machine's stored sessions, newest first. A harness that did not list
- * in time, or whose listing threw, keeps the sessions it listed last. What
- * a listing left out is said to the person where the hub's find answers
- * stored sessions, from the hub's own listing (Jump's left-out line, hub
- * find.ts `leftOut`); here it is only logged.
- */
-export async function loadCatalog(machineId: string): Promise<void> {
-  try {
-    await waitForHub();
-    const requestId = newId();
-    const payload: ControlPayload = {
-      requestId,
-      method: "listSessions",
-      args: [SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {}],
-    };
-    const listed = await askMachine(
-      machineId,
-      requestId,
-      CONTROL_TIMEOUT_MS,
-      () => send({ verb: "control", machineId, requestId, payload }),
-      (result, leftOut) => ({
-        sessions: result as NeutralSessionInfo[],
-        unanswered: leftOut?.unanswered ?? [],
-        failed: leftOut?.failed ?? [],
-      })
-    );
-    switch (listed.kind) {
-      case "unanswered":
-        // The catalog it last listed stands.
-        console.warn(
-          `[cawco] listSessions on ${machineId}: ${didntAnswer(machineId, listed, { missed: "its list of stored sessions didn't come back", again: "The list it gave last stands until the next load." })}`
-        );
-        break;
-      case "answered": {
-        const { sessions, unanswered, failed } = listed.value;
-        const silent = new Set(
-          [...unanswered, ...failed].map((one) => one.harness)
-        );
-        const kept = (catalog[machineId] ?? []).filter((info) =>
-          silent.has(info.harness)
-        );
-        for (const { harness, after } of unanswered) {
-          console.warn(
-            `[cawco] listSessions on ${machineId}: ${harness} didn't answer within ${secondsOf(after)} s; its sessions as listed last stand`
-          );
-        }
-        for (const { harness, error } of failed) {
-          console.warn(
-            `[cawco] listSessions on ${machineId}: ${harness} couldn't list (${error}); its sessions as listed last stand`
-          );
-        }
-        catalog = { ...catalog, [machineId]: [...sessions, ...kept] };
-        break;
-      }
-      default:
-        unhandled("read", listed);
-    }
-  } catch (error) {
-    console.error(`[cawco] listSessions on ${machineId} failed:`, error);
-  } finally {
-    catalogsTried[machineId] = true;
-  }
 }
 
 /**
@@ -9951,18 +9847,6 @@ export const cawco = {
   get servedAreas(): Area[] | null {
     return servedBoard()?.areas ?? null;
   },
-  /** Every online machine's stored sessions have been read, or failed to be. */
-  get catalogsRead() {
-    return (
-      state.fleetRead &&
-      state.machines
-        .filter((machine) => machine.status === "online")
-        .every((machine) => catalogsTried[machine.machineId])
-    );
-  },
-  /** One machine's stored sessions have been read, or failed to be. */
-  catalogRead: (machineId: string): boolean =>
-    catalogsTried[machineId] === true,
   get status() {
     return state.status;
   },
@@ -10111,36 +9995,60 @@ export const cawco = {
   },
   /**
    * The sessions behind stored transcripts that the board no longer lists
-   * (the hub's `StoredSessions`): the person's own, and what nests under
+   * (the hub's `StoredRecent`): the person's own, and what nests under
    * them. Recent lists them beside {@link listedInstances}.
    */
   get olderInstances(): InstanceRow[] {
-    return olderRows;
+    return storedHeard ? olderRows : (servedBoard()?.stored.rows ?? olderRows);
+  },
+  /**
+   * The transcripts in a project's folder that a person started outside
+   * CawCo and no session wraps (the hub's `StoredRecent`): Recent's stored
+   * rows.
+   */
+  get storedTranscripts(): StoredTranscript[] {
+    return storedNow().transcripts;
+  },
+  /** A stored transcript by its session id, where this page knows it: Recent's, or one a page asked its machine for. */
+  storedOf(
+    id: string
+  ): { machineId: string; info: NeutralSessionInfo } | undefined {
+    return (
+      storedNow().transcripts.find((one) => one.info.sessionId === id) ??
+      storedInfos.get(id)
+    );
+  },
+  /** The stored transcripts this page knows on one machine ({@link storedOf}). */
+  storedOn(machineId: string): NeutralSessionInfo[] {
+    return [
+      ...storedNow().transcripts.filter((one) => one.machineId === machineId),
+      ...[...storedInfos.values()].filter((one) => one.machineId === machineId),
+    ].map((one) => one.info);
   },
   /**
    * The transcript stored on a machine that view `id` is of, as a session
-   * could resume it, when the hub holds no row under that id and a
-   * machine's catalog lists it by it: a transcript no session wraps (a tab
-   * of one a session wraps takes that session's id as it opens, workspace
-   * `enter`). Null for any other view.
+   * could resume it, when the hub holds no row under that id: a transcript
+   * no session wraps (a tab of one a session wraps takes that session's id
+   * as it opens, workspace `enter`). One no list holds is asked of the
+   * machine its page holds it on (`where`), and is this once it answers.
+   * Null for any other view.
    */
-  storedSource(id: string): ForkSource | null {
+  storedSource(id: string, where?: StoredWhere | null): ForkSource | null {
     if (rowById(id) !== undefined) {
       return null;
     }
-    for (const machine of state.machines) {
-      const info = (catalog[machine.machineId] ?? []).find(
-        (one) => one.sessionId === id
-      );
-      if (info) {
-        return {
-          machineId: machine.machineId,
-          cwd: info.cwd ?? "",
-          harness: info.harness,
-          sessionId: id,
-          resumes: true,
-        };
-      }
+    const known = cawco.storedOf(id);
+    if (known) {
+      return {
+        machineId: known.machineId,
+        cwd: known.info.cwd ?? "",
+        harness: known.info.harness,
+        sessionId: id,
+        resumes: true,
+      };
+    }
+    if (where) {
+      untrack(() => readStoredInfo(where, id));
     }
     return null;
   },
@@ -10149,8 +10057,8 @@ export const cawco = {
    * ({@link ResumePlan}), its machine asked what it ran with the first time
    * this is read; null for any other view.
    */
-  resumePlan(id: string): ResumePlan | null {
-    const source = cawco.storedSource(id);
+  resumePlan(id: string, where?: StoredWhere | null): ResumePlan | null {
+    const source = cawco.storedSource(id, where);
     if (!source) {
       return null;
     }
@@ -10166,22 +10074,8 @@ export const cawco = {
   pickResume(id: string, pick: Partial<Omit<ResumePlan, "run">>): void {
     resumePicks[id] = { ...resumePicks[id], ...pick };
   },
-  /** Whether a stored transcript stands as itself: the hub said no session wraps it. */
-  storedAlone: (sessionId: string): boolean => unwrapped.has(sessionId),
-  /** The hub has answered for the stored transcripts asked of it ({@link askStored}). */
-  get storedRead() {
-    return storedRead.done;
-  },
-  /** Asks the hub what it holds behind these stored transcripts, by harness key. */
-  askStored,
-  /** Reads a session the board no longer lists again, after a change to it the hub took. */
+  /** Settles with the hub's word on a session the board no longer lists, after a change to it the hub took. */
   olderMoved,
-  /** Stored sessions on one machine, minus the spin-offs hiding among them. */
-  catalogOf: (machineId: string): NeutralSessionInfo[] =>
-    (catalog[machineId] ?? []).filter(listedInHistory),
-  /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
-  hasStored: (machineId: string): boolean =>
-    (catalog[machineId] ?? []).some(listedInHistory),
   get projects(): ProjectRow[] {
     return projectsNow();
   },

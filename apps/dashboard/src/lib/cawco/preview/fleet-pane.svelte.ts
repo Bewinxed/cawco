@@ -24,7 +24,7 @@ const fleetFolders: FolderReader = {
     }),
   recent: (machineId) =>
     cawco
-      .catalogOf(machineId)
+      .storedOn(machineId)
       .reduce<NeutralSessionInfo | null>(
         (best, info) =>
           info.cwd && (!best || info.lastModified > best.lastModified)

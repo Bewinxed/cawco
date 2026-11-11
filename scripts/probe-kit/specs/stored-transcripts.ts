@@ -116,6 +116,7 @@ async function hubFind(
   const find = createFind({
     db,
     blockPage: () => false,
+    catalogRead: () => undefined,
     purged: () => new Set(),
     refreshInstances: () => undefined,
     online: () => true,

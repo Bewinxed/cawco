@@ -21,14 +21,14 @@
  * does, and never without that press. A session a project or a task
  * started stands only while it needs the person.
  *
- * A transcript stored on a machine (its catalog, `cawco.catalogOf`) that was
- * run inside a project's folder there (core `projectAt`) is asked of the
- * hub, the whole list in one ask (`cawco.askStored`, core `StoredSessions`).
- * One a session of the hub wraps is that session: a row the board lists, or
- * one the hub answers with (`cawco.olderInstances`: the person's own
- * sessions the board no longer lists, and what nests under them), listed
- * by the one rule above, a delegate under its session. Only a transcript no
- * session wraps, that its harness records a person started (core
+ * A transcript stored on a machine that was run inside a project's folder
+ * there (core `projectAt`) is the hub's to reconcile, off the machine's
+ * catalog (hub stored-recent.ts, core `StoredRecent`): one a session of the
+ * hub wraps is that session, a row the board lists, or one the hub holds
+ * behind it (`cawco.olderInstances`: the person's own sessions the board no
+ * longer lists, and what nests under them), listed by the one rule above, a
+ * delegate under its session. Only a transcript no session wraps, that its
+ * harness records a person started (core
  * `NeutralSessionInfo.startedBy`: Claude Code's from a terminal, the desktop
  * app or the IDE; none of OpenCode's or pi's, which record nothing that
  * tells a typed session from a program's run), stands as a stored row,
@@ -42,12 +42,9 @@
  * reply never moves a row.
  */
 import type { NeutralSessionInfo } from "@cawco/core/harness";
-import { projectAt } from "@cawco/core/project-membership";
 import { personsOwn } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { sidebarWords } from "@cawco/core/words/sidebar";
-import { untrack } from "svelte";
-import { browser } from "$app/env";
 import { epochOf } from "../board.svelte";
 import {
   type BoardRow,
@@ -223,82 +220,36 @@ function listedHere(row: BoardRow, from: BoardRow | undefined): boolean {
 }
 
 /**
- * The transcripts stored on the machines, each in a project's folder on
- * its machine: what Recent asks the hub of (`cawco.askStored`), and, of
- * them, the ones no session wraps, which stand as stored rows. Read again
- * only when a catalog, a machine or a project changes, never on a turn's
- * frames: a machine's catalog is a thousand and more. Their day is the
- * list's, read with the clock.
+ * The transcripts stored on the machines that stand as rows: in a project's
+ * folder on their machine, started by a person, wrapped by no session, as
+ * the hub keeps them (`cawco.storedTranscripts`, hub stored-recent.ts).
+ * Their day is the list's, read with the clock.
  */
 class StoredTranscripts {
-  /** The machines' ids, as text: the same text while none is added or removed. */
-  readonly #machineIds = $derived(
-    cawco.machines.map((machine) => machine.machineId).join("\n")
-  );
-
-  /** Every stored transcript in a project's folder, wrapped or not. */
-  readonly #inProjects = $derived.by(() => {
+  readonly entries = $derived.by(() => {
     const out: Omit<StoredEntry, "day">[] = [];
-    for (const machineId of this.#machineIds.split("\n")) {
-      if (!machineId) {
+    for (const { machineId, projectId, info } of cawco.storedTranscripts) {
+      const project = cawco.project(projectId);
+      if (!project) {
         continue;
       }
-      for (const info of cawco.catalogOf(machineId)) {
-        const project = projectAt(cawco.projects, {
-          machineId,
-          cwd: info.cwd ?? "",
-        });
-        if (!project) {
-          continue;
-        }
-        out.push({
-          kind: "stored",
-          key: `${machineId}:${info.sessionId}`,
-          info,
-          machineId,
-          project,
-          at: info.wroteAt ?? info.createdAt ?? 0,
-          status: "yours",
-          mark: "idle",
-          unread: false,
-        });
-      }
+      out.push({
+        kind: "stored",
+        key: `${machineId}:${info.sessionId}`,
+        info,
+        machineId,
+        project,
+        at: info.wroteAt ?? info.createdAt ?? 0,
+        status: "yours",
+        mark: "idle",
+        unread: false,
+      });
     }
     return out;
   });
-
-  /** Their harness keys, as text: the same text while the hub's answer for them holds. */
-  readonly keys = $derived(
-    [...new Set(this.#inProjects.map((entry) => entry.info.sessionId))]
-      .sort()
-      .join("\n")
-  );
-
-  /** The ones a person started that the hub said no session wraps. */
-  readonly entries = $derived(
-    this.#inProjects.filter(
-      (entry) =>
-        entry.info.startedBy === "person" &&
-        cawco.storedAlone(entry.info.sessionId)
-    )
-  );
 }
 
 const stored = new StoredTranscripts();
-
-// The hub is asked what it holds behind them once the catalogs are in, and
-// again when the transcripts in the projects' folders change.
-if (browser) {
-  $effect.root(() => {
-    $effect(() => {
-      if (!cawco.catalogsRead) {
-        return;
-      }
-      const { keys } = stored;
-      untrack(() => cawco.askStored(keys ? keys.split("\n") : []));
-    });
-  });
-}
 
 /** Recent's rows, newest first: read only where the list is drawn. */
 export function recentEntries(): RecentEntry[] {

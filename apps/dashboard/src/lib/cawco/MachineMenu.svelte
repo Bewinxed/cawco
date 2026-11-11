@@ -20,14 +20,12 @@
     IconPause,
     IconPlay,
     IconPlus,
-    IconRefresh,
     IconTrash,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import AskHere from "./AskHere.svelte";
   import {
     cawco,
-    loadCatalog,
     type Machine,
     pauseMachine,
     removeMachine,
@@ -133,12 +131,6 @@
   </ContextMenu.Trigger>
 
   <ContextMenu.Content>
-    <ContextMenu.PendingItem
-      icon={IconRefresh}
-      label="Reload sessions"
-      pendingLabel="Reloading…"
-      run={() => loadCatalog(machine.machineId)}
-    />
     <!-- The board reads `spawn` out of the query and preselects it. -->
     <ContextMenu.Item
       onSelect={() => goto(`/session?spawn=${machine.machineId}`)}

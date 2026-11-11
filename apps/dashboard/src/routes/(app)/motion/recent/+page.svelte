@@ -8,11 +8,15 @@
     PERMISSION_MODES,
     type StoredRun,
   } from "@cawco/core/harness";
+  import {
+    type MemberProject,
+    projectAt,
+  } from "@cawco/core/project-membership";
   import type {
     InstanceRow,
     NamedSpawn,
     SessionPulse,
-    StoredSessions,
+    StoredRecent,
     TabNamed,
   } from "@cawco/core/protocol";
   import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
@@ -56,7 +60,7 @@
    * and one behind a session the person pressed Done on ("Refund flow edge
    * cases", which stays hidden).
    * Five more are behind sessions the board no longer lists, which the
-   * bench answers for as the hub does (`POST /api/instances/stored`): a
+   * bench keeps as the hub does (hub stored-recent.ts, `standStored`): a
    * session the person stopped four days ago ("Move invoices to the new
    * ledger", in Older under storefront, by its own id) with two delegates
    * folded under it, one of theirs that failed five days ago ("Reconcile
@@ -79,7 +83,6 @@
     };
     frame: (frame: PulseFrame | PermissionRequestFrame | object) => void;
     leaveHub: () => void;
-    standCatalog: (machineId: string, sessions: NeutralSessionInfo[]) => void;
     standHub: (
       answer: (
         instanceId: string,
@@ -90,6 +93,7 @@
       spawn: (machineId: string, spawn: NamedSpawn) => Promise<void>,
       control: (machineId: string, method: string, args: unknown[]) => unknown
     ) => void;
+    standStored: (stored: StoredRecent) => void;
     state: {
       accounts: unknown;
       machines: unknown[];
@@ -464,6 +468,7 @@
       row.id === id ? { ...row, ...change } : row
     );
     adopt();
+    standStored();
   };
 
   /** How long the bench's machine takes a start in: about a real one's. */
@@ -518,29 +523,36 @@
     return Promise.resolve(Response.json({ at }));
   }
 
+  /** The machines' stored transcripts as their listings answer them (stored-listing.ts). */
+  let listing: Record<string, NeutralSessionInfo[]> = {};
+
   /**
-   * What the hub holds behind the stored transcripts asked of it, as it
-   * answers `/api/instances/stored`: the keys no row of the bench wraps,
-   * and the person's older session with its delegates.
+   * Recent's stored transcripts as the hub keeps them off the machines'
+   * listings (core `StoredRecent`, hub stored-recent.ts): the person's older
+   * session with its delegates, and the transcripts in a project's folder
+   * that a person started and no row of the bench wraps.
    */
-  const StoredBody = z.object({ sessions: z.array(z.string()) });
-  function answerStored(
-    input: RequestInfo | URL,
-    init: RequestInit | undefined
-  ): Promise<Response> | undefined {
-    const url = input instanceof Request ? input.url : String(input);
-    if (!(url.includes("/api/instances/stored") && init?.body)) {
-      return;
-    }
-    const { sessions } = StoredBody.parse(JSON.parse(String(init.body)));
+  function standStored(): void {
     const held = real ? [] : [...olderRows, olderCheck];
     const wrapped = new Set([...rows, ...held].map((row) => row.sessionId));
     const listed = new Set(rows.map((row) => row.id));
-    const answer: StoredSessions = {
-      unwrapped: sessions.filter((key) => !wrapped.has(key)),
+    const projects = debug.state.projects as MemberProject[];
+    debug.standStored({
       rows: real ? [] : olderRows.filter((row) => !listed.has(row.id)),
-    };
-    return Promise.resolve(Response.json(answer));
+      transcripts: Object.entries(listing).flatMap(([machineId, infos]) =>
+        infos.flatMap((info) => {
+          const project = projectAt(projects, {
+            machineId,
+            cwd: info.cwd ?? "",
+          });
+          return project &&
+            info.startedBy === "person" &&
+            !wrapped.has(info.sessionId)
+            ? [{ machineId, projectId: project.id, info }]
+            : [];
+        })
+      ),
+    });
   }
 
   /**
@@ -683,6 +695,7 @@
     debug.state.projectsRead = true;
     rows = from.instances;
     adopt();
+    standStored();
   }
 
   function standSketch(): void {
@@ -780,15 +793,13 @@
     }));
     debug.state.projectsRead = true;
     adopt();
-    const listing = storedListing(
+    listing = storedListing(
       now,
       idOf(3),
       DONE,
       [...olderRows, olderCheck].flatMap((row) => row.sessionId ?? [])
     );
-    for (const [machineId, sessions] of Object.entries(listing)) {
-      debug.standCatalog(machineId, sessions);
-    }
+    standStored();
     for (const [id, seed] of seeds) {
       if (seed.doing === "working") {
         pulse(id, "working");
@@ -803,12 +814,10 @@
   }
 
   onMount(() => {
-    // Done, answered as the hub would (the row's `doneAt`), and what it
-    // holds behind the stored transcripts.
+    // Done, answered as the hub would (the row's `doneAt`).
     const fetchWas = window.fetch;
     window.fetch = (input, init) =>
       answerSeen(input, init) ??
-      answerStored(input, init) ??
       answerNamed(input, init) ??
       answerTranscript(input) ??
       fetchWas(input, init);

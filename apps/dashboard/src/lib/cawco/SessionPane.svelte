@@ -1216,7 +1216,7 @@
     // A transcript stored on its machine that no session wraps has no row
     // either: the first send on its page resumes it as a session of
     // CawCo's, these words its first prompt.
-    const stored = cawco.storedSource(viewId);
+    const stored = cawco.storedSource(viewId, storedWhere);
     if (stored) {
       return await resumeWith(stored, text, extras, id);
     }
@@ -1227,6 +1227,13 @@
     return await submitCommand(viewId, machineId, "send", { text, extras }, id);
   }
 
+  /** Where this page holds its transcript to be, when it reads one by its machine, folder and harness. */
+  const storedWhere = $derived(
+    browsing && browsingHarness
+      ? { machineId: browsing, cwd: browsingCwd, harness: browsingHarness }
+      : null
+  );
+
   /** The first message is resuming this page's stored transcript. */
   let resuming = $state(false);
   /**
@@ -1236,7 +1243,9 @@
   const storedNote = $derived(
     // Read as the page opens, so its machine has said what it ran with by
     // the time a message is sent.
-    !resuming && cawco.resumePlan(viewId) ? transcriptWords.startedOutside : ""
+    !resuming && cawco.resumePlan(viewId, storedWhere)
+      ? transcriptWords.startedOutside
+      : ""
   );
 
   /**

@@ -468,16 +468,17 @@ function remember(sessionId: string, ctx?: AskedContext): void {
  * Where a conversation lives: which machine, which folder, which harness.
  *
  * The fleet already knows this. A cawco instance carries its machine, and
- * every online machine publishes a catalogue of the transcripts on its disk —
- * so an id can be RESOLVED rather than carried around. It was being carried:
+ * the hub keeps the transcripts the machines store that Recent draws (hub
+ * stored-recent.ts) — so an id can be RESOLVED rather than carried around. It was being carried:
  * copied into the URL, and into a most-recently-used record that evicts. Both
  * copies could go stale or be lost, and when they were, a conversation with a
  * perfectly good unique id became unreachable — not because anything was
  * missing, but because the one thing that knew where it lived had never been
  * asked.
  *
- * Asked in order of authority: the hub's own instances, then the machines'
- * catalogues, then what we were told when the tab was opened. The first two
+ * Asked in order of authority: the hub's own instances, then the stored
+ * transcripts this page knows (`cawco.storedOf`), then what we were told
+ * when the tab was opened. The first two
  * are live, so a tab whose remembered address was lost heals itself as soon
  * as the fleet answers.
  */
@@ -490,20 +491,13 @@ export function contextOf(sessionId: string): SessionContext | null {
       harness: instance.harness,
     };
   }
-  for (const machine of cawco.machines) {
-    if (machine.status !== "online") {
-      continue;
-    }
-    const stored = cawco
-      .catalogOf(machine.machineId)
-      .find((entry) => entry.sessionId === sessionId);
-    if (stored) {
-      return {
-        machine: machine.machineId,
-        cwd: stored.cwd ?? "",
-        harness: stored.harness,
-      };
-    }
+  const stored = cawco.storedOf(sessionId);
+  if (stored) {
+    return {
+      machine: stored.machineId,
+      cwd: stored.info.cwd ?? "",
+      harness: stored.info.harness,
+    };
   }
   return held.ctx?.[sessionId] ?? workingSet.contextOf(sessionId);
 }

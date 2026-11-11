@@ -1052,19 +1052,35 @@ export type TabNamed =
 export const TAB_NAMES_PER_ASK = 64;
 
 /**
- * What the hub holds behind stored transcripts (`POST
- * /api/instances/stored`), asked with the harness keys of the transcripts a
- * list would draw, once for the whole list.
- * - `unwrapped`: the asked keys no session of the hub wraps: transcripts
- *   run outside CawCo, the only ones a list draws as stored.
- * - `rows`: the sessions wrapping the rest that the board no longer lists,
- *   where the session at the top of their chain is the person's own
- *   ({@link personsOwn}), each with the sessions it nests under, as the
- *   board hands a row.
+ * What Recent draws of the transcripts the machines store, kept by the hub
+ * off each machine's catalog (hub stored-recent.ts): `GET /api/stored`, then
+ * each `stored` frame, whole.
+ * - `rows`: the sessions wrapping a stored transcript in a project's folder
+ *   that the board no longer lists, where the session at the top of their
+ *   chain is the person's own ({@link personsOwn}), each with the sessions
+ *   it nests under, as the board hands a row.
+ * - `transcripts`: the transcripts in a project's folder that a person
+ *   started (`NeutralSessionInfo.startedBy`) and no session of the hub
+ *   wraps: transcripts run outside CawCo.
  */
-export interface StoredSessions {
+export interface StoredRecent {
   rows: InstanceRow[];
-  unwrapped: string[];
+  transcripts: StoredTranscript[];
+}
+
+/** A transcript stored on a machine, in a project's folder there ({@link StoredRecent}). */
+export interface StoredTranscript {
+  info: import("./harness").NeutralSessionInfo;
+  machineId: string;
+  /** The project whose folder holds it most closely (core `projectAt`). */
+  projectId: string;
+}
+
+/** Hub-originated: Recent's stored transcripts, whole, on each change. */
+export interface StoredFrame {
+  instanceId?: undefined;
+  kind: "stored";
+  stored: StoredRecent;
 }
 
 /** What a session's `init` says about its MCP servers and tools. */
@@ -1094,7 +1110,7 @@ export type SessionOrigin = "person" | "delegate" | "project" | "check";
 /**
  * The person's own work: a session they started, or one they wrote in. The
  * one rule for whose sessions a list holds (the dashboard's Recent, the
- * hub's {@link StoredSessions}).
+ * hub's {@link StoredRecent}).
  */
 export const personsOwn = (row: {
   origin?: SessionOrigin | null;
@@ -1608,7 +1624,11 @@ export type FramePayload =
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
   | import("./stream-relay").RelayFrame
   /** Hub-originated: the stream relay's journey, whole, on each change. */
-  | import("./stream-relay").RelayJourneyFrame;
+  | import("./stream-relay").RelayJourneyFrame
+  /** Hub-originated: Recent's stored transcripts, whole, on each change. */
+  | StoredFrame
+  /** Daemon-originated: the machine's stored transcripts moved. */
+  | import("./frames").CatalogMovedFrame;
 
 export const CAWCO_HUB_PORT = 3456;
 

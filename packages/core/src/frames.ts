@@ -809,6 +809,18 @@ export interface RecoveryUnavailableFrame {
   reason: string;
 }
 
+/**
+ * A machine's stored transcripts moved (agent catalog-index.ts): the
+ * sessions whose files were written, added or removed since the last such
+ * frame. The hub reads the machine's catalog again only when one of them may
+ * stand in Recent (hub stored-recent.ts).
+ */
+export interface CatalogMovedFrame {
+  instanceId?: undefined;
+  kind: "catalog_moved";
+  sessions: string[];
+}
+
 /** A harness whose `listSessions` did not answer within its bound: left out of the listing, not read as having none. */
 export interface HarnessUnanswered {
   /** The milliseconds it was given. */

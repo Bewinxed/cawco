@@ -23997,47 +23997,16 @@
         }
       }
     },
-    "/api/instances/stored": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "sessions": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "required": [
-                  "sessions"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "postApiInstancesStored",
+    "/api/stored": {
+      "get": {
+        "operationId": "getApiStored",
         "responses": {
           "200": {
-            "description": "postApiInstancesStored 200",
+            "description": "getApiStored 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StoredSessions"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiInstancesStored 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/StoredRecent"
                 }
               }
             }
@@ -38156,6 +38125,12 @@
           },
           {
             "$ref": "#/components/schemas/RelayJourneyFrame"
+          },
+          {
+            "$ref": "#/components/schemas/StoredFrame"
+          },
+          {
+            "$ref": "#/components/schemas/CatalogMovedFrame"
           }
         ],
         "discriminator": {
@@ -38215,7 +38190,9 @@
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
             "browser_list": "#/components/schemas/BrowserListFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
-            "stream_relay.journey": "#/components/schemas/RelayJourneyFrame"
+            "stream_relay.journey": "#/components/schemas/RelayJourneyFrame",
+            "stored": "#/components/schemas/StoredFrame",
+            "catalog_moved": "#/components/schemas/CatalogMovedFrame"
           }
         }
       },
@@ -53600,8 +53577,8 @@
           "remedy"
         ]
       },
-      "StoredSessions": {
-        "description": "What the hub holds behind stored transcripts (`POST\n/api/instances/stored`), asked with the harness keys of the transcripts a\nlist would draw, once for the whole list.\n- `unwrapped`: the asked keys no session of the hub wraps: transcripts\n  run outside CawCo, the only ones a list draws as stored.\n- `rows`: the sessions wrapping the rest that the board no longer lists,\n  where the session at the top of their chain is the person's own\n  ({@link personsOwn}), each with the sessions it nests under, as the\n  board hands a row.",
+      "StoredRecent": {
+        "description": "What Recent draws of the transcripts the machines store, kept by the hub\noff each machine's catalog (hub stored-recent.ts): `GET /api/stored`, then\neach `stored` frame, whole.\n- `rows`: the sessions wrapping a stored transcript in a project's folder\n  that the board no longer lists, where the session at the top of their\n  chain is the person's own ({@link personsOwn}), each with the sessions\n  it nests under, as the board hands a row.\n- `transcripts`: the transcripts in a project's folder that a person\n  started (`NeutralSessionInfo.startedBy`) and no session of the hub\n  wraps: transcripts run outside CawCo.",
         "type": "object",
         "properties": {
           "rows": {
@@ -53610,16 +53587,16 @@
               "$ref": "#/components/schemas/InstanceRow"
             }
           },
-          "unwrapped": {
+          "transcripts": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/StoredTranscript"
             }
           }
         },
         "required": [
           "rows",
-          "unwrapped"
+          "transcripts"
         ]
       },
       "InstanceRow": {
@@ -53994,6 +53971,27 @@
           "machineId",
           "sessionId",
           "status"
+        ]
+      },
+      "StoredTranscript": {
+        "description": "A transcript stored on a machine, in a project's folder there ({@link StoredRecent}).",
+        "type": "object",
+        "properties": {
+          "info": {
+            "$ref": "#/components/schemas/NeutralSessionInfo"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "projectId": {
+            "description": "The project whose folder holds it most closely (core `projectAt`).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "info",
+          "machineId",
+          "projectId"
         ]
       },
       "TabNamed": {
@@ -67482,6 +67480,47 @@
         "required": [
           "journey",
           "kind"
+        ]
+      },
+      "StoredFrame": {
+        "description": "Hub-originated: Recent's stored transcripts, whole, on each change.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "stored"
+            ]
+          },
+          "stored": {
+            "$ref": "#/components/schemas/StoredRecent"
+          }
+        },
+        "required": [
+          "kind",
+          "stored"
+        ]
+      },
+      "CatalogMovedFrame": {
+        "description": "A machine's stored transcripts moved (agent catalog-index.ts): the\nsessions whose files were written, added or removed since the last such\nframe. The hub reads the machine's catalog again only when one of them may\nstand in Recent (hub stored-recent.ts).",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "catalog_moved"
+            ]
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "sessions"
         ]
       },
       "IngestMark": {

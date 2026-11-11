@@ -2412,7 +2412,8 @@ const attach = (
         frame.kind === "browser_handback" ||
         frame.kind === "browser_list" ||
         frame.kind === "stream_relay" ||
-        frame.kind === "stage-clone"
+        frame.kind === "stage-clone" ||
+        frame.kind === "catalog_moved"
       ) {
         return false;
       }

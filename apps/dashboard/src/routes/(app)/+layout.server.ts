@@ -1,7 +1,11 @@
 import { harnessNamed } from "@cawco/core/harness";
 import type { HubAuthState } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
-import type { InstanceRow, SessionPulse } from "@cawco/core/protocol";
+import type {
+  InstanceRow,
+  SessionPulse,
+  StoredRecent,
+} from "@cawco/core/protocol";
 import type {
   Machine,
   ProjectRow,
@@ -104,6 +108,7 @@ export const load: LayoutServerLoad = async ({
     machinesRead,
     projectsRead,
     areasRead,
+    storedRead,
   ] = await Promise.all([
     readHub<HubAuthState>(fetch, hubRequest("GET /api/auth")),
     readHub<InstanceRow[]>(fetch, hubRequest("GET /api/instances")),
@@ -111,6 +116,7 @@ export const load: LayoutServerLoad = async ({
     readHub<Machine[]>(fetch, hubRequest("GET /api/agents")),
     readHub<ProjectRow[]>(fetch, hubRequest("GET /api/projects")),
     readHub<{ areas: Area[] }>(fetch, hubRequest("GET /api/areas")),
+    readHub<StoredRecent>(fetch, hubRequest("GET /api/stored")),
   ]);
   const auth = authRead.ok ? authRead.value : null;
   const board: ServedBoard | null =
@@ -118,19 +124,21 @@ export const load: LayoutServerLoad = async ({
     pulsesRead.ok &&
     machinesRead.ok &&
     projectsRead.ok &&
-    areasRead.ok
+    areasRead.ok &&
+    storedRead.ok
       ? {
           instances: rowsRead.value,
           pulses: pulsesRead.value,
           machines: machinesRead.value,
           projects: projectsRead.value,
           areas: areasRead.value.areas,
+          stored: storedRead.value,
         }
       : null;
-  const stored = Number(pref(RAIL_KEY));
+  const railKept = Number(pref(RAIL_KEY));
   const railWidth =
-    Number.isFinite(stored) && stored > 0
-      ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(stored)))
+    Number.isFinite(railKept) && railKept > 0
+      ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(railKept)))
       : null;
   /** The sidebar put away on a desk (Shell's Hide sidebar), drawn so from the first paint. */
   const railHidden = pref(RAIL_HIDDEN_KEY) === "1";

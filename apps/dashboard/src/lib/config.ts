@@ -7,24 +7,6 @@ export const WS_RECONNECT_MAX_ATTEMPTS = 10;
 export const WS_RECONNECT_BASE_DELAY = 1000;
 export const WS_RECONNECT_MAX_DELAY = 30_000;
 
-/**
- * How many stored sessions per machine to ask `listSessions` for.
- *
- * `0` means all of them, and all of them is the right answer. The machine
- * reads its whole directory either way — it scans every transcript, sorts
- * them by age, and only THEN applies this — so a limit here never saved the
- * expensive part. It threw away the answer after paying for it, and the
- * sessions it discarded became unfindable: not listed anywhere, not
- * searchable, and not reachable by any link a reader could have produced.
- *
- * What arrives instead is metadata — an id, a folder, a modified time, a
- * first line. Measured on the machine this was written on: 898 transcripts
- * spanning 1.1GB on disk, and their catalogue is a few hundred kilobytes.
- * The transcripts themselves are still read one at a time, on demand, which
- * is the part that was ever worth being careful about.
- */
-export const SESSION_CATALOG_LIMIT = 0;
-
 /** How long a control call waits for the frame that answers its `requestId`. */
 export const CONTROL_TIMEOUT_MS = 15_000;
 

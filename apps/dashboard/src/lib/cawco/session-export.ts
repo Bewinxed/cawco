@@ -135,7 +135,7 @@ export async function sessionsCsv(spend: SessionSpend): Promise<string> {
   });
   const stored = cawco.machines.flatMap((machine) =>
     cawco
-      .catalogOf(machine.machineId)
+      .storedOn(machine.machineId)
       .filter((info) => !seen.has(info.sessionId))
       .map((info) => {
         seen.add(info.sessionId);

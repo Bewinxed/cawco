@@ -4,7 +4,7 @@
  * fields as each harness fills them: Claude's summary, first prompt, branch
  * and file size; OpenCode's title; pi's first message), with the person's
  * last prompt in each (`wroteAt`) and the file's last change after it.
- * The bench stands them in its client (dev `standCatalog`); the
+ * The bench keeps them as the hub does (its `standStored`); the
  * stored-transcripts probe hands the same listing to the hub's find.
  *
  * - `inStorefront`: Claude Code's, typed in a terminal in a project's

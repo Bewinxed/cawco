@@ -14,6 +14,7 @@ import type {
   BuildInfo,
   CarrySessionOutcome,
   CarrySessionRequest,
+  CatalogMovedFrame,
   CommandAck,
   CommandResult,
   CompactStage,
@@ -100,7 +101,7 @@ import type {
   SessionTooling,
   SkillFile,
   SpawnPayload,
-  StoredSessions,
+  StoredFrame,
   TabNamed,
   ToolSigninChallenge,
   ToolSpec,
@@ -572,7 +573,6 @@ import {
   FleetSyncReportSchema,
   HarnessReportSchema,
   MachineCapabilitiesSchema,
-  NeutralSessionInfoSchema,
   OpenCodeGoLimitsSchema,
   ScratchWorktreeSchema,
   SkillFileSchema,
@@ -1072,6 +1072,7 @@ import {
 import { createSshTunnels } from "./ssh-tunnels";
 import { templateOf } from "./stages";
 import { sessionStartingSet } from "./starting-set";
+import { createStoredRecent } from "./stored-recent";
 import { createStreamHub } from "./stream";
 import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
@@ -20595,9 +20596,8 @@ export const createServer = (
     asBoard(withAncestors(boardShown(), boardRowsByIds, isHubParent));
 
   /**
-   * What the hub holds behind stored transcripts (`POST
-   * /api/instances/stored`, core `StoredSessions`), asked by their harness
-   * keys: the keys no session wraps (transcripts run outside CawCo), and
+   * What the hub holds behind stored transcripts (stored-recent.ts), asked
+   * by their harness keys: the keys no session wraps (transcripts run outside CawCo), and
    * the sessions wrapping the rest that the board no longer lists, where
    * the session at the top of their chain is the person's own (core
    * `personsOwn`), each with the sessions it nests under, as the board
@@ -20605,7 +20605,9 @@ export const createServer = (
    * every list with the board, as before; one whose chain names a session
    * the hub no longer has stands nowhere (board-ancestors.ts).
    */
-  const storedSessions = (keys: string[]): StoredSessions => {
+  const storedSessions = (
+    keys: string[]
+  ): { rows: InstanceRow[]; unwrapped: string[] } => {
     const wrapping = db
       .boardSessionsWrapping(keys)
       .filter((row) => row.kind !== "summariser");
@@ -20646,6 +20648,34 @@ export const createServer = (
       ),
     };
   };
+
+  /**
+   * Recent's stored transcripts, kept here off each machine's catalog as
+   * find keeps it (stored-recent.ts): read as a machine registers and when
+   * it says a transcript moved, worked out again as a catalog, the board or
+   * the projects move, and told to every dashboard whole when it changed.
+   */
+  const storedRecent = createStoredRecent({
+    after: (ms, run) => {
+      lifetime.after(ms, run);
+    },
+    behind: storedSessions,
+    catalogOf: (machineId) => find.catalogOf(machineId),
+    machines: () => db.listAgents().map((agent) => agent.machineId),
+    relist: (machineId) => find.relist(machineId),
+    projects: () =>
+      db.listProjects().map((project) => ({
+        ...project,
+        primaryPlaceId: checkoutOf(project)?.id ?? null,
+      })),
+    publish: (stored) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "stored", stored } satisfies StoredFrame,
+      }),
+    wrapped: (sessionId) => db.instanceBySessionId(sessionId) !== undefined,
+  });
 
   /**
    * The whole board as one message: every row, every machine, and what each
@@ -21315,6 +21345,15 @@ export const createServer = (
           payload,
         } satisfies Envelope<FramePayload>);
       }
+      // Then Recent's stored transcripts, whole (stored-recent.ts).
+      const stored = laws.hold(storedRecent.now);
+      if (stored) {
+        sendFrame(ws, {
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "stored", stored },
+        } satisfies Envelope<FramePayload>);
+      }
     }
     if (!older) {
       sendFrame(ws, {
@@ -21417,6 +21456,8 @@ export const createServer = (
     // A row, a machine or a preview may have moved: an artifact's tab hears
     // what moved of its own session, before the board's own early return.
     artifactSessions.refresh();
+    // A row leaving the board, or moving off it, may move Recent's stored list.
+    storedRecent.moved();
     if (rows) {
       publishBoardDelta(machineId, rows);
     }
@@ -21583,53 +21624,20 @@ export const createServer = (
 
   /**
    * Names the machine's stored conversations that nothing has ever named, off
-   * the catalog the machine keeps anyway — a catalog entry carries the session's
-   * first prompt, so this costs one control call and no transcript reads.
+   * its catalog as find last read it (find.ts) — a
+   * catalog entry carries the session's first prompt, so this costs no
+   * transcript reads.
    *
-   * Offered when a daemon registers, and free in the steady state: the query for
-   * unnamed rows comes back empty and the machine is never asked. Only the same
+   * Run as a daemon registers, after that read, and free in the steady
+   * state: the query for unnamed rows comes back empty. Only the same
    * `firstPrompt` the dashboard would name a stored session by is used — a
    * harness summary is a different string, and a row named with one would
    * disagree with the strip it is meant to agree with.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: matches the daemon's session list against unnamed rows and picks the naming source per harness in one place; splitting it would scatter the fallback order this depends on.
-  const nameStoredSessions = async (machineId: string): Promise<void> => {
+  const nameStoredSessions = (machineId: string): void => {
     const unnamed = db.unnamedSessions(machineId);
     if (unnamed.length === 0) {
       return;
-    }
-
-    const answer = await readAgent(
-      machineId,
-      CONTROL_LIST_SESSIONS,
-      [{}],
-      READ_TIMEOUT_MS
-    );
-    // Unanswered or refused: the rows stay unnamed, named at the next ask.
-    switch (answer.kind) {
-      case "unanswered":
-        return;
-      case "answered":
-        if (!(answer.value.ok && Array.isArray(answer.value.result))) {
-          return;
-        }
-        break;
-      default:
-        throw unreachable(answer);
-    }
-    // A harness that did not list in time (`unanswered`) or whose listing
-    // threw (`failed`) keeps what was named for it: its rows are named only
-    // from a listing that has them, and nothing here drops or renames a row
-    // the listing left out.
-    for (const { harness, after } of answer.value.unanswered ?? []) {
-      console.info(
-        `[catalog] ${harness} on ${machineName(machineId)} didn't list its sessions within ${after / 1000} s; its unnamed rows wait for the next listing`
-      );
-    }
-    for (const { harness, error } of answer.value.failed ?? []) {
-      console.info(
-        `[catalog] ${harness} on ${machineName(machineId)} couldn't list its sessions: ${error}; its unnamed rows wait for the next listing`
-      );
     }
 
     // Name from whatever the catalog carries, in the SAME precedence the
@@ -21639,23 +21647,16 @@ export const createServer = (
     // so reading only `firstPrompt` left every opencode/pi row unnamed at rest.
     // The row's stored title wins in `resolveSessionTitle` either way, so naming
     // from the given title is not a mismatch with what the client would show.
-    const names = new Map<string, string>();
-    const listed: unknown = answer.value.result;
-    for (const entry of Array.isArray(listed) ? listed : []) {
-      // An untrusted control reply: an entry that is not a session's is passed over.
-      const read = NeutralSessionInfoSchema.safeParse(entry);
-      if (!read.success) {
-        continue;
-      }
-      const info = read.data;
-      const source =
-        (info.customTitle || info.summary)?.trim() || info.firstPrompt;
-      const name =
-        typeof source === "string" ? deriveTitleFromFirstMessage(source) : "";
-      if (name) {
-        names.set(info.sessionId, name);
-      }
-    }
+    const names = new Map(
+      find.catalogOf(machineId).map((info) => {
+        const source =
+          (info.customTitle || info.summary)?.trim() || info.firstPrompt;
+        return [
+          info.sessionId,
+          typeof source === "string" ? deriveTitleFromFirstMessage(source) : "",
+        ] as const;
+      })
+    );
 
     let named = false;
     for (const row of unnamed) {
@@ -23478,12 +23479,15 @@ export const createServer = (
   };
 
   /** Tells every dashboard the projects changed: each reads them again. */
-  const projectsChanged = (): void =>
+  const projectsChanged = (): void => {
     registry.broadcast({
       verb: "frames",
       machineId: "hub",
       payload: { kind: "projects.changed" },
     });
+    // A place come or gone moves which stored transcripts are a project's.
+    storedRecent.moved();
+  };
 
   // A checkout added or removed: every dashboard reads the projects again,
   // and its machine is sent what moved there: the project's rows with the
@@ -27167,6 +27171,8 @@ export const createServer = (
         tasks: read.flatMap((each) => each.tasks),
       };
     },
+    // A catalog read moves Recent's stored list (stored-recent.ts).
+    catalogRead: () => storedRecent.moved(),
     listStored: async (machineId) => {
       const answer = await readAgent(
         machineId,
@@ -34257,14 +34263,8 @@ export const createServer = (
             : reported;
         }
       )
-      // What the hub holds behind the stored transcripts a list would draw
-      // (`storedSessions`), asked once for the whole list by their keys.
-      .post(
-        "/api/instances/stored",
-        { body: t.Object({ sessions: t.Array(t.String()) }) },
-        ({ body }) =>
-          laws.raise(() => storedSessions([...new Set(body.sessions)]))
-      )
+      // Recent's stored transcripts, as the hub keeps them (stored-recent.ts).
+      .get("/api/stored", () => laws.raise(storedRecent.now))
       // What each tab's id names, as the dashboard asks of the tabs it kept
       // from an earlier visit and of an address before it reads them: the
       // session it is read by (itself, a former id's session, a harness key's
@@ -39070,10 +39070,13 @@ export const createServer = (
               }
               publishInstances(message.machineId);
               detach(pushAgents(message.machineId), "agent push");
-              // And what its stored conversations are called, for the ones nobody
-              // has ever named — off the catalog the daemon just read anyway.
+              // Its catalog, for Recent's stored list, and what its stored
+              // conversations are called, for the ones nobody has ever named,
+              // off that catalog.
               detach(
-                nameStoredSessions(message.machineId),
+                find
+                  .relist(message.machineId)
+                  .then(() => nameStoredSessions(message.machineId)),
                 "stored session names"
               );
               // The ledger the returning agent reattaches against: what this hub
@@ -39628,6 +39631,18 @@ export const createServer = (
                 break;
               }
               // Its items as they converge (fleet-sync.ts): kept on its row.
+              // Its stored transcripts moved (agent catalog-index.ts): Recent's
+              // stored list reads its catalog again when they may move it.
+              if (kind === "catalog_moved") {
+                const { sessions } = message.payload as CatalogMovedFrame;
+                if (Array.isArray(sessions)) {
+                  detach(
+                    storedRecent.heard(message.machineId, sessions),
+                    "read the machine's catalog"
+                  );
+                }
+                break;
+              }
               if (kind === "fleet_converge") {
                 const { items, generation } =
                   message.payload as FleetConvergeFrame;

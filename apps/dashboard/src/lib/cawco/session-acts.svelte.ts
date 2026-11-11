@@ -18,7 +18,6 @@ import { SvelteMap } from "svelte/reactivity";
 import {
   answeredOr,
   cawco,
-  loadCatalog,
   machineControl,
   renameInstance,
   stopSession,
@@ -167,6 +166,5 @@ export async function renameSession(
     undefined,
     info.harness
   );
-  await loadCatalog(machineId);
   answeredOr(machineId, renamed, "whether it was renamed is not known");
 }

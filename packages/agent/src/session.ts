@@ -17,6 +17,7 @@ import type {
   AsleepFrame,
   CarrySessionOutcome,
   CarrySessionRequest,
+  CatalogMovedFrame,
   ControlPayload,
   ControlResultFrame,
   CutCommand,
@@ -201,6 +202,7 @@ import {
   openCanvasScreen,
 } from "./canvas-screen";
 import { carryWorktree, worktreeHeld } from "./carry";
+import { onCatalogMoved } from "./catalog-index";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
@@ -779,6 +781,11 @@ const CATALOG_READS = new Set([
 /** Stored transcripts read at once ({@link SessionSupervisor.#transcriptRead}). Ours: the hub's settle reads ask four of a machine at once (server.ts `SETTLE_READS_PER_MACHINE`); a page's and Find's reads take the rest. */
 const TRANSCRIPT_READS_AT_ONCE = 8;
 
+/** How long the transcripts stay still before the hub is told they moved ({@link SessionSupervisor.#catalogMoved}). */
+const CATALOG_QUIET_MS = 2000;
+/** The longest moving transcripts go untold ({@link SessionSupervisor.#catalogMoved}). */
+const CATALOG_TOLD_MS = 10_000;
+
 /** A catalog read that took this long or longer says so in the log, with what it read. */
 const CATALOG_SLOW_MS = 1000;
 
@@ -957,6 +964,7 @@ export class SessionSupervisor {
       this.harnessCustodyReady("opencode")
     );
     onFleetMcpMoved(() => this.#reportFleet());
+    onCatalogMoved((sessions) => this.#catalogMoved(sessions));
     keeperLimits.on("limit", (message) => this.#limitReached(message));
     watchLeaks({
       targetOf: (procId, pid) => this.#touched(procId, pid),
@@ -5964,6 +5972,48 @@ export class SessionSupervisor {
         convergedGeneration: this.#desired.convergedGeneration,
       } satisfies FleetReportFrame,
     });
+  }
+
+  /** The sessions whose transcripts moved since the last report ({@link #catalogMoved}). */
+  readonly #movedSessions = new Set<string>();
+  #movedTimer: ReturnType<typeof setTimeout> | undefined;
+  /** When the first move not yet told was heard. */
+  #movedSince = 0;
+
+  /**
+   * Tells the hub which stored transcripts moved (core `CatalogMovedFrame`),
+   * once they have been still for {@link CATALOG_QUIET_MS}, and at least every
+   * {@link CATALOG_TOLD_MS} while they keep moving: a turn writes its
+   * transcript line by line, and the hub needs one word for the lot.
+   */
+  #catalogMoved(sessions: string[]): void {
+    if (this.#movedSessions.size === 0) {
+      this.#movedSince = Date.now();
+    }
+    for (const session of sessions) {
+      this.#movedSessions.add(session);
+    }
+    clearTimeout(this.#movedTimer);
+    const wait = Math.min(
+      CATALOG_QUIET_MS,
+      this.#movedSince + CATALOG_TOLD_MS - Date.now()
+    );
+    this.#movedTimer = setTimeout(
+      () => {
+        const moved = [...this.#movedSessions];
+        this.#movedSessions.clear();
+        this.emit({
+          verb: "frames",
+          machineId: "",
+          payload: {
+            kind: "catalog_moved",
+            sessions: moved,
+          } satisfies CatalogMovedFrame,
+        });
+      },
+      Math.max(0, wait)
+    );
+    this.#movedTimer.unref?.();
   }
 
   /** The machine's word on items as they move (core `FleetConvergeFrame`). */
