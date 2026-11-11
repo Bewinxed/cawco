@@ -20,6 +20,7 @@ import {
   PROJECT_SKILLS,
   TREE_STORE_DIR,
 } from "./claude-dirs";
+import type { HarnessKind } from "./harness";
 import { hostEnvironment } from "./session-env";
 import { sessiondEndpoint } from "./sessiond";
 import { hostJavaHome, systemProgram } from "./workspace-needs";
@@ -1385,6 +1386,25 @@ export const AGENT_SOCKET_ENV = [
   "GNOME_KEYRING_CONTROL",
 ] as const;
 
+/** Where each harness keeps its logins on the host, which no workspace reads ({@link credentialStores}). */
+const HARNESS_CREDENTIALS: Record<HarnessKind, () => string[]> = {
+  // Claude Code: each config dir's login (the machine's own, each
+  // account's, any it was pointed at), and the fleet's MCP servers with
+  // their headers and env.
+  claude: () => [
+    ...claudeConfigDirs().map((dir) => join(dir, ".credentials.json")),
+    claudeHomeJson(),
+  ],
+  // OpenCode: `auth.json`, `mcp-auth.json`; `opencode.json` with provider
+  // keys and MCP headers.
+  opencode: () => [
+    join(xdgDataHome(), "opencode"),
+    join(xdgConfigHome(), "opencode"),
+  ],
+  // pi: `auth.json`, the CLIProxyAPI key; CLIProxyAPI's own logins.
+  pi: () => [piAgentDir(), join(homedir(), ".cli-proxy-api")],
+};
+
 /**
  * Every place on this machine that holds a credential CawCo, a harness or
  * another tool keeps. Every workspace boundary hides each one from every
@@ -1408,18 +1428,8 @@ export const credentialStores = (): string[] => {
     cawcoDataDir(),
     hubDataDir(),
     dirname(hubDbPath()),
-    // Claude Code: each config dir's login (the machine's own, each
-    // account's, any it was pointed at), and the fleet's MCP servers with
-    // their headers and env.
-    ...claudeConfigDirs().map((dir) => join(dir, ".credentials.json")),
-    claudeHomeJson(),
-    // OpenCode: `auth.json`, `mcp-auth.json`; `opencode.json` with provider
-    // keys and MCP headers.
-    join(xdgDataHome(), "opencode"),
-    join(xdgConfigHome(), "opencode"),
-    // pi: `auth.json`, the CLIProxyAPI key; CLIProxyAPI's own logins.
-    piAgentDir(),
-    join(home, ".cli-proxy-api"),
+    // Each harness's own logins ({@link HARNESS_CREDENTIALS}).
+    ...Object.values(HARNESS_CREDENTIALS).flatMap((stores) => stores()),
     // Other agents' logins: Codex, Gemini, GitHub Copilot.
     join(home, ".codex"),
     join(home, ".gemini"),

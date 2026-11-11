@@ -10,7 +10,7 @@ import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
-import { HARNESSES } from "@cawco/core/harness";
+import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { spawnRead, untether } from "@cawco/core/tether";
@@ -271,6 +271,29 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
     "command" in advice
       ? { installCommand: advice.command }
       : { installCommand: "", reason: advice.refusal };
+  // Each harness CLI, in HARNESSES' order among the items.
+  const harnessItems: Record<HarnessKind, MachineCapability> = {
+    // The Claude Code sessions run (auth.ts), so the same lookup reports it.
+    claude: {
+      id: "claude",
+      available: !!claude,
+      path: claude,
+      ...adviceOf(claudeAdvice),
+      ...(claude ? {} : { reason: CLAUDE_NOT_INSTALLED }),
+    },
+    opencode: {
+      id: "opencode",
+      available: !!opencode,
+      path: opencode,
+      ...adviceOf(opencodeAdvice),
+    },
+    pi: {
+      id: "pi",
+      available: !!resolveBin("pi"),
+      path: resolveBin("pi"),
+      ...adviceOf(piAdvice),
+    },
+  };
   const items: MachineCapability[] = [
     {
       id: "git",
@@ -278,26 +301,7 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       path: git,
       installCommand: mac ? "xcode-select --install" : linuxInstall("git"),
     },
-    {
-      // The Claude Code sessions run (auth.ts), so the same lookup reports it.
-      id: "claude",
-      available: !!claude,
-      path: claude,
-      ...adviceOf(claudeAdvice),
-      ...(claude ? {} : { reason: CLAUDE_NOT_INSTALLED }),
-    },
-    {
-      id: "opencode",
-      available: !!opencode,
-      path: opencode,
-      ...adviceOf(opencodeAdvice),
-    },
-    {
-      id: "pi",
-      available: !!resolveBin("pi"),
-      path: resolveBin("pi"),
-      ...adviceOf(piAdvice),
-    },
+    ...HARNESSES.map((kind) => harnessItems[kind]),
     {
       id: "node",
       available: !!node,

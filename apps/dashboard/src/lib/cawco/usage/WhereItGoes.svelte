@@ -21,9 +21,10 @@
    * machine ran sessions of both. Each group's height is driven
    * (motion/relay-boxes) so an old row never overflows into the group below.
    */
-  import type { HarnessKind } from "@cawco/core/harness";
+  import { everyOf } from "@cawco/core/every-of";
   import type {
     UsageGroupBy,
+    UsageHarness,
     UsageSummary,
     UsageSummaryRow,
   } from "@cawco/core/usage/types";
@@ -48,10 +49,13 @@
   import ReadFailed from "./ReadFailed.svelte";
 
   /** The harnesses this panel reads spend for. */
-  type Harness = Extract<HarnessKind, "claude" | "opencode">;
+  type Harness = UsageHarness;
   /** The folds a reader picks between, in the order offered. */
   type Grouping = Extract<UsageGroupBy, "session" | "model" | "machine">;
-  const HARNESSES: Harness[] = ["claude", "opencode"];
+  const HARNESSES: readonly Harness[] = everyOf<Harness>()([
+    "claude",
+    "opencode",
+  ]);
   const GROUPINGS: Grouping[] = ["session", "model", "machine"];
 
   let {

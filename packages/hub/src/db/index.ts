@@ -4890,7 +4890,7 @@ const make = async (path: string): Promise<DbShape> => {
       q.until === undefined ? undefined : lte(usageBuckets.start, q.until),
       q.harness === undefined
         ? undefined
-        : eq(usageBuckets.harness, q.harness as "claude" | "opencode"),
+        : eq(usageBuckets.harness, q.harness as UsageHarness),
       q.machineId === undefined
         ? undefined
         : eq(usageBuckets.machineId, q.machineId)
@@ -10726,7 +10726,7 @@ const make = async (path: string): Promise<DbShape> => {
             sql`${usageBuckets.inputTokens} + ${usageBuckets.outputTokens} + ${usageBuckets.cacheCreationTokens} + ${usageBuckets.cacheReadTokens} + ${usageBuckets.reasoningTokens} > 0`,
             harness === undefined
               ? undefined
-              : eq(usageBuckets.harness, harness as "claude" | "opencode"),
+              : eq(usageBuckets.harness, harness as UsageHarness),
             machineId === undefined
               ? undefined
               : eq(usageBuckets.machineId, machineId)

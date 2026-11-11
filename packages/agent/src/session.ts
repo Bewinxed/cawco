@@ -261,7 +261,7 @@ import {
   stopPreview,
   stopPreviews,
 } from "./preview";
-import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
+import { isSessionProc, parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
 import { removeTree } from "./remove-tree";
 import { repoTop } from "./repo-top";
@@ -3012,9 +3012,7 @@ export class SessionSupervisor {
           procs.some((held) => {
             const id = parseProcId(held.procId);
             return (
-              held.alive &&
-              (id.kind === "claude" || id.kind === "pi") &&
-              id.instanceId === instanceId
+              held.alive && isSessionProc(id) && id.instanceId === instanceId
             );
           })
         )
@@ -3227,7 +3225,7 @@ export class SessionSupervisor {
             const identity = parseProcId(held.procId);
             return (
               held.alive &&
-              (identity.kind === "claude" || identity.kind === "pi") &&
+              isSessionProc(identity) &&
               identity.instanceId === instanceId
             );
           });
@@ -4141,7 +4139,7 @@ export class SessionSupervisor {
           return (
             held.alive &&
             held.pid === proc.pid &&
-            (id.kind === "claude" || id.kind === "pi") &&
+            isSessionProc(id) &&
             id.instanceId === instanceId
           );
         }),
@@ -4430,7 +4428,7 @@ export class SessionSupervisor {
         instanceId,
         harness:
           this.#placed.get(instanceId)?.harness ??
-          (proc.kind === "pi" ? "pi" : "claude"),
+          (isSessionProc(proc) ? proc.kind : "claude"),
         message: {
           type: "system",
           subtype: LIMIT_REACHED,
@@ -7179,7 +7177,7 @@ function endHeld(instanceId: string, pid?: number): Promise<boolean> {
           return (
             proc.alive &&
             (pid === undefined || proc.pid === pid) &&
-            (id.kind === "claude" || id.kind === "pi") &&
+            isSessionProc(id) &&
             id.instanceId === instanceId
           );
         })

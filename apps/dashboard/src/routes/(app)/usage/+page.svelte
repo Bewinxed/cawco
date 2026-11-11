@@ -1,6 +1,6 @@
 <script lang="ts">
   import { bucketStart } from "@cawco/core/usage/tokens";
-  import type { LimitWindow } from "@cawco/core/usage/types";
+  import type { LimitWindow, UsageHarness } from "@cawco/core/usage/types";
   import { openedAt } from "@cawco/core/usage/windows";
   /**
    * Usage: will it last, first. The Limits block
@@ -99,7 +99,7 @@
    * still being read.
    */
   const since = $derived.by(
-    (): Record<"claude" | "opencode", number | null | undefined> => {
+    (): Record<UsageHarness, number | null | undefined> => {
       if (range === "window") {
         if (!cawco.usageLimitsRead) {
           return { claude: undefined, opencode: undefined };

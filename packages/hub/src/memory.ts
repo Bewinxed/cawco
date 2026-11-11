@@ -105,6 +105,7 @@ import {
   type PermissionResult,
   type ProjectNote,
 } from "@cawco/core";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
 import { parseRecord } from "@cawco/core/state-file";
 import { askWords } from "@cawco/core/words/asks";
@@ -323,7 +324,15 @@ const KEEPALIVE = "keepalive";
  * `subagent`). Claude's says it ended itself, in a `task_notification`: a
  * background one's call answers at once and the subagent runs on.
  */
-const ENDS_WITH_CALL: ReadonlySet<string> = new Set(["opencode"]);
+const ENDS_WITH_CALL: Record<HarnessKind, boolean> = {
+  claude: false,
+  opencode: true,
+  pi: false,
+};
+const endsWithCall = (harness: string | undefined): boolean => {
+  const kind = harnessNamed(harness);
+  return kind !== undefined && ENDS_WITH_CALL[kind];
+};
 
 /** Where the watch keeps each session's state (db `session_taints`), and what it reads of the fleet. */
 export interface TaintStore {
@@ -490,7 +499,7 @@ export const createTurnWatch = (store: TaintStore) => {
     if (
       subagents.length === 0 ||
       neutral.parent_tool_use_id ||
-      !(harness && ENDS_WITH_CALL.has(harness)) ||
+      !endsWithCall(harness) ||
       !Array.isArray(content)
     ) {
       return;

@@ -1,12 +1,40 @@
+import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
+
 /** The process keeper's namespace. Infrastructure procs are never sessions. */
 export const OPENCODE_SERVER_PROC_ID = "opencode-server";
-export const SESSION_PROC_KINDS = ["claude", "pi"] as const;
+
+/**
+ * Whether each harness runs every session in a keeper process of its own,
+ * named by {@link procIdFor}. OpenCode's sessions share an account's server
+ * ({@link OPENCODE_SERVER_PROC_ID}).
+ */
+const OWN_PROCESS = {
+  claude: true,
+  opencode: false,
+  pi: true,
+} as const satisfies Record<HarnessKind, boolean>;
+/** A harness whose every session is a keeper process of its own ({@link OWN_PROCESS}). */
+export type SessionProcKind = {
+  [K in HarnessKind]: (typeof OWN_PROCESS)[K] extends true ? K : never;
+}[HarnessKind];
+/** Whether `kind` names a harness whose every session is a keeper process of its own. */
+export const isSessionProcKind = (kind: string): kind is SessionProcKind =>
+  HARNESSES.some((harness) => harness === kind && OWN_PROCESS[harness]);
+/** {@link SessionProcKind}'s members, in {@link HARNESSES}' order. */
+export const SESSION_PROC_KINDS: readonly SessionProcKind[] =
+  HARNESSES.filter(isSessionProcKind);
 
 export type ProcId =
-  | { kind: "claude" | "pi"; instanceId: string }
+  | { kind: SessionProcKind; instanceId: string }
   | { kind: "boundary"; id: string }
   | { kind: "judge" }
   | { kind: "opencode-server" };
+
+/** A session's own keeper process, as {@link parseProcId} reads it. */
+export type SessionProc = Extract<ProcId, { instanceId: string }>;
+/** Whether `id` is a session's own keeper process ({@link isSessionProcKind}). */
+export const isSessionProc = (id: ProcId): id is SessionProc =>
+  isSessionProcKind(id.kind);
 
 const JUDGE_PREFIX = "judge-";
 
@@ -33,7 +61,7 @@ export const isBoundaryOf = (procId: string, workspace: string): boolean =>
   procId.startsWith(`${procIdFor("boundary", workspace)}-`);
 
 export function procIdFor(
-  kind: "claude" | "pi" | "boundary",
+  kind: SessionProcKind | "boundary",
   id: string
 ): string {
   switch (kind) {

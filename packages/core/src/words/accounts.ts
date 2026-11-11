@@ -12,6 +12,7 @@
  * where the HIG asks for something the web does another way.
  */
 import type { AccountHue, CompactMethod, PlacementStrategy } from "../accounts";
+import type { HarnessKind } from "../harness";
 import { commonWords } from "./common";
 import { andList, pad2 } from "./helpers";
 
@@ -106,7 +107,7 @@ export const accountsWords = {
     claude: "Claude Code",
     opencode: "OpenCode",
     pi: "pi",
-  },
+  } satisfies Record<HarnessKind, string>,
   /** "Claude Code and OpenCode". */
   harnessList: (names: readonly string[]) => andList(names),
 

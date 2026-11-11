@@ -281,7 +281,12 @@ import { placePush } from "./place-push";
 import { placeLfs, placeRepo } from "./place-repo";
 import { listenBrowsers, previewNetworks, servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
-import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
+import {
+  isSessionProc,
+  parseProcId,
+  procIdFor,
+  SESSION_PROC_KINDS,
+} from "./proc-id";
 import {
   accountLent,
   beginProviderLogin,
@@ -1588,9 +1593,7 @@ const readCustody = async (
           ...new Set(
             held.flatMap((proc) => {
               const id = parseProcId(proc.procId);
-              return id.kind === "claude" || id.kind === "pi"
-                ? [id.instanceId]
-                : [];
+              return isSessionProc(id) ? [id.instanceId] : [];
             })
           ),
         ],

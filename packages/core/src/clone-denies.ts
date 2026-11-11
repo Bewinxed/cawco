@@ -20,6 +20,7 @@ import {
   PROJECT_SKILLS,
   projectClaudeRelative,
 } from "./claude-dirs";
+import type { HarnessKind } from "./harness";
 
 /**
  * What stands in for a clone-side deny path its clone does not have, before
@@ -139,26 +140,39 @@ const SCHEDULED_EMPTY = { kind: "file", text: '{"tasks":[]}\n' } as const;
  *   empty one stands in.
  * - OpenCode and pi: `.agents/skills`.
  */
-const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> = {
-  ".mcp.json": { kind: "file", text: '{"mcpServers":{}}\n' },
-  [projectClaudeRelative("settings.json")]: EMPTY_JSON,
-  [projectClaudeRelative("settings.local.json")]: EMPTY_JSON,
-  [projectClaudeRelative("hooks")]: DIR,
-  [projectClaudeRelative("commands")]: DIR,
-  [projectClaudeRelative("agents")]: DIR,
-  [PROJECT_SKILLS]: DIR,
-  [projectClaudeRelative("workflows")]: DIR,
-  [projectClaudeRelative("routines")]: DIR,
-  [projectClaudeRelative("output-styles")]: DIR,
-  [projectClaudeRelative("launch.json")]: LAUNCH_EMPTY,
-  [projectClaudeRelative("scheduled_tasks.json")]: SCHEDULED_EMPTY,
-  [projectClaudeRelative("loop.md")]: EMPTY,
-  "opencode.json": OPENCODE_EMPTY,
-  "opencode.jsonc": OPENCODE_EMPTY,
-  ".opencode": OPENCODE_DIR,
-  ".pi": DIR,
-  ".agents/skills": DIR,
+const HARNESS_CONFIG_EMPTY_BY: Record<
+  HarnessKind,
+  Readonly<Record<string, CloneDenyEmpty>>
+> = {
+  claude: {
+    ".mcp.json": { kind: "file", text: '{"mcpServers":{}}\n' },
+    [projectClaudeRelative("settings.json")]: EMPTY_JSON,
+    [projectClaudeRelative("settings.local.json")]: EMPTY_JSON,
+    [projectClaudeRelative("hooks")]: DIR,
+    [projectClaudeRelative("commands")]: DIR,
+    [projectClaudeRelative("agents")]: DIR,
+    [PROJECT_SKILLS]: DIR,
+    [projectClaudeRelative("workflows")]: DIR,
+    [projectClaudeRelative("routines")]: DIR,
+    [projectClaudeRelative("output-styles")]: DIR,
+    [projectClaudeRelative("launch.json")]: LAUNCH_EMPTY,
+    [projectClaudeRelative("scheduled_tasks.json")]: SCHEDULED_EMPTY,
+    [projectClaudeRelative("loop.md")]: EMPTY,
+  },
+  opencode: {
+    "opencode.json": OPENCODE_EMPTY,
+    "opencode.jsonc": OPENCODE_EMPTY,
+    ".opencode": OPENCODE_DIR,
+  },
+  // `.agents/skills` is OpenCode's too; it stands here once.
+  pi: {
+    ".pi": DIR,
+    ".agents/skills": DIR,
+  },
 };
+/** Every harness's config, as one table. */
+const HARNESS_CONFIG_EMPTY: Readonly<Record<string, CloneDenyEmpty>> =
+  Object.assign({}, ...Object.values(HARNESS_CONFIG_EMPTY_BY));
 
 /**
  * {@link HARNESS_CONFIG_EMPTY}'s paths: the one list of harness config a

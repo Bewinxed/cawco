@@ -3,9 +3,19 @@
  * (USAGE-SPEC.md §4.1). Pure types only; no runtime imports.
  */
 
+import type { HarnessKind } from "../harness";
 import { HOUR_MS } from "../time";
 
-export type UsageHarness = "claude" | "opencode";
+/** Whether CawCo scans each harness's usage and limits (agent usage/scanner.ts): Claude Code's and OpenCode's; pi's not yet. */
+interface UsageScanned {
+  claude: true;
+  opencode: true;
+  pi: false;
+}
+/** The harnesses whose usage CawCo scans ({@link UsageScanned}). */
+export type UsageHarness = {
+  [K in HarnessKind]: UsageScanned[K] extends true ? K : never;
+}[HarnessKind];
 
 export interface UsageTokens {
   cacheCreation: number; // Claude: see cacheCreationCount() rule in tokens.ts

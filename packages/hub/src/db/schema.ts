@@ -56,6 +56,7 @@ import type {
   StarterSourceKind,
   StrategyChoice,
   ToolStatus,
+  UsageHarness,
   WorkspaceKind,
 } from "@cawco/core";
 import { ASK_STORED, type AskState } from "@cawco/core/asks";
@@ -2468,7 +2469,7 @@ export const usageBuckets = sqliteTable(
     /** `${machineId}:${harness}:${sessionId}:${model}:${start}` */
     id: text("id").primaryKey(),
     machineId: text("machine_id").notNull(),
-    harness: text("harness").$type<"claude" | "opencode">().notNull(),
+    harness: text("harness").$type<UsageHarness>().notNull(),
     start: integer("start").notNull(),
     spanMs: integer("span_ms").notNull().default(HOUR_MS),
     firstTs: integer("first_ts").notNull(),

@@ -27,7 +27,12 @@ import type { HubRepoKey } from "./hub-repo";
 import { HOUR_MS } from "./time";
 import { harnessWords } from "./words/harness";
 
-/** Every harness, in the order a machine's are named and brought up: Claude Code first, which every machine runs. */
+/**
+ * Every harness, in the order a machine's are named and brought up: Claude
+ * Code first, which every machine runs. Adding one starts from
+ * docs/harnesses.md, the checklist of what every harness must do and every
+ * place outside the adapters that names one.
+ */
 export const HARNESSES = ["claude", "opencode", "pi"] as const;
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = (typeof HARNESSES)[number];
@@ -96,7 +101,13 @@ export interface SessionCredentialInstall {
   instanceId: string;
 }
 
-/** The harness a value off the wire, a URL or storage names, when it names one CawCo runs. */
+/** Each harness's refusal of a clean start ({@link cleanStartRefusal}), none where it can. */
+const CLEAN_START_REFUSAL: Record<HarnessKind, string | undefined> = {
+  claude: undefined,
+  opencode: harnessWords.openCodeNotClean,
+  pi: undefined,
+};
+
 /**
  * Why `harness` can't start a session clean (core `SpawnPayload.clean`), or
  * undefined when it can. Claude Code and pi start each session with what its
@@ -107,8 +118,9 @@ export interface SessionCredentialInstall {
  * clean.
  */
 export const cleanStartRefusal = (harness: HarnessKind): string | undefined =>
-  harness === "opencode" ? harnessWords.openCodeNotClean : undefined;
+  CLEAN_START_REFUSAL[harness];
 
+/** The harness a value off the wire, a URL or storage names, when it names one CawCo runs. */
 export const harnessNamed = (value: unknown): HarnessKind | undefined =>
   HARNESSES.find((harness) => harness === value);
 

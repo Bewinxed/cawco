@@ -49,23 +49,27 @@ const LABELS: Record<OfferedMode, string> = spawnWords.modes;
  * Bypass already allows every one of them. On both, Bypass still asks you
  * before CawCo's fleet changes; Full Send approves everything but questions.
  */
-const DESCRIPTIONS: Partial<Record<HarnessKind, Record<OfferedMode, string>>> =
-  {
-    claude: {
-      default: "Reads and allow-listed tools run; others ask.",
-      plan: "Read-only until you approve a plan.",
-      acceptEdits: "File edits run without asking.",
-      bypassPermissions: "Tools run unasked; safety checks still ask.",
-      fullSend: "Everything is approved; only questions ask.",
-    },
-    opencode: {
-      default: "OpenCode's permission asks come to you.",
-      plan: "Runs OpenCode's plan agent.",
-      acceptEdits: "Edit asks are allowed; the rest come to you.",
-      bypassPermissions: "Every permission ask is allowed.",
-      fullSend: "Bypass, and fleet changes are approved too.",
-    },
-  };
+const DESCRIPTIONS: Record<
+  HarnessKind,
+  Record<OfferedMode, string> | undefined
+> = {
+  claude: {
+    default: "Reads and allow-listed tools run; others ask.",
+    plan: "Read-only until you approve a plan.",
+    acceptEdits: "File edits run without asking.",
+    bypassPermissions: "Tools run unasked; safety checks still ask.",
+    fullSend: "Everything is approved; only questions ask.",
+  },
+  opencode: {
+    default: "OpenCode's permission asks come to you.",
+    plan: "Runs OpenCode's plan agent.",
+    acceptEdits: "Edit asks are allowed; the rest come to you.",
+    bypassPermissions: "Every permission ask is allowed.",
+    fullSend: "Bypass, and fleet changes are approved too.",
+  },
+  // pi has no permission modes (agent pi-services.ts `capabilities`).
+  pi: undefined,
+};
 
 /** What a mode is called, including one a harness named but the product does not offer. */
 export function permissionModeLabel(mode: PermissionMode): string {
@@ -162,7 +166,7 @@ const RESTARTS =
  * FULL SEND"), CawCo's own admin writes included (hub asks.ts). The
  * safety checks are the ones Claude Code still raises in its bypass mode.
  */
-const FULL_SEND: Partial<Record<HarnessKind, FullSendCopy>> = {
+const FULL_SEND: Record<HarnessKind, FullSendCopy | undefined> = {
   claude: {
     confirm: [
       "Approves without asking: safety checks, plan approval, your ask rules, and fleet changes like memory, skills, hooks and MCP servers.",
@@ -181,6 +185,7 @@ const FULL_SEND: Partial<Record<HarnessKind, FullSendCopy>> = {
     warning:
       "Fleet changes run without asking you. Pick Bypass to have them ask again.",
   },
+  pi: undefined,
 };
 
 /** Full Send's words for `harness`; null where it is not offered. */

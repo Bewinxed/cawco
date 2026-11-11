@@ -1243,19 +1243,23 @@ const opencodeEntry = async (
 };
 
 /** One entry of pi's or OpenCode's own store, read now. */
-const readStoreEntry = async (
+const readStoreEntry = (
   store: HomeCredential["store"],
   storeProvider: string
-): Promise<StoreEntry | undefined> => {
-  if (store === "opencode") {
-    return await opencodeEntry(storeProvider);
-  }
-  const path = piStorePath();
-  const entry = (await readJson(path))[storeProvider];
-  const credential = entry ? piCredentialOf(entry) : undefined;
-  return credential
-    ? { credential, drop: () => dropPiEntry(path, storeProvider, credential) }
-    : undefined;
+): Promise<StoreEntry | undefined> => STORE_ENTRY[store](storeProvider);
+const STORE_ENTRY: Record<
+  HomeCredential["store"],
+  (storeProvider: string) => Promise<StoreEntry | undefined>
+> = {
+  opencode: (storeProvider) => opencodeEntry(storeProvider),
+  pi: async (storeProvider) => {
+    const path = piStorePath();
+    const entry = (await readJson(path))[storeProvider];
+    const credential = entry ? piCredentialOf(entry) : undefined;
+    return credential
+      ? { credential, drop: () => dropPiEntry(path, storeProvider, credential) }
+      : undefined;
+  },
 };
 
 /** The account provider an entry in a store is for. */

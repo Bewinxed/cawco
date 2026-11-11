@@ -1,6 +1,8 @@
 /** Passive custody inspection: never starts or asks a harness, model or provider. */
 
+import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
+import type { SessionProcKind } from "./proc-id";
 import type { SessiondClient } from "./sessiond-client";
 
 /** A ring line read back: its fields as they are, `message` a line of its own. */
@@ -49,9 +51,9 @@ const TURN_LINES: ReadonlySet<unknown> = new Set([
 /** The last turn marker in already-written bytes; no marker means unknown. */
 export class ChildActivity {
   #running: boolean | undefined;
-  readonly #kind: "claude" | "pi";
+  readonly #kind: SessionProcKind;
 
-  constructor(kind: "claude" | "pi") {
+  constructor(kind: SessionProcKind) {
     this.#kind = kind;
   }
 
@@ -59,19 +61,31 @@ export class ChildActivity {
     if (!line) {
       return;
     }
-    if (this.#kind === "pi") {
-      if (line.type === "busy" && typeof line.active === "boolean") {
-        this.#running = line.active;
-      } else if (
-        line.type === "reply" &&
-        typeof line.value?.busy === "boolean"
-      ) {
-        this.#running = line.value.busy;
-      } else if (line.type === "frame" && line.message?.type === "result") {
-        this.#running = false;
-      }
-      return;
+    switch (this.#kind) {
+      case "claude":
+        this.#readClaude(line);
+        return;
+      case "pi":
+        this.#readPi(line);
+        return;
+      default:
+        unhandled("session process kind", this.#kind);
     }
+  }
+
+  /** pi's host says its turn's state in lines of its own. */
+  #readPi(line: RingLine): void {
+    if (line.type === "busy" && typeof line.active === "boolean") {
+      this.#running = line.active;
+    } else if (line.type === "reply" && typeof line.value?.busy === "boolean") {
+      this.#running = line.value.busy;
+    } else if (line.type === "frame" && line.message?.type === "result") {
+      this.#running = false;
+    }
+  }
+
+  /** Claude Code's child writes the Agent SDK's stream. */
+  #readClaude(line: RingLine): void {
     if (line.type === "result") {
       this.#running = false;
     } else if (

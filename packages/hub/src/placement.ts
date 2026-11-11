@@ -26,6 +26,7 @@ import {
   windowUsed,
   windowWords,
 } from "@cawco/core";
+import { harnessNamed } from "@cawco/core/harness";
 import { HOUR_MS } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
@@ -110,11 +111,10 @@ export type Placement =
 export const noAccountRefusal = (machine: string): string =>
   `No Claude account is signed in on ${machine}. Add one in ${configurePage("accounts")} and sign it in there.`;
 
-/** Each harness as a sentence names it. */
-const HARNESS_NAMES: Record<string, string> = {
-  claude: "Claude Code",
-  opencode: "OpenCode",
-  pi: "pi",
+/** A harness as a sentence names it (core words/accounts.ts `harnesses`), or the value as given when it names none. */
+const harnessName = (harness: string): string => {
+  const kind = harnessNamed(harness);
+  return kind ? accountsWords.harnesses[kind] : harness;
 };
 
 /**
@@ -128,7 +128,7 @@ export const unreportedHarnessRefusal = (
   machine: string,
   harness: string
 ): string =>
-  `${machine} hasn't said yet whether it can run ${HARNESS_NAMES[harness] ?? harness}: its agent is still checking. Start the session again in a moment. Nothing was started.`;
+  `${machine} hasn't said yet whether it can run ${harnessName(harness)}: its agent is still checking. Start the session again in a moment. Nothing was started.`;
 
 const pct = (value: number): string => `${Math.round(value)}%`;
 

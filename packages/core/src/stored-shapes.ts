@@ -1889,7 +1889,7 @@ const AccountMoveShape = declared(
       signedOutOn: z.string().optional(),
       compact: CompactStageShape.optional(),
       compactFirst: z.literal(true).optional(),
-      compactBy: z.enum(["opencode", "pi"]).optional(),
+      compactBy: HarnessKindShape.exclude(["claude"]).optional(),
       summaryRefused: z.string().optional(),
       relaunched: z.literal(true).optional(),
       from: NamedAccountShape,

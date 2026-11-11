@@ -768,6 +768,14 @@ const gated: Gated[] = [
     "packages/core/src/delegate-types.ts",
     "packages/core/src/words/delegate-types.ts",
   ]),
+  // docs/harnesses.md has a row for every member a harness adapter meets.
+  bun("scripts/harnesses-check.ts", [
+    "docs/harnesses.md",
+    "packages/agent/src/harness.ts",
+    "packages/agent/src/session.ts",
+    "packages/agent/src/harnesses/capabilities.ts",
+    "bun.lock",
+  ]),
   bun("scripts/routine-report-check.ts", [
     "packages/hub/src/routines.ts",
     "packages/hub/src/caw.ts",

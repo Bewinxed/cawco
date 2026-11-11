@@ -35,6 +35,7 @@ import {
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
+import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
   type Admission,
@@ -378,6 +379,19 @@ export const fileDue = (how: {
  */
 export const WHOLE_MOVE_NOTICE_MS = 5 * MINUTE_MS;
 
+/** Whether each harness's own `/compact` runs a move's compaction (core `AccountMove.compactBy`): every one's but Claude Code's, whose is the move's own. */
+const OWN_COMPACT: Record<HarnessKind, boolean> = {
+  claude: false,
+  opencode: true,
+  pi: true,
+};
+const compactsOwn = (
+  harness: string
+): harness is Exclude<HarnessKind, "claude"> => {
+  const kind = harnessNamed(harness);
+  return kind !== undefined && OWN_COMPACT[kind];
+};
+
 /**
  * `move`, a move's line, as one `plan` compacts says it: natively, its
  * stages from `filing`, before the move when the plan says so, by the
@@ -394,9 +408,7 @@ export const compactedLine = (
         ...move,
         compact: "filing",
         ...(plan.when === "before" ? { compactFirst: true as const } : {}),
-        ...(harness === "opencode" || harness === "pi"
-          ? { compactBy: harness }
-          : {}),
+        ...(compactsOwn(harness) ? { compactBy: harness } : {}),
       }
     : move;
 

@@ -333,14 +333,15 @@ const opencodeSession = (policy: Policy, call: Call): Policy => ({
  * OpenCode: {@link opencodeSession}. pi keeps its saved outputs in the
  * session's own folder, which the policy already reads.
  */
-const sessionPolicy = (policy: Policy, call: Call): Policy => {
-  if (call.harness === "claude") {
-    return claudeSession(policy, call.transcript);
-  }
-  if (call.harness === "opencode") {
-    return opencodeSession(policy, call);
-  }
-  return policy;
+const sessionPolicy = (policy: Policy, call: Call): Policy =>
+  SESSION_KEEPS[call.harness](policy, call);
+const SESSION_KEEPS: Record<
+  HarnessKind,
+  (policy: Policy, call: Call) => Policy
+> = {
+  claude: (policy, call) => claudeSession(policy, call.transcript),
+  opencode: (policy, call) => opencodeSession(policy, call),
+  pi: (policy) => policy,
 };
 
 /** A path field of a built-in tool, and what reading or writing it is. */
@@ -514,9 +515,10 @@ const handedToHub = (policy: Policy, path: string): boolean => {
 };
 
 /** The cawco tool a harness's tool name is: Claude Code's `mcp__cawco__<tool>`, OpenCode's `cawco_<tool>`. */
-const CAWCO_PREFIX: Partial<Record<Call["harness"], string>> = {
+const CAWCO_PREFIX: Record<Call["harness"], string | undefined> = {
   claude: "mcp__cawco__",
   opencode: "cawco_",
+  pi: undefined,
 };
 
 const cawcoTool = (call: Call): string | undefined => {

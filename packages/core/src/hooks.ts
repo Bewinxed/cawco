@@ -17,6 +17,7 @@
 import { USER_LAYER_SHELL, userLayerLabel } from "./claude-dirs";
 import { type FleetPlacement, placementProblem } from "./fleet";
 import type { HarnessKind } from "./harness";
+import { accountsWords } from "./words/accounts";
 
 /** Every lifecycle point a hook can attach to. */
 export type HookEvent =
@@ -590,7 +591,7 @@ export const hookUnsupported = (
   harness: HookHarness,
   hook: Pick<FleetHook, "event" | "handler">
 ): string | undefined => {
-  const name = harness === "opencode" ? "OpenCode" : "pi";
+  const name = accountsWords.harnesses[harness];
   const events: readonly HookEvent[] = HOOK_EVENTS_ON[harness];
   if (!events.includes(hook.event)) {
     return `${name} raises no ${hook.event}: it runs hooks on ${events.join(", ")}.`;

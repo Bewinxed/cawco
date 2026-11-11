@@ -14,6 +14,8 @@ import {
   harnessNamed,
 } from "./harness";
 import { NO_REPLY_TOOL } from "./no-reply";
+import { unhandled } from "./unhandled";
+import { accountsWords } from "./words/accounts";
 import { delegateTypesWords } from "./words/delegate-types";
 
 /** One named preset. `name` is the key a `delegate` call's `type` asks for. */
@@ -703,12 +705,23 @@ export const denyToolsProblem = (
   harness: HarnessKind,
   names: readonly string[]
 ): string | undefined => {
-  if (names.length === 0 || harness === "claude") {
+  if (names.length === 0) {
     return undefined;
   }
-  const { unmapped } =
-    harness === "opencode" ? opencodeToolsFor(names) : piToolsFor(names);
-  const label = harness === "opencode" ? "OpenCode" : "pi";
+  let unmapped: readonly string[];
+  switch (harness) {
+    case "claude":
+      return undefined;
+    case "opencode":
+      ({ unmapped } = opencodeToolsFor(names));
+      break;
+    case "pi":
+      ({ unmapped } = piToolsFor(names));
+      break;
+    default:
+      return unhandled("harness", harness);
+  }
+  const label = accountsWords.harnesses[harness];
   return unmapped.length > 0
     ? `${label} has no tool for ${unmapped.map((name) => `“${name}”`).join(", ")}, so it cannot deny ${unmapped.length === 1 ? "it" : "them"}`
     : undefined;

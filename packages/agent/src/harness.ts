@@ -9,9 +9,13 @@
  * worktrees, spin-off bookkeeping, busy tracking and the routing, and defers
  * to whichever {@link Harness} a spawn names.
  *
- * Adding a harness: implement {@link Harness}, register it in
- * `./harnesses/index.ts`, and if it ships new UI concepts, teach the dashboard's
- * folding layer about them (they arrive as `raw` frames until then).
+ * Adding a harness: docs/harnesses.md is the checklist. It names every
+ * member below and where each harness meets it, the capabilities, and every
+ * place outside the adapters that names a harness; `bun run check`
+ * (scripts/harnesses-check.ts) fails when a member here has no row there.
+ * Implement {@link Harness}, register it in `./harnesses/index.ts`, and if
+ * it ships new UI concepts, teach the dashboard's folding layer about them
+ * (they arrive as `raw` frames until then).
  */
 import type {
   AskAnswer,

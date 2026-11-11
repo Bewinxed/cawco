@@ -236,6 +236,7 @@ import {
   boundaryProcId,
   isBoundaryOf,
   isJudgeOf,
+  isSessionProcKind,
   JUDGE_FORM_LENGTH,
   judgeProcId,
   parseProcId,
@@ -6554,7 +6555,7 @@ const attachedProcs = (
   const hook = `'${join(stateDir(id), "hook")}'`;
   return procs.filter((proc) => {
     const { kind } = parseProcId(proc.procId);
-    if (!(proc.alive && (kind === "claude" || kind === "pi"))) {
+    if (!(proc.alive && isSessionProcKind(kind))) {
       return false;
     }
     if (isPlace(id)) {

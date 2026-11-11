@@ -1396,7 +1396,7 @@ export type AccountMove =
        */
       compactFirst?: true;
       /** The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less. */
-      compactBy?: "opencode" | "pi";
+      compactBy?: Exclude<import("./harness").HarnessKind, "claude">;
       /**
        * The policy said to go on from a summary, which could not be written
        * for this move, in the hub's words: its harness's `/compact` ran

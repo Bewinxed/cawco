@@ -501,6 +501,7 @@ import type {
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
+import { everyOf } from "@cawco/core/every-of";
 import { hashFiles } from "@cawco/core/file-hash";
 import { type FleetItems, fleetItemsOf } from "@cawco/core/fleet-items";
 import {
@@ -1738,8 +1739,8 @@ const accountProvider = t.String({
  * the apps' generated schema has it.
  */
 const homeStore = t.Union(
-  (["claude", "pi", "opencode"] as const satisfies readonly HomeStore[]).map(
-    (store) => t.Literal(store)
+  everyOf<HomeStore>()(["claude", "pi", "opencode"]).map((store) =>
+    t.Literal(store)
   )
 );
 const strategyChoice = t.Object({

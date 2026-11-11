@@ -8,7 +8,7 @@
    * kind of money. Hours for a window or a day, the hub's days for a week or
    * a month. Table swaps both charts for their figures.
    */
-  import type { UsageSummary } from "@cawco/core/usage/types";
+  import type { UsageHarness, UsageSummary } from "@cawco/core/usage/types";
   import {
     TabItem,
     Tabs,
@@ -23,7 +23,7 @@
   import { hubMidnight, money, summaryReader } from "../usage";
   import ReadFailed from "./ReadFailed.svelte";
 
-  type Harness = "claude" | "opencode";
+  type Harness = UsageHarness;
 
   let {
     hourly,
