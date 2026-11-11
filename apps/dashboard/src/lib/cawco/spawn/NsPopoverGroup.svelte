@@ -110,6 +110,7 @@
       {#if shown}
         <Popover.Content
           data-ns-pop
+          preventOverflowTextSelection={false}
           align={shown.align}
           class={cn("ns-theme", glidePopoverVariants())}
           collisionPadding={inset}

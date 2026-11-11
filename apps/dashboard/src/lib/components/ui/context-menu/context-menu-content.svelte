@@ -22,6 +22,8 @@
     motion,
     child: callerChild,
     children,
+    /* Off: see popover-content.svelte. */
+    preventOverflowTextSelection = false,
     ...restProps
   }: ContextMenuPrimitive.ContentProps &
     FloatingSurfaceLooks & {
@@ -41,6 +43,7 @@
      the page has its pointer back at the dismissal (floating-presence). -->
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.Content
+    {preventOverflowTextSelection}
     class={cn(
       floatingSurface({ motion }),
       "relative z-(--layer-float) min-w-48 origin-(--bits-context-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",

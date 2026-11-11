@@ -137,6 +137,12 @@
     onCloseAutoFocus,
     child: callerChild,
     children,
+    /* Off, as the sheet has it: while this layer is mounted, bits-ui's
+       text-selection lock writes `user-select` on <body> at every
+       pointerdown inside it and again at pointerup, and each write restyles
+       the whole page (3,700 elements, 35-50 ms in Chromium on a session with
+       a component canvas open). */
+    preventOverflowTextSelection = false,
     ...restProps
   }: PopoverPrimitive.ContentProps &
     PopoverContentLooks &
@@ -223,6 +229,7 @@
      the page has its pointer back at the dismissal (floating-presence). -->
 <PopoverPortal {...portalProps}>
   <PopoverPrimitive.Content
+    {preventOverflowTextSelection}
     {align}
     class={cn(
       floatingSurface({ motion }),

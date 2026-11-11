@@ -109,6 +109,8 @@
     body: bodyLook,
     restoreScrollDelay = 0,
     modal = true,
+    /* Off: see popover-content.svelte. */
+    preventOverflowTextSelection = false,
     ...restProps
   }: WithoutChildrenOrChild<DialogPrimitive.ContentProps> &
     DialogContentLooks & {
@@ -179,6 +181,7 @@
        is open, and clears it at once (floating-presence). The sheet's slide
        travels its own height (`--sheet-away`, the kit sheet's). -->
   <DialogPrimitive.Content
+    {preventOverflowTextSelection}
     class={cn(tray.tray(), dialogContentVariants({ width }), className)}
     data-slot="dialog-content"
     interactOutsideBehavior={modal ? "close" : "ignore"}

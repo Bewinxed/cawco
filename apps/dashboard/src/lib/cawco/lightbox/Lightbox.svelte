@@ -205,6 +205,7 @@
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     <DialogPrimitive.Content
+      preventOverflowTextSelection={false}
       class="pointer-events-none fixed inset-0 z-(--layer-float) flex items-center justify-center p-space-4 outline-off"
       onEscapeKeydown={(event) => {
         event.preventDefault();

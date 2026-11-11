@@ -59,6 +59,8 @@
     motion,
     child: callerChild,
     children,
+    /* Off: see popover-content.svelte. */
+    preventOverflowTextSelection = false,
     ...restProps
   }: DropdownMenuPrimitive.ContentProps &
     DropdownMenuContentLooks &
@@ -90,6 +92,7 @@
 <!-- Mounted and drawn as the popover is (floating-body). -->
 <DropdownMenuPortal {...portalProps}>
   <DropdownMenuPrimitive.Content
+    {preventOverflowTextSelection}
     {align}
     class={cn(
       floatingSurface({ motion }),

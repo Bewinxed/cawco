@@ -584,6 +584,7 @@
      z-index is held inside: it stands on the floating layer itself
      (DESIGN.md, Stacking), or the card stood under the page's dock. -->
 <Content
+  preventOverflowTextSelection={false}
   data-glass-card={glass || undefined}
   {...kitSurface ? { motion: "hang" as const } : {}}
   {...glass ? { portalProps: { disabled: true } } : {}}

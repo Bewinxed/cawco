@@ -21,6 +21,8 @@
     overlayProps,
     restoreScrollDelay = 0,
     children,
+    /* Off: see popover-content.svelte. */
+    preventOverflowTextSelection = false,
     ...restProps
   }: WithoutChild<AlertDialogPrimitive.ContentProps> & {
     size?: "default" | "sm";
@@ -41,6 +43,7 @@
 <AlertDialogPortal {...portalProps}>
   <AlertDialogOverlay {...overlayProps} />
   <AlertDialogPrimitive.Content
+    {preventOverflowTextSelection}
     class={cn(
       tray.tray(),
       "group/alert-dialog-content data-[size=sm]:phone:max-w-80",
