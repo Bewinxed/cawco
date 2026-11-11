@@ -1469,15 +1469,14 @@ const LEAF_FINISHING =
   "Keep working while the brief still owes work, and work that does not depend on an open question or card goes on while it waits. An error, a timeout, a busy or failing tool, a locked file or an empty result is an ordinary obstacle: diagnose it and work through it with the access you have (wait and retry, fix the call, use another tool or source). A deliberate block is different: the workspace's boundary, access that was withheld, a file the brief says not to touch, a guardrail. Leave it alone, look for another safe way to finish, and when there is none, name it in finish_item's `blocked`. None of this lifts a confirmation the harness asks for a risky or destructive action.";
 
 /**
- * When and how a session draws a block in its reply (tsk-330): an `openui`
- * fence the transcript draws in place, versioned by its name, kept as a
- * page artifact when it should outlive the message. Every session hears it;
- * the components and syntax are the inline-block skill's (generated from
- * the block library, core openui-views.ts), as a decision page's are
- * LIBRARY.md's.
+ * When a session draws a block in its reply (tsk-330), opened with the
+ * medium it is drawn in. Every session hears it on every turn, so it holds
+ * only when a block is the right form and the pointer to the inline-block
+ * skill, which holds everything else (its fence, versions, keeping, sizes;
+ * generated from the block library, core openui-views.ts).
  */
 const BLOCKS =
-  'Blocks: when a reply compares options, tracks many items, or shows figures, a chart or a diagram, draw it as a block in place of a markdown table: a fence opened with ```openui name="a few plain words", holding an OpenUI Lang program the transcript draws in place. Load the inline-block skill before your first block. Prose stays prose, and a choice for the person goes through ask or a decision page. A later fence under the same name is the block\'s new version; the earlier one folds and points to it. When a block should outlive the message, keep it: artifact_create with kind "page", does "judge", the block\'s program as `program` and its name in lowercase words joined by dashes as `name`, then revise it there with artifact_update\'s statements.';
+  "Blocks: a block is a small UI drawn inline in this chat's transcript, between your reply's paragraphs, and read on a desk and on a phone. When a reply compares options, tracks many items, or shows figures, a chart or a diagram, draw it as a block in place of a markdown table. Prose stays prose, and a choice for the person goes through ask or a decision page. Load the inline-block skill before your first block.";
 
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(

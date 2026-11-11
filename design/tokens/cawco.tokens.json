@@ -4570,14 +4570,14 @@
     "c-diagram-small": {
       "$type": "dimension",
       "$value": {
-        "value": 240,
-        "unit": "px"
+        "value": 25,
+        "unit": "rem"
       },
-      "$description": "A diagram an agent sized `small` in its block (views-library Diagram, Diagram.svelte): a glance beside the words, a 3 to 6 bar chart or a pie, about a third of the reply's measure (c-measure, 72ch). Diagram.svelte holds it under its room (the reply, its size container), so a phone draws it at the screen's width less its padding; a `full` diagram takes the whole room, the turn's width.",
+      "$description": "A diagram an agent sized `small` in its block (views-library Diagram, Diagram.svelte): a glance beside the words, a 3 to 6 bar chart or a pie of short slice names. The narrowest at which Pele 1.6.0 keeps a pie's legend beside it rather than under it: measured at the 13px label size, from 345px for one-word slice names (\"Research\") and 390px for two (\"Delegated builds\"); there a bar chart of six one-word labels shows all six, where under 360px Pele drops every other one (it never turns them). Diagram.svelte holds it under its room (the reply, its size container), and a phone draws every size at the screen's width less its padding.",
       "$extensions": {
         "dev.cawco": {
           "platforms": ["web"],
-          "css": "30ch"
+          "css": "25rem"
         }
       }
     },

@@ -16,7 +16,8 @@
   library's Diagram is this one (a view, an agent's block in its reply).
 
   A Diagram given a size (views-library `DIAGRAM_SIZES`: its agent's pick,
-  or `fit` where its program names none, BlockDiagram.svelte) draws no
+  or `medium` in a block where its program names none, BlockDiagram.svelte)
+  draws no
   wider than that size's room: `small` and `medium` their token
   (`c-diagram-small`, `c-diagram-medium`) under its size container's width,
   `full` that whole width (`100cqi`: in a reply, MessageBody's, which takes
@@ -24,10 +25,17 @@
   phone every size that whole width, the screen's less its padding. An
   unseen ruler of that width tells it the room in px. Pele lays a drawing
   wider than the room out again at it (`maxWidth`: an xychart, a pie and a
-  timeline re-lay their axes and words to it, pele.run/api), and one that
-  still stands wider (a flowchart, which keeps its layout) is scaled down to
-  it, its height following its viewBox; a drawing narrower than the room
-  stands at its natural size, never scaled up. Its well hugs the drawing.
+  timeline re-lay their axes and words to it, pele.run/api); in a block a
+  left-to-right flowchart wider than its room is drawn top to bottom
+  (`autoDirection`, at any width: the owner's pin on a sideways-scrolling
+  flow), and one that still stands wider is scaled down to
+  it, its height following its viewBox, but never below the scale that
+  keeps its words at the meta size (`--text-meta` over the label size Pele
+  measured them in): past that floor it stands wider than its room and its
+  well scrolls it sideways (tsk-330: "nothing scrolls sideways but a
+  diagram in its well"), as a decision page's does. A drawing narrower than
+  the room stands at its natural size, never scaled up. Its well hugs the
+  drawing.
 -->
 <script lang="ts">
   import { CANVAS_DIAGRAMS } from "@cawco/core/decisions";
@@ -43,14 +51,14 @@
   let {
     props,
     statementId,
-    fit,
+    block = false,
   }: OpenUIRenderProps<{
     mermaid: unknown;
     caption?: unknown;
     size?: unknown;
   }> & {
-    /** The size it takes where its program names none: a block's diagram fits the reply (BlockDiagram). None on a decision page or a view, where an unsized one stands at its natural size. */
-    fit?: DiagramSize;
+    /** It stands in an agent's block (BlockDiagram): with no size it fits the reply (`medium`), and a left-to-right drawing wider than its room is drawn top to bottom. On a decision page or a view an unsized one stands at its natural size, drawn as written. */
+    block?: boolean;
   } = $props();
 
   /** The room each size draws in: its token under the size container's width, or that whole width; on a phone every size takes the whole width. */
@@ -59,17 +67,42 @@
     medium: "w-c-diagram-medium max-w-[100cqi]",
     full: "w-[100cqi]",
   };
-  const size = $derived(DIAGRAM_SIZES.find((one) => one === props.size) ?? fit);
+  const size = $derived(
+    DIAGRAM_SIZES.find((one) => one === props.size) ??
+      (block ? "medium" : undefined)
+  );
   /** Its size's room, px, as its ruler measures it; null until measured. */
   let room = $state<number | null>(null);
+  /** The meta text size, px, as the ruler's meta line resolves it: a scaled drawing's words stay at least this size. */
+  let meta = $state(0);
   const measureRoom = frameSize(
-    (ruler: HTMLElement) => Math.floor(ruler.getBoundingClientRect().width),
-    (width: number) => {
+    (ruler: HTMLElement) => ({
+      width: Math.floor(ruler.getBoundingClientRect().width),
+      meta: Number.parseFloat(
+        getComputedStyle(ruler.firstElementChild ?? ruler).fontSize
+      ),
+    }),
+    ({ width, meta: least }: { width: number; meta: number }) => {
+      meta = least;
       if (width > 0 && width !== room) {
         room = width;
       }
     }
   );
+
+  /**
+   * The width a drawing `width` px wide stands at: its natural size with no
+   * room, else scaled down to its room no further than `least`, the scale
+   * at which its words stand at the meta size; never scaled up.
+   */
+  const shownWidth = (
+    width: number,
+    cap: number | undefined,
+    least: number
+  ): number =>
+    cap === undefined
+      ? width
+      : Math.min(width, Math.max(cap, width * Math.min(1, least || 0)));
 
   /** Whether it can open as a canvas: on a decision page, of a type the converter draws as elements (core `CANVAS_DIAGRAMS`). */
   const drawsAsCanvas = (named: string | null): boolean =>
@@ -89,6 +122,7 @@
     const element = box;
     // A sized one draws once its room is known, and again as it changes.
     const cap = size ? room : undefined;
+    const least = meta;
     if (!element || cap === null) {
       return;
     }
@@ -102,20 +136,25 @@
       }
       type = pele.detectType(source);
       try {
+        const labels = Number.parseFloat(getComputedStyle(element).fontSize);
         const options = {
           links: false,
           images: false,
           autoDirection: false,
           responsive: false,
           fontFamily: getComputedStyle(element).fontFamily,
-          fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
+          fontSize: labels,
         };
         let drawing = await pele.renderAsync(source, options);
         if (cap !== undefined && drawing.width > cap) {
-          // Wider than its room: laid out again at it.
+          // Wider than its room: laid out again at it, and in a block turned top to bottom at any width (Pele turns one only under its breakpoint).
           drawing = await pele.renderAsync(source, {
             ...options,
             maxWidth: cap,
+            ...(block && {
+              autoDirection: true,
+              directionBreakpoint: Number.POSITIVE_INFINITY,
+            }),
           });
         }
         if (gone) {
@@ -126,8 +165,8 @@
         const svg = element.querySelector("svg");
         const { width, height } = drawing;
         if (svg && width > 0 && height > 0) {
-          // At its natural size, or scaled down to its room: its height follows its viewBox.
-          const shown = cap === undefined ? width : Math.min(width, cap);
+          // Its height follows its viewBox.
+          const shown = shownWidth(width, cap, least / labels);
           svg.style.inlineSize = `${shown}px`;
           svg.style.blockSize = "auto";
           drawn = shown;
@@ -214,7 +253,9 @@
       ]}
       data-slot="diagram-room"
       {@attach measureRoom}
-    ></div>
+    >
+      <span class="type-meta"></span>
+    </div>
     {@render well()}
   </div>
 {:else}

@@ -128,11 +128,11 @@ export const Chart = {
     before: "Spend per week, from the hub's records:",
     after: "Week four's rise is the design runs, which ran with no cap.",
     source: `root = Column([chart])
-chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Delegated work, last four weeks")`,
+chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Hub records, last four weeks")`,
   },
 };
 
-/** A small pie beside the words, a glance at where the week went. */
+/** A small pie beside the words, its legend beside it: a glance at where the week went. */
 export const SmallChart = {
   args: {
     name: "Where the week went",
@@ -141,7 +141,7 @@ export const SmallChart = {
     after:
       "Review stayed small because the merge checks caught the two failures before anyone read them.",
     source: `root = Column([chart])
-chart = Diagram("pie\\n\\"Design\\" : 42\\n\\"Build\\" : 31\\n\\"Review\\" : 12\\n\\"Research\\" : 9", "Hours by kind of work, this week", "small")`,
+chart = Diagram("pie title Hours by kind\\n\\"Design\\" : 42\\n\\"Build\\" : 31\\n\\"Review\\" : 12\\n\\"Research\\" : 9", "Session records, this week", "small")`,
   },
 };
 
@@ -154,12 +154,24 @@ export const MediumChart = {
     after:
       "The dip in week seven is the hub migration, when merges were held for two days.",
     source: `root = Column([chart])
-chart = Diagram("xychart-beta\\ntitle \\"Merged changes per week\\"\\nx-axis [W1, W2, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12]\\ny-axis \\"Merged\\"\\nline [18, 22, 21, 27, 31, 30, 14, 33, 38, 41, 39, 46]", "Merged to main, August to November", "medium")`,
+chart = Diagram("xychart-beta\\ntitle \\"Merged changes per week\\"\\nx-axis [W1, W2, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12]\\ny-axis \\"Merged\\"\\nline [18, 22, 21, 27, 31, 30, 14, 33, 38, 41, 39, 46]", "August to November", "medium")`,
   },
 };
 
-/** A dense flow the agent drew full: the reply takes the turn's width for it. */
+/** A timeline drawn full: the reply takes the turn's width for it. */
 export const FullDiagram = {
+  args: {
+    name: "Inline blocks timeline",
+    asked: "how long did inline blocks take, end to end?",
+    before: "Nine working days from the pitch to main:",
+    after: "The build ran two pieces side by side, which saved two days.",
+    source: `root = Column([plan])
+plan = Diagram("gantt\\ntitle Inline blocks, pitch to main\\ndateFormat YYYY-MM-DD\\nsection Shape\\nPitch drawn :a1, 2026-11-02, 2d\\nOwner picks :a2, after a1, 1d\\nsection Build\\nLibrary and prompt :b1, after a2, 2d\\nTranscript block :b2, after a2, 3d\\nKeep as artifact :b3, after b2, 2d\\nsection Land\\nMerge checks :c1, after b3, 1d\\nShipped :milestone, after c1, 0d", "Session records, November", "full")`,
+  },
+};
+
+/** A long flow the agent wrote top to bottom, so it fits the reply's column. */
+export const LongFlow = {
   args: {
     name: "How a delegate lands",
     asked: "walk me through what happens between delegate and main",
@@ -167,6 +179,18 @@ export const FullDiagram = {
     after:
       "A failed check or a conflict goes back to the same session, which fixes and finishes again.",
     source: `root = Column([flow])
-flow = Diagram("flowchart LR\\nA[Brief] --> B[Workspace cut]\\nB --> C[Session reads the code]\\nC --> D[Edits and commits]\\nD --> E[finish_item]\\nE --> F[Rebase onto main]\\nF --> G{Merge checks}\\nG -->|pass| H[Pushed to main]\\nG -->|fail| I[Back to the session]\\nF -->|conflict| I\\nI --> D\\nH --> J[Report to parent]", "A delegate's path to main", "full")`,
+flow = Diagram("---\\ntitle: A delegate's path to main\\n---\\nflowchart TB\\nA[Brief] --> B[Workspace cut]\\nB --> C[Session reads the code]\\nC --> D[Edits and commits]\\nD --> E[finish_item]\\nE --> F[Rebase onto main]\\nF --> G{Merge checks}\\nG -->|pass| H[Pushed to main]\\nG -->|fail| I[Back to the session]\\nF -->|conflict| I\\nI --> D\\nH --> J[Report to parent]")`,
+  },
+};
+
+/** A short flow written left to right: on a phone it turns top to bottom. */
+export const ShortFlow = {
+  args: {
+    name: "Delegate in four steps",
+    asked: "what's the short version?",
+    before: "Four steps, each waiting on the one before:",
+    after: "Everything else is a way back into the second step.",
+    source: `root = Column([flow])
+flow = Diagram("flowchart LR\\nA[Brief] --> B[Delegate works] --> C[Merge checks] --> D[Main]")`,
   },
 };

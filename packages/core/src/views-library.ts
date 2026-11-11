@@ -444,7 +444,7 @@ export const viewLibrary = <C>(
         .enum(DIAGRAM_SIZES)
         .optional()
         .describe(
-          'How wide it draws: "small" for a glance beside the words (a 3 to 6 bar chart, a pie), "medium" for a chart someone reads, "full" for a dense diagram (a flowchart or sankey of many nodes). Left out, it fits the reply\'s words. Never wider than it draws on its own.'
+          'Its width on a desk: "small" about 400px, "medium" the reply\'s text column, "full" the turn\'s width. Left out, it fits the reply.'
         ),
     })
   );
@@ -616,7 +616,7 @@ table = Table(["Pull request", "Owner", "Checks"], [["Inline blocks", "Ana", Bad
   fenced(
     "Weekly spend",
     `root = Column([chart])
-chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Delegated work, last four weeks", "small")`
+chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Hub records, last four weeks", "small")`
   ),
 ];
 
@@ -627,20 +627,23 @@ chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3,
  * inline-block skill an agent loads before its first block.
  */
 export const blockPromptOptions = (): PromptOptions => ({
-  preamble: `You draw a CawCo block: one OpenUI Lang program over CawCo's components, written in your reply as a fenced code block whose info string is \`${BLOCK_FENCE}\`. The transcript draws it in place of the code. The fence holds the program alone.`,
+  preamble: `A block is a small UI drawn inline in a chat transcript, between your reply's paragraphs: about one text column wide (580px) on a desk, the screen's width (about 360px) on a phone. The same block is read on both, so it holds up at both: choose forms that reflow, never fixed sizes. Its components reflow by themselves: a Row wraps, a Table turns each row into a card on a phone, and a Diagram fits its size, takes the screen's width on a phone, and turns a left-to-right flow too wide for its room top to bottom.
+
+Write it in your reply as a fenced code block opened with \`${BLOCK_FENCE}\`, a few plain words the person would call it, holding one OpenUI Lang program and nothing else: the transcript draws it in place of the code, and a fence with no name stays code.`,
   toolCalls: false,
   bindings: false,
   builtinFunctions: false,
   examples: BLOCK_EXAMPLES,
   additionalRules: [
-    'Name every block in its fence: `openui name="…"`, a few plain words the person would call it. A fence with no name draws as code.',
-    "A later fence with the same name in the same conversation is the block's newer version: the earlier one folds and points to it. Reuse the name to revise a block; a new name is a new block.",
-    "Write the data into the program as literals: the figures, rows and words you have now. There is no Query() or Mutation(), and no $variables.",
-    "A block shows; it asks nothing. There are no buttons, inputs or links: a choice goes through `ask` or a decision page.",
-    "No URLs, images or markup in its words: its text is plain. A Diagram's Mermaid is the one place for diagram syntax.",
-    "A heading is a Text in the program, where the block needs one; the block draws no title of its own.",
-    `Charts are Diagrams: ${PELE_CHARTS}, in Mermaid's own syntax.`,
-    'A Diagram\'s third argument is its size. "small": a glance beside the words, such as a 3 to 6 bar chart or a pie. "medium": a chart someone reads. "full": a dense diagram, such as a flowchart or sankey of many nodes. Left out, it fits the reply\'s words. A diagram never draws wider than it does on its own, and the block is only as wide as what it holds.',
-    "Use only the components listed. A name outside them is dropped and reported, never drawn.",
+    "Revise a block by writing a later fence under the same name: it becomes the block's newer version, and the earlier one folds and points to it. A new name is a new block.",
+    'Keep a block past this message as a page: artifact_create with kind "page", does "judge", the program as `program` and its name in lowercase words joined by dashes as `name`; revise it there with artifact_update\'s statements.',
+    "Write every figure, row and word as a literal: the data you have now.",
+    "A block shows information; a choice for the person goes through `ask` or a decision page.",
+    "Every word in a block is plain text; diagram syntax lives in a Diagram's Mermaid.",
+    "The block draws no title of its own: a heading is a Text in the program.",
+    'A Diagram\'s size sets its width on a desk: "small" about 400px, beside the words (a pie of a few short slice names, up to six bars); "medium" the text column, about 580px, the size when left out; "full" the whole turn, about 1100px, for a dense diagram. On a phone every size is the screen\'s width.',
+    "A chart's name is its Mermaid `title` (a flowchart's in a `---\\ntitle: …\\n---` header), drawn as its heading; the Diagram's caption is a meta line under it for the source or the period, or left out.",
+    "Pele, the renderer, lays a chart out at its width: in under about 400px a pie's legend moves under it and an axis shows every other label (it never turns them). A left-to-right diagram too wide for its room is redrawn top to bottom, and one still too wide shrinks while its words stay readable, then scrolls sideways.",
+    "Use only the components listed: a name outside them is dropped and reported.",
   ],
 });
