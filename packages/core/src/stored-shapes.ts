@@ -3102,6 +3102,7 @@ const NeutralSessionInfoShape = declared(
     harness: HarnessKindShape,
     lastModified: z.number(),
     sessionId: z.string(),
+    startedBy: z.enum(["person", "program"]).optional(),
     summary: z.string().optional(),
     tag: z.string().optional(),
     wroteAt: z.number().optional(),

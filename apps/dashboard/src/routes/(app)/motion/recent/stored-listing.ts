@@ -7,8 +7,13 @@
  * The bench stands them in its client (dev `standCatalog`); the
  * stored-transcripts probe hands the same listing to the hub's find.
  *
- * - `inStorefront`, `inSocials` and `inPaperwork`: in a project's folder (a
- *   subfolder of one, for socials), so in Recent under it;
+ * - `inStorefront`: Claude Code's, typed in a terminal in a project's
+ *   folder, so in Recent under it;
+ * - `inSocials` (OpenCode's, in a subfolder of a project's) and
+ *   `inPaperwork` (pi's): in a project's folder, and their harness records
+ *   nothing that says a person started them, so only Jump finds them;
+ * - `byProgram`: Claude Code's, in a project's folder, run by a program
+ *   (`claude -p`), so only Jump finds it;
  * - `inWorkspace` (a workspace checkout) and `inDownloads`: in no project's
  *   folder, so only Jump finds them;
  * - `behindListed`: the transcript of a session the hub lists ("Checkout
@@ -19,6 +24,10 @@
  *   no longer lists (the bench's: a session the person stopped days ago,
  *   its two delegates, and a check nobody wrote in), each that session's
  *   row or none, never a stored one.
+ *
+ * Each of Claude Code's says who started it (`startedBy`, from its
+ * transcript's `entrypoint`): a person, or a program for what CawCo and
+ * `claude -p` ran.
  */
 import type { NeutralSessionInfo } from "@cawco/core/harness";
 import {
@@ -35,6 +44,7 @@ export const STORED = {
   inStorefront: "0c1a0d00-5f0e-4b6a-9d2e-3a7c1b2e4f01",
   inSocials: "ses_7f3a9c2b1e0d4a6b8c5e2f1a",
   inPaperwork: "01a1c445-5f77-73e8-9c29-b9f35dc2c149",
+  byProgram: "0c1a0d00-5f0e-4b6a-9d2e-3a7c1b2e4f03",
   inWorkspace: "0c1a0d00-5f0e-4b6a-9d2e-3a7c1b2e4f02",
   inDownloads: "01a1c445-5f77-73e8-9c29-b9f35dc2c150",
 } as const;
@@ -55,6 +65,7 @@ export function storedListing(
       ...behindOlder.map((sessionId, n): NeutralSessionInfo => ({
         sessionId,
         harness: "claude",
+        startedBy: "program",
         firstPrompt: "Move last quarter's invoices onto the new ledger",
         cwd: "/srv/storefront",
         fileSize: 512_000 + n,
@@ -65,6 +76,7 @@ export function storedListing(
       {
         sessionId: STORED.inStorefront,
         harness: "claude",
+        startedBy: "person",
         summary: "Idempotent payment webhooks",
         firstPrompt:
           "Stripe retries the payment_intent.succeeded webhook and we charge twice; make the handler idempotent",
@@ -75,6 +87,17 @@ export function storedListing(
         // The person's last prompt; the agent's run went on after it.
         wroteAt: now - 50 * MINUTE,
         lastModified: now - 4 * MINUTE,
+      },
+      {
+        sessionId: STORED.byProgram,
+        harness: "claude",
+        startedBy: "program",
+        firstPrompt: "Summarise yesterday's failed orders as JSON",
+        cwd: "/srv/storefront",
+        fileSize: 18_204,
+        createdAt: now - 6 * HOUR,
+        wroteAt: now - 6 * HOUR,
+        lastModified: now - 6 * HOUR + MINUTE,
       },
       {
         sessionId: STORED.inSocials,
@@ -88,6 +111,7 @@ export function storedListing(
       {
         sessionId: STORED.inWorkspace,
         harness: "claude",
+        startedBy: "person",
         summary: "Probe kit: cut the flaky waits",
         firstPrompt: "The probe kit's waits flake under load; cut them",
         gitBranch: "ws/1a2b3c4d",
@@ -100,6 +124,7 @@ export function storedListing(
       {
         sessionId: behindListed,
         harness: "claude",
+        startedBy: "program",
         summary: "Checkout returns 404 after payment",
         firstPrompt: "Checkout returns 404 after payment",
         cwd: "/srv/storefront",
@@ -111,6 +136,7 @@ export function storedListing(
       {
         sessionId: behindDone,
         harness: "claude",
+        startedBy: "program",
         summary: "Refund flow edge cases",
         firstPrompt: "Refund flow edge cases",
         cwd: "/srv/storefront",

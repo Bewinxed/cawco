@@ -146,7 +146,12 @@
   import { deriveModelEntries, type ModelEntry } from "./model-entries";
   import { lastSpawnAt, lastUsedAt, recordModelUse } from "./modelUse.svelte";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
-  import { placeOf, type SpawnPrefill, spawning } from "./new-session.svelte";
+  import {
+    landResume,
+    placeOf,
+    type SpawnPrefill,
+    spawning,
+  } from "./new-session.svelte";
   import type {
     LeadChip,
     MachineItem,
@@ -684,7 +689,7 @@
       : `${cwd.trim().replace(/\/+$/u, "")}/${repoPath(repo).split("/").pop() ?? ""}`
   );
   const project = $derived(cawco.projects.find((row) => row.id === projectId));
-  /** A fork its source had no mode for (spawn/new-session `startFork`): Start forks it. Never on a continuation. */
+  /** A fork its source had no mode for (spawn/new-session `startFork`): Start forks it, or resumes it when it is a stored transcript (`resumes`). Never on a continuation. */
   const forking = $derived(continueFrom ? undefined : prefill?.fork);
   /**
    * The project of the session being continued: the hub starts the new
@@ -1178,7 +1183,7 @@
       return spawnWords.form.continue;
     }
     if (forking) {
-      return spawnWords.form.fork;
+      return forking.resumes ? spawnWords.form.resume : spawnWords.form.fork;
     }
     if (moving) {
       return moveStep ? spawnWords.moveIt : spawnWords.moveAndStart;
@@ -1537,11 +1542,9 @@
     const where =
       cawco.machines.find((row) => row.machineId === forking.machineId)
         ?.hostname ?? forking.machineId;
-    return spawnWords.form.forkWhere(
-      forking.harness,
-      where,
-      tilde(forking.cwd)
-    );
+    return (
+      forking.resumes ? spawnWords.form.resumeWhere : spawnWords.form.forkWhere
+    )(forking.harness, where, tilde(forking.cwd));
   }
   function validate() {
     const held = forkHeld();
@@ -1894,9 +1897,21 @@
       extras: draft.extras,
     });
     if (forked.kind === "unchosen") {
-      throw new Error(spawnWords.form.forkNeedsMode);
+      throw new Error(
+        source.resumes
+          ? spawnWords.form.resumeNeedsMode
+          : spawnWords.form.forkNeedsMode
+      );
     }
-    return answeredOr(target, forked, spawnWords.form.forkUnknown);
+    const started = answeredOr(
+      target,
+      forked,
+      source.resumes
+        ? spawnWords.form.resumeUnknown
+        : spawnWords.form.forkUnknown
+    );
+    landResume(source, started);
+    return started;
   }
   /**
    * What holds Start before anything is sent, saying why: a file still on
@@ -2126,7 +2141,12 @@
     if (continueFrom) {
       return spawnWords.continueSession;
     }
-    return forking ? spawnWords.forkSession : commonWords.newSession;
+    if (forking) {
+      return forking.resumes
+        ? spawnWords.resumeSession
+        : spawnWords.forkSession;
+    }
+    return commonWords.newSession;
   });
   /** The form's name as its head says it, for a frame that draws the head (the sheet). */
   export function title(): string {

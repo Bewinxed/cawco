@@ -28,9 +28,13 @@
  * one the hub answers with (`cawco.olderInstances`: the person's own
  * sessions the board no longer lists, and what nests under them), listed
  * by the one rule above, a delegate under its session. Only a transcript no
- * session wraps stands as a stored row, under its project: Your turn, never
- * unread, and no Done (the hub keeps nothing for a transcript it never ran
- * to archive it by). One outside every project's folder is found in Jump's
+ * session wraps, that its harness records a person started (core
+ * `NeutralSessionInfo.startedBy`: Claude Code's from a terminal, the desktop
+ * app or the IDE; none of OpenCode's or pi's, which record nothing that
+ * tells a typed session from a program's run), stands as a stored row,
+ * under its project: Your turn, never unread, and no Done (the hub keeps
+ * nothing for a transcript it never ran to archive it by). Every other one
+ * (a program's run, one outside every project's folder) is found in Jump's
  * search.
  *
  * Order: the person's last message to it (`wroteAt`, a stored transcript's
@@ -270,9 +274,13 @@ class StoredTranscripts {
       .join("\n")
   );
 
-  /** The ones the hub said no session wraps. */
+  /** The ones a person started that the hub said no session wraps. */
   readonly entries = $derived(
-    this.#inProjects.filter((entry) => cawco.storedAlone(entry.info.sessionId))
+    this.#inProjects.filter(
+      (entry) =>
+        entry.info.startedBy === "person" &&
+        cawco.storedAlone(entry.info.sessionId)
+    )
   );
 }
 

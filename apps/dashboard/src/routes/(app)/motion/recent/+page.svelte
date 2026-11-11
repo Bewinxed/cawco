@@ -3,6 +3,7 @@
   import type { NeutralSessionInfo } from "@cawco/core/harness";
   import type {
     InstanceRow,
+    NamedSpawn,
     SessionPulse,
     StoredSessions,
     TabNamed,
@@ -21,7 +22,9 @@
    * three delegates (one failed), and thirty more for the regroup's 40-row
    * recording (`?rows=40`, the default; `?rows=10` the sketch's alone).
    *
-   * `window.__rb` drives what the hub would: `status(id, "working" |
+   * `?stay` keeps the bench's hub standing once its page is left (a tab
+   * opened from the rail), until a reload. `window.__rb` drives what the
+   * hub would: `status(id, "working" |
    * "needs" | "yours" | "wakes")` moves a session between the list's three
    * words (a pulse, a parked ask, the turn's end, a turn that ended waiting
    * on its own work); `wrote(id)` is the person writing to it; `ids` names
@@ -29,9 +32,12 @@
    * here as the hub would: `doneAt` on its row.
    *
    * The machines' stored transcripts stand in too (stored-listing.ts), as
-   * each machine's listing answers them: three in a project's folder, two
-   * in none, one behind a listed session and one behind a session the
-   * person pressed Done on ("Refund flow edge cases", which stays hidden).
+   * each machine's listing answers them: one a person typed in a terminal
+   * in a project's folder (in Recent), three in a project's folder that
+   * nothing says a person started (OpenCode's, pi's, a `claude -p` run:
+   * Jump's alone), two in no project's folder, one behind a listed session
+   * and one behind a session the person pressed Done on ("Refund flow edge
+   * cases", which stays hidden).
    * Five more are behind sessions the board no longer lists, which the
    * bench answers for as the hub does (`POST /api/instances/stored`): a
    * session the person stopped four days ago ("Move invoices to the new
@@ -42,7 +48,9 @@
    * transcripts is stored under its harness key, never its id, and the
    * bench answers what a tab's id names as the hub does (`POST
    * /api/instances/named`), so a tab opened by such a key takes the
-   * session's id.
+   * session's id. A start the page asks for is taken as the hub takes one
+   * (its row opened; `__rb.spawns`, then `__rb.commands` for what is sent
+   * to it), so a first send on a stored transcript's page resumes it here.
    */
 
   /** The client's stores as a bench writes them (dev `__cawcoDebug`). */
@@ -52,7 +60,10 @@
     frame: (frame: PulseFrame | PermissionRequestFrame | object) => void;
     leaveHub: () => void;
     standCatalog: (machineId: string, sessions: NeutralSessionInfo[]) => void;
-    standHub: (answer: () => void) => void;
+    standHub: (
+      answer: (instanceId: string, kind: string, intent: unknown) => void,
+      spawn: (machineId: string, spawn: NamedSpawn) => void
+    ) => void;
     state: { machines: unknown[]; projects: unknown[]; projectsRead: boolean };
   }
   const debug = (globalThis as unknown as { __cawcoDebug: Bench }).__cawcoDebug;
@@ -424,6 +435,10 @@
     adopt();
   };
 
+  /** What the page asked the bench's hub to do: each start, and each command after it. */
+  const spawns: { machineId: string; spawn: NamedSpawn }[] = [];
+  const commands: { instanceId: string; kind: string; intent: unknown }[] = [];
+
   /** Moves a session to one of the list's words, as the hub's frames would. */
   function status(id: string, doing: Doing) {
     settle(id);
@@ -530,6 +545,8 @@
   const real = (globalThis as unknown as { __rbReal?: Real }).__rbReal;
   /** `?fleet`: the page is Fleet on a desk, beside the rail. */
   const fleet = params.has("fleet");
+  /** `?stay`: the bench's hub outlives its page. */
+  const stays = params.has("stay");
 
   function standReal(from: Real): void {
     debug.state.machines = from.agents;
@@ -611,7 +628,31 @@
       answerStored(input, init) ??
       answerNamed(input, init) ??
       fetchWas(input, init);
-    debug.standHub(() => undefined);
+    debug.standHub(
+      (instanceId, kind, intent) => {
+        commands.push({ instanceId, kind, intent });
+      },
+      (machineId, spawn) => {
+        // The hub opens the row a start asks for: a resume's on the
+        // conversation it names, the person's own.
+        spawns.push({ machineId, spawn });
+        rows = [
+          ...rows,
+          {
+            ...rowOf(spawn.instanceId, {
+              title: "Idempotent payment webhooks",
+              project: "p-storefront",
+              doing: "working",
+              ago: 0,
+            }),
+            cwd: spawn.cwd,
+            machineId,
+            sessionId: spawn.resume?.sessionKey ?? spawn.instanceId,
+          },
+        ];
+        adopt();
+      }
+    );
     if (real) {
       standReal(real);
     } else {
@@ -621,6 +662,8 @@
       ids: Object.fromEntries(
         SKETCH.map(([letter], n) => [letter, idOf(n + 1)])
       ),
+      commands,
+      spawns,
       done: DONE,
       failed: FAILED,
       older: OLDER,
@@ -632,6 +675,12 @@
     };
     Object.assign(window, { __rb: bench });
     return () => {
+      // `?stay`: the bench's hub stands after its page is left, so a
+      // session's own page (a tab it opens, a transcript it resumes) is
+      // operated on it; a reload ends it.
+      if (stays) {
+        return;
+      }
       window.fetch = fetchWas;
       Reflect.deleteProperty(window, "__rb");
       debug.leaveHub();

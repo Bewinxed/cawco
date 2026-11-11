@@ -881,11 +881,47 @@ const jsonlNames = async (dir: string): Promise<string[]> => {
   }
 };
 
-/** A session's info, read from its transcript's two ends wherever it is stored. */
+/**
+ * The entrypoints a person starts Claude Code by: its terminal, its desktop
+ * app (on Anthropic's API or another provider's) and its VS Code extension.
+ * Every other the CLI knows is a program's: the Agent SDKs (`sdk-ts`,
+ * `sdk-py`), `claude -p` (`sdk-cli`), an MCP server, a GitHub action, a
+ * remote or scheduled run.
+ */
+const PERSON_ENTRYPOINTS: ReadonlySet<string> = new Set([
+  "cli",
+  "claude-desktop",
+  "claude-desktop-3p",
+  "claude-vscode",
+]);
+
+/**
+ * Who started the transcript these records are of (core
+ * `NeutralSessionInfo.startedBy`), by the `entrypoint` the CLI writes on
+ * each record; nothing when no record carries one (a transcript from
+ * before the field).
+ */
+const startedBy = (
+  entries: readonly SessionStoreEntry[] | null
+): Pick<NeutralSessionInfo, "startedBy"> => {
+  for (const entry of entries ?? []) {
+    const { entrypoint } = entry as { entrypoint?: unknown };
+    if (typeof entrypoint === "string") {
+      return {
+        startedBy: PERSON_ENTRYPOINTS.has(entrypoint) ? "person" : "program",
+      };
+    }
+  }
+  return {};
+};
+
+/** A session's info, read from its transcript's two ends wherever it is stored, and who started it ({@link startedBy}), read off the same ends. */
 const sessionInfoAt = async (
   file: string,
   sessionId: string
-): Promise<SDKSessionInfo | undefined> => {
+): Promise<
+  (SDKSessionInfo & Pick<NeutralSessionInfo, "startedBy">) | undefined
+> => {
   let modified: number;
   try {
     modified = (await stat(file)).mtimeMs;
@@ -895,8 +931,17 @@ const sessionInfoAt = async (
     }
     throw error;
   }
+  const store = transcriptStore(file);
+  let started: Pick<NeutralSessionInfo, "startedBy"> = {};
   const info = await getSessionInfo(sessionId, {
-    sessionStore: transcriptStore(file),
+    sessionStore: {
+      ...store,
+      load: async (key) => {
+        const ends = await store.load(key);
+        started = startedBy(ends);
+        return ends;
+      },
+    },
   });
   // A store has no modification time to give, so the SDK's answer says when
   // it was read: the transcript's own is what the SDK's listing reports.
@@ -904,7 +949,11 @@ const sessionInfoAt = async (
   // transcript shares the decoded text it was parsed from, so keeping a field
   // kept that text (130 MB across 1,500 listed sessions, measured).
   return (
-    info && { ...structuredClone(info), lastModified: Math.floor(modified) }
+    info && {
+      ...structuredClone(info),
+      lastModified: Math.floor(modified),
+      ...started,
+    }
   );
 };
 
@@ -4591,10 +4640,12 @@ class ClaudeSession implements HarnessSession {
 }
 
 const toInfo = (
-  info: import("@anthropic-ai/claude-agent-sdk").SDKSessionInfo
+  info: import("@anthropic-ai/claude-agent-sdk").SDKSessionInfo &
+    Pick<NeutralSessionInfo, "startedBy">
 ): NeutralSessionInfo => ({
   sessionId: info.sessionId,
   harness: "claude",
+  ...(info.startedBy === undefined ? {} : { startedBy: info.startedBy }),
   ...(info.summary === undefined ? {} : { summary: info.summary }),
   lastModified: info.lastModified,
   ...(info.fileSize === undefined ? {} : { fileSize: info.fileSize }),
@@ -5293,7 +5344,11 @@ class ClaudeHarness implements Harness {
     });
     const ownDated = await listingRead(own, async (info) => {
       const file = await claudeSessionFile(info.sessionId, dir);
-      return { ...toInfo(info), ...(file ? await wroteIn(file) : {}) };
+      return {
+        ...toInfo(info),
+        ...(file ? startedBy(await transcriptEnds(file)) : {}),
+        ...(file ? await wroteIn(file) : {}),
+      };
     });
     return [
       ...ownDated,

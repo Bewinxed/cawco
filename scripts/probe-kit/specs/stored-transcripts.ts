@@ -14,9 +14,11 @@
  *      result, never a second.
  *
  * Recent (the bench at 1440, grouped by project):
- * (r1) a transcript in a project's folder (a subfolder of one too) stands
- *      under that project, at its place: after the session the person last
- *      wrote to before it, and before the older ones;
+ * (r1) a transcript a person started in a project's folder (Claude Code's,
+ *      from a terminal) stands under that project, at its place: after the
+ *      session the person last wrote to before it, and before the older
+ *      ones; one its harness does not say a person started (OpenCode's,
+ *      pi's, Claude Code's run by a program) is absent;
  * (r2) one in no project's folder is absent;
  * (r3) one behind a listed session adds no row: that session has its one;
  * (r4) one behind a session pressed Done stays hidden;
@@ -335,11 +337,13 @@ async function recent(
     JSON.stringify(inGroup.map((one) => one.text.slice(0, 40)))
   );
   check(
-    "r1: the OpenCode transcript in a subfolder of socials' stands under socials, and the pi one under Paperwork",
-    where(`stored:${OBELISK}:${STORED.inSocials}`)?.group ===
-      "project:p-socials" &&
-      where(`stored:${MINI}:${STORED.inPaperwork}`)?.group ===
-        "project:p-paperwork",
+    "r1: the transcripts in a project's folder that nothing says a person started (OpenCode's in socials, pi's in Paperwork, Claude Code's run by a program in storefront) are absent",
+    !keys.some(
+      (key) =>
+        key.includes(STORED.inSocials) ||
+        key.includes(STORED.inPaperwork) ||
+        key.includes(STORED.byProgram)
+    ),
     JSON.stringify(rows.filter((one) => one.key.startsWith("stored:")))
   );
   check(

@@ -25,10 +25,11 @@ import {
 } from "../client.svelte";
 import { readJson, writeJson } from "../storage";
 import { projectOfTab, tabOfPath } from "../workspace/tabs";
+import { workspace } from "../workspace/workspace.svelte";
 
 export interface SpawnPrefill {
   cwd?: string;
-  /** A fork its source had no mode for: Start forks it, on the mode picked. */
+  /** A fork its source had no mode for: Start forks it, on the mode picked; one that `resumes` is a stored transcript, which Start resumes. */
   fork?: ForkSource;
   machineId?: string;
   projectId?: string;
@@ -143,26 +144,55 @@ export function newSession(
 }
 
 /**
- * Forks `source` ({@link forkSession}): the fork's answer, or null when it
- * has no mode to run in and the New Session form has opened on it instead,
- * at `anchor` when the press has one to hang from, its machine and folder
- * set, as a spin-off, Start waiting for a mode. A start never refuses for a
- * form nobody was shown.
+ * A stored transcript resumed as session `instanceId`: the page it was read
+ * on becomes that session's, its tab re-addressed where it stands (its id
+ * in the address, the same tab). Nothing for a fork, which is a session of
+ * its own beside its source.
+ */
+export function landResume(source: ForkSource, instanceId: string): void {
+  if (source.resumes) {
+    workspace.retarget(source.sessionId, instanceId);
+  }
+}
+
+/**
+ * Forks `source` ({@link forkSession}), or resumes it when it `resumes` (a
+ * stored transcript, by a first send on its page): the answer, or null when
+ * it has no mode to run in and the New Session form has opened on it
+ * instead, at `anchor` when the press has one to hang from, its machine and
+ * folder set (a fork as a spin-off), Start waiting for a mode. A start
+ * never refuses for a form nobody was shown. `first` is the message it
+ * starts with: sent as its first prompt (under `commandId`, the row its
+ * sender drew), or carried into the form.
  */
 export async function startFork(
   source: ForkSource,
-  anchor: HTMLElement | null = null
+  anchor: HTMLElement | null = null,
+  first?: { text: string; extras: SendExtras; commandId?: string }
 ): Promise<Bounded<string> | null> {
-  const forked = await forkSession(source);
+  const forked = await forkSession({
+    ...source,
+    ...(first
+      ? {
+          prompt: first.text,
+          extras: first.extras,
+          commandId: first.commandId,
+        }
+      : {}),
+  });
   if (forked.kind !== "unchosen") {
+    if (forked.kind === "answered") {
+      landResume(source, forked.value);
+    }
     return forked;
   }
   newSession(
     {
       machineId: source.machineId,
       cwd: source.cwd,
-      spinOff: true,
+      ...(source.resumes ? {} : { spinOff: true }),
       fork: source,
+      ...(first ? { prompt: { text: first.text, extras: first.extras } } : {}),
     },
     anchor
   );

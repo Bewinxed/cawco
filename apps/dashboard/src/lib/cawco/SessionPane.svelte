@@ -30,6 +30,7 @@
    * the pane draws none of its own and leaves its scroll timeline to the
    * panel.
    */
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { type Snippet, untrack } from "svelte";
   import {
     crossIn,
@@ -47,9 +48,11 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
+    answeredOr,
     cawco,
     clearReadFault,
     commandFault,
+    type ForkSource,
     faultMessage,
     holdForStart,
     keepServedAway,
@@ -80,7 +83,7 @@
   import { frameSize } from "./frame-observer";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
-  import { deadlineIn } from "./hub-read";
+  import { deadlineIn, failureWords } from "./hub-read";
   import { rowHref } from "./links";
   import { minimizedAsks } from "./minimized-asks.svelte";
   import MoveWait from "./move/MoveWait.svelte";
@@ -101,6 +104,7 @@
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
+  import { startFork } from "./spawn/new-session.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
@@ -1210,11 +1214,55 @@
     if (unborn) {
       return holdForStart(viewId, text, extras, id);
     }
+    // A transcript stored on its machine that no session wraps has no row
+    // either: the first send on its page resumes it as a session of
+    // CawCo's, these words its first prompt.
+    const stored = cawco.storedSource(viewId);
+    if (stored) {
+      return await resumeWith(stored, text, extras, id);
+    }
     // A message to a sleeping session wakes it on the hub, in the one path every
     // send takes, so this tab sends and nothing else. The hub's own refusal
     // ("machine X is not connected") becomes the command's failed stage — the
     // ledger is the report, which is why there is nothing to catch here.
     return await submitCommand(viewId, machineId, "send", { text, extras }, id);
+  }
+
+  /** The first send on a stored transcript is resuming it: the composer says it is sending. */
+  let resuming = $state(false);
+
+  /**
+   * Resumes the stored transcript this page reads as a session of CawCo's,
+   * on its machine and in its folder, `text` its first prompt (spawn/
+   * new-session `startFork`, the one start on a stored conversation): the
+   * page becomes that session's, its tab re-addressed where it stands. With
+   * no mode to run in, the New Session form opens on it, carrying the
+   * words. A start the hub refuses, or did not answer, puts the words back
+   * in the field with its reason.
+   */
+  async function resumeWith(
+    stored: ForkSource,
+    text: string,
+    extras: SendExtras,
+    id: string
+  ): Promise<string | undefined> {
+    resuming = true;
+    try {
+      const resumed = await startFork(stored, null, {
+        text,
+        extras,
+        commandId: id,
+      });
+      if (resumed) {
+        answeredOr(stored.machineId, resumed, spawnWords.form.resumeUnknown);
+        return id;
+      }
+    } catch (error) {
+      draft.restore(text, extras);
+      draft.notice = failureWords(error);
+    } finally {
+      resuming = false;
+    }
   }
 
   function onstop(): void {
@@ -1314,7 +1362,7 @@
       return session?.busy ?? false;
     },
     get sending() {
-      return sends.sending;
+      return sends.sending || resuming;
     },
     get sendError() {
       return sendFailure;
@@ -1529,7 +1577,7 @@
     recallOf={viewId}
     sendError={sendFailure}
     {faultAgain}
-    sending={sends.sending}
+    sending={sends.sending || resuming}
     showing={viewId}
     {suggest}
     trayRows={[{ delegatesOf: viewId, id: viewId, prompts: offer }]}

@@ -848,6 +848,20 @@ export interface NeutralSessionInfo {
   harness: HarnessKind;
   lastModified: number;
   sessionId: string;
+  /**
+   * Who started it, where its harness records that. Claude Code writes its
+   * `entrypoint` on every record of a transcript: the terminal, the desktop
+   * app and the VS Code extension are a person's; `sdk-ts`, `sdk-py`,
+   * `sdk-cli` (`claude -p`) and every other are a program's (agent
+   * claude.ts `startedBy`). Absent where nothing recorded says: a Claude
+   * transcript from before the field, and every OpenCode and pi session
+   * (OpenCode's database holds the same fields for a typed session and
+   * for `opencode run`; pi's session header names its folder and its
+   * parent, never what started it). A list of a person's work draws a
+   * stored transcript only when this says `person` (dashboard
+   * recent.svelte.ts); search finds every one.
+   */
+  startedBy?: "person" | "program";
   summary?: string;
   tag?: string;
   /**

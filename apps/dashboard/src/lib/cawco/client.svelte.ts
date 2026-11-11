@@ -1476,10 +1476,14 @@ type BenchHub = (
   intent: unknown
 ) => void;
 let benchHub: BenchHub | null = null;
+/** What a bench's hub does with a start ({@link start}): it opens the row, as the hub does when it takes one. */
+type BenchSpawn = (machineId: string, spawn: NamedSpawn) => void;
+let benchSpawn: BenchSpawn | null = null;
 
 /** Stands the page on a bench's hub: the socket closed, the hub said reached (dev only). */
-function standHub(answer: BenchHub): void {
+function standHub(answer: BenchHub, spawn: BenchSpawn | null = null): void {
   benchHub = answer;
+  benchSpawn = spawn;
   globalThis.__cawcoDisposing = true;
   teardown();
   state.status = "connected";
@@ -1493,6 +1497,7 @@ function standHub(answer: BenchHub): void {
 /** The bench is gone: the page reaches for the real hub again (dev only). */
 function leaveHub(): void {
   benchHub = null;
+  benchSpawn = null;
   connect();
 }
 
@@ -6369,13 +6374,19 @@ async function start({
   const requestId = newId();
   const payload = await explicit(machineId, { instanceId, ...spawn });
   let taken: Bounded<void>;
-  try {
-    taken = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () => {
-      opening.set(instanceId, requestId);
-      send({ verb: "spawn", machineId, instanceId, requestId, payload });
-    });
-  } finally {
-    opening.delete(instanceId);
+  if (import.meta.env.DEV && benchSpawn) {
+    // A bench's hub takes the start in place of the wire (dev only).
+    benchSpawn(machineId, payload);
+    taken = { kind: "answered", value: undefined };
+  } else {
+    try {
+      taken = await ask<void>(requestId, CONTROL_TIMEOUT_MS, () => {
+        opening.set(instanceId, requestId);
+        send({ verb: "spawn", machineId, instanceId, requestId, payload });
+      });
+    } finally {
+      opening.delete(instanceId);
+    }
   }
   switch (taken.kind) {
     case "unanswered":
@@ -6609,6 +6620,13 @@ export interface ForkSource {
   cwd: string;
   harness: HarnessKind;
   machineId: string;
+  /**
+   * The conversation itself goes on in the new session, where a fork
+   * branches a copy of it into a spin-off: a transcript stored on a machine
+   * that no session of the hub wraps, resumed as a session of CawCo's by
+   * the person's first send on its page.
+   */
+  resumes?: true;
   sessionId: string;
 }
 
@@ -6624,6 +6642,12 @@ export interface ForkSource {
  * records none) on a harness that has modes, nothing is sent and the answer
  * is `unchosen`: the New Session form opens on the fork, and Start waits for
  * a mode (spawn/new-session `startFork`).
+ *
+ * A source that `resumes` is started the same way with the conversation
+ * itself: no branch and no spin-off, a session of CawCo's on the transcript
+ * where it is stored, which its machine carries into the account it runs
+ * on (agent claude.ts). `commandId` is the row its first prompt was drawn
+ * as, when its sender drew one.
  */
 export async function forkSession({
   machineId,
@@ -6636,12 +6660,15 @@ export async function forkSession({
   effort,
   prompt,
   extras = {},
+  resumes,
+  commandId,
 }: ForkSource & {
   permissionMode?: PermissionMode;
   model?: string;
   effort?: EffortLevel;
   prompt?: string;
   extras?: SendExtras;
+  commandId?: string;
 }): Promise<Bounded<string> | { kind: "unchosen" }> {
   const source = instanceForSession(instanceIndex, sessionId, {
     machineId,
@@ -6669,10 +6696,10 @@ export async function forkSession({
     harness,
     resume: {
       sessionKey: sessionId,
-      fork: true,
+      ...(resumes ? {} : { fork: true }),
       ...(at ? { atMessage: at } : {}),
     },
-    scratch: {},
+    ...(resumes ? {} : { scratch: {} }),
     ...(named ? { model: named } : {}),
     ...(mode ? { permissionMode: mode } : {}),
     ...(level ? { effort: level } : {}),
@@ -6681,7 +6708,13 @@ export async function forkSession({
     case "unanswered":
       return started;
     case "answered":
-      sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
+      sendFirstPrompt(
+        started.value.instanceId,
+        machineId,
+        prompt,
+        extras,
+        commandId
+      );
       detach(refresh(), "refresh");
       return { kind: "answered", value: started.value.instanceId };
     default:
@@ -9774,6 +9807,33 @@ export const cawco = {
    */
   get olderInstances(): InstanceRow[] {
     return olderRows;
+  },
+  /**
+   * The transcript stored on a machine that view `id` is of, as a session
+   * could resume it, when the hub holds no row under that id and a
+   * machine's catalog lists it by it: a transcript no session wraps (a tab
+   * of one a session wraps takes that session's id as it opens, workspace
+   * `enter`). Null for any other view.
+   */
+  storedSource(id: string): ForkSource | null {
+    if (rowsById.has(id)) {
+      return null;
+    }
+    for (const machine of state.machines) {
+      const info = (catalog[machine.machineId] ?? []).find(
+        (one) => one.sessionId === id
+      );
+      if (info) {
+        return {
+          machineId: machine.machineId,
+          cwd: info.cwd ?? "",
+          harness: info.harness,
+          sessionId: id,
+          resumes: true,
+        };
+      }
+    }
+    return null;
   },
   /** Whether a stored transcript stands as itself: the hub said no session wraps it. */
   storedAlone: (sessionId: string): boolean => unwrapped.has(sessionId),

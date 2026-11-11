@@ -97,6 +97,8 @@ export const spawnWords = {
   permissionMode: (mode: string) => `${PERMISSION_MODE} ${mode}`,
   /** The form's title. */
   forkSession: "Fork session",
+  /** The form's title on a stored transcript a first send resumes. */
+  resumeSession: "Resume session",
   continueSession: "Continue session",
   /** Its Start, and a Start that moves the project to the machine first. */
   startSession: "Start session",
@@ -130,6 +132,8 @@ export const spawnWords = {
     /** Start on a continuation and on a fork. */
     continue: "Continue",
     fork: "Fork",
+    /** Start on a stored transcript resumed as a session of CawCo's. */
+    resume: "Resume",
     startMany: (count: number) => `Start ${count} sessions`,
     /** The reading line while a machine is read, and Start while the folder is. */
     reading: "Reading…",
@@ -151,6 +155,11 @@ export const spawnWords = {
     forkWhere: (harness: string, machine: string, folder: string) =>
       `A fork runs where its session ran: ${harness} on ${machine}, in ${folder}.`,
     forkNeedsMode: "Choose a permission mode for the fork.",
+    /** The same of a stored transcript resumed: where it goes on, its mode, an answer that never came. */
+    resumeUnknown: "whether the session was resumed is not known",
+    resumeWhere: (harness: string, machine: string, folder: string) =>
+      `A resumed session goes on where it ran: ${harness} on ${machine}, in ${folder}.`,
+    resumeNeedsMode: "Choose a permission mode to resume it in.",
     moveChanged:
       "The move changed before it started. Open it and start it again.",
     /** A move's reading: what Move & start does first, to the project or (several) the folder it takes. */

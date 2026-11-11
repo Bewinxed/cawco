@@ -812,6 +812,7 @@ const ForkSourceShape = z.object({
   cwd: z.string(),
   harness: HarnessKindShape,
   machineId: z.string(),
+  resumes: z.literal(true).optional(),
   sessionId: z.string(),
 });
 

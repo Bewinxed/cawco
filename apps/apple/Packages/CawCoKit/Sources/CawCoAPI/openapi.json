@@ -38549,6 +38549,10 @@
           "sessionId": {
             "type": "string"
           },
+          "startedBy": {
+            "$ref": "#/components/schemas/NeutralSessionInfoStartedBy",
+            "description": "Who started it, where its harness records that. Claude Code writes its\n`entrypoint` on every record of a transcript: the terminal, the desktop\napp and the VS Code extension are a person's; `sdk-ts`, `sdk-py`,\n`sdk-cli` (`claude -p`) and every other are a program's (agent\nclaude.ts `startedBy`). Absent where nothing recorded says: a Claude\ntranscript from before the field, and every OpenCode and pi session\n(OpenCode's database holds the same fields for a typed session and\nfor `opencode run`; pi's session header names its folder and its\nparent, never what started it). A list of a person's work draws a\nstored transcript only when this says `person` (dashboard\nrecent.svelte.ts); search finds every one."
+          },
           "summary": {
             "type": "string"
           },
@@ -67568,6 +67572,13 @@
         "enum": [
           "ended",
           "running"
+        ]
+      },
+      "NeutralSessionInfoStartedBy": {
+        "type": "string",
+        "enum": [
+          "person",
+          "program"
         ]
       },
       "PageAnchorScheme": {
