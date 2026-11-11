@@ -916,6 +916,10 @@
               >
             </Collapsible.Trigger>
             {@const drawn = stripOf(routine.nextRuns, now) !== null}
+            <!-- A separator stands only between two things on the line:
+                 the schedule's words show when no strip is drawn, then the
+                 paused or off words, then the folded Last and Next. -->
+            {@const lineHasLead = !drawn || Boolean(line.off)}
             {#if drawn}
               <!-- Its schedule drawn on the line from the hub's own runs
                    (DESIGN.md, The Show Don't Tell Rule); the words are the
@@ -948,7 +952,7 @@
                 data-slot="folded"
                 class="hidden @max-table-34rem/table:inline"
               >
-                · {words.lastShort}
+                {lineHasLead ? "· " : ""}{words.lastShort}
                 <RunStatus
                   said={last.said}
                   status={last.status}
