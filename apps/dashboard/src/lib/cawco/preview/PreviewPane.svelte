@@ -84,7 +84,7 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import { BarCard, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -92,7 +92,6 @@
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconAlert,
@@ -188,6 +187,7 @@
   import ChangesTag from "./ChangesTag.svelte";
   import CommentRail from "./CommentRail.svelte";
   import CommentsButton from "./CommentsButton.svelte";
+  import CommentsCard from "./CommentsCard.svelte";
   import CoverState, { type CoverWaiting } from "./CoverState.svelte";
   import type { CommentDrafts } from "./comment-drafts.svelte";
   import {
@@ -1632,49 +1632,6 @@
     watch.observe(pane);
     return () => watch.disconnect();
   });
-  /** The hung Comments card: its height, down to the side card's foot, px. It floats over the page, which keeps its width. */
-  let railReach = $state({ height: 0 });
-  /** The hung column measured last: Comments and Tune swap, and the one closing never zeroes the one opening. */
-  let reaching: HTMLElement | null = null;
-  const reachRail = (node: HTMLElement) => {
-    reaching = node;
-    // Read off the glass it hangs from, never its own box: the card comes
-    // down out of the glass, and read mid-way its top stood above its rest.
-    const read = () => {
-      const card = section?.getBoundingClientRect();
-      const glass = section
-        ?.querySelector<HTMLElement>(
-          '[data-slot="side-head"] [data-slot="tools"]'
-        )
-        ?.getBoundingClientRect();
-      if (!(card && glass)) {
-        return;
-      }
-      const reach = {
-        height: Math.max(
-          0,
-          Math.round(card.bottom - glass.bottom - numberOf("--space-2"))
-        ),
-      };
-      if (reach.height !== railReach.height) {
-        railReach = reach;
-      }
-    };
-    // Read untracked: the attachment would re-run on what it writes.
-    untrack(read);
-    const watch = frameObserver(read);
-    const card = untrack(() => section);
-    if (card) {
-      watch.observe(card);
-    }
-    return () => {
-      watch.disconnect();
-      if (reaching === node) {
-        reaching = null;
-        railReach = { height: 0 };
-      }
-    };
-  };
   /**
    * Where the rail stands is known: on a phone or in the drawer at once,
    * else once the pane's width is read. Until then neither rail is drawn,
@@ -4392,20 +4349,10 @@
     />
   {/if}
 {/snippet}
-<!-- The open thread, joined to the comments card's leading edge (BarCard `beside`, `hungPin`). -->
+<!-- The open thread, joined to the comments card's leading edge (CommentsCard `thread`, `hungPin`). -->
 {#snippet hungThread()}
   {#if hungPin && drafts}
-    {#key hungPin.id}
-      <!-- The thread's card, padded and scrolling as the floating thread
-           is (PinFloat's surface): the thread's rows scroll, the card never
-           sideways. -->
-      <div
-        class="flex w-c-comments-w min-h-0 flex-col gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain p-space-3"
-        data-slot="thread-card"
-      >
-        {@render thread(hungPin, drafts.draft(hungPin.id), false)}
-      </div>
-    {/key}
+    {@render thread(hungPin, drafts.draft(hungPin.id), false)}
   {/if}
 {/snippet}
 <!-- Comments: on a phone the toggle of the well's foot sheet; elsewhere
@@ -4426,45 +4373,29 @@
       answers={unread.size}
     />
   {:else}
-    <Popover.Root
+    <CommentsCard
+      label={commentWords.comments}
       onOpenChange={(open) => showList(open)}
       open={listOpen && railPlaced}
+      panel={section}
+      thread={hungPin && kit && drafts ? hungThread : null}
+      threadKey={hungPin?.id}
+      threadLabel={hungPin ? `Comment ${hungPin.number}` : undefined}
     >
-      <Popover.Trigger>
-        {#snippet child({ props })}
-          <CommentsButton
-            count={openCount}
-            down={linkDown ? NOT_REACHING : null}
-            label={commentsTitle}
-            open={listOpen}
-            held={heldCount}
-            {pinsShown}
-            {props}
-            answers={unread.size}
-          />
-        {/snippet}
-      </Popover.Trigger>
-      <BarCard
-        bare
-        beside={hungPin && kit && drafts ? hungThread : null}
-        besideLabel={hungPin ? `Comment ${hungPin.number}` : undefined}
-        escapeKeydownBehavior="ignore"
-        interactOutsideBehavior="ignore"
-        label={commentWords.comments}
-        onCloseAutoFocus={(event: Event) => event.preventDefault()}
-        onOpenAutoFocus={(event: Event) => event.preventDefault()}
-        trapFocus={false}
-      >
-        <div
-          class="flex h-(--rail-h) w-c-comments-w min-h-0 flex-col"
-          data-slot="rail-card"
-          style:--rail-h="{railReach.height}px"
-          {@attach reachRail}
-        >
-          {@render railOf("beside")}
-        </div>
-      </BarCard>
-    </Popover.Root>
+      {#snippet trigger(props)}
+        <CommentsButton
+          count={openCount}
+          down={linkDown ? NOT_REACHING : null}
+          label={commentsTitle}
+          open={listOpen}
+          held={heldCount}
+          {pinsShown}
+          {props}
+          answers={unread.size}
+        />
+      {/snippet}
+      {@render railOf("beside")}
+    </CommentsCard>
   {/if}
 {/snippet}
 {#snippet commentsMenu()}

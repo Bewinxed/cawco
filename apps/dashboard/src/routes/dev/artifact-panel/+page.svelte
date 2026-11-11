@@ -2,9 +2,10 @@
   /**
    * The artifact panel whole, for judging it at its widths: its head (the
    * artifact's title and its menu, the mode, the glass, Close), the page in
-   * its well, the Comments rail beside the page on a desk and the Comments
-   * sheet over it on a phone (under 640px), and a thread opened. The real
-   * parts (SideSurface, CommentRail, ThreadSheet, PinCard) on
+   * its well, the Comments card hung from the head's Comments on a desk (a
+   * thread opened from it joined to its leading edge) and the Comments sheet
+   * over it on a phone (under 640px), and a thread opened. The real parts
+   * (SideSurface, CommentsCard, CommentRail, ThreadSheet, PinCard) on
    * real records (records.ts): the decision page title-bars-close, its five
    * pins as they stand, and the session's artifacts. The page is its own
    * picture (the bench reaches no hub, and the page's doc is the hub's), and
@@ -33,8 +34,8 @@
    * bar, Search, + and Sort folded into More leading, each row Unsent, the
    * head's bubble ringed), `fold` (held, the rail's More open), `note` (Send
    * all pressed: its note under the bar), `hold` (a comment being written: Hold beside send),
-   * and on a desk the card's pour: `pour` (it pours out of comment 4's pill
-   * once the panel stands), `drain` (it drains back), `turn` (it opens and
+   * and on a desk the card's pour, the Comments card shut: `pour` (it pours
+   * out of comment 4's pill once the panel stands), `drain` (it drains back), `turn` (it opens and
    * is closed half way, turning back from where it is drawn); `?slow=n`
    * runs the pour n times as long; `?count=n` sets the head's Comments
    * badge to n (5, 12, 150, 1500).
@@ -56,6 +57,7 @@
   import CommentComposer from "#lib/cawco/preview/CommentComposer.svelte";
   import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
   import CommentsButton from "#lib/cawco/preview/CommentsButton.svelte";
+  import CommentsCard from "#lib/cawco/preview/CommentsCard.svelte";
   import type { RailList, RailSort } from "#lib/cawco/preview/comment-rows.js";
   import pageDesk from "#lib/cawco/preview/fixtures/title-bars-close-desk.webp";
   import pagePhone from "#lib/cawco/preview/fixtures/title-bars-close-phone.webp";
@@ -172,8 +174,10 @@
     }
     return PINS;
   });
+  /** The card's pour (`pour`, `drain`, `turn`) is the thread beside its pill, which stands while the Comments card is shut. */
+  const pours = asked === "pour" || asked === "drain" || asked === "turn";
   let listOpen = $state(
-    asked !== "rest" && asked !== "changes" && asked !== "scrolled"
+    asked !== "rest" && asked !== "changes" && asked !== "scrolled" && !pours
   );
   let filter = $state<RailList>(
     asked === "resolved" || asked === "found" ? "resolved" : "open"
@@ -213,6 +217,8 @@
     }
   }
   const thread = $derived(pins.find((one) => one.id === openPin) ?? null);
+  /** On a desk the open thread stands joined to the Comments card while it stands (PreviewPane's `hungPin`), else beside its pill. */
+  const hung = $derived(!phone.current && listOpen ? thread : null);
   /** The pin being placed again (Pin it somewhere else): the next tap on the page places it. */
   let placing = $state<string | null>(
     asked === "place" ? (PINS[3]?.id ?? null) : null
@@ -264,6 +270,8 @@
     return () => removeEventListener("keydown", away);
   });
   let well = $state({ w: 0, h: 0 });
+  /** The panel's card (SideSurface `section`): the hung Comments card reaches its foot. */
+  let section = $state<HTMLElement>();
   /** The page as it scrolls in the well. */
   let benchPage = $state<HTMLElement>();
   /**
@@ -473,17 +481,55 @@
     >
   </DropdownMenu.RadioGroup>
 {/snippet}
+<!-- The open thread, joined to the Comments card's leading edge (CommentsCard `thread`), as PreviewPane hangs it. -->
+{#snippet hungThread()}
+  {#if hung}
+    {@render card(hung)}
+  {/if}
+{/snippet}
+<!-- Comments: on a phone the toggle of the Comments sheet; on a desk the
+     card hung from the head's glass, as PreviewPane draws it. -->
 {#snippet commentsBar()}
-  <CommentsButton
-    count={badgeCount}
-    label="Comments (⇧C hides the pins)"
-    onclick={() => {
-      listOpen = !listOpen;
-    }}
-    held={heldCount}
-    open={listOpen && !(phone.current && composing)}
-    answers={checked.length}
-  />
+  {#if phone.current}
+    <CommentsButton
+      count={badgeCount}
+      label="Comments (⇧C hides the pins)"
+      onclick={() => {
+        listOpen = !listOpen;
+      }}
+      held={heldCount}
+      open={listOpen && !composing}
+      answers={checked.length}
+    />
+  {:else}
+    <CommentsCard
+      label={commentWords.comments}
+      onOpenChange={(open) => {
+        // Shut, it takes the thread joined to it along (PreviewPane `showList`).
+        if (!open && hung) {
+          openPin = null;
+        }
+        listOpen = open;
+      }}
+      open={listOpen}
+      panel={section}
+      thread={hung ? hungThread : null}
+      threadKey={hung?.id}
+      threadLabel={hung ? `Comment ${hung.number}` : undefined}
+    >
+      {#snippet trigger(props)}
+        <CommentsButton
+          count={badgeCount}
+          label="Comments (⇧C hides the pins)"
+          held={heldCount}
+          open={listOpen}
+          {props}
+          answers={checked.length}
+        />
+      {/snippet}
+      {@render railOf("beside")}
+    </CommentsCard>
+  {/if}
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item
@@ -582,7 +628,7 @@
     sheet={phone.current}
     name={one.title ?? ""}
     onclose={() => {
-      if (phone.current) {
+      if (phone.current || hung) {
         openPin = null;
       } else {
         // On a desk the card drains into its pill first (PinFloat).
@@ -653,6 +699,7 @@
       of="preview"
       onclose={() => undefined}
       placement={phone.current ? "sheet" : "beside"}
+      bind:section
       subtitle={shown?.ask}
       subtitleId="bench-line"
     >
@@ -793,7 +840,7 @@
             {@render card(thread)}
           </ThreadSheet>
         {/if}
-      {:else if thread}
+      {:else if thread && !hung}
         <!-- The card beside its pin in the pane's own shell (PinFloat),
              poured out of its pill on the page. -->
         <div class="contents">

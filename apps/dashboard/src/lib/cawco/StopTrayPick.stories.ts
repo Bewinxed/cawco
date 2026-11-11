@@ -360,68 +360,48 @@ const pressConfirm = async ({
   await userEvent.wait(4400);
 };
 
-/** Caw's settings drawn around the section, at a form, ending one way, from a step. */
-const panel = (
-  form: "desk" | "phone",
-  endsOn: "title" | "confirm",
-  step: "pick" | "off"
-) => ({
-  component: CawOffPanel,
-  args: { projectName: "Cawco-Dev", rows: FLEET, form, endsOn, step },
+/**
+ * Where his settings stand in each frame: a phone's sheet under 640px (the
+ * dashboard's phone line), else the desk's popover. Read once as the frame
+ * mounts, when `matchMedia` answers at that frame's width, and kept for its
+ * context, so a move's later args never read the window's width instead.
+ */
+const forms = new WeakMap<object, "desk" | "phone">();
+const formIn = (context: object): "desk" | "phone" => {
+  const known = forms.get(context);
+  if (known) {
+    return known;
+  }
+  const form = matchMedia("(width < 640px)").matches ? "phone" : "desk";
+  forms.set(context, form);
+  return form;
+};
+
+/** Caw's settings drawn around the section, ending one way, from a step, in the form the frame's width stands them in. */
+const panel = (endsOn: "title" | "confirm", step: "pick" | "off") => ({
+  args: { projectName: "Cawco-Dev", rows: FLEET, endsOn, step },
+  render: (args: Record<string, unknown>, context: object) => ({
+    Component: CawOffPanel,
+    props: { ...args, form: formIn(context) },
+  }),
 });
 
-/** On a desk, today: the title says Caw is off for Cawco-Dev, the list folds, the buttons go. */
-export const OffTitleDesk = {
-  ...panel("desk", "title", "off"),
-  parameters: { viewport: 402 },
-  from: "TurningOffTitleDesk",
+/** Today's way, him off: the title says Caw is off for Cawco-Dev, the list folds, the buttons go. */
+export const OffTitle = {
+  ...panel("title", "off"),
+  from: "TurningOffTitle",
   play: pressConfirm,
 };
 
-/** On a phone, today: the title says Caw is off for Cawco-Dev, the list folds, the buttons go. */
-export const OffTitlePhone = {
-  ...panel("phone", "title", "off"),
-  parameters: { viewport: 390 },
-  from: "TurningOffTitlePhone",
+/** Turning him off today's way: press Stop 8 and turn off to play it; the switch asks again. */
+export const TurningOffTitle = panel("title", "pick");
+
+/** Forget's way, him off: the question stays, the confirm ends on Caw is off beside Close. */
+export const OffConfirm = {
+  ...panel("confirm", "off"),
+  from: "TurningOffConfirm",
   play: pressConfirm,
 };
 
-/** On a desk, today's way: press Stop 8 and turn off to play it; the switch asks again. */
-export const TurningOffTitleDesk = {
-  ...panel("desk", "title", "pick"),
-  parameters: { viewport: 402 },
-};
-
-/** On a phone, today's way: press Stop 8 and turn off to play it; the switch asks again. */
-export const TurningOffTitlePhone = {
-  ...panel("phone", "title", "pick"),
-  parameters: { viewport: 390 },
-};
-
-/** On a desk, Forget's way: the question stays, the confirm ends on Caw is off beside Close. */
-export const OffConfirmDesk = {
-  ...panel("desk", "confirm", "off"),
-  parameters: { viewport: 402 },
-  from: "TurningOffConfirmDesk",
-  play: pressConfirm,
-};
-
-/** On a phone, Forget's way: the question stays, the confirm ends on Caw is off beside Close. */
-export const OffConfirmPhone = {
-  ...panel("phone", "confirm", "off"),
-  parameters: { viewport: 390 },
-  from: "TurningOffConfirmPhone",
-  play: pressConfirm,
-};
-
-/** On a desk, Forget's way: press Stop 8 and turn off to play it; the switch asks again. */
-export const TurningOffConfirmDesk = {
-  ...panel("desk", "confirm", "pick"),
-  parameters: { viewport: 402 },
-};
-
-/** On a phone, Forget's way: press Stop 8 and turn off to play it; the switch asks again. */
-export const TurningOffConfirmPhone = {
-  ...panel("phone", "confirm", "pick"),
-  parameters: { viewport: 390 },
-};
+/** Turning him off Forget's way: press Stop 8 and turn off to play it; the switch asks again. */
+export const TurningOffConfirm = panel("confirm", "pick");
