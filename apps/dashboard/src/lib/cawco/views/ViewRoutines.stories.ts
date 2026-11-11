@@ -16,7 +16,7 @@ export default {
 };
 
 /** Caw suggests the routine at the foot of the ledger, under the project's routines. */
-export const Offered = {};
+export const InRoutines = {};
 
 /** A project with no routine yet: the suggestion under the empty state. */
 export const OfferedEmpty = { decorators: [hubAs("connected", STATES.empty)] };

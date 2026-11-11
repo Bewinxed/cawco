@@ -38,7 +38,7 @@
           <Table.Head class="w-c-ledger-when-w" variant="band"
             >{words.columnLastCall}</Table.Head
           >
-          <Table.Head class="w-c-ledger-took-w" edge="end" variant="band"
+          <Table.Head class="w-c-ledger-when-w" edge="end" variant="band"
             >{words.columnSessions}</Table.Head
           >
         </Table.Row>
@@ -72,7 +72,7 @@
               {/if}
             </Table.Cell>
             <Table.Cell
-              class="w-c-ledger-took-w"
+              class="w-c-ledger-when-w"
               edge="end"
               rule="top"
               variant="ledger"
