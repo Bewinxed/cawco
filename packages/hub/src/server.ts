@@ -27092,6 +27092,7 @@ export const createServer = (
   // every machine's transcripts, under one ranking.
   const find = createFind({
     db,
+    blockPage: (id) => isBlockProgram(artifacts.program(id)),
     purged: () => db.find.purged(),
     refreshInstances: refreshBoard,
     online: (machineId) => registry.agent(machineId) !== undefined,

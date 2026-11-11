@@ -1158,6 +1158,19 @@ public enum Words {
             "Pin anything in \(title) that reads wrong"
         }
 
+        /// A kept block refused for its size, in KiB, and the most a block holds.
+        public static func blockTooLarge(kib: Int, most: Int) -> String {
+            "The block is \(kib) KiB; a block holds \(most) KiB at most. Split it."
+        }
+
+        /// A kept block refused for OpenUI Cloud markers in its program.
+        public static let blockCloudMarkers = "The block carries OpenUI Cloud markers: a block is a program alone, and runs no scripts."
+
+        /// A kept block refused for an action in its program, by the action's name.
+        public static func blockAction(action: String) -> String {
+            "@\(action) is an action: a block runs none."
+        }
+
         /// A kept block refused for a URL in its words (hub decision-program.ts), the URL's start quoted.
         public static func blockUrlRefused(url: String) -> String {
             "“\(url)” is a URL: a block reaches no network. Write what it shows into the block."

@@ -115,6 +115,7 @@ async function hubFind(
   raw.close();
   const find = createFind({
     db,
+    blockPage: () => false,
     purged: () => new Set(),
     refreshInstances: () => undefined,
     online: () => true,

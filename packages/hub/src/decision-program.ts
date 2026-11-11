@@ -688,14 +688,20 @@ const checkProgram = (
   artifact?: ArtifactNamed
 ): CheckedProgram => {
   const program = `${raw.trim()}\n`;
+  const block = programLibraryOf(program) === "block";
   if (program.length > PROGRAM_MAX) {
+    const kib = Math.round(program.length / 1024);
     refuse([
-      `The program is ${Math.round(program.length / 1024)} KiB; a decision page's is ${PROGRAM_MAX / 1024} KiB at most. Split the page.`,
+      block
+        ? transcriptWords.blockTooLarge(kib, PROGRAM_MAX / 1024)
+        : `The program is ${kib} KiB; a decision page's is ${PROGRAM_MAX / 1024} KiB at most. Split the page.`,
     ]);
   }
   if (program.includes(CLOUD_MARKER)) {
     refuse([
-      "The program carries OpenUI Cloud markers: a decision page is a program alone, and runs no scripts.",
+      block
+        ? transcriptWords.blockCloudMarkers
+        : "The program carries OpenUI Cloud markers: a decision page is a program alone, and runs no scripts.",
     ]);
   }
   const actions = tokenize(program)
@@ -704,7 +710,11 @@ const checkProgram = (
         (token.t === TOKEN.BuiltinCall && ACTIONS.has(String(token.v))) ||
         (token.t === TOKEN.Type && token.v === "Action")
     )
-    .map((token) => `@${token.v} is an action: a decision page runs none.`);
+    .map((token) =>
+      block
+        ? transcriptWords.blockAction(String(token.v))
+        : `@${token.v} is an action: a decision page runs none.`
+    );
   if (actions.length > 0) {
     refuse(actions);
   }
@@ -712,7 +722,7 @@ const checkProgram = (
   if (unclosed) {
     refuse([unclosed]);
   }
-  if (programLibraryOf(program) === "block") {
+  if (block) {
     return checkBlock(program);
   }
   const result = parser.parse(program);

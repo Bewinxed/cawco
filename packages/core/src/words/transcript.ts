@@ -97,6 +97,15 @@ export const transcriptWords = {
   /** A block kept as an artifact: what the panel's head asks of the person. */
   keptBlockAsk: (title: string): string =>
     `Pin anything in ${title} that reads wrong`,
+  /** A kept block refused for its size, in KiB, and the most a block holds. */
+  blockTooLarge: (kib: number, most: number): string =>
+    `The block is ${kib} KiB; a block holds ${most} KiB at most. Split it.`,
+  /** A kept block refused for OpenUI Cloud markers in its program. */
+  blockCloudMarkers:
+    "The block carries OpenUI Cloud markers: a block is a program alone, and runs no scripts.",
+  /** A kept block refused for an action in its program, by the action's name. */
+  blockAction: (action: string): string =>
+    `@${action} is an action: a block runs none.`,
   /** A kept block refused for a URL in its words (hub decision-program.ts), the URL's start quoted. */
   blockUrlRefused: (url: string): string =>
     `“${url}” is a URL: a block reaches no network. Write what it shows into the block.`,

@@ -460,14 +460,17 @@ export const machineEntry = (machine: AgentRow, online: boolean): Entry => {
 /**
  * An artifact's entry: a page in a project is a decision (written to the
  * project's `decisions/`), with picks to make until the person changes one
- * of its choices. `opened`: the revision the person last opened, if any.
+ * of its choices; a kept block (`block`, hub kept-blocks.ts) asks nothing
+ * and is an artifact. `opened`: the revision the person last opened, if any.
  */
 export const artifactEntry = (
   artifact: FindArtifactRow,
   maker: FindInstanceRow,
-  project: { id: string; name: string } | null
+  project: { id: string; name: string } | null,
+  block: boolean
 ): Entry => {
-  const decision = artifact.kind === "page" && artifact.projectId !== null;
+  const decision =
+    artifact.kind === "page" && artifact.projectId !== null && !block;
   const makerTitle = boardTitle(maker);
   return {
     asked: new Set<string>([

@@ -300,6 +300,8 @@ export interface FindDeps {
     timeoutMs: number,
     ask: Pick<FindRequest, "caller" | "signal">
   ) => Promise<TranscriptAnswer | { error: string }>;
+  /** Whether artifact `id` is a kept block (hub kept-blocks.ts): a page that asks nothing, found as an artifact. */
+  blockPage: (id: string) => boolean;
   db: DbShape;
   /**
    * A machine's catalog of the sessions it keeps (`listSessions`), with the
@@ -783,7 +785,8 @@ export const createFind = (deps: FindDeps) => {
             artifactEntry(
               artifact,
               maker,
-              projectOf(artifact.projectId ?? maker.projectId)
+              projectOf(artifact.projectId ?? maker.projectId),
+              artifact.kind === "page" && deps.blockPage(artifact.id)
             ),
           ]
         : [];
