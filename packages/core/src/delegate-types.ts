@@ -78,19 +78,23 @@ export interface StartingSet {
 /** CawCo's own MCP server, by the name every harness gives it. */
 export const CAWCO_SERVER = "cawco";
 
-/** The harnesses that enforce a {@link StartingSet} so far. */
-const STARTING_SET_HARNESSES: readonly HarnessKind[] = ["claude", "opencode"];
+/** `servers`, by name, held to a starting set's; all of them with none. */
+export const inStartingSet = <Config>(
+  servers: Record<string, Config>,
+  set: StartingSet | undefined
+): Record<string, Config> =>
+  set
+    ? Object.fromEntries(
+        Object.entries(servers).filter(([name]) => set.servers.includes(name))
+      )
+    : servers;
 
-/** Why `harness` cannot carry this starting set, in a sentence, or nothing when it can. */
+/** Why this starting set cannot be saved, in a sentence, or nothing when it can. Every harness enforces one. */
 export const startingSetProblem = (
-  harness: HarnessKind,
   set: StartingSet | undefined
 ): string | undefined => {
   if (!set) {
     return undefined;
-  }
-  if (!STARTING_SET_HARNESSES.includes(harness)) {
-    return delegateTypesWords.problemStartingSetHarness(harness);
   }
   const blank = [...set.skills, ...set.servers].some((name) => !name.trim());
   return blank ? delegateTypesWords.problemStartingSetBlank : undefined;
@@ -223,7 +227,7 @@ export const delegateTypeProblem = (
   // promise nothing keeps.
   return (
     denyToolsProblem(draft.harness, draft.denyTools ?? []) ??
-    startingSetProblem(draft.harness, draft.startingSet)
+    startingSetProblem(draft.startingSet)
   );
 };
 

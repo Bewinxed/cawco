@@ -7,6 +7,7 @@ import type {
   ModelTurnUsage,
   SentMessage,
   SpawnPayload,
+  StartingSet,
   SupportedCommands,
 } from "@cawco/core";
 import {
@@ -23,6 +24,7 @@ import {
   hookToolCall,
   hookToolInputBack,
   INSTALL_SESSION_CREDENTIAL,
+  inStartingSet,
   MESSAGES_READ,
   piToolsFor,
   pricedRequest,
@@ -395,6 +397,37 @@ class CawcoTools {
 }
 
 /**
+ * pi's MCP extension for one session (`createMcpExtension`, "Connects the
+ * servers from `mcp.json` and the servers extensions register with
+ * `pi.registerMcpServer()`", pi 1.4.0 extensions/mcp/index.d.ts). With a
+ * starting set ({@link SpawnPayload.startingSet}) it connects the set's
+ * servers alone, as Claude Code's `strictMcpConfig` does: it reads no
+ * `mcp.json` (`loadConfig`, "Defaults to reading `mcp.json` from the agent
+ * directory and the trusted project"), since a set names fleet servers, and
+ * of the servers extensions register (the fleet's, `FleetMcp`, and any of the
+ * person's own pi extensions) it sees only the set's: it reads them through
+ * `pi.getMcpServers()` alone, at `session_start` and on every
+ * `mcp_servers_change` (index.js `registeredServers`).
+ */
+const piMcpExtension = (set: StartingSet | undefined): ExtensionFactory => {
+  if (!set) {
+    return createMcpExtension();
+  }
+  const mcp = createMcpExtension({
+    loadConfig: () => ({ servers: [], errors: [] }),
+  });
+  return (pi) =>
+    mcp(
+      Object.assign(Object.create(pi) as ExtensionAPI, {
+        getMcpServers: () =>
+          pi
+            .getMcpServers()
+            .filter((server) => set.servers.includes(server.name)),
+      })
+    );
+};
+
+/**
  * The fleet's MCP servers for one session, registered through pi's own
  * extension API (`pi.registerMcpServer`, pi.dev/docs/latest/extensions:
  * "Servers registered while the extension loads connect when the session
@@ -411,10 +444,17 @@ class FleetMcp {
   readonly #cwd: string;
   /** A workspace session's MCP gate, which its servers with a command go through ({@link piMcpServers}). */
   readonly #gate: McpGate | undefined;
+  /** The servers it started with ({@link SpawnPayload.startingSet}): it takes no fleet server outside them. */
+  readonly #set: StartingSet | undefined;
 
-  constructor(cwd: string, gate: McpGate | undefined) {
+  constructor(
+    cwd: string,
+    gate: McpGate | undefined,
+    set: StartingSet | undefined
+  ) {
     this.#cwd = cwd;
     this.#gate = gate;
+    this.#set = set;
   }
 
   /** The inline extension: holds pi's API and registers the session's first set. */
@@ -427,13 +467,18 @@ class FleetMcp {
 
   /**
    * The fleet's servers for this session's folder now ({@link piMcpServers}),
-   * the gated chrome-devtools through `door`, and why any is not taken.
+   * held to its starting set, the gated chrome-devtools through `door`, and
+   * why any is not taken.
    */
   async read(door: BrowserDoor | undefined): Promise<{
     servers: Record<string, McpServerConfig>;
     skipped: Record<string, string>;
   }> {
-    return piMcpServers(await fleetMcpAt(this.#cwd), door, this.#gate);
+    return piMcpServers(
+      inStartingSet(await fleetMcpAt(this.#cwd), this.#set),
+      door,
+      this.#gate
+    );
   }
 
   /**
@@ -798,6 +843,27 @@ const CLEAN_LOADER = {
 } satisfies Partial<ConstructorParameters<typeof DefaultResourceLoader>[0]>;
 
 /**
+ * A session's skills held to its starting set ({@link SpawnPayload.startingSet}):
+ * pi's own filter over what it found (`skillsOverride`, applied to every skill
+ * the loader loads, resource-loader.js `updateSkillsFromPaths`; "Discover,
+ * filter, merge, or replace them", examples/sdk/04-skills.ts), by the name pi
+ * lists a skill by. The model reads the skills pi lists in its system prompt
+ * (skills.js `formatSkillsForPrompt`), and a brief's skills load from the same
+ * list ({@link loadSkills}). No set: every skill it found.
+ */
+const skillsHeldTo = (
+  set: StartingSet | undefined
+): Partial<ConstructorParameters<typeof DefaultResourceLoader>[0]> =>
+  set
+    ? {
+        skillsOverride: ({ skills, diagnostics }) => ({
+          skills: skills.filter((skill) => set.skills.includes(skill.name)),
+          diagnostics,
+        }),
+      }
+    : {};
+
+/**
  * What a session's resource loader reads beside pi's own discovery, and the
  * context files CawCo adds to pi's. pi reads `AGENTS.md` and `CLAUDE.md` up
  * from its folder itself (resource-loader.js `loadContextFileFromDir`,
@@ -842,6 +908,7 @@ const loaderSources = async (
       })),
     ],
     loader: {
+      ...skillsHeldTo(spec.startingSet),
       additionalSkillPaths: Object.values(placed?.skills ?? {}),
       additionalExtensionPaths: configAt(set, placed, "piExtensions").flatMap(
         (extension) => (extension.entry ? [extension.entry] : [])
@@ -1654,11 +1721,13 @@ export async function startPiHost(
   // fenced session has none of them, and CawCo's extensions alone
   // ({@link cawcosExtensionsAlone}).
   const fenced = spec.fence === true;
-  const fleetMcp = fenced ? undefined : new FleetMcp(ctx.cwd, ctx.mcpGate);
+  const fleetMcp = fenced
+    ? undefined
+    : new FleetMcp(ctx.cwd, ctx.mcpGate, spec.startingSet);
   const mcp: ExtensionFactory[] = fleetMcp
     ? [
         createToolSearchExtension(),
-        createMcpExtension(),
+        piMcpExtension(spec.startingSet),
         fleetMcp.extension(
           (await fleetMcp.read(await ctx.browserDoor?.())).servers
         ),

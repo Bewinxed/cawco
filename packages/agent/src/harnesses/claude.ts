@@ -109,6 +109,7 @@ import {
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
   identityOf,
+  inStartingSet,
   MESSAGES_HELD,
   MESSAGES_READ,
   mcpGatewayPort,
@@ -1731,17 +1732,6 @@ const startingSetOptions = (set: StartingSet | undefined) =>
  */
 const startingSetSettings = (set: StartingSet | undefined) =>
   set ? FENCE_SETTINGS : {};
-
-/** `servers` held to a starting set's names; all of them with none. */
-const inStartingSet = <Config>(
-  servers: Record<string, Config>,
-  set: StartingSet | undefined
-): Record<string, Config> =>
-  set
-    ? Object.fromEntries(
-        Object.entries(servers).filter(([name]) => set.servers.includes(name))
-      )
-    : servers;
 
 /**
  * The SDK hooks a session's compaction runs: its open items, word for word,

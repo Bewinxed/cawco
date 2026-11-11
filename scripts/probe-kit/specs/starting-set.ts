@@ -27,6 +27,13 @@
  * - n1. A delegate of a type with no set lists every skill and takes every
  *   server, the account's own included, and its Skill call to the same
  *   skill runs.
+ * - p1–p3 (tsk-338), on pi: four skills in pi's agent dir, the person's own
+ *   `mcp.json` server (`probe-user`) and a server his own pi extension
+ *   registers (`probe-ext`), beside the two fleet servers. A delegate of a pi
+ *   type whose set is two skills and `probe-in` lists exactly those, the
+ *   skill its `delegate` call named and CawCo's own skills (p1), is told of
+ *   `probe-in` alone of the MCP servers and keeps CawCo's tools (p2); one of
+ *   a pi type with no set lists every skill and every server (p3).
  *
  *   bun scripts/probe-kit/run.ts starting-set
  */
@@ -67,6 +74,17 @@ const USER_SERVER = "probe-user";
 
 const SET_TYPE = "probe-set";
 const PLAIN_TYPE = "probe-plain";
+
+/** pi's skills: the account's three and one more, so a set of two leaves two out. */
+const PI_SKILLS = [...SKILLS, "probe-set-delta"];
+const PI_SET: StartingSet = {
+  skills: ["probe-set-alpha", "probe-set-gamma"],
+  servers: ["probe-in"],
+};
+/** The server the person's own pi extension registers. */
+const EXT_SERVER = "probe-ext";
+const PI_SET_TYPE = "probe-set-pi";
+const PI_PLAIN_TYPE = "probe-plain-pi";
 
 /** The skill each delegate's first turn calls, by the tag its brief carries. */
 const CALLS: Record<string, string> = {
@@ -208,6 +226,32 @@ const plantAccount = async (fleet: KitFleet, server: string): Promise<void> => {
   );
 };
 
+/**
+ * pi's agent dir: its skills, the person's own `mcp.json` server and his own
+ * pi extension, which registers a server of its own.
+ */
+const plantPi = async (fleet: KitFleet, server: string): Promise<void> => {
+  const pi = join(fleet.env.HOME as string, ".pi", "agent");
+  const stdio = (name: string) => ({
+    command: process.execPath,
+    args: [server, name],
+    exposure: "deferred",
+  });
+  await writeAll({
+    ...Object.fromEntries(
+      PI_SKILLS.map((name) => [
+        join(pi, "skills", name, "SKILL.md"),
+        skillFile(name, `The probe's ${name}.`),
+      ])
+    ),
+    [join(pi, "mcp.json")]: JSON.stringify({
+      mcpServers: { [USER_SERVER]: stdio(USER_SERVER) },
+    }),
+    [join(pi, "extensions", "probe-ext.ts")]:
+      `export default (pi) => pi.registerMcpServer(${JSON.stringify(EXT_SERVER)}, ${JSON.stringify(stdio(EXT_SERVER))});\n`,
+  });
+};
+
 /** Every string a request's JSON body holds, joined: what its model read, escapes undone. */
 const wordsOf = (body: string): string => {
   const out: string[] = [];
@@ -252,6 +296,30 @@ const listingOf = (words: string): string[] => {
     .sort();
 };
 
+/** The skills pi's newest system prompt lists (`<available_skills>`, pi skills.js `formatSkillsForPrompt`), sorted. */
+const piListingOf = (words: string): string[] => {
+  const block =
+    [
+      ...words.matchAll(/<available_skills>([\s\S]*?)<\/available_skills>/gu),
+    ].at(-1)?.[1] ?? "";
+  return [...block.matchAll(/<name>([^<]+)<\/name>/gu)]
+    .map((match) => match[1] as string)
+    .sort();
+};
+
+/** The MCP servers pi's `mcp_servers` section tells its model of (`- mcp__<server> (tool_search)`), as namespaces, sorted. */
+const piServersOf = (words: string): string[] =>
+  [
+    ...new Set(
+      [...words.matchAll(/^- mcp__(\w+) \((?:tool_search|codemode)\)/gmu)].map(
+        (match) => match[1] as string
+      )
+    ),
+  ].sort();
+
+/** A server's name as pi namespaces it (pi core/mcp-servers.js `mcpNamespace`). */
+const piNamespace = (name: string): string => name.replace(/-/gu, "_");
+
 /** The MCP servers whose tools a turn names (`mcp__<server>__<tool>`), sorted. */
 const serversOf = (words: string, offered: readonly string[]): string[] =>
   [
@@ -291,6 +359,107 @@ const rowSet = (fleet: KitFleet, instanceId: string): unknown => {
 const same = (a: readonly string[], b: readonly string[]): boolean =>
   JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 
+/** p1–p3: the set on pi, beside a pi type with none. */
+const piLegs = async (
+  kit: Kit,
+  fleet: KitFleet,
+  parent: string,
+  at: string
+): Promise<void> => {
+  const answer = await toolWords(
+    {
+      base: fleet.base,
+      id: parent,
+      credential: await fleet.sessionCredential(parent),
+    },
+    "admin_delegate_types_write",
+    {
+      action: "put",
+      name: PI_SET_TYPE,
+      description: "A probe's pi type with a starting set",
+      harness: "pi",
+      model: MODEL.pi,
+      startingSet: PI_SET,
+      reason: "The starting-set probe's pi type.",
+    }
+  );
+  if (answer.refused) {
+    throw new Error(`the pi type was refused: ${answer.text}`);
+  }
+  await fleet.api(
+    hubRequest("PUT /api/delegate-types/:name", {
+      path: { name: PI_PLAIN_TYPE },
+      body: {
+        description: "A probe's pi type with no set",
+        harness: "pi",
+        model: MODEL.pi,
+      },
+    })
+  );
+  await delegate(fleet, {
+    parentInstanceId: parent,
+    title: "pi set delegate",
+    prompt: "PROBE-PI-SET: say ok.",
+    type: PI_SET_TYPE,
+    skills: [BRIEF_SKILL],
+    host: true,
+    cwd: at,
+  });
+  await delegate(fleet, {
+    parentInstanceId: parent,
+    title: "pi plain delegate",
+    prompt: "PROBE-PI-PLAIN: say ok.",
+    type: PI_PLAIN_TYPE,
+    host: true,
+    cwd: at,
+  });
+  const set = (await awaitTurns(fleet, "PROBE-PI-SET"))[0] as Seen;
+  const plain = (await awaitTurns(fleet, "PROBE-PI-PLAIN"))[0] as Seen;
+  const setWords = wordsOf(set.body);
+  const plainWords = wordsOf(plain.body);
+  const listed = piListingOf(setWords);
+  const plainListed = piListingOf(plainWords);
+  const servers = piServersOf(setWords);
+  const plainServers = piServersOf(plainWords);
+  const cawcoTools = (tools: readonly string[]) =>
+    ["handoff", "set_title"].every((name) => tools.includes(name));
+  await writeFile(
+    join(fleet.sandbox, "starting-set-pi-listings.json"),
+    JSON.stringify(
+      {
+        set: { skills: listed, servers, tools: set.toolNames },
+        plain: {
+          skills: plainListed,
+          servers: plainServers,
+          tools: plain.toolNames,
+        },
+      },
+      null,
+      2
+    )
+  );
+  kit.check(
+    "p1: a pi delegate of a type whose set is two skills lists exactly those two, the skill its delegate call named, and CawCo's own; neither other skill of pi's",
+    same(listed, [...PI_SET.skills, BRIEF_SKILL, ...BUNDLED_SKILLS]),
+    `listed ${listed.join(", ")}`
+  );
+  kit.check(
+    "p2: of the MCP servers it is told of probe-in alone: not the fleet's probe-out, the person's own mcp.json probe-user, nor probe-ext his own pi extension registers; CawCo's own tools are its",
+    same(servers, [piNamespace("probe-in")]) && cawcoTools(set.toolNames),
+    `servers ${servers.join(", ")}; tools ${set.toolNames.join(", ")}`
+  );
+  kit.check(
+    "p3: a pi delegate of a type with no set lists every skill of pi's and is told of every server, the person's own and his extension's included",
+    PI_SKILLS.every((name) => plainListed.includes(name)) &&
+      same(
+        plainServers,
+        [...FLEET_SERVERS, USER_SERVER, EXT_SERVER].map(piNamespace)
+      ) &&
+      cawcoTools(plain.toolNames),
+    `listed ${plainListed.length} skills: ${plainListed.join(", ")}; servers ${plainServers.join(", ")}`
+  );
+};
+
 const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "starting-set",
@@ -309,6 +478,7 @@ const spec: Spec = {
     await fleet.agentUp();
     await fleet.accountSignedIn();
     await plantAccount(fleet, server);
+    await plantPi(fleet, server);
     for (const name of FLEET_SERVERS) {
       await fleet.api(
         hubRequest("PUT /api/fleet/mcp/:name", {
@@ -470,6 +640,8 @@ const spec: Spec = {
         !plainCall.toolFailed,
       `listed ${plainListed.length} skills: ${plainListed.join(", ")}; servers ${plainServers.join(", ")}; call failed ${plainCall.toolFailed}`
     );
+
+    await piLegs(kit, fleet, parent, at);
 
     // s4: the type changes; the running session keeps its set, a new one takes the change.
     const before = rowSet(fleet, started.inside);
