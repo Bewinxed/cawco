@@ -16,6 +16,7 @@
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { hubSeam } from "#lib/cawco/hub-live.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -151,6 +152,8 @@
 
   // --- the hub's page, and what keeps it live -------------------------------------
 
+  /** The hub this page reads: the live client's, or a states file's stand-in. */
+  const hub = hubSeam();
   /** The page as the hub last answered it; null until the first read lands. */
   let page = $state<RoutinesPage | null>(null);
   /** Why the last read failed, while nothing has been read. */
@@ -162,7 +165,7 @@
     reads += 1;
     const ticket = reads;
     try {
-      const next = await readRoutinesPage(id);
+      const next = await readRoutinesPage(id, hub.read);
       if (id === project.id && ticket === reads) {
         page = next;
         problem = null;
@@ -180,7 +183,7 @@
   let pageOf = "";
   $effect(() => {
     const { id } = project;
-    if (cawco.status !== "connected") {
+    if (hub.state !== "connected") {
       readFor = "";
       return;
     }

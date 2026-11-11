@@ -8,7 +8,7 @@
  */
 import type { ApprovedActionView } from "@cawco/core/actions";
 import type { ConnectionView } from "@cawco/core/connections";
-import { hubRequest } from "@cawco/core/hub-request";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import type { RelayView } from "@cawco/core/relays";
 import type { RoutineRunView, RoutineTarget } from "@cawco/core/routine-kinds";
 import { routinesWords } from "@cawco/core/words/routines";
@@ -108,29 +108,33 @@ interface IngressRead {
   routes: Omit<EventRoute, "service">[];
 }
 
-/** The project's routines page, each part read at once. */
+/**
+ * The project's routines page, each part read at once, through `read`: the
+ * live client's `send`, or a states file's stand-in hub (hub-seam.ts).
+ */
 export async function readRoutinesPage(
-  projectId: string
+  projectId: string,
+  read: <T>(request: HubRequest) => Promise<T> = send
 ): Promise<RoutinesPage> {
   const id = encodeURIComponent(projectId);
   const [routines, ingress, relays, actions, connections, trim] =
     await Promise.all([
-      send<Routine[]>(
+      read<Routine[]>(
         hubRequest("GET /api/routines", { query: { projectId: id } })
       ),
-      send<IngressRead>(
+      read<IngressRead>(
         hubRequest("GET /api/projects/:id/ingress", { path: { id: projectId } })
       ),
-      send<RelayView[]>(
+      read<RelayView[]>(
         hubRequest("GET /api/projects/:id/relays", { path: { id: projectId } })
       ),
-      send<{ actions: ApprovedActionView[] }>(
+      read<{ actions: ApprovedActionView[] }>(
         hubRequest("GET /api/actions", { query: { projectId: id } })
       ),
-      send<{ connections: ConnectionView[] }>(
+      read<{ connections: ConnectionView[] }>(
         hubRequest("GET /api/connections")
       ),
-      send<{ offered: boolean }>(
+      read<{ offered: boolean }>(
         hubRequest("GET /api/projects/:id/trim-routine", {
           path: { id: projectId },
         })
