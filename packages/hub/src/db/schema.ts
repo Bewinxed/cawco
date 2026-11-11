@@ -3653,20 +3653,37 @@ export const jevSettings = sqliteTable("jev_settings", {
 });
 
 /**
- * How often the operator's sessions used each skill, tool and MCP server, per
- * day. Counted by the hub from the frames it already relays, backfilled once
- * from the transcript index. Ranks composer suggestion candidates.
+ * Each skill, tool and MCP server a session called, per day: how many calls
+ * and when its last one was. Counted by the hub from the frames it relays
+ * (usage-count.ts `UsageCounter`), every harness's in one neutral shape, and
+ * backfilled once from the hub machine's Claude transcripts. Ranks composer
+ * suggestion candidates (summed over sessions) and answers which skills and
+ * servers each role called (capability-calls.ts).
+ *
+ * `instanceId` is not a foreign key: a deleted session's calls still rank
+ * suggestions. A backfilled call whose conversation is no session of the
+ * hub's (one run from a terminal) is kept under `''`.
  */
-export const capabilityUsageDaily = sqliteTable(
-  "capability_usage_daily",
+export const capabilityCalls = sqliteTable(
+  "capability_calls",
   {
+    instanceId: text("instance_id").notNull(),
     kind: text("kind").$type<CapabilityKind>().notNull(),
+    /** A skill's name, a tool's, or an MCP server's as its tools' `mcp__<server>__` prefix writes it. */
     name: text("name").notNull(),
-    /** Local date, `YYYY-MM-DD`. */
+    /** The hub's local date, `YYYY-MM-DD`. */
     day: text("day").notNull(),
     count: integer("count").notNull(),
+    /** The newest call that day. */
+    lastAt: timestamp("last_at").notNull(),
   },
-  (table) => [primaryKey({ columns: [table.kind, table.name, table.day] })]
+  (table) => [
+    primaryKey({
+      columns: [table.instanceId, table.kind, table.name, table.day],
+    }),
+    // The window a count reads, and what suggestions read since a day.
+    index("capability_calls_day").on(table.day),
+  ]
 );
 
 /**

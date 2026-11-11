@@ -99,7 +99,6 @@ import { ownIdentity } from "@cawco/core/process-identity";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { nameStoredRowsFrom } from "@cawco/core/stored-json";
-import type { CapabilityKind } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import {
   and,
@@ -151,6 +150,7 @@ import { type AsksDb, asksDb } from "./asks";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
 import { type BrowsersDb, browsersDb } from "./browsers";
+import { type CapabilityCallsDb, capabilityCallsDb } from "./capability-calls";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type DecidesDb, decidesDb } from "./decides";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
@@ -186,7 +186,6 @@ import {
   areas,
   artifacts,
   askPushes,
-  capabilityUsageDaily,
   chosenModes,
   claudeContextWindows,
   completedTurns,
@@ -687,15 +686,6 @@ export interface DbShape {
   readonly actions: ActionsDb;
   /** A machine's active workspaces with a clone: an item there is live, or the hub has not settled it since. Never a host-scope row (schema.ts `workspaces.host`). */
   readonly activeWorkspacesOn: (machineId: string) => WorkspaceRow[];
-  /** Adds counted capability uses, summing into any row already there. */
-  readonly addCapabilityUsage: (
-    rows: {
-      kind: CapabilityKind;
-      name: string;
-      day: string;
-      count: number;
-    }[]
-  ) => void;
   /**
    * Files a place of a project. One already there for that project, machine
    * and folder is answered as it is, with `added` false. A project's first
@@ -817,12 +807,8 @@ export interface DbShape {
   readonly briefingsHanded: (instanceId: string) => Map<string, string>;
   /** The fleet's browsers, per machine (browsers.ts). */
   readonly browsers: BrowsersDb;
-  /** Whether nothing has been counted yet — the backfill's cue. */
-  readonly capabilityUsageEmpty: () => boolean;
-  /** Every usage row on or after `day` (`YYYY-MM-DD`). */
-  readonly capabilityUsageSince: (
-    day: string
-  ) => (typeof capabilityUsageDaily.$inferSelect)[];
+  /** Each session's skill, tool and MCP server calls (usage-count.ts, capability-calls.ts). */
+  readonly capabilityCalls: CapabilityCallsDb;
   /**
    * Work item `itemId` moves from session `from` to session `to`, a
    * continuation of it: the item and `to`'s row name each other, and
@@ -10557,6 +10543,7 @@ const make = async (path: string): Promise<DbShape> => {
     accounts: accountsDb(db),
     areas: areasStore,
     turnUsage: turnUsageDb(db),
+    capabilityCalls: capabilityCallsDb(db),
     toolCallKeys: toolCallKeysDb(db),
     turnCuts: turnCutsDb(db),
     treeStops: treeStopsDb(db),
@@ -10969,37 +10956,6 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
     },
-    addCapabilityUsage: (rows) => {
-      db.transaction((tx) => {
-        for (const row of rows) {
-          tx.insert(capabilityUsageDaily)
-            .values(row)
-            .onConflictDoUpdate({
-              target: [
-                capabilityUsageDaily.kind,
-                capabilityUsageDaily.name,
-                capabilityUsageDaily.day,
-              ],
-              set: {
-                count: sql`${capabilityUsageDaily.count} + ${row.count}`,
-              },
-            })
-            .run();
-        }
-      });
-    },
-    capabilityUsageSince: (day) =>
-      db
-        .select()
-        .from(capabilityUsageDaily)
-        .where(gte(capabilityUsageDaily.day, day))
-        .all(),
-    capabilityUsageEmpty: () =>
-      db
-        .select({ day: capabilityUsageDaily.day })
-        .from(capabilityUsageDaily)
-        .limit(1)
-        .get() === undefined,
     skillsInstalledSince: (since) =>
       db
         .select({ name: skills.name })

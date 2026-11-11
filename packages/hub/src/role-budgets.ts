@@ -104,9 +104,13 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * says what a delegate costs and how to brief one ("Set expectations for
  * subagents"), and finish_item's says who reads the report ("Make reports
  * easy to follow") (worker 30,040, delegate 11,206 measured).
+ * 2026-11-11: calls_by_role, which skills and MCP servers each role's
+ * sessions called (capability-calls.ts), so the routine that proposes
+ * trimming each role's starting set reads a count, not transcripts
+ * (worker 30,358 measured; a delegate is listed none).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_100,
+  worker: 30_400,
   delegate: 11_250,
   overseer: 770,
   "web-facing": 3400,
@@ -402,6 +406,10 @@ export const standIn = (
       find: () => Promise.reject(new Error("measuring")),
       machineIds: () => [],
       pairing: () => false,
+      capabilityCalls: () => {
+        throw new Error("measuring");
+      },
+      projects: () => [],
     }),
     // The browser ask, from the one list the server gives sessions.
     browserTools: (actor) =>

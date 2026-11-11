@@ -4,8 +4,9 @@
  * what a verdict recorded.
  */
 import type { UpdateReport } from "@cawco/core";
+import type { CapabilityCallsReport } from "../capability-calls";
 import type { DesignWritten } from "../design-system";
-import { lines, listed } from "./words";
+import { ago, count, lines, listed } from "./words";
 
 /** `update_machines`: the build found, then each machine's install. */
 export const machinesUpdatedWords = (updated: {
@@ -50,3 +51,34 @@ export const designVerdictWords = (recorded: {
   recorded: string;
 }): string =>
   `Recorded ${recorded.recorded === "passed" ? "a pass" : "your findings"}. ${recorded.finished}`;
+
+/** `calls_by_role`: the window and what was counted, a line per role and name, then what no session called. */
+export const capabilityCallsWords = (
+  report: CapabilityCallsReport,
+  now = Date.now()
+): string => {
+  const harnesses = Object.entries(report.sessions).map(
+    ([harness, n]) => `${harness} ${n}`
+  );
+  const counted = harnesses.length
+    ? `sessions that called any: ${listed(harnesses)}`
+    : "no session called a skill or server";
+  return lines(
+    `Skills and MCP servers called in ${report.project ? `project ${report.project.name}` : "every project"}, the last ${count(report.days, "day")} (since ${new Date(report.since).toISOString().slice(0, 10)}); ${counted}.`,
+    report.rows.length > 0 && "role | kind | name | sessions | last call",
+    report.rows.map(
+      (row) =>
+        `${row.role} | ${row.kind} | ${row.name} | ${row.sessions} | ${ago(row.lastAt, now)}`
+    ),
+    report.uncalled !== undefined &&
+      (report.uncalled.length === 0
+        ? "Every skill and server the window's sessions listed was called."
+        : lines(
+            `Listed by the window's sessions and called by none (${report.uncalled.length}), with the machines that list it, of ${report.machines.length}:`,
+            report.uncalled.map(
+              (item) =>
+                `${item.kind} | ${item.name} | ${item.machines.length === report.machines.length ? "every machine" : listed(item.machines)}`
+            )
+          ))
+  );
+};

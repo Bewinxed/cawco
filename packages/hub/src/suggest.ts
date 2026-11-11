@@ -5,7 +5,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess, jevUnanswered } from "./jev";
-import { usageScores } from "./usage-count";
+import { mcpUsageName, usageScores } from "./usage-count";
 
 /** Suggestions answer while the reader types, so they are asked briefly. */
 const SUGGEST_TIMEOUT_MS = 10_000;
@@ -38,16 +38,9 @@ const NEVER_SUGGEST_TOOLS = new Set([
   "Skill",
 ]);
 
-/**
- * The name a candidate's usage is recorded under. MCP usage is keyed by the
- * `mcp__<server>__` tool-name prefix, which is the server's display name with
- * everything outside `[A-Za-z0-9_-]` replaced by `_` (`Exa.ai` → `Exa_ai`).
- */
-function usageName(candidate: SuggestCandidate): string {
-  return candidate.kind === "mcp"
-    ? candidate.name.replace(/[^A-Za-z0-9_-]/gu, "_")
-    : candidate.name;
-}
+/** The name a candidate's usage is recorded under: a server's, its tools' prefix. */
+const usageName = (candidate: SuggestCandidate): string =>
+  candidate.kind === "mcp" ? mcpUsageName(candidate.name) : candidate.name;
 
 /**
  * The candidates worth asking about: the top {@link SUGGEST_CANDIDATE_LIMIT}

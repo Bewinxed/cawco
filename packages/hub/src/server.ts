@@ -698,6 +698,7 @@ import {
   createBrowsers,
 } from "./browsers";
 import { createCallKeys } from "./call-keys";
+import { CapabilityCallsRefusal, capabilityCalls } from "./capability-calls";
 import {
   type Caw,
   cawRoutes,
@@ -28637,6 +28638,12 @@ export const createServer = (
       designSystem.write(actor, files, why, toolUseId),
     machineIds: () => registry.machineIds(),
     pairing: () => hubAuth.mode() === "pairing",
+    capabilityCalls: (asked) => capabilityCalls(db, asked),
+    projects: () =>
+      db.listProjects().map((project) => ({
+        id: project.id,
+        name: project.name,
+      })),
   });
   // A relayed tool call sent again under its key is answered, not run again.
   const toolCallKeys = createToolCallKeys({ db: db.toolCallKeys, lifetime });
@@ -38339,6 +38346,29 @@ export const createServer = (
       // limits frame, so the dashboard pulls aggregates when it needs them.
       .get("/api/usage/limits", (): UsageLimitsResponse => usageLimits(db))
       .get("/api/usage/spend", (): UsageSpend => spendNow())
+      // Which skills and MCP servers each role's sessions called
+      // (capability-calls.ts): a project's, or every project's with what
+      // was installed and called by none.
+      .get(
+        "/api/capability-calls",
+        {
+          ...hidden,
+          query: t.Object({
+            projectId: t.Optional(t.String({ minLength: 1 })),
+            days: t.Optional(t.Numeric()),
+          }),
+        },
+        ({ query, status }) => {
+          try {
+            return capabilityCalls(db, query);
+          } catch (error) {
+            if (error instanceof CapabilityCallsRefusal) {
+              return status(400, error.message);
+            }
+            throw error;
+          }
+        }
+      )
       .get(
         "/api/usage/limits/history",
         {

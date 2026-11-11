@@ -373,6 +373,12 @@ export interface components {
     "GET /api/binary-updates/release": Record<string, never>;
     "GET /api/binary-updates/settings": Record<string, never>;
     "GET /api/browsers": Record<string, never>;
+    "GET /api/capability-calls": {
+      query?: {
+        days?: number | string;
+        projectId?: string;
+      };
+    };
     "GET /api/connections": Record<string, never>;
     "GET /api/connections/:name/github-projects": {
       path: {
@@ -4372,6 +4378,16 @@ export interface components {
       reason: string;
       /** @enum {string} */
       response_format?: "concise" | "detailed";
+    };
+    "tool calls_by_role": {
+      /** @description Default 30. */
+      days?: number;
+      /** @description A name or id; "all" for every project. Default: your own project, else all. */
+      project?: string;
+      /** @enum {string} */
+      response_format?: "concise" | "detailed";
+      /** @description Only this role's rows, like build or person. */
+      role?: string;
     };
     "tool comment_read": {
       /** @description Its name, handle or id. */

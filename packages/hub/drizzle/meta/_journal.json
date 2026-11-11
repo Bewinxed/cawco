@@ -2668,6 +2668,13 @@
       "when": 1794398925147,
       "tag": "0388_instances_starting_set",
       "breakpoints": true
+    },
+    {
+      "idx": 389,
+      "version": "6",
+      "when": 1794400373109,
+      "tag": "0389_capability_calls",
+      "breakpoints": true
     }
   ]
 }

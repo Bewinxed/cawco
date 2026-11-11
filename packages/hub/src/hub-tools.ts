@@ -17,12 +17,20 @@
  *   its must-fix findings, each tied to an element, or none for a pass.
  * - `find`, for `GET /api/find`: the dashboard's Finder, the same engine,
  *   narrowed and read as a session needs it (find-tool.ts).
+ * - `calls_by_role`, for `GET /api/capability-calls`: which skills and MCP
+ *   servers each role's sessions called (capability-calls.ts), a project
+ *   named by its name too.
  *
  * One list, made here: the MCP server lists it to sessions (server.ts) and
  * the role budgets measure it (role-budgets.ts).
  */
 import type { InstanceRow } from "@cawco/core";
 import { z } from "zod";
+import {
+  CALLS_DEFAULT_DAYS,
+  CALLS_MAX_DAYS,
+  type CapabilityCallsReport,
+} from "./capability-calls";
 import type { DesignFinding, DesignPick } from "./db/schema";
 import {
   DESIGN_WRITE_FILES,
@@ -33,6 +41,7 @@ import { FIND_TOOL, type FindTool, findToolDefinition } from "./find-tool";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { tool } from "./mcp-tool";
 import {
+  capabilityCallsWords,
   designVerdictWords,
   designWrittenWords,
   machinesUpdatedWords,
@@ -56,6 +65,7 @@ export const HUB_TOOLS: ReadonlySet<string> = new Set([
   "design_write",
   DESIGN_VERDICT,
   FIND_TOOL,
+  "calls_by_role",
 ]);
 
 /** A verifier's verdict as `design_verdict` takes it. */
@@ -130,6 +140,11 @@ export interface HubToolsDeps {
     name: string,
     input: Record<string, unknown>
   ) => Promise<string | undefined>;
+  /** The count of skill and server calls by role (capability-calls.ts), for a project or every one. */
+  capabilityCalls: (asked: {
+    days?: number;
+    projectId?: string;
+  }) => CapabilityCallsReport;
   /** A design check's verdict from its verifier (design-verify.ts `verdict`). */
   designVerdict: (
     actor: InstanceRow,
@@ -150,7 +165,31 @@ export interface HubToolsDeps {
   machineIds: () => string[];
   /** Whether the hub requires paired devices (hub-auth.ts): an install asks the person first. */
   pairing: () => boolean;
+  /** The projects, by id and name. */
+  projects: () => { id: string; name: string }[];
 }
+
+/** The project `asked` names, by id or name; undefined for every project. */
+const projectNamed = (
+  asked: string,
+  projects: { id: string; name: string }[]
+): string | undefined => {
+  const name = asked.trim();
+  if (name.toLowerCase() === "all") {
+    return;
+  }
+  const found =
+    projects.find((project) => project.id === name) ??
+    projects.find(
+      (project) => project.name.toLowerCase() === name.toLowerCase()
+    );
+  if (!found) {
+    throw new Error(
+      `project "${asked}" is no project of this fleet. Projects: ${projects.map((project) => project.name).join(", ") || "none"}. Example: {"project": "all", "days": 30}`
+    );
+  }
+  return found.id;
+};
 
 /** The hub's own session tools, bound to the calling session (none for a listing). */
 export const createHubTools =
@@ -246,5 +285,54 @@ export const createHubTools =
         designVerdictWords
       ),
       findToolDefinition((input, format) => deps.find(me(), input, format)),
+      tool(
+        "calls_by_role",
+        `Which skills and MCP servers each role's sessions called in the last days: per role and name, how many sessions called it and when last. A role is a delegate type, or person for the sessions the person started. Project "all" also lists what sessions had installed and none called.`,
+        {
+          project: z
+            .string()
+            .min(1)
+            .optional()
+            .describe(
+              'A name or id; "all" for every project. Default: your own project, else all.'
+            ),
+          days: z
+            .number()
+            .int()
+            .min(1)
+            .max(CALLS_MAX_DAYS)
+            .optional()
+            .describe(`Default ${CALLS_DEFAULT_DAYS}.`),
+          role: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Only this role's rows, like build or person."),
+        },
+        ({ project, days, role }) => {
+          const projectId =
+            project === undefined
+              ? (me().projectId ?? undefined)
+              : projectNamed(project, deps.projects());
+          const report = deps.capabilityCalls({ days, projectId });
+          return Promise.resolve(
+            role === undefined
+              ? report
+              : {
+                  ...report,
+                  rows: report.rows.filter((row) => row.role === role),
+                }
+          );
+        },
+        (report) => capabilityCallsWords(report),
+        {
+          annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+          },
+        }
+      ),
     ];
   };
