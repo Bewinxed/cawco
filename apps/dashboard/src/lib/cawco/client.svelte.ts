@@ -1480,7 +1480,9 @@ function standCatalog(machineId: string, sessions: NeutralSessionInfo[]): void {
 type BenchHub = (
   instanceId: string,
   kind: CommandKind,
-  intent: unknown
+  intent: unknown,
+  /** The id it goes under: a send's is its row's, and its record's once the hub has it. */
+  commandId: string
 ) => void;
 let benchHub: BenchHub | null = null;
 /** What a bench's hub does with a start ({@link start}): it opens the row, as the hub does when it takes one. */
@@ -1514,7 +1516,7 @@ function benchTook(
     const { text, extras, replaces } = intent as CommandIntents["send"];
     noteSendSubmitted(instanceId, text, extras ?? {}, commandId, replaces);
   }
-  benchHub(instanceId, kind, intent);
+  benchHub(instanceId, kind, intent, commandId);
   return true;
 }
 
@@ -6739,12 +6741,19 @@ function planOf(key: string): ResumePlan {
  * session wraps): it is resumed as a session of CawCo's, on its machine and
  * in its folder, with what it ran with ({@link ResumePlan}), `text` its
  * first prompt, through the one start on a stored conversation
- * ({@link forkSession}). His words stand in the transcript at once, and a
- * line under them says it is being resumed. Once its machine has taken the
- * start, `land` makes the page the new session's (its tab re-addressed),
- * where the same words stand as its first prompt. A start its machine
+ * ({@link forkSession}). His words stand in the transcript at once, and
+ * under them, where its working line stands once it runs, a line says it
+ * is being resumed. Once its machine has taken the start, `land` makes the
+ * page the new session's (its tab re-addressed), where the same words
+ * stand as its first prompt and the session works. A start its machine
  * refused or did not answer throws why, the words taken back for the
  * caller to put in the field.
+ *
+ * A transcript whose sign-in is no account of CawCo's on its machine (its
+ * run's `account` null, none picked in its tab's details) is `refused`
+ * before anything runs: nothing picks an account for it. The transcript
+ * says so, with the sign-in and the ways on, and the words are the
+ * caller's to put back.
  */
 export async function resumeStored(
   source: ForkSource,
@@ -6752,21 +6761,48 @@ export async function resumeStored(
   extras: SendExtras,
   commandId: string,
   land: (instanceId: string) => void
-): Promise<void> {
+): Promise<"resumed" | "refused"> {
   const viewId = source.sessionId;
-  drawFirstPrompt(viewId, commandId, text, extras, source);
   const target = session(viewId);
-  const note: Message = {
+  const said = resumeRefusals.get(viewId);
+  if (said) {
+    resumeRefusals.delete(viewId);
+    target.notes = target.notes.filter((held) => held.message.id !== said.id);
+    place(target);
+  }
+  const run = await readStoredRun(source);
+  const plan = planOf(viewId);
+  if (run.account === null && !plan.account) {
+    // Its sign-in is no account of CawCo's, and nothing picks one for it:
+    // said where the resume would have stood, before anything runs.
+    const refusal: Message = {
+      id: newId(),
+      instanceId: viewId,
+      type: "ui.error",
+      content: run.signIn
+        ? transcriptWords.noAccount(machineName(source.machineId), run.signIn)
+        : transcriptWords.noSignIn(machineName(source.machineId)),
+      metadata: { errorTitle: transcriptWords.notResumed },
+      timestamp: new Date().toISOString(),
+    };
+    resumeRefusals.set(viewId, refusal);
+    addNote(target, refusal);
+    return "refused";
+  }
+  // His words, then the line that says what is happening to them, where
+  // the session's own working line stands once it runs: the transcript
+  // works at nothing until then.
+  const sent = localUserMessage(viewId, commandId, text, extras);
+  const resuming: Message = {
     id: newId(),
     instanceId: viewId,
     type: "ui.system_note",
     content: transcriptWords.resuming,
     timestamp: new Date().toISOString(),
   };
-  addNote(target, note);
+  target.local.push(sent, resuming);
+  place(target);
   try {
-    await readStoredRun(source);
-    const plan = planOf(viewId);
     const resumed = await forkSession({
       ...source,
       prompt: text,
@@ -6784,13 +6820,18 @@ export async function resumeStored(
       );
     }
     land(answeredOr(source.machineId, resumed, transcriptWords.resumeUnknown));
+    return "resumed";
   } finally {
     // The words go on in the session's own transcript, or back to the field.
-    withdrawFirstPrompt(viewId, commandId);
-    target.notes = target.notes.filter((held) => held.message !== note);
+    target.local = target.local.filter(
+      (held) => held.id !== sent.id && held.id !== resuming.id
+    );
     place(target);
   }
 }
+
+/** The refusal each stored transcript's last first message left in it ({@link resumeStored}): the next one takes it away. */
+const resumeRefusals = new Map<string, Message>();
 
 /** Where a fork branches from: the conversation, its machine, folder and harness, and the answer it branches at. */
 export interface ForkSource {

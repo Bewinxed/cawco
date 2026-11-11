@@ -1234,9 +1234,9 @@
    * wraps, and nothing has been sent on it: the line over its composer.
    */
   const storedNote = $derived(
-    !resuming && cawco.storedSource(viewId)
-      ? transcriptWords.startedOutside
-      : ""
+    // Read as the page opens, so its machine has said what it ran with by
+    // the time a message is sent.
+    !resuming && cawco.resumePlan(viewId) ? transcriptWords.startedOutside : ""
   );
 
   /**
@@ -1254,9 +1254,18 @@
   ): Promise<string | undefined> {
     resuming = true;
     try {
-      await resumeStored(stored, text, extras, id, (instanceId) =>
-        workspace.retarget(viewId, instanceId)
+      const outcome = await resumeStored(
+        stored,
+        text,
+        extras,
+        id,
+        (instanceId) => workspace.retarget(viewId, instanceId)
       );
+      if (outcome === "refused") {
+        // Said in the transcript: the words stay his to send.
+        draft.restore(text, extras);
+        return;
+      }
       return id;
     } catch (error) {
       draft.restore(text, extras);

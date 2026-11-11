@@ -909,12 +909,20 @@ export interface RanValue {
  * and the resume names none: the harness takes its own.
  */
 export interface StoredRun {
-  /** The account whose folder holds it; null: the machine's own sign-in. Absent on a harness that keeps no session by account. */
+  /**
+   * The account it resumes on: the one whose folder holds it, or, kept in
+   * the machine's own folder, the account signed in on this machine as that
+   * folder's login. Null when its login is no account's ({@link signIn}
+   * names it): nothing picks one for it. Absent on a harness that keeps no
+   * session by account.
+   */
   account?: string | null;
   effort?: RanValue;
   model?: RanValue;
   /** Always said by a harness that has modes: a session of CawCo's starts in one. */
   permissionMode?: RanValue;
+  /** Who the folder that holds it is signed in as, its email, where it is the machine's own and a login is kept there. */
+  signIn?: string;
 }
 
 /** A stored transcript entry. `message` is the {@link NeutralMessage} the turn wrote. */

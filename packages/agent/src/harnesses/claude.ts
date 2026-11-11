@@ -268,7 +268,7 @@ import {
   writtenAt,
 } from "../wakeups";
 import { FULL_CAPABILITIES } from "./capabilities";
-import { claudeStoredRun } from "./claude-stored-run";
+import { claudeStoredRun, homeLoginAccount } from "./claude-stored-run";
 import {
   CLAUDE_PROMPT_TYPES,
   claudePromptAt,
@@ -5455,7 +5455,11 @@ class ClaudeHarness implements Harness {
     return info ? { ...toInfo(info), ...(await wroteIn(file)) } : undefined;
   }
 
-  /** What the stored session ran with (claude-stored-run.ts): its account is the config dir that holds its transcript. */
+  /**
+   * What the stored session ran with (claude-stored-run.ts): its account is
+   * the one whose config dir holds its transcript, or, kept in the
+   * machine's own dir, the one signed in here as that dir's login.
+   */
   async storedRun(sessionKey: string, dir?: string): Promise<StoredRun> {
     const file = await claudeSessionFile(sessionKey, dir);
     if (!file) {
@@ -5463,11 +5467,17 @@ class ClaudeHarness implements Harness {
     }
     const configDir = dirname(dirname(dirname(file)));
     const info = await sessionInfoAt(file, sessionKey);
-    return await claudeStoredRun(
-      file,
-      info?.cwd ?? dir,
-      accountIds().find((id) => accountConfigDir(id) === configDir) ?? null
-    );
+    const accounts = accountIds();
+    const holder = accounts.find((id) => accountConfigDir(id) === configDir);
+    let on: Pick<StoredRun, "account" | "signIn">;
+    if (holder) {
+      on = { account: holder };
+    } else if (configDir === claudeHome()) {
+      on = await homeLoginAccount(accounts);
+    } else {
+      on = { account: null };
+    }
+    return await claudeStoredRun(file, info?.cwd ?? dir, on);
   }
 
   async getSessionMessages(

@@ -4,8 +4,11 @@
  * transcript run outside CawCo starts a session of CawCo's on it, with no
  * form to pick anything in.
  *
- * - Account: the config dir that holds the transcript, an account's or the
- *   machine's own sign-in's.
+ * - Account: the account whose config dir holds the transcript. One kept
+ *   in the machine's own dir is on the login Claude Code keeps for that dir
+ *   (`oauthAccount` in its `.claude.json`): the account signed in on this
+ *   machine as that same login, or none, and then the login's email is
+ *   said, for the one who has to pick.
  * - Permission mode: the transcript's newest `permission-mode` record (the
  *   CLI writes the session's mode there and reads it back on `--resume`,
  *   CLI 2.1.322); else `permissions.defaultMode` of the settings that apply
@@ -22,9 +25,18 @@
  */
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import {
+  type AccountIdentity,
+  identityOf,
+  sameIdentity,
+} from "@cawco/core/accounts";
 import type { RanFrom, StoredRun } from "@cawco/core/harness";
 import { isEffortLevel, PERMISSION_MODES } from "@cawco/core/harness";
-import { projectClaudeDir } from "@cawco/core/paths";
+import {
+  accountClaudeJson,
+  claudeHomeJson,
+  projectClaudeDir,
+} from "@cawco/core/paths";
 import { ReverseReader, typeFilter } from "@cawco/jsonl-parser";
 
 /** How far back from a transcript's end its mode and model are looked for. Ours: the CLI appends the mode after each turn, and a turn's assistant record is within one tool result of it. */
@@ -104,16 +116,60 @@ const fromTranscript = async (
   }
 };
 
+/** Who a `.claude.json` says its dir is signed in as; nothing when it keeps no login. */
+const signedInAt = async (
+  path: string
+): Promise<AccountIdentity | undefined> => {
+  const kept = (await settingsAt(path)) as
+    { oauthAccount?: unknown } | undefined;
+  const login = kept?.oauthAccount as
+    | {
+        emailAddress?: unknown;
+        organizationName?: unknown;
+        organizationUuid?: unknown;
+      }
+    | undefined;
+  const text = (value: unknown): string | undefined =>
+    typeof value === "string" && value !== "" ? value : undefined;
+  return identityOf({
+    email: text(login?.emailAddress),
+    organization: text(login?.organizationName),
+    orgId: text(login?.organizationUuid),
+  });
+};
+
+/**
+ * The account a transcript kept in the machine's own config dir resumes on:
+ * the one of `accounts` (this machine's) signed in as that dir's login
+ * (core `sameIdentity`), with the login's email; no account when none is,
+ * or when the dir keeps no login.
+ */
+export async function homeLoginAccount(
+  accounts: readonly string[]
+): Promise<Pick<StoredRun, "account" | "signIn">> {
+  const home = await signedInAt(claudeHomeJson());
+  if (!home) {
+    return { account: null };
+  }
+  for (const id of accounts) {
+    const held = await signedInAt(accountClaudeJson(id));
+    if (held && sameIdentity(home, held)) {
+      return { account: id, signIn: home.email };
+    }
+  }
+  return { account: null, signIn: home.email };
+}
+
 /**
  * What the session stored at `file` (a transcript under a config dir's
  * `projects/<slug>/`) ran with. `cwd` is the folder it ran in, as its
- * transcript says; `account` the account whose config dir holds it, null
- * for the machine's own sign-in.
+ * transcript says; `on` the account it resumes on, and the login its dir
+ * keeps where that is the machine's own.
  */
 export async function claudeStoredRun(
   file: string,
   cwd: string | undefined,
-  account: string | null
+  on: Pick<StoredRun, "account" | "signIn">
 ): Promise<StoredRun> {
   const configDir = dirname(dirname(dirname(file)));
   const tiers: [RanFrom, string][] = [
@@ -163,7 +219,7 @@ export async function claudeStoredRun(
     isEffortLevel(one.effortLevel) ? one.effortLevel : undefined
   );
   return {
-    account,
+    ...on,
     permissionMode: saidMode
       ? { from: "transcript", value: saidMode }
       : (set((one) => mode(one.permissions?.defaultMode)) ?? {

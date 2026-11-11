@@ -45,10 +45,14 @@ const providerOfSession = (
 
 /**
  * The accounts a session can run on, in fill-first order: its provider's,
- * signed in on its machine.
+ * signed in on its machine. `of` names the provider for a holder on no
+ * account (a stored transcript whose sign-in is no account of CawCo's).
  */
-export function signedInHere(instance: AccountHolder): Account[] {
-  const provider = providerOfSession(instance);
+export function signedInHere(
+  instance: AccountHolder,
+  of?: AccountProvider
+): Account[] {
+  const provider = providerOfSession(instance) ?? of;
   if (!provider) {
     return [];
   }

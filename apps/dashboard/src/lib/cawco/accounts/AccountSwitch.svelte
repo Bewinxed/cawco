@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { AccountProvider } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
   import {
     type ChipSize,
@@ -26,6 +27,7 @@
     moveTo,
     movingTo,
     shownAccount,
+    signedInHere,
     switchable,
   } from "./switch.svelte";
 
@@ -34,6 +36,7 @@
     readonly,
     size = "regular",
     onpick,
+    none,
   }: {
     instance: AccountHolder;
     /**
@@ -49,19 +52,29 @@
      * resumes on, which no session of the hub's runs on yet.
      */
     onpick?: (accountId: string) => void;
+    /**
+     * A holder on no account (a stored transcript whose sign-in is no
+     * account of CawCo's): what the chip says, and the provider whose
+     * accounts signed in on its machine it offers, any one a pick.
+     */
+    none?: { label: string; provider: AccountProvider };
   } = $props();
   const chip = $derived(
     chipVariants({ variant: "setting", size, class: "min-w-0 max-w-full" })
   );
 
   let open = $state(false);
-  const accounts = $derived(switchable(instance));
+  const accounts = $derived(
+    none && !instance.accountId
+      ? signedInHere(instance, none.provider)
+      : switchable(instance)
+  );
   const target = $derived(movingTo(instance));
   const shown = $derived.by(() => {
     const id = shownAccount(instance);
     return cawco.accounts?.accounts.find((one) => one.id === id) ?? null;
   });
-  const name = $derived(shown ? nameOf(shown) : "");
+  const name = $derived(shown ? nameOf(shown) : (none?.label ?? ""));
   const pickable = $derived(
     !(readonly || asking(instance)) && accounts.length > 0
   );
@@ -77,16 +90,18 @@
 </script>
 
 {#snippet face()}
-  <span
-    data-slot="dot"
-    aria-hidden="true"
-    class="size-space-2 flex-none rounded-pill bg-(--c)"
-    style:--c={hueVar(shown?.hue ?? "amber")}
-  ></span>
+  {#if shown}
+    <span
+      data-slot="dot"
+      aria-hidden="true"
+      class="size-space-2 flex-none rounded-pill bg-(--c)"
+      style:--c={hueVar(shown.hue)}
+    ></span>
+  {/if}
   <span data-slot="chip-label" data-account-chip>{name}</span>
 {/snippet}
 
-{#if shown}
+{#if shown || none}
   {#if pickable}
     <NsPopover
       haspopup="listbox"

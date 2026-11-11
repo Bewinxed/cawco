@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { CLAUDE_PROVIDER } from "@cawco/core/accounts";
   import type { PermissionRequestFrame, PulseFrame } from "@cawco/core/frames";
   import {
     CAPABILITIES_NONE,
@@ -36,7 +37,10 @@
    * opened from the rail), until a reload: its machines are then
    * connected, the transcript typed in a terminal is read as the hub reads
    * one, and its machine says what it ran with (`__rb.controls`), so its
-   * page is written to and its first message resumes it. `window.__rb` drives what the
+   * page is written to and its first message resumes it. Its sign-in is
+   * no account of CawCo's there, so the message is refused until an
+   * account is picked in its details (`?stay=matched`: it is the studio's
+   * account, and resumes on it). `window.__rb` drives what the
    * hub would: `status(id, "working" |
    * "needs" | "yours" | "wakes")` moves a session between the list's three
    * words (a pulse, a parked ask, the turn's end, a turn that ended waiting
@@ -74,11 +78,21 @@
     leaveHub: () => void;
     standCatalog: (machineId: string, sessions: NeutralSessionInfo[]) => void;
     standHub: (
-      answer: (instanceId: string, kind: string, intent: unknown) => void,
+      answer: (
+        instanceId: string,
+        kind: string,
+        intent: unknown,
+        commandId: string
+      ) => void,
       spawn: (machineId: string, spawn: NamedSpawn) => Promise<void>,
       control: (machineId: string, method: string, args: unknown[]) => unknown
     ) => void;
-    state: { machines: unknown[]; projects: unknown[]; projectsRead: boolean };
+    state: {
+      accounts: unknown;
+      machines: unknown[];
+      projects: unknown[];
+      projectsRead: boolean;
+    };
   }
   const debug = (globalThis as unknown as { __cawcoDebug: Bench }).__cawcoDebug;
 
@@ -453,7 +467,12 @@
   const SPAWN_MS = 1500;
   /** What the page asked the bench's hub to do: each start, and each command after it. */
   const spawns: { machineId: string; spawn: NamedSpawn }[] = [];
-  const commands: { instanceId: string; kind: string; intent: unknown }[] = [];
+  const commands: {
+    commandId: string;
+    instanceId: string;
+    intent: unknown;
+    kind: string;
+  }[] = [];
   const controls: { machineId: string; method: string; args: unknown[] }[] = [];
 
   /** Moves a session to one of the list's words, as the hub's frames would. */
@@ -588,9 +607,35 @@
           "assistant",
           "The handler now records each event id before it charges, and a retry of one it has seen answers 200 without charging again."
         ),
+        // What the session was sent since, as the hub has taken it: each
+        // under its send's own id, the row this tab drew for it.
+        ...commands
+          .filter((one) => one.instanceId === id && one.kind === "send")
+          .map((one): TranscriptBlock => ({
+            id: one.commandId,
+            instanceId: id,
+            type: "user",
+            content: (one.intent as { text: string }).text,
+            timestamp: new Date().toISOString(),
+          })),
       ],
       branches: [],
       cursor: null,
+      // The session it was resumed as is at work on its first message.
+      ...(resumed
+        ? {
+            tail: {
+              busy: true,
+              currentTool: null,
+              openBlock: null,
+              streaming: "",
+              streams: {},
+              thinkingClosing: false,
+              thinkingSince: null,
+              thinkingStream: "",
+            },
+          }
+        : {}),
       where: {
         cwd: "/srv/storefront",
         harness: "claude",
@@ -618,6 +663,14 @@
   const fleet = params.has("fleet");
   /** `?stay`: the bench's hub outlives its page. */
   const stays = params.has("stay");
+  /** `?stay=matched`: the machine's own sign-in is one of CawCo's accounts there. */
+  const matched = params.get("stay") === "matched";
+  /** The two Claude accounts signed in on the bench's machines. */
+  const STUDIO = "acc-studio";
+  const ACCOUNTS = [
+    { id: STUDIO, email: "rand@acme.studio", hue: "amber" },
+    { id: "acc-max", email: "billing@acme.studio", hue: "blue" },
+  ];
 
   function standReal(from: Real): void {
     debug.state.machines = from.agents;
@@ -660,6 +713,41 @@
         : {}),
     }));
     debug.areas.areas = AREAS;
+    if (stays) {
+      // The accounts a session's details offer: two of Claude's, signed in
+      // on both machines.
+      debug.state.accounts = {
+        accounts: ACCOUNTS.map((account, order) => ({
+          ...account,
+          atPlanLimit: "move",
+          createdAt: now - 30 * DAY_MS,
+          identity: null,
+          kind: "subscription",
+          label: null,
+          neverBackup: false,
+          order,
+          provider: CLAUDE_PROVIDER,
+          reservePct: null,
+        })),
+        bench: [],
+        catalogFaults: [],
+        catalogs: [],
+        pending: [],
+        readings: [],
+        rebalances: [],
+        routing: [],
+        signins: ACCOUNTS.flatMap((account) =>
+          [OBELISK, MINI].map((machineId) => ({
+            accountId: account.id,
+            checkedAt: now,
+            machineId,
+            movedAt: null,
+            movedFrom: null,
+            state: "signed-in",
+          }))
+        ),
+      };
+    }
     debug.state.projects = PROJECTS.map(([id, name, area, machineId]) => ({
       id,
       name,
@@ -720,8 +808,8 @@
       answerTranscript(input) ??
       fetchWas(input, init);
     debug.standHub(
-      (instanceId, kind, intent) => {
-        commands.push({ instanceId, kind, intent });
+      (instanceId, kind, intent, commandId) => {
+        commands.push({ instanceId, kind, intent, commandId });
       },
       async (machineId, spawn) => {
         // The hub opens the row a start asks for, once its machine has
@@ -744,16 +832,20 @@
           },
         ];
         adopt();
+        // It runs: its first message is its turn.
+        pulse(spawn.instanceId, "working");
       },
       (machineId, method, args) => {
         controls.push({ machineId, method, args });
         // What the transcript typed in a terminal ran with, as its machine
         // reads it (agent claude-stored-run.ts): its mode and model off the
-        // transcript, its effort off the user's settings, kept under the
-        // machine's own sign-in.
+        // transcript, its effort off the user's settings. It is kept under
+        // the machine's own sign-in, which is no account of CawCo's there,
+        // or, with `?stay=matched`, the studio's.
         return method === CONTROL_STORED_RUN
           ? ({
-              account: null,
+              account: matched ? STUDIO : null,
+              signIn: matched ? "rand@acme.studio" : "rand@personal.example",
               permissionMode: { from: "transcript", value: "acceptEdits" },
               model: { from: "transcript", value: "claude-opus-5-5" },
               effort: { from: "user-settings", value: "high" },

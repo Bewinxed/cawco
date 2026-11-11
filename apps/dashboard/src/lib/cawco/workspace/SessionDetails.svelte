@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+  import { accountProvidersOf } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
   import type {
     EffortLevel,
@@ -962,31 +963,26 @@
               readonly={!accountOpen}
               size="compact"
             />
-          {:else if resume?.account && machineId}
-            <!-- The account its transcript is kept under, and so resumes
-                 on: a pick is the resume's, no move of any session. -->
+          {:else if resume?.run && resume.run.account !== undefined && machineId && harness}
+            <!-- The account it resumes on: the one its transcript is kept
+                 under, or, kept under the machine's own sign-in, the
+                 account signed in here as that login. With none, it names
+                 none until one is picked. A pick is the resume's, no move
+                 of any session. -->
             <AccountSwitch
               instance={{
                 id: sessionId,
                 machineId,
                 accountId: resume.account,
               }}
+              none={{
+                label: transcriptWords.machineSignIn,
+                provider: accountProvidersOf(harness, resume.model)[0] ?? "",
+              }}
               onpick={(account) => cawco.pickResume(sessionId, { account })}
               readonly={!accountOpen}
               size="compact"
             />
-          {:else if resume?.run?.account === null}
-            <!-- Kept under the machine's own sign-in, in no account's
-                 folder: the hub places it as it starts. -->
-            <span
-              data-tool
-              data-account-chip
-              data-variant="static"
-              class={chipVariants({ variant: "setting", size: "compact" })}
-              ><span data-slot="chip-label"
-                >{transcriptWords.machineSignIn}</span
-              ></span
-            >
           {/if}
         </div>
         <!-- One line is always held for what a change says, so its pending,

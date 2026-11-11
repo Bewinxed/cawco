@@ -1050,8 +1050,19 @@ public enum Words {
             "Nothing it stored names one, so \(harness) uses its own."
         }
 
-        /// The account chip for a transcript kept under the machine's own sign-in, in no account's folder.
-        public static let machineSignIn = "This machine's sign-in"
+        /// The account chip for a transcript kept under the machine's own sign-in when that sign-in is no account of CawCo's: it names no account until one is picked.
+        public static let machineSignIn = "No account"
+
+        /// A first message refused before anything ran: the transcript's sign-in is no account of CawCo's on its machine, and nothing picks one for it. The card's title, then its line with the two ways on, `email` the sign-in; and the line when its machine keeps no sign-in for it.
+        public static let notResumed = "Not resumed"
+
+        public static func noAccount(machine: String, email: String) -> String {
+            "It ran as \(email), which is no account of CawCo's on \(machine). Move \(machine)'s sign-in into CawCo in Configure, or pick an account in this session's details."
+        }
+
+        public static func noSignIn(machine: String) -> String {
+            "\(machine) keeps no sign-in for it. Pick an account in this session's details."
+        }
 
         /// A resume or a reading the machine did not answer in time ({@link didntAnswer}'s outcome).
         public static let resumeUnknown = "whether the session was resumed is not known"
