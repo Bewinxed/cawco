@@ -67,8 +67,7 @@
    * Outlives Its Surface Rule): Start parks it in the tab's parked starts
    * (spawn/parked), which it runs into, and the form shows it from there
    * (`spawning.shown`) while it is open. Dismissed, the form closes and the
-   * start goes on as its own row; only the form's Cancel drops what it
-   * holds. Its picks are kept in the tab's storage and its prompt in the
+   * start goes on; only the form's Cancel drops what it holds. Its picks are kept in the tab's storage and its prompt in the
    * draft store, so a reload opens it again as it was.
    */
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -179,7 +178,6 @@
     prefill,
     continueFrom,
     onclose,
-    onparked,
     onexitcontinue,
     sheet = false,
   }: {
@@ -197,11 +195,6 @@
      */
     continueFrom?: ContinueSource;
     onclose: () => void;
-    /**
-     * Dismissed on a start, which goes on as its own row (spawn/parked): its
-     * id, for the frame to travel into that row as it closes.
-     */
-    onparked?: (id: string) => void;
     /** The operator deleted the source chip: the dialog stays open as a plain New Session. */
     onexitcontinue?: () => void;
   } = $props();
@@ -1603,9 +1596,6 @@
     pressedFor = null;
     const left = spawning.shown;
     onclose();
-    if (left) {
-      onparked?.(left);
-    }
     return left;
   }
   /**

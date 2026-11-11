@@ -2,10 +2,7 @@
  * The starts the New Session form has handed the hub, kept by this tab until
  * the reader has seen how each ended (DESIGN.md, The Work Outlives Its Surface
  * Rule). A start belongs to its work, not to the form: ×, Esc or a press
- * outside close the form and the start goes on here, drawn as its own row in
- * the home (StartingRows) with its stage while it runs, then what it came to.
- * One press on the row opens the form on it again, at the same step: the
- * same picks and prompt, and the start as it stands now. Only the form's own
+ * outside close the form and the start goes on here. Only the form's own
  * Cancel ends one (a continuation's, before its session has started).
  *
  * Each start is kept in the tab's own storage, its prompt and what rode it
@@ -32,7 +29,6 @@ import {
   type ContinueSource,
   continuationRunning,
   continuationStageWords,
-  continuing,
   type SessionDraft,
 } from "../continue.svelte";
 import { type DraftContent, loadDraft, saveDraft } from "../draft-store";
@@ -122,15 +118,6 @@ $effect.root(() => {
 /** The parked start `id`, as the store holds it (reactive). */
 export function parkedStart(id: string | null): ParkedStart | undefined {
   return id ? parked.list.find((one) => one.id === id) : undefined;
-}
-
-/**
- * The form is open, and on the start it shows: that start's row stands
- * aside while it does, so the screen never shows the start twice.
- */
-export function shownStart(): string | null {
-  const open = spawning.open || continuing.source !== null;
-  return open ? spawning.shown : null;
 }
 
 /**
@@ -291,26 +278,6 @@ export function keepDraftOf(id: string, draft: SessionDraft): void {
   if (start && start.state === "failed") {
     start.draft = draft;
   }
-}
-
-/**
- * Opens the form on `id` again, hanging from `anchor` (its row): the same
- * step, the same picks and prompt, the start as it stands now.
- */
-export function reopenStart(id: string, anchor: HTMLElement | null): void {
-  const start = parkedStart(id);
-  if (!start) {
-    return;
-  }
-  spawning.shown = id;
-  spawning.anchor = anchor;
-  spawning.opening += 1;
-  if (start.continueFrom) {
-    continuing.source = start.continueFrom;
-    return;
-  }
-  spawning.prefill = start.prefill;
-  spawning.open = true;
 }
 
 /** What a continuation's failure says, in the hub's words. */

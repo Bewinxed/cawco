@@ -26,7 +26,6 @@
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { newSession } from "../spawn/new-session.svelte";
-  import StartingRows from "../spawn/StartingRows.svelte";
   import UsageMeter from "../UsageMeter.svelte";
   import { workspace } from "../workspace/workspace.svelte";
   import Caw from "./Caw.svelte";
@@ -190,9 +189,6 @@
       variant === "rail" && "gap-space-3 px-space-2 pt-space-1 empty:p-0",
     ]}
   >
-    <!-- The starts the New Session form left running, each its own row
-         until the reader has seen how it ended (spawn/parked). -->
-    <StartingRows />
     {#if wide && !noFleet && !machineless}
       <!-- Fleet on a desk: each machine, its harnesses and its state (its
            menu on right-click), then Add machine. -->
