@@ -199,6 +199,7 @@ import { currentClientId } from "./client-id";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { type DelegateRecord, delegateRecord } from "./delegate-record";
 import { devDebug } from "./dev-debug";
+import type { ServedBoard } from "./first-paint";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import type { Area } from "./home/areas.svelte";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
@@ -781,27 +782,18 @@ const storedInfos = new SvelteMap<
 >();
 
 /**
- * The board as this page's server load read it (the (app) layout's
- * `board`): the hub's rows, their pulses, the machines, the projects and
- * their areas, read in the request that rendered the page. The store draws
- * from it until its own reads land: the rows, pulses and machines until the
- * socket's first snapshot ({@link servedLive}), the projects until their
- * first read, the areas until theirs (home/areas.svelte.ts). So the
- * server's HTML and the hydrated page draw the same lists from the first
- * paint, and none of them waits on the socket. Read during a render on the
- * server, as `page` is: the store's own state is the client's alone. Null
- * where the server could not read the hub whole.
+ * The board as this page's server load read it for its first paint
+ * (first-paint.ts): the hub's rows, their pulses, the machines, the projects
+ * and their areas, read in the request that rendered the page, each cut to
+ * what the first paint reads. The store draws from it until its own reads
+ * land: the rows, pulses and machines until the socket's first snapshot
+ * ({@link servedLive}), the projects until their first read, the areas until
+ * theirs (home/areas.svelte.ts). So the server's HTML and the hydrated page
+ * draw the same lists from the first paint, and none of them waits on the
+ * socket. Read during a render on the server, as `page` is: the store's own
+ * state is the client's alone. Null where the server could not read the hub
+ * whole.
  */
-export interface ServedBoard {
-  areas: Area[];
-  instances: InstanceRow[];
-  machines: Machine[];
-  projects: ProjectRow[];
-  pulses: Record<string, SessionPulse>;
-  /** Recent's stored transcripts as the hub keeps them, drawn until its first `stored` frame. */
-  stored: StoredRecent;
-}
-
 function servedBoard(): ServedBoard | null {
   return (servedPage.data as { board?: ServedBoard | null }).board ?? null;
 }
@@ -847,7 +839,7 @@ function servedIndex(board: ServedBoard): InstanceIndex<InstanceRow> {
  */
 let hubRows = $state.raw<InstanceRow[]>([]);
 /** The hub's rows, as every walk over the rows reads them: the served board's until the socket's first snapshot ({@link servedLive}). */
-const instances = $derived(servedLive()?.instances ?? hubRows);
+const instances = $derived<InstanceRow[]>(servedLive()?.instances ?? hubRows);
 /** Each hub row by its id, each key its own signal (board.svelte.ts). */
 const rowsById = new Keyed<InstanceRow>();
 /** Each session key's rows, by key, the same way. */

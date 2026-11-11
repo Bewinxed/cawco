@@ -6,11 +6,8 @@ import type {
   SessionPulse,
   StoredRecent,
 } from "@cawco/core/protocol";
-import type {
-  Machine,
-  ProjectRow,
-  ServedBoard,
-} from "#lib/cawco/client.svelte.js";
+import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
+import { type ServedBoard, servedBoardOf } from "#lib/cawco/first-paint.js";
 import type { Area } from "#lib/cawco/home/areas.svelte.js";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { KEPT, type Pref, prefCookie } from "#lib/cawco/prefs.js";
@@ -96,11 +93,11 @@ export const load: LayoutServerLoad = async ({
   // is shown the pairing screen from the first paint, and a paired one the
   // app. Its cookie is SameSite=Lax, so it rides a link from another site
   // too.
-  // The board (client.svelte.ts `ServedBoard`): the sidebar's Recent and
-  // Projects, the bar's Machines and every row the store draws are in the
-  // server's HTML and on the first paint, and none of them waits on the
-  // socket. All of it or none: a part the hub would not give leaves the
-  // store to read it all itself.
+  // The board as the first paint draws it (first-paint.ts): the sidebar's
+  // Recent and Projects, the bar's Machines and every row the store draws
+  // are in the server's HTML and on the first paint, and none of them waits
+  // on the socket. All of it or none: a part the hub would not give leaves
+  // the store to read it all itself.
   const [
     authRead,
     rowsRead,
@@ -126,14 +123,14 @@ export const load: LayoutServerLoad = async ({
     projectsRead.ok &&
     areasRead.ok &&
     storedRead.ok
-      ? {
+      ? servedBoardOf({
           instances: rowsRead.value,
           pulses: pulsesRead.value,
           machines: machinesRead.value,
           projects: projectsRead.value,
           areas: areasRead.value.areas,
           stored: storedRead.value,
-        }
+        })
       : null;
   const railKept = Number(pref(RAIL_KEY));
   const railWidth =

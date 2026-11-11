@@ -16,7 +16,7 @@ export interface Area {
   position: number;
 }
 
-/** The areas as last read, and whether this page has read them: until it has, the served board's (client.svelte.ts `ServedBoard`). */
+/** The areas as last read, and whether this page has read them: until it has, the served board's (first-paint.ts `ServedBoard`). */
 const state = $state<{ areas: Area[]; read: boolean }>({
   areas: [],
   read: false,
