@@ -5,6 +5,12 @@
  * beside its media) and revises with `artifact_update`'s `statements`,
  * merged by name with lang-core's `mergeStatements`.
  *
+ * A page's program may also be an agent's block kept as an artifact
+ * (tsk-330): the parser is chosen by the library the program is written
+ * over, read from its root (core inline-blocks.ts `programLibraryOf`), and a
+ * block's is checked as a block ({@link checkBlock}); the rest of this
+ * header is a decision page's.
+ *
  * - Parsed with lang-core's parser over the library's generated schema
  *   (`@cawco/core/decisions-spec`), as the page's host draws it.
  * - A component the library does not have is dropped and named, never
@@ -34,6 +40,7 @@
  * the artifact's route with the overlay, whose page hash is the program's.
  */
 
+import blocksSpec from "@cawco/core/blocks-spec";
 import type { Kind } from "@cawco/core/decides";
 import { type ProgramRead, readProgram } from "@cawco/core/decisions";
 import {
@@ -49,6 +56,7 @@ import {
   SANS_FAMILY,
   undrawn,
 } from "@cawco/core/house-faces";
+import { programLibraryOf } from "@cawco/core/inline-blocks";
 import { unhandled } from "@cawco/core/unhandled";
 import {
   type ASTNode,
@@ -75,6 +83,11 @@ export const DECISION_ASSETS = "/__cawco/decision/";
 
 const MAX_PROBLEMS = 8;
 const parser = createParser(spec.schema as LibraryJSONSchema, spec.root);
+/** A kept block's parser (core views-library.ts `blockLibrary`, tsk-330): a page whose root is a Column is a block's program. */
+const blockParser = createParser(
+  blocksSpec.schema as LibraryJSONSchema,
+  blocksSpec.root
+);
 
 const URL_LIKE =
   /[a-z][a-z0-9+.-]*:\/\/|(?:^|[\s"'(])(?:data|javascript|vbscript|mailto|blob|file|tel):|(?:^|[\s"'(/])www\.[a-z0-9-]+\./iu;
@@ -570,6 +583,83 @@ const unclosedProblem = (text: string): string | null => {
     : `${what[0]?.toUpperCase()}${what.slice(1)}.`;
 };
 
+/** The components a parse dropped, by name, once each. */
+const droppedIn = (result: ReturnType<typeof parser.parse>): string[] => [
+  ...new Set(
+    result.meta.errors
+      .filter((error) => error.code === "unknown-component")
+      .map((error) => error.component)
+      .filter((name): name is string => !!name)
+  ),
+];
+
+/** What a program's checks refuse in their own words: a Query, a Mutation, `$variables`, and drawing nothing. */
+interface ParsedWords {
+  mutation: string;
+  nothing: string;
+  query: string;
+  state: string;
+}
+
+/**
+ * `result` refused with every reason, in `words` and the parser's own
+ * (its unknown components are dropped, never refused), then its words
+ * that reach out, hold markup, or hold a character the house face lacks.
+ */
+const refuseParsed = (
+  result: ReturnType<typeof parser.parse>,
+  words: ParsedWords
+): void => {
+  const problems = [
+    ...result.queryStatements.map(
+      (query) => `${query.statementId} = Query(…): ${words.query}`
+    ),
+    ...result.mutationStatements.map(
+      (mutation) => `${mutation.statementId} = Mutation(…): ${words.mutation}`
+    ),
+    ...(Object.keys(result.stateDeclarations).length > 0 ? [words.state] : []),
+    ...result.meta.errors
+      .filter((error) => error.code !== "unknown-component")
+      .map((error) =>
+        error.statementId
+          ? `${error.statementId}: ${error.message}`
+          : error.message
+      ),
+  ];
+  if (!result.root && problems.length === 0) {
+    problems.push(words.nothing);
+  }
+  if (problems.length > 0) {
+    refuse(problems);
+  }
+  const unsafe = [...unsafeWords(result.root), ...undrawnWords(result.root)];
+  if (unsafe.length > 0) {
+    refuse(unsafe);
+  }
+};
+
+/**
+ * A block's program kept as a page (tsk-330), already through the size,
+ * code and closing checks: parsed over the block library, holding its data
+ * as written (no Query, Mutation or `$variable`), every mistake the parser
+ * reports refused in its own words, its words plain and in the house face.
+ * It asks nothing, so it has no cards, ids or media to check.
+ */
+const checkBlock = (program: string): CheckedProgram => {
+  const result = blockParser.parse(program);
+  refuseParsed(result, {
+    query: "a block holds its data as you wrote it.",
+    mutation: "a block runs none.",
+    state: "A block keeps no $variables: write its values as they are.",
+    nothing: `The block draws nothing: it needs root = ${blocksSpec.root}(…), reaching every part of it.`,
+  });
+  return {
+    program,
+    read: readProgram(null),
+    dropped: droppedIn(result),
+  };
+};
+
 /**
  * `raw` as a decision page's program, or a {@link ProgramRefusal} with every
  * reason: its size and code first, then the parser's mistakes, then its ids,
@@ -605,44 +695,18 @@ const checkProgram = (
   if (unclosed) {
     refuse([unclosed]);
   }
+  if (programLibraryOf(program) === "block") {
+    return checkBlock(program);
+  }
   const result = parser.parse(program);
-  const problems: string[] = [];
-  for (const query of result.queryStatements) {
-    problems.push(
-      `${query.statementId} = Query(…): a decision page holds your words and the person's picks, never data.`
-    );
-  }
-  for (const mutation of result.mutationStatements) {
-    problems.push(
-      `${mutation.statementId} = Mutation(…): a decision page runs none.`
-    );
-  }
-  if (Object.keys(result.stateDeclarations).length > 0) {
-    problems.push(
-      "A decision page keeps no $variables: the person's picks are kept by decision id."
-    );
-  }
-  for (const error of result.meta.errors) {
-    if (error.code !== "unknown-component") {
-      problems.push(
-        error.statementId
-          ? `${error.statementId}: ${error.message}`
-          : error.message
-      );
-    }
-  }
-  if (!result.root && problems.length === 0) {
-    problems.push(
-      `The program draws nothing: it needs root = ${spec.root}(…), reaching every part of it.`
-    );
-  }
-  if (problems.length > 0) {
-    refuse(problems);
-  }
-  const unsafe = [...unsafeWords(result.root), ...undrawnWords(result.root)];
-  if (unsafe.length > 0) {
-    refuse(unsafe);
-  }
+  refuseParsed(result, {
+    query:
+      "a decision page holds your words and the person's picks, never data.",
+    mutation: "a decision page runs none.",
+    state:
+      "A decision page keeps no $variables: the person's picks are kept by decision id.",
+    nothing: `The program draws nothing: it needs root = ${spec.root}(…), reaching every part of it.`,
+  });
   const read = readProgram(result.root);
   const whole = wholeArtifacts(program, read, artifact);
   const ids = [
@@ -660,14 +724,7 @@ const checkProgram = (
       whole.program === program
         ? read
         : readProgram(parser.parse(whole.program).root),
-    dropped: [
-      ...new Set(
-        result.meta.errors
-          .filter((error) => error.code === "unknown-component")
-          .map((error) => error.component)
-          .filter((name): name is string => !!name)
-      ),
-    ],
+    dropped: droppedIn(result),
   };
 };
 

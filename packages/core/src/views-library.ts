@@ -21,6 +21,7 @@ import {
   tagSchemaId,
 } from "@openuidev/lang-core";
 import { z } from "zod";
+import { INLINE_BLOCK_LANG } from "./inline-blocks";
 import {
   STAGE_KINDS,
   VIEW_TEXT_ROLES,
@@ -308,13 +309,36 @@ export const VIEW_COMPONENTS = [
   "Text",
   "Badge",
   "StatTile",
+  "Table",
+  "Diagram",
   "Board",
   "StageColumn",
   "TaskCard",
-  "Table",
+  "TaskTable",
   "Calendar",
 ] as const;
 export type ViewComponentName = (typeof VIEW_COMPONENTS)[number];
+
+/**
+ * The components an agent's block (an `openui` fence in its reply, tsk-330)
+ * may name: the view library's that draw what the program holds. The ones
+ * that draw a project's tasks read them through a Query, which a block has
+ * none of, so they are left out ({@link blockLibrary}).
+ */
+export const BLOCK_COMPONENTS = [
+  "Column",
+  "Row",
+  "Text",
+  "Badge",
+  "StatTile",
+  "Table",
+  "Diagram",
+] as const satisfies readonly ViewComponentName[];
+export type BlockComponentName = (typeof BLOCK_COMPONENTS)[number];
+
+/** The Mermaid types Pele draws as charts (pele.run), as the block prompt names them. */
+const PELE_CHARTS =
+  "xychart-beta (bar and line), pie, quadrantChart, radar-beta, sankey-beta, treemap-beta, venn-beta, gantt, timeline";
 
 /** The component a view's `root` is. */
 export const VIEW_ROOT: ViewComponentName = "Column";
@@ -394,6 +418,28 @@ export const viewLibrary = <C>(
   );
   const Table = define(
     "Table",
+    "Rows under headings, one cell per heading: a cell is words, a number or a Badge. On a phone each row stands as a card.",
+    z.object({
+      columns: z.array(z.string()).min(1).describe("The headings."),
+      rows: z
+        .array(z.array(z.union([z.string(), z.number(), Badge.ref])))
+        .describe("Each row's cells, in the headings' order."),
+    })
+  );
+  const Diagram = define(
+    "Diagram",
+    `A Mermaid diagram or chart, drawn on the house look: a flowchart, sequenceDiagram, stateDiagram-v2, erDiagram, classDiagram, mindmap, or a chart: ${PELE_CHARTS}.`,
+    z.object({
+      mermaid: z
+        .string()
+        .describe(
+          'Mermaid text, lines split with \\n: "flowchart LR\\nA --> B".'
+        ),
+      caption: z.string().optional().describe("A line under it."),
+    })
+  );
+  const TaskTable = define(
+    "TaskTable",
     "Tasks as rows, one column per entry of `columns`; a row opens its task.",
     z.object({
       rows: z.array(task).describe("The tasks tool's rows, or a part of them."),
@@ -439,6 +485,8 @@ export const viewLibrary = <C>(
       StageColumn.ref,
       TaskCard.ref,
       Table.ref,
+      TaskTable.ref,
+      Diagram.ref,
       Calendar.ref,
     ])
   );
@@ -460,7 +508,7 @@ export const viewLibrary = <C>(
   );
   const Column = define(
     "Column",
-    "Lays its children out one under another. A view's root.",
+    "Lays its children out one under another. The program's root.",
     z.object({ children: z.array(child), align })
   );
 
@@ -471,13 +519,39 @@ export const viewLibrary = <C>(
       Text,
       Badge,
       StatTile,
+      Table,
+      Diagram,
       Board,
       StageColumn,
       TaskCard,
-      Table,
+      TaskTable,
       Calendar,
     ],
     root: VIEW_ROOT,
+  });
+};
+
+/**
+ * The block library over `renderers`: the view library less the components
+ * that draw a project's tasks (lang-core `extend`, `remove`), so a block's
+ * program names only what it holds.
+ */
+export const blockLibrary = <C>(
+  renderers: Record<BlockComponentName, C>
+): Required<Library<C>> => {
+  const blocks = new Set<string>(BLOCK_COMPONENTS);
+  // The task components are built with no renderer and removed at once:
+  // nothing in the library it answers holds one.
+  const all = Object.fromEntries(
+    VIEW_COMPONENTS.map((name) => [
+      name,
+      blocks.has(name) ? renderers[name as BlockComponentName] : null,
+    ])
+  ) as Record<ViewComponentName, C>;
+  return viewLibrary<C>(all).extend({
+    components: {
+      remove: VIEW_COMPONENTS.filter((name) => !blocks.has(name)),
+    },
   });
 };
 
@@ -509,5 +583,53 @@ export const viewPromptOptions = (): PromptOptions => ({
     "No URLs, images or markup anywhere: a view cannot reach the network, and its text is plain.",
     "Use only the components listed. A name outside them is dropped and reported, never drawn.",
     "To see a tool's real data before you write, call view_query with its name and arguments: it answers what Query() will.",
+  ],
+});
+
+// --- the block prompt ----------------------------------------------------------
+
+/** A block's fence as the prompt's preamble shows it. */
+const BLOCK_FENCE = `${INLINE_BLOCK_LANG} name="…"`;
+
+/** A program in its fence, as a reply holds it. */
+const fenced = (name: string, program: string): string =>
+  `\`\`\`${INLINE_BLOCK_LANG} name="${name}"\n${program}\n\`\`\``;
+
+/** Two blocks, as the block prompt shows them: figures over a table, and a chart. */
+const BLOCK_EXAMPLES = [
+  fenced(
+    "Release health",
+    `root = Column([figures, table])
+figures = Row([StatTile("Merged", 14, "done"), StatTile("Waiting on review", 3, "attn"), StatTile("Failed checks", 1, "fail")])
+table = Table(["Pull request", "Owner", "Checks"], [["Inline blocks", "Ana", Badge("Passed", "done")], ["Tray chips", "Omar", Badge("Running", "live")], ["Sign-in move", "Lea", Badge("Failed", "fail")]])`
+  ),
+  fenced(
+    "Weekly spend",
+    `root = Column([chart])
+chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Delegated work, last four weeks")`
+  ),
+];
+
+/**
+ * What the block prompt is generated with: the block library, no tools, no
+ * bindings and no built-ins (a block holds the data as the agent drew it),
+ * and the rules of the fence a block is written in. Its prompt is the
+ * inline-block skill an agent loads before its first block.
+ */
+export const blockPromptOptions = (): PromptOptions => ({
+  preamble: `You draw a CawCo block: one OpenUI Lang program over CawCo's components, written in your reply as a fenced code block whose info string is \`${BLOCK_FENCE}\`. The transcript draws it in place of the code. The fence holds the program alone.`,
+  toolCalls: false,
+  bindings: false,
+  builtinFunctions: false,
+  examples: BLOCK_EXAMPLES,
+  additionalRules: [
+    'Name every block in its fence: `openui name="…"`, a few plain words the person would call it. A fence with no name draws as code.',
+    "A later fence with the same name in the same conversation is the block's newer version: the earlier one folds and points to it. Reuse the name to revise a block; a new name is a new block.",
+    "Write the data into the program as literals: the figures, rows and words you have now. There is no Query() or Mutation(), and no $variables.",
+    "A block shows; it asks nothing. There are no buttons, inputs or links: a choice goes through `ask` or a decision page.",
+    "No URLs, images or markup in its words: its text is plain. A Diagram's Mermaid is the one place for diagram syntax.",
+    "A heading is a Text in the program, where the block needs one; the block draws no title of its own.",
+    `Charts are Diagrams: ${PELE_CHARTS}, in Mermaid's own syntax.`,
+    "Use only the components listed. A name outside them is dropped and reported, never drawn.",
   ],
 });

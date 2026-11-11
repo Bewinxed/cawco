@@ -22,6 +22,7 @@
 </script>
 
 <script lang="ts">
+  import { inlineBlockName } from "@cawco/core/inline-blocks";
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import {
@@ -30,6 +31,7 @@
     type Theme,
   } from "svelte-streamdown";
   import { markMentions } from "#lib/cawco/find/mention.svelte.js";
+  import { markdownBlocksHere } from "#lib/cawco/markdown-blocks.js";
   import {
     markdownFleetHere,
     plainReferenceOf,
@@ -55,6 +57,7 @@
     streaming = false,
     fades = false,
     said = false,
+    blocksAt,
     look,
     class: className,
   }: MarkdownLooks & {
@@ -78,7 +81,16 @@
      * `markMentions`).
      */
     said?: boolean;
+    /**
+     * The reply these words are, in a transcript that draws an agent's
+     * blocks (markdown-blocks.ts): a named `openui` fence is its block, by
+     * this reply. Left out, every fence is code.
+     */
+    blocksAt?: string;
   } = $props();
+
+  /** The block component a transcript provides; none elsewhere. */
+  const Block = markdownBlocksHere();
 
   /**
    * The skills of the session whose words these are (SessionPane): a code
@@ -368,10 +380,32 @@
 	     `not-prose`, so prose's `pre` and `code` dressing leaves it alone;
 	     inline code (`codespan`) keeps it, because it is prose, not a
 	     listing. -->
-    {#snippet code({ token })}
-      <div class="not-prose my-3">
-        <OutputBlock language={token.lang} text={token.text} />
-      </div>
+    {#snippet code({
+      token,
+      incomplete,
+    }: {
+      token: { lang?: string; meta?: string; text: string };
+      incomplete?: boolean;
+    })}
+      {@const name =
+        Block && blocksAt !== undefined
+          ? inlineBlockName(token.lang, token.meta)
+          : null}
+      {#if Block && blocksAt !== undefined && name}
+        <!-- A named openui fence in a reply is the agent's block
+             (tsk-330), drawn in place of its code; one still open is
+             being written. -->
+        <Block
+          at={blocksAt}
+          {name}
+          source={token.text}
+          streaming={streaming && !!incomplete}
+        />
+      {:else}
+        <div class="not-prose my-3">
+          <OutputBlock language={token.lang} text={token.text} />
+        </div>
+      {/if}
     {/snippet}
     <!-- A code span naming a skill of this session, exactly, is that
          skill's chip (SkillChip); any other is code. -->

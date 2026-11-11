@@ -26,6 +26,7 @@
   import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { track } from "#lib/cawco/track.js";
   import MessageBody from "../MessageBody.svelte";
+  import { LIVE_REPLY } from "../markdown-blocks";
   import { useVoice } from "../turn/voice";
   import Who from "../turn/Who.svelte";
   import { useLedger } from "./arrivals.svelte";
@@ -262,6 +263,7 @@
         timestamp={live.kind === "single" ? live.message.timestamp : undefined}
       />
       <MessageBody
+        at={live.kind === "single" ? live.message.id : LIVE_REPLY}
         fades={ledger?.watched ?? false}
         source={live.kind === "single" ? live.message.content : live.text}
         streaming={live.kind === "live"}

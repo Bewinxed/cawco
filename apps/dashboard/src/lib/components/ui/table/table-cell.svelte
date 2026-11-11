@@ -40,6 +40,9 @@
         /** A generated view's lead column, on the row's spacing; its words wrap. */
         "view-lead":
           "type-label num h-c-ledger-row-h whitespace-normal border-b border-b-border-hairline px-space-3 py-space-2 text-ink-muted",
+        /** A generated table's other cells whose words wrap (an agent's block), on the row's spacing. */
+        "view-wraps":
+          "type-label num h-c-ledger-row-h whitespace-normal border-b border-b-border-hairline px-space-3 py-space-2 text-ink-muted",
         /** A matrix's cell, ruled from its neighbour on the left; its words wrap. */
         matrix:
           "whitespace-normal border-border border-l px-space-4 py-space-2",

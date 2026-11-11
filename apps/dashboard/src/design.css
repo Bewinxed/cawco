@@ -2430,3 +2430,66 @@
     color: var(--on-action);
   }
 }
+
+/* ---- DOM a library draws, which takes no class from its host's markup:
+   each mapped onto the house's tokens and roles on its host's own hook, the
+   same in the dashboard (a view's or an agent's block's Diagram) and on a
+   decision page (host.css imports this sheet). */
+@layer components {
+  /* Pele's diagram (pele.run/theming: its variables, then its classes),
+     drawn straight on its card's ground with no panel of its own (The
+     Frame Recesses Rule): a node raised (The Frame Recesses Rule) with a
+     control's edge and the 8px of an item inside a surface, its name in the
+     label role in strong ink; an edge and its arrowhead 1px in muted ink,
+     its words in meta; a subgraph the recess with a hairline, its title in
+     the label role, muted; a highlight strong ink, never coral (The Coral Is
+     Where You Act Rule); weights never above 500 (The 500 Ceiling Rule). */
+  [data-slot="diagram"] {
+    --pele-bg: var(--surface-raised);
+    --pele-fg: var(--ink-strong);
+    --pele-muted: var(--ink-muted);
+    --pele-line: var(--ink-muted);
+    --pele-surface: var(--surface-raised);
+    --pele-surface-alt: var(--surface-recess);
+    --pele-border: var(--border-control);
+    --pele-accent: var(--ink-strong);
+    --pele-critical: var(--status-fail-ink);
+    --pele-error: var(--status-fail-ink);
+    --pele-font: var(--font-sans);
+    --pele-font-mono: var(--font-mono);
+    --pele-title-weight: var(--weight-strong);
+    --pele-heading-weight: var(--weight-strong);
+    --pele-bold-weight: var(--weight-strong);
+    --pele-radius: var(--radius-sm);
+    --pele-series-1: var(--chart-1);
+    --pele-series-2: var(--chart-2);
+    --pele-series-3: var(--chart-3);
+    --pele-series-4: var(--chart-4);
+    --pele-series-5: var(--chart-5);
+    --pele-series-6: var(--chart-brand);
+    --pele-series-7: var(--ink-muted);
+    --pele-series-8: var(--border-contrast);
+
+    & > svg {
+      display: block;
+    }
+    & .pele-node .pele-label {
+      font-weight: var(--weight-strong);
+    }
+    & .pele-edge :is(path, line, polyline) {
+      stroke-width: 1px;
+    }
+    & .pele-edge-label {
+      font-size: var(--text-meta);
+      fill: var(--ink-muted);
+    }
+    & .pele-cluster > :is(rect, path) {
+      stroke: var(--border-hairline);
+    }
+    & .pele-cluster-label {
+      font-size: var(--text-label);
+      font-weight: var(--weight-strong);
+      fill: var(--ink-muted);
+    }
+  }
+}

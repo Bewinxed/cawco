@@ -85,4 +85,16 @@ export const transcriptWords = {
   notSent: "Couldn't send that message.",
   /** A stored session's menu: its words carried into a new session. */
   continueInNew: "Continue in new session…",
+  /** An agent's block in its reply (InlineBlock, tsk-330): its act, floating over it. */
+  keepAsArtifact: "Keep as artifact",
+  /** On a block a later version under its name replaced: the way to that version. */
+  jumpToLatestVersion: "Jump to latest version",
+  /** On a block moved into an artifact: the way to it, by its title. */
+  openArtifact: (title: string): string => `Open ${title}`,
+  /** Under a block naming components the block library lacks: what was left out. */
+  blockDropped: (names: readonly string[]): string =>
+    `This block uses ${names.join(", ")}, which CawCo's blocks don't have, so ${names.length > 1 ? "they're" : "it's"} left out.`,
+  /** A block kept as an artifact: what the panel's head asks of the person. */
+  keptBlockAsk: (title: string): string =>
+    `Pin anything in ${title} that reads wrong`,
 };

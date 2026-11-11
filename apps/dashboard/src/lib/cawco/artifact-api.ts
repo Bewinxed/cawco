@@ -223,6 +223,27 @@ export async function createDraftCanvas(
   return { id: made.id, name: made.name };
 }
 
+/**
+ * An agent's block kept as an artifact (Keep as artifact, tsk-330): a page
+ * whose program is the block's, on the session's panel, named by the
+ * block's slug so the transcript knows it again. The same name again
+ * replaces it. Answers it; a refusal throws the hub's sentence.
+ */
+export async function keepBlock(
+  instanceId: string,
+  block: { ask: string; name: string; program: string; title: string }
+): Promise<{ id: string; name: string }> {
+  const response = await ok(
+    await hubFetch(
+      hubRequest("POST /api/instances/:id/artifacts", {
+        path: { id: instanceId },
+        body: { kind: "page", does: "judge", ...block },
+      })
+    )
+  );
+  return (await response.json()) as { id: string; name: string };
+}
+
 /** A canvas as a send carries it: its `.excalidraw` file, its outline, its picture (base64 PNG, null until drawn). */
 export interface CanvasExport {
   file: { elements: { isDeleted?: boolean }[] } & Record<string, unknown>;

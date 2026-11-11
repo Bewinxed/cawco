@@ -744,6 +744,8 @@ public enum Size {
     public static let cBlockView: Double = 248
     /// The tallest a list block's card stands on a desk before its rows scroll inside it, so forty routines never push the blocks after them out of view. A phone's page is its one scroller, and there a card stands at its rows' height.
     public static let cBlockBodyMax: Double = 480
+    /// How tall an agent's block stands in its reply once a later version or an artifact replaced it (tsk-330): its head and a few rows under the veil, so a replaced block takes a third of its room.
+    public static let cInlineBlockFossilH: Double = 160
     /// The drop indicator a dragged block's place is shown by: a brand-solid line across the target block's edge, in the gap between blocks.
     public static let cBlockDropLine: Double = 2
     /// The dot at the drop indicator's leading end, brand-solid.

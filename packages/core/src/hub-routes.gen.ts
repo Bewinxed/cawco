@@ -4154,7 +4154,7 @@ export interface components {
        */
       dir?: string;
       /**
-       * @description pick: a page with `program`. judge: a component, or a preview or page judged whole. try: a preview. draw: a canvas.
+       * @description pick: a page with decision cards. judge: a component, a kept block, or a preview or page judged whole. try: a preview. draw: a canvas.
        * @enum {string}
        */
       does: "pick" | "judge" | "try" | "draw";
@@ -4202,7 +4202,7 @@ export interface components {
       path?: string;
       /** @description A dev server's port. */
       port?: number;
-      /** @description Its decision cards (decision-page skill). */
+      /** @description Its decision cards (decision-page skill), or a block from your reply to keep (inline-block skill). */
       program?: string;
       /** @enum {string} */
       response_format?: "concise" | "detailed";

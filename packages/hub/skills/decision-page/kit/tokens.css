@@ -947,6 +947,8 @@
     --c-block-view: 15.5rem;
     /* The tallest a list block's card stands on a desk before its rows scroll inside it, so forty routines never push the blocks after them out of view. A phone's page is its one scroller, and there a card stands at its rows' height. */
     --c-block-body-max: 30rem;
+    /* How tall an agent's block stands in its reply once a later version or an artifact replaced it (tsk-330): its head and a few rows under the veil, so a replaced block takes a third of its room. */
+    --c-inline-block-fossil-h: 10rem;
     /* The drop indicator a dragged block's place is shown by: a brand-solid line across the target block's edge, in the gap between blocks. */
     --c-block-drop-line: 2px;
     /* The dot at the drop indicator's leading end, brand-solid. */

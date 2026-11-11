@@ -243,6 +243,8 @@
     },
     "./views-spec": "./src/views-spec.json",
     "./decisions-spec": "./src/decisions-spec.json",
+    "./blocks-spec": "./src/blocks-spec.json",
+    "./inline-blocks": "./src/inline-blocks.ts",
     "./decisions-library": {
       "types": "./src/decisions-library.ts",
       "default": "./src/decisions-library.ts"

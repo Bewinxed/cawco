@@ -8,6 +8,7 @@ packages/jsonl-parser/
 packages/hub/drizzle/meta/
 packages/core/src/views-spec.json
 packages/core/src/decisions-spec.json
+packages/core/src/blocks-spec.json
 design-previews/comment-sizing/parts.js
 design-previews/comment-sizing/house.css
 design-previews/address/assets/

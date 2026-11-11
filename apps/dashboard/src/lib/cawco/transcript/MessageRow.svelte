@@ -1226,7 +1226,7 @@
 {:else if kind === "assistant"}
   <Turn {grouped}>
     <Who {grouped} name={agentName} timestamp={message.timestamp} />
-    <MessageBody source={message.content} />
+    <MessageBody at={message.id} source={message.content} />
   </Turn>
 {:else if kind === "thinking"}
   {#if message.content.trim()}

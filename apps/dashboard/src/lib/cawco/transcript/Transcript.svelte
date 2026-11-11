@@ -88,6 +88,7 @@
     frameObserver,
     frameSize,
   } from "../frame-observer";
+  import { LIVE_REPLY, provideMarkdownBlocks } from "../markdown-blocks";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { scrollMotion } from "../motion/keyed.svelte";
   import { BLEED } from "../motion/rows.svelte";
@@ -115,6 +116,12 @@
   import { connectReveal } from "./connect-sign-ins.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosure, disclosureAt } from "./disclosure.svelte";
+  import {
+    blockKey,
+    blockReveal,
+    ConversationBlocks,
+    provideInlineBlocks,
+  } from "./inline-blocks.svelte";
   import Latest from "./Latest.svelte";
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
@@ -146,6 +153,7 @@
   import SystemLine from "./SystemLine.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
+  import TranscriptBlock from "./TranscriptBlock.svelte";
   import { trayNews, trayReveal } from "./tray.svelte";
 
   let {
@@ -223,6 +231,10 @@
 
   setContext("cawco:machine", () => session.machineId);
   provideSessionHere(() => session.instanceId);
+  // An agent's blocks in its replies (tsk-330): drawn by the rows' markdown,
+  // their versions read off this conversation.
+  provideInlineBlocks(new ConversationBlocks(() => session));
+  provideMarkdownBlocks(TranscriptBlock);
 
   /** One transcript, on screen, being read: `focused` follows `visible`. */
   const isFocused = $derived(focused ?? visible);
@@ -5003,6 +5015,34 @@
       );
       if (index >= 0) {
         list?.scrollToIndex(index, { align: "center", smooth: true });
+      }
+    });
+  });
+
+  // Jump to latest version pressed on a replaced block: the newest
+  // version's row comes into view, unless its block is drawn already, and
+  // the block itself is brought to the view's middle and marked once drawn
+  // (TranscriptBlock).
+  $effect(() => {
+    const want = blockReveal.get(session.instanceId);
+    if (!(want && active)) {
+      return;
+    }
+    untrack(() => {
+      blockReveal.delete(session.instanceId);
+      const drawn = scroller?.querySelector(
+        `[data-block-key="${CSS.escape(blockKey(session.instanceId, want))}"]`
+      );
+      if (drawn) {
+        return;
+      }
+      const index = renderedRows.findIndex((row) =>
+        want.at === LIVE_REPLY
+          ? row.kind === "live"
+          : row.kind === "single" && row.message.id === want.at
+      );
+      if (index >= 0) {
+        list?.scrollToIndex(index, { align: "center" });
       }
     });
   });

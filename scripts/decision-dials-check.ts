@@ -34,8 +34,12 @@ const ROOT = join(import.meta.dir, "..");
 const KIT_PAGE = join(ROOT, "packages/hub/skills/decision-page/kit/page.html");
 /** The kit's line that loads the dials, with its comment. */
 const DIALS_LINE = /^.*\{\{DIALS\}\}.*$/mu;
-/** A length in rem outside a media or container query's prelude. */
-const REM_LEFT = /(?<![=<>[\w.])-?(?:\d+\.?\d*|\.\d+)rem(?![\w-])/u;
+/**
+ * A length in rem outside a media or container query's prelude. A class
+ * name that says a width (`.@max-table-34rem/table:hidden`, the kit
+ * Table's fold) is no length: a rem after a dash is a selector's.
+ */
+const REM_LEFT = /(?<![=<>[\w.-])-?(?:\d+\.?\d*|\.\d+)rem(?![\w-])/u;
 
 const wrong: string[] = [];
 const said = (line: string) => console.log(`ok  ${line}`);

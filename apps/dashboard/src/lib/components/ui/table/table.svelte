@@ -39,6 +39,11 @@
         "matrix-stacks": "@max-phone/table:border-l-none",
         "matrix-stacks-under":
           "@max-phone/table:border-l-none @max-phone/table:pt-0",
+        /** A generated table's cells (an agent's block): blocks of their own size. */
+        "view-wraps":
+          "@max-phone/table:block @max-phone/table:h-auto @max-phone/table:w-auto @max-phone/table:min-w-0 @max-phone/table:border-none @max-phone/table:p-0",
+        "view-lead":
+          "@max-phone/table:block @max-phone/table:h-auto @max-phone/table:w-auto @max-phone/table:min-w-0 @max-phone/table:border-none @max-phone/table:p-0",
       },
     },
     /**

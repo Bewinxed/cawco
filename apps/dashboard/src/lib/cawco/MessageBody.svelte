@@ -19,6 +19,7 @@
     streaming = false,
     fades = false,
     said = false,
+    at,
     wrap = "stable",
   }: {
     source: string;
@@ -27,6 +28,8 @@
     fades?: boolean;
     /** The person's own words: a skill they name is its chip, and so is every session they mention. */
     said?: boolean;
+    /** The agent's reply these words are, in a transcript: its named `openui` fences are its blocks (markdown-blocks.ts). */
+    at?: string;
     /**
      * How its lines break: `stable` in a transcript, whose words may still be
      * landing (no line moves as the next words come); `pretty` for words that
@@ -41,5 +44,5 @@
   data-wrap={wrap === "pretty" ? "pretty" : undefined}
   class="max-w-c-measure text-size-body leading-body font-normal text-ink-strong"
 >
-  <Markdown {fades} {said} {source} {streaming} />
+  <Markdown blocksAt={at} {fades} {said} {source} {streaming} />
 </div>
