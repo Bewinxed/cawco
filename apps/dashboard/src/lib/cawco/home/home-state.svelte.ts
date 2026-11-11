@@ -1059,7 +1059,10 @@ class Home {
       $effect(() => {
         if (
           cawco.hub === "unreachable" ||
-          (cawco.fleetRead && cawco.liveRead && cawco.catalogsRead)
+          (cawco.fleetRead &&
+            cawco.liveRead &&
+            cawco.catalogsRead &&
+            cawco.storedRead)
         ) {
           this.#ready = true;
         }

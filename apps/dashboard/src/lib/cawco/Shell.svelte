@@ -338,9 +338,10 @@
   }
 
   /**
-   * The sidebar put away on a desk (Hide sidebar, beside Files in the top
-   * bar's glass), kept per browser and for the server's first paint. The
-   * same button brings it back.
+   * The sidebar put away on a desk (Hide sidebar, at the leading edge of
+   * its own header), kept per browser and for the server's first paint.
+   * Away, the same button stands at the page's leading edge, in the top
+   * bar, and brings it back.
    */
   let railHidden = $state(untrack(() => initialRailHidden));
   /** The rail on its way out: drawn over the page, out of its layout, as it slides. */
@@ -954,11 +955,17 @@
         if (!group) {
           continue;
         }
-        const left = layoutLeft(group);
+        // Its group's box, cut to the slot at both ends: the first
+        // column starts past what leads the bar (Show sidebar).
+        const left = Math.max(layoutLeft(group), areaLeft);
+        const right = Math.min(
+          layoutLeft(group) + group.offsetWidth,
+          areaRight
+        );
         places.push([
           col,
           `${left - areaLeft}px`,
-          `${Math.max(0, Math.min(group.offsetWidth, areaRight - left))}px`,
+          `${Math.max(0, right - left)}px`,
         ]);
       }
       return places;
@@ -1307,7 +1314,7 @@
     >
       {#if railed}
         <RegionBoundary face="line" part="sidebar">
-          <Sidebar {narrow} scroller={keepScroll} />
+          <Sidebar {narrow} onhide={toggleRail} scroller={keepScroll} />
         </RegionBoundary>
       {/if}
       <!-- Drawn a grip's width on the rail's edge; under a fine pointer it
@@ -1450,6 +1457,31 @@
         >
           <IconSidebar class="size-icon-lg max-desk:size-c-bar-toggle-glyph" />
         </button>
+        {#if railed && railHidden}
+          <!-- The sidebar is put away on a desk: the button that hid it, at
+               its header's leading edge, stands here at the page's, as far
+               in as it stood there, alone in its glass group, and brings
+               the sidebar back. Its glyph mirrors right to left, as the
+               sidebar's side does. Hosted tabs start past it (followPanes). -->
+          <div
+            data-slot="rail-show"
+            class="flex flex-none ps-space-2 group-data-under/top:pointer-events-auto"
+          >
+            <BarGlass form="group">
+              <BarItem
+                data-rail-toggle
+                label={sidebarWords.showSidebar}
+                layout="desk"
+                onclick={toggleRail}
+              >
+                <IconSidebarLinear
+                  aria-hidden="true"
+                  class="size-icon-md text-ink-muted rtl:-scale-x-100"
+                />
+              </BarItem>
+            </BarGlass>
+          </div>
+        {/if}
         <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
            who arrived by URL. One slot for the bar's left-hand content,
@@ -1542,7 +1574,8 @@
                  is clipped to, past the 16px a name needs from a control. -->
             <span
               data-slot="crumb"
-              class="min-w-0 truncate ps-space-7 me-space-3 max-desk:ps-0 coarse:portrait:ps-0"
+              data-led={(railed && railHidden) || undefined}
+              class="min-w-0 truncate ps-space-7 data-led:ps-space-1 me-space-3 max-desk:ps-0 coarse:portrait:ps-0"
               in:riseIn
               out:crossOut
             >
@@ -1569,23 +1602,10 @@
               <!-- Caw's head: what needs you, and its drawer. -->
               <NeedsCaw />
             {/snippet}
-            {#if railed}
-              <!-- The sidebar, put away and brought back on a desk; Files
-                   (the conversation on screen's artifacts and attachments)
-                   beside it. -->
-              <BarItem
-                data-rail-toggle
-                icon={IconSidebarLinear}
-                label={railHidden
-                  ? sidebarWords.showSidebar
-                  : sidebarWords.hideSidebar}
-                layout="desk"
-                onclick={toggleRail}
-                open={!railHidden}
-              />
-              {#if files.session}
-                <FilesItem count={filesCounted} />
-              {/if}
+            {#if railed && files.session}
+              <!-- Files: the conversation on screen's artifacts and
+                   attachments. -->
+              <FilesItem count={filesCounted} />
             {/if}
             <!-- Drawn on every screen and hidden on the phone's glass by its
                  layout (`desk`: the shell container's desk line,

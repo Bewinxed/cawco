@@ -66,6 +66,9 @@ export const sidebarWords = {
   /** The sessions' sort: its button, named with the order it holds, and the order by last activity. */
   sortSessions: (order: string) => `Sort sessions — currently ${order}`,
   lastActivity: "Last activity",
+  /** A project's count in Projects, as the switch that unfolds its running sessions under its row. */
+  showRunning: (project: string) => `Show ${project}'s running sessions`,
+  hideRunning: (project: string) => `Hide ${project}'s running sessions`,
   /** The sidebar's one list of the sessions the person started or wrote in. */
   recent: "Recent",
   /** Recent with nothing in it. */

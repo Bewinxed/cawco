@@ -1,20 +1,21 @@
 <script lang="ts">
-  import { projectEndWords } from "@cawco/core/words/project-ends";
-  import { sidebarWords } from "@cawco/core/words/sidebar";
   /**
    * Fleet sidebar, on the shadcn-svelte sidebar primitives (ui/sidebar/*):
    *
-   *   • Header: the CawCo icon and wordmark, Start session
+   *   • Header: Hide sidebar (a desk), the CawCo icon and wordmark, Start session
    *   • Content: Fleet, then two sections, each a hairline seam above it:
    *     Recent (home/RecentList: every session the person started or wrote
    *     in, grouped by up to three levels) and Projects (every project, one
-   *     row each with its running count on its mark, grouped by area and
-   *     machine from the same kind of menu)
+   *     row each, its running count on its mark the switch that unfolds
+   *     those sessions under it, grouped by area and machine from the same
+   *     kind of menu)
    *   • Footer: the usage strip, the reader's avatar and the settings
    *
    * A session says what it is doing on its mark (SessionMark: an echo, or a
    * dot on its corner) rather than in a text pill.
    */
+  import { projectEndWords } from "@cawco/core/words/project-ends";
+  import { sidebarWords } from "@cawco/core/words/sidebar";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
@@ -35,9 +36,12 @@
     IconPlus,
     IconSearch,
     IconSettings,
+    IconSidebarLinear,
   } from "#lib/icons.js";
+  import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { cawco, type ProjectRow } from "./client.svelte";
+  import { epochOf } from "./board.svelte";
+  import { type BoardRow, cawco, type ProjectRow } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
   import { files, filesCount } from "./files/files.svelte";
@@ -49,23 +53,43 @@
     inForce,
     PROJECT_OPTIONS,
     type ProjectGroupBy,
+    runningPath,
   } from "./home/grouping.svelte";
   import Home from "./home/Home.svelte";
-  import { home, isDelegate, machineName } from "./home/home-state.svelte";
+  import {
+    clock,
+    home,
+    instanceTitle,
+    isDelegate,
+    lastAt,
+    machineName,
+  } from "./home/home-state.svelte";
+  import OlderDelegates from "./home/OlderDelegates.svelte";
+  import {
+    type Branch,
+    branchOf,
+    delegatesByTop,
+    inFront,
+  } from "./home/session-branches";
+  import { rowHref } from "./links";
   import { machinesOnline } from "./MachinesButton.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { markHue } from "./mark";
   import { type BranchOptions, branch } from "./motion/branch.svelte";
+  import { echoBeat } from "./motion/echo.svelte";
   import { reflow } from "./motion/rows.svelte";
   import { landRegroup, regroup, regroupPrimer } from "./motion/share.svelte";
+  import { olderOut } from "./OlderRows.svelte";
+  import { type Reading, runningIds } from "./older";
+  import { openTrees, type TreeList } from "./open-trees.svelte";
   import PresenceMenu from "./PresenceMenu.svelte";
-  import ProjectEndTray from "./ProjectEndTray.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { endAtRail } from "./project-end.svelte";
   import { folderOf } from "./projects";
+  import RailProjectEnd from "./RailProjectEnd.svelte";
   import { rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
-  import { ROW_PILL } from "./SessionRow.svelte";
+  import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
   import TreeLine from "./TreeLine.svelte";
@@ -77,6 +101,7 @@
   let {
     onsearch,
     onfiles,
+    onhide,
     narrow,
     sheet = false,
     scroller,
@@ -85,6 +110,12 @@
     onsearch?: () => void;
     /** Opens Files for the conversation on screen, from the phone's Files row (Shell owns its drawer). */
     onfiles?: () => void;
+    /**
+     * Puts the sidebar away, from the button at its header's leading edge
+     * (the Shell's rail on a desk; the Shell's top bar brings it back). The
+     * phone's sheet has its own Close and passes none.
+     */
+    onhide?: () => void;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
     /**
@@ -225,19 +256,52 @@
   );
 
   /**
-   * A project's count, on its mark: the sessions running in it that are
-   * their own top, never a delegate (owner: "the working count shouldn't
-   * count delegates").
+   * A project's running sessions that are their own top, never a delegate
+   * (owner: "the working count shouldn't count delegates"), newest started
+   * first: its count, on its mark, and the rows that mark unfolds under it.
    */
   const runningIn = $derived.by(() => {
-    const counts = new Map<string, number>();
+    const running = new Map<string, BoardRow[]>();
     for (const row of cawco.runningInstances) {
       if (row.projectId && !isDelegate(row)) {
-        counts.set(row.projectId, (counts.get(row.projectId) ?? 0) + 1);
+        const held = running.get(row.projectId);
+        if (held) {
+          held.push(row);
+        } else {
+          running.set(row.projectId, [row]);
+        }
       }
     }
-    return counts;
+    for (const rows of running.values()) {
+      rows.sort((a, b) => epochOf(b, "createdAt") - epochOf(a, "createdAt"));
+    }
+    return running;
   });
+
+  /** Each listed top's delegates, at any depth: read only while a project's sessions are out. */
+  const delegatesOf = $derived(
+    delegatesByTop(cawco.listedInstances, cawco.listedById)
+  );
+
+  /** Projects' unfolded sessions keep their own open delegates (open-trees). */
+  const PROJECTS_LIST: TreeList = "rail-projects";
+  /** What the older rule reads of the fleet (older.ts). */
+  const reading = $derived<Reading>({
+    lastAt,
+    now: clock.now,
+    running: runningIds(),
+  });
+  /** A session row's age, as Recent says it. */
+  const ageOf = (row: BoardRow): string => {
+    const at = lastAt(row);
+    return at === 0 ? "" : formatAgeShort(at, clock.now);
+  };
+  const ageHint = (row: BoardRow): string => {
+    const at = lastAt(row);
+    return at === 0
+      ? "No activity recorded"
+      : `${sidebarWords.lastActivity} ${formatDistanceToNow(new Date(at))}`;
+  };
 
   /** The machine a project is placed on first: its primary place's. */
   const machineOf = (project: ProjectRow): string =>
@@ -331,11 +395,22 @@
   /**
    * Projects as one flat tree (tree-lines.ts): the groups and the projects
    * in them, each a row keyed by what it is, so a regroup moves the same
-   * rows. Ungrouped, the projects are its roots.
+   * rows. Ungrouped, the projects are its roots. A project whose count was
+   * pressed has its running sessions under it, each with its delegates
+   * folded under it as Recent folds them (a delegate's row, `node`; a
+   * session's "N older" row).
    */
   type ProjectNode =
     | { kind: "group"; group: ProjectGroup }
-    | { kind: "project"; project: ProjectRow };
+    | { kind: "project"; project: ProjectRow }
+    | {
+        kind: "session";
+        count: number;
+        node: Branch | null;
+        row: BoardRow;
+        under: BoardRow[];
+      }
+    | { kind: "older"; node: Branch };
   const projectNode = (project: ProjectRow): ProjectNode => ({
     kind: "project",
     project,
@@ -344,13 +419,78 @@
     kind: "group",
     group,
   });
+  const branchNode = (node: Branch): ProjectNode => ({
+    kind: "session",
+    row: node.row,
+    count: node.count,
+    node,
+    under: node.under,
+  });
+  /** A project's running sessions, as rows under it. */
+  const runningNodes = (project: ProjectRow): ProjectNode[] =>
+    (runningIn.get(project.id) ?? []).map((row) => {
+      const under = delegatesOf.get(row.id) ?? [];
+      return {
+        kind: "session",
+        row,
+        count: under.length,
+        node: null,
+        under,
+      };
+    });
+  /** Whether a row's own rows are out under it. */
+  function projectOpen(node: ProjectNode): boolean {
+    switch (node.kind) {
+      case "group":
+        return !grouping.folded(node.group.path);
+      case "project":
+        return (
+          runningIn.has(node.project.id) &&
+          !grouping.folded(runningPath(node.project.id))
+        );
+      case "session":
+        return node.count > 0 && openTrees.has(node.row.id, PROJECTS_LIST);
+      case "older":
+        return olderOut(
+          node.node.row.id,
+          inFront(node.node.older, activeSession),
+          PROJECTS_LIST
+        );
+      default:
+        return node satisfies never;
+    }
+  }
   const projectKids = (node: ProjectNode): ProjectNode[] => {
-    if (node.kind === "project" || grouping.folded(node.group.path)) {
+    if (node.kind === "older" || !projectOpen(node)) {
       return [];
     }
-    return node.group.groups
-      ? node.group.groups.map(projectGroupNode)
-      : node.group.projects.map(projectNode);
+    if (node.kind === "group") {
+      return node.group.groups
+        ? node.group.groups.map(projectGroupNode)
+        : node.group.projects.map(projectNode);
+    }
+    if (node.kind === "project") {
+      return runningNodes(node.project);
+    }
+    const own = node.node ?? branchOf(node.row, node.under, reading);
+    return [
+      ...own.recent.map(branchNode),
+      ...(own.older.length > 0 ? [{ kind: "older" as const, node: own }] : []),
+    ];
+  };
+  const projectKey = (node: ProjectNode): string => {
+    switch (node.kind) {
+      case "group":
+        return `group:${node.group.path}`;
+      case "project":
+        return `project:${node.project.id}`;
+      case "session":
+        return `session:${node.row.id}`;
+      case "older":
+        return `older:${node.node.row.id}`;
+      default:
+        return node satisfies never;
+    }
   };
   const projectRows = $derived(
     flatTree(
@@ -358,13 +498,13 @@
         ? orderedProjects.map(projectNode)
         : groupedProjects.map(projectGroupNode),
       projectKids,
-      (node) =>
-        node.kind === "group"
-          ? `group:${node.group.path}`
-          : `project:${node.project.id}`
+      projectKey
     )
   );
-  /** How a group's projects open and fold: off each row's mark (motion/branch). */
+  /** A box of older delegates' trees: their rows, flat, under the box. */
+  const olderProjectRows = (trees: Branch[]): FlatRow<ProjectNode>[] =>
+    flatTree(trees.map(branchNode), projectKids, projectKey);
+  /** How every row of the tree opens and folds: off its parent's mark (motion/branch). */
   const PROJECT_TREE: BranchOptions = { glyph: "[data-tree-mark]" };
 
   /**
@@ -407,7 +547,7 @@
      the direction. -->
 
 {#snippet projectRow(project: ProjectRow)}
-  {@const runningCount = runningIn.get(project.id) ?? 0}
+  {@const runningCount = runningIn.get(project.id)?.length ?? 0}
   {@const href = `/project/${project.id}`}
   {@const here =
     (onWorkspace && workspace.activeTab === projectTab(project.id)) ||
@@ -419,8 +559,12 @@
   >
     <Sidebar.MenuButton isActive={here} row="list">
       {#snippet child({ props })}
-        <!-- The row is the link to the project's page; its mark says how
-               many of its sessions run now. Its sessions are in Recent. -->
+        <!-- The row is the link to the project's page. Its mark says how
+             many of its sessions run now and is the switch that unfolds
+             them under the row, as a session's mark unfolds its delegates;
+             its press never reaches the link. Under a finger the switch
+             reaches sideways to the name, the row's own gap (`row="list"`),
+             as a session row's does. -->
         <a
           {href}
           {...props}
@@ -428,6 +572,7 @@
           aria-current={here ? "page" : undefined}
           onclickcapture={(event) => openProjectTab(event, project.id)}
           class="{props.class} mark-line coarse:h-c-btn-h-lg"
+          style:--mark-hit-gap="var(--space-3)"
           data-regroup="regroup:project:{project.id}"
           {@attach landRegroup(() => `regroup:project:${project.id}`)}
         >
@@ -435,6 +580,10 @@
             count={runningCount}
             hue={markHue(folderOf(project))}
             name={project.name}
+            ontoggle={runningCount > 0
+              ? () => grouping.toggle(runningPath(project.id))
+              : undefined}
+            open={runningCount > 0 && !grouping.folded(runningPath(project.id))}
           />
           <span
             class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
@@ -448,36 +597,28 @@
     </Sidebar.MenuButton>
   </FolderMenu>
   <!-- An end asked from this row's menu, under it. -->
-  <div
-    data-slot="sidebar-end"
-    class="contents"
-    style:--ask-indent="var(--space-1)"
-    style:--ask-end="var(--space-1)"
-    style:--fault-indent="var(--space-2)"
-    style:--fault-end="var(--space-2)"
-  >
-    <ProjectEndTray
-      at={endAtRail(project.id)}
-      opener={() => document.getElementById(railLinkId(project.id))}
-      parks
-      projectId={project.id}
-    />
-  </div>
+  <RailProjectEnd
+    at={endAtRail(project.id)}
+    opener={() => document.getElementById(railLinkId(project.id))}
+    parks
+    projectId={project.id}
+  />
 {/snippet}
 
-<!-- A row of Projects' tree: a group parent or a project, keyed in the one
-     list, its share of the lines its own (TreeLine). -->
+<!-- A row of Projects' tree: a group parent, a project, one of its running
+     sessions (or a delegate under one) or a session's "N older" row, keyed
+     in the one list, its share of the lines its own (TreeLine). -->
 {#snippet projectTreeRow(item: FlatRow<ProjectNode>)}
   {@const node = item.node}
+  {@const sub = node.kind === "session" || node.kind === "older"}
   <li
-    class="kit-tree-row group/menu-item"
+    class={["kit-tree-row", sub ? "group/menu-sub-item" : "group/menu-item"]}
     {...lineAttrs(item.line)}
     data-flip="box"
-    data-line-open={(node.kind === "group" &&
-      !grouping.folded(node.group.path)) ||
-      undefined}
-    data-sidebar="menu-item"
-    data-slot="sidebar-menu-item"
+    data-line-open={projectOpen(node) || undefined}
+    data-session-row={node.kind === "session" ? node.row.id : undefined}
+    data-sidebar={sub ? "menu-sub-item" : "menu-item"}
+    data-slot={sub ? "sidebar-menu-sub-item" : "sidebar-menu-item"}
     style:--line-depth={item.line.depth}
     in:branch={PROJECT_TREE}
     out:branch={PROJECT_TREE}
@@ -491,8 +632,39 @@
         label={node.group.label}
         path={node.group.path}
       />
-    {:else}
+    {:else if node.kind === "project"}
       {@render projectRow(node.project)}
+    {:else if node.kind === "session"}
+      {@const { row, count } = node}
+      <SessionRow
+        active={activeSession === row.id}
+        compact
+        fold={count > 0
+          ? {
+              count,
+              open: projectOpen(node),
+              ontoggle: () => openTrees.toggle(row.id, PROJECTS_LIST),
+            }
+          : null}
+        hint={ageHint(row)}
+        href={rowHref(row.id)}
+        instance={row}
+        machineId={row.machineId}
+        peek={false}
+        stale={!home.live}
+        title={instanceTitle(row)}
+        trail={ageOf(row)}
+      />
+    {:else}
+      <!-- Its older delegates, in a box of their own under the row. -->
+      <OlderDelegates
+        active={activeSession}
+        flatten={olderProjectRows}
+        list={PROJECTS_LIST}
+        out={projectOpen(node)}
+        own={node.node}
+        row={projectTreeRow}
+      />
     {/if}
   </li>
 {/snippet}
@@ -505,10 +677,30 @@
   <!-- ────────────────────── header ──────────────────────── -->
 
   <Sidebar.Header>
-    <!-- The wordmark, and in the header's corner what is started from
-         anywhere: a session (⇧⌘N). Jump lives on the tab row (Shell), beside
-         the conversations it jumps between. -->
+    <!-- At the leading edge on a desk, Hide sidebar; the wordmark; and in
+         the header's corner what is started from anywhere: a session
+         (⇧⌘N). Jump lives on the tab row (Shell), beside the conversations
+         it jumps between. -->
     <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
+      {#if onhide}
+        <Tip label={sidebarWords.hideSidebar}>
+          {#snippet children(tip)}
+            <!-- Start session's twin at the row's other end: the same box
+                 and glyph size. Its glyph mirrors right to left, as the
+                 sidebar's side does. -->
+            <button
+              {...tip}
+              aria-label={sidebarWords.hideSidebar}
+              class="select-none focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
+              data-rail-toggle
+              onclick={() => onhide()}
+              type="button"
+            >
+              <IconSidebarLinear class="size-space-5 rtl:-scale-x-100" />
+            </button>
+          {/snippet}
+        </Tip>
+      {/if}
       <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton isActive={false} row="nav">
@@ -688,8 +880,9 @@
          Until then, rows standing where they will be. -->
     {#if stage >= 3}
       <!-- Projects, the index of every project: one row each, its running
-           count on its mark, grouped by the same kind of menu as Recent
-           (area first). A seam and room above it, as above Recent. -->
+           count on its mark, which unfolds those sessions under it, grouped
+           by the same kind of menu as Recent (area first). A seam and room
+           above it, as above Recent. -->
       <Sidebar.Group data-flip="box" pad="rail">
         <!-- Its controls end where the rows do, inside the row (the label's
              `end="action"`). The word gives way first (DESIGN.md, The
@@ -753,7 +946,7 @@
               : sidebarWords.noProjects}
           </p>
         {:else}
-          <div {@attach highlight(PILL)}>
+          <div {@attach highlight(PILL)} {@attach echoBeat()}>
             <!-- One flat tree, every row keyed: grouped, a section's room
                  between the groups at the root; ungrouped, the projects
                  a list's two pixels apart. -->

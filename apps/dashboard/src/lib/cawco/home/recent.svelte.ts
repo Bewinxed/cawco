@@ -19,22 +19,29 @@
  * person's last word) only while it needs them. A session a project or a
  * task started stands only while it needs the person.
  *
- * A transcript stored on a machine (its catalog, `cawco.catalogOf`) stands
- * here too when it was run inside a project's folder on that machine (core
- * `projectAt`), under that project, unless the hub holds a session of it
- * (that session is its row, or none if the list leaves it out). It is Your
- * turn, never unread, and has no Done: the hub keeps nothing for a transcript
- * it never ran to archive it by. One outside every project's folder is found
- * in Jump's search.
+ * A transcript stored on a machine (its catalog, `cawco.catalogOf`) that was
+ * run inside a project's folder there (core `projectAt`) is asked of the
+ * hub, the whole list in one ask (`cawco.askStored`, core `StoredSessions`).
+ * One a session of the hub wraps is that session: a row the board lists, or
+ * one the hub answers with (`cawco.olderInstances`: the person's own
+ * sessions the board no longer lists, and what nests under them), listed
+ * by the one rule above, a delegate under its session. Only a transcript no
+ * session wraps stands as a stored row, under its project: Your turn, never
+ * unread, and no Done (the hub keeps nothing for a transcript it never ran
+ * to archive it by). One outside every project's folder is found in Jump's
+ * search.
  *
  * Order: the person's last message to it (`wroteAt`, a stored transcript's
  * read from it by its harness), else its start (`createdAt`): an agent's
  * reply never moves a row.
  */
 import type { NeutralSessionInfo } from "@cawco/core/harness";
-import { projectAt, topsIn } from "@cawco/core/project-membership";
+import { projectAt } from "@cawco/core/project-membership";
+import { personsOwn } from "@cawco/core/protocol";
 import { DAY_MS } from "@cawco/core/time";
 import { sidebarWords } from "@cawco/core/words/sidebar";
+import { untrack } from "svelte";
+import { browser } from "$app/env";
 import { epochOf } from "../board.svelte";
 import {
   type BoardRow,
@@ -54,6 +61,7 @@ import {
   isDelegate,
   machineName,
 } from "./home-state.svelte";
+import { delegatesByTop } from "./session-branches";
 
 export type RecentStatus = "working" | "needs" | "yours";
 type Day = "today" | "yesterday" | "older";
@@ -108,9 +116,8 @@ export interface RecentGroup {
 const stamped = (value: unknown): boolean =>
   value !== null && value !== undefined;
 
-/** The person's own work: they started it, or wrote in it. */
-const theirs = (row: BoardRow): boolean =>
-  row.origin === "person" || stamped(row.wroteAt);
+/** The person's own work: they started it, or wrote in it (the hub's rule too). */
+const theirs = personsOwn;
 
 /** An ask waits on the person, or it failed, or it stopped at its account's limit. */
 const needsThem = (row: BoardRow): boolean =>
@@ -170,27 +177,26 @@ function dayOf(at: number, now: number): Day {
   return at >= start - DAY_MS ? "yesterday" : "older";
 }
 
-/** Each listed top's delegates, at any depth. */
-function delegatesByTop(listed: BoardRow[]): Map<string, BoardRow[]> {
-  const topOf = topsIn(cawco.listedById);
-  const under = new Map<string, BoardRow[]>();
-  for (const row of listed) {
-    const top = topOf(row);
-    if (top !== row) {
-      const held = under.get(top.id);
-      if (held) {
-        held.push(row);
-      } else {
-        under.set(top.id, [row]);
-      }
-    }
-  }
-  return under;
+/**
+ * The sessions Recent reads: the board's listed rows, then the older ones
+ * the hub answered the stored transcripts with (`cawco.olderInstances`),
+ * by id.
+ */
+class Sessions {
+  readonly rows = $derived<BoardRow[]>([
+    ...cawco.listedInstances,
+    ...cawco.olderInstances,
+  ]);
+  readonly byId = $derived(
+    new Map(this.rows.map((row) => [row.id, row] as const))
+  );
 }
 
-/** Continued into a listed session: that one takes its row. */
+const sessions = new Sessions();
+
+/** Continued into a session the list reads: that one takes its row. */
 const continued = (row: BoardRow): boolean =>
-  !!row.continuedInto && cawco.listedById.has(row.continuedInto);
+  !!row.continuedInto && sessions.byId.has(row.continuedInto);
 
 /** Whether a session stands in Recent (see the module's head). */
 function listedHere(row: BoardRow, from: BoardRow | undefined): boolean {
@@ -202,11 +208,12 @@ function listedHere(row: BoardRow, from: BoardRow | undefined): boolean {
 }
 
 /**
- * The transcripts stored on the machines that stand in Recent: each in a
- * project's folder on its machine, the hub holding no session of it. Read
- * again only when a catalog, a machine, a project or the sessions the hub
- * holds change, never on a turn's frames: a machine's catalog is a thousand
- * and more. Their day is the list's, read with the clock.
+ * The transcripts stored on the machines, each in a project's folder on
+ * its machine: what Recent asks the hub of (`cawco.askStored`), and, of
+ * them, the ones no session wraps, which stand as stored rows. Read again
+ * only when a catalog, a machine or a project changes, never on a turn's
+ * frames: a machine's catalog is a thousand and more. Their day is the
+ * list's, read with the clock.
  */
 class StoredTranscripts {
   /** The machines' ids, as text: the same text while none is added or removed. */
@@ -214,18 +221,14 @@ class StoredTranscripts {
     cawco.machines.map((machine) => machine.machineId).join("\n")
   );
 
-  readonly entries = $derived.by(() => {
-    const held = cawco.instanceIndex.bySession;
+  /** Every stored transcript in a project's folder, wrapped or not. */
+  readonly #inProjects = $derived.by(() => {
     const out: Omit<StoredEntry, "day">[] = [];
     for (const machineId of this.#machineIds.split("\n")) {
       if (!machineId) {
         continue;
       }
       for (const info of cawco.catalogOf(machineId)) {
-        // A session the hub holds is its own row, or none.
-        if (held.has(info.sessionId)) {
-          continue;
-        }
         const project = projectAt(cawco.projects, {
           machineId,
           cwd: info.cwd ?? "",
@@ -248,14 +251,40 @@ class StoredTranscripts {
     }
     return out;
   });
+
+  /** Their harness keys, as text: the same text while the hub's answer for them holds. */
+  readonly keys = $derived(
+    [...new Set(this.#inProjects.map((entry) => entry.info.sessionId))]
+      .sort()
+      .join("\n")
+  );
+
+  /** The ones the hub said no session wraps. */
+  readonly entries = $derived(
+    this.#inProjects.filter((entry) => cawco.storedAlone(entry.info.sessionId))
+  );
 }
 
 const stored = new StoredTranscripts();
 
+// The hub is asked what it holds behind them once the catalogs are in, and
+// again when the transcripts in the projects' folders change.
+if (browser) {
+  $effect.root(() => {
+    $effect(() => {
+      if (!cawco.catalogsRead) {
+        return;
+      }
+      const { keys } = stored;
+      untrack(() => cawco.askStored(keys ? keys.split("\n") : []));
+    });
+  });
+}
+
 /** Recent's rows, newest first: read only where the list is drawn. */
 export function recentEntries(): RecentEntry[] {
-  const listed = cawco.listedInstances;
-  const under = delegatesByTop(listed);
+  const listed = sessions.rows;
+  const under = delegatesByTop(listed, sessions.byId);
   /** The sessions continued into another listed one, by that one: theirs if the old was. */
   const continuedFrom = new Map<string, BoardRow>();
   for (const row of listed) {

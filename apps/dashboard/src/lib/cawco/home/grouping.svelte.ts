@@ -81,8 +81,16 @@ function picked<T extends string>(levels: Levels<T>, at: number, by: T) {
   return next;
 }
 
-/** A group parent folded by default: Older, at the list's top level. */
-const foldedAtFirst = (path: string): boolean => path === "day:older";
+/** The fold of a project's running sessions under its row in Projects, as a path the folds keep. */
+export const runningPath = (projectId: string): string =>
+  `running:${projectId}`;
+
+/**
+ * A parent folded by default: Older, at the list's top level, and a
+ * project's running sessions under its row in Projects.
+ */
+const foldedAtFirst = (path: string): boolean =>
+  path === "day:older" || path.startsWith("running:");
 
 export const grouping = {
   get recent(): Levels<GroupBy> {
@@ -99,7 +107,7 @@ export const grouping = {
     state.projects = picked(state.projects, at, by);
     writeJson(PROJECTS_KEY, state.projects);
   },
-  /** Whether the group parent at `path` is folded. */
+  /** Whether the parent at `path` is folded. */
   folded(path: string): boolean {
     return state.folds[path] ?? foldedAtFirst(path);
   },

@@ -542,6 +542,9 @@ interface SettledInstance {
 /** How long a session that stopped moving stays in the listings the rails read. */
 const STALE_AFTER_MS = DAY_MS;
 
+/** How many keys one read names ({@link DbShape.boardSessionsWrapping}): under SQLite's bound on a statement's values. */
+const KEYS_PER_READ = 500;
+
 /** A folder's trailing slashes, which {@link DbShape.projectHolding} reads past. */
 const TRAILING_SLASHES = /\/+$/u;
 
@@ -802,6 +805,13 @@ export interface DbShape {
    * listings never show (discarded, being deleted, a removed machine's).
    */
   readonly boardAncestors: (ids: string[]) => BoardInstanceRow[];
+  /**
+   * The sessions that wrap these transcripts (each a harness's session
+   * key), as the board reads a row, listed or not: what stands behind a
+   * machine's stored transcripts ({@link boardAncestors}'s rule for which
+   * rows are ever shown).
+   */
+  readonly boardSessionsWrapping: (sessionIds: string[]) => BoardInstanceRow[];
   /** The briefer documents a session has been handed, path → the hash it read (briefings.ts). */
   readonly briefingsHanded: (instanceId: string) => Map<string, string>;
   /** The fleet's browsers, per machine (browsers.ts). */
@@ -8125,6 +8135,29 @@ const make = async (path: string): Promise<DbShape> => {
             .where(and(listedInstances(), inArray(instances.id, ids)))
             .all()
             .map(asListed),
+    boardSessionsWrapping: (sessionIds) => {
+      const rows: BoardInstanceRow[] = [];
+      // In bounded lists: a machine's catalog is a thousand keys and more.
+      for (let at = 0; at < sessionIds.length; at += KEYS_PER_READ) {
+        rows.push(
+          ...db
+            .select(boardColumns)
+            .from(instances)
+            .where(
+              and(
+                inArray(
+                  instances.sessionId,
+                  sessionIds.slice(at, at + KEYS_PER_READ)
+                ),
+                keptInstances()
+              )
+            )
+            .all()
+            .map(asListed)
+        );
+      }
+      return rows;
+    },
     boardAncestors: (ids) =>
       ids.length === 0
         ? []

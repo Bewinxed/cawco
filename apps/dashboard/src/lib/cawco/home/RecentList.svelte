@@ -32,23 +32,16 @@
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
-  import { type BoardRow, cawco } from "../client.svelte";
-  import { catalogTitle, conversationHref, rowHref } from "../links";
+  import type { BoardRow } from "../client.svelte";
+  import { rowHref, sessionTitle } from "../links";
   import { type BranchOptions, branch } from "../motion/branch.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { regroup, regroupPrimer } from "../motion/share.svelte";
-  import OlderRows, { olderOut } from "../OlderRows.svelte";
-  import {
-    DELEGATE_WINDOW,
-    failedIn,
-    listedOf,
-    type Reading,
-    runningIds,
-  } from "../older";
+  import { olderOut } from "../OlderRows.svelte";
+  import { type Reading, runningIds } from "../older";
   import { openTrees, type TreeList } from "../open-trees.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import TreeLine from "../TreeLine.svelte";
-  import { tree } from "../tree";
   import { type FlatRow, flatTree, lineAttrs, treeLines } from "../tree-lines";
   import GroupMenu from "./GroupMenu.svelte";
   import GroupParent from "./GroupParent.svelte";
@@ -61,6 +54,7 @@
     lastAt,
     projectOfRow,
   } from "./home-state.svelte";
+  import OlderDelegates from "./OlderDelegates.svelte";
   import {
     groupEntries,
     type RecentEntry,
@@ -70,6 +64,7 @@
     type SessionEntry,
     type StoredEntry,
   } from "./recent.svelte";
+  import { type Branch, branchOf, inFront } from "./session-branches";
 
   let {
     variant,
@@ -131,69 +126,12 @@
 
   /* ── A session's delegates, as every tree in the app hangs them ────── */
 
-  /** A session and the sessions it started (tree.ts), split by older.ts's rule. */
-  interface Branch {
-    children: Branch[];
-    count: number;
-    older: Branch[];
-    recent: Branch[];
-    row: BoardRow;
-    under: BoardRow[];
-  }
-
   /** What the older rule reads of the fleet. */
   const reading = $derived<Reading>({
     lastAt,
     now: clock.now,
     running: runningIds(),
   });
-
-  /** The session's own branch, its delegates under it newest first. */
-  function branchOf(entry: SessionEntry): Branch {
-    const rows = [entry.row, ...entry.under];
-    const lines = tree(rows, {
-      order: (siblings) => [...siblings].sort((a, b) => lastAt(b) - lastAt(a)),
-    });
-    const byId = new Map<string, Branch>();
-    const roots: Branch[] = [];
-    for (const line of lines) {
-      const node: Branch = {
-        row: line.row,
-        children: [],
-        count: line.descendants.length,
-        older: [],
-        recent: [],
-        under: line.descendants,
-      };
-      byId.set(line.row.id, node);
-      const parent = line.parent ? byId.get(line.parent) : undefined;
-      (parent ? parent.children : roots).push(node);
-    }
-    for (const node of byId.values()) {
-      if (node.children.length === 0) {
-        continue;
-      }
-      const listed = listedOf(
-        node.children.map((child) => child.row),
-        (row) => byId.get(row.id)?.under ?? [],
-        reading,
-        DELEGATE_WINDOW
-      );
-      for (const child of node.children) {
-        (listed.has(child.row.id) ? node.recent : node.older).push(child);
-      }
-    }
-    return byId.get(entry.row.id) ?? (roots[0] as Branch);
-  }
-
-  const inFront = (trees: Branch[]): boolean =>
-    active !== null &&
-    trees.some(
-      (node) =>
-        node.row.id === active || node.under.some((row) => row.id === active)
-    );
-  const rowsIn = (trees: Branch[]): number =>
-    trees.reduce((held, node) => held + 1 + node.count, 0);
 
   /* ── The list as one flat tree ─────────────────────────────────────── */
 
@@ -244,7 +182,7 @@
     if (node.kind === "session") {
       return node.count > 0 && openTrees.has(node.row.id, list);
     }
-    return olderOut(node.node.row.id, inFront(node.node.older), list);
+    return olderOut(node.node.row.id, inFront(node.node.older, active), list);
   }
 
   /** What hangs under a row while it is open: the next level, or a session's delegates. */
@@ -258,7 +196,8 @@
         ? group.groups.map(groupNode)
         : group.entries.map(entryNode);
     }
-    const own = node.node ?? branchOf(node.entry as SessionEntry);
+    const entry = node.entry as SessionEntry;
+    const own = node.node ?? branchOf(entry.row, entry.under, reading);
     return [
       ...own.recent.map(branchNode),
       ...(own.older.length > 0 ? [{ kind: "older" as const, node: own }] : []),
@@ -324,6 +263,7 @@
       <GroupParent
         by={group.by}
         count={countIn(group)}
+        endAt="{list}:{group.path}"
         groupKey={group.key}
         label={group.label}
         path={group.path}
@@ -358,17 +298,15 @@
         word={entry ? WORD[entry.status] : undefined}
       />
     {:else if node.kind === "stored"}
-      <!-- A transcript stored on its machine: Your turn, never unread, and
-           no Done (the hub keeps nothing to archive it by). -->
+      <!-- A transcript stored on its machine that no session wraps: read
+           by its own key, Your turn, never unread, and no Done (the hub
+           keeps nothing to archive it by). -->
       {@const { info, machineId, project } = node.entry}
       <SessionRow
         active={active !== null && active === info.sessionId}
         compact={!tall}
         hint={hintAt(info.lastModified)}
-        href={conversationHref(info.sessionId, cawco.instanceIndex, {
-          machineId,
-          cwd: info.cwd ?? "",
-        })}
+        href={rowHref(info.sessionId)}
         {info}
         line={tall ? project.name : ""}
         {machineId}
@@ -377,25 +315,19 @@
         quiet
         regroup="regroup:stored:{node.entry.key}"
         {stale}
-        title={catalogTitle(info, cawco.instanceIndex, machineId)}
+        title={sessionTitle(info)}
         trail={ageAt(info.lastModified)}
         word={WORD[node.entry.status]}
       />
     {:else}
-      {@const own = node.node}
       <!-- Its older delegates, in a box of their own under the row. -->
-      <OlderRows
-        count={rowsIn(own.older)}
-        failed={failedIn(
-          own.older.flatMap((held) => [held.row, ...held.under])
-        )}
+      <OlderDelegates
+        {active}
         flatten={olderRows}
-        front={inFront(own.older)}
-        glyph={GLYPH}
-        id={own.row.id}
         {list}
+        out={isOpen(node)}
+        own={node.node}
         row={treeRow}
-        trees={isOpen(node) ? own.older : []}
       />
     {/if}
   </li>

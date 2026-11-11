@@ -14,7 +14,11 @@
  * - `behindListed`: the transcript of a session the hub lists ("Checkout
  *   returns 404 after payment"), its row the one it has;
  * - `behindDone`: the transcript of a session the person pressed Done on,
- *   which stays hidden.
+ *   which stays hidden;
+ * - `behindOlder`: the transcripts of sessions the hub holds and its board
+ *   no longer lists (the bench's: a session the person stopped days ago,
+ *   its two delegates, and a check nobody wrote in), each that session's
+ *   row or none, never a stored one.
  */
 import type { NeutralSessionInfo } from "@cawco/core/harness";
 import {
@@ -37,15 +41,27 @@ export const STORED = {
 
 /**
  * Each machine's listing at `now`. `behindListed` and `behindDone` are the
- * session ids of the bench's listed session and its Done one.
+ * session ids of the bench's listed session and its Done one; `behindOlder`
+ * those of the sessions its board no longer lists.
  */
 export function storedListing(
   now: number,
   behindListed: string,
-  behindDone: string
+  behindDone: string,
+  behindOlder: readonly string[] = []
 ): Record<string, NeutralSessionInfo[]> {
   return {
     [OBELISK]: [
+      ...behindOlder.map((sessionId, n): NeutralSessionInfo => ({
+        sessionId,
+        harness: "claude",
+        firstPrompt: "Move last quarter's invoices onto the new ledger",
+        cwd: "/srv/storefront",
+        fileSize: 512_000 + n,
+        createdAt: now - 5 * DAY,
+        wroteAt: now - 4 * DAY - n * HOUR,
+        lastModified: now - 4 * DAY - n * HOUR + 5 * MINUTE,
+      })),
       {
         sessionId: STORED.inStorefront,
         harness: "claude",

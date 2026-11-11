@@ -1033,6 +1033,22 @@ export type TabNamed =
   | { asked: string; kind: "session"; id: string }
   | { asked: string; kind: "none" | "unknown" };
 
+/**
+ * What the hub holds behind stored transcripts (`POST
+ * /api/instances/stored`), asked with the harness keys of the transcripts a
+ * list would draw, once for the whole list.
+ * - `unwrapped`: the asked keys no session of the hub wraps: transcripts
+ *   run outside CawCo, the only ones a list draws as stored.
+ * - `rows`: the sessions wrapping the rest that the board no longer lists,
+ *   where the session at the top of their chain is the person's own
+ *   ({@link personsOwn}), each with the sessions it nests under, as the
+ *   board hands a row.
+ */
+export interface StoredSessions {
+  rows: InstanceRow[];
+  unwrapped: string[];
+}
+
 /** What a session's `init` says about its MCP servers and tools. */
 export interface SessionTooling {
   servers: { name: string; status: string }[];
@@ -1056,6 +1072,18 @@ export interface SessionCommands {
  * nests under the session that started it.
  */
 export type SessionOrigin = "person" | "delegate" | "project" | "check";
+
+/**
+ * The person's own work: a session they started, or one they wrote in. The
+ * one rule for whose sessions a list holds (the dashboard's Recent, the
+ * hub's {@link StoredSessions}).
+ */
+export const personsOwn = (row: {
+  origin?: SessionOrigin | null;
+  wroteAt?: unknown;
+}): boolean =>
+  row.origin === "person" ||
+  (row.wroteAt !== null && row.wroteAt !== undefined);
 
 /** Every {@link SessionOrigin}, in the order the type names them. */
 export const SESSION_ORIGINS = [

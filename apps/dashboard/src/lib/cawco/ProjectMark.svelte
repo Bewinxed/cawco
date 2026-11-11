@@ -4,10 +4,12 @@
    * on the project's hue. Its count is the sessions running in it: a status
    * of the project, not the rows listed under it, so it stays on the tile.
    * On the sidebar's Projects a project is one row, the link to its page,
-   * and its mark only says the count; on Recent grouped by project it is
-   * the group's parent, and the row is the switch that folds the sessions
-   * under it (`rowToggles`).
+   * and its mark is the switch that unfolds the sessions it counts under
+   * that row (`ontoggle`), as a session's mark unfolds its delegates; on
+   * Recent grouped by project it is the group's parent, and the row is the
+   * switch that folds the sessions under it (`rowToggles`).
    */
+  import { sidebarWords } from "@cawco/core/words/sidebar";
   import { IconFolder } from "#lib/icons.js";
   import type { MarkHue } from "./mark";
   import TreeMark from "./TreeMark.svelte";
@@ -18,6 +20,7 @@
     count = 0,
     open = false,
     rowToggles = false,
+    ontoggle,
   }: {
     /** The project's name. */
     name: string;
@@ -28,16 +31,30 @@
     open?: boolean;
     /** The row is the switch that folds the rows under it: the mark draws the morph. */
     rowToggles?: boolean;
+    /** Unfolds and folds its running sessions from the mark's own hit area. */
+    ontoggle?: () => void;
   } = $props();
+
+  const switchLabel = $derived.by(() => {
+    if (rowToggles) {
+      return `${open ? "Hide" : "Show"} ${name}`;
+    }
+    if (ontoggle) {
+      return open
+        ? sidebarWords.hideRunning(name)
+        : sidebarWords.showRunning(name);
+    }
+  });
 </script>
 
 <TreeMark
   {count}
   countIsStatus
   fill="var(--mark-{hue})"
+  {ontoggle}
   {open}
   {rowToggles}
-  switchLabel={rowToggles ? `${open ? "Hide" : "Show"} ${name}` : undefined}
+  {switchLabel}
 >
   {#snippet face()}
     <IconFolder aria-hidden="true" class="size-icon-sm" />

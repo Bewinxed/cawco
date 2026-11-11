@@ -2264,6 +2264,11 @@ export interface components {
         }[];
       };
     };
+    "POST /api/instances/stored": {
+      body: {
+        sessions: string[];
+      };
+    };
     "POST /api/instances/titles": {
       body: {
         ids: (

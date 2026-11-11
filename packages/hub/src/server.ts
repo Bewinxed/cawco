@@ -100,6 +100,7 @@ import type {
   SessionTooling,
   SkillFile,
   SpawnPayload,
+  StoredSessions,
   TabNamed,
   ToolSigninChallenge,
   ToolSpec,
@@ -377,6 +378,7 @@ import {
   parseDelegateWaitNotice,
   pauseClock,
   permissionModeNamed,
+  personsOwn,
   pictureName,
   placeAtLink,
   planWaitsOf,
@@ -20449,7 +20451,8 @@ export const createServer = (
     }
     return out;
   };
-  const boardRows = () => {
+  /** The rows the board lists now, as the database holds them. */
+  const boardShown = (): BoardInstanceRow[] => {
     refreshBoard();
     const now = Date.now();
     const shown: BoardInstanceRow[] = [];
@@ -20458,13 +20461,16 @@ export const createServer = (
         shown.push(row);
       }
     }
-    // Each listed row comes with the sessions it nests under, and one whose
-    // chain names a session the hub no longer has is not listed at all
-    // (board-ancestors.ts). Whether its work item is live was read to list
-    // it, and goes no further.
-    const listed = withAncestors(shown, boardRowsByIds, isHubParent).map(
-      ({ workLive: _workLive, ...row }) => row
-    );
+    return shown;
+  };
+  /**
+   * Rows as every reader of the board is handed them: what the database
+   * does not hold laid over each (presence, damage, running delegates,
+   * keep-alive, its queued sends, its owed move, its stall). Whether its
+   * work item is live was read to list it, and goes no further.
+   */
+  const asBoard = (rows: BoardInstanceRow[]) => {
+    const listed = rows.map(({ workLive: _workLive, ...row }) => row);
     // The move a person asked of each session that it still owes, off its
     // one record (`owedMoves`, read here from the database: the board is
     // first read before that is declared). A move of the hub's own
@@ -20502,6 +20508,64 @@ export const createServer = (
       );
     }
     return board;
+  };
+  // Each listed row comes with the sessions it nests under, and one whose
+  // chain names a session the hub no longer has is not listed at all
+  // (board-ancestors.ts).
+  const boardRows = () =>
+    asBoard(withAncestors(boardShown(), boardRowsByIds, isHubParent));
+
+  /**
+   * What the hub holds behind stored transcripts (`POST
+   * /api/instances/stored`, core `StoredSessions`), asked by their harness
+   * keys: the keys no session wraps (transcripts run outside CawCo), and
+   * the sessions wrapping the rest that the board no longer lists, where
+   * the session at the top of their chain is the person's own (core
+   * `personsOwn`), each with the sessions it nests under, as the board
+   * hands a row. A session the person neither started nor wrote in leaves
+   * every list with the board, as before; one whose chain names a session
+   * the hub no longer has stands nowhere (board-ancestors.ts).
+   */
+  const storedSessions = (keys: string[]): StoredSessions => {
+    const wrapping = db
+      .boardSessionsWrapping(keys)
+      .filter((row) => row.kind !== "summariser");
+    const wrapped = new Set(wrapping.map((row) => row.sessionId));
+    const listed = new Map(
+      withAncestors(boardShown(), boardRowsByIds, isHubParent).map(
+        (row) => [row.id, row] as const
+      )
+    );
+    const nested = new Map(
+      withAncestors(
+        wrapping.filter((row) => !listed.has(row.id)),
+        boardRowsByIds,
+        isHubParent
+      ).map((row) => [row.id, row] as const)
+    );
+    /** The session at the top of a row's chain, among the rows held here. */
+    const topOf = (row: BoardInstanceRow): BoardInstanceRow => {
+      const seen = new Set<string>();
+      let at = row;
+      while (at.parentInstanceId && !seen.has(at.id)) {
+        seen.add(at.id);
+        const parent =
+          nested.get(at.parentInstanceId) ?? listed.get(at.parentInstanceId);
+        if (!parent) {
+          break;
+        }
+        at = parent;
+      }
+      return at;
+    };
+    return {
+      unwrapped: keys.filter((key) => !wrapped.has(key)),
+      rows: asBoard(
+        [...nested.values()].filter(
+          (row) => !listed.has(row.id) && personsOwn(topOf(row))
+        )
+      ),
+    };
   };
 
   /**
@@ -33975,6 +34039,14 @@ export const createServer = (
             ? { reason: reported.reason === "dead" ? "offline" : "timeout" }
             : reported;
         }
+      )
+      // What the hub holds behind the stored transcripts a list would draw
+      // (`storedSessions`), asked once for the whole list by their keys.
+      .post(
+        "/api/instances/stored",
+        { body: t.Object({ sessions: t.Array(t.String()) }) },
+        ({ body }) =>
+          laws.raise(() => storedSessions([...new Set(body.sessions)]))
       )
       // What each tab's id names, as the dashboard asks of the tabs it kept
       // from an earlier visit and of an address before it reads them: the

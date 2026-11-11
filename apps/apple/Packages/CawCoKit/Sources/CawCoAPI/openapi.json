@@ -23767,6 +23767,54 @@
         }
       }
     },
+    "/api/instances/stored": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "sessions"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesStored",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesStored 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredSessions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesStored 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/named": {
       "post": {
         "requestBody": {
@@ -53252,6 +53300,398 @@
           "remedy"
         ]
       },
+      "StoredSessions": {
+        "description": "What the hub holds behind stored transcripts (`POST\n/api/instances/stored`), asked with the harness keys of the transcripts a\nlist would draw, once for the whole list.\n- `unwrapped`: the asked keys no session of the hub wraps: transcripts\n  run outside CawCo, the only ones a list draws as stored.\n- `rows`: the sessions wrapping the rest that the board no longer lists,\n  where the session at the top of their chain is the person's own\n  ({@link personsOwn}), each with the sessions it nests under, as the\n  board hands a row.",
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstanceRow"
+            }
+          },
+          "unwrapped": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "rows",
+          "unwrapped"
+        ]
+      },
+      "InstanceRow": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "description": "The account the session runs on (`instances.account_id`): placed once as\nit starts and kept for its whole life. Null on a harness without accounts\nand on a session from before accounts existed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chosenEffort": {
+            "$ref": "#/components/schemas/EffortLevel",
+            "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
+          },
+          "clean": {
+            "description": "Started clean ({@link SpawnPayload.clean}): written by its first spawn\nand kept, so every launch of it is clean and a comparison can tell it\nfrom a session started with its context.",
+            "type": "boolean"
+          },
+          "continuedInto": {
+            "description": "The session a continuation moved this one's work item to: this one never\nruns again ({@link relaunchOf} refuses it), and what is sent to it goes\nthere. Null on every other session.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "description": "When the hub first opened its row: when it was started.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "cwd": {
+            "description": "The directory the session was launched in; see `launchDir`.",
+            "type": "string"
+          },
+          "damaged": {
+            "$ref": "#/components/schemas/DamagedRow",
+            "description": "Its record, or its workspace's, is damaged on its machine\n({@link DamagedRow}): laid over by the hub from the machine's last beat,\nnever stored. `lastError` says the same in words."
+          },
+          "delegateType": {
+            "description": "The delegate type its spawn named; null: none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "delegateTypeProject": {
+            "description": "The project whose catalog that type came from; null: the fleet's.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "derivedTitle": {
+            "description": "The name the session's first user message gave it, derived once by the hub.\nA listing already answers {@link title} with this when nothing named the\nrow, so a reader never watches the label change as the transcript arrives.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "doneAt": {
+            "description": "When the person pressed Done on it (an archive), on the hub's clock: off\nthe sidebar's Recent list until they write to it again. Null otherwise.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "effort": {
+            "$ref": "#/components/schemas/InstanceRowEffort",
+            "description": "The effort the session actually sends, as its agent last read it back from\nthe harness ({@link import (\"./harness\").EFFORT_READ}): a level, `none` when\nit sends no effort, null until the first reading lands. What its chip\nshows; never what a launch of it asks for ({@link chosenEffort})."
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind",
+            "description": "Which harness owns {@link sessionId} — what a resume and a catalog read route on."
+          },
+          "held": {
+            "description": "First-hand custody on the current agent connection, never stored liveness.",
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason",
+              "since"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "keepAlive": {
+            "$ref": "#/components/schemas/KeepAlive"
+          },
+          "kind": {
+            "description": "`mainline`, `scratch` for a spin-off, or `summariser`, never on the board.",
+            "type": "string"
+          },
+          "lastError": {
+            "description": "What killed the session, on a row the agent reported as `error`: words a person reads.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastErrorKind": {
+            "$ref": "#/components/schemas/ErrorFrameLastErrorKind",
+            "description": "What `lastError` was, typed where it was found; null when no producer\ntyped it. What every decision about the row reads, `relaunchOf` first."
+          },
+          "lastRequestAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "launchDir": {
+            "$ref": "#/components/schemas/InstanceRowLaunchDir",
+            "description": "Whether `cwd` is the launch directory: `known`; `unread`, still to be read\nfrom its machine; `unknown`, its machine has no record of its conversation,\nso `cwd` may be a folder its CLI wandered into and the session is named by\nits title (hub `sessionLabel`) and cannot be resumed."
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "mayStart": {
+            "description": "The delegate types a session may start, by name. `[\"any\"]` ({@link * ANY_TYPE}) is every type: the session orchestrates. Any other list, the\nempty one included, makes it a leaf for every role rule (its toolset, its\nmemory, its budget): a leaf may start the types it names and nothing else,\nand the hub refuses any other start before anything spawns.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SessionOrigin",
+            "description": "Who started it ({@link SessionOrigin}), as the hub stamped it at its\nstart. A row the hub sends always has it."
+          },
+          "owedMove": {
+            "description": "The account a person moved it to that it moves to at its next launch,\nas the hub keeps it (its `owed_moves`), until the move lands: what it\nwaits on, its turn's end, the background work its process holds ending,\nor its machine connected again. Absent when it owes none.",
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "waits": {
+                "$ref": "#/components/schemas/InstanceRowWaits"
+              }
+            },
+            "required": [
+              "accountId",
+              "waits"
+            ]
+          },
+          "parentInstanceId": {
+            "description": "The session that started this one (`delegate`, `start_session`), which every rail nests it under; absent on a\nsession a person started. A delegate is told from a session merely\nstarted by {@link workItemId}, never by where it stands.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentToolUseId": {
+            "description": "The delegating tool call, so the parent transcript can render the round trip.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissionMode": {
+            "description": "How the session answers tool permissions and which model answers, as of its\nlast spawn, switch or `init`. Null on a session that has never said.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "projectId": {
+            "description": "Its one project, written by the hub as it started: the project it was\nstarted in, its parent's for a delegate, Caw's work or a check, else\nthe project whose place holds its folder most closely. Null when none\ndoes. The rails list a session under this project and no other.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "queuedSends": {
+            "description": "The sends waiting for it (accepted, not yet read by its session; a keep-\nalive ping aside): one starts its next turn. Laid over by the hub from\nits send records, never stored; absent at none. The sidebar counts a\nsession with one as still working.",
+            "type": "number"
+          },
+          "role": {
+            "$ref": "#/components/schemas/DelegateTypeRole",
+            "description": "The toolset it runs in, when its spawn named one; null: derived from\nhow it started."
+          },
+          "runningDelegates": {
+            "description": "Hub-derived count of live delegated work items, including descendants and checks.",
+            "type": "number"
+          },
+          "seenAt": {
+            "description": "When the owner last looked at it (its tab in front, after it ended) or\narchived it off Finished, on any device, or the end of a turn that had\nnothing for them when nothing before it was unseen. Null on one never\nseen.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "sessionId": {
+            "description": "The harness's own session id, once the session has named itself.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stalled": {
+            "description": "The session is stopped at its account's limit (or on its refused\nsign-in), in words, as the hub's at-limit controller holds it (hub\nat-limit.ts `stall`): what happened and when it carries on; `until`,\nepoch ms, the moment it does. Absent while it runs. Its row, its head and\nits transcript show it as an error with the way out: another account\nfrom its menu.",
+            "type": "object",
+            "properties": {
+              "until": {
+                "type": "number"
+              },
+              "words": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "words"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/InstanceStatus"
+          },
+          "title": {
+            "description": "What the session is called: the owner's rename, else the name the session\ngave itself (`set_title`) or was spawned under, else {@link derivedTitle}.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "titleSource": {
+            "$ref": "#/components/schemas/InstanceRowTitleSource",
+            "description": "Who gave the session its name: `owner` (a dashboard rename, which the\nsession's own `set_title` cannot replace) or `agent`. Null while nobody has."
+          },
+          "turnEndedAt": {
+            "description": "When its latest turn ended, on the hub's clock, as `seenAt` is: the\ntwo together say whether it ended since the owner last looked. Null on\none whose turn never ended.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "updatedAt": {
+            "description": "When the row last moved.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "wakesItself": {
+            "description": "Its latest turn ended with work of its own that will start it again\n(harness.ts `waitsOnItself`: a background command, a monitor, a wake-up\nit set itself). The sidebar counts it as still working.",
+            "type": "boolean"
+          },
+          "workItemId": {
+            "description": "The work item this session runs: every delegate is one, and a session\nnever runs more than one. Null on a session nobody delegated, and on a\ndelegate from before work items existed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workspaceId": {
+            "description": "The workspace of its own its work item runs in (a delegate's clone), as\nthe board reads it off that item: what the session menu's Archive\nworkspace names (dashboard LiveSessionMenu). Null on a session with no\nwork item.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "wroteAt": {
+            "description": "When the person last wrote to it (a send of theirs the hub accepted,\nharness.ts `byPerson`), on the hub's clock. Null when they never did.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "required": [
+          "cwd",
+          "harness",
+          "id",
+          "kind",
+          "launchDir",
+          "machineId",
+          "sessionId",
+          "status"
+        ]
+      },
       "TabNamed": {
         "description": "What the hub says a tab's id names (`POST /api/instances/named`): a tab\nkept from an earlier visit, or an address, may name a session by its full\nid, its short id, a former id, its harness key or a stored conversation's\nkey, or name nothing at all.\n- `session`: the id the session is read by (`id`), the asked one or\n  another.\n- `none`: no session, stored conversation or ask goes by it.\n- `unknown`: the hub can't tell now (the machine it names, or one it had\n  to ask, is away or did not answer).",
         "anyOf": [
@@ -64750,376 +65190,6 @@
           "previewSettings",
           "protocol",
           "pulses"
-        ]
-      },
-      "InstanceRow": {
-        "type": "object",
-        "properties": {
-          "accountId": {
-            "description": "The account the session runs on (`instances.account_id`): placed once as\nit starts and kept for its whole life. Null on a harness without accounts\nand on a session from before accounts existed.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "chosenEffort": {
-            "$ref": "#/components/schemas/EffortLevel",
-            "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
-          },
-          "clean": {
-            "description": "Started clean ({@link SpawnPayload.clean}): written by its first spawn\nand kept, so every launch of it is clean and a comparison can tell it\nfrom a session started with its context.",
-            "type": "boolean"
-          },
-          "continuedInto": {
-            "description": "The session a continuation moved this one's work item to: this one never\nruns again ({@link relaunchOf} refuses it), and what is sent to it goes\nthere. Null on every other session.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "createdAt": {
-            "description": "When the hub first opened its row: when it was started.",
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
-          "cwd": {
-            "description": "The directory the session was launched in; see `launchDir`.",
-            "type": "string"
-          },
-          "damaged": {
-            "$ref": "#/components/schemas/DamagedRow",
-            "description": "Its record, or its workspace's, is damaged on its machine\n({@link DamagedRow}): laid over by the hub from the machine's last beat,\nnever stored. `lastError` says the same in words."
-          },
-          "delegateType": {
-            "description": "The delegate type its spawn named; null: none.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "delegateTypeProject": {
-            "description": "The project whose catalog that type came from; null: the fleet's.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "derivedTitle": {
-            "description": "The name the session's first user message gave it, derived once by the hub.\nA listing already answers {@link title} with this when nothing named the\nrow, so a reader never watches the label change as the transcript arrives.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "doneAt": {
-            "description": "When the person pressed Done on it (an archive), on the hub's clock: off\nthe sidebar's Recent list until they write to it again. Null otherwise.",
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
-          "effort": {
-            "$ref": "#/components/schemas/InstanceRowEffort",
-            "description": "The effort the session actually sends, as its agent last read it back from\nthe harness ({@link import (\"./harness\").EFFORT_READ}): a level, `none` when\nit sends no effort, null until the first reading lands. What its chip\nshows; never what a launch of it asks for ({@link chosenEffort})."
-          },
-          "harness": {
-            "$ref": "#/components/schemas/HarnessKind",
-            "description": "Which harness owns {@link sessionId} — what a resume and a catalog read route on."
-          },
-          "held": {
-            "description": "First-hand custody on the current agent connection, never stored liveness.",
-            "type": "object",
-            "properties": {
-              "since": {
-                "type": "number"
-              },
-              "reason": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "reason",
-              "since"
-            ]
-          },
-          "id": {
-            "type": "string"
-          },
-          "keepAlive": {
-            "$ref": "#/components/schemas/KeepAlive"
-          },
-          "kind": {
-            "description": "`mainline`, `scratch` for a spin-off, or `summariser`, never on the board.",
-            "type": "string"
-          },
-          "lastError": {
-            "description": "What killed the session, on a row the agent reported as `error`: words a person reads.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lastErrorKind": {
-            "$ref": "#/components/schemas/ErrorFrameLastErrorKind",
-            "description": "What `lastError` was, typed where it was found; null when no producer\ntyped it. What every decision about the row reads, `relaunchOf` first."
-          },
-          "lastRequestAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
-          "launchDir": {
-            "$ref": "#/components/schemas/InstanceRowLaunchDir",
-            "description": "Whether `cwd` is the launch directory: `known`; `unread`, still to be read\nfrom its machine; `unknown`, its machine has no record of its conversation,\nso `cwd` may be a folder its CLI wandered into and the session is named by\nits title (hub `sessionLabel`) and cannot be resumed."
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "mayStart": {
-            "description": "The delegate types a session may start, by name. `[\"any\"]` ({@link * ANY_TYPE}) is every type: the session orchestrates. Any other list, the\nempty one included, makes it a leaf for every role rule (its toolset, its\nmemory, its budget): a leaf may start the types it names and nothing else,\nand the hub refuses any other start before anything spawns.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "model": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "origin": {
-            "$ref": "#/components/schemas/SessionOrigin",
-            "description": "Who started it ({@link SessionOrigin}), as the hub stamped it at its\nstart. A row the hub sends always has it."
-          },
-          "owedMove": {
-            "description": "The account a person moved it to that it moves to at its next launch,\nas the hub keeps it (its `owed_moves`), until the move lands: what it\nwaits on, its turn's end, the background work its process holds ending,\nor its machine connected again. Absent when it owes none.",
-            "type": "object",
-            "properties": {
-              "accountId": {
-                "type": "string"
-              },
-              "waits": {
-                "$ref": "#/components/schemas/InstanceRowWaits"
-              }
-            },
-            "required": [
-              "accountId",
-              "waits"
-            ]
-          },
-          "parentInstanceId": {
-            "description": "The session that started this one (`delegate`, `start_session`), which every rail nests it under; absent on a\nsession a person started. A delegate is told from a session merely\nstarted by {@link workItemId}, never by where it stands.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parentToolUseId": {
-            "description": "The delegating tool call, so the parent transcript can render the round trip.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "permissionMode": {
-            "description": "How the session answers tool permissions and which model answers, as of its\nlast spawn, switch or `init`. Null on a session that has never said.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "projectId": {
-            "description": "Its one project, written by the hub as it started: the project it was\nstarted in, its parent's for a delegate, Caw's work or a check, else\nthe project whose place holds its folder most closely. Null when none\ndoes. The rails list a session under this project and no other.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "queuedSends": {
-            "description": "The sends waiting for it (accepted, not yet read by its session; a keep-\nalive ping aside): one starts its next turn. Laid over by the hub from\nits send records, never stored; absent at none. The sidebar counts a\nsession with one as still working.",
-            "type": "number"
-          },
-          "role": {
-            "$ref": "#/components/schemas/DelegateTypeRole",
-            "description": "The toolset it runs in, when its spawn named one; null: derived from\nhow it started."
-          },
-          "runningDelegates": {
-            "description": "Hub-derived count of live delegated work items, including descendants and checks.",
-            "type": "number"
-          },
-          "seenAt": {
-            "description": "When the owner last looked at it (its tab in front, after it ended) or\narchived it off Finished, on any device, or the end of a turn that had\nnothing for them when nothing before it was unseen. Null on one never\nseen.",
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
-          "sessionId": {
-            "description": "The harness's own session id, once the session has named itself.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "stalled": {
-            "description": "The session is stopped at its account's limit (or on its refused\nsign-in), in words, as the hub's at-limit controller holds it (hub\nat-limit.ts `stall`): what happened and when it carries on; `until`,\nepoch ms, the moment it does. Absent while it runs. Its row, its head and\nits transcript show it as an error with the way out: another account\nfrom its menu.",
-            "type": "object",
-            "properties": {
-              "until": {
-                "type": "number"
-              },
-              "words": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "words"
-            ]
-          },
-          "status": {
-            "$ref": "#/components/schemas/InstanceStatus"
-          },
-          "title": {
-            "description": "What the session is called: the owner's rename, else the name the session\ngave itself (`set_title`) or was spawned under, else {@link derivedTitle}.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "titleSource": {
-            "$ref": "#/components/schemas/InstanceRowTitleSource",
-            "description": "Who gave the session its name: `owner` (a dashboard rename, which the\nsession's own `set_title` cannot replace) or `agent`. Null while nobody has."
-          },
-          "turnEndedAt": {
-            "description": "When its latest turn ended, on the hub's clock, as `seenAt` is: the\ntwo together say whether it ended since the owner last looked. Null on\none whose turn never ended.",
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
-          "updatedAt": {
-            "description": "When the row last moved.",
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              {
-                "type": "number"
-              }
-            ]
-          },
-          "wakesItself": {
-            "description": "Its latest turn ended with work of its own that will start it again\n(harness.ts `waitsOnItself`: a background command, a monitor, a wake-up\nit set itself). The sidebar counts it as still working.",
-            "type": "boolean"
-          },
-          "workItemId": {
-            "description": "The work item this session runs: every delegate is one, and a session\nnever runs more than one. Null on a session nobody delegated, and on a\ndelegate from before work items existed.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "workspaceId": {
-            "description": "The workspace of its own its work item runs in (a delegate's clone), as\nthe board reads it off that item: what the session menu's Archive\nworkspace names (dashboard LiveSessionMenu). Null on a session with no\nwork item.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "wroteAt": {
-            "description": "When the person last wrote to it (a send of theirs the hub accepted,\nharness.ts `byPerson`), on the hub's clock. Null when they never did.",
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              {
-                "type": "number"
-              }
-            ]
-          }
-        },
-        "required": [
-          "cwd",
-          "harness",
-          "id",
-          "kind",
-          "launchDir",
-          "machineId",
-          "sessionId",
-          "status"
         ]
       },
       "DamagedHubRecord": {

@@ -1,17 +1,21 @@
 /**
  * Which sessions the reader has unfolded to show their delegates, one id at
  * a time (tree.ts `collapse`), in each list on its own: the rail's Recent is
- * not the phone home's. Every tree starts folded; opening one is remembered
+ * not the phone home's, nor the rail's Projects. Every tree starts folded; opening one is remembered
  * per browser, per list.
  */
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
 import { readJson, writeJson } from "./storage";
 
-/** A list that shows trees: the rail's Recent, and the phone home's. */
-export type TreeList = "rail-recent" | "home-recent";
+/** A list that shows trees: the rail's Recent, the phone home's, and the running sessions a project unfolds in the rail's Projects. */
+export type TreeList = "rail-recent" | "home-recent" | "rail-projects";
 
-const LISTS: readonly TreeList[] = ["rail-recent", "home-recent"];
+const LISTS: readonly TreeList[] = [
+  "rail-recent",
+  "home-recent",
+  "rail-projects",
+];
 
 const keyOf = (list: TreeList): string => `cawco-open-trees:${list}`;
 

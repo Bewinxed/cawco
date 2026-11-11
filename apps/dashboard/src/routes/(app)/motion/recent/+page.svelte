@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { PermissionRequestFrame, PulseFrame } from "@cawco/core/frames";
   import type { NeutralSessionInfo } from "@cawco/core/harness";
-  import type { InstanceRow, SessionPulse } from "@cawco/core/protocol";
+  import type {
+    InstanceRow,
+    SessionPulse,
+    StoredSessions,
+  } from "@cawco/core/protocol";
   import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
   import { onMount } from "svelte";
   import { z } from "zod";
@@ -27,6 +31,11 @@
    * each machine's listing answers them: three in a project's folder, two
    * in none, one behind a listed session and one behind a session the
    * person pressed Done on ("Refund flow edge cases", which stays hidden).
+   * Four more are behind sessions the board no longer lists, which the
+   * bench answers for as the hub does (`POST /api/instances/stored`): a
+   * session the person stopped four days ago ("Move invoices to the new
+   * ledger", in Older under storefront, by its own id) with two delegates
+   * folded under it, and a check nobody wrote in, which stands nowhere.
    */
 
   /** The client's stores as a bench writes them (dev `__cawcoDebug`). */
@@ -294,6 +303,35 @@
     doneAt: now - 60 * MINUTE_MS,
   };
 
+  /** A session the person stopped four days ago: the board no longer lists it, and the hub still holds it. */
+  const OLDER = idOf(91);
+  const olderSeed: Seed = {
+    title: "Move invoices to the new ledger",
+    project: "p-storefront",
+    doing: "yours",
+    ago: 4 * DAY_MS,
+  };
+  /** It and its two delegates: what the hub answers its transcripts with. */
+  const olderRows: InstanceRow[] = [
+    rowOf(OLDER, olderSeed, { status: "stopped" }),
+    ...["Port the invoice schema", "Check totals against last quarter"].map(
+      (title, n): InstanceRow => ({
+        ...rowOf(idOf(92 + n), { ...olderSeed, title }),
+        origin: "delegate",
+        parentInstanceId: OLDER,
+        status: "sleeping",
+        wroteAt: null,
+      })
+    ),
+  ];
+  /** A check of that work nobody wrote in: the hub holds it, and it stands in no list. */
+  const olderCheck: InstanceRow = {
+    ...rowOf(idOf(94), { ...olderSeed, title: "Review the ledger migration" }),
+    origin: "check",
+    status: "sleeping",
+    wroteAt: null,
+  };
+
   let rows = $state<InstanceRow[]>([
     ...seeds.map(([id, seed]) => rowOf(id, seed)),
     ...delegates,
@@ -394,6 +432,31 @@
   }
 
   /**
+   * What the hub holds behind the stored transcripts asked of it, as it
+   * answers `/api/instances/stored`: the keys no row of the bench wraps,
+   * and the person's older session with its delegates.
+   */
+  const StoredBody = z.object({ sessions: z.array(z.string()) });
+  function answerStored(
+    input: RequestInfo | URL,
+    init: RequestInit | undefined
+  ): Promise<Response> | undefined {
+    const url = input instanceof Request ? input.url : String(input);
+    if (!(url.includes("/api/instances/stored") && init?.body)) {
+      return;
+    }
+    const { sessions } = StoredBody.parse(JSON.parse(String(init.body)));
+    const held = real ? [] : [...olderRows, olderCheck];
+    const wrapped = new Set([...rows, ...held].map((row) => row.sessionId));
+    const listed = new Set(rows.map((row) => row.id));
+    const answer: StoredSessions = {
+      unwrapped: sessions.filter((key) => !wrapped.has(key)),
+      rows: real ? [] : olderRows.filter((row) => !listed.has(row.id)),
+    };
+    return Promise.resolve(Response.json(answer));
+  }
+
+  /**
    * A live hub's own rows, when a check stands them in before the page loads
    * (`__rbReal`: `/api/instances`, `/api/projects`, `/api/agents` and
    * `/api/areas` from a hub opened on a copy of its database): the bench
@@ -458,7 +521,10 @@
     }));
     debug.state.projectsRead = true;
     adopt();
-    const listing = storedListing(now, idOf(3), DONE);
+    const listing = storedListing(now, idOf(3), DONE, [
+      ...olderRows.map((row) => row.id),
+      olderCheck.id,
+    ]);
     for (const [machineId, sessions] of Object.entries(listing)) {
       debug.standCatalog(machineId, sessions);
     }
@@ -476,16 +542,19 @@
   }
 
   onMount(() => {
+    // Done, answered as the hub would (the row's `doneAt`), and what it
+    // holds behind the stored transcripts.
+    const fetchWas = window.fetch;
+    window.fetch = (input, init) =>
+      answerSeen(input, init) ??
+      answerStored(input, init) ??
+      fetchWas(input, init);
     debug.standHub(() => undefined);
     if (real) {
       standReal(real);
     } else {
       standSketch();
     }
-    // Done, answered as the hub would: the row's `doneAt`.
-    const fetchWas = window.fetch;
-    window.fetch = (input, init) =>
-      answerSeen(input, init) ?? fetchWas(input, init);
     const bench = {
       ids: Object.fromEntries(
         SKETCH.map(([letter], n) => [letter, idOf(n + 1)])

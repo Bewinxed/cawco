@@ -118,6 +118,7 @@ import type {
   SessionTooling,
   SpawnPayload,
   StopRequest,
+  StoredSessions,
   WorkItemSummary,
 } from "@cawco/core/protocol";
 import { DELEGATE_SUMMARIES_LIMIT } from "@cawco/core/protocol";
@@ -293,6 +294,9 @@ export type HubState = "connected" | "connecting" | "unreachable";
  * the socket is down from the first moment, over the page.
  */
 const OUTAGE_GRACE = 4000;
+
+/** How long a change to the stored transcripts, or to the board, settles before the hub is asked of them ({@link askStoredSoon}). */
+const STORED_ASK_AFTER_MS = 300;
 
 /** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
 export type Machine = AgentRow;
@@ -787,6 +791,19 @@ const rowsById = new Keyed<InstanceRow>();
 const rowsBySession = new Keyed<readonly InstanceRow[]>();
 
 /**
+ * The sessions behind the machines' stored transcripts that the board no
+ * longer lists (the hub's answer, {@link readStored}): held by id and by
+ * session beside the board's rows, so everything that reads a session by
+ * its id reads these as it reads a listed one, and in no list of the
+ * board's ({@link instances}).
+ */
+let olderRows = $state.raw<InstanceRow[]>([]);
+/** The stored transcripts no session of the hub wraps, by harness key ({@link readStored}). */
+let unwrapped = $state.raw<ReadonlySet<string>>(new Set());
+/** The hub has answered for the stored transcripts asked of it last. */
+const storedRead = $state({ done: false });
+
+/**
  * What each hub row's session needs from you ({@link activityNow}), held
  * per row: every list asks it of every row it holds, and asked afresh each
  * time, a turn ending somewhere re-ran it for the whole board. Each is
@@ -837,6 +854,102 @@ function holdRows(
     }
   }
   hubRows = next;
+  // The board's word on a session is the newest: a row it lists now is no
+  // older one, and a transcript its session wraps is no stored one.
+  const listed = new Set(moved.map((row) => row.id));
+  if (olderRows.some((row) => listed.has(row.id))) {
+    olderRows = olderRows.filter((row) => !listed.has(row.id));
+  }
+  if (moved.some((row) => row.sessionId && unwrapped.has(row.sessionId))) {
+    const wrapped = new Set(moved.map((row) => row.sessionId));
+    unwrapped = new Set([...unwrapped].filter((key) => !wrapped.has(key)));
+  }
+  // A row the board stopped listing may be one the hub still holds.
+  if (gone.length > 0) {
+    askStoredSoon();
+  }
+}
+
+/**
+ * The hub's answer for the stored transcripts as `rows` and `keys` have
+ * it: each older session into the index, each one it no longer answers
+ * with out of it. A row the board lists is the board's.
+ */
+function holdStored(rows: InstanceRow[], keys: string[]): void {
+  const listed = new Set(hubRows.map((row) => row.id));
+  const next = reconcileRows(
+    olderRows,
+    rows.filter((row) => !listed.has(row.id)),
+    (row) => row.id
+  );
+  const kept = new Set(next);
+  for (const row of olderRows) {
+    if (!kept.has(row) && rowsById.get(row.id) === row) {
+      leaveSession(row);
+      rowsById.delete(row.id);
+      rowActivity.delete(row.id);
+    }
+  }
+  for (const row of next) {
+    if (rowsById.get(row.id) !== row) {
+      rowsById.set(row.id, row);
+      joinSession(row);
+      if (!rowActivity.has(row.id)) {
+        rowActivity.set(row.id, new RowActivity(row.id));
+      }
+    }
+  }
+  olderRows = next;
+  unwrapped = new Set(keys.filter((key) => !rowsBySession.has(key)));
+  storedRead.done = true;
+}
+
+/** The stored transcripts asked of the hub last, by harness key; null until a list has asked. */
+let storedKeys: string[] | null = null;
+/** The newest ask's number: an older ask's answer is dropped. */
+let storedAsk = 0;
+let storedTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Asks the hub what it holds behind the stored transcripts `storedKeys`
+ * names (`POST /api/instances/stored`, core `StoredSessions`): one ask for
+ * the whole list. An ask the hub did not answer leaves what it answered
+ * last; the next change to the list, or to the board, asks again.
+ */
+async function readStored(): Promise<void> {
+  storedAsk += 1;
+  const mine = storedAsk;
+  const keys = storedKeys ?? [];
+  if (keys.length === 0) {
+    holdStored([], []);
+    return;
+  }
+  const answer = await load<StoredSessions>(
+    hubRequest("POST /api/instances/stored", { body: { sessions: keys } })
+  );
+  if (answer && mine === storedAsk) {
+    holdStored(answer.rows, answer.unwrapped);
+  }
+  // Unanswered, the list stands on what the hub answered last.
+  storedRead.done = true;
+}
+
+/** {@link readStored}, once for every change made in the same moment. */
+function askStoredSoon(): void {
+  if (!browser || storedKeys === null) {
+    return;
+  }
+  clearTimeout(storedTimer);
+  storedTimer = setTimeout(
+    () => detach(readStored(), "readStored"),
+    STORED_ASK_AFTER_MS
+  );
+}
+
+/** The stored transcripts a list draws, by harness key: asked of the hub when they change. */
+function askStored(keys: string[]): void {
+  storedKeys = keys;
+  askStoredSoon();
 }
 
 /** A row out of its session key's rows. */
@@ -3249,6 +3362,9 @@ function readFleet(delay = 1000): void {
 
 /** Every online machine's stored sessions — the sidebar's contents on arrival. */
 function refreshCatalogs(): void {
+  // What the hub holds behind them is asked again with every board read: a
+  // hub that restarted answers afresh.
+  askStoredSoon();
   for (const machine of state.machines) {
     if (machine.status === "online") {
       detach(loadCatalog(machine.machineId), "loadCatalog");
@@ -9638,6 +9754,22 @@ export const cawco = {
   get scratchInstances(): InstanceRow[] {
     return instances.filter((row) => isListed(row) && row.kind === "scratch");
   },
+  /**
+   * The sessions behind stored transcripts that the board no longer lists
+   * (the hub's `StoredSessions`): the person's own, and what nests under
+   * them. Recent lists them beside {@link listedInstances}.
+   */
+  get olderInstances(): InstanceRow[] {
+    return olderRows;
+  },
+  /** Whether a stored transcript stands as itself: the hub said no session wraps it. */
+  storedAlone: (sessionId: string): boolean => unwrapped.has(sessionId),
+  /** The hub has answered for the stored transcripts asked of it ({@link askStored}). */
+  get storedRead() {
+    return storedRead.done;
+  },
+  /** Asks the hub what it holds behind these stored transcripts, by harness key. */
+  askStored,
   /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),

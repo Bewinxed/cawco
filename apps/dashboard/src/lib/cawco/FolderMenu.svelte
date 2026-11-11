@@ -30,6 +30,8 @@
     children: Snippet;
     /** The directory itself: what every preference here is keyed by. */
     cwd: string;
+    /** Where an end asked here unfolds (project-end.svelte.ts): the project's row in the rail unless the menu's own row says another. */
+    endAt?: string;
     /** Shut every other folder. Only the rail has folders to shut. */
     oncollapseothers?: () => void;
     /** Start a session here, prefilled with this directory. */
@@ -40,6 +42,7 @@
 
   let {
     cwd,
+    endAt,
     project = null,
     onnew,
     oncollapseothers,
@@ -49,6 +52,11 @@
   const pickedHue = $derived(folderPrefs.chosenHue(cwd));
 
   const pinned = $derived(project ? rail.isPinned(project.id) : false);
+
+  /** Where this menu's ends unfold. */
+  const endsAt = $derived(
+    endAt ?? (project ? endAtRail(project.id) : undefined)
+  );
 
   let open = $state(false);
 </script>
@@ -62,7 +70,7 @@
        the menu doesn't hand it back to the row as it closes. -->
   <ContextMenu.Content
     onCloseAutoFocus={(event) => {
-      if (project && endHost.at === endAtRail(project.id)) {
+      if (endsAt && endHost.at === endsAt) {
         event.preventDefault();
       }
     }}
@@ -150,17 +158,15 @@
       </ContextMenu.Item>
     {/if}
 
-    {#if project}
+    {#if project && endsAt}
       <ContextMenu.Separator />
       <!-- Each end unfolds under this row (project-end.svelte.ts). -->
-      <ContextMenu.Item
-        onSelect={() => askEnd(project, endAtRail(project.id), "forget")}
-      >
+      <ContextMenu.Item onSelect={() => askEnd(project, endsAt, "forget")}>
         <IconArchive />
         <span>{projectEndWords.forgetProject}</span>
       </ContextMenu.Item>
       <ContextMenu.Item
-        onSelect={() => askEnd(project, endAtRail(project.id), "delete")}
+        onSelect={() => askEnd(project, endsAt, "delete")}
         variant="destructive"
       >
         <IconDeleteForGood />
