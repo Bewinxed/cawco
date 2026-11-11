@@ -8,7 +8,12 @@
     "Badge",
     "StatTile",
     "Table",
-    "Diagram"
+    "Diagram",
+    "Image",
+    "Video",
+    "Audio",
+    "Slides",
+    "Preview"
   ],
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -34,6 +39,21 @@
       },
       "Diagram": {
         "$ref": "#/$defs/Diagram"
+      },
+      "Image": {
+        "$ref": "#/$defs/Image"
+      },
+      "Video": {
+        "$ref": "#/$defs/Video"
+      },
+      "Audio": {
+        "$ref": "#/$defs/Audio"
+      },
+      "Slides": {
+        "$ref": "#/$defs/Slides"
+      },
+      "Preview": {
+        "$ref": "#/$defs/Preview"
       }
     },
     "required": [
@@ -43,7 +63,12 @@
       "Badge",
       "StatTile",
       "Table",
-      "Diagram"
+      "Diagram",
+      "Image",
+      "Video",
+      "Audio",
+      "Slides",
+      "Preview"
     ],
     "additionalProperties": false,
     "$defs": {
@@ -90,855 +115,25 @@
             "$ref": "#/$defs/StatTile"
           },
           {
-            "type": "object",
-            "properties": {
-              "children": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "stage": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string"
-                        },
-                        "kind": {
-                          "type": "string",
-                          "enum": [
-                            "todo",
-                            "active",
-                            "waiting",
-                            "you",
-                            "done",
-                            "dropped"
-                          ]
-                        },
-                        "count": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "kind",
-                        "count"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "tasks": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "number": {
-                            "type": "number"
-                          },
-                          "title": {
-                            "type": "string"
-                          },
-                          "stage": {
-                            "type": "string"
-                          },
-                          "kind": {
-                            "anyOf": [
-                              {
-                                "type": "string",
-                                "enum": [
-                                  "todo",
-                                  "active",
-                                  "waiting",
-                                  "you",
-                                  "done",
-                                  "dropped"
-                                ]
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ]
-                          },
-                          "type": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          },
-                          "labels": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "rank": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          },
-                          "needsYou": {
-                            "type": "boolean"
-                          },
-                          "liveAttempt": {
-                            "type": "boolean"
-                          },
-                          "waits": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "label": {
-                                  "type": "string"
-                                },
-                                "settled": {
-                                  "type": "boolean"
-                                },
-                                "state": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "label",
-                                "settled",
-                                "state"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "todos": {
-                            "type": "object",
-                            "properties": {
-                              "done": {
-                                "type": "number"
-                              },
-                              "total": {
-                                "type": "number"
-                              }
-                            },
-                            "required": [
-                              "done",
-                              "total"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "fields": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {
-                              "type": "string"
-                            }
-                          },
-                          "dates": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {
-                              "type": "number"
-                            }
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "number",
-                          "title",
-                          "stage",
-                          "kind",
-                          "type",
-                          "labels",
-                          "rank",
-                          "needsYou",
-                          "liveAttempt",
-                          "waits",
-                          "todos",
-                          "fields",
-                          "dates"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "fields": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": [
-                    "stage",
-                    "tasks"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "title": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "children"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "stage": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "todo",
-                      "active",
-                      "waiting",
-                      "you",
-                      "done",
-                      "dropped"
-                    ]
-                  },
-                  "count": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "name",
-                  "kind",
-                  "count"
-                ],
-                "additionalProperties": false
-              },
-              "tasks": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "number": {
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "stage": {
-                      "type": "string"
-                    },
-                    "kind": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "todo",
-                            "active",
-                            "waiting",
-                            "you",
-                            "done",
-                            "dropped"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "type": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "labels": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "rank": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "needsYou": {
-                      "type": "boolean"
-                    },
-                    "liveAttempt": {
-                      "type": "boolean"
-                    },
-                    "waits": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "label": {
-                            "type": "string"
-                          },
-                          "settled": {
-                            "type": "boolean"
-                          },
-                          "state": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "label",
-                          "settled",
-                          "state"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "todos": {
-                      "type": "object",
-                      "properties": {
-                        "done": {
-                          "type": "number"
-                        },
-                        "total": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "done",
-                        "total"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "fields": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "string"
-                      }
-                    },
-                    "dates": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "number",
-                    "title",
-                    "stage",
-                    "kind",
-                    "type",
-                    "labels",
-                    "rank",
-                    "needsYou",
-                    "liveAttempt",
-                    "waits",
-                    "todos",
-                    "fields",
-                    "dates"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "fields": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "stage",
-              "tasks"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "task": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string"
-                  },
-                  "number": {
-                    "type": "number"
-                  },
-                  "title": {
-                    "type": "string"
-                  },
-                  "stage": {
-                    "type": "string"
-                  },
-                  "kind": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": [
-                          "todo",
-                          "active",
-                          "waiting",
-                          "you",
-                          "done",
-                          "dropped"
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "type": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "labels": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "rank": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "needsYou": {
-                    "type": "boolean"
-                  },
-                  "liveAttempt": {
-                    "type": "boolean"
-                  },
-                  "waits": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "label": {
-                          "type": "string"
-                        },
-                        "settled": {
-                          "type": "boolean"
-                        },
-                        "state": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "label",
-                        "settled",
-                        "state"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "todos": {
-                    "type": "object",
-                    "properties": {
-                      "done": {
-                        "type": "number"
-                      },
-                      "total": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "done",
-                      "total"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "fields": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
-                  "dates": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "number"
-                    }
-                  }
-                },
-                "required": [
-                  "id",
-                  "number",
-                  "title",
-                  "stage",
-                  "kind",
-                  "type",
-                  "labels",
-                  "rank",
-                  "needsYou",
-                  "liveAttempt",
-                  "waits",
-                  "todos",
-                  "fields",
-                  "dates"
-                ],
-                "additionalProperties": false
-              },
-              "fields": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "task"
-            ],
-            "additionalProperties": false
-          },
-          {
             "$ref": "#/$defs/Table"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "rows": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "number": {
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "stage": {
-                      "type": "string"
-                    },
-                    "kind": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "todo",
-                            "active",
-                            "waiting",
-                            "you",
-                            "done",
-                            "dropped"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "type": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "labels": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "rank": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "needsYou": {
-                      "type": "boolean"
-                    },
-                    "liveAttempt": {
-                      "type": "boolean"
-                    },
-                    "waits": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "label": {
-                            "type": "string"
-                          },
-                          "settled": {
-                            "type": "boolean"
-                          },
-                          "state": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "label",
-                          "settled",
-                          "state"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "todos": {
-                      "type": "object",
-                      "properties": {
-                        "done": {
-                          "type": "number"
-                        },
-                        "total": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "done",
-                        "total"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "fields": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "string"
-                      }
-                    },
-                    "dates": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "number",
-                    "title",
-                    "stage",
-                    "kind",
-                    "type",
-                    "labels",
-                    "rank",
-                    "needsYou",
-                    "liveAttempt",
-                    "waits",
-                    "todos",
-                    "fields",
-                    "dates"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "columns": {
-                "minItems": 1,
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "label": {
-                      "type": "string"
-                    },
-                    "field": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "label",
-                    "field"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            },
-            "required": [
-              "rows",
-              "columns"
-            ],
-            "additionalProperties": false
           },
           {
             "$ref": "#/$defs/Diagram"
           },
           {
-            "type": "object",
-            "properties": {
-              "rows": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "number": {
-                      "type": "number"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "stage": {
-                      "type": "string"
-                    },
-                    "kind": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "todo",
-                            "active",
-                            "waiting",
-                            "you",
-                            "done",
-                            "dropped"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "type": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "labels": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    },
-                    "rank": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "needsYou": {
-                      "type": "boolean"
-                    },
-                    "liveAttempt": {
-                      "type": "boolean"
-                    },
-                    "waits": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "label": {
-                            "type": "string"
-                          },
-                          "settled": {
-                            "type": "boolean"
-                          },
-                          "state": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "label",
-                          "settled",
-                          "state"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "todos": {
-                      "type": "object",
-                      "properties": {
-                        "done": {
-                          "type": "number"
-                        },
-                        "total": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "done",
-                        "total"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "fields": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "string"
-                      }
-                    },
-                    "dates": {
-                      "type": "object",
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "additionalProperties": {
-                        "type": "number"
-                      }
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "number",
-                    "title",
-                    "stage",
-                    "kind",
-                    "type",
-                    "labels",
-                    "rank",
-                    "needsYou",
-                    "liveAttempt",
-                    "waits",
-                    "todos",
-                    "fields",
-                    "dates"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "date": {
-                "type": "string"
-              },
-              "range": {
-                "type": "string",
-                "enum": [
-                  "week",
-                  "month"
-                ]
-              }
-            },
-            "required": [
-              "rows",
-              "date"
-            ],
-            "additionalProperties": false
+            "$ref": "#/$defs/Image"
+          },
+          {
+            "$ref": "#/$defs/Video"
+          },
+          {
+            "$ref": "#/$defs/Audio"
+          },
+          {
+            "$ref": "#/$defs/Slides"
+          },
+          {
+            "$ref": "#/$defs/Preview"
           }
         ]
       },
@@ -1114,6 +309,117 @@
         ],
         "additionalProperties": false,
         "description": "A Mermaid diagram or chart, drawn on the house look: a flowchart, sequenceDiagram, stateDiagram-v2, erDiagram, classDiagram, mindmap, or a chart: xychart-beta (bar and line), pie, quadrantChart, radar-beta, sankey-beta, treemap-beta, venn-beta, gantt, timeline."
+      },
+      "Image": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "alt": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "small",
+              "medium",
+              "full"
+            ]
+          }
+        },
+        "required": [
+          "file",
+          "alt"
+        ],
+        "additionalProperties": false,
+        "description": "A picture from a file: a screenshot, an image you generated, a picture in the project's folder. An animated GIF, WebP or PNG plays as it is. Pressed, it opens full size."
+      },
+      "Video": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "small",
+              "medium",
+              "full"
+            ]
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "additionalProperties": false,
+        "description": "A clip from a file, in the platform's player: a screen recording, a video you generated."
+      },
+      "Audio": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "additionalProperties": false,
+        "description": "A sound from a file, in the platform's player: narration a text-to-speech tool made, a recording."
+      },
+      "Slides": {
+        "type": "object",
+        "properties": {
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "caption": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "children"
+        ],
+        "additionalProperties": false,
+        "description": "Its children one at a time, stepped through with arrows and a count, swiped on a phone: each child is one slide, a picture or a Column of any components."
+      },
+      "Preview": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "type": "string"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "small",
+              "medium",
+              "full"
+            ]
+          }
+        },
+        "required": [
+          "artifact"
+        ],
+        "additionalProperties": false,
+        "description": "An HTML page artifact of this conversation, live in a frame: an animated mockup, a custom visual. Make the page first with artifact_create (kind \"page\", its `html`); its HTML never goes in the block."
       }
     }
   }

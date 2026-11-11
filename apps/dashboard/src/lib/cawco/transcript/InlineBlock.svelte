@@ -27,12 +27,21 @@
    * A folded block draws its program once, then stands as that drawing in
    * plain markup (`frozen`, handed back by `onfreeze` once it has settled):
    * a transcript of replaced blocks holds no live renderer.
+   *
+   * Its pictures, clips, sounds and pages read through what the transcript
+   * gives (block-media.ts). Folded, they stand as stills: no player and no
+   * frame, so its clip playing stops as it is replaced, and its frozen
+   * drawing holds none.
    */
   import type { OpenUIError, ParseResult } from "@openuidev/lang-core";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { IconArtifactPageLinear } from "#lib/icons.js";
   import { animatedCaw } from "../home/FaultCaw.svelte";
+  import {
+    blockSourcesHere,
+    provideBlockMedia,
+  } from "../views/openui/block-media";
   import { BLOCK_LIBRARY } from "../views/openui/library";
   import OpenUiRenderer from "../views/openui/OpenUiRenderer.svelte";
 
@@ -77,6 +86,16 @@
   } = $props();
 
   const still = $derived(mode !== "latest");
+
+  const sources = blockSourcesHere();
+  provideBlockMedia({
+    src: (file) => sources?.src(file) ?? null,
+    open: (shots, index) => sources?.open(shots, index),
+    ...(sources?.pages ? { pages: sources.pages } : {}),
+    get still() {
+      return still;
+    },
+  });
 
   /** It doesn't parse into anything it can draw: it stands as the code it is. */
   let unparsed = $state(false);
@@ -222,7 +241,7 @@
       </div>
     </div>
   {:else}
-    <div data-slot="block-body" class="min-w-0">
+    <div data-block-gallery data-slot="block-body" class="min-w-0">
       <OpenUiRenderer
         caw={animatedCaw}
         class="min-w-0"

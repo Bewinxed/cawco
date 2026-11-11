@@ -39,11 +39,11 @@
 -->
 <script lang="ts">
   import { CANVAS_DIAGRAMS } from "@cawco/core/decisions";
-  import { DIAGRAM_SIZES, type DiagramSize } from "@cawco/core/views-library";
   import { decisionsWords } from "@cawco/core/words/decisions";
   import { Button } from "#lib/components/ui/button/index.js";
   import { frameSize } from "../../frame-observer.js";
   import { hubRefusal } from "../../hub-read.js";
+  import { BLOCK_ROOM, blockSize } from "../../views/openui/block-size.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { overlayTag } from "./page.svelte.js";
   import Well from "./Well.svelte";
@@ -61,15 +61,8 @@
     block?: boolean;
   } = $props();
 
-  /** The room each size draws in: its token under the size container's width, or that whole width; on a phone every size takes the whole width. */
-  const ROOM: Record<DiagramSize, string> = {
-    small: "w-c-diagram-small max-w-[100cqi] max-phone:w-[100cqi]",
-    medium: "w-c-diagram-medium max-w-[100cqi]",
-    full: "w-[100cqi]",
-  };
   const size = $derived(
-    DIAGRAM_SIZES.find((one) => one === props.size) ??
-      (block ? "medium" : undefined)
+    blockSize(props.size) ?? (block ? "medium" : undefined)
   );
   /** Its size's room, px, as its ruler measures it; null until measured. */
   let room = $state<number | null>(null);
@@ -249,7 +242,7 @@
       aria-hidden="true"
       class={[
         "pointer-events-none invisible absolute start-0 top-0 h-0",
-        ROOM[size],
+        BLOCK_ROOM[size],
       ]}
       data-slot="diagram-room"
       {@attach measureRoom}

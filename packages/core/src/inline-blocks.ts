@@ -134,3 +134,33 @@ const ROOT = /^\s*root\s*=\s*([A-Za-z_][\w]*)\s*\(/mu;
  */
 export const programLibraryOf = (program: string): "decisions" | "block" =>
   ROOT.exec(program)?.[1] === "Column" ? "block" : "decisions";
+
+/**
+ * Where a file a block's Image, Video or Audio names is read: an absolute
+ * path on the machine of the session that wrote it (hub `GET
+ * /api/agents/:machineId/media`, as `show_image` shows one), or a path in
+ * its project's folder (`GET /api/projects/:id/folder/raw`, as a report's
+ * outputs are drawn). Kept as a page, the hub copies each beside the page.
+ */
+export type BlockFile =
+  { on: "machine"; path: string } | { on: "folder"; path: string };
+
+/** A scheme at a name's start (`https:`, `data:`, `file:`): a web address, never a file. */
+const SCHEME = /^[a-z][a-z0-9+.-]*:/iu;
+const DOT_SLASH = /^(?:\.\/)+/u;
+
+/** Where `file` is read from; null when it names no file a block may show: empty, a web address, or a path that climbs (`..`). */
+export const blockFile = (file: string): BlockFile | null => {
+  const path = file.trim();
+  if (
+    !path ||
+    SCHEME.test(path) ||
+    path.startsWith("//") ||
+    path.split("/").includes("..")
+  ) {
+    return null;
+  }
+  return path.startsWith("/")
+    ? { on: "machine", path }
+    : { on: "folder", path: path.replace(DOT_SLASH, "") };
+};

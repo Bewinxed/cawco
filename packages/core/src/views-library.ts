@@ -10,7 +10,9 @@
  *
  * A view cannot run code or reach the network: the library has no action,
  * input, link or image, there are no mutations, and the tools are the hub's
- * routes alone.
+ * routes alone. An agent's block (tsk-330) adds the media (pictures, clips,
+ * sounds, a slideshow, a page artifact framed live), each from a file or an
+ * artifact the hub serves, never a web address.
  */
 import {
   createLibrary,
@@ -320,10 +322,28 @@ export const VIEW_COMPONENTS = [
 export type ViewComponentName = (typeof VIEW_COMPONENTS)[number];
 
 /**
+ * The components only a block draws: what an agent shows from its files
+ * (a picture, a clip, a sound), a slideshow of any of them, and an HTML page
+ * artifact of its conversation, live. A view reads the project's data
+ * alone, so it names none of them ({@link viewLibrary}).
+ */
+const MEDIA_COMPONENTS = [
+  "Image",
+  "Video",
+  "Audio",
+  "Slides",
+  "Preview",
+] as const;
+type MediaComponentName = (typeof MEDIA_COMPONENTS)[number];
+
+/** Every component either library defines. */
+type AnyComponentName = ViewComponentName | MediaComponentName;
+
+/**
  * The components an agent's block (an `openui` fence in its reply, tsk-330)
- * may name: the view library's that draw what the program holds. The ones
- * that draw a project's tasks read them through a Query, which a block has
- * none of, so they are left out ({@link blockLibrary}).
+ * may name: the view library's that draw what the program holds, and the
+ * media. The ones that draw a project's tasks read them through a Query,
+ * which a block has none of, so they are left out ({@link blockLibrary}).
  */
 export const BLOCK_COMPONENTS = [
   "Column",
@@ -333,10 +353,11 @@ export const BLOCK_COMPONENTS = [
   "StatTile",
   "Table",
   "Diagram",
-] as const satisfies readonly ViewComponentName[];
+  ...MEDIA_COMPONENTS,
+] as const satisfies readonly AnyComponentName[];
 export type BlockComponentName = (typeof BLOCK_COMPONENTS)[number];
 
-/** How wide a Diagram draws, as its agent picks (Diagram.svelte, tokens `c-diagram-*`): a glance, the reply's measure, the turn's width. */
+/** How wide a block's Diagram, picture, clip or page draws, as its agent picks (block-size.ts, tokens `c-diagram-*`): a glance, the reply's measure, the turn's width. */
 export const DIAGRAM_SIZES = ["small", "medium", "full"] as const;
 export type DiagramSize = (typeof DIAGRAM_SIZES)[number];
 
@@ -347,20 +368,48 @@ const PELE_CHARTS =
 /** The component a view's `root` is. */
 export const VIEW_ROOT: ViewComponentName = "Column";
 
+/** A size, as each sized block component takes it. */
+const sizeOf = (thing: string) =>
+  z
+    .enum(DIAGRAM_SIZES)
+    .optional()
+    .describe(
+      `Its width on a desk: "small" about 400px, "medium" the reply's text column, "full" the turn's width. Left out, ${thing}.`
+    );
+
+/** A file a block's Image, Video or Audio names (core inline-blocks.ts `blockFile`), with the kinds it reads. */
+const fileOf = (kinds: string) =>
+  z
+    .string()
+    .describe(
+      `An absolute path on your machine ("/home/me/shots/after.png"), or a path in the project's folder ("assets/4a0d95d4/after.png"); ${kinds}. Never a web address.`
+    );
+
 /**
- * The library over `renderers`, one per component, by name: the dashboard's
- * Svelte components, or nothing (`null`) where only the schema and the
- * prompt are read. Each prop's schema is the props its renderer takes.
+ * The library of the components `names` gives, over `renderers`, one per
+ * component, by name: the dashboard's Svelte components, or nothing
+ * (`null`) where only the schema and the prompt are read. Each prop's
+ * schema is the props its renderer takes; a Row's, Column's or Slides'
+ * child is any component the library keeps, and no other.
  */
-export const viewLibrary = <C>(
-  renderers: Record<ViewComponentName, C>
+const libraryOf = <C, N extends AnyComponentName>(
+  names: readonly N[],
+  renderers: Record<N, C>
 ): Required<Library<C>> => {
+  const named = new Set<string>(names);
+  const kept = <T extends { name: string }>(all: T[]): T[] =>
+    all.filter((one) => named.has(one.name));
   const define = <T extends z.ZodObject>(
-    name: ViewComponentName,
+    name: AnyComponentName,
     description: string,
     props: T
   ) =>
-    defineComponent({ name, description, props, component: renderers[name] });
+    defineComponent({
+      name,
+      description,
+      props,
+      component: renderers[name as N] ?? (null as C),
+    });
 
   const Text = define(
     "Text",
@@ -440,12 +489,45 @@ export const viewLibrary = <C>(
           'Mermaid text, lines split with \\n: "flowchart LR\\nA --> B".'
         ),
       caption: z.string().optional().describe("A line under it."),
-      size: z
-        .enum(DIAGRAM_SIZES)
-        .optional()
-        .describe(
-          'Its width on a desk: "small" about 400px, "medium" the reply\'s text column, "full" the turn\'s width. Left out, it fits the reply.'
-        ),
+      size: sizeOf("it fits the reply"),
+    })
+  );
+  const Image = define(
+    "Image",
+    "A picture from a file: a screenshot, an image you generated, a picture in the project's folder. An animated GIF, WebP or PNG plays as it is. Pressed, it opens full size.",
+    z.object({
+      file: fileOf("png, jpg, gif, webp or avif"),
+      alt: z.string().describe("What it shows, for a reader who can't see it."),
+      caption: z.string().optional().describe("A line under it."),
+      size: sizeOf("it stands at its own size up to the text column"),
+    })
+  );
+  const Video = define(
+    "Video",
+    "A clip from a file, in the platform's player: a screen recording, a video you generated.",
+    z.object({
+      file: fileOf("mp4, mov or webm"),
+      caption: z.string().optional().describe("A line under it."),
+      size: sizeOf("the text column"),
+    })
+  );
+  const Audio = define(
+    "Audio",
+    "A sound from a file, in the platform's player: narration a text-to-speech tool made, a recording.",
+    z.object({
+      file: fileOf("mp3, m4a, wav, ogg, flac or aac"),
+      caption: z.string().optional().describe("A line under it."),
+    })
+  );
+  const Preview = define(
+    "Preview",
+    'An HTML page artifact of this conversation, live in a frame: an animated mockup, a custom visual. Make the page first with artifact_create (kind "page", its `html`); its HTML never goes in the block.',
+    z.object({
+      artifact: z
+        .string()
+        .describe("The page artifact's `name`, as you made it."),
+      caption: z.string().optional().describe("A line under it."),
+      size: sizeOf("the text column"),
     })
   );
   const TaskTable = define(
@@ -483,23 +565,29 @@ export const viewLibrary = <C>(
         .describe('"week" when left out.'),
     })
   );
-  // A layout holds any component, layouts included.
-  const child: z.ZodType = z.lazy(() =>
-    z.union([
-      Column.ref,
-      Row.ref,
-      Text.ref,
-      Badge.ref,
-      StatTile.ref,
-      Board.ref,
-      StageColumn.ref,
-      TaskCard.ref,
-      Table.ref,
-      TaskTable.ref,
-      Diagram.ref,
-      Calendar.ref,
-    ])
-  );
+  // A layout holds any component its library keeps, layouts included.
+  const child: z.ZodType = z.lazy(() => {
+    const [first, ...rest] = kept([
+      Column,
+      Row,
+      Text,
+      Badge,
+      StatTile,
+      Board,
+      StageColumn,
+      TaskCard,
+      Table,
+      TaskTable,
+      Diagram,
+      Calendar,
+      Image,
+      Video,
+      Audio,
+      Slides,
+      Preview,
+    ]).map((one) => one.ref);
+    return first ? z.union([first, ...rest]) : z.never();
+  });
   const align = z
     .enum(["start", "center", "end", "stretch"])
     .optional()
@@ -521,9 +609,17 @@ export const viewLibrary = <C>(
     "Lays its children out one under another. The program's root.",
     z.object({ children: z.array(child), align })
   );
+  const Slides = define(
+    "Slides",
+    "Its children one at a time, stepped through with arrows and a count, swiped on a phone: each child is one slide, a picture or a Column of any components.",
+    z.object({
+      children: z.array(child),
+      caption: z.string().optional().describe("A line under it."),
+    })
+  );
 
   return createLibrary({
-    components: [
+    components: kept([
       Column,
       Row,
       Text,
@@ -536,34 +632,31 @@ export const viewLibrary = <C>(
       TaskCard,
       TaskTable,
       Calendar,
-    ],
+      Image,
+      Video,
+      Audio,
+      Slides,
+      Preview,
+    ]),
     root: VIEW_ROOT,
   });
 };
 
 /**
- * The block library over `renderers`: the view library less the components
- * that draw a project's tasks (lang-core `extend`, `remove`), so a block's
- * program names only what it holds.
+ * The view library over `renderers`: every component less the media, which
+ * show an agent's files and pages where a view reads the project's data.
+ */
+export const viewLibrary = <C>(
+  renderers: Record<ViewComponentName, C>
+): Required<Library<C>> => libraryOf(VIEW_COMPONENTS, renderers);
+
+/**
+ * The block library over `renderers`: every component less those that
+ * draw a project's tasks, so a block's program names only what it holds.
  */
 export const blockLibrary = <C>(
   renderers: Record<BlockComponentName, C>
-): Required<Library<C>> => {
-  const blocks = new Set<string>(BLOCK_COMPONENTS);
-  // The task components are built with no renderer and removed at once:
-  // nothing in the library it answers holds one.
-  const all = Object.fromEntries(
-    VIEW_COMPONENTS.map((name) => [
-      name,
-      blocks.has(name) ? renderers[name as BlockComponentName] : null,
-    ])
-  ) as Record<ViewComponentName, C>;
-  return viewLibrary<C>(all).extend({
-    components: {
-      remove: VIEW_COMPONENTS.filter((name) => !blocks.has(name)),
-    },
-  });
-};
+): Required<Library<C>> => libraryOf(BLOCK_COMPONENTS, renderers);
 
 // --- the prompt ----------------------------------------------------------------
 
@@ -605,7 +698,7 @@ const BLOCK_FENCE = `${INLINE_BLOCK_LANG} name="…"`;
 const fenced = (name: string, program: string): string =>
   `\`\`\`${INLINE_BLOCK_LANG} name="${name}"\n${program}\n\`\`\``;
 
-/** Two blocks, as the block prompt shows them: figures over a table, and a chart. */
+/** Three blocks, as the block prompt shows them: figures over a table, a chart, and two screenshots side by side. */
 const BLOCK_EXAMPLES = [
   fenced(
     "Release health",
@@ -618,6 +711,13 @@ table = Table(["Pull request", "Owner", "Checks"], [["Inline blocks", "Ana", Bad
     `root = Column([chart])
 chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Hub records, last four weeks", "small")`
   ),
+  fenced(
+    "Tray chips, before and after",
+    `root = Column([pair])
+pair = Row([before, after])
+before = Image("/home/me/shots/tray-before.png", "The tray at 390px, its fourth chip cut off at the edge", "Before")
+after = Image("assets/4a0d95d4/tray-after.png", "The tray at 390px, its chips wrapping onto a second line", "After")`
+  ),
 ];
 
 /**
@@ -627,7 +727,7 @@ chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3,
  * inline-block skill an agent loads before its first block.
  */
 export const blockPromptOptions = (): PromptOptions => ({
-  preamble: `A block is a small UI drawn inline in a chat transcript, between your reply's paragraphs: about one text column wide (580px) on a desk, the screen's width (about 360px) on a phone. The same block is read on both, so it holds up at both: choose forms that reflow, never fixed sizes. Its components reflow by themselves: a Row wraps, a Table turns each row into a card on a phone, and a Diagram fits its size, takes the screen's width on a phone, and turns a left-to-right flow too wide for its room top to bottom.
+  preamble: `A block is a small UI drawn inline in a chat transcript, between your reply's paragraphs: about one text column wide (580px) on a desk, the screen's width (about 360px) on a phone. The same block is read on both, so it holds up at both: choose forms that reflow, never fixed sizes. Its components reflow by themselves: a Row wraps, a Table turns each row into a card on a phone, a Diagram fits its size, takes the screen's width on a phone, and turns a left-to-right flow too wide for its room top to bottom, a picture, clip or page does the same, and Slides swipes.
 
 Write it in your reply as a fenced code block opened with \`${BLOCK_FENCE}\`, a few plain words the person would call it, holding one OpenUI Lang program and nothing else: the transcript draws it in place of the code, and a fence with no name stays code.`,
   toolCalls: false,
@@ -641,7 +741,10 @@ Write it in your reply as a fenced code block opened with \`${BLOCK_FENCE}\`, a 
     "A block shows information; a choice for the person goes through `ask` or a decision page.",
     "Every word in a block is plain text; diagram syntax lives in a Diagram's Mermaid.",
     "The block draws no title of its own: a heading is a Text in the program.",
-    'A Diagram\'s size sets its width on a desk: "small" about 400px, beside the words (a pie of a few short slice names, up to six bars); "medium" the text column, about 580px, the size when left out; "full" the whole turn, about 1100px, for a dense diagram. On a phone every size is the screen\'s width.',
+    'A size sets a Diagram\'s, Image\'s, Video\'s or Preview\'s width on a desk: "small" about 400px, beside the words (a pie of a few short slice names, up to six bars, an upright phone screenshot or clip); "medium" the text column, about 580px; "full" the whole turn, about 1100px, for a dense diagram or a wide screen. A Diagram, Video or Preview left unsized is "medium"; an Image left unsized stands at its own size up to the text column, and pictures in a Row share the row. On a phone every size is the screen\'s width.',
+    "An Image, Video or Audio names its file by its absolute path on your machine, or by its path in the project's folder, where a delegate's outputs land (assets/<item>/…). A screenshot you took, an image you generated, a narration a text-to-speech tool saved: name the file where it is, up to 50 MB. A block reaches no network, so a web address shows nothing: save the file first.",
+    'To show HTML of your own (an animated mockup, a custom visual), make it a page first: artifact_create with kind "page" and its `html`. Then Preview("<its name>") shows it live in a frame in the block. The fence holds the program alone, never HTML.',
+    "Slides steps through its children one at a time: use it for steps read in order, or for more pictures than fit side by side (four or more). Two or three things to compare go side by side in a Row, where the eye moves between them at once.",
     "A chart's name is its Mermaid `title` (a flowchart's in a `---\\ntitle: …\\n---` header), drawn as its heading; the Diagram's caption is a meta line under it for the source or the period, or left out.",
     "Pele, the renderer, lays a chart out at its width: in under about 400px a pie's legend moves under it and an axis shows every other label (it never turns them). A left-to-right diagram too wide for its room is redrawn top to bottom, and one still too wide shrinks while its words stay readable, then scrolls sideways.",
     "Use only the components listed: a name outside them is dropped and reported.",

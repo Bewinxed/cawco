@@ -4,7 +4,18 @@
  * the orchestrator's reply on inline generative UI prior art (2026-11-11),
  * whose table arrived as markdown. Its first version listed Slack and
  * Telegram; the owner asked why, and the redrawn table left them out.
+ *
+ * The media stories name their files as an agent does, a path in the
+ * project's folder or on its machine, each served here from beside this
+ * file (block-fixtures/): canvas captures of this block, the phone app's
+ * paywall story, and a narration made with ElevenLabs for this story.
  */
+import cawTap from "./block-fixtures/caw-tap.webp?url";
+import mergeChecksPage from "./block-fixtures/merge-checks.html?raw";
+import paywallStory from "./block-fixtures/paywall-story.mp4?url";
+import releaseNarration from "./block-fixtures/release-narration.mp3?url";
+import replyWriting from "./block-fixtures/reply-writing.png?url";
+import replyWritten from "./block-fixtures/reply-written.png?url";
 import InlineBlockReply from "./InlineBlockReply.svelte";
 
 /** A product's maturity is a fact, not a CawCo status: its badge is neutral (The Reserved Hue Rule). */
@@ -192,5 +203,111 @@ export const ShortFlow = {
     after: "Everything else is a way back into the second step.",
     source: `root = Column([flow])
 flow = Diagram("flowchart LR\\nA[Brief] --> B[Delegate works] --> C[Merge checks] --> D[Main]")`,
+  },
+};
+
+/** The merge-checks page as its own document, as a page artifact stands at its own address. */
+const mergeChecks = URL.createObjectURL(
+  new Blob([mergeChecksPage], { type: "text/html" })
+);
+
+/** Where the media stories' files sit in the project's folder, as a delegate's outputs land there. */
+const ASSETS = "assets/4a0d95d4";
+const FILES = {
+  [`${ASSETS}/reply-writing.png`]: replyWriting,
+  [`${ASSETS}/reply-written.png`]: replyWritten,
+  "/home/ana/.cawco/shots/caw-tap.webp": cawTap,
+  [`${ASSETS}/paywall-story.mp4`]: paywallStory,
+  [`${ASSETS}/release-narration.mp3`]: releaseNarration,
+};
+
+/** Two screenshots side by side: the reply while the agent wrote it, and once it was written. */
+export const BeforeAndAfter = {
+  args: {
+    name: "Streaming the table",
+    asked: "show me what the table looks like while you're still writing it",
+    before: "Two captures of the same reply, a second apart:",
+    after:
+      "The head and the rows it has stand at once; nothing moves as the rest arrive.",
+    files: FILES,
+    source: `root = Column([pair])
+pair = Row([writing, written])
+writing = Image("${ASSETS}/reply-writing.png", "The reply mid-stream: the table's head and its first three rows", "Before: three rows in")
+written = Image("${ASSETS}/reply-written.png", "The same reply written: all eight rows of the table", "After: all eight rows")`,
+  },
+};
+
+/** An animated picture that plays as it is: Caw's tap, looping beside the words. */
+export const AnimatedPicture = {
+  args: {
+    name: "Caw's tap",
+    asked: "what does the phone app's first screen do before the paywall?",
+    before: "Caw walks in and taps the phone, on a loop:",
+    after: "It runs once on first launch, then the paywall's words come up.",
+    files: FILES,
+    source: `root = Column([tap])
+tap = Image("/home/ana/.cawco/shots/caw-tap.webp", "Caw walking up to a phone on a desk and tapping its screen", "The first 3.6 seconds, looped", "small")`,
+  },
+};
+
+/** A clip in the platform's player, its frames loaded only once it plays. */
+export const Video = {
+  args: {
+    name: "Paywall story",
+    asked: "send me the paywall story as it ships",
+    before: "The ten-second story the paywall opens on, as the app ships it:",
+    after:
+      "It's 160 KB at this size; the app carries the full 1024 by 1536 cut.",
+    files: FILES,
+    source: `root = Column([clip])
+clip = Video("${ASSETS}/paywall-story.mp4", "Paywall story, 10.8 seconds, no sound", "small")`,
+  },
+};
+
+/** Narration from a text-to-speech tool, in the platform's player with its caption. */
+export const Narration = {
+  args: {
+    name: "Release narration",
+    asked: "read this week's release note aloud for the changelog video",
+    before: "Here's the narration, made with ElevenLabs in the Alice voice:",
+    after: "If the pace is right, I'll lay it under the changelog video.",
+    files: FILES,
+    source: `root = Column([voice])
+voice = Audio("${ASSETS}/release-narration.mp3", "This week in CawCo, 11.8 seconds, Alice voice")`,
+  },
+};
+
+/** A slideshow of four steps, one at a time, with its arrows and count. */
+export const Slideshow = {
+  args: {
+    name: "How a delegate lands",
+    asked: "walk me through what a delegate does after it finishes",
+    before: "Four steps, one per slide:",
+    after: "A failed check or a conflict sends it back to the second step.",
+    source: `root = Column([steps])
+steps = Slides([brief, work, checks, main], "From a delegate's finish to main")
+brief = Column([Text("1. Finish", "title"), Text("The delegate calls finish_item with its report and its proof: each command it ran, with the output."), Badge("Report written", "done")])
+work = Column([Text("2. Rebase", "title"), Text("The hub rebases its commits onto main. A conflict goes straight back to the same session, which fixes it and finishes again."), Badge("Rebased onto main", "done")])
+checks = Column([Text("3. Merge checks", "title"), Text("The checks the project's gate names run on the rebased branch: types, lint, the house checks and formatting."), Row([StatTile("Passed", 3, "done"), StatTile("Running", 1, "live")])])
+main = Column([Text("4. Main", "title"), Text("Once every check passes the hub pushes to main and the parent reads the report."), Badge("Pushed", "done")])`,
+  },
+};
+
+/** An HTML page the agent made as an artifact, live in the reply: its bars fill as the checks run. */
+export const LivePage = {
+  args: {
+    name: "Merge checks",
+    asked: "can you show the merge checks as they'd look running?",
+    before: "I made it as a page; here it is live:",
+    after: "Each bar is one check, at the time it took on the last run.",
+    pages: [
+      {
+        name: "merge-checks-live",
+        title: "Merge checks, live",
+        src: mergeChecks,
+      },
+    ],
+    source: `root = Column([page])
+page = Preview("merge-checks-live", "Last run's times, looped")`,
   },
 };

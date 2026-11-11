@@ -37,6 +37,7 @@
     "clipper2-ts": "2.0.1-18",
     "clsx": "^2.1.1",
     "cuelume": "0.2.4",
+    "embla-carousel-svelte": "8.6.0",
     "interactjs": "1.10.28",
     "minisearch": "7.2.0",
     "pele": "1.6.0",

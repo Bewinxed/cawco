@@ -108,7 +108,38 @@ export const transcriptWords = {
     `@${action} is an action: a block runs none.`,
   /** A kept block refused for a URL in its words (hub decision-program.ts), the URL's start quoted. */
   blockUrlRefused: (url: string): string =>
-    `“${url}” is a URL: a block reaches no network. Write what it shows into the block.`,
+    `“${url}” is a URL: a block reaches no network. Show a file with Image, Video or Audio, or write what it shows into the block.`,
+  /** A kept block refused for a file its Image, Video or Audio can't name (core `blockFile`): empty, a web address, or climbing out with `..`. */
+  blockFileRefused: (file: string): string =>
+    `“${file}” names no file a block can show: give an absolute path on your machine, or a path in the project's folder.`,
+  /** A kept block refused for a path in the project's folder, written by a session in no project. */
+  blockFileNoProject: (file: string): string =>
+    `“${file}” is a path in a project's folder, and this session is in no project: give its absolute path on your machine.`,
+  /** Where a block's picture, clip or sound would stand when it names no file a block can show. */
+  blockFileUnshown: (file: string): string =>
+    `“${file}” isn't a file this block can show.`,
+  /** Where a block's picture would stand when it didn't load. */
+  blockPictureFailed: (alt: string): string => `${alt} didn't load.`,
+  /** A block's picture, pressed: it opens full size. */
+  blockPictureOpen: (alt: string): string => `Open ${alt} full size`,
+  /** A replaced block's clip, still: what it was. */
+  blockVideoStill: "Video",
+  /** A replaced block's sound, still: what it was. */
+  blockAudioStill: "Sound",
+  /** A block's slideshow: the slide it shows, of how many. */
+  blockSlideCount: (at: number, of: number): string => `${at} of ${of}`,
+  blockSlidePrevious: "Previous slide",
+  blockSlideNext: "Next slide",
+  /** A block's slideshow, as a reader is told it. */
+  blockSlides: (of: number): string => `Slideshow, ${of} slides`,
+  /** A block's Preview naming no page artifact of its conversation. */
+  blockPageMissing: (name: string): string =>
+    `No page named “${name}” in this conversation.`,
+  /** A block's Preview whose page didn't open, the hub's words after. */
+  blockPageFailed: (name: string, why: string): string =>
+    `${name} didn't open: ${why}`,
+  /** A block's Preview's frame, as a reader is told it. */
+  blockPageFrame: (title: string): string => `Page: ${title}`,
   /** A kept block refused for markup in its words, the markup's start quoted. */
   blockMarkupRefused: (markup: string): string =>
     `“${markup}” holds markup: a block's words are plain.`,

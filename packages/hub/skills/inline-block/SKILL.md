@@ -7,7 +7,7 @@ description: "Draw a block in your reply, a small UI the chat transcript draws i
 
 # Inline blocks
 
-A block is a small UI drawn inline in a chat transcript, between your reply's paragraphs: about one text column wide (580px) on a desk, the screen's width (about 360px) on a phone. The same block is read on both, so it holds up at both: choose forms that reflow, never fixed sizes. Its components reflow by themselves: a Row wraps, a Table turns each row into a card on a phone, and a Diagram fits its size, takes the screen's width on a phone, and turns a left-to-right flow too wide for its room top to bottom.
+A block is a small UI drawn inline in a chat transcript, between your reply's paragraphs: about one text column wide (580px) on a desk, the screen's width (about 360px) on a phone. The same block is read on both, so it holds up at both: choose forms that reflow, never fixed sizes. Its components reflow by themselves: a Row wraps, a Table turns each row into a card on a phone, a Diagram fits its size, takes the screen's width on a phone, and turns a left-to-right flow too wide for its room top to bottom, a picture, clip or page does the same, and Slides swipes.
 
 Write it in your reply as a fenced code block opened with `openui name="…"`, a few plain words the person would call it, holding one OpenUI Lang program and nothing else: the transcript draws it in place of the code, and a fence with no name stays code.
 
@@ -33,6 +33,11 @@ Badge(text: string, tone?: "neutral" | "live" | "attn" | "done" | "fail") — A 
 StatTile(label: string, value: number | string, tone?: "neutral" | "live" | "attn" | "done" | "fail", unit?: string) — One figure with its label, like a count of tasks in a stage.
 Table(columns: string[], rows: (string | number | Badge)[][]) — Rows under headings, one cell per heading: a cell is words, a number or a Badge. On a phone each row stands as a card.
 Diagram(mermaid: string, caption?: string, size?: "small" | "medium" | "full") — A Mermaid diagram or chart, drawn on the house look: a flowchart, sequenceDiagram, stateDiagram-v2, erDiagram, classDiagram, mindmap, or a chart: xychart-beta (bar and line), pie, quadrantChart, radar-beta, sankey-beta, treemap-beta, venn-beta, gantt, timeline.
+Image(file: string, alt: string, caption?: string, size?: "small" | "medium" | "full") — A picture from a file: a screenshot, an image you generated, a picture in the project's folder. An animated GIF, WebP or PNG plays as it is. Pressed, it opens full size.
+Video(file: string, caption?: string, size?: "small" | "medium" | "full") — A clip from a file, in the platform's player: a screen recording, a video you generated.
+Audio(file: string, caption?: string) — A sound from a file, in the platform's player: narration a text-to-speech tool made, a recording.
+Slides(children: any[], caption?: string) — Its children one at a time, stepped through with arrows and a count, swiped on a phone: each child is one slide, a picture or a Column of any components.
+Preview(artifact: string, caption?: string, size?: "small" | "medium" | "full") — An HTML page artifact of this conversation, live in a frame: an animated mockup, a custom visual. Make the page first with artifact_create (kind "page", its `html`); its HTML never goes in the block.
 
 ## Hoisting and streaming
 
@@ -60,6 +65,13 @@ root = Column([chart])
 chart = Diagram("xychart-beta\ntitle \"Spend per week\"\nx-axis [W1, W2, W3, W4]\ny-axis \"USD\"\nbar [42, 58, 37, 61]", "Hub records, last four weeks", "small")
 ```
 
+```openui name="Tray chips, before and after"
+root = Column([pair])
+pair = Row([before, after])
+before = Image("/home/me/shots/tray-before.png", "The tray at 390px, its fourth chip cut off at the edge", "Before")
+after = Image("assets/4a0d95d4/tray-after.png", "The tray at 390px, its chips wrapping onto a second line", "After")
+```
+
 ## Final Verification
 Before finishing, walk your output and verify:
 1. root = Column(...) is the FIRST line (for optimal streaming).
@@ -73,7 +85,10 @@ Before finishing, walk your output and verify:
 - A block shows information; a choice for the person goes through `ask` or a decision page.
 - Every word in a block is plain text; diagram syntax lives in a Diagram's Mermaid.
 - The block draws no title of its own: a heading is a Text in the program.
-- A Diagram's size sets its width on a desk: "small" about 400px, beside the words (a pie of a few short slice names, up to six bars); "medium" the text column, about 580px, the size when left out; "full" the whole turn, about 1100px, for a dense diagram. On a phone every size is the screen's width.
+- A size sets a Diagram's, Image's, Video's or Preview's width on a desk: "small" about 400px, beside the words (a pie of a few short slice names, up to six bars, an upright phone screenshot or clip); "medium" the text column, about 580px; "full" the whole turn, about 1100px, for a dense diagram or a wide screen. A Diagram, Video or Preview left unsized is "medium"; an Image left unsized stands at its own size up to the text column, and pictures in a Row share the row. On a phone every size is the screen's width.
+- An Image, Video or Audio names its file by its absolute path on your machine, or by its path in the project's folder, where a delegate's outputs land (assets/<item>/…). A screenshot you took, an image you generated, a narration a text-to-speech tool saved: name the file where it is, up to 50 MB. A block reaches no network, so a web address shows nothing: save the file first.
+- To show HTML of your own (an animated mockup, a custom visual), make it a page first: artifact_create with kind "page" and its `html`. Then Preview("<its name>") shows it live in a frame in the block. The fence holds the program alone, never HTML.
+- Slides steps through its children one at a time: use it for steps read in order, or for more pictures than fit side by side (four or more). Two or three things to compare go side by side in a Row, where the eye moves between them at once.
 - A chart's name is its Mermaid `title` (a flowchart's in a `---\ntitle: …\n---` header), drawn as its heading; the Diagram's caption is a meta line under it for the source or the period, or left out.
 - Pele, the renderer, lays a chart out at its width: in under about 400px a pie's legend moves under it and an axis shows every other label (it never turns them). A left-to-right diagram too wide for its room is redrawn top to bottom, and one still too wide shrinks while its words stay readable, then scrolls sideways.
 - Use only the components listed: a name outside them is dropped and reported.

@@ -99,9 +99,10 @@ const read = async (path: string): Promise<string> => {
 /**
  * By extension, not by sniffing — a `.png` that is not one just fails to
  * render. No SVG: opened as a document it is script on the dashboard's origin.
- * A picture or a video is the one file the tunnel does carry whole: a
- * screenshot or a screen recording an agent made is worth nothing as a path.
- * A video's captions travel the same way: the `.vtt` beside it.
+ * A picture, a video or a sound is the one file the tunnel does carry whole:
+ * a screenshot, a screen recording or a narration an agent made is worth
+ * nothing as a path. A video's captions travel the same way: the `.vtt`
+ * beside it.
  */
 const MEDIA_TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -114,6 +115,13 @@ const MEDIA_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".mov": "video/quicktime",
   ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".oga": "audio/ogg",
+  ".flac": "audio/flac",
+  ".aac": "audio/aac",
   ".vtt": "text/vtt",
 };
 
@@ -124,7 +132,7 @@ const media = async (path: string): Promise<FsMedia> => {
   const mediaType = MEDIA_TYPES[extname(path).toLowerCase()];
   if (!mediaType) {
     throw new Error(
-      `${path} is not an image, video or captions file (${Object.keys(MEDIA_TYPES).join(", ")})`
+      `${path} is not an image, video, sound or captions file (${Object.keys(MEDIA_TYPES).join(", ")})`
     );
   }
   const file = Bun.file(path);
@@ -133,7 +141,7 @@ const media = async (path: string): Promise<FsMedia> => {
   }
   if (file.size > MEDIA_LIMIT_BYTES) {
     throw new Error(
-      `${path} is ${megabytes(file.size)}; a picture or video is shown up to ${megabytes(MEDIA_LIMIT_BYTES)}`
+      `${path} is ${megabytes(file.size)}; a picture, video or sound is shown up to ${megabytes(MEDIA_LIMIT_BYTES)}`
     );
   }
   return {

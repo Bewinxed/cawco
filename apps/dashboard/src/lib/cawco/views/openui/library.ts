@@ -6,11 +6,18 @@
  * own component library and theme are not loaded (PRD §5.2).
  *
  * The block library (an agent's block in its reply, tsk-330) is the same
- * library less its task components, on the same renderers.
+ * library less its task components, with the media a block shows (a
+ * picture, a clip, a sound, a slideshow, a page artifact), on the same
+ * renderers where both draw a component.
  */
 import { blockLibrary, viewLibrary } from "@cawco/core/views-library";
 import Diagram from "../../decisions/host/Diagram.svelte";
+import BlockAudio from "./BlockAudio.svelte";
 import BlockDiagram from "./BlockDiagram.svelte";
+import BlockImage from "./BlockImage.svelte";
+import BlockPreview from "./BlockPreview.svelte";
+import BlockSlides from "./BlockSlides.svelte";
+import BlockVideo from "./BlockVideo.svelte";
 import type { OpenUIComponent } from "./OpenUiRenderer.svelte";
 import ViewBadge from "./ViewBadge.svelte";
 import ViewBoard from "./ViewBoard.svelte";
@@ -24,19 +31,18 @@ import ViewTaskCard from "./ViewTaskCard.svelte";
 import ViewTaskTable from "./ViewTaskTable.svelte";
 import ViewText from "./ViewText.svelte";
 
-/** The components a block draws, by name. */
-const BLOCK_RENDERERS = {
+/** The components a view and a block both draw, by name. */
+const SHARED = {
   Column: ViewColumn,
   Row: ViewRow,
   Text: ViewText,
   Badge: ViewBadge,
   StatTile: ViewStat,
   Table: ViewTable,
-  Diagram: BlockDiagram,
 } satisfies Record<string, OpenUIComponent>;
 
 export const VIEW_LIBRARY = viewLibrary<OpenUIComponent>({
-  ...BLOCK_RENDERERS,
+  ...SHARED,
   Diagram,
   Board: ViewBoard,
   StageColumn: ViewStageColumn,
@@ -45,4 +51,13 @@ export const VIEW_LIBRARY = viewLibrary<OpenUIComponent>({
   Calendar: ViewCalendarNode,
 });
 
-export const BLOCK_LIBRARY = blockLibrary<OpenUIComponent>(BLOCK_RENDERERS);
+/** A block's, in a reply: its Diagram sized as a block sizes it, and its media read through the reply (block-media.ts). */
+export const BLOCK_LIBRARY = blockLibrary<OpenUIComponent>({
+  ...SHARED,
+  Diagram: BlockDiagram,
+  Image: BlockImage,
+  Video: BlockVideo,
+  Audio: BlockAudio,
+  Slides: BlockSlides,
+  Preview: BlockPreview,
+});

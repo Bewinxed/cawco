@@ -4,6 +4,9 @@
  * revises its block in place, a long conversation of revisions whose every
  * replaced version is frozen to markup, and a block kept as an artifact.
  */
+import mergeChecksPage from "./block-fixtures/merge-checks.html?raw";
+import paywallStory from "./block-fixtures/paywall-story.mp4?url";
+import releaseNarration from "./block-fixtures/release-narration.mp3?url";
 import InlineBlockConversation from "./InlineBlockConversation.svelte";
 
 /** A reply's fence for block `name` holding `program`. */
@@ -50,5 +53,55 @@ export const Kept = {
       `Where the release stands:\n\n${health(12, 3, 0)}\n\nI kept it as an artifact so it can follow the release.`,
     ],
     kept: [{ slug: "release-health", title: "Release health" }],
+  },
+};
+
+/** The paywall story's clip, as a reply names it in the project's folder. */
+const CLIP = "assets/4a0d95d4/paywall-story.mp4";
+const clip = (caption: string): string =>
+  fence(
+    "Paywall story",
+    `root = Column([clip])
+clip = Video("${CLIP}", "${caption}", "small")`
+  );
+
+/** A clip redrawn in a later reply: the first stands still and folded, no player in it; the newest plays. */
+export const ReplacedVideo = {
+  args: {
+    replies: [
+      `The paywall story as it was this morning:\n\n${clip("First cut, 12.4 seconds")}\n\nI'll trim the opening.`,
+      `Trimmed: the walk-in is shorter now.\n\n${clip("Second cut, 10.8 seconds")}\n\nThat's the cut that ships.`,
+    ],
+    files: { [CLIP]: paywallStory },
+  },
+};
+
+/** The narration and the merge-checks page, as a reply names them. */
+const NARRATION = "assets/4a0d95d4/release-narration.mp3";
+const checks = (caption: string): string =>
+  fence(
+    "Merge checks",
+    `root = Column([page, voice])
+page = Preview("merge-checks-live", "${caption}")
+voice = Audio("${NARRATION}", "Release narration, Alice voice")`
+  );
+
+/** A live page and a narration redrawn later: the first stands as a still box and a still row, no frame and no player in it. */
+export const ReplacedPage = {
+  args: {
+    replies: [
+      `The checks page with this morning's times:\n\n${checks("Morning run")}\n\nI'll rerun after the rebase.`,
+      `After the rebase:\n\n${checks("After the rebase")}\n\nAll four passed.`,
+    ],
+    files: { [NARRATION]: releaseNarration },
+    pages: [
+      {
+        name: "merge-checks-live",
+        title: "Merge checks, live",
+        src: URL.createObjectURL(
+          new Blob([mergeChecksPage], { type: "text/html" })
+        ),
+      },
+    ],
   },
 };

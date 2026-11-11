@@ -1173,7 +1173,67 @@ public enum Words {
 
         /// A kept block refused for a URL in its words (hub decision-program.ts), the URL's start quoted.
         public static func blockUrlRefused(url: String) -> String {
-            "“\(url)” is a URL: a block reaches no network. Write what it shows into the block."
+            "“\(url)” is a URL: a block reaches no network. Show a file with Image, Video or Audio, or write what it shows into the block."
+        }
+
+        /// A kept block refused for a file its Image, Video or Audio can't name (core `blockFile`): empty, a web address, or climbing out with `..`.
+        public static func blockFileRefused(file: String) -> String {
+            "“\(file)” names no file a block can show: give an absolute path on your machine, or a path in the project's folder."
+        }
+
+        /// A kept block refused for a path in the project's folder, written by a session in no project.
+        public static func blockFileNoProject(file: String) -> String {
+            "“\(file)” is a path in a project's folder, and this session is in no project: give its absolute path on your machine."
+        }
+
+        /// Where a block's picture, clip or sound would stand when it names no file a block can show.
+        public static func blockFileUnshown(file: String) -> String {
+            "“\(file)” isn't a file this block can show."
+        }
+
+        /// Where a block's picture would stand when it didn't load.
+        public static func blockPictureFailed(alt: String) -> String {
+            "\(alt) didn't load."
+        }
+
+        /// A block's picture, pressed: it opens full size.
+        public static func blockPictureOpen(alt: String) -> String {
+            "Open \(alt) full size"
+        }
+
+        /// A replaced block's clip, still: what it was.
+        public static let blockVideoStill = "Video"
+
+        /// A replaced block's sound, still: what it was.
+        public static let blockAudioStill = "Sound"
+
+        /// A block's slideshow: the slide it shows, of how many.
+        public static func blockSlideCount(at: Int, of: Int) -> String {
+            "\(at) of \(of)"
+        }
+
+        public static let blockSlidePrevious = "Previous slide"
+
+        public static let blockSlideNext = "Next slide"
+
+        /// A block's slideshow, as a reader is told it.
+        public static func blockSlides(of: Int) -> String {
+            "Slideshow, \(of) slides"
+        }
+
+        /// A block's Preview naming no page artifact of its conversation.
+        public static func blockPageMissing(name: String) -> String {
+            "No page named “\(name)” in this conversation."
+        }
+
+        /// A block's Preview whose page didn't open, the hub's words after.
+        public static func blockPageFailed(name: String, why: String) -> String {
+            "\(name) didn't open: \(why)"
+        }
+
+        /// A block's Preview's frame, as a reader is told it.
+        public static func blockPageFrame(title: String) -> String {
+            "Page: \(title)"
         }
 
         /// A kept block refused for markup in its words, the markup's start quoted.

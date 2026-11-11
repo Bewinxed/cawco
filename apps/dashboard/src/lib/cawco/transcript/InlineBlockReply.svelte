@@ -4,13 +4,15 @@
    * pane draws it (Transcript's column padding, MessageRow's turns): the
    * person's message in its well, then the agent's reply with a block
    * (InlineBlock) between its two paragraphs, so the block is judged where
-   * it lives.
+   * it lives. Its files and pages are the story's own (block-fixture.ts).
    */
   import type { ComponentProps } from "svelte";
   import MessageBody from "../MessageBody.svelte";
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
+  import { provideBlockSources } from "../views/openui/block-media";
+  import { type FixturePage, fixtureSources } from "./block-fixture";
   import InlineBlock from "./InlineBlock.svelte";
   import { REPLY_FRAME } from "./reply-frame";
 
@@ -18,6 +20,8 @@
     asked,
     before,
     after = "",
+    files = {},
+    pages = [],
     ...block
   }: {
     /** The person's message the reply answers. */
@@ -26,7 +30,17 @@
     before: string;
     /** Its words under the block. */
     after?: string;
+    /** The files its block names, by the address each is served from. */
+    files?: Record<string, string>;
+    /** The page artifacts its conversation made. */
+    pages?: FixturePage[];
   } & ComponentProps<typeof InlineBlock> = $props();
+  provideBlockSources(
+    fixtureSources(
+      () => files,
+      () => pages
+    )
+  );
 </script>
 
 <div

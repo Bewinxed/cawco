@@ -18,13 +18,37 @@
 <script lang="ts">
   import { programLibraryOf } from "@cawco/core/inline-blocks";
   import { onMount, tick } from "svelte";
+  import { loadPhotoSwipe } from "../../lightbox/photoswipe";
+  import { provideBlockMedia } from "../../views/openui/block-media";
   import OpenUiRenderer from "../../views/openui/OpenUiRenderer.svelte";
   import { decisionCardOf } from "./card-fault";
   import { DECISION_LIBRARY, HOST_BLOCK_LIBRARY } from "./library.js";
-  import { overlayTag, programIn, takeServed } from "./page.svelte.js";
+  import { overlayTag, programIn, served, takeServed } from "./page.svelte.js";
   import { stillCaw } from "./StillCaw.svelte";
 
   let program = $state(programIn(document));
+  // A kept block's pictures, clips and sounds are the files the hub copied
+  // beside the page; its pictures open full size in the house's PhotoSwipe.
+  provideBlockMedia({
+    src: (file) => served.files[file] ?? null,
+    open: async (shots, index) => {
+      const photoSwipe = await loadPhotoSwipe();
+      photoSwipe({
+        dataSource: shots.map((shot) => ({
+          src: shot.src,
+          msrc: shot.src,
+          width: shot.width,
+          height: shot.height,
+          alt: shot.alt,
+          element: shot.element,
+        })),
+        index,
+        imageClickAction: "close",
+        tapAction: "close",
+      }).init();
+    },
+    still: false,
+  });
   const block = $derived(programLibraryOf(program) === "block");
   const SERVED_HASH = /data-page-hash="([0-9a-f]{64})"/u;
 
@@ -76,7 +100,8 @@
       data-slot="page-scroll"
     >
       <div
-        class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col overflow-x-clip px-(--page-in) py-(--page-in)"
+        class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col overflow-x-clip px-(--page-in) py-(--page-in) @container"
+        data-block-gallery
         data-slot="page-column"
       >
         <OpenUiRenderer

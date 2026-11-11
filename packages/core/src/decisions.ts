@@ -308,7 +308,7 @@ export interface ProgramRead {
     width?: number;
   }[];
   cards: DecisionCard[];
-  /** The files its Image pieces show, as written. */
+  /** The files its Image pieces show, as written; a kept block's Video and Audio too. */
   images: string[];
   intro: string;
   sections: { cards: string[]; id: string; title: string }[];
@@ -419,11 +419,15 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     images: [],
     setup: null,
   };
-  if (root?.typeName !== "Decisions") {
+  // A block kept as a page (its root a Column, tsk-330) has no cards: only
+  // the media it shows.
+  if (!(root?.typeName === "Decisions" || root?.typeName === "Column")) {
     return read;
   }
-  read.title = text(root.props.title);
-  read.intro = text(root.props.intro);
+  if (root.typeName === "Decisions") {
+    read.title = text(root.props.title);
+    read.intro = text(root.props.intro);
+  }
   const taken = new Set<string>();
   /** A Decision: its card, in its Section's list, then the media on it and on its options. */
   const decision = (
@@ -464,7 +468,11 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
       decision(props, section);
     } else if (typeName === "Canvas" || typeName === "Preview") {
       read.artifacts.push(artifactOf(typeName, props, card));
-    } else if (typeName === "Image") {
+    } else if (
+      typeName === "Image" ||
+      typeName === "Video" ||
+      typeName === "Audio"
+    ) {
       read.images.push(text(props.file));
     } else if (typeName === "Setup") {
       read.setup = { shape: text(props.shape) };

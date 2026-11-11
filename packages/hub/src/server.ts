@@ -336,6 +336,7 @@ import {
   type MachineFault,
   type MachineProviderLists,
   MCP_PLATFORMS,
+  MEDIA_LIMIT_BYTES,
   MEMORY_ROLES,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -501,6 +502,7 @@ import type {
 } from "@cawco/core/context-filing";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
+import { deliverableKind } from "@cawco/core/deliverables";
 import { detach } from "@cawco/core/detach";
 import { everyOf } from "@cawco/core/every-of";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -525,6 +527,7 @@ import {
   isHubPreview,
   originsFor,
 } from "@cawco/core/hub-previews";
+import { blockFile } from "@cawco/core/inline-blocks";
 import { doing } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
@@ -599,6 +602,7 @@ import { projectWords } from "@cawco/core/words/project";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { type RelaunchFor, relaunchWords } from "@cawco/core/words/relaunch";
 import { spawnWords } from "@cawco/core/words/spawn";
+import { transcriptWords } from "@cawco/core/words/transcript";
 import { turnWords } from "@cawco/core/words/turns";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
@@ -993,6 +997,7 @@ import {
   onFolderCommits,
   projectFolderRoutes,
   projectRoot,
+  readFolderBytes,
   readFolderFile,
 } from "./project-folder";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
@@ -13922,8 +13927,15 @@ export const createServer = (
   /** The most one Image's file may hold. Our bound: a page's pictures load with it. */
   const IMAGE_LIMIT = 2 * 1024 * 1024;
 
-  /** Where a program's Images are read from: its work folder, the project's folder, and on a revision the pictures its page shows and the machine each is read on. */
+  /**
+   * Where a program's Images are read from: its work folder, the project's
+   * folder, and on a revision the pictures its page shows and the machine
+   * each is read on. A kept block's files (`block`, tsk-330) are pictures,
+   * clips and sounds, a relative one in its session's project's folder
+   * (core inline-blocks.ts `blockFile`).
+   */
   interface ImageAt {
+    block?: { projectId: string | null };
     dir?: string | undefined;
     inFolder?: true;
     readOn?: ((file: string) => string | undefined) | undefined;
@@ -13961,12 +13973,31 @@ export const createServer = (
     };
   };
 
+  /** A kept block's file named by its path `path` in its session's project's folder, or why it can't be read there, in a sentence. */
+  const blockFolderFile = (
+    file: string,
+    path: string,
+    projectId: string | null
+  ): Promise<{ bytes: Uint8Array } | string> =>
+    projectId
+      ? readFolderBytes(projectId, path, MEDIA_LIMIT_BYTES).catch(
+          (error: unknown) =>
+            error instanceof FolderRefusal
+              ? error.message
+              : Promise.reject(error)
+        )
+      : Promise.resolve(transcriptWords.blockFileNoProject(file));
+
   /** An Image's file as it stands where its name points, or why it can't be read there, in a sentence. */
   const imageFile = async (
     row: InstanceRow,
     file: string,
     at: ImageAt
   ): Promise<{ bytes: Uint8Array } | string> => {
+    const named = at.block ? blockFile(file) : null;
+    if (named?.on === "folder") {
+      return blockFolderFile(file, named.path, at.block?.projectId ?? null);
+    }
     const where = imagePath(file, at);
     if ("problem" in where) {
       return where.problem;
@@ -14049,6 +14080,12 @@ export const createServer = (
     }
     if (typeof read === "string") {
       return { problem: read };
+    }
+    // A kept block's clip or sound is held to what a machine serves of one
+    // (agent fs.ts), its pictures to a page's.
+    const kind = deliverableKind(file);
+    if (at.block && (kind === "video" || kind === "audio")) {
+      return { bytes: read.bytes };
     }
     return read.bytes.byteLength > IMAGE_LIMIT
       ? {
@@ -14153,9 +14190,12 @@ export const createServer = (
     }
     if (program) {
       // A refusal of the program's is thrown, and answered by the service.
+      const at: ImageAt = isBlockProgram(program.text)
+        ? { ...program, block: { projectId: row.projectId ?? null } }
+        : program;
       const built = await buildProgram(
         program.text,
-        (file) => programImage(row, file, program),
+        (file) => programImage(row, file, at),
         artifact,
         db.decides.kinds()
       );

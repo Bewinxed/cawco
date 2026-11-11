@@ -8,7 +8,7 @@
    * - a post (`*.post.json`): the post card (PostCard);
    * - markdown: the file drawn as a turn's words are (MessageBody);
    * - an image: the image, which opens in the house Lightbox;
-   * - video or audio: the platform's own player;
+   * - video or audio: the platform's own player (MediaPlayer);
    * - anything else: its file row, and Open shows the file itself (the
    *   output's own route, in a tab of its own).
    * Its file row heads it, so every output is one press from the task. A
@@ -30,10 +30,12 @@
   import { track } from "#lib/cawco/track.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
-  import { failureWords, hubRefusal } from "../hub-read";
+  import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { readOutputText } from "../project-tasks";
+  import MediaPlayer from "./MediaPlayer.svelte";
+  import { mediaProblem } from "./media-problem";
   import PostCard from "./PostCard.svelte";
 
   let {
@@ -102,40 +104,28 @@
   });
 
   /**
-   * A picture, video or audio is drawn by the platform from `src`, and the
-   * platform says nothing of why it could not be: on its error the same
-   * `src` is asked once more, to read the hub's refusal into `problem`.
+   * A picture is drawn by the platform from `src`, and the platform says
+   * nothing of why it could not be: on its error the hub is asked why
+   * (media-problem.ts). Video and audio say their own (MediaPlayer).
    */
-  const media = $derived(
-    kind === "image" || kind === "video" || kind === "audio"
-  );
   $effect(() => {
-    if (!media) {
+    if (kind !== "image") {
       return;
     }
     // A new file is tried fresh.
     track(src);
     problem = null;
   });
-  async function mediaFailed() {
-    const at = src;
-    const words = await fetch(at).then(
-      async (response) =>
-        response.ok
-          ? madeWords.notShown(name)
-          : failureWords(
-              await hubRefusal(response, madeWords.notShownThen(name))
-            ),
-      (error: unknown) => failureWords(error)
-    );
-    if (at === src) {
-      problem = words;
-    }
-  }
 
-  /** The element's own error event, held as an attachment: no press on it. */
-  const whenFailed: Attachment<HTMLMediaElement | HTMLImageElement> = (node) =>
-    on(node, "error", mediaFailed);
+  /** The picture's own error event, held as an attachment: no press on it. */
+  const whenFailed: Attachment<HTMLImageElement> = (node) =>
+    on(node, "error", async () => {
+      const at = src;
+      const words = await mediaProblem(at, name);
+      if (at === src) {
+        problem = words;
+      }
+    });
 
   /** The image opens in the Lightbox, out of the thumbnail it was pressed on. */
   let image = $state<HTMLImageElement | null>(null);
@@ -243,27 +233,13 @@
             {@attach whenFailed}
           />
         </button>
-      {:else if kind === "video"}
-        <!-- svelte-ignore a11y_media_has_caption: a task's output carries no caption track; its file is what there is -->
-        <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
-        <video
-          class="block w-full max-h-c-task-output-video-h rounded-sm bg-surface-recess"
-          controls
-          preload="metadata"
+      {:else if kind === "video" || kind === "audio"}
+        <MediaPlayer
+          class="group-data-[kind=video]:max-h-c-task-output-video-h"
+          {kind}
+          {name}
           {src}
-          {@attach whenFailed}
-          in:reveal
-        ></video>
-      {:else if kind === "audio"}
-        <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
-        <audio
-          class="w-full"
-          controls
-          preload="metadata"
-          {src}
-          {@attach whenFailed}
-          in:reveal
-        ></audio>
+        />
       {/if}
     </div>
   {/if}

@@ -97,6 +97,7 @@
   import { provideSessionHere } from "../session-here";
   import { readJson, writeJson } from "../storage";
   import type { Message } from "../types";
+  import { provideBlockSources } from "../views/openui/block-media";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
@@ -108,6 +109,7 @@
     watchedSessions,
   } from "./arrivals.svelte";
   import Behind from "./Behind.svelte";
+  import { transcriptSources } from "./block-sources";
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import ConnectCard from "./ConnectCard.svelte";
@@ -234,6 +236,15 @@
   // An agent's blocks in its replies (tsk-330): drawn by the rows' markdown,
   // their versions read off this conversation.
   provideInlineBlocks(new ConversationBlocks(() => session));
+  // Their pictures, clips, sounds and pages, read from the session's
+  // machine, its project's folder and its artifacts.
+  provideBlockSources(
+    transcriptSources(() => ({
+      instanceId: session.instanceId,
+      machineId: session.machineId,
+      projectId: cawco.instanceIndex.byId.get(session.instanceId)?.projectId,
+    }))
+  );
   provideMarkdownBlocks(TranscriptBlock);
 
   /** One transcript, on screen, being read: `focused` follows `visible`. */

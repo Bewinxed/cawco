@@ -13,6 +13,8 @@
   import Turn from "../turn/Turn.svelte";
   import Who from "../turn/Who.svelte";
   import type { Message } from "../types";
+  import { provideBlockSources } from "../views/openui/block-media";
+  import { type FixturePage, fixtureSources } from "./block-fixture";
   import {
     ConversationBlocks,
     provideInlineBlocks,
@@ -22,12 +24,24 @@
   let {
     replies,
     kept = [],
+    files = {},
+    pages = [],
   }: {
     /** The agent's replies, oldest first. */
     replies: string[];
     /** The artifacts its blocks were kept as, by slug and title. */
     kept?: { slug: string; title: string }[];
+    /** The files its blocks name, by the address each is served from. */
+    files?: Record<string, string>;
+    /** The page artifacts it made. */
+    pages?: FixturePage[];
   } = $props();
+  provideBlockSources(
+    fixtureSources(
+      () => files,
+      () => pages
+    )
+  );
 
   /** Its own session: each story's replies are a conversation of their own. */
   const uid = $props.id();

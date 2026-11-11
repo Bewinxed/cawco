@@ -56,7 +56,7 @@ import {
   SANS_FAMILY,
   undrawn,
 } from "@cawco/core/house-faces";
-import { programLibraryOf } from "@cawco/core/inline-blocks";
+import { blockFile, programLibraryOf } from "@cawco/core/inline-blocks";
 import { unhandled } from "@cawco/core/unhandled";
 import { transcriptWords } from "@cawco/core/words/transcript";
 import {
@@ -659,9 +659,14 @@ const refuseParsed = (
  * code and closing checks: parsed over the block library, holding its data
  * as written (no Query, Mutation or `$variable`), every mistake the parser
  * reports refused in its own words, its words plain and in the house face.
- * It asks nothing, so it has no cards, ids or media to check.
+ * It asks nothing, so it has no cards or ids; each file its Image, Video
+ * and Audio name is one it may show (core `blockFile`), and each Preview
+ * names its artifact whole, as `artifact` resolves it.
  */
-const checkBlock = (program: string): CheckedProgram => {
+const checkBlock = (
+  program: string,
+  artifact: ArtifactNamed | undefined
+): CheckedProgram => {
   const result = blockParser.parse(program);
   refuseParsed(result, {
     library: "block",
@@ -670,9 +675,23 @@ const checkBlock = (program: string): CheckedProgram => {
     state: "A block keeps no $variables: write its values as they are.",
     nothing: `The block draws nothing: it needs root = ${blocksSpec.root}(…), reaching every part of it.`,
   });
+  const read = readProgram(result.root);
+  const whole = wholeArtifacts(program, read, artifact);
+  const problems = [
+    ...read.images.flatMap((file) =>
+      blockFile(file) ? [] : [transcriptWords.blockFileRefused(file)]
+    ),
+    ...whole.problems,
+  ];
+  if (problems.length > 0) {
+    refuse(problems);
+  }
   return {
-    program,
-    read: readProgram(null),
+    program: whole.program,
+    read:
+      whole.program === program
+        ? read
+        : readProgram(blockParser.parse(whole.program).root),
     dropped: droppedIn(result),
   };
 };
@@ -723,7 +742,7 @@ const checkProgram = (
     refuse([unclosed]);
   }
   if (block) {
-    return checkBlock(program);
+    return checkBlock(program, artifact);
   }
   const result = parser.parse(program);
   refuseParsed(result, {
@@ -758,7 +777,11 @@ const checkProgram = (
 
 /** A program read without checks: what the hub draws from a page it already keeps. */
 export const readKept = (program: string): ProgramRead =>
-  readProgram(parser.parse(program).root);
+  readProgram(
+    (programLibraryOf(program) === "block" ? blockParser : parser).parse(
+      program
+    ).root
+  );
 
 /** Each statement of a program by its name, as written. */
 const statementsOf = (program: string): Map<string, string> => {
