@@ -136,6 +136,7 @@
   import { refusals } from "../refusals.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
+  import { span } from "../span";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import {
@@ -143,7 +144,6 @@
     clock,
     type NeedsItem,
     type ProjectMarking,
-    span,
   } from "./home-state.svelte";
   import NeedsMeta from "./NeedsMeta.svelte";
   import NeedsRow from "./NeedsRow.svelte";

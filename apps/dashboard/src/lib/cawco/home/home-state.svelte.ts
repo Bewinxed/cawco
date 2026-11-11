@@ -55,12 +55,10 @@ import {
   type ProjectRow,
 } from "../client.svelte";
 import { connect, INSTALL_PARAM } from "../connect/installs.svelte";
-import { buildConvergence, machineSync, syncNotice } from "../convergence";
-import { machineFaults } from "../fleet-faults";
-import { harnessWords, machineBlocksOf } from "../harness-block.svelte";
+import { buildConvergence } from "../convergence";
 import { hubAuth } from "../hub-auth.svelte";
 import { conversationHref, resolveSessionTitle } from "../links";
-import { signInWarning } from "../machine";
+import { machineVerdict } from "../machine-verdict";
 import { type MarkHue, markHue } from "../mark";
 import { asksHere, onPhone, person, rowAsks } from "../person.svelte";
 import {
@@ -330,22 +328,6 @@ export const clock = {
     return tick;
   },
 };
-
-/** "4m", "1h 12m", "2d": how long, at the grain a glance needs. */
-export function span(ms: number): string {
-  const minutes = Math.max(0, Math.floor(ms / 60_000));
-  if (minutes < 1) {
-    return "now";
-  }
-  if (minutes < 60) {
-    return `${minutes}m`;
-  }
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
-  }
-  return `${Math.floor(hours / 24)}d`;
-}
 
 /* ── Shapes ────────────────────────────────────────────────────────── */
 
@@ -862,55 +844,30 @@ interface MachineException {
   text: string;
 }
 
-/** What is wrong with a machine, in a word or two; `null` when nothing is. */
+/**
+ * What is wrong with a machine, in a word or two; `null` when nothing is.
+ * Read in this order, the first that says something: unreachable; its sync
+ * (until one lands it knows no fleet denials and starts nothing, whatever
+ * its harnesses say); its harness CLIs refused; its sign-ins; its build
+ * behind the hub's; the fleet rows it could not apply. All but its status
+ * and build are its verdict ({@link machineVerdict}): the served board's until the
+ * socket's first snapshot, made from its own row after.
+ */
 function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (machine.status !== "online") {
     return "unreachable";
   }
-  // A machine that never synced, or whose last sync failed or went
-  // unanswered, says so first: until one lands it knows no fleet denials
-  // and starts nothing, whatever its harnesses say; with an older report it
-  // runs on what that report says.
-  const sync = syncNotice(machineSync(machine, clock.now), span);
-  if (sync) {
-    return sync;
-  }
-  // A harness CLI refused here: nothing of it starts on the machine until it
-  // is brought up, from its block or Configure → CLI tools. Each one said:
-  // one never hides another.
-  const blocked = machineBlocksOf(machine);
-  if (blocked.length > 0) {
-    return blocked.map(harnessWords.row).join(" · ");
-  }
-  // Every harness's sign-in words: one never hides another's.
-  const signIn = [
-    signInWarning(machine, "pi"),
-    signInWarning(machine, "opencode"),
-  ]
-    .filter(Boolean)
-    .join(" ");
-  if (signIn) {
-    return signIn;
-  }
-  if (buildConvergence(machine.build, cawco.hubBuild) === "behind") {
-    return "behind hub";
-  }
-  // A server waiting on a sign-in is no fault of the machine's: the
-  // sign-in is the fleet's, said once in the machines card with its Sign in
-  // (fleet-faults.ts `signInsWaiting`), never on each machine's row
-  // (obelisk-of-light read "sync failed" for ElevenLabs' needs-auth alone,
-  // 2026-10-23).
-  const broken = machineFaults(machine.machineId, machine.fleet).filter(
-    (fault) => fault.cause !== "needs-auth"
+  const verdict =
+    cawco.servedVerdictOf(machine.machineId) ??
+    machineVerdict(machine, clock.now);
+  return (
+    verdict.sync ??
+    verdict.blocked ??
+    verdict.signIn ??
+    (buildConvergence(machine.build, cawco.hubBuild) === "behind"
+      ? "behind hub"
+      : verdict.faults)
   );
-  if (broken.length === 0) {
-    return null;
-  }
-  // Something that did not answer in time is slow, not broken: said so only
-  // while that is all there is.
-  return broken.every((fault) => fault.cause === "timed-out")
-    ? "sync slow"
-    : "sync failed";
 }
 
 /* ── The model ─────────────────────────────────────────────────────── */

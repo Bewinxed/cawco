@@ -19,6 +19,7 @@ import type {
 import type { Machine, ProjectRow } from "./client.svelte";
 import { type FleetFault, fleetFaults } from "./convergence";
 import type { Area } from "./home/areas.svelte";
+import { type MachineVerdict, machineVerdict } from "./machine-verdict";
 
 /**
  * A session row's fields the first paint reads: where it is, its kind and
@@ -60,9 +61,11 @@ type FirstPaintRow = Pick<InstanceRow, (typeof ROW_KEYS)[number]>;
  * A machine's fields the first paint reads: who and where it is, its status
  * and build, its pause, and the faults its row says (its update, its last
  * fleet change, what a workspace there lacks). Not its harnesses, its fleet
- * report or each fleet item's converge, the most of a machine's row: the
- * items that didn't set up go as their fault lines read them
- * (`fleetFaults`).
+ * report or each fleet item's converge, the most of a machine's row: what
+ * the first paint reads of those goes as it reads it, made by the page's
+ * own functions here: the items that didn't set up as their fault lines
+ * read them (`fleetFaults`), and what its row says is wrong with it
+ * (`verdict`, the bar's Machines).
  */
 const MACHINE_KEYS = [
   "machineId",
@@ -86,6 +89,8 @@ const MACHINE_KEYS = [
 type FirstPaintMachine = Pick<Machine, (typeof MACHINE_KEYS)[number]> & {
   /** Its fleet items that didn't set up (convergence.ts `fleetFaults`). */
   fleetFaults: FleetFault[];
+  /** What its row says is wrong with it (machine-verdict.ts). */
+  verdict: MachineVerdict;
 };
 
 /** Recent's stored transcripts, the older sessions among them cut as every row is. */
@@ -129,12 +134,14 @@ export function servedBoardOf(read: {
   pulses: Record<string, SessionPulse>;
   stored: StoredRecent;
 }): ServedBoard {
+  const now = Date.now();
   return {
     areas: read.areas,
     instances: read.instances.map(firstPaintRow),
     machines: read.machines.map((machine) => ({
       ...cut(machine, MACHINE_KEYS),
       fleetFaults: fleetFaults(machine.fleetItems),
+      verdict: machineVerdict(machine, now),
     })),
     projects: read.projects,
     pulses: read.pulses,

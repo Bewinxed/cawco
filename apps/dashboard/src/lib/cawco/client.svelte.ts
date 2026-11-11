@@ -222,6 +222,7 @@ import {
   resolveSessionTitle,
   transcriptUrl,
 } from "./links";
+import type { MachineVerdict } from "./machine-verdict";
 import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
@@ -9904,6 +9905,13 @@ export const cawco = {
   /** What the hub is running; `undefined` until its first frame. */
   get hubBuild() {
     return state.hubBuild;
+  },
+  /** What the served board says is wrong with a machine (machine-verdict.ts), until the socket's first snapshot; null after it. */
+  servedVerdictOf(machineId: string): MachineVerdict | null {
+    return (
+      servedLive()?.machines.find((one) => one.machineId === machineId)
+        ?.verdict ?? null
+    );
   },
   /**
    * A machine's fleet items that didn't set up, as its fault lines read
