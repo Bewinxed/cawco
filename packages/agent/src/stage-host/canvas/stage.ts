@@ -78,6 +78,7 @@ import {
   type PageError,
   type Story,
   type SweepStep,
+  storyRefOf,
 } from "@cawco/core/stage";
 import {
   type ClipRead,
@@ -120,6 +121,7 @@ import {
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { graphWords as words } from "@cawco/core/words/graph";
+import { stageRenderWords } from "@cawco/core/words/stage-render";
 import { differences } from "./diff";
 import { tellHolder } from "./embed";
 import { drew, firstWords, lookOf, partsOf, readAnimation } from "./measure";
@@ -2361,8 +2363,7 @@ export function bootStage(page: Page): Mode {
     name: string,
     interaction: Interaction = "rest"
   ): Promise<{ key: string } | { refused: string }> {
-    const cut = name.lastIndexOf(":");
-    const storyName = cut > 0 ? name.slice(cut + 1) : name;
+    const { story: storyName } = storyRefOf(name);
     // Found by the plans the stage wrote into the page: no other section is loaded, so none is drawn for it.
     const holders = holdersOf(page.files, page.plans, name);
     const section =
@@ -2374,7 +2375,7 @@ export function bootStage(page: Page): Mode {
     }
     if (!section) {
       return {
-        refused: `${storyName} is a story of ${holders.length} states files here: name one, ${holders.map((file) => `${file}:${storyName}`).join(" or ")}.`,
+        refused: stageRenderWords.storyInSeveral(storyName, holders),
       };
     }
     // Its read done first: it says which interactions the story reaches.

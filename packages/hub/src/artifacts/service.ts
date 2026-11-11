@@ -230,6 +230,7 @@ import {
   renderSaid,
   type StateAsk,
   specOf,
+  stateAmbiguity,
   stateSaid,
   storiesSaid,
   unseen,
@@ -6546,6 +6547,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ({ report } = opened);
       } catch (error) {
         unreachedWritten(row, error);
+      }
+      // A bare story name two states files export reads no one frame: refused, before any draw, with the `file:Story` names to send.
+      const ambiguous =
+        report && ask.state && stateAmbiguity(report, ask.state.story);
+      if (ambiguous) {
+        throw new ArtifactRefusal(409, ambiguous);
       }
       // A draw asked of a stage that answered: refused in its own words when it can't be made.
       if (opened && (ask.render || ask.png)) {

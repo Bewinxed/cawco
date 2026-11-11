@@ -4274,6 +4274,7 @@ export interface components {
             interaction?: "rest" | "hover" | "focus" | "pressed";
             /** @enum {string} */
             scheme?: "light" | "dark";
+            /** @description Its export; `file:Story` where two states files export it. */
             story: string;
             width?: number;
           };

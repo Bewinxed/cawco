@@ -24,6 +24,7 @@ import {
   INTERACTIONS,
   SERVE_COMMAND_LIMIT,
   STORY_FILE,
+  storyRefOf,
 } from "@cawco/core/stage";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
@@ -58,6 +59,13 @@ export type ArtifactTool = (typeof ARTIFACT_TOOLS)[number];
 
 /** A story's export name in a CSF file: `Roomy`. */
 export const STORY_NAME = /^[A-Z][A-Za-z0-9_]{0,99}$/u;
+/** Whether `name` is a story a state read takes: `Story`, or `file:Story` naming the states file that exports it. */
+export const isStateStory = (name: string): boolean => {
+  const { file, story } = storyRefOf(name);
+  return (
+    STORY_NAME.test(story) && (file === undefined || STORY_FILE.test(file))
+  );
+};
 /** Args one write may set. Our bound: a component's props. */
 export const ARGS_LIMIT = 100;
 
@@ -312,10 +320,10 @@ export const artifactUpdate = {
 export const artifactRead = {
   name: "artifact_read",
   description:
-    "Read the person's picks, notes and values on an artifact artifact_list lists: each choice " +
-    "picked or not yet. `since`: the seq your last read gave. No id: your newest. `png` adds its picture, pins and all, `width` px wide; " +
-    "a preview or a page drawn in `state`, its link's `?query` or `#hash`. `save` keeps it at a .png path in your clone or `$TMPDIR/`. " +
-    "A canvas: its outline and what the person changed. A component: its frames, moves, stories, `dials` and `tuned`; `state` adds a frame's style delta, " +
+    "Read the person's picks, notes and values on an artifact artifact_list lists: each choice, " +
+    "picked or not. `since`: the seq your last read gave. No id: your newest. `png` adds its picture with pins, `width` px wide; " +
+    "a preview or a page drawn in `state`, its link's `?query` or `#hash`. `save` keeps it as a .png in your clone or $TMPDIR. " +
+    "A canvas: its outline and the person's changes. A component: its frames, moves, stories, `dials` and `tuned`; `state` adds a frame's style delta, " +
     '`detail: "story"` a story\'s args, `render` draws it now, `verify` asks the design verifier.',
   input: {
     id: id.optional(),
@@ -334,7 +342,11 @@ export const artifactRead = {
       .union([
         z.string(),
         z.object({
-          story: z.string(),
+          story: z
+            .string()
+            .describe(
+              "Its export; `file:Story` where two states files export it."
+            ),
           interaction: z.enum(INTERACTIONS).optional(),
           scheme: z.enum(["light", "dark"]).optional(),
           width: z.number().int().positive().optional(),

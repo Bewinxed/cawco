@@ -43,13 +43,19 @@ import {
   THUMBNAIL_BYTES,
 } from "./service";
 import { PNG_SIGNATURE } from "./sync";
-import { ARGS_LIMIT, PATCH_LIMIT, STORY_NAME, WORKSPACE_ID } from "./tools";
+import {
+  ARGS_LIMIT,
+  isStateStory,
+  PATCH_LIMIT,
+  STORY_NAME,
+  WORKSPACE_ID,
+} from "./tools";
 
 /** A read's frame, from its JSON; refused with the shape when it is none. */
 const STATE_ASK = z.object({
   interaction: z.enum(INTERACTIONS).optional(),
   scheme: z.enum(["light", "dark"]).optional(),
-  story: z.string().regex(STORY_NAME),
+  story: z.string().refine(isStateStory),
   width: z.number().positive().optional(),
 });
 /** A preview's or a page's state: the query or hash its own link for that state adds. */
@@ -206,7 +212,7 @@ const SHAPES: Record<string, string> = {
   create: CREATE_SHAPE,
   update:
     'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
-  read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
+  read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story: "Story" or, where two states files export it, "file:Story", interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
 
@@ -488,7 +494,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           ),
           story: t.Optional(storyName),
           // JSON: a frame { story, interaction?, scheme?, width? }, or a state link's "?query" or "#hash".
-          state: t.Optional(t.String({ maxLength: 400 })),
+          state: t.Optional(t.String({ maxLength: 1400 })),
           // Where the picture is kept in the session's workspace.
           save: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
           render: t.Optional(t.BooleanString()),

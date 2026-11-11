@@ -42,6 +42,13 @@ export const stageRenderWords = {
   notAsked: (others: readonly SectionUndrawn[]) =>
     `This state read drew its own section alone; the others stand as their last draw left them, each drawn alone by a state read of its first story: ${others.map((one) => `${one.file}${one.first ? ` (${one.first})` : ""}`).join(", ")}.`,
   /**
+   * A state read naming `story` bare where states files `files` each export
+   * it: the `file:Story` form `state.story` takes, one per file, ready to
+   * send (hub routes.ts `STATE_ASK` accepts each).
+   */
+  storyInSeveral: (story: string, files: readonly string[]) =>
+    `${story} is a story of ${files.length} states files on this canvas. Name the one to read with its file in state.story: ${files.map((file) => `{ story: "${file}:${story}" }`).join(" or ")}.`,
+  /**
    * A state read whose own section did not draw within the limit: where it
    * stood, and what to do, as its section alone needs longer than a read has.
    */

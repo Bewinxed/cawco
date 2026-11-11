@@ -7982,7 +7982,7 @@
             "in": "query",
             "required": false,
             "schema": {
-              "maxLength": 400,
+              "maxLength": 1400,
               "type": "string"
             }
           },

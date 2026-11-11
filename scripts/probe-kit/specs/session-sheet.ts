@@ -28,6 +28,12 @@
  * 2g. That state read (`render: true, png: true, state`) answers its
  *    picture and its frame drawn within the limit, the first section named
  *    as left to its last draw.
+ * 2h. A canvas of two states files that both export `Shared`: a state read
+ *    naming `Shared` bare is refused with the `file:Story` name of each, the
+ *    tool's own words (core stage-render.ts `storyInSeveral`).
+ * 2i. The read sent with exactly that second name, `png` and a frame width
+ *    asked, answers that file's frame (its title, never the other's) at that
+ *    width, and its picture.
  * 3. A dashboard's raw `stageEnsure` control, naming a place id and a folder
  *    the hub never resolved (the same project, copied elsewhere), is refused
  *    at the hub's relay as the hub's to send, and never reaches the machine:
@@ -218,6 +224,7 @@ import {
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
+import { stageRenderWords } from "../../../packages/core/src/words/stage-render";
 import { storyReadWords } from "../../../packages/core/src/words/story-read";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
@@ -241,6 +248,16 @@ const MIXED = "src/Mixed.stories.js";
 const REFUSAL = "this session runs in no workspace";
 /** Legs 2f and 2g: two states files whose sweep runs past the render's limit, each eight moves whose play never ends. */
 const SLOW = ["src/SlowA.stories.js", "src/SlowB.stories.js"] as const;
+/** Legs 2h and 2i: two states files that both export `Shared`, each its own title. */
+const TWINS = ["src/TwinA.stories.js", "src/TwinB.stories.js"] as const;
+/** A states file exporting `Shared`, its card titled `title`. */
+const twinStories = (title: string): string =>
+  `import Card from "./Card.svelte";
+
+export default { component: Card, args: { title: "${title}" } };
+
+export const Shared = { args: {} };
+`;
 /** A states file of `prefix`'s eight moves from `Still`, each play waiting forever: the page's bound ends each (runtime.ts `PLAY_LIMIT_MS`). */
 const slowStories = (prefix: string): string =>
   `import Card from "./Card.svelte";
@@ -303,6 +320,8 @@ export const Imported = { ...fixture("Imported") };
 `,
   [SLOW[0]]: slowStories("SlowA"),
   [SLOW[1]]: slowStories("SlowB"),
+  [TWINS[0]]: twinStories("Twin A"),
+  [TWINS[1]]: twinStories("Twin B"),
 };
 
 /** A SvelteKit project, committed as a checkout of its own: its tsconfig extends the one Kit's sync writes into node_modules, as the dashboard's does. */
@@ -427,7 +446,7 @@ const componentFiles = (said: string): string[] | undefined => {
 
 /** What a detailed component canvas answer says of its render: the sections it did not draw, its moves, the frame asked, its picture. */
 interface RenderRead {
-  frame?: { state?: string; story?: string };
+  frame?: { state?: string; story?: string; text?: string; width?: number };
   moves?: { error?: { message: string }; to: string }[];
   png?: string | null;
   render?: { undrawn?: SectionUndrawn[] };
@@ -797,7 +816,56 @@ const componentLegs = async (
   );
 
   await pastTheLimit(kit, call);
+  await twinStates(kit, call);
 };
+
+/** Legs 2h and 2i: a story two states files export, refused bare with the name to send, then read by exactly that name. */
+async function twinStates(
+  kit: Kit,
+  call: (n: string, name: string, input: object) => Promise<string>
+): Promise<void> {
+  const made = await call("2h", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "twins",
+    file: [...TWINS],
+    does: "judge",
+    title: "Probe twin cards",
+    ask: "Judge the two cards that share a state",
+  });
+  const twinsId = made.match(ID)?.[1];
+  if (!twinsId) {
+    kit.check("2h: the canvas of two states files is made", false, short(made));
+    return;
+  }
+  const bare = await call("2h", "mcp__cawco__artifact_read", {
+    id: twinsId,
+    png: true,
+    state: { story: "Shared" },
+  });
+  kit.check(
+    "2h: a state read naming a story two states files export is refused with the file:Story name of each",
+    bare.includes(stageRenderWords.storyInSeveral("Shared", TWINS)),
+    short(bare)
+  );
+  const [, second] = TWINS;
+  const width = 480;
+  const named = await call("2i", "mcp__cawco__artifact_read", {
+    id: twinsId,
+    png: true,
+    render: true,
+    state: { story: `${second}:Shared`, width },
+  });
+  const posed = renderRead(named);
+  kit.check(
+    "2i: the read sent with the refusal's file:Story name answers that file's frame at the width asked, with its picture",
+    posed.png === "beside" &&
+      posed.frame?.story === "Shared" &&
+      posed.frame.width === width &&
+      (posed.frame.text ?? "").includes("Twin B") &&
+      !(posed.frame.text ?? "").includes("Twin A"),
+    `png ${String(posed.png).slice(0, 20)}; frame ${JSON.stringify(posed.frame ?? null).slice(0, 200)}; ${short(named)}`
+  );
+}
 
 /** Legs 2f and 2g: a canvas whose sweep runs past the render's limit answers what it drew within it, and a state read draws its own section. */
 async function pastTheLimit(

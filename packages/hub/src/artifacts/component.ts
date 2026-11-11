@@ -23,6 +23,7 @@ import {
   type SheetWeight,
   type StageError,
   type StageErrorKind,
+  storyRefOf,
 } from "@cawco/core/stage";
 import { stageRenderWords } from "@cawco/core/words/stage-render";
 
@@ -88,6 +89,16 @@ const frameLine = (frame: FrameRender) => ({
   ...(frame.error ? { error: frame.error } : {}),
 });
 
+/** The sections of `report` holding story `name` (`Story`, or `file:Story` naming one states file). */
+const holdersIn = (report: RenderReport, name: string): SectionRender[] => {
+  const { file, story } = storyRefOf(name);
+  return report.sections.filter(
+    (section) =>
+      (file === undefined || section.file === file) &&
+      section.frames.some((frame) => frame.story === story)
+  );
+};
+
 /**
  * The frames a read lists, at most {@link FRAMES_LISTED}: a state read's
  * from the asked state (`Story`, or `file:Story`) on, in the section that
@@ -98,18 +109,8 @@ function framesListed(
   report: RenderReport,
   state: string | undefined
 ): { cut?: string; listed: FrameRender[] } {
-  const cut = state?.lastIndexOf(":") ?? -1;
-  const [inFile, story] =
-    state && cut > 0
-      ? [state.slice(0, cut), state.slice(cut + 1)]
-      : [undefined, state];
-  const holder = story
-    ? report.sections.find(
-        (section) =>
-          (inFile === undefined || section.file === inFile) &&
-          section.frames.some((frame) => frame.story === story)
-      )
-    : undefined;
+  const story = state ? storyRefOf(state).story : undefined;
+  const holder = state ? holdersIn(report, state)[0] : undefined;
   if (holder) {
     const from = holder.frames.findIndex((frame) => frame.story === story);
     const listed = holder.frames.slice(from, from + FRAMES_LISTED);
@@ -221,23 +222,42 @@ export interface StateAsk {
   width?: number;
 }
 
+/**
+ * Why `report` can't answer a state read of story `name`: a bare name two
+ * or more of its states files export, in the words that name each
+ * `file:Story` to send instead; null when it names one.
+ */
+export const stateAmbiguity = (
+  report: RenderReport,
+  name: string
+): string | null => {
+  const holders = holdersIn(report, name);
+  return holders.length > 1
+    ? stageRenderWords.storyInSeveral(
+        storyRefOf(name).story,
+        holders.map((section) => section.file)
+      )
+    : null;
+};
+
 /** One frame's computed-style delta from rest, the transitions it fires, where its elements are written, and its parts. */
 export function stateSaid(report: RenderReport, ask: StateAsk) {
   const interaction = ask.interaction ?? "rest";
-  const frames = report.sections
-    .flatMap((section) => section.frames)
-    .filter(
-      (one) =>
-        one.story === ask.story &&
-        one.interaction === interaction &&
-        (!ask.scheme || one.scheme === ask.scheme) &&
-        (!ask.width || one.width === ask.width)
-    );
+  const { story } = storyRefOf(ask.story);
+  const held = holdersIn(report, ask.story).flatMap(
+    (section) => section.frames
+  );
+  const frames = held.filter(
+    (one) =>
+      one.story === story &&
+      one.interaction === interaction &&
+      (!ask.scheme || one.scheme === ask.scheme) &&
+      (!ask.width || one.width === ask.width)
+  );
   const [frame] = frames;
   if (!frame) {
-    const drawn = report.sections
-      .flatMap((section) => section.frames)
-      .filter((one) => one.story === ask.story)
+    const drawn = held
+      .filter((one) => one.story === story)
       .map((one) => one.interaction);
     return {
       story: ask.story,

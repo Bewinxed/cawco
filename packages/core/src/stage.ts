@@ -310,15 +310,23 @@ export const STAGE_RENDER_MS = 90_000;
 /** The canvas page's query naming the one state a stage's render is asked for (`Story`, or `file:Story`): the page sweeps that state's section alone ({@link sweptFiles}). */
 export const RENDER_STATE_PARAM = "state";
 
+/** A story as an agent names it: `Story`, or `file:Story` naming the states file that exports it. */
+export const storyRefOf = (
+  name: string
+): { file: string | undefined; story: string } => {
+  const cut = name.lastIndexOf(":");
+  return cut > 0
+    ? { file: name.slice(0, cut), story: name.slice(cut + 1) }
+    : { file: undefined, story: name };
+};
+
 /** The states files of `files` whose plan has story `name` (`Story`, or `file:Story` naming one file). */
 export const holdersOf = (
   files: readonly string[],
   plans: Record<string, SectionPlan>,
   name: string
 ): string[] => {
-  const cut = name.lastIndexOf(":");
-  const [inFile, story] =
-    cut > 0 ? [name.slice(0, cut), name.slice(cut + 1)] : [undefined, name];
+  const { file: inFile, story } = storyRefOf(name);
   return files.filter(
     (file) =>
       (inFile === undefined || file === inFile) &&
