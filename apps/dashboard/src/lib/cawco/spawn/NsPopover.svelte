@@ -195,6 +195,7 @@
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         preventOverflowTextSelection={false}
+        strategy="fixed"
         data-ns-pop
         data-fit={fit || undefined}
         {align}

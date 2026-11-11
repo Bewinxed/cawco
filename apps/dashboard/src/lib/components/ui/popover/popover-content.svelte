@@ -142,6 +142,14 @@
        pointerdown inside it and again at pointerup, and each write restyles
        the whole page (3,700 elements, 35-50 ms in Chromium on a session with
        a component canvas open). */
+    /* Fixed, not absolute: a floating layer's open and close motion carries
+       it past the window's foot (a menu rising from a bar at the bottom
+       starts a menu's height below it), and placed absolutely it lengthened
+       the document for those frames: a scrollbar came and went, the whole
+       page moved 10px sideways twice per open, and focus moving into the
+       menu scrolled the page to it. A fixed layer never adds to the
+       document's scroll. */
+    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
   }: PopoverPrimitive.ContentProps &
@@ -230,6 +238,7 @@
 <PopoverPortal {...portalProps}>
   <PopoverPrimitive.Content
     {preventOverflowTextSelection}
+    {strategy}
     {align}
     class={cn(
       floatingSurface({ motion }),

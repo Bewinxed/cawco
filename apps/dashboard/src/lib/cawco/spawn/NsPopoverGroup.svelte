@@ -111,6 +111,7 @@
         <Popover.Content
           data-ns-pop
           preventOverflowTextSelection={false}
+          strategy="fixed"
           align={shown.align}
           class={cn("ns-theme", glidePopoverVariants())}
           collisionPadding={inset}

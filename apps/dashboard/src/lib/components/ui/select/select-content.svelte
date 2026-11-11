@@ -23,6 +23,8 @@
     preventScroll = false,
     forceMount = false,
     /* Off: see popover-content.svelte. */
+    /* Fixed: see popover-content.svelte. */
+    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
   }: WithoutChild<SelectPrimitive.ContentProps> & {
@@ -50,6 +52,7 @@
 <SelectPortal {...portalProps}>
   <SelectPrimitive.Content
     {preventOverflowTextSelection}
+    {strategy}
     class={cn(
       floatingSurface(),
       "relative isolate z-(--layer-float) max-h-(--bits-select-content-available-height) min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",

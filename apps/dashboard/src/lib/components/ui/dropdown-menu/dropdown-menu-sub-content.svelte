@@ -32,6 +32,8 @@
     width,
     min,
     /* Off: see popover-content.svelte. */
+    /* Fixed: see popover-content.svelte. */
+    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
   }: Omit<DropdownMenuPrimitive.SubContentProps, "side" | "collisionPadding"> &
@@ -50,6 +52,7 @@
 <DropdownMenuPortal {...portalProps}>
   <DropdownMenuPrimitive.SubContent
     {preventOverflowTextSelection}
+    {strategy}
     class={cn(
       floatingSurface(),
       "relative z-(--layer-float) max-h-(--bits-menu-content-available-height) w-auto min-w-36 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",

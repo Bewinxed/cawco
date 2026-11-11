@@ -35,6 +35,8 @@
     frame,
     pad,
     /* Off: see popover-content.svelte. */
+    /* Fixed: see popover-content.svelte. */
+    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
   }: Omit<ContextMenuPrimitive.SubContentProps, "side" | "collisionPadding"> &
@@ -53,6 +55,7 @@
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.SubContent
     {preventOverflowTextSelection}
+    {strategy}
     class={cn(
       floatingSurface(),
       "relative z-(--layer-float) max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",

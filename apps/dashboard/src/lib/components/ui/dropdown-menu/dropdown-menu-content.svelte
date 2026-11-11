@@ -60,6 +60,8 @@
     child: callerChild,
     children,
     /* Off: see popover-content.svelte. */
+    /* Fixed: see popover-content.svelte. */
+    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
   }: DropdownMenuPrimitive.ContentProps &
@@ -93,6 +95,7 @@
 <DropdownMenuPortal {...portalProps}>
   <DropdownMenuPrimitive.Content
     {preventOverflowTextSelection}
+    {strategy}
     {align}
     class={cn(
       floatingSurface({ motion }),

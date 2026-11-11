@@ -23,6 +23,8 @@
     child: callerChild,
     children,
     /* Off: see popover-content.svelte. */
+    /* Fixed: see popover-content.svelte. */
+    strategy = "fixed",
     preventOverflowTextSelection = false,
     ...restProps
   }: ContextMenuPrimitive.ContentProps &
@@ -44,6 +46,7 @@
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.Content
     {preventOverflowTextSelection}
+    {strategy}
     class={cn(
       floatingSurface({ motion }),
       "relative z-(--layer-float) min-w-48 origin-(--bits-context-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
