@@ -6,10 +6,13 @@
    * suggestion is judged in the routines' own. A state with no routine
    * names the chips the empty state offers and Caw able to start; one where
    * he can't says why. `pressed` presses Caw's chip once it is drawn, as
-   * the person would.
+   * the person would. Caw stands in at rest (`lead`), with no head to
+   * sit down in.
    */
+  import { conversationWords } from "@cawco/core/words/project-conversation";
   import { routinesWords } from "@cawco/core/words/routines";
   import { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
+  import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
   import { PROJECT } from "./routines-fixture";
   import ViewRoutines from "./ViewRoutines.svelte";
@@ -26,6 +29,20 @@
     /** Caw's chip pressed: its ask in the composer, unsent. */
     pressed?: boolean;
   } = $props();
+
+  // His seat as the page's CawLead holds it: on, at rest, nothing moving
+  // (as decides/preview/SetupFixture stands him).
+  const lead = {
+    holds: true,
+    inPanel: false,
+    open: false,
+    seat: () => () => undefined,
+    sentence: conversationWords.status.ready,
+    shown: true,
+    status: "idle",
+  } as unknown as CawLead;
+  /** His outro to the head's seat: there is no head in this frame. */
+  const sitDown = () => ({ duration: 0 });
 
   const blocks = new ProjectBlocks(
     () => PROJECT.id,
@@ -78,6 +95,8 @@
   <ViewRoutines
     {blocks}
     {canTalk}
+    {lead}
+    {sitDown}
     cawProblem={canTalk ? null : "Caw's machine is away in this frame."}
     project={PROJECT}
     {starters}

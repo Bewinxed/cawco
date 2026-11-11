@@ -6,6 +6,7 @@
   import { connectWords } from "@cawco/core/words/connect";
   import { routinesWords as words } from "@cawco/core/words/routines";
   import { untrack } from "svelte";
+  import type { TransitionConfig } from "svelte/transition";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
   import BlockPage, {
     type BlockItem,
@@ -20,6 +21,8 @@
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
+  import CawSeat from "#lib/cawco/project/CawSeat.svelte";
+  import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import { startConversation } from "#lib/cawco/project/conversation.js";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -54,7 +57,9 @@
    * With no routine yet it offers to start one (The Empty Starts Work Rule):
    * starters written for the project from what it repeats or waits on over
    * the session Composer to Caw (words alone), whose words start a
-   * conversation in the project. A starter puts its words in the composer, unsent. Where Caw
+   * conversation in the project, Caw standing as its mark on the block's
+   * axis with the title, the line, the chips and the composer. A starter
+   * puts its words in the composer, unsent. Where Caw
    * can't start, the way by hand: Create routine, the routine form
    * (RoutineForm) in the empty state's place. Where Caw can start, the
    * block's head offers Create routine beside the empty state; with
@@ -136,7 +141,13 @@
     blocks,
     viewItems,
     onform,
+    lead,
+    sitDown,
   }: {
+    /** The project's Caw: he stands as the empty page's mark (CawSeat at 80). */
+    lead: CawLead;
+    /** His seat's outro as he leaves the empty page for the head's (ProjectPage). */
+    sitDown: (node: HTMLElement) => TransitionConfig;
     /** The routine form opened: the page clears what would stand over it (a phone's Caw sheet). */
     onform?: () => void;
     /** The project: its id and its name. */
@@ -856,27 +867,34 @@
     class="relative h-(--ask-h) w-full flex-none"
     style:--ask-h="calc({askFoot}px + var(--space-4))"
   >
-    <Composer
-      fleet={composerFleet}
-      agentName="Caw"
-      attach={false}
-      draft={askDraft}
-      onfoot={(foot) => {
-        askFoot = foot.stack;
-      }}
-      onstop={() => undefined}
-      onsubmit={(text) => {
-        detach(ask(text), "ask");
-      }}
-      placeholder={words.placeholder}
-      sendError={askError}
-    />
+    {@render composer(false)}
   </div>
+{/snippet}
+
+<!-- The composer itself; `flush` in the empty state, where it stands in
+     the block's flow as wide as the chips' column. -->
+{#snippet composer(flush: boolean)}
+  <Composer
+    fleet={composerFleet}
+    agentName="Caw"
+    attach={false}
+    draft={askDraft}
+    onfoot={(foot) => {
+      askFoot = foot.stack;
+    }}
+    onstop={() => undefined}
+    onsubmit={(text) => {
+      detach(ask(text), "ask");
+    }}
+    placeholder={words.placeholder}
+    sendError={askError}
+    {flush}
+  />
 {/snippet}
 
 {#snippet routineRows(routine: Routine)}
   {@const rule = sorted[0]?.id === routine.id ? undefined : "top"}
-  {@const lead = LEAD[leadOf(routine)]}
+  {@const rowLead = LEAD[leadOf(routine)]}
   {@const line = scheduleLine(routine)}
   {@const last = lastOf(routine)}
   {@const next = nextOf(routine)}
@@ -905,10 +923,10 @@
           <Table.Cell class="w-(--col-state)" {rule} variant="list-opens">
             <span
               data-slot="lead"
-              aria-label={lead.said}
+              aria-label={rowLead.said}
               class="grid w-c-row-lead place-items-center text-ink-muted lead-expiring:text-status-attn-glyph lead-paused:text-ink-subtle"
               data-lead={leadOf(routine)}
-              role="img"><lead.glyph class="size-icon-md" /></span
+              role="img"><rowLead.glyph class="size-icon-md" /></span
             >
           </Table.Cell>
           <Table.Cell {rule} variant="list-opens">
@@ -1098,63 +1116,83 @@
 
 {#snippet routinesBody()}
   {#if empty}
-    <div data-slot="starters" class="w-full max-w-c-starters-w p-space-3">
+    <div data-slot="starters" class="w-full p-space-3">
       {#if making}
         <!-- Create routine: the form in the empty state's place. -->
-        {@render routineForm()}
+        <div class="max-w-c-starters-w">{@render routineForm()}</div>
       {:else if canTalk}
-        <EmptyState
-          actionWidth="fill"
-          icon={IconClock}
-          line={words.emptyCaw(project.name)}
-          title={words.empty}
-        >
-          {#snippet action()}
-            <!-- The starters as the kit's option chips,
-                 a press putting its words in the composer under them, unsent. -->
-            <div class="flex flex-col gap-space-3">
-              {#if starters.length > 0 || offered}
-                <ul
-                  data-slot="routine-starters"
-                  aria-label={words.startersLabel}
-                  class={chipsVariants({
-                    class:
-                      "m-0 list-none px-(--starters-inset) py-0 max-desk:px-space-3",
-                  })}
-                  style:--starters-inset="calc((100% - var(--c-composer-w)) / 2)"
-                >
-                  {#each starters as starter (starter.text)}
-                    {@render chip(starter.glyph, starter.text, () =>
-                      pick(starter.text)
-                    )}
-                  {/each}
-                  {#if offered}
-                    <!-- Caw's suggestion, after the project's own. -->
-                    {@render chip("routine", words.trimAsk, suggest)}
-                  {/if}
-                </ul>
-              {/if}
-              {@render askCaw()}
-            </div>
-          {/snippet}
-        </EmptyState>
+        <!-- Caw stands as the mark, and he, the title, the line, the chips
+             and his composer share the block's axis (DESIGN.md, The Caw
+             Stands On The Axis Rule), as the empty board and Decisions do. -->
+        <div data-slot="caw-empty" class="mx-auto w-full max-w-c-starters-w">
+          <EmptyState
+            actionWidth="fill"
+            axis
+            line={words.emptyCaw(project.name)}
+            title={words.empty}
+          >
+            {#snippet mark()}
+              <div
+                data-slot="caw-80"
+                class="mb-space-3 grid justify-items-center"
+                data-share="caw:{project.id}"
+                out:sitDown|global
+              >
+                <CawSeat
+                  {lead}
+                  projectId={project.id}
+                  projectName={project.name}
+                  size={80}
+                />
+              </div>
+            {/snippet}
+            {#snippet action()}
+              <!-- The starters as the kit's option chips, a press putting its
+                   words in the composer under them, unsent. -->
+              <div class="flex w-full flex-col gap-space-3">
+                {#if starters.length > 0 || offered}
+                  <ul
+                    data-slot="routine-starters"
+                    aria-label={words.startersLabel}
+                    class={chipsVariants({
+                      class: "m-0 list-none justify-center p-0",
+                    })}
+                  >
+                    {#each starters as starter (starter.text)}
+                      {@render chip(starter.glyph, starter.text, () =>
+                        pick(starter.text)
+                      )}
+                    {/each}
+                    {#if offered}
+                      <!-- Caw's suggestion, after the project's own. -->
+                      {@render chip("routine", words.trimAsk, suggest)}
+                    {/if}
+                  </ul>
+                {/if}
+                {@render composer(true)}
+              </div>
+            {/snippet}
+          </EmptyState>
+        </div>
       {:else}
         <!-- Caw makes routines and can't start (The Empty Starts Work
              Rule's second sentence): the line says what the page is for, his
              reason stands in its own line over the way by hand, the routine
              form in this place, as every can't-start empty state has it. -->
-        <EmptyState
-          icon={IconClock}
-          line={words.emptyWhat(project.name)}
-          title={words.empty}
-        >
-          {#snippet action()}
-            <CantStart
-              byHand={createByHand}
-              reason={cawProblem ?? CAW_NO_MACHINE}
-            />
-          {/snippet}
-        </EmptyState>
+        <div class="max-w-c-starters-w">
+          <EmptyState
+            icon={IconClock}
+            line={words.emptyWhat(project.name)}
+            title={words.empty}
+          >
+            {#snippet action()}
+              <CantStart
+                byHand={createByHand}
+                reason={cawProblem ?? CAW_NO_MACHINE}
+              />
+            {/snippet}
+          </EmptyState>
+        </div>
       {/if}
     </div>
   {:else}
@@ -1248,7 +1286,8 @@
         making = false;
         askDraft.focusWanted = true;
       }
-      pick(words.connectSourceAsk);
+      // The page's own words, no starter's: its send tells no outcome.
+      askDraft.ask(words.connectSourceAsk);
     }}
     reason={cawProblem ?? CAW_NO_MACHINE}
     size="sm"

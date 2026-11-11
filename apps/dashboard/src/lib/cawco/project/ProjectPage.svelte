@@ -2155,6 +2155,7 @@
       {blocks}
       {canTalk}
       cawProblem={lead.problem}
+      {lead}
       onform={() => {
         // A phone's Caw is a sheet over the page's foot: the routine form
         // the reader opened stands clear of it, his seat brings him back.
@@ -2163,6 +2164,7 @@
         }
       }}
       project={{ id: project.id, name: project.name }}
+      {sitDown}
       starters={routineStarters}
       viewItems={viewItemsOf("routines")}
     />
