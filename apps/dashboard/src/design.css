@@ -654,9 +654,18 @@
   & :is([data-glass-at="trailing"], [data-glass-at="only"]) {
     --r-end: var(--r-inner);
   }
-  /* An item whose card hangs from the glass (the glass `data-joined`, the
-     item `data-open`) is square at its foot, running on into the card. */
-  &[data-joined] [data-glass-at][data-open] {
+  /* An item whose card or menu hangs from the glass (the glass
+     `data-joined`, the item open by either of the kit's two ways of saying
+     it, as the `data-open` variant reads them: a popover's or menu's
+     trigger says `data-state="open"`, a BarItem's own `open` says
+     `data-open`) is square at its foot, running on into what it opened.
+     Read by `data-open` alone, an open More kept its rounded trailing
+     corner over the foot its `::after` drew (the variant's match). */
+  &[data-joined]
+    [data-glass-at]:is(
+      [data-state="open"],
+      [data-open]:not([data-open="false"])
+    ) {
     --r-foot: 0px;
   }
 }
