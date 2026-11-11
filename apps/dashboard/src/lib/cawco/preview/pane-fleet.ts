@@ -48,8 +48,8 @@ export interface PaneFleet {
    * no browser, or its machine has reported none for that key.
    */
   browser: (instanceId: string) => ListedBrowser | null;
-  /** Closes the session's panel. */
-  closePreview: (instanceId: string) => Promise<void>;
+  /** Closes the session's panel in this tab alone (closed-here.ts). */
+  closePreview: (instanceId: string) => void;
   /**
    * The session's own composer beside the pane, where an empty state's ask
    * goes unsent (empty-asks.ts): its agent by name and the ask; undefined

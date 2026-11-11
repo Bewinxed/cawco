@@ -870,16 +870,9 @@ export class CanvasRoom {
       return;
     }
     this.#hold(canvas);
-    try {
-      await closePreview(session);
-    } catch (error) {
-      stage.pinned = null;
-      this.draft.canvas = null;
-      this.#letGoStage();
-      stage.standAt("panel");
-      this.error = `The canvas couldn't leave the panel: ${errorOf(error)}. It stays docked.`;
-      return;
-    }
+    // The panel goes in this tab alone (closed-here.ts): another tab or
+    // device showing the session keeps the canvas docked in its panel.
+    closePreview(session);
     if (canvas.folded) {
       stage.pinned = null;
       stage.standAt(null);

@@ -23,7 +23,6 @@ import type { FsEntry, FsPayload } from "@cawco/core/protocol";
 import { ArtifactSessionHeardSchema } from "#lib/cawco/stored-shapes.js";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
-import { deletePreview } from "../artifact-api";
 import { newId } from "../id";
 import { rowHref } from "../links";
 import { TRY_AGAIN, unansweredWords } from "../unanswered";
@@ -139,12 +138,13 @@ export class ArtifactSession implements PaneFleet {
 
   sessionHref = (instanceId: string): string => rowHref(instanceId);
 
-  closePreview = async (instanceId: string): Promise<void> => {
-    await deletePreview(instanceId);
-    if (instanceId === this.#instanceId && this.#preview) {
-      this.#preview = { ...this.#preview, state: "closed" };
-    }
-  };
+  /**
+   * Closes nothing: the tab shows its own artifact (hub server.ts
+   * `tabTarget`), never its session's panel. Its own tab's Close goes back
+   * to the session (PreviewPane `backToSession`), and a task's stage, inset,
+   * has no Close.
+   */
+  closePreview = (): void => undefined;
 
   readonly folders: FolderReader = {
     list: (machineId, path) => this.#fs<FsEntry[]>(machineId, "list", path),

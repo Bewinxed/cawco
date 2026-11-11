@@ -127,7 +127,7 @@ const run = async (kit: Kit) => {
     fleet.api<{ id: string }>(
       hubRequest("POST /api/instances/:id/artifacts", { path: { id }, body })
     );
-  /** The person's Close of `id`'s panel, as its head's Close sends it. */
+  /** `id`'s panel closed on the hub, every view of it (the iOS app's Close); the dashboard's Close is its tab's own (preview/closed-here.ts). */
   const close = async (id: string) => {
     await fetchHub(
       fetch,

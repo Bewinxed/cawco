@@ -332,15 +332,15 @@
   let reload = $state(0);
   /**
    * What last went wrong, and what trying again means: the frame's own
-   * errors (a capture the page refused) reload the frame; a refused close
-   * asks again. A page's own send the hub refused, and a field the hub's
-   * bounds refused, have no way back here: the page sends again from its
-   * own button, and says a field's problem under the field; the band goes
-   * once the page is heard from again.
+   * errors (a capture the page refused) reload the frame. A page's own send
+   * the hub refused, and a field the hub's bounds refused, have no way back
+   * here: the page sends again from its own button, and says a field's
+   * problem under the field; the band goes once the page is heard from
+   * again.
    */
   let failure = $state<{
     message: string;
-    again: "reload" | "close" | null;
+    again: "reload" | null;
   } | null>(null);
   /**
    * An act of the pane's own the hub refused (a show from the artifacts'
@@ -3873,19 +3873,9 @@
       folded,
     };
   }
-  let closing = $state(false);
-  async function close() {
-    closing = true;
-    try {
-      await fleet.closePreview(instanceId);
-    } catch (error) {
-      failure = {
-        message: failureWords(error),
-        again: "close",
-      };
-    } finally {
-      closing = false;
-    }
+  /** Close: the panel goes in this tab alone (closed-here.ts). */
+  function close() {
+    fleet.closePreview(instanceId);
   }
   /** What a component artifact's design graph hands the head: its state's title, its steps, its view, its components (graph-head.ts). */
   let graphHead = $state<GraphHead | null>(null);
@@ -4596,8 +4586,6 @@
   <SideSurface
     of="preview"
     mode={isCanvas || isBrowser ? undefined : mode}
-    closeFailed={failure?.again === "close"}
-    {closing}
     items={headItems}
     label="Preview"
     onclose={ownTab ? backToSession : close}
@@ -5204,15 +5192,6 @@
           onclick={retry}
           pending={retrying}
           pendingLabel="Reloading…"
-          size="sm"
-          variant="outline"
-        />
-      {:else if failure?.again === "close"}
-        <Button
-          label={commonWords.tryAgain}
-          onclick={close}
-          pending={closing}
-          pendingLabel="Closing…"
           size="sm"
           variant="outline"
         />

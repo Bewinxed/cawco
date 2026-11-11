@@ -88,7 +88,7 @@
   }
   const fleet: PaneFleet = {
     browser: () => null,
-    closePreview: () => Promise.resolve(),
+    closePreview: () => undefined,
     folders: {
       list: () =>
         Promise.resolve({ kind: "answered", value: [] } as Bounded<FsEntry[]>),

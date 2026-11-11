@@ -136,7 +136,7 @@ const run = async (kit: Kit) => {
     );
     return (await response.json()) as { showing: { id: string } | null };
   };
-  /** The person's Close (artifact-api.ts `deletePreview`). */
+  /** The person's Close on the iOS app (CawCoCore Previews.swift `closePreview`): the hub's show goes. The dashboard's Close is its tab's own (preview/closed-here.ts) and tells the hub nothing. */
   const personCloses = async () => {
     await (
       await fetchHub(

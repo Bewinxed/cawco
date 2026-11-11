@@ -33501,6 +33501,9 @@ export const createServer = (
           }
         }
       )
+      // The iOS app's Close (CawCoCore Previews.swift `closePreview`): the
+      // show goes for every view. The dashboard's Close is its tab's own
+      // (dashboard preview/closed-here.ts) and sends nothing.
       .delete("/api/instances/:id/preview", ({ params }) =>
         closePreview(params.id)
       )

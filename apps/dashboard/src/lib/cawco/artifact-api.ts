@@ -349,14 +349,3 @@ export async function findArtifact(
   }
   return response.json();
 }
-
-/** Closes the session's panel; each store marks its own copy closed once the hub took it. */
-export async function deletePreview(instanceId: string): Promise<void> {
-  await ok(
-    await hubFetch(
-      hubRequest("DELETE /api/instances/:id/preview", {
-        path: { id: instanceId },
-      })
-    )
-  );
-}

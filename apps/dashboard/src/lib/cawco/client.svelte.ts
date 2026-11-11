@@ -187,7 +187,6 @@ import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 import { page as servedPage } from "$app/state";
 import { activityOf, runningSubagents, sessionActivity } from "./activity";
-import { deletePreview } from "./artifact-api";
 import { Keyed, Pulse, type PulseReading, unlessSame } from "./board.svelte";
 import { currentClientId } from "./client-id";
 import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
@@ -218,6 +217,7 @@ import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { type HeldPlan, handlePlanMessage } from "./plan";
 import { presenceAgain, presenceClientId } from "./presence";
+import { closedHere, closeHere } from "./preview/closed-here";
 import { send as askHub } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type CommandRefusal, refusals } from "./refusals.svelte";
@@ -3447,9 +3447,11 @@ function handleFrame(frame: FramePayload): void {
     heardFrame(`preview:${frame.instanceId}`);
     const previous = state.previews[frame.instanceId];
     const sameRevision = previous?.revision === frame.revision;
+    // A show this tab closed stays closed here (closed-here.ts).
+    const drawn = closedHere(frame.instanceId, frame);
     const next = {
       ...(sameRevision ? previous : {}),
-      ...frame,
+      ...drawn,
     };
     if (!equal(previous, next)) {
       state.previews[frame.instanceId] = next;
@@ -3460,7 +3462,7 @@ function handleFrame(frame: FramePayload): void {
     // Decisions, SideSheet's snap all follow `previewRequests`).
     if (
       state.liveRead &&
-      frame.state === "open" &&
+      drawn.state === "open" &&
       (previous?.state !== "open" || !sameRevision)
     ) {
       revealPreview(frame.instanceId);
@@ -6893,17 +6895,17 @@ export function revealPreview(instanceId: string): void {
 }
 
 /**
- * Closes the session's preview. The hub's `closed` frame goes out before its
- * answer whenever it had one shown; the answer closes it here only when no
- * preview frame came since, so a preview shown again meanwhile stays.
+ * Closes the session's panel in this tab alone (closed-here.ts): every other
+ * tab and device keeps it open, and the agent's next show opens it here
+ * again.
  */
-export async function closePreview(instanceId: string): Promise<void> {
-  const mark = readLeaves();
-  await deletePreview(instanceId);
+export function closePreview(instanceId: string): void {
   const previous = state.previews[instanceId];
-  if (previous && !heardSince(`preview:${instanceId}`, mark)) {
-    state.previews[instanceId] = { ...previous, state: "closed" };
+  if (previous?.state !== "open") {
+    return;
   }
+  closeHere(instanceId, previous.revision);
+  state.previews[instanceId] = { ...previous, state: "closed" };
 }
 
 /**
