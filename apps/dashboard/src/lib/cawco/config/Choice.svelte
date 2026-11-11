@@ -2,7 +2,10 @@
   /**
    * A choice between a few named options: the kit's segmented control, on one
    * line (DESIGN.md, Segmented: one groove, never two rows). Where the row is
-   * narrower than its segments it scrolls sideways under the house edge
+   * narrower than its segments, the segments first give up the room at their
+   * sides, down to their words (the kit item's `fit`), so a phone's row holds
+   * six short options whole: Effort's Unset to max at 390. Only a row
+   * narrower than the words alone scrolls sideways under the house edge
    * fade; the scroller pads into an equal negative margin, so every
    * segment's touch area stays whole (DESIGN.md, The 44 Touch Rule).
    */
@@ -59,7 +62,7 @@
 >
   <ToggleGroup.Root
     aria-label={label}
-    class="flex-none"
+    class="min-w-0 flex-initial"
     onValueChange={(next) => {
       if (next) {
         onchange(next);
@@ -69,7 +72,7 @@
     {value}
   >
     {#each options as option (option.value)}
-      <ToggleGroup.Item disabled={option.disabled} value={option.value}>
+      <ToggleGroup.Item disabled={option.disabled} fit value={option.value}>
         {option.label}
       </ToggleGroup.Item>
     {/each}
