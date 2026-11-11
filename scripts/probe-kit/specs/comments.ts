@@ -1307,7 +1307,7 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
       `the stroke over #second kept no group: ${state}; the pane's well ${JSON.stringify(outer)}; said ${on.said.join(" | ") || "nothing"}`
     );
   }
-  await dragFromIcon(on, frame, 0, 40);
+  await dragFromIcon(on, frame, -90, 40);
   // The radial's Comment opens the composer on the ink: nothing written until Comment.
   const composer = on.page.locator(COMPOSE);
   const opened = await composer

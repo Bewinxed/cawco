@@ -582,7 +582,7 @@ const PICTURES_BODY_MAX =
 
 /** The longest page address a post names. Our call. */
 const URL_MAX = 2048;
-/** The longest mark id a picture names: a pin's or a stroke group's. Our call. */
+/** The longest mark id a picture names: a pin's. Our call. */
 const MARK_ID_MAX = 100;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/u;

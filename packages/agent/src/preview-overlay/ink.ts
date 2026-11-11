@@ -57,7 +57,6 @@ import {
   changedAnchor,
   newId,
   type PageAnchor,
-  type Pin,
   type PinnedElement,
   readPins,
   wordsFollow,
@@ -365,14 +364,20 @@ const inOrder = (els: Element[]) =>
     a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
   );
 
-/** An inline element (a bold word, a code span) as the block it stands in: what a line across words marks. */
+/**
+ * A run of words (a bold word, a code span, an icon's inline svg) as the
+ * element it stands in: what a line across words marks. Only `display:
+ * inline` climbs: a button, a chip or a badge (`inline-flex`,
+ * `inline-block`, `inline-grid`) is a thing of its own, so a stroke across
+ * it marks it. Read by the prefix, a button inside a card climbed past
+ * itself to the card, and the drawing named the card.
+ */
 const blockOf = (el: Element): Element => {
   let at = el;
   while (
     at.parentElement &&
-    (at.ownerDocument.defaultView ?? window)
-      .getComputedStyle(at)
-      .display.startsWith("inline")
+    (at.ownerDocument.defaultView ?? window).getComputedStyle(at).display ===
+      "inline"
   ) {
     at = at.parentElement;
   }
@@ -1050,7 +1055,6 @@ export function startInk(deps: InkDeps): Ink {
       })),
       at: open?.at ?? at,
       over: over.map((el) => deps.anchorOf(el)),
-      ...(open?.illustration ? { illustration: true as const } : {}),
       ...(onOwnScroll
         ? { scrolled: { x: anchor.scrollLeft, y: anchor.scrollTop } }
         : {}),
@@ -1585,12 +1589,8 @@ export function startInk(deps: InkDeps): Ink {
     if (!group) {
       return;
     }
-    const pinAs = (kind: Pin["kind"]) =>
-      deps.pins().pinInk(group, kind, under ?? elementsUnder(id));
     const picks: Record<Pick, () => void> = {
-      annotate: () => pinAs("annotation"),
-      comment: () => pinAs("comment"),
-      illustrate: () => ink.set(id, { ...group, illustration: true }),
+      comment: () => deps.pins().pinInk(group, under ?? elementsUnder(id)),
       erase: () => {
         ink.delete(id);
         const at = new Date().toISOString();

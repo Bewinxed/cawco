@@ -71,6 +71,7 @@
   import { previewWords } from "@cawco/core/words/preview";
   import { sheetWords } from "@cawco/core/words/sheet";
   import { shellWords } from "@cawco/core/words/shell";
+  import { Portal } from "bits-ui";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { z } from "zod";
@@ -210,6 +211,7 @@
   import ThreadSheet from "./ThreadSheet.svelte";
   import {
     type ComposeTarget,
+    type PageMessage,
     type PreviewPinAt,
     pageMessage,
     previewBox,
@@ -2679,10 +2681,10 @@
     }
     composing = null;
     if (nextDraft?.hasContent) {
-      post({ type: "cawco:compose-park" });
+      postComposer({ type: "cawco:compose-park" });
       keepDraftAt(keptDraft ? { ...keptDraft, parked: true } : null);
     } else {
-      post({ type: "cawco:compose-cancel" });
+      postComposer({ type: "cawco:compose-cancel" });
       keepDraftAt(null);
     }
   }
@@ -2745,6 +2747,71 @@
       parked: kept.parked,
     });
   }
+  /** The page's words on the comment being written ({@link heardComposer}). */
+  type ComposerMessage = PageMessage & {
+    type: "cawco:compose" | "cawco:compose-at" | "cawco:comment-result";
+  };
+  const COMPOSER_MESSAGES: readonly string[] = [
+    "cawco:compose",
+    "cawco:compose-at",
+    "cawco:comment-result",
+  ] satisfies ComposerMessage["type"][];
+  const isComposerMessage = (
+    message: PageMessage
+  ): message is ComposerMessage => COMPOSER_MESSAGES.includes(message.type);
+  /**
+   * To the page the comment being written stands on: a canvas's is its
+   * stage's frame (canvas/stage.svelte.ts), which the pane's own `iframe`
+   * never is; any other page's, the pane's.
+   */
+  function postComposer(message: object) {
+    if (isCanvas) {
+      stage?.post(message);
+    } else {
+      post(message);
+    }
+  }
+  /**
+   * The page's word on the comment being written: a press (or a radial's
+   * Comment on ink) opened its composer, where its pill stands, and its
+   * answer to Comment. The pane's page says it through `receive`, a
+   * canvas's through its stage (CanvasStages, `SlotActions.composer`).
+   */
+  function heardComposer(message: ComposerMessage) {
+    switch (message.type) {
+      case "cawco:compose": {
+        // A press on the page (or a radial's Comment) opened a comment's composer: nothing is written yet.
+        const said = previewCompose(message);
+        if (!said) {
+          return;
+        }
+        if (openPin) {
+          closeCard();
+        }
+        loadKit();
+        dropPeek();
+        // The press was the page's, which the host never hears: the page's last input is it.
+        lastInput.current = message.via === "key" ? "key" : "pointer";
+        composing = {
+          at: composing?.at ?? null,
+          chain: said.chain,
+          chosen: said.chosen,
+          error: "",
+          sending: false,
+        };
+        keepComposed(said, message);
+        break;
+      }
+      case "cawco:compose-at":
+        if (composing) {
+          composing.at = previewPinAt(message);
+        }
+        break;
+      case "cawco:comment-result":
+        heardComment(message);
+        break;
+    }
+  }
   /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once; `held`, kept to send with the others (core `ThreadEntry.held`). */
   function comment(text: string, held = false) {
     if (!(composing && nextDraft)) {
@@ -2753,7 +2820,7 @@
     const said = saidIn(nextDraft, text);
     composing.error = "";
     composing.sending = true;
-    post({ type: "cawco:comment", ...said, held });
+    postComposer({ type: "cawco:comment", ...said, held });
   }
   /** The page's answer to Comment: written, the composer goes; refused, the words are back in it with why. */
   function heardComment(message: Record<string, unknown>) {
@@ -3361,36 +3428,12 @@
         openCard(id, message.via === "key" ? "key" : "pointer");
         break;
       }
-      case "cawco:compose": {
-        // A press on the page (or a radial's Comment) opened a comment's composer: nothing is written yet.
-        const said = previewCompose(message);
-        if (!said) {
-          return;
-        }
-        if (openPin) {
-          closeCard();
-        }
-        loadKit();
-        dropPeek();
-        // The press was the page's, which the host never hears: the page's last input is it.
-        lastInput.current = message.via === "key" ? "key" : "pointer";
-        composing = {
-          at: composing?.at ?? null,
-          chain: said.chain,
-          chosen: said.chosen,
-          error: "",
-          sending: false,
-        };
-        keepComposed(said, message);
-        break;
-      }
+      case "cawco:compose":
       case "cawco:compose-at":
-        if (composing) {
-          composing.at = previewPinAt(message);
-        }
-        break;
       case "cawco:comment-result":
-        heardComment(message);
+        if (isComposerMessage(message)) {
+          heardComposer(message);
+        }
         break;
       case "cawco:pin-chain": {
         const id = previewPinId(message.id);
@@ -3399,7 +3442,10 @@
           cardParent = {
             id,
             name:
-              parent && parent.anchor.selector !== "body"
+              parent &&
+              !(
+                "selector" in parent.anchor && parent.anchor.selector === "body"
+              )
                 ? pinName({
                     anchor: parent.anchor,
                     elements: parent.elements,
@@ -3782,6 +3828,13 @@
       one.actions.panel = {
         undock: () => giveBack(false),
         done: () => giveBack(true),
+        // A Comment on the canvas's ink opens this panel's composer, as a page's does.
+        composer: (data) => {
+          const message = pageMessage(data);
+          if (message && isComposerMessage(message)) {
+            heardComposer(message);
+          }
+        },
       };
       one.standAt("panel");
       one.changed();
@@ -3863,6 +3916,32 @@
   let frameBox = $state<{ h: number; w: number; x: number; y: number } | null>(
     null
   );
+  /**
+   * A canvas's box on the screen while a comment on its ink is written: its
+   * stage's fixed layer (CanvasStages), over the panel's slot, which the
+   * composer's room stands over.
+   */
+  let canvasBox = $state<{
+    h: number;
+    w: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  $effect(() => {
+    const node = isCanvas && composing ? stage?.el : undefined;
+    if (!node) {
+      canvasBox = null;
+      return;
+    }
+    const measure = () => {
+      const box = node.getBoundingClientRect();
+      canvasBox = { x: box.left, y: box.top, w: box.width, h: box.height };
+    };
+    const watch = frameObserver(measure);
+    watch.observe(node);
+    measure();
+    return () => watch.disconnect();
+  });
   $effect(() => {
     const frameNode = iframe;
     const wellNode = well;
@@ -4290,13 +4369,33 @@
       draft={nextDraft}
       focus
       onchange={() => drafts?.changed(NEXT_COMMENT)}
-      onchoose={(index) => post({ type: "cawco:compose-target", index })}
+      onchoose={(index) =>
+        postComposer({ type: "cawco:compose-target", index })}
       onhold={(text) => comment(text, true)}
       onsubmit={(text) => comment(text)}
       placeholder={commentWords.composeHint}
       sendError={composing.error}
       sending={composing.sending}
     />
+  {/if}
+{/snippet}
+
+<!-- The composer beside its pill, in a room `w` by `h`: the pane's over a
+     page, or one over a canvas's own layer. -->
+{#snippet composerCard(w: number, h: number)}
+  {#if composing && kit && nextDraft}
+    <PinFloat
+      bare
+      box={composing.at?.box ?? null}
+      label={commentWords.comment}
+      mark={composing.at?.mark ?? null}
+      room={{ w, h }}
+      sheet={floatSheet}
+      slot="pin-composer"
+      bind:float={composerFloat}
+    >
+      {@render composerBody()}
+    </PinFloat>
   {/if}
 {/snippet}
 
@@ -4989,19 +5088,8 @@
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     {@attach measureRoom}
   >
-    {#if composing && kit && nextDraft && !pageHung}
-      <PinFloat
-        bare
-        box={composing.at?.box ?? null}
-        label={commentWords.comment}
-        mark={composing.at?.mark ?? null}
-        room={{ w: roomW, h: roomH }}
-        sheet={floatSheet}
-        slot="pin-composer"
-        bind:float={composerFloat}
-      >
-        {@render composerBody()}
-      </PinFloat>
+    {#if !(pageHung || isCanvas)}
+      {@render composerCard(roomW, roomH)}
     {/if}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
          another's never moves to it. -->
@@ -5072,6 +5160,24 @@
       {/key}
     {/if}
   </div>
+  {#if isCanvas && canvasBox}
+    <!-- A canvas stands on its own layer over the panel (CanvasStages):
+         the composer of a Comment on its ink stands in a room over that
+         layer, in the canvas's box, so a place the canvas says is a place
+         on it. -->
+    <Portal>
+      <div
+        data-slot="canvas-pin-room"
+        class="@container fixed z-(--layer-float) pointer-events-none left-(--frame-x) top-(--frame-y) w-(--frame-w) h-(--frame-h)"
+        style:--frame-x={`${canvasBox.x}px`}
+        style:--frame-y={`${canvasBox.y}px`}
+        style:--frame-w={`${canvasBox.w}px`}
+        style:--frame-h={`${canvasBox.h}px`}
+      >
+        {@render composerCard(canvasBox.w, canvasBox.h)}
+      </div>
+    </Portal>
+  {/if}
   {#if failure || paneRefused}
     <!-- The pane's own line: a frame's failure, or an act of the pane's the
          hub refused, kept through a reload. -->

@@ -206,10 +206,22 @@ export function previewPinAt(value: unknown): PreviewPinAt | null {
 /** The most of a press's chain the page may offer (overlay page.ts `CHAIN_MOST` and the page as a whole). */
 const CHAIN_MAX = 8;
 
-/** One target the composer's chip offers: what it stands on, as a pin would hold it (named by core pin-name.ts). */
+/** One target the composer's chip offers: what it stands on, as a pin would hold it (named by core pin-name.ts): a page's element, or a canvas's by id. */
 export interface ComposeTarget {
-  anchor: Record<string, unknown> & { selector: string };
+  anchor:
+    (Record<string, unknown> & { selector: string }) | { element: string };
   elements: unknown[];
+}
+
+/** What a composer's target stands on: a page's element by its selector, or a canvas's element by its id (a Comment on its ink); null for neither. */
+function composeAnchor(value: unknown): ComposeTarget["anchor"] | null {
+  const anchor = record(value);
+  if (typeof anchor?.selector === "string") {
+    return { ...anchor, selector: anchor.selector };
+  }
+  return typeof anchor?.element === "string"
+    ? { element: anchor.element }
+    : null;
 }
 
 /**
@@ -223,13 +235,11 @@ export function previewCompose(
   const chain = Array.isArray(message.chain)
     ? message.chain.slice(0, CHAIN_MAX).flatMap((one) => {
         const target = record(one);
-        const anchor = record(target?.anchor);
-        return anchor &&
-          typeof anchor.selector === "string" &&
-          Array.isArray(target?.elements)
+        const anchor = composeAnchor(target?.anchor);
+        return anchor && Array.isArray(target?.elements)
           ? [
               {
-                anchor: anchor as ComposeTarget["anchor"],
+                anchor,
                 elements: (target.elements as unknown[]).slice(0, 4),
               },
             ]

@@ -3401,21 +3401,16 @@ function pinPicture(id: string): Promise<string | null> {
 
 /**
  * The pictures of the person's marks the session has not heard: each unsent
- * pin's, and each stroke group's no pin stands on. Each was drawn when its
- * mark was made; only one whose mark moved since is drawn again.
+ * pin's (a stroke group no pin stands on never goes, so it has none). Each
+ * was drawn when its mark was made; only one whose mark moved since is
+ * drawn again.
  */
 async function markPictures(): Promise<MarkPicture[]> {
-  const doc = artifact.doc();
-  const all = [...readPins(doc).values()];
-  const owed = all.filter(pinUnsent).sort((a, b) => a.number - b.number);
-  const pinned = new Set(all.map((pin) => pin.ink));
-  const loose = [...(doc.getMap("ink") as DocMap<InkGroup>).values()].filter(
-    (group) => !(group.sentAt || pinned.has(group.id))
-  );
-  const marks = [
-    ...loose.map((group) => ({ id: group.id, png: groupPicture(group.id) })),
-    ...owed.map((pin) => ({ id: pin.id, png: pinPicture(pin.id) })),
-  ].slice(0, COMMENT_LIMITS.pictures);
+  const marks = [...readPins(artifact.doc()).values()]
+    .filter(pinUnsent)
+    .sort((a, b) => a.number - b.number)
+    .map((pin) => ({ id: pin.id, png: pinPicture(pin.id) }))
+    .slice(0, COMMENT_LIMITS.pictures);
   const pictures: MarkPicture[] = [];
   for (const { id, png } of marks) {
     const drawn = await png;

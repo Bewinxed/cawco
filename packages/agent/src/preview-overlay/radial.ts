@@ -8,9 +8,12 @@ import { solarGlyphs } from "./glyphs" with { type: "macro" };
  * When the pen lifts, a 24px raised circle with the pen glyph arrives at the
  * stroke's last point as a floating tag does (rising 8px, from 0.96, over
  * `--dur-panel`) and leaves the same way (`--dur-exit`) two breaths later or
- * when the next stroke starts. A press on it that moves opens the menu: four
- * 90° sectors round the icon, outer radius 56px, in the panel material with
- * the control edge, each with its glyph and, outside the ring, its word.
+ * when the next stroke starts. A press on it that moves opens the menu: two
+ * 180° sectors round the icon, Comment over Erase, outer radius 56px, in the
+ * panel material with the control edge, each with its glyph and, outside the
+ * ring, its word. Ink with no comment stays on the page and never reaches
+ * the session (the owner's pick, 2026-11-11: "Only when you comment on it"),
+ * so the menu offers nothing that sends a drawing without words.
  * The sector under the pointer takes `surface-fill` and its word
  * `selected-ink`; releasing on a sector picks it, releasing within 20px of
  * the centre picks nothing. A tap opens the same menu and a second tap
@@ -26,15 +29,15 @@ import { hostTokens } from "./tokens" with { type: "macro" };
 const GLYPHS = solarGlyphs();
 const TOKENS = hostTokens();
 
-export type Pick = "annotate" | "comment" | "illustrate" | "erase";
+export type Pick = "comment" | "erase";
 
 /** The sectors, clockwise from the top: what each picks, its glyph, its word. */
 const SECTORS: { pick: Pick; glyph: GlyphName; word: string }[] = [
-  { pick: "annotate", glyph: "pin", word: "Annotate" },
   { pick: "comment", glyph: "comment", word: "Comment" },
-  { pick: "illustrate", glyph: "gallery", word: "Illustrate" },
   { pick: "erase", glyph: "eraser", word: "Erase" },
 ];
+/** Each sector's sweep, degrees: the ring shared evenly. */
+const SPAN = 360 / SECTORS.length;
 
 /** The radial menu's numbers (the artifact panel's canvas and ink). */
 const ICON = 24;
@@ -56,9 +59,7 @@ const ICON_IN = 12;
 /** Each sector's word, by its edge nearest the ring: where it stands and which way it runs. */
 const WORDS_AT = [
   { x: 0, y: -(OUTER + WORD_GAP), translate: "-50% -100%" },
-  { x: OUTER + WORD_GAP, y: 0, translate: "0 -50%" },
   { x: 0, y: OUTER + WORD_GAP, translate: "-50% 0" },
-  { x: -(OUTER + WORD_GAP), y: 0, translate: "-100% -50%" },
 ] as const;
 
 const svg = (body: string, size = 16) =>
@@ -79,8 +80,8 @@ const sectorPath = (from: number, to: number) => {
   return `M ${f(ox0)} ${f(oy0)} A ${OUTER} ${OUTER} 0 0 1 ${f(ox1)} ${f(oy1)} L ${f(ix1)} ${f(iy1)} A ${INNER} ${INNER} 0 0 0 ${f(ix0)} ${f(iy0)} Z`;
 };
 
-/** Each sector's centre angle: Annotate up, then clockwise. */
-const centreOf = (index: number) => -90 + index * 90;
+/** Each sector's centre angle: Comment up, then clockwise. */
+const centreOf = (index: number) => -90 + index * SPAN;
 
 const CHROME = `
   .ink-icon {
@@ -291,7 +292,8 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
       return null;
     }
     const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
-    return (((Math.round((deg + 90) / 90) % 4) + 4) % 4) as number;
+    const count = SECTORS.length;
+    return ((Math.round((deg + 90) / SPAN) % count) + count) % count;
   };
 
   const heat = (index: number | null) => {
@@ -356,8 +358,8 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     const ring = document.createElement("div");
     ring.className = "ink-ring";
     const paths = SECTORS.map((sector, index) => {
-      const from = centreOf(index) - 45;
-      const to = centreOf(index) + 45;
+      const from = centreOf(index) - SPAN / 2;
+      const to = centreOf(index) + SPAN / 2;
       const [gx, gy] = point(GLYPH_R, centreOf(index));
       return `<path class="ink-sector" data-index="${index}" data-pick="${sector.pick}" data-from="${from}" data-to="${to}" data-inner="${INNER}" data-outer="${OUTER}" d="${sectorPath(from, to)}"/><g class="ink-glyph" transform="translate(${(gx - 8).toFixed(2)} ${(gy - 8).toFixed(2)})">${svg(GLYPHS[sector.glyph])}</g>`;
     }).join("");

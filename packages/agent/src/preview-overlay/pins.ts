@@ -222,12 +222,8 @@ export interface Pins {
   marks: (live: Set<string>, unread: Set<string>) => void;
   /** Pin `id`'s thread opened in the host (`cawco:pin-open`) by a press on the page, the pin as this page holds it with it; `made`, for one the apps' tap just made. */
   open: (id: string, made?: boolean) => void;
-  /** A pin on an ink group: an annotation is written; a comment's composer opens on it. */
-  pinInk: (
-    group: InkGroup,
-    kind: Pin["kind"],
-    elements: PinnedElement[] | string[]
-  ) => void;
+  /** A comment on an ink group: its composer opens on it. */
+  pinInk: (group: InkGroup, elements: PinnedElement[] | string[]) => void;
   /** Pin `id` placed again on `el` at the viewport's `x`, `y`: out of the moved tray. */
   placeAgain: (id: string, el: Element, x: number, y: number) => void;
   /** Where on `el`'s box the viewport's `x`, `y` lands, as fractions. */
@@ -1876,10 +1872,10 @@ export function startPins(deps: PinsDeps): Pins {
       ...[...placed.values()].map(({ el }) => el),
       ...(drafted ? [drafted.el] : []),
     ],
-    pinInk: (group, kind, elements) => {
+    pinInk: (group, elements) => {
       // A comment is composed first, but the apps' radial Comment pins the
       // ink at once and opens its card (until tsk-59).
-      if (kind === "comment" && !deps.appCommenting()) {
+      if (!deps.appCommenting()) {
         const el =
           ("selector" in group.anchor ? deps.locate(group.anchor)?.el : null) ??
           document.body;
@@ -1889,7 +1885,7 @@ export function startPins(deps: PinsDeps): Pins {
       const pin: Pin = {
         id: newId(),
         number: nextNumber(),
-        kind,
+        kind: "comment",
         anchor: group.anchor,
         at: new Date().toISOString(),
         by: "person",
@@ -1897,10 +1893,6 @@ export function startPins(deps: PinsDeps): Pins {
         ink: group.id,
         thread: [],
       };
-      if (kind !== "comment") {
-        write(pin);
-        return;
-      }
       write({ ...pin, title: pinName(pin) });
       open(pin.id, true);
     },

@@ -75,6 +75,12 @@
       case "cawco:remove":
         actions?.remove?.();
         break;
+      // A Comment on the canvas's ink: the composer is its slot holder's.
+      case "cawco:compose":
+      case "cawco:compose-at":
+      case "cawco:comment-result":
+        actions?.composer?.(event.data);
+        break;
       case SHORTCUT_MESSAGE: {
         // A shell combo the canvas left unhandled: the shell's, as from its own keys.
         const name = previewShortcut(event.data);

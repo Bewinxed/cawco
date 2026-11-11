@@ -476,7 +476,7 @@ const decisionChecks = async (
   );
 };
 
-/** Check 7: Annotate pins a group; its pill goes as its strokes scroll out of view. */
+/** Check 7: a Comment pins a group; its pill goes as its strokes scroll out of view. */
 const pillChecks = async (kit: Kit, page: Page, at: string) => {
   const hand = handOn(page);
   await hand.open(`${at}/decision`);
@@ -491,6 +491,13 @@ const pillChecks = async (kit: Kit, page: Page, at: string) => {
     -90,
     40,
     "html"
+  );
+  // The radial's Comment opens the composer on the ink; its host's words write the pin (page.ts `writeDraft`).
+  await page.evaluate(() =>
+    window.postMessage(
+      { type: "cawco:comment", text: "This one." },
+      location.origin
+    )
   );
   await hand.settle(500);
   const pills = () =>

@@ -1,28 +1,30 @@
 /**
  * Pins and their threads on an artifact (Projects spec §5.7 "Comments on
  * previews", §5.10; tsk-3): every mark the person makes on an artifact is a
- * numbered pin in its doc, written in parts (below). An annotation stands on a stroke
- * group's ink (core ink.ts); a comment stands on the element the person
- * tapped in Comment mode, or on ink by the radial menu's Comment, and carries
- * a thread the person and the agent both write. A comment is written whole,
+ * numbered pin in its doc, written in parts (below). A comment stands on the
+ * element the person tapped in Comment mode, or on a stroke group's ink
+ * (core ink.ts) by the radial menu's Comment, and carries a thread the
+ * person and the agent both write. Ink reaches the session only with its
+ * comment (the owner's pick, 2026-11-11: "Only when you comment on it"): a
+ * group no comment stands on stays on the page and is never delivered. A comment is written whole,
  * its pin and its first entry in one transaction ({@link commentOn}): a
  * press on the page writes nothing until there are words or attachments to
  * keep. It reaches the session by itself a few seconds after it is written
  * (the owner's pick, "Go by themselves", 2026-10-23): the hub delivers
  * everything the session hasn't heard as one message carrying the pins
- * themselves ({@link pinSection}, {@link inkSection}), then stamps each pin
- * `sentAt` and `heard` ({@link pinSaid}), each entry and stroke group
- * `sentAt`. A delivery no one took marks each pin it carried `notSent`, with
+ * themselves ({@link pinSection}), then stamps each pin `sentAt` and
+ * `heard` ({@link pinSaid}), each entry and the stroke group a comment
+ * stands on `sentAt`. A delivery no one took marks each pin it carried `notSent`, with
  * why, until a delivery carries it; the person's Try again sends one alone
  * ({@link SendBody} `pins`). An entry's pictures, texts and files are
  * stored on the hub by reference ({@link CommentAttachment}).
  *
  * A comment or a reply may be held instead (the owner, 2026-11-05: one key
  * sends it, another holds it, one act sends everything held): its entry is
- * marked `held` in the doc, and no delivery carries it ({@link withoutHeld}),
- * nor a stroke group drawn after it, until the person's Send all clears
- * every mark in one write with their note ({@link sendHeld}); the next
- * delivery, the same one as ever, then carries them all with the note
+ * marked `held` in the doc, and no delivery carries it ({@link withoutHeld})
+ * until the person's Send all clears every mark in one write with their
+ * note ({@link sendHeld}); the next delivery, the same one as ever, then
+ * carries them all with the note
  * ({@link heldNoteOf}). Held entries are the doc's, so they outlive a reload,
  * the page and the panel.
  *
@@ -71,7 +73,6 @@ import type { DocMap, MapDoc } from "./doc-maps";
 import { type FileSpot, fileSpotDetail, readFileSpot } from "./file-spot";
 import { fnv1a } from "./fnv1a";
 import type { PreviewElement } from "./index";
-import type { InkGroup } from "./ink";
 import type { Interaction } from "./stage";
 import { fileViewerWords } from "./words/file-viewer";
 
@@ -115,8 +116,7 @@ export const COMMENT_LIMITS = {
 
 /**
  * A picture the page draws of one of the person's marks: the page cropped
- * round it, its ink on it. `mark` is a pin's id (its element, or its ink)
- * or a stroke group's id (ink no pin stands on).
+ * round it, its ink on it. `mark` is a pin's id (its element, or its ink).
  */
 export interface MarkPicture {
   mark: string;
@@ -371,7 +371,7 @@ export interface Pin {
   id: string;
   /** The stroke group it stands on, when it stands on ink. */
   ink?: string;
-  kind: "annotation" | "comment";
+  kind: "comment";
   /** Its element is gone from the page since then; it waits in the moved tray. */
   movedAt?: string;
   /**
@@ -408,6 +408,22 @@ export interface Pin {
 
 /** A pin's head (`pins`): what it is, written once as it is made. */
 type PinHead = Pick<Pin, "at" | "by" | "id" | "kind" | "number" | "title">;
+
+/**
+ * A pin's head as a doc may hold it: the radial menu's Annotate wrote
+ * `"annotation"` (a pin on ink with no words) until the owner's pick of
+ * 2026-11-11 ("Only when you comment on it") removed it. Such a pin reads as
+ * a comment with no note ({@link readHead}).
+ */
+type StoredPinHead = Omit<PinHead, "kind"> & {
+  kind: "annotation" | "comment";
+};
+
+/** A stored head as a pin's head now: an annotation is a comment with no note. */
+const readHead = ({ kind: _kind, ...head }: StoredPinHead): PinHead => ({
+  ...head,
+  kind: "comment",
+});
 
 /** Where a pin stands (`places`): moved by the page as its anchor finds its element again, or by the person placing it again. */
 export type PinPlace = Pick<
@@ -446,7 +462,7 @@ export const entryKey = (pin: string, entry: string): string =>
 /** The pin an `entries` key belongs to. */
 const entryPin = (key: string): string => key.slice(0, key.indexOf(":"));
 
-const headsOf = (doc: MapDoc) => doc.getMap("pins") as DocMap<PinHead>;
+const headsOf = (doc: MapDoc) => doc.getMap("pins") as DocMap<StoredPinHead>;
 const placesOf = (doc: MapDoc) => doc.getMap("places") as DocMap<PinPlace>;
 const resolvesOf = (doc: MapDoc) =>
   doc.getMap("resolves") as DocMap<PinResolve>;
@@ -475,7 +491,7 @@ const threadsOf = (doc: MapDoc): Map<string, ThreadEntry[]> => {
 /** Pin `head` whole, from its parts in `doc` and its thread. */
 const assemble = (
   doc: MapDoc,
-  head: PinHead,
+  head: StoredPinHead,
   thread: ThreadEntry[]
 ): Pin | undefined => {
   const place = placesOf(doc).get(head.id);
@@ -485,7 +501,7 @@ const assemble = (
   const resolve = resolvesOf(doc).get(head.id);
   const seenAt = looksOf(doc).get(head.id);
   return {
-    ...head,
+    ...readHead(head),
     ...place,
     ...(resolve ? { resolvedAt: resolve.at, resolvedBy: resolve.by } : {}),
     ...(seenAt ? { seenAt } : {}),
@@ -1119,7 +1135,7 @@ export function pinProblem(value: unknown): string | null {
     isObject(value) &&
     typeof value.id === "string" &&
     typeof value.number === "number" &&
-    (value.kind === "annotation" || value.kind === "comment") &&
+    value.kind === "comment" &&
     isObject(value.anchor) &&
     Array.isArray(value.thread)
   )) {
@@ -1319,14 +1335,13 @@ export const pinUnsent = (pin: Pin): boolean =>
 /**
  * Whether an unsent pin is ready to go: a comment the apps' Comment mode
  * makes by a tap before the person writes in it goes once they have (or
- * resolved it). An annotation stands on its ink, and goes as it is. The
- * dashboard's comments are written with their words (commentOn), so this
+ * resolved it). The dashboard's comments are written with their words (commentOn), so this
  * holds back only the apps' tap pins (preview-overlay page.ts
  * `appCommenting`): it exists until the app's commenting lands (tsk-59) and
  * is deleted then.
  */
 export const pinReady = (pin: Pin): boolean =>
-  pin.kind === "annotation" || pin.thread.length > 0 || !!pin.resolvedAt;
+  pin.thread.length > 0 || !!pin.resolvedAt;
 
 /**
  * Pin `current` as the session heard pin `sent` at `at`: stamped sent, its
@@ -1511,10 +1526,7 @@ export const withoutHeld = (pin: Pin): Pin => {
 export const pinsToTell = (pins: Iterable<Pin>): Pin[] =>
   [...pins]
     .map(withoutHeld)
-    .filter(
-      (pin) =>
-        pin.kind === "annotation" || pin.thread.length > 0 || pinKnown(pin)
-    );
+    .filter((pin) => pin.thread.length > 0 || pinKnown(pin));
 
 /** The person's note with what they held, kept until the delivery that carries them (`meta.heldNote`). */
 export interface HeldNote {
@@ -2142,14 +2154,6 @@ const spotHead = (anchor: PageAnchor): string => {
   return wholePage(anchor) ? "the whole page" : anchor.selector;
 };
 
-/** What a stroke group's head says it is drawn over: the file, the page as a whole, else its element's selector. */
-const inkOver = (anchor: PageAnchor): string => {
-  if (readFileSpot(anchor.file)) {
-    return "the file";
-  }
-  return wholePage(anchor) ? "the page as a whole" : anchor.selector;
-};
-
 /** Where in a file a mark stands, as its section's line (file-spot.ts); none off a file. */
 const inFileLine = (anchor: PageAnchor): string[] => {
   const file = readFileSpot(anchor.file);
@@ -2160,7 +2164,7 @@ const inFileLine = (anchor: PageAnchor): string[] => {
  * What a pin stands on, one line per fact, under its heading: the element by
  * its selector (or a canvas's element), the frames and artifact it stands
  * in, its source's file:line, the components it is inside, its state, its
- * text, the elements under its ink. `url`, when given, is the page's address
+ * text; on a canvas, the elements under its ink. `url`, when given, is the page's address
  * as its own line; `comment_read` says it once for the artifact instead.
  */
 export const pinStandsOn = (pin: Pin, url?: string): string[] => {
@@ -2173,10 +2177,6 @@ export const pinStandsOn = (pin: Pin, url?: string): string[] => {
     ];
   }
   const { source } = anchor;
-  const under =
-    pin.kind === "annotation"
-      ? (pin.elements as PinnedElement[]).map((el) => el.selector).join(", ")
-      : "";
   const chain = chainWords(anchor);
   return [
     `## ${pin.number}. ${pin.kind} on ${spotHead(anchor)}`,
@@ -2202,7 +2202,6 @@ export const pinStandsOn = (pin: Pin, url?: string): string[] => {
     ...(anchor.text?.trim()
       ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]
       : []),
-    ...(under ? [`- Under the ink: ${under}`] : []),
   ];
 };
 
@@ -2281,51 +2280,6 @@ export function pinDelivery(
     `- Link: ${context.link}`,
     ...(pin.resolvedAt ? ["- Resolved by the person."] : []),
   ].join("\n");
-}
-
-/**
- * A stroke group no pin stands on, as a delivery says it: what it is drawn
- * over (its element by selector, source and text, and every element it
- * encloses when it marks more than one; or a canvas's element), and its box
- * in the page; `picture` when the delivery carries its crop.
- */
-export function inkSection(
-  group: InkGroup,
-  context: { picture: boolean; url: string }
-): string {
-  const { anchor, page } = group;
-  const what = group.illustration ? "Illustration" : "Ink";
-  const box = `- Box: ${Math.round(page.w)} × ${Math.round(page.h)} px at ${Math.round(page.x)}, ${Math.round(page.y)} in the page`;
-  const over = (group.over ?? []).map(
-    (one) =>
-      `  - ${one.selector}${one.text?.trim() ? ` ${JSON.stringify(one.text.trim().slice(0, 80))}` : ""}`
-  );
-  const lines =
-    "selector" in anchor
-      ? [
-          `## ${what} over ${inkOver(anchor)}`,
-          ...inFileLine(anchor),
-          ...(over.length > 1 ? ["- Encloses:", ...over] : []),
-          ...(anchor.frames?.length
-            ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
-            : []),
-          ...(anchor.source?.file
-            ? [
-                `- Source: ${anchor.source.file}${anchor.source.line ? `:${anchor.source.line}` : ""}`,
-              ]
-            : []),
-          ...(chainWords(anchor) ? [`- Inside: ${chainWords(anchor)}`] : []),
-          `- Page: ${context.url}`,
-          ...(anchor.text?.trim()
-            ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]
-            : []),
-          box,
-        ]
-      : [`## ${what} on the canvas's element ${anchor.element}`];
-  if (context.picture) {
-    lines.push("- In its picture, with the ink on it.");
-  }
-  return lines.join("\n");
 }
 
 /**

@@ -86,7 +86,6 @@ import {
   type CommentAttachment,
   carryChanges,
   heldNoteOf,
-  inkSection,
   type MarkPictures,
   newAnswer,
   notedLine,
@@ -1671,18 +1670,11 @@ export interface MarksDelivery {
   text: string;
 }
 
-/** The person's marks as the journal names them: each pin by number and id, then the loose stroke groups' count. */
-const marksNamed = (pins: Pin[], strokes: number): string =>
-  [
-    ...(pins.length > 0
-      ? [
-          `${pins.length === 1 ? "pin" : "pins"} ${pins.map((pin) => `${pin.number} (${pin.id})`).join(", ")}`,
-        ]
-      : []),
-    ...(strokes > 0
-      ? [`${strokes} ${strokes === 1 ? "stroke group" : "stroke groups"}`]
-      : []),
-  ].join(" and ") || "no marks";
+/** The person's marks as the journal names them: each pin by number and id. */
+const marksNamed = (pins: Pin[]): string =>
+  pins.length > 0
+    ? `${pins.length === 1 ? "pin" : "pins"} ${pins.map((pin) => `${pin.number} (${pin.id})`).join(", ")}`
+    : "no marks";
 
 /** Whether someone took a delivery of the marks; why not, when no one did. */
 export type MarksOutcome = { ok: true } | { ok: false; reason: string };
@@ -1767,11 +1759,10 @@ const sayDelivery = (
     pins: Pin[];
     retry: boolean;
     saves: number;
-    strokes: number;
   }
 ) => {
   const carried = [
-    marksNamed(went.pins, went.strokes),
+    marksNamed(went.pins),
     ...(went.errors > 0 ? [`${went.errors} compile error(s)`] : []),
     ...(went.saves > 0 ? [`${went.saves} save(s)`] : []),
   ].join(", ");
@@ -4887,7 +4878,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * A delivered page's latest picture of the person's ink (the crop of the
-   * last stroke group that went) becomes a page's or preview's picture, as a
+   * last comment on ink that went) becomes a page's or preview's picture, as a
    * canvas keeps its own; `artifact_promote` writes it.
    */
   const keepInkPicture = (row: ArtifactRow, png: string | null) => {
@@ -4901,8 +4892,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /*
-   * The person's marks (pins, replies, resolves, ink) go to the session by
-   * themselves: each change of theirs pushes the artifact's delivery back to
+   * The person's marks (pins, replies, resolves, and the ink a comment
+   * stands on) go to the session by themselves: each change of theirs pushes the artifact's delivery back to
    * {@link COMMENTS_QUIET_MS} from now ({@link personMarked}), and one
    * delivery carries everything the session hasn't heard as one message. A
    * sheet's saves and compile errors go on the same delivery, pushed back
@@ -4950,7 +4941,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * The person's own change to artifact `id`'s doc (a comment, a reply, a
-   * resolve, a stroke): what of it the session hasn't heard goes once their
+   * resolve): what of it the session hasn't heard goes once their
    * changes have stood quiet {@link COMMENTS_QUIET_MS} ({@link marked}).
    */
   const personMarked = (id: string) => marked(id, COMMENTS_QUIET_MS);
@@ -4958,37 +4949,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * What of the person's marks on an artifact's doc the session has not
    * heard: each pin ready to go (core `pinReady`, which holds back an apps'
-   * tap pin until its words are written; until tsk-59), by number, and each
-   * stroke group no pin stands on; with every group, moved ones too, by id.
+   * tap pin until its words are written; until tsk-59), by number, what the
+   * person holds left out (core `withoutHeld`); with every stroke group,
+   * moved ones too, by id, for the ink a pin stands on. Ink goes only with
+   * its comment: a group no pin stands on is never owed (the owner's pick,
+   * 2026-11-11: "Only when you comment on it").
    */
   const marksOwed = (doc: Doc) => {
     const pins = [...readPins(doc).values()];
-    const pinned = new Set(pins.map((pin) => pin.ink));
-    const ink = doc.getMap("ink").toJSON() as Record<string, InkGroup>;
-    // What the person holds waits for their Send all (core `withoutHeld`),
-    // and so does ink drawn since the first of it.
-    const [holding] = pins
-      .flatMap((pin) => pin.thread)
-      .filter((entry) => entry.held && !entry.sentAt)
-      .map((entry) => entry.at)
-      .sort();
     return {
       pins,
       owed: pins
         .map(withoutHeld)
         .filter((pin) => pinUnsent(pin) && pinReady(pin))
         .sort((a, b) => a.number - b.number),
-      loose: Object.values(ink).filter(
-        (group) =>
-          !(
-            group.sentAt ||
-            pinned.has(group.id) ||
-            (holding !== undefined && group.at >= holding)
-          )
-      ),
       groups: {
         ...(doc.getMap("moved").toJSON() as Record<string, InkGroup>),
-        ...ink,
+        ...(doc.getMap("ink").toJSON() as Record<string, InkGroup>),
       },
     };
   };
@@ -4997,8 +4974,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * What a delivery carried, stamped heard once someone took it: each pin as
    * it stands now, its entries that went stamped when unchanged and `heard`
    * what went (core `pinHeard`), so what the person wrote while it was on
-   * its way stays owed; each stroke group that went, when it still stands as
-   * it went; and the address they were made at.
+   * its way stays owed; the stroke group each pin stands on, when it still
+   * stands as it went; and the address they were made at.
    */
   const stampDelivered = (
     id: string,
@@ -5081,7 +5058,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       });
       sayDelivery(row, instance, {
         pins,
-        strokes: 0,
         errors: 0,
         saves: 0,
         retry: true,
@@ -5302,18 +5278,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * crop, in the order attached, while the message's picture caps hold
    * (core `COMMENT_LIMITS.pictures`, `pictureChars`), past them as a file;
    * each text folded in; anything else a file the session's machine keeps.
-   * `images` starts with the blocks ahead of every pin's (a canvas's, the
-   * loose ink's), so a picture's number is its place in the message.
+   * A picture's number is its place in the message.
    */
   const carryAttachments = (
     owed: Pin[],
-    crop: (of: Pin) => string | undefined,
-    ahead: string[]
+    crop: (of: Pin) => string | undefined
   ) => {
-    const images: { data: string; mediaType: string }[] = ahead.map((data) => ({
-      data,
-      mediaType: "image/png",
-    }));
+    const images: { data: string; mediaType: string }[] = [];
     const attachments: SendAttachment[] = [];
     const carried = new Map<string, Carried>();
     for (const pin of owed) {
@@ -5348,25 +5319,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     (doc.getMap("meta").get("sentUrl") as string | null | undefined) ??
     routeOf(id);
 
-  /**
-   * The pictures of the loose ink a delivery carries ahead of every pin's: a
-   * canvas's ink is in the canvas's own picture, a page's each in the crop
-   * the page drew round it.
-   */
-  const loosePictures = (row: ArtifactRow, loose: InkGroup[]) => {
-    const canvas = row.kind === "canvas" ? pictureOf(row.id) : null;
-    const pictureOfGroup = (group: InkGroup) =>
-      row.kind === "canvas" ? null : held.picture(row.id, group.id);
-    return {
-      canvas,
-      pictureOfGroup,
-      ahead: [
-        ...(canvas && loose.length > 0 ? [canvas] : []),
-        ...loose.flatMap((group) => pictureOfGroup(group) ?? []),
-      ],
-    };
-  };
-
   /** Each owed pin's section of artifact `artifact`, its link with it, what it carries named as the delivery carries it. */
   const pinSections = (
     artifact: string,
@@ -5386,8 +5338,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * Delivers what artifact `id` owes its session as one message: every pin
-   * and loose stroke group the session hasn't heard ({@link marksOwed}),
-   * each pin as its section or its one resolve line with what it carries,
+   * the session hasn't heard ({@link marksOwed}), with the ink it stands
+   * on, each pin as its section or its one resolve line with what it carries,
    * the page's pictures of them; a sheet's saves and errors with them. With
    * `only` (a comment's Try again), those comments alone. Once someone took
    * it, what went is stamped heard ({@link stampDelivered}); when no one
@@ -5409,36 +5361,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const doc = docs.doc(id);
     const all = marksOwed(doc);
     if (!instance) {
-      sayNoHolder(row, all.owed.length + all.loose.length);
+      sayNoHolder(row, all.owed.length);
       return "nothing";
     }
     const { pins, groups } = all;
-    // A comment's Try again carries that comment alone: no other pin, no loose ink.
+    // A comment's Try again carries that comment alone.
     const owed = all.owed.filter((pin) => !only || only.has(pin.id));
-    const loose = only ? [] : all.loose;
     const errors = errorsOwed(row, doc);
     const saves = savesOwed(row, doc);
-    if (owed.length + loose.length + errors.length + saves.length === 0) {
+    if (owed.length + errors.length + saves.length === 0) {
       return "nothing";
     }
     const url = addressOf(id, doc);
-    const { canvas, pictureOfGroup, ahead } = loosePictures(row, loose);
     const { images, attachments, carried } = carryAttachments(
       owed,
-      (pin) => held.picture(id, pin.id) ?? undefined,
-      ahead
+      (pin) => held.picture(id, pin.id) ?? undefined
     );
     // The person's note with what they held goes with the first delivery that carries any of it.
     const note = only ? undefined : heldNoteOf(doc);
     const marks = [
-      ...(note && owed.length + loose.length > 0 ? [notedLine(note.text)] : []),
+      ...(note && owed.length > 0 ? [notedLine(note.text)] : []),
       ...pinSections(row.id, owed, groups, url, carried),
-      ...loose.map((group) =>
-        inkSection(group, {
-          url,
-          picture: !!canvas || pictureOfGroup(group) !== null,
-        })
-      ),
     ];
     // A sheet's saves and compile errors go on the person's marks' own channel.
     const text = marksText(row, marks, errors, saves);
@@ -5449,7 +5392,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
     sayDelivery(row, instance, {
       pins: owed,
-      strokes: loose.length,
       errors: errors.length,
       saves: saves.length,
       retry: !!only,
@@ -5459,7 +5401,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       notSent(id, owed, outcome.reason);
       return outcome;
     }
-    if (note && owed.length + loose.length > 0) {
+    if (note && owed.length > 0) {
       docs.transact(id, "hub", (live) => {
         const meta = live.getMap("meta");
         if (
@@ -5469,27 +5411,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
       });
     }
+    const inked = owed.flatMap((pin) =>
+      pin.ink && groups[pin.ink] ? [{ pin, group: groups[pin.ink] }] : []
+    );
     stampDelivered(
       id,
       owed,
-      [
-        ...loose,
-        ...owed.flatMap((pin) =>
-          pin.ink && groups[pin.ink] ? [groups[pin.ink]] : []
-        ),
-      ],
+      inked.map(({ group }) => group),
       url
     );
     errorsHeard(id, errors);
     savesHeard(id, saves);
     keepInkPicture(
       row,
-      loose.map(pictureOfGroup).findLast((png) => png !== null) ?? null
+      inked
+        .map(({ pin }) => held.picture(id, pin.id))
+        .findLast((png) => png !== null) ?? null
     );
     letGoPictures(
       id,
-      [...owed.map((pin) => pin.id), ...loose.map((group) => group.id)],
-      new Set([...pins.map((pin) => pin.id), ...Object.keys(groups)])
+      owed.map((pin) => pin.id),
+      new Set(pins.map((pin) => pin.id))
     );
     return outcome;
   };
@@ -9860,8 +9802,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * The page's pictures of the marks the person just made there (core
-     * `MarkPictures`), each a crop round one mark, by the pin's or the
-     * stroke group's id, kept on disk ({@link heldPictures}): the next
+     * `MarkPictures`), each a crop round one pin (its ink's, when it stands
+     * on ink), by the pin's id, kept on disk ({@link heldPictures}): the next
      * delivery carries the ones it delivers. A later post replaces a mark's
      * picture.
      */

@@ -47,7 +47,7 @@ public extension Pin {
 
     /// Its thread's last line, as its row shows it (PinList.svelte `lastLine`).
     var lastLine: String {
-        guard let last = thread.last else { return kind == .annotation ? "Annotation" : "Nothing written yet" }
+        guard let last = thread.last else { return "Nothing written yet" }
         let first = last.text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         return "\(last.by == .agent ? "Agent" : "You"): \(first)"
     }

@@ -29,6 +29,12 @@ export type Slot = "composer" | "panel";
 
 /** What the canvas's rail asks of whoever holds the slot it stands in. */
 export interface SlotActions {
+  /**
+   * The page's word on a comment being written on its ink (`cawco:compose`,
+   * `cawco:compose-at`, `cawco:comment-result`): the slot's holder opens its
+   * composer as it does for a page's (PreviewPane `heardComposer`).
+   */
+  composer?: (message: unknown) => void;
   dock?: () => void;
   done?: () => void;
   remove?: () => void;

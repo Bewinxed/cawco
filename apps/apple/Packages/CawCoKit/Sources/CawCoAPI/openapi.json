@@ -45532,7 +45532,10 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/PinKind"
+            "type": "string",
+            "enum": [
+              "comment"
+            ]
           },
           "movedAt": {
             "description": "Its element is gone from the page since then; it waits in the moved tray.",
@@ -68195,13 +68198,6 @@
         "enum": [
           "conversation",
           "jev"
-        ]
-      },
-      "PinKind": {
-        "type": "string",
-        "enum": [
-          "annotation",
-          "comment"
         ]
       },
       "PinResolvedBy": {

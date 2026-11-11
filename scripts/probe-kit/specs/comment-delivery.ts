@@ -21,8 +21,9 @@
  *    `sentAt`; the hub's journal says it went.
  * 3. A reply to pin 2 later: one more delivery, pin 2 alone.
  * 4. The person resolves pin 3: one more delivery, its resolve line.
- * 5. A pen stroke no pin stands on: one more delivery, the ink over its
- *    element with its box, and the page with the ink as its picture.
+ * 5. A pen stroke no comment stands on goes nowhere (the owner's pick,
+ *    2026-11-11: "Only when you comment on it"): no delivery comes, and
+ *    its group is never stamped `sentAt`.
  * 6. Everything sent: no Send in the pane's head.
  * 8. A comment the session reads with comment_read before its delivery is
  *    stamped heard and never delivered; the person's later reply on it
@@ -49,8 +50,8 @@
  * 10. The page's own doc socket dropped: once it has stood lost 15 s the
  *    Comments control and its rail say the comments aren't reaching the
  *    agent, with Try again; a comment pressed then opens its composer at
- *    once, and Comment keeps its words in the page's doc; it and an
- *    annotation made then survive a frame reload from the device, the page
+ *    once, and Comment keeps its words in the page's doc; it and a comment
+ *    on ink made then survive a frame reload from the device, the page
  *    lets go of another artifact's stale copy, and with the link back and
  *    Try again the session hears each once, by itself.
  * 11. Pins kept on a page-sized container by its place (one moved aside)
@@ -189,8 +190,9 @@ const FIRST_WORDS = "Read this before it goes.";
 /** Step 9's pin, on the page as a whole (after pins 1–4), and the person's words in it. */
 const WHOLE_PIN = 5;
 const WHOLE_WORDS = "So much useless copy everywhere.";
-/** Step 10's pin, an annotation made while the page's link is down. */
+/** Step 10's pin, a comment on ink made while the page's link is down, and the person's words in it. */
 const DOWN_PIN = 6;
+const DOWN_INK_WORDS = "Drawn while the link was down.";
 /** Step 10's comment, tapped while the page's link is down, and the person's words in it. */
 const DOWN_COMMENT = 7;
 const DOWN_WORDS = "Written while the link was down.";
@@ -971,7 +973,7 @@ const wholePageChecks = async (on: On, frame: Frame) => {
  * closed the link (1006)" while his page drew pins 23 and 24 the hub never
  * had): the page's own doc socket dropped; within the lost link's wait the
  * Comments control and its panel say the comments aren't reaching the
- * agent; an annotation made then, the frame reloaded while still down,
+ * agent; a comment on ink made then, the frame reloaded while still down,
  * comes back from the device; Try again with the link back takes it to the
  * hub, and the session hears it once, by itself.
  */
@@ -1012,16 +1014,26 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   );
   await shutList(page);
 
-  // An annotation, made on the page while its link is down.
+  // A comment on ink, made on the page while its link is down.
   await frame.locator("#c").scrollIntoViewIfNeeded();
   await settle(page, 300);
   await strokeOver(on, frame, "#c");
   await page.waitForTimeout(350);
   await dragFromIcon(on, frame, -90, 40);
+  const inkComposer = page.locator(COMPOSE);
+  await inkComposer.waitFor({ timeout: 5000 }).catch(() => undefined);
+  await inkComposer
+    .getByRole("combobox")
+    .fill(DOWN_INK_WORDS)
+    .catch(() => undefined);
+  await page.keyboard.press("Enter");
   const made = await until(
-    `pin ${DOWN_PIN}, an annotation, in the page's doc`,
+    `pin ${DOWN_PIN}, a comment on the ink, in the page's doc`,
     () => docOf(frame),
-    (now) => numbered(now.pins, DOWN_PIN)?.kind === "annotation",
+    (now) => {
+      const pin = numbered(now.pins, DOWN_PIN);
+      return !!pin?.ink && pin.thread[0]?.text === DOWN_INK_WORDS;
+    },
     5000
   ).catch(() => null);
   const madeId = made ? numbered(made.pins, DOWN_PIN)?.id : undefined;
@@ -1031,8 +1043,9 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   const comment = page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
-  // The annotation counts on Send even while it stands only on the page, so
-  // the head may fold its mode into one button: C reaches the pane anyway.
+  // The comment on the ink counts on Send even while it stands only on the
+  // page, so the head may fold its mode into one button: C reaches the pane
+  // anyway.
   if (await comment.isVisible().catch(() => false)) {
     await comment.focus();
     await page.keyboard.press("c");
@@ -1127,7 +1140,7 @@ const linkDownChecks = async (on: On, frame: Frame) => {
     10_000
   ).catch(() => null);
   kit.check(
-    "10: an annotation and a comment's words made while the link is down, the frame reloaded with the link still down: the page's doc holds both again, from the device, and the session has heard nothing of them",
+    "10: a comment on ink and a comment's words made while the link is down, the frame reloaded with the link still down: the page's doc holds both again, from the device, and the session has heard nothing of them",
     !!madeId && !!back && early === 0,
     `made ${String(madeId)}; back ${back ? "yes" : "no"}; heard early ${early}`
   );
@@ -1177,11 +1190,12 @@ const linkDownChecks = async (on: On, frame: Frame) => {
   const stamped = numbered(after, DOWN_PIN);
   const stampedComment = numbered(after, DOWN_COMMENT);
   kit.check(
-    "10: with the link back and Try again, the annotation reaches the hub and the session hears it exactly once by itself, stamped sent, no Send standing, and the control says nothing more",
+    "10: with the link back and Try again, the comment on the ink reaches the hub and the session hears it exactly once by itself, stamped sent, no Send standing, and the control says nothing more",
     cleared === true &&
       offered === null &&
       went.length === 1 &&
-      words.includes(`## ${DOWN_PIN}. annotation on #c`) &&
+      words.includes(`## ${DOWN_PIN}. comment on #c`) &&
+      words.includes(wroteLine(DOWN_INK_WORDS)) &&
       words.includes(`- Pin: ${madeId}`) &&
       !!stamped?.sentAt,
     `cleared ${String(cleared)}; Send ${String(offered)}; ${went.length} deliveries of pin ${DOWN_PIN}; stamped ${String(stamped?.sentAt)}; heard ${words.slice(0, 400) || "nothing"}`
@@ -2038,31 +2052,28 @@ const run = async (kit: Kit) => {
   // 8, before the stroke: a comment read before its delivery.
   await readFirstChecks(on, frame, id, callIn);
 
-  // 5. A pen stroke no pin stands on.
+  // 5. A pen stroke no comment stands on.
   const before5 = heard.length;
   await strokeOver(on, frame, "#d");
-  const inked = await until(
+  await until(
     "the stroke group in the doc",
     () => docOf(frame),
     (now) => Object.keys(now.ink).length > 0,
     10_000
-  ).catch(() => docOf(frame));
-  const ink = await nextDelivery(
-    "the ink's delivery",
-    before5,
-    MARK_TO_MODEL_MS + 8000
-  );
-  const words5 = ink?.last ?? "";
+  ).catch(() => undefined);
+  await Bun.sleep(MARK_TO_MODEL_MS);
+  const inked = await docOf(frame);
+  const words5 = deliveries(before5)
+    .map((one) => one.last.slice(0, 200))
+    .join(" | ");
   kit.check(
-    "5: a pen stroke no pin stands on goes by itself: the ink over #d with its box, and the page with the ink as its picture",
+    "5: a pen stroke no comment stands on stays on the page: no delivery comes, and its group is never stamped sentAt",
     Object.keys(inked.ink).length === 1 &&
-      deliveries(before5).length === 1 &&
-      words5.includes("## Ink over #d") &&
-      words5.includes("- Source: src/Page.svelte:14") &&
-      words5.includes("- Box: ") &&
-      !!ink &&
-      ownImages(ink) === 1,
-    `groups ${Object.keys(inked.ink).length}; pictures ${ink ? ownImages(ink) : "-"}; heard ${words5.slice(0, 500)}`
+      Object.values(inked.ink).every((group) => !group.sentAt) &&
+      deliveries(before5).length === 0,
+    `groups ${Object.values(inked.ink)
+      .map((group) => (group.sentAt ? "sent" : "unsent"))
+      .join()}; ${deliveries(before5).length} deliveries: ${words5 || "none"}`
   );
 
   // 9. A comment on the page as a whole, whose words then change.

@@ -365,7 +365,10 @@ const SessionPlanShape = z.object({
 export const SessionPlanSchema: z.ZodType<SessionPlanType> = SessionPlanShape;
 
 const ComposeTargetShape = z.object({
-  anchor: z.looseObject({ selector: z.string() }),
+  anchor: z.union([
+    z.object({ element: z.string() }),
+    z.looseObject({ selector: z.string() }),
+  ]),
   elements: z.array(z.unknown()),
 });
 export const ComposeTargetSchema: z.ZodType<ComposeTargetType> =

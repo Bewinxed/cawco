@@ -695,10 +695,10 @@ export function parseArtifactResponses(text: string): ArtifactResponses | null {
 }
 
 /**
- * The person's pins, replies, resolves and ink on one of the session's
+ * The person's pins, replies and resolves on one of the session's
  * artifacts, delivered on their Send with their note first (hub
  * artifacts/service.ts `deliverMarks`): the sections say each pin (its
- * number, id, anchor, source and words) and each loose stroke group, so the
+ * number, id, anchor, source and words, and the ink it stands on), so the
  * session acts on them without reading first. Sent under the system origin
  * {@link import("./harness").ARTIFACT_ORIGIN}, like the picks' notice; a
  * transcript draws it as the same quiet line, "Comments on <title>".

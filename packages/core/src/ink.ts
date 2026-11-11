@@ -17,7 +17,9 @@
  * - `moved`: groups whose anchor no longer matches anything on the page
  *   (core comments.ts `findAnchor`), kept for the moved tray.
  *
- * The pins on a group (Annotate, Comment) are core comments.ts's.
+ * A group reaches the session only through a Comment on it, a pin of core
+ * comments.ts's: one no comment stands on stays on the page, never
+ * delivered (the owner's pick, 2026-11-11: "Only when you comment on it").
  *
  * Every entry is a plain JSON value in its map.
  */
@@ -54,8 +56,6 @@ export interface InkGroup {
   /** The group's box, as fractions of the anchor's box. */
   box: { x: number; y: number; w: number; h: number };
   id: string;
-  /** Marked a picture, bound to nothing (Illustrate). */
-  illustration?: true;
   /** On a page: the elements it marks, in document order; `anchor` is one of them or their container. */
   over?: PageAnchor[];
   /** Where the group stood in the page when it was drawn, px. */

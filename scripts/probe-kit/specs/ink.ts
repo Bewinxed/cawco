@@ -23,21 +23,30 @@
  *    it right by the margin.
  * 3. The icon arrives at the stroke's last point over 280 ms, and leaves
  *    after two breaths (4 s) or when the next stroke starts.
- * 4. A press dragged from the icon opens 4 × 90° sectors at radius 56; the
- *    sector under the pointer takes `surface-fill`; a release on Annotate
- *    writes pin 1 naming the paragraph's selector and source; Comment on a
- *    second group writes pin 2, kind "comment"; Erase removes a third; a
+ * 4. A press dragged from the icon opens 2 × 180° sectors at radius 56,
+ *    Comment over Erase; the sector under the pointer takes `surface-fill`;
+ *    Comment on a group opens the composer on its ink and writes pin 1, kind
+ *    "comment", with the person's words; Erase removes a second group; a
  *    release within 20px of the centre picks nothing; a tap, then a second
  *    tap on a sector, picks. The words stand outside the ring, and a menu
  *    opened at the viewport's edge stays inside it.
+ * 4b. A stroke across a button (`display: inline-flex`) inside a padded card
+ *    marks the button, never the card (ink.ts `blockOf` climbs only
+ *    `display: inline`).
  * 4e. The pen's eraser removes the whole strokes it crosses (CDP's mouse has
  *    no eraser button, so these are the page's own PointerEvents, button 5).
- * 5. The ink and its pins go to the session by themselves, with no Send
- *    (the hub's `personMarked`, `deliverMarks`): it hears the paragraph's
- *    and the second paragraph's pins, and every pin and group has `sentAt`.
+ * 5. Ink reaches the session only through its own Comment (the owner's
+ *    pick, 2026-11-11: "Only when you comment on it"): the Comment on a
+ *    group goes by itself, with no Send (the hub's `personMarked`,
+ *    `deliverMarks`), with its picture, its pin and group stamped `sentAt`;
+ *    a bare stroke group stays undelivered, with no `sentAt`, and the
+ *    session hears nothing of a fresh one within 10 s.
  * 6. On a canvas a pen stroke is Excalidraw's freedraw (the overlay's layer
- *    draws nothing), the icon stands at its end, and Annotate pins the
- *    element under it by id.
+ *    draws nothing), the icon stands at its end, and its Comment opens the
+ *    panel's composer over the canvas (CanvasStages hands the page's
+ *    `cawco:compose` to PreviewPane): nothing is written or sent until its
+ *    words go, then its pin names the element under it by id and the
+ *    session hears it.
  * 7. With reduced motion the icon and the menu animate opacity alone.
  *
  * And the owner's report (2026-10-16: "why does sketching around a specific
@@ -46,12 +55,13 @@
  * `fixtures/test-map.html`), in Draw with the mouse, as he drew it:
  * 8. A loop round "Proposed cut" (its intro line, the three rule cards and
  *    the "Also in the cut" paragraph) marks those elements, or a container
- *    of theirs below `main`; never `body`, `html` or `main`. Its delivered
- *    picture is the loop's box with its 24px margin, never the page.
+ *    of theirs below `main`; never `body`, `html` or `main`. The picture
+ *    its Comment delivers is the loop's box with its 24px margin, never the
+ *    page.
  * 9. Over the 2-second loop no main-thread task of the page's runs past
  *    16.7ms; after it lifts, none past 50ms, a loop round one card or round
- *    every card in view alike; and the time from the lift to the picture's
- *    delivery to the hub stays flat between the two.
+ *    every card in view alike; and the time from its Comment to the
+ *    picture's delivery to the hub stays flat between the two.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -262,19 +272,33 @@ const page = (spacer: boolean, para: boolean) => `<!doctype html>
   <p id="third">The third paragraph, to erase.</p>
   <p id="fourth">The fourth paragraph, where a release picks nothing.</p>
   <p id="fifth">The fifth paragraph, picked by a tap and a tap.</p>
+  <div id="card" style="width: 60%; padding: 32px; border: 1px solid #ccc">
+    <button id="card-button" style="display: inline-flex; padding: 8px 24px; font: inherit">A button inside a card</button>
+  </div>
   <div class="tall"></div>
 </main></body></html>`;
 
 const calls = new ToolCalls();
-/** Every message the session was sent, as the model read it. */
-const heard: string[] = [];
+/** The person's words on the comment leg 4 writes on the second paragraph's ink. */
+const COMMENT_WORDS = "This one, thicker.";
+/** An image block in a request's body. */
+const IMAGE_BLOCK = /"type":"image"/gu;
+/**
+ * Every message the session was sent, as the model read it, with the images
+ * it carried beyond the request before it's (each request carries the whole
+ * conversation): its own.
+ */
+const heard: { images: number; last: string }[] = [];
+let imagesSoFar = 0;
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  heard.push(request.last);
+  const images = request.body.match(IMAGE_BLOCK)?.length ?? 0;
+  heard.push({ last: request.last, images: images - imagesSoFar });
+  imagesSoFar = images;
   return calls.reply(request) ?? text("ok");
 };
 
@@ -541,6 +565,7 @@ const run = async (kit: Kit) => {
   await iconChecks(on, frame, first);
   await menuChecks(on, frame);
   await edgeChecks(on, frame);
+  await buttonChecks(on, frame);
   await eraserChecks(on, frame);
   await idleChecks(on, frame);
   frame = await placeChecks(on, frame, id);
@@ -738,14 +763,16 @@ const menuChecks = async (on: On, frame: Frame) => {
   }
   const hot = menu.sectors.find((one) => one.hot);
   on.kit.check(
-    "4: a press dragged from the icon opens four 90° sectors at radius 56 (a 112px menu), their words menu items; the sector under the pointer takes surface-fill",
-    menu.sectors.length === 4 &&
+    "4: a press dragged from the icon opens two 180° sectors at radius 56 (a 112px menu), Comment over Erase, their words menu items; the sector under the pointer takes surface-fill",
+    menu.sectors.length === 2 &&
+      menu.sectors.map((one) => one.pick).join() === "comment,erase" &&
       menu.sectors.every(
-        (one) => one.to - one.from === 90 && one.outer === 56
+        (one) => one.to - one.from === 180 && one.outer === 56
       ) &&
       menu.size?.join() === "112,112" &&
+      menu.words.length === 2 &&
       menu.words.every((role) => role === "menuitem") &&
-      hot?.pick === "annotate" &&
+      hot?.pick === "comment" &&
       hot.fill === menu.fill,
     JSON.stringify(menu)
   );
@@ -755,23 +782,20 @@ const menuChecks = async (on: On, frame: Frame) => {
   );
   on.kit.check(
     "4: a release within 20px of the centre picks nothing",
-    Object.keys(doc.pins).length === 0 && !!fifth && !fifth.illustration,
-    `pins ${Object.keys(doc.pins).length}; fifth ${JSON.stringify(fifth?.illustration)}`
+    Object.keys(doc.pins).length === 0 && !!fifth,
+    `pins ${Object.keys(doc.pins).length}; fifth ${fifth ? "kept" : "gone"}`
   );
 
-  // Annotate on the paragraph's group: a fresh stroke joins it and brings its icon.
-  await strokeOver(on, frame, "#para");
-  await on.page.waitForTimeout(350);
-  await dragFromIcon(on, frame, -90, 40);
   // Comment on the second paragraph's group: it opens the comment's
   // composer on the ink, writing nothing; Comment writes the pin with its
   // words (core `commentOn`), and the composer goes.
   await strokeOver(on, frame, "#second");
   await on.page.waitForTimeout(350);
-  await dragFromIcon(on, frame, 0, 40);
+  await dragFromIcon(on, frame, -90, 40);
   const composer = on.page.locator('[data-slot="pin-composer"]');
   await composer.waitFor({ timeout: 5000 });
-  await composer.getByRole("combobox").fill("This one, thicker.");
+  const composing = Object.keys((await docOf(frame)).pins).length;
+  await composer.getByRole("combobox").fill(COMMENT_WORDS);
   await composer.getByRole("button", { name: "Comment", exact: true }).click();
   await composer
     .waitFor({ state: "detached", timeout: 8000 })
@@ -780,10 +804,23 @@ const menuChecks = async (on: On, frame: Frame) => {
   // Erase the third.
   await strokeOver(on, frame, "#third");
   await on.page.waitForTimeout(350);
-  await dragFromIcon(on, frame, 180, 40);
-  // A tap on the fourth's icon, then a tap on Illustrate.
+  await dragFromIcon(on, frame, 90, 40);
+  // A tap on the fourth's fresh group's icon, then a tap on Erase.
+  const fourthBefore = new Set(
+    Object.entries((await docOf(frame)).ink)
+      .filter(
+        ([, group]) =>
+          (group.anchor as { selector?: string }).selector === "#fourth"
+      )
+      .map(([key]) => key)
+  );
   await strokeOver(on, frame, "#fourth");
   await on.page.waitForTimeout(350);
+  const tapped = Object.entries((await docOf(frame)).ink).find(
+    ([key, group]) =>
+      (group.anchor as { selector?: string }).selector === "#fourth" &&
+      !fourthBefore.has(key)
+  )?.[0];
   const tap = await until(
     "the icon",
     () => iconPoint(on, frame),
@@ -797,44 +834,34 @@ const menuChecks = async (on: On, frame: Frame) => {
     await on.page.waitForTimeout(350);
   }
   doc = await docOf(frame);
-  const pins = Object.values(doc.pins).sort(
-    (a, b) => Number(a.number) - Number(b.number)
-  );
+  const pins = Object.values(doc.pins);
   const bySelector = (selector: string) =>
     Object.values(doc.ink).filter(
       (group) => (group.anchor as { selector?: string }).selector === selector
     );
-  const [annotated, commented] = pins;
-  const elements = (annotated?.elements ?? []) as {
-    selector: string;
-    source: unknown;
-  }[];
+  const [commented] = pins;
+  const thread = (commented?.thread ?? []) as { text?: string }[];
   on.kit.check(
-    "4: Annotate writes pin 1 on the paragraph's group, naming the paragraph's selector and its source",
-    annotated?.number === 1 &&
-      annotated.kind === "annotation" &&
-      (annotated.anchor as { selector?: string }).selector === "#para" &&
-      elements[0]?.selector === "#para" &&
-      "source" in (elements[0] ?? {}),
-    JSON.stringify(annotated)
-  );
-  on.kit.check(
-    "4: Comment on a second group writes pin 2, kind comment, with its thread",
-    commented?.number === 2 &&
+    "4: Comment on a group opens the composer on its ink, writing nothing; its Comment writes pin 1, kind comment, on the second paragraph's group with the person's words",
+    composing === 0 &&
+      pins.length === 1 &&
+      commented?.number === 1 &&
       commented.kind === "comment" &&
-      Array.isArray(commented.thread) &&
-      (commented.anchor as { selector?: string }).selector === "#second",
-    JSON.stringify(commented)
+      (commented.anchor as { selector?: string }).selector === "#second" &&
+      !!commented.ink &&
+      String(commented.ink) in doc.ink &&
+      thread[0]?.text === COMMENT_WORDS,
+    `pins while composing ${composing}; ${JSON.stringify(commented)}`
   );
   on.kit.check(
     "4: Erase removes the third group",
-    bySelector("#third").length === 0 && pins.length === 2,
+    bySelector("#third").length === 0,
     `third ${bySelector("#third").length}`
   );
   on.kit.check(
-    "4: a tap on the icon, then a tap on a sector, picks it (Illustrate)",
-    bySelector("#fourth").some((group) => group.illustration === true),
-    JSON.stringify(bySelector("#fourth").map((group) => group.illustration))
+    "4: a tap on the icon, then a tap on a sector, picks it (Erase takes the fourth's fresh group)",
+    !!tapped && !(tapped in doc.ink) && pins.length === 1,
+    `fresh group ${String(tapped)}; still there ${tapped ? String(tapped in doc.ink) : "-"}`
   );
 };
 
@@ -911,6 +938,45 @@ const edgeChecks = async (on: On, frame: Frame) => {
       seen.expanded === "true",
     JSON.stringify(seen)
   );
+};
+
+/**
+ * 4b. The owner's report (2026-11-11: a drawing named much more than he drew
+ * over): a stroke across a button inside a card marks the button. A button
+ * is `inline-flex`, and ink.ts `blockOf` climbed every display reading
+ * `inline…` to the card; it climbs only `display: inline` now.
+ */
+const buttonChecks = async (on: On, frame: Frame) => {
+  await frame.locator("#card-button").scrollIntoViewIfNeeded();
+  await settle(on.page, 200);
+  const before = new Set(Object.keys((await docOf(frame)).ink));
+  await strokeOver(on, frame, "#card-button");
+  const group = await until(
+    "the button's stroke group",
+    async () =>
+      Object.entries((await docOf(frame)).ink).find(
+        ([key]) => !before.has(key)
+      )?.[1],
+    Boolean,
+    5000
+  ).catch(() => undefined);
+  const display = await frame
+    .locator("#card-button")
+    .evaluate((el) => getComputedStyle(el).display);
+  const anchor = (group?.anchor as { selector?: string } | undefined)?.selector;
+  const over = ((group?.over as { selector?: string }[] | undefined) ?? []).map(
+    (one) => one.selector
+  );
+  on.kit.check(
+    "4b: a stroke across a button (display: inline-flex) inside a padded card marks the button, not the card",
+    display === "inline-flex" &&
+      anchor === "#card-button" &&
+      over.length > 0 &&
+      over.every((selector) => selector === "#card-button"),
+    `display ${display}; anchor ${String(anchor)}; marks ${over.join(", ") || "nothing"}`
+  );
+  await frame.evaluate(() => window.scrollTo(0, 0));
+  await settle(on.page, 200);
 };
 
 /** 4e. The pen's eraser takes the whole strokes it crosses; a group left with none goes. */
@@ -1187,38 +1253,67 @@ const placeChecks = async (
   return frame;
 };
 
+/** How long the session is watched for a delivery of bare ink that must not come: past the hub's quiet (3 s) and a delivery's reach. */
+const BARE_MS = 10_000;
+
 /**
- * 5. The ink and its pins go by themselves (the artifact panel's surface brief, How comments reach
- * the session): with no Send, the session hears the paragraph's and the
- * second paragraph's pins, and the hub stamps every pin and group.
+ * 5. Ink reaches the session only through its own Comment (the owner's
+ * pick, 2026-11-11: "Only when you comment on it"; the artifact panel's
+ * surface brief, How comments reach the session): with no Send, the
+ * session hears the Comment on the second paragraph's group with its
+ * picture, and the hub stamps the pin and its group; no bare group is ever
+ * stamped, and a fresh bare stroke brings the session nothing within 10 s.
  */
 const deliveredChecks = async (on: On, frame: Frame) => {
+  const comment = (read: Awaited<ReturnType<typeof docOf>>) =>
+    Object.values(read.pins).find((one) => one.number === 1);
   const stamped = await until(
-    "sentAt on the doc, from the hub's delivery",
+    "sentAt on the comment and its ink, from the hub's delivery",
     () => docOf(frame),
-    (doc) =>
-      Object.values(doc.pins).every((pin) => !!pin.sentAt) &&
-      Object.values(doc.ink).every((group) => !!group.sentAt),
+    (read) => {
+      const first = comment(read);
+      return !!first?.sentAt && !!read.ink[String(first.ink)]?.sentAt;
+    },
     60_000
   ).catch(() => docOf(frame));
-  const told = heard.filter((text) => SECTION.test(text));
+  const pin = comment(stamped);
+  const delivery = heard.find(
+    (one) => SECTION.test(one.last) && one.last.includes("#second")
+  );
   on.kit.check(
-    "5: with no Send, the ink and its pins go by themselves (the session hears #para's and #second's pins) and every pin and group is stamped sentAt",
-    told.some((text) => text.includes("#para")) &&
-      told.some((text) => text.includes("#second")) &&
-      Object.values(stamped.pins).every((pin) => !!pin.sentAt) &&
-      Object.values(stamped.ink).every((group) => !!group.sentAt),
-    `heard ${told.length} delivery message(s); pins ${Object.values(
-      stamped.pins
-    )
-      .map((pin) => !!pin.sentAt)
-      .join()}; groups ${Object.values(stamped.ink)
-      .map((group) => !!group.sentAt)
-      .join()}`
+    "5: with no Send, a Comment on a group goes by itself: the session hears #second's comment with its words and its picture, and the pin and its group are stamped sentAt",
+    !!delivery &&
+      delivery.last.includes(COMMENT_WORDS) &&
+      delivery.images >= 1 &&
+      !!pin?.sentAt &&
+      !!stamped.ink[String(pin.ink)]?.sentAt,
+    `heard ${delivery ? `${delivery.images} picture(s): ${delivery.last.slice(0, 300)}` : "no delivery of #second"}; pin ${String(pin?.sentAt)}; its group ${String(stamped.ink[String(pin?.ink)]?.sentAt)}`
+  );
+  const before = heard.length;
+  await frame.evaluate(() => window.scrollTo(0, 0));
+  await strokeOver(on, frame, "#fifth");
+  await on.page.waitForTimeout(BARE_MS);
+  const doc = await docOf(frame);
+  const pinned = new Set(Object.values(doc.pins).map((one) => one.ink));
+  const bare = [
+    ...Object.entries(doc.ink),
+    ...Object.entries(doc.moved as Record<string, Record<string, unknown>>),
+  ].filter(([key]) => !pinned.has(key));
+  const since = heard.slice(before).filter((one) => SECTION.test(one.last));
+  on.kit.check(
+    `5: a stroke group with no comment stays on the page: none of the ${bare.length} bare groups is stamped sentAt, and within ${BARE_MS / 1000} s of a fresh one the session hears nothing`,
+    bare.length >= 2 &&
+      bare.every(([, group]) => !group.sentAt) &&
+      since.length === 0 &&
+      !heard.some((one) => one.last.includes("## Ink")),
+    `bare ${bare.map(([, group]) => String(!!group.sentAt)).join()}; heard since ${since.length}: ${since.map((one) => one.last.slice(0, 120)).join(" | ") || "nothing"}`
   );
 };
 
-/** 6. On a canvas: Excalidraw's freedraw, the icon at its end, Annotate pins the element under it. */
+/** 6. On a canvas: Excalidraw's freedraw, the icon at its end, and its Comment, with words, pins the element under it. */
+const CANVAS_WORDS = "Round this off.";
+/** The hub's quiet after the person's last mark before it delivers them (artifacts/service.ts `COMMENTS_QUIET_MS`). */
+const QUIET_MS = 3000;
 const canvasChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
@@ -1278,13 +1373,44 @@ const canvasChecks = async (on: On) => {
     () => document.querySelectorAll("svg[data-cawco-ink] path").length
   );
   const icon = await iconPoint(on, frame, CANVAS_FRAME);
+  const before = heard.length;
   await dragFromIcon(on, frame, -90, 40, CANVAS_FRAME);
+  // Its composer opens over the canvas, and nothing is written or sent until Comment.
+  const composer = on.page.locator('[data-slot="pin-composer"]');
+  const opened = await composer
+    .waitFor({ timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  await on.page.waitForTimeout(QUIET_MS + 2000);
+  const unsaid = {
+    pins: Object.keys((await docOf(frame)).pins).length,
+    heard: heard.slice(before).filter((one) => SECTION.test(one.last)).length,
+  };
+  await composer
+    .getByRole("combobox")
+    .fill(CANVAS_WORDS)
+    .catch(() => undefined);
+  await composer
+    .getByRole("button", { name: "Comment", exact: true })
+    .click()
+    .catch(() => undefined);
   const pins = await until(
-    "the canvas's pin",
+    "the canvas's comment",
     async () => Object.values((await docOf(frame)).pins),
     (list) => list.length > 0,
     5000
   ).catch(async () => Object.values((await docOf(frame)).pins));
+  const told = await until(
+    "the canvas's comment delivered",
+    () =>
+      heard
+        .slice(before)
+        .find(
+          (one) => SECTION.test(one.last) && one.last.includes(CANVAS_WORDS)
+        ),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
   on.kit.check(
     "6: on a canvas a pen stroke is Excalidraw's freedraw, the overlay's layer draws nothing, and the icon stands at its end",
     INK_LINE.test(outline.outline ?? "") &&
@@ -1295,11 +1421,16 @@ const canvasChecks = async (on: On) => {
     `layer paths ${layer}; icon ${JSON.stringify(icon)} against ${JSON.stringify(to)}; outline:\n${outline.outline}`
   );
   on.kit.check(
-    "6: Annotate on a canvas pins the element under the stroke by id",
-    pins.length === 1 &&
+    "6: Comment on a canvas's stroke opens the composer over the canvas and writes nothing until its words go: then its pin names the element under the stroke by id, and only then does the session hear it, with those words",
+    opened &&
+      unsaid.pins === 0 &&
+      unsaid.heard === 0 &&
+      pins.length === 1 &&
       (pins[0].elements as string[]).includes("box") &&
-      pins[0].kind === "annotation",
-    JSON.stringify(pins[0])
+      pins[0].kind === "comment" &&
+      (pins[0].thread as { text?: string }[])[0]?.text === CANVAS_WORDS &&
+      !!told?.last.includes(CANVAS_WORDS),
+    `composer ${opened ? "open" : "never opened"}; before its words: pins ${unsaid.pins}, heard ${unsaid.heard}; ${JSON.stringify(pins[0])}; heard ${told?.last.slice(0, 300) ?? "nothing"}`
   );
 };
 
@@ -1359,7 +1490,7 @@ const reducedChecks = async (on: On) => {
   await emulateMotion(on.page, null);
 };
 
-/** A loop round `box` (the screen's px), traced: the page's tasks while it ran and after it lifted, and when its picture reached the hub. */
+/** A loop round `box` (the screen's px), traced: the page's tasks while it ran and after it lifted; then its Comment, and when its picture reached the hub. */
 const tracedLoop = async (
   on: On,
   frame: Frame,
@@ -1369,12 +1500,10 @@ const tracedLoop = async (
   const mark = (name: string) =>
     frame.evaluate((n) => performance.mark(n), name);
   const before = new Set(Object.keys((await docOf(frame)).ink));
-  let lifted = 0;
   const main = await traceMain(on.page, async () => {
     await mark("loop-down");
-    lifted = await mouseLoop(frame, box);
+    await mouseLoop(frame, box);
     await mark("loop-up");
-    // The picture goes once the marks pause (page.ts PICTURES_AFTER_MS).
     await until(
       "the loop's group",
       async () =>
@@ -1382,14 +1511,35 @@ const tracedLoop = async (
       Boolean,
       5000
     ).catch(() => undefined);
-    await on.page.waitForTimeout(2500);
+    await on.page.waitForTimeout(2000);
     await mark("loop-after");
   });
   const doc = await docOf(frame);
   const id = Object.keys(doc.ink).find((one) => !before.has(one));
+  // Ink goes only with its comment: the loop's Comment, and the picture its pin posts once the marks pause (page.ts PICTURES_AFTER_MS).
+  // A short drag: a loop round the whole view ends by the frame's top, where 40px up leaves it.
+  await dragFromIcon(on, frame, -90, 26);
+  const composer = on.page.locator('[data-slot="pin-composer"]');
+  await composer.waitFor({ timeout: 5000 }).catch(() => undefined);
+  await composer
+    .getByRole("combobox")
+    .fill("These, together.")
+    .catch(() => undefined);
+  const asked = Date.now();
+  await composer
+    .getByRole("button", { name: "Comment", exact: true })
+    .click()
+    .catch(() => undefined);
+  const pin = await until(
+    "the loop's comment",
+    async () =>
+      Object.values((await docOf(frame)).pins).find((one) => one.ink === id),
+    Boolean,
+    5000
+  ).catch(() => undefined);
   const posted = await until(
     "the loop's picture at the hub",
-    () => pictures.posted.find((one) => one.mark === id),
+    () => pictures.posted.find((one) => one.mark === pin?.id),
     Boolean,
     10_000
   ).catch(() => undefined);
@@ -1401,7 +1551,7 @@ const tracedLoop = async (
     drawingLongest: longestIn(main.tasks, at("loop-down"), at("loop-up")),
     after: tasksOver(main.tasks, at("loop-up"), at("loop-after"), LONG_TASK_MS),
     afterLongest: longestIn(main.tasks, at("loop-up"), at("loop-after")),
-    delivered: posted ? posted.at - lifted : Number.NaN,
+    delivered: posted ? posted.at - asked : Number.NaN,
     png: posted?.png ?? null,
   };
 };
@@ -1569,7 +1719,7 @@ const mapChecks = async (on: On) => {
       : null;
     const scale = size && crop ? size.w / crop.w : 0;
     on.kit.check(
-      "8: its delivered picture is the loop's box with its 24px margin (±2px at its scale, at most 2×), never the page",
+      "8: the picture its Comment delivers is the loop's box with its 24px margin (±2px at its scale, at most 2×), never the page",
       !!size &&
         !!crop &&
         scale > 0 &&
@@ -1585,7 +1735,7 @@ const mapChecks = async (on: On) => {
     );
     await on.page.waitForTimeout(4500);
 
-    // One card, then every card in view: the same lag after the lift, the same wait for its picture.
+    // One card, then every card in view: the same lag after the lift, the same wait for its comment's picture.
     const card = await frame.evaluate(() => {
       const cards = [...document.querySelectorAll("article.card")];
       const one = cards[Math.floor(cards.length / 2)];
@@ -1630,7 +1780,7 @@ const mapChecks = async (on: On) => {
       `Proposed cut longest ${loop.afterLongest.toFixed(1)}ms; one card ${one.afterLongest.toFixed(1)}ms; every card ${all.afterLongest.toFixed(1)}ms; over: ${[...loop.after, ...one.after, ...all.after].join(", ") || "none"}`
     );
     on.kit.check(
-      "9: the lift to the picture's delivery stays flat: every card in view within 750ms of one card's",
+      "9: the Comment to its picture's delivery stays flat: every card in view within 750ms of one card's",
       Number.isFinite(one.delivered) &&
         Number.isFinite(all.delivered) &&
         all.delivered - one.delivered <= 750,

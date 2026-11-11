@@ -1,7 +1,7 @@
 /**
  * The page's pictures of the person's marks (core `MarkPictures`), held for
  * the Send that carries them: on disk, under the artifact's own folder, one
- * PNG per mark (a pin's id or a stroke group's) and the page's address
+ * PNG per pin, by its id, and the page's address
  * beside them. Each post is written, synced, before the page hears it was
  * held, so a hub restart between the marking and the Send keeps them, and
  * the delivery reads them from here.

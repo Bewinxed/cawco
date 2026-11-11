@@ -155,7 +155,6 @@ typeOverrides:
     PersonReadState: OpenEnums.PersonReadState
     PhoneDoneAction: OpenEnums.PhoneDoneAction
     PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy
-    PinKind: OpenEnums.PinKind
     PinResolvedBy: OpenEnums.PinResolvedBy
     PlaceKind: OpenEnums.PlaceKind
     PlacementStrategy: OpenEnums.PlacementStrategy
