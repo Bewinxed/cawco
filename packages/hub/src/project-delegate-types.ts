@@ -16,6 +16,9 @@
  * role: web-facing        # its toolset
  * budget: { usd: 2, per: day }
  * lands: none             # drafts, not commits
+ * starting_set:           # what its sessions start with, besides CawCo's own
+ *   skills: [brand-voice, x-post]
+ *   servers: [exa]
  * ---
  * Draft posts in the brand voice.
  * ```
@@ -24,8 +27,10 @@
  * calling model routes by), unless the front matter gives one. A type is a
  * preset: there is no persona text. `deny` (Claude's tool
  * names) and `may_start` (`[browser]`, or `any`) mean what a fleet type's
- * `denyTools` and `mayStart` mean, and `account:` names the account its sessions prefer
- * (an account id).
+ * `denyTools` and `mayStart` mean, `account:` names the account its sessions prefer
+ * (an account id), and `starting_set:` is a fleet type's `startingSet` (core
+ * `StartingSet`), read as the project's own `starting-set.md` is: a delegate
+ * of the type takes it before its project's (hub starting-set.ts).
  *
  * Files are the truth: the catalog is read from the folder each time it is
  * asked for, synchronously (a handful of small files), so the work-item path
@@ -47,11 +52,13 @@ import {
   mayStartProblem,
   SESSION_ROLES,
   type SessionRole,
+  type StartingSet,
 } from "@cawco/core";
 import { delegateTypesWords } from "@cawco/core/words/delegate-types";
 import { Elysia } from "elysia";
 import type { DelegateTypesShape } from "./delegate-types";
 import { areaFolder, FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
+import { startingSetOfLines } from "./project-starting-set";
 import { listOf, scalarOf } from "./task-file";
 
 /**
@@ -113,6 +120,7 @@ const KNOWN_FIELDS = new Set([
   "may_start",
   "account",
   "description",
+  "starting_set",
 ]);
 
 /** `{ usd: 2, per: day }`, or the same pairs indented under the key. */
@@ -143,6 +151,26 @@ const budgetOf = (line: FrontMatterLine): DelegateBudget | string => {
     }
   }
   return budget;
+};
+
+/**
+ * `starting_set:` with its `skills` and `servers` lists on the lines under it,
+ * read as a project's starting-set file reads them (project-starting-set.ts),
+ * or why it does not read.
+ */
+const startingSetOf = (line: FrontMatterLine): StartingSet | string => {
+  const under = line.under.filter((raw) => raw.trim() !== "");
+  if (line.value.trim() !== "" || under.length === 0) {
+    return delegateTypesWords.problemStartingSetForm;
+  }
+  const indent = Math.min(
+    ...under.map((raw) => LEADING_SPACE.exec(raw)?.[0].length ?? 0)
+  );
+  const block = frontMatterBlock(
+    `---\n${under.map((raw) => raw.slice(indent)).join("\n")}\n---\n`
+  );
+  const read = startingSetOfLines(block?.lines ?? [], "starting_set");
+  return read.ok ? read.set : `starting_set: ${read.problems.join(" ")}`;
 };
 
 /** A type file's known fields, read as front matter writes them, and the keys it had no use for. */
@@ -184,7 +212,7 @@ const projectFieldsOf = (
   | string
   | Pick<
       CatalogType,
-      "budget" | "lands" | "connections" | "role" | "mayStart"
+      "budget" | "lands" | "connections" | "role" | "mayStart" | "startingSet"
     > => {
   const role = fields.scalar("role");
   if (role === "curator") {
@@ -208,6 +236,11 @@ const projectFieldsOf = (
   if (typeof budget === "string") {
     return budget;
   }
+  const setLine = fields.line("starting_set");
+  const startingSet = setLine ? startingSetOf(setLine) : undefined;
+  if (typeof startingSet === "string") {
+    return startingSet;
+  }
   // `mcp:` names connections (§5.1): the hub calls them, the session never
   // holds their keys.
   const connections = fields.list("mcp");
@@ -217,6 +250,7 @@ const projectFieldsOf = (
     ...(budget && Object.keys(budget).length > 0 ? { budget } : {}),
     ...(lands ? { lands: lands as LandsMode } : {}),
     ...(mayStart?.length ? { mayStart } : {}),
+    ...(startingSet ? { startingSet } : {}),
   };
 };
 
@@ -268,6 +302,7 @@ const parseTypeFile = (
     ...(account ? { account } : {}),
     ...(extra.connections ? { connections: extra.connections } : {}),
     ...(extra.mayStart ? { mayStart: extra.mayStart } : {}),
+    ...(extra.startingSet ? { startingSet: extra.startingSet } : {}),
   };
   const problem = delegateTypeProblem(draft);
   if (problem) {
@@ -286,7 +321,7 @@ const parseTypeFile = (
 
 /** The words naming the fields a type file had no use for. */
 const ignoredWords = (ignored: string[]): string =>
-  `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, may_start, account and description`;
+  `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, may_start, account, starting_set and description`;
 
 /**
  * Why `content` written at `path` (`delegates/<name>.md`) would not make a

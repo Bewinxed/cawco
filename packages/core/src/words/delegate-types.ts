@@ -90,6 +90,9 @@ export const delegateTypesWords = {
   problemHarness: (harness: string) =>
     `“${harness}” is not a harness a delegate type can run on`,
   problemStartingSetBlank: "a starting set names no blank skill or server",
+  /** A project type file's `starting_set:` with a value on its own line, or nothing under it. */
+  problemStartingSetForm:
+    "starting_set lists its skills and servers on indented lines under it, like “  skills: [grill]” and “  servers: [exa]”",
   problemCuratorRole:
     "role curator is the memory curator's: the hub starts that run itself, and it denies shell, edit and web tools",
 };

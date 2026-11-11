@@ -768,6 +768,11 @@ const gated: Gated[] = [
     "packages/core/src/delegate-types.ts",
     "packages/core/src/words/delegate-types.ts",
   ]),
+  bun("scripts/type-starting-set-check.ts", [
+    "packages/hub/src/project-delegate-types.ts",
+    "packages/hub/src/project-starting-set.ts",
+    "packages/core/src/delegate-types.ts",
+  ]),
   bun("scripts/routine-report-check.ts", [
     "packages/hub/src/routines.ts",
     "packages/hub/src/caw.ts",

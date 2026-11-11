@@ -3687,6 +3687,9 @@ public enum Words {
 
         public static let problemStartingSetBlank = "a starting set names no blank skill or server"
 
+        /// A project type file's `starting_set:` with a value on its own line, or nothing under it.
+        public static let problemStartingSetForm = "starting_set lists its skills and servers on indented lines under it, like “  skills: [grill]” and “  servers: [exa]”"
+
         public static let problemCuratorRole = "role curator is the memory curator's: the hub starts that run itself, and it denies shell, edit and web tools"
 
         // packages/core/src/harness.ts `EFFORT_LEVELS`

@@ -22,6 +22,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type FrontMatterLine,
   frontMatterBlock,
   type StartingSet,
   startingSetProblem,
@@ -47,26 +48,26 @@ const names = (list: readonly string[]): string[] => [
   ...new Set(list.map((name) => name.trim())),
 ];
 
-/** `content` read as a starting-set file. */
-const readStartingSetFile = (content: string): StartingSetReading => {
-  const block = frontMatterBlock(content);
-  if (!block) {
-    return {
-      ok: false,
-      problems: [
-        `${STARTING_SET_FILE} opens with a --- block naming skills and servers.`,
-      ],
-    };
-  }
+/**
+ * A starting set from the front matter lines that name it: `skills` and
+ * `servers`, each a list, either left out for none. `where` names what holds
+ * them in a refusal (this file, or a type file's `starting_set`). What a
+ * project's file and a project delegate type's `starting_set` both read
+ * (project-delegate-types.ts).
+ */
+export const startingSetOfLines = (
+  lines: readonly FrontMatterLine[],
+  where: string
+): StartingSetReading => {
   const problems: string[] = [];
   const set: StartingSet = { skills: [], servers: [] };
-  for (const line of block.lines) {
+  for (const line of lines) {
     if (line.key === undefined) {
       continue;
     }
     if (!(FIELDS as readonly string[]).includes(line.key)) {
       problems.push(
-        `“${line.key}” is not a field of ${STARTING_SET_FILE}: it reads skills and servers.`
+        `“${line.key}” is not a field of ${where}: it reads skills and servers.`
       );
       continue;
     }
@@ -81,6 +82,20 @@ const readStartingSetFile = (content: string): StartingSetReading => {
   return problems.length > 0 || blank
     ? { ok: false, problems: [...problems, ...(blank ? [`${blank}.`] : [])] }
     : { ok: true, set };
+};
+
+/** `content` read as a starting-set file. */
+const readStartingSetFile = (content: string): StartingSetReading => {
+  const block = frontMatterBlock(content);
+  if (!block) {
+    return {
+      ok: false,
+      problems: [
+        `${STARTING_SET_FILE} opens with a --- block naming skills and servers.`,
+      ],
+    };
+  }
+  return startingSetOfLines(block.lines, STARTING_SET_FILE);
 };
 
 /** Why `content` would not read as a starting-set file: the folder's write guard. */

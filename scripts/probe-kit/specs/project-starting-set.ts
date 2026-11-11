@@ -26,6 +26,13 @@
  * - p5. A session continued from the set type's delegate is that type still:
  *   its row names the type and keeps the delegate's set, its tools leave out
  *   the type's denied `Write`, and it lists the delegate's set.
+ * - p6. A type of Set's own (`delegates/probe-proj-own.md`) naming a
+ *   `starting_set` reads back with it through `list_delegate_types`, and a
+ *   delegate of it lists exactly that set, CawCo's own and the template's
+ *   starter skill, its tools from that set's server and `cawco` alone.
+ * - p7. A type file whose `starting_set` is malformed, or names a blank
+ *   skill, is refused when a session writes it, with a sentence naming
+ *   what to fix.
  *
  *   bun scripts/probe-kit/run.ts project-starting-set
  */
@@ -36,6 +43,7 @@ import { join } from "node:path";
 import type { StartingSet } from "../../../packages/core/src/delegate-types";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
+import { delegateTypesWords } from "../../../packages/core/src/words/delegate-types";
 import { projectSettingsWords } from "../../../packages/core/src/words/project-settings";
 import {
   BUNDLED_SKILLS,
@@ -71,6 +79,17 @@ const TYPE_SET: StartingSet = {
 };
 const STARTERS = TEMPLATE_SKILLS.code;
 const DENIED = "Write";
+
+/** The set Set's own type file names: a skill of the account's, one of the plugin's, one fleet server. */
+const OWN_SET: StartingSet = {
+  skills: ["probe-set-gamma", "probe-plug:plug-inside"],
+  servers: ["probe-in"],
+};
+const OWN_TYPE = "probe-proj-own";
+
+/** A project type file with `startingSet` as its front matter writes it: one list inline, one as a block sequence. */
+const ownTypeFile = (startingSet: string): string =>
+  `---\nharness: claude\nmodel: ${MODEL.claude}\ndescription: A probe's project type with its own starting set\n${startingSet}---\nSay ok.\n`;
 
 const SET_TYPE = "probe-proj-set";
 const PLAIN_TYPE = "probe-proj-plain";
@@ -365,6 +384,64 @@ const spec: Spec = {
         plainPerson.tools.includes(DENIED) &&
         same(goneOnListed, listsOf(TYPE_SET)),
       `row type ${rowType(fleet, target)}; set ${JSON.stringify(rowSet(fleet, target))} (the delegate's ${JSON.stringify(began)}); ${DENIED} offered to the delegate ${typedTurn.tools.includes(DENIED)}, to the continued session ${goneOn.toolNames.includes(DENIED)}, to a session of no type ${plainPerson.tools.includes(DENIED)}; lists ${goneOnListed.join(", ")}`
+    );
+
+    // p6: a type of Set's own names a set: it reads back, and its delegate takes it.
+    await fleet.api(
+      hubRequest("PUT /api/projects/:id/folder/file", {
+        path: { id: setProject },
+        body: {
+          path: `delegates/${OWN_TYPE}.md`,
+          content: ownTypeFile(
+            'starting_set:\n  skills: [probe-set-gamma, "probe-plug:plug-inside"]\n  servers:\n    - probe-in\n'
+          ),
+        },
+      })
+    );
+    const catalog = await toolWords(session, "list_delegate_types", {});
+    const ownLine = catalog.text
+      .split("\n")
+      .find((line) => line.includes(OWN_TYPE));
+    await delegate(fleet, {
+      parentInstanceId: parent.id,
+      title: "Delegate of a project type with a set",
+      prompt: "PROBE-PROJ-OWN: say ok.",
+      type: OWN_TYPE,
+      host: true,
+      cwd: at.set,
+    });
+    const ownTurn = await firstTurn(fleet, "PROBE-PROJ-OWN");
+    kit.check(
+      "p6: a project type file naming a starting set reads back with it through list_delegate_types, and a delegate of it lists exactly that set, CawCo's own and its template's starter skill, its tools from that set's server and cawco alone",
+      !catalog.refused &&
+        ownLine !== undefined &&
+        OWN_SET.skills.every((name) => ownLine.includes(name)) &&
+        OWN_SET.servers.every((name) => ownLine.includes(name)) &&
+        same(ownTurn.listed, listsOf(OWN_SET)) &&
+        same(ownTurn.servers, ["cawco", ...OWN_SET.servers]),
+      `listed as: ${ownLine}; delegate lists ${ownTurn.listed.join(", ")}; servers ${ownTurn.servers.join(", ")}`
+    );
+
+    // p7: a malformed set and a blank name, each refused as a session writes the file.
+    const refusals = await Promise.all(
+      [
+        "starting_set: [probe-set-gamma]\n",
+        'starting_set:\n  skills: [probe-set-gamma, " "]\n',
+      ].map((startingSet, index) =>
+        toolWords(session, "folder_write", {
+          path: `delegates/probe-proj-bad-${index}.md`,
+          content: ownTypeFile(startingSet),
+        })
+      )
+    );
+    const [malformed, blank] = refusals;
+    kit.check(
+      "p7: a project type file with a malformed starting set, or one naming a blank skill, is refused when written, with a sentence saying what to fix",
+      malformed.refused &&
+        malformed.text.includes(delegateTypesWords.problemStartingSetForm) &&
+        blank.refused &&
+        blank.text.includes(delegateTypesWords.problemStartingSetBlank),
+      `malformed: ${malformed.text}; blank: ${blank.text}`
     );
   },
 };
