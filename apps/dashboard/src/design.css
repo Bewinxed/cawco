@@ -2074,7 +2074,9 @@
    on scale, the two the compositor runs off the main thread: a frame of the
    page's own work never holds them. The one leaving is drawn over the whole
    of its first frame (opacity 1 at 0ms) and the pair is never both near
-   gone (each at 0.5 where they cross). */
+   gone (each at 0.5 where they cross). A swap that runs with a motion
+   of its own takes that motion's clock: `--icon-swap-dur` and
+   `--icon-swap-ease` (the sidebar toggle's glyph, on the sidebar's slide). */
 @utility icon-swap {
   /* biome-ignore lint/suspicious/noDuplicateSelectors: `&` here is this @utility's own class; the rule reads every utility's `&` as one selector. */
   :where(&) {
@@ -2086,7 +2088,7 @@
     grid-area: 1 / 1;
     transition-property: opacity, scale;
     transition-duration: var(--icon-swap-dur, var(--dur-pop));
-    transition-timing-function: var(--ease-out);
+    transition-timing-function: var(--icon-swap-ease, var(--ease-out));
   }
   :where(&) > :where([data-active="false"]) {
     opacity: 0;
@@ -2117,7 +2119,7 @@
 @utility swap-move {
   transition-property: opacity, scale;
   transition-duration: var(--icon-swap-dur, var(--dur-pop));
-  transition-timing-function: var(--ease-out);
+  transition-timing-function: var(--icon-swap-ease, var(--ease-out));
 }
 @utility swap-gone {
   opacity: 0;

@@ -288,6 +288,14 @@ export { default as IconToolNotebook } from "~icons/solar/notebook-bold-duotone"
 export { default as IconFileLog } from "~icons/solar/notes-bold-duotone";
 /** Solar's own spelling. The `palette-*` cut is a board; this one is the palette. */
 export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
+/*
+ * The desk's one sidebar toggle (Shell), a matched pair on Solar Linear's
+ * panel: the chevron points into the panel while the sidebar stands (Hide
+ * sidebar) and out of it while it is away (Show sidebar), and the toggle
+ * swaps one for the other as it travels between the two places.
+ */
+export { default as IconSidebarHide } from "~icons/solar/panel-left-close-linear";
+export { default as IconSidebarShow } from "~icons/solar/panel-left-open-linear";
 /** Attach's Files and photos. */
 export { default as IconPaperclip } from "~icons/solar/paperclip-bold-duotone";
 /** Caw holds still while his lead works (the sidebar's motion switch); a paused routine; Idle and Stopped (DESIGN.md, Session status). */
@@ -372,7 +380,6 @@ export {
 } from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
 export {
-  default as IconSidebarLinear,
   default as IconRoomLinear,
   default as IconUndockLinear,
 } from "~icons/solar/sidebar-minimalistic-linear";

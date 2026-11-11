@@ -16,7 +16,7 @@
    */
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { sidebarWords } from "@cawco/core/words/sidebar";
-  import { untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -36,7 +36,6 @@
     IconPlus,
     IconSearch,
     IconSettings,
-    IconSidebarLinear,
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
@@ -101,7 +100,7 @@
   let {
     onsearch,
     onfiles,
-    onhide,
+    lead,
     narrow,
     sheet = false,
     scroller,
@@ -111,11 +110,12 @@
     /** Opens Files for the conversation on screen, from the phone's Files row (Shell owns its drawer). */
     onfiles?: () => void;
     /**
-     * Puts the sidebar away, from the button at its header's leading edge
-     * (the Shell's rail on a desk; the Shell's top bar brings it back). The
-     * phone's sheet has its own Close and passes none.
+     * What leads the header's row, at its leading edge: the desk's sidebar
+     * toggle, which the Shell draws here while the sidebar stands and in
+     * its top bar while it is away. The phone's sheet has its own Close and
+     * passes none.
      */
-    onhide?: () => void;
+    lead?: Snippet;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
     /**
@@ -677,30 +677,15 @@
   <!-- ────────────────────── header ──────────────────────── -->
 
   <Sidebar.Header>
-    <!-- At the leading edge on a desk, Hide sidebar; the wordmark; and in
+    <!-- At the leading edge on a desk, the sidebar toggle; the wordmark; and in
          the header's corner what is started from anywhere: a session
          (⇧⌘N). Jump lives on the tab row (Shell), beside the conversations
          it jumps between. -->
     <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
-      {#if onhide}
-        <Tip label={sidebarWords.hideSidebar}>
-          {#snippet children(tip)}
-            <!-- Start session's twin at the row's other end: the same box
-                 and glyph size. Its glyph mirrors right to left, as the
-                 sidebar's side does. -->
-            <button
-              {...tip}
-              aria-label={sidebarWords.hideSidebar}
-              class="select-none focus-inset touch-hit inline-grid flex-none place-items-center size-c-nav-h border-none border-current rounded-sm bg-transparent text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
-              data-rail-toggle
-              onclick={() => onhide()}
-              type="button"
-            >
-              <IconSidebarLinear class="size-space-5 rtl:-scale-x-100" />
-            </button>
-          {/snippet}
-        </Tip>
-      {/if}
+      <!-- The desk's one sidebar toggle, while the sidebar stands (Shell
+           `railToggle`): Start session's twin at the row's other end, the
+           same box and glyph size. -->
+      {@render lead?.()}
       <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton isActive={false} row="nav">
