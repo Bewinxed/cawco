@@ -1120,7 +1120,6 @@ const serverStopped = async (kit: Kit): Promise<void> => {
     registerChild: () => undefined,
     turnOutcome: () => undefined,
     lead: false,
-    fence: false,
   } as never);
   session.handle({
     type: "session.execution.interrupted",

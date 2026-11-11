@@ -3792,7 +3792,7 @@ export interface components {
       response_format?: "concise" | "detailed";
       /** @description Skills its delegates load at start. */
       skills?: string[];
-      /** @description Its sessions' only skills (plugin:skill) and fleet MCP servers, besides CawCo's. Claude only. */
+      /** @description Its sessions' only skills (plugin:skill) and fleet MCP servers, besides CawCo's. Not on pi. */
       startingSet?: {
         servers: string[];
         skills: string[];

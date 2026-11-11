@@ -79,7 +79,7 @@ export interface StartingSet {
 export const CAWCO_SERVER = "cawco";
 
 /** The harnesses that enforce a {@link StartingSet} so far. */
-const STARTING_SET_HARNESSES: readonly HarnessKind[] = ["claude"];
+const STARTING_SET_HARNESSES: readonly HarnessKind[] = ["claude", "opencode"];
 
 /** Why `harness` cannot carry this starting set, in a sentence, or nothing when it can. */
 export const startingSetProblem = (

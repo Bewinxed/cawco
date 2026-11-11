@@ -105,7 +105,6 @@ import { acknowledgeSessionCredential } from "../session-identity";
 import { opencodeCompactsAt } from "./compaction-points";
 import {
   at,
-  CAWCO_MCP_SERVER,
   errorTag,
   errorText,
   type McpNotConnected,
@@ -346,39 +345,72 @@ const deniedSpawningTools = (mayStart: readonly string[]): string[] =>
 /** What OpenCode makes of a server's name in its tools' ids. */
 const MCP_NAME_UNSAFE = /[^a-zA-Z0-9_-]/gu;
 
-/** How long a fenced session's read of its location's MCP servers may take. */
-const MCP_FENCE_READ_MS = 65_000;
+/** How long a session's read of its location's MCP servers may take ({@link mcpOutside}). */
+const MCP_LIST_READ_MS = 65_000;
 
 /**
- * A fenced session on OpenCode (a memory curator or fleet-watch triage run,
- * `SpawnPayload.fence`): every tool of every MCP server the location has,
- * but CawCo's, denied (`<server>_*`, which hides the tool from the turn and
- * from Code Mode's catalog alike and refuses a call to it). The list is the
- * location's MCP servers, read each time a turn is about to run, so a server
- * added later is fenced too.
+ * The tools of every MCP server the location has outside `reached` (a
+ * fenced session's CawCo alone, a starting set's servers), denied
+ * (`<server>_*`): 2.0.29 drops such a tool from the turn and from Code
+ * Mode's catalog and refuses a call to it, and gives the model a server's
+ * instructions only while one of its tools is not denied (mcp/instructions.ts
+ * `McpInstructions.load`). The list is the location's MCP servers, read each
+ * time a turn is about to run, so a server added later is held off too.
  */
-const mcpFence = async (
+const mcpOutside = async (
   client: OpencodeClient,
-  directory: string
+  directory: string,
+  reached: ReadonlySet<string>
 ): Promise<OpencodeRule[]> => {
-  const listed = await readWithin(MCP_FENCE_READ_MS, (signal) =>
+  const listed = await readWithin(MCP_LIST_READ_MS, (signal) =>
     client.mcp.list(at(directory), { signal })
   );
   switch (listed.kind) {
     case "answered":
       return listed.value.data
-        .filter((server) => server.name !== CAWCO_MCP_SERVER)
+        .filter((server) => !reached.has(server.name))
         .map((server) =>
           deny(`${server.name.replace(MCP_NAME_UNSAFE, "_")}_*`)
         );
     case "unanswered":
       throw new Error(
-        `A fenced session runs no turn without its fence: ${notAnswered("the location's MCP servers", listed)}`
+        `A session held to some MCP servers runs no turn before it reads which ones its folder has: ${notAnswered("the location's MCP servers", listed)}`
       );
     default:
       unhandled("read", listed);
   }
 };
+
+/**
+ * The skill rule every session runs under, the static policy's
+ * (opencode.ts `STATIC_POLICY`) and again after a starting set's allowances
+ * ({@link skillAllowlist}), so a set never lifts it: no `wf-*` skill runs.
+ */
+export const NO_WORKFLOW_SKILLS: OpencodeRule = {
+  action: "skill",
+  resource: "wf-*",
+  effect: "deny",
+};
+
+/**
+ * A starting set's skills as session rules: every skill denied, then each
+ * named one allowed, the last rule that matches deciding (2.0.29
+ * `Permission.evaluate`). The model's skill listing holds only the skills
+ * these leave allowed (skill/instructions.ts `SkillInstructions.load`,
+ * through `Skill.available`), the skill tool stays offered while the last
+ * `skill` rule is not a deny over `*` (tool.ts `whollyDisabled`), and a call
+ * to any other skill is refused (tool/plugin/skill.ts `permission.assert`).
+ * A skill is named by its id, its folder's name.
+ */
+const skillAllowlist = (skills: readonly string[]): OpencodeRule[] => [
+  deny("skill"),
+  ...skills.map((resource): OpencodeRule => ({
+    action: "skill",
+    resource,
+    effect: "allow",
+  })),
+  NO_WORKFLOW_SKILLS,
+];
 
 /** The key prefix of a role memory document's entry ({@link instructionEntries}). */
 const ROLE_ENTRY = "cawco-role.";
@@ -685,8 +717,6 @@ export interface OpencodeSessionOptions {
   deniedRules: OpencodeRule[];
   directory: string;
   effort?: EffortLevel;
-  /** A fenced session: it has CawCo's MCP server and no other. */
-  fence: boolean;
   instanceId: string;
   /** Its scoped memory documents ({@link SpawnPayload.instructions}); none on an attach. */
   instructions?: readonly SessionInstruction[];
@@ -699,6 +729,14 @@ export interface OpencodeSessionOptions {
   /** The delegate types it may start (core `MayStart`); absent, any. */
   mayStart?: MayStart;
   model: string | undefined;
+  /**
+   * The only MCP servers it reaches, CawCo's among them: a fenced session's
+   * CawCo alone, a starting set's servers (core `SpawnPayload.startingSet`).
+   * Absent: every server its location has.
+   */
+  onlyServers?: readonly string[];
+  /** The only skills it lists and loads, its starting set's; absent, every skill its location has. */
+  onlySkills?: readonly string[];
   onRelease: () => void;
   permissionMode: PermissionMode | undefined;
   /** The harness's own work before a dispatch: its server up, the session on it. */
@@ -797,7 +835,8 @@ export class OpencodeSession implements HarnessSession {
   #permissionMode: PermissionMode | undefined;
   readonly #applied: Applied;
   readonly #deniedRules: OpencodeRule[];
-  readonly #fence: boolean;
+  readonly #onlyServers: ReadonlySet<string> | undefined;
+  readonly #onlySkills: readonly string[] | undefined;
   /** The delegate types it may start (core `MayStart`); absent, any. */
   readonly #mayStart?: MayStart;
   /** The instruction entries put on the session, by key, as the hash of the value put. */
@@ -934,7 +973,8 @@ export class OpencodeSession implements HarnessSession {
     this.#permissionMode = options.permissionMode;
     this.#applied = { ...options.applied };
     this.#deniedRules = options.deniedRules;
-    this.#fence = options.fence;
+    this.#onlyServers = options.onlyServers && new Set(options.onlyServers);
+    this.#onlySkills = options.onlySkills;
     this.#mayStart = options.mayStart;
     this.#scopedInstructions = options.instructions ?? [];
     this.#registerChild = options.registerChild;
@@ -1065,16 +1105,21 @@ export class OpencodeSession implements HarnessSession {
   // ------------------------------------------------------------ settings
 
   /**
-   * The whole permission ruleset the session runs on: its denials, the tools
-   * its role leaves out, and a fenced session's fence.
+   * The whole permission ruleset the session runs on: its starting set's
+   * skills, the tools its role leaves out, its denials, and the MCP servers
+   * it does not reach. The set's allowances go first, so a denial after
+   * them still wins.
    */
   async #rules(): Promise<OpencodeRule[]> {
     return [
+      ...(this.#onlySkills ? skillAllowlist(this.#onlySkills) : []),
       ...deniedSpawningTools(sessionMayStart({ mayStart: this.#mayStart })).map(
         deny
       ),
       ...this.#deniedRules,
-      ...(this.#fence ? await mcpFence(this.#client, this.#directory) : []),
+      ...(this.#onlyServers
+        ? await mcpOutside(this.#client, this.#directory, this.#onlyServers)
+        : []),
     ];
   }
 

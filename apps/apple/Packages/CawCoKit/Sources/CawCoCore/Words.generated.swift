@@ -3675,7 +3675,7 @@ public enum Words {
         }
 
         public static func problemStartingSetHarness(harness: String) -> String {
-            "a starting set is enforced on Claude Code alone so far, not on \(harness)"
+            "a starting set is enforced on Claude Code and OpenCode so far, not on \(harness)"
         }
 
         public static let problemStartingSetBlank = "a starting set names no blank skill or server"

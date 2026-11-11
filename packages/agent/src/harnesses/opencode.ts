@@ -163,6 +163,7 @@ import {
   answerOf,
   assertPluginLoaded,
   at,
+  CAWCO_MCP_SERVER,
   errorText,
   type McpNotConnected,
   notAnswered,
@@ -204,6 +205,7 @@ import {
   forgetBackground,
   type ModelDefault,
   type ModelListed,
+  NO_WORKFLOW_SKILLS,
   OpencodeSession,
   opencodeCatalog,
   splitModel,
@@ -267,7 +269,7 @@ const STATIC_POLICY = {
       (action) => ({ action, resource: "*", effect: "ask" }) as const
     ),
     { action: "edit", resource: "*", effect: "ask" },
-    { action: "skill", resource: "wf-*", effect: "deny" },
+    NO_WORKFLOW_SKILLS,
     ...[...HARNESS_TOOLS.opencode.fetch, ...HARNESS_TOOLS.opencode.search].map(
       (action) => ({ action, resource: "*", effect: "deny" }) as const
     ),
@@ -5909,6 +5911,12 @@ export class OpencodeHarness implements Harness {
       }
     }
 
+    // A fenced session reaches CawCo's server alone; one with a starting set,
+    // its set's servers and CawCo's, and its set's skills alone.
+    const onlyServers =
+      spec.fence === true
+        ? [CAWCO_MCP_SERVER]
+        : spec.startingSet && [...spec.startingSet.servers, CAWCO_MCP_SERVER];
     let session!: OpencodeSession;
     session = new OpencodeSession({
       instanceId: ctx.instanceId,
@@ -5924,7 +5932,8 @@ export class OpencodeHarness implements Harness {
       deniedRules,
       account,
       view,
-      fence: spec.fence === true,
+      ...(onlyServers ? { onlyServers } : {}),
+      ...(spec.startingSet ? { onlySkills: spec.startingSet.skills } : {}),
       applied,
       ready,
       // Skills load natively, each as a message of its own, at its first

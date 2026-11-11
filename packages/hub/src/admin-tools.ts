@@ -501,7 +501,7 @@ const TYPE_ACCOUNT_DESCRIPTION =
 
 /** The delegate type tool's `startingSet` parameter, as the agent calling it reads it. */
 const STARTING_SET_DESCRIPTION =
-  "Its sessions' only skills (plugin:skill) and fleet MCP servers, besides CawCo's. Claude only.";
+  "Its sessions' only skills (plugin:skill) and fleet MCP servers, besides CawCo's. Not on pi.";
 
 /**
  * A delegate types answer (the list, or one type saved) with the fleet's
