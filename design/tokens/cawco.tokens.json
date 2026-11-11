@@ -4559,6 +4559,14 @@
       },
       "$description": "The tallest a list block's card stands on a desk before its rows scroll inside it, so forty routines never push the blocks after them out of view. A phone's page is its one scroller, and there a card stands at its rows' height."
     },
+    "c-inline-block-fossil-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "rem"
+      },
+      "$description": "How tall an agent's block stands in its reply once a later version or an artifact replaced it (tsk-330): its head and a few rows under the veil, so a replaced block takes a third of its room."
+    },
     "c-block-drop-line": {
       "$type": "dimension",
       "$value": {

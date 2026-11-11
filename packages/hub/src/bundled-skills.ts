@@ -5,7 +5,8 @@
  *
  * - {@link BUNDLED_SKILLS} reach every session on every machine: `show`
  *   (what the person does with anything opened in their panel, before any
- *   kind's skill), `decision-page` (§5.8), the planning skills and the design skills,
+ *   kind's skill), `decision-page` (§5.8), `inline-block` (the block library
+ *   an agent draws in its reply, tsk-330), the planning skills and the design skills,
  *   `design-explore` and `component-canvas` among them: every agent's
  *   component canvas is built by them, and one skill per kind of event the
  *   project's conversation hears (caw.ts `EVENT_SKILLS`).
@@ -28,6 +29,7 @@ import { runtimeTree, standalone } from "@cawco/core/runtime";
 export const BUNDLED_SKILLS = [
   "show",
   "decision-page",
+  "inline-block",
   "grill",
   "to-tasks",
   "triage",

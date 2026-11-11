@@ -980,6 +980,7 @@ import {
   FolderRefusal,
   folderFileNames,
   guardFolderFile,
+  hasProjectFolder,
   listFolder,
   onFolderCommits,
   projectFolderRoutes,
@@ -1101,6 +1102,7 @@ import { unknownFieldsOf } from "./unknown-fields";
 import { unwatchedMode } from "./unwatched-mode";
 import { TOOL_RELEASES } from "./upstreams";
 import { UsageCounter } from "./usage-count";
+import { renameViewTaskTables } from "./view-task-tables";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
 import { WelcomeConverge } from "./welcome-converge";
@@ -28059,6 +28061,36 @@ export const createServer = (
     },
   });
   leadRuns = routines;
+  /** The views' one-time task table rename (view-task-tables.ts), over every project's folder. */
+  const viewTaskTables = {
+    dataMigrated: (name: string) => db.dataMigrated(name),
+    markDataMigrated: (name: string) => db.markDataMigrated(name),
+    projectIds: () => db.listProjects().map((project) => project.id),
+    listViews: async (projectId: string, dir: string): Promise<string[]> => {
+      // Reading a folder makes it: a project with none has no views.
+      if (!(await hasProjectFolder(projectId))) {
+        return [];
+      }
+      try {
+        const { entries } = await listFolder(projectId, dir);
+        return entries
+          .filter((entry) => entry.kind === "file")
+          .map((entry) => entry.path);
+      } catch (error) {
+        if (error instanceof FolderRefusal && error.status === 404) {
+          return [];
+        }
+        throw error;
+      }
+    },
+    read: async (projectId: string, path: string) =>
+      (await readFolderFile(projectId, path)).content,
+    write: (
+      projectId: string,
+      writes: { content: string; path: string }[],
+      options: { author: { name: string }; message: string }
+    ) => changeFolderFiles(projectId, { writes, deletes: [] }, options),
+  };
   offBoot.push(() => {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
@@ -28071,8 +28103,10 @@ export const createServer = (
     // its oldest (project-merge.ts), then a folder edited while the hub was
     // down is re-read once.
     detach(
-      mergeSameRemote(merging).then(() => tasks.syncAll()),
-      "project merge and task catch-up"
+      mergeSameRemote(merging)
+        .then(() => tasks.syncAll())
+        .then(() => renameViewTaskTables(viewTaskTables)),
+      "project merge, task catch-up and the views' task tables"
     );
   });
   // Connections (connections.ts): outside services the hub signs in to and

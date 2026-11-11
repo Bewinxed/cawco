@@ -1136,6 +1136,27 @@ public enum Words {
 
         /// A stored session's menu: its words carried into a new session.
         public static let continueInNew = "Continue in new session…"
+
+        /// An agent's block in its reply (InlineBlock, tsk-330): its act, floating over it.
+        public static let keepAsArtifact = "Keep as artifact"
+
+        /// On a block a later version under its name replaced: the way to that version.
+        public static let jumpToLatestVersion = "Jump to latest version"
+
+        /// On a block moved into an artifact: the way to it, by its title.
+        public static func openArtifact(title: String) -> String {
+            "Open \(title)"
+        }
+
+        /// Under a block naming components the block library lacks: what was left out.
+        public static func blockDropped(names: [String]) -> String {
+            "This block uses \(names.joined(separator: ", ")), which CawCo's blocks don't have, so \(names.count > 1 ? "they're" : "it's") left out."
+        }
+
+        /// A block kept as an artifact: what the panel's head asks of the person.
+        public static func keptBlockAsk(title: String) -> String {
+            "Pin anything in \(title) that reads wrong"
+        }
     }
 
     public enum Asks {

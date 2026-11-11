@@ -9,9 +9,11 @@
   sideways where it is wider (Well.svelte). Its colours and roles are the
   house's (host.css, `[data-slot=diagram]`), so a theme change needs no
   redraw. Links and images in the Mermaid are off, so a page reaches no
-  network. "Open as canvas" makes it a canvas in the panel, offered only for
-  the types @excalidraw/mermaid-to-excalidraw 2.2.2 draws as elements
-  (flowchart, sequence, class, state, ER); it draws any other as a picture.
+  network. "Open as canvas" makes it a canvas in the panel, offered only on
+  a decision page (its overlay names the artifact) and only for the types
+  @excalidraw/mermaid-to-excalidraw 2.2.2 draws as elements (flowchart,
+  sequence, class, state, ER); it draws any other as a picture. The view
+  library's Diagram is this one (a view, an agent's block in its reply).
 -->
 <script lang="ts">
   import { CANVAS_DIAGRAMS } from "@cawco/core/decisions";
@@ -27,9 +29,10 @@
     statementId,
   }: OpenUIRenderProps<{ mermaid: unknown; caption?: unknown }> = $props();
 
-  /** Whether the converter draws Mermaid type `named` as elements (core `CANVAS_DIAGRAMS`). */
+  /** Whether it can open as a canvas: on a decision page, of a type the converter draws as elements (core `CANVAS_DIAGRAMS`). */
   const drawsAsCanvas = (named: string | null): boolean =>
-    CANVAS_DIAGRAMS.some((one) => one === named);
+    CANVAS_DIAGRAMS.some((one) => one === named) &&
+    overlayTag().artifact !== null;
   const text = $derived(String(props.mermaid ?? ""));
   let box = $state<HTMLDivElement>();
   let type = $state<string | null>(null);

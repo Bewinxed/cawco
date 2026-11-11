@@ -1468,6 +1468,17 @@ const ANSWERS =
 const LEAF_FINISHING =
   "Keep working while the brief still owes work, and work that does not depend on an open question or card goes on while it waits. An error, a timeout, a busy or failing tool, a locked file or an empty result is an ordinary obstacle: diagnose it and work through it with the access you have (wait and retry, fix the call, use another tool or source). A deliberate block is different: the workspace's boundary, access that was withheld, a file the brief says not to touch, a guardrail. Leave it alone, look for another safe way to finish, and when there is none, name it in finish_item's `blocked`. None of this lifts a confirmation the harness asks for a risky or destructive action.";
 
+/**
+ * When and how a session draws a block in its reply (tsk-330): an `openui`
+ * fence the transcript draws in place, versioned by its name, kept as a
+ * page artifact when it should outlive the message. Every session hears it;
+ * the components and syntax are the inline-block skill's (generated from
+ * the block library, core openui-views.ts), as a decision page's are
+ * LIBRARY.md's.
+ */
+const BLOCKS =
+  'Blocks: when a reply compares options, tracks many items, or shows figures, a chart or a diagram, draw it as a block in place of a markdown table: a fence opened with ```openui name="a few plain words", holding an OpenUI Lang program the transcript draws in place. Load the inline-block skill before your first block. Prose stays prose, and a choice for the person goes through ask or a decision page. A later fence under the same name is the block\'s new version; the earlier one folds and points to it. When a block should outlive the message, keep it: artifact_create with kind "page", does "judge", the block\'s program as `program` and its name in lowercase words joined by dashes as `name`, then revise it there with artifact_update\'s statements.';
+
 /** The server's instructions for one session, from what it can be listed. */
 export function handoffInstructions(
   deps: HandoffDeps,
@@ -1479,7 +1490,7 @@ export function handoffInstructions(
   // dashboard draws the link as that session's chip.
   // Who decides' kinds are the fleet's rows: the live list, read as the
   // session starts, so a kind added reaches the next session.
-  const naming = `${DECIDES_RULE} ${kindsLine(kinds)}\n\n${REFERENCE_GUIDANCE}\n\n${ANSWERS}`;
+  const naming = `${DECIDES_RULE} ${kindsLine(kinds)}\n\n${REFERENCE_GUIDANCE}\n\n${BLOCKS}\n\n${ANSWERS}`;
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")

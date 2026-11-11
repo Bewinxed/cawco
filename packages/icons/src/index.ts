@@ -176,6 +176,8 @@ export {
   default as IconFileMarkdown,
   default as IconToolRead,
 } from "~icons/solar/document-text-bold-duotone";
+/** Keep as artifact, a bar's symbol over an agent's block (tsk-330). */
+export { default as IconArtifactPageLinear } from "~icons/solar/document-text-linear";
 export { default as IconDocuments } from "~icons/solar/documents-bold-duotone";
 export { default as IconDollar } from "~icons/solar/dollar-bold-duotone";
 export { default as IconCollapseOthers } from "~icons/solar/double-alt-arrow-up-bold-duotone";

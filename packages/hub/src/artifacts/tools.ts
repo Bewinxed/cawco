@@ -171,7 +171,7 @@ export const artifactCreate = {
         "page: `program`, `html`, or `dir` holding page.oui or page.html. component: `file`, every story drawn live (component-canvas skill). preview: a server on `port`, or a folder (`dir`), at `path`. canvas: `elements`, `mermaid`, or empty."
       ),
     does: does.describe(
-      "pick: a page with `program`. judge: a component, or a preview or page judged whole. try: a preview. draw: a canvas."
+      "pick: a page with decision cards. judge: a component, a kept block, or a preview or page judged whole. try: a preview. draw: a canvas."
     ),
     ask,
     title,
@@ -181,7 +181,9 @@ export const artifactCreate = {
       .min(1)
       .max(PROGRAM_MAX)
       .optional()
-      .describe("Its decision cards (decision-page skill)."),
+      .describe(
+        "Its decision cards (decision-page skill), or a block from your reply to keep (inline-block skill)."
+      ),
     html: z
       .string()
       .min(1)
