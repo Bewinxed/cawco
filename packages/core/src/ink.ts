@@ -21,7 +21,12 @@
  *
  * Every entry is a plain JSON value in its map.
  */
-import type { Anchor, PageAnchor } from "./comments";
+import {
+  type Anchor,
+  FILE_SPOT_PROBLEM,
+  fileSpotProblem,
+  type PageAnchor,
+} from "./comments";
 
 export const INK_LIMITS = {
   /** Elements one group names it marks. Our call. */
@@ -80,6 +85,9 @@ function inkGroupProblem(value: unknown): string | null {
   }
   if (value.strokes.length > INK_LIMITS.strokesPerGroup) {
     return `A stroke group keeps at most ${INK_LIMITS.strokesPerGroup} strokes.`;
+  }
+  if (isObject(value.anchor) && fileSpotProblem(value.anchor)) {
+    return FILE_SPOT_PROBLEM;
   }
   for (const stroke of value.strokes) {
     if (!(isObject(stroke) && Array.isArray(stroke.points))) {

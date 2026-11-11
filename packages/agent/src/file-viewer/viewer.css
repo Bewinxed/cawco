@@ -1,0 +1,184 @@
+/* CawCo's file viewer (core file-viewer.ts): a PDF's pages, an image, text's
+   numbered lines, or what a file is, on the house tokens (the kit's
+   tokens.css, before this sheet). No literal colour or size: each is a token,
+   or a count of the font's own units. */
+:root {
+  color-scheme: light dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-recess);
+  color: var(--ink-strong);
+  font: var(--type-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The head: the file's name, what it is, its download. */
+.file-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-page);
+  border-block-end: var(--border-width) solid var(--border-hairline);
+}
+.file-name {
+  margin: 0;
+  min-inline-size: 0;
+  font: var(--type-row);
+  color: var(--ink-strong);
+  overflow-wrap: anywhere;
+}
+.file-meta {
+  margin: 0;
+  font: var(--type-meta);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.file-meta span + span::before {
+  content: "·";
+  padding-inline: var(--space-1);
+}
+.file-download {
+  margin-inline-start: auto;
+  font: var(--type-label);
+  color: var(--brand-ink);
+  text-underline-offset: 0.2em;
+}
+.file-download:hover {
+  color: var(--brand-ink-strong);
+}
+.file-download:focus-visible {
+  outline: var(--border-width) solid var(--focus-ring);
+  outline-offset: var(--space-1);
+  border-radius: var(--radius-xs);
+}
+
+.file-body {
+  flex: 1;
+  padding: var(--space-5) var(--space-4);
+}
+.file-note {
+  margin: var(--space-4) auto 0;
+  max-inline-size: var(--c-measure);
+  font: var(--type-meta);
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+/* A PDF: its pages down the middle, each at most its printed size (set on it). */
+.pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+.pages > .file-note {
+  margin: 0;
+}
+.page {
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor, 1) * var(--user-unit));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  position: relative;
+  inline-size: 100%;
+  overflow: clip;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+.page-canvas {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+/* An image: itself, fit to the width. */
+.file-image {
+  display: grid;
+  place-items: start center;
+}
+.file-image img {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+  box-shadow: var(--shadow-raised);
+}
+
+/* Text: its lines on one sheet at the reading measure, each numbered. */
+.sheet {
+  max-inline-size: calc(
+    var(--c-measure) + var(--digits, 4) * 1ch + var(--space-3) * 2 +
+      var(--space-4)
+  );
+  margin-inline: auto;
+  padding-block: var(--space-3);
+  background: var(--surface-raised);
+  border: var(--border-width) solid var(--border-card);
+  border-radius: var(--radius-md);
+}
+.lines {
+  font: var(--type-code);
+  color: var(--ink-strong);
+}
+.line {
+  display: grid;
+  grid-template-columns: calc(var(--digits, 4) * 1ch) minmax(0, 1fr);
+  column-gap: var(--space-3);
+  min-block-size: 1lh;
+  padding-inline: var(--space-3) var(--space-4);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.line::before {
+  content: attr(data-line);
+  text-align: end;
+  color: var(--ink-subtle);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.line:target {
+  background: var(--brand-wash);
+}
+
+/* A file with no viewer: what it is, and its download. */
+.file-other {
+  display: grid;
+  place-items: center;
+}
+.file-card {
+  display: grid;
+  gap: var(--space-2);
+  max-inline-size: var(--c-measure-short);
+  padding: var(--space-5);
+  background: var(--surface-raised);
+  border: var(--border-width) solid var(--border-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+}
+.file-kind {
+  margin: 0;
+  font: var(--type-caps);
+  color: var(--ink-muted);
+}
+.file-card .file-name {
+  font: var(--type-title);
+}
+.file-line {
+  margin: 0;
+  color: var(--ink-muted);
+  text-wrap: pretty;
+}
+.file-card .file-download {
+  justify-self: start;
+  margin-inline-start: 0;
+  margin-block-start: var(--space-2);
+}

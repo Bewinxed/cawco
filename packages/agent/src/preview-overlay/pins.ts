@@ -144,8 +144,8 @@ export interface DraftTarget {
 const DRAFT_PIN = "draft";
 
 export interface PinsDeps {
-  /** What a page's mark stands on, read from `el` as it is now. */
-  anchorOf: (el: Element) => PageAnchor;
+  /** What a page's mark stands on, read from `el` as it is now; at `point` on it (fractions of its box), where in the file viewer's file that is. */
+  anchorOf: (el: Element, point?: { x: number; y: number }) => PageAnchor;
   /** A mark's anchor as this page may read it, `at` when the mark was made (page.ts `anchorToday`). */
   anchorToday: (anchor: PageAnchor, at: string) => PageAnchor;
   /** The page stands in the iPhone or Mac app, whose card opens a pin a tap writes (page.ts `appCommenting`, until tsk-59). */
@@ -828,7 +828,11 @@ export function startPins(deps: PinsDeps): Pins {
         continue;
       }
       const found = deps.locate(deps.anchorToday(pin.anchor, pin.at));
-      const now = found && deps.anchorOf(found.el);
+      // Where in a file it stands was read as it was made or placed again, and stands.
+      const now = found && {
+        ...deps.anchorOf(found.el),
+        ...(pin.anchor.file ? { file: pin.anchor.file } : {}),
+      };
       if (
         now &&
         (pin.movedAt ||
@@ -1852,15 +1856,16 @@ export function startPins(deps: PinsDeps): Pins {
       draw();
     },
     commentAt: (el, x, y) => {
+      const point = pointOn(el, x, y);
       const pin: Pin = {
         id: newId(),
         number: nextNumber(),
         kind: "comment",
-        anchor: deps.anchorOf(el),
+        anchor: deps.anchorOf(el, point),
         at: new Date().toISOString(),
         by: "person",
         elements: [deps.describe(el)],
-        point: pointOn(el, x, y),
+        point,
         thread: [],
       };
       write({ ...pin, title: pinName(pin) });
@@ -1905,10 +1910,11 @@ export function startPins(deps: PinsDeps): Pins {
         return;
       }
       // Its place alone: a resolve or a reply written meanwhile stands.
+      const point = pointOn(el, x, y);
       placePin(artifact.doc(), id, {
-        anchor: deps.anchorOf(el),
+        anchor: deps.anchorOf(el, point),
         elements: [deps.describe(el)],
-        point: pointOn(el, x, y),
+        point,
       });
       open(id);
     },

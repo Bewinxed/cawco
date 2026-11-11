@@ -36,6 +36,7 @@ import { agentReact } from "../packages/core/src/agent-react";
 import { bundled } from "../packages/core/src/bundled";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
 import { decisionHostAssets } from "../packages/core/src/decision-host";
+import { fileViewerAssets } from "../packages/core/src/file-viewer";
 import { bundleOverlay } from "../packages/core/src/preview-proxy";
 import { publishedFile } from "../packages/core/src/runtime";
 
@@ -235,11 +236,13 @@ export async function prepareAssets(options: {
     // each workspace's hook and OpenCode's plugin run its copy.
     ["workspace-judge.ts", "packages/core/src/workspace-judge.ts"],
   ];
-  const [canvas, decision] = await Promise.all([
+  const [canvas, decision, fileViewer] = await Promise.all([
     // A canvas's host page, its bundle and Excalidraw's fonts (core canvas-host.ts).
     canvasHostAssets(join(WORK, "canvas"), filesUnder),
     // A decision page's host bundle, its HTML pages' dials entry with it (core decision-host.ts).
     decisionHostAssets(join(WORK, "decision"), filesUnder),
+    // The file viewer's script and sheet, and PDF.js as published (core file-viewer.ts).
+    fileViewerAssets(join(WORK, "file"), filesUnder),
     writeWorkFiles(copies),
   ]);
   const playwright = packageDir("playwright-core", requireAgent);
@@ -265,6 +268,7 @@ export async function prepareAssets(options: {
     ["stage/host.mjs", join(WORK, "stage-host.mjs")],
     ...canvas,
     ...decision,
+    ...fileViewer,
     // Run as plain Bun as each workspace's judge, never as cawco (boundary.ts).
     ["boundary/judge.ts", join(ROOT, "packages/agent/src/boundary-judge.ts")],
     // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).

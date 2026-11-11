@@ -1,8 +1,8 @@
 /**
  * The merge check on the bundles Bun builds at runtime for a
  * browser: the canvas host, the decision host (whose dashboard components'
- * styles Lightning CSS compiles, core page-css.ts), the preview overlay and
- * the stage host. Each is built as the hub builds it, and each builder
+ * styles Lightning CSS compiles, core page-css.ts), the preview overlay,
+ * the file viewer and the stage host. Each is built as the hub builds it, and each builder
  * refuses a `light-dark()` Bun lowered to switch variables nothing sets
  * (core bundle-css-guard.ts): a stylesheet that reached Bun's CSS bundler
  * again stops here instead of drawing transparent on the canvas.
@@ -12,12 +12,14 @@
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { buildCanvasHost } from "../packages/core/src/canvas-host";
 import { buildDecisionHost } from "../packages/core/src/decision-host";
+import { builtFiles } from "../packages/core/src/file-viewer";
 import { loadOverlay } from "../packages/core/src/preview-proxy";
 
 const started = performance.now();
 const bundles = {
   "canvas host": buildCanvasHost,
   "decision host": buildDecisionHost,
+  "file viewer": builtFiles,
   "preview overlay": loadOverlay,
   "stage host": buildStageHost,
 } as const;

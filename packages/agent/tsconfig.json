@@ -15,6 +15,7 @@
     "node_modules",
     "dist",
     "src/canvas-host",
+    "src/file-viewer",
     "src/preview-overlay",
     "src/stage-host/canvas"
   ],

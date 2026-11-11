@@ -10,6 +10,11 @@ import {
 } from "@cawco/core/browser";
 import { PREVIEW_RELAYED_HEADER } from "@cawco/core/browser-gate";
 import {
+  fileViewerPage,
+  fileViewOf,
+  opensAsFile,
+} from "@cawco/core/file-viewer";
+import {
   asksUpgrade,
   cachePreview,
   causeOf,
@@ -740,6 +745,46 @@ const servesNow = (held: number): Response =>
     },
   });
 
+/** What a file's answer says no longer once the viewer page stands in its place: the file's own length, encoding, range and validators. */
+const FILE_ONLY_HEADERS = [
+  "accept-ranges",
+  "content-disposition",
+  "content-encoding",
+  "content-length",
+  "content-range",
+  "etag",
+  "last-modified",
+] as const;
+
+/**
+ * The viewer page (core file-viewer.ts) for the file at `url` answered with
+ * `headers` and `body`, `size` bytes when the folder said (else its answer's
+ * length); `headers` become the page's: HTML, never kept.
+ */
+async function viewerOf(
+  url: URL,
+  headers: Headers,
+  body: ReadableStream<Uint8Array> | null,
+  size: number | null
+): Promise<string> {
+  const type = headers.get("content-type");
+  const length = Number(headers.get("content-length"));
+  const name = decodeURIComponent(url.pathname.split("/").at(-1) ?? "");
+  const page = fileViewerPage({
+    name: name || url.hostname,
+    src: `${url.pathname}${url.search}`,
+    type,
+    size: size ?? (Number.isFinite(length) && length > 0 ? length : null),
+    view: await fileViewOf(type, body),
+  });
+  for (const header of FILE_ONLY_HEADERS) {
+    headers.delete(header);
+  }
+  headers.set("content-type", "text/html; charset=utf-8");
+  headers.set("cache-control", "no-store");
+  return page;
+}
+
 async function start(
   options: Parameters<typeof startPreview>[0]
 ): Promise<{ port: number }> {
@@ -900,6 +945,8 @@ async function start(
     let response: Response;
     /** A folder's file at its folder's key: kept for good. */
     let versioned: string | null = null;
+    /** The bytes of the folder's file answered, as its folder holds it; a server's answer says its own length. */
+    let fileSize: number | null = null;
     if ("port" in source) {
       const route = machineRoute(url.pathname);
       if (route) {
@@ -1036,9 +1083,11 @@ async function start(
       if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) {
         return missing(403, "Forbidden");
       }
-      if (!(await stat(actual)).isFile()) {
+      const stats = await stat(actual);
+      if (!stats.isFile()) {
         return missing(404, "Not found");
       }
+      fileSize = stats.size;
       // A file at its folder's key never changes its bytes, so it is kept
       // for good (core `IMMUTABLE`, longer than any TTL a CDN would set);
       // the page's own address is what is on disk now.
@@ -1080,11 +1129,20 @@ async function start(
         }
       }
     }
-    const html =
-      !!headers.get("content-type")?.startsWith("text/html") &&
+    // A frame's load of a file that is no HTML page (a PDF, an image, text,
+    // anything else): CawCo's viewer of it in its place, a page like any
+    // other, so the overlay reaches it (core file-viewer.ts). A tab's load,
+    // a download, an `<img>` or the viewer's own fetch gets the file.
+    let page: string | null = null;
+    if (opensAsFile(request, response.status, headers.get("content-type"))) {
+      page = await viewerOf(url, headers, response.body, fileSize);
+    } else if (
+      headers.get("content-type")?.startsWith("text/html") &&
       request.method !== "HEAD" &&
-      !!response.body;
-    const page = html ? await response.text() : null;
+      response.body
+    ) {
+      page = await response.text();
+    }
     // A document's load its server answered with an error status and
     // nothing the browser can draw (no body, or one that isn't HTML): the
     // browser would draw its own broken-frame face, with no words, so

@@ -1,4 +1,5 @@
 import { type Pin, type PinnedElement, wholePage } from "./comments";
+import { fileSpotName, readFileSpot } from "./file-spot";
 
 /** A pin on the page as a whole (core `wholePage`), by name. Our call. */
 const PAGE_WORDS = "Whole page";
@@ -114,7 +115,7 @@ function shortText(text: string): string {
  * the start of the element's own words, else the element by its id, class
  * or kind. Never a component's name (the code's word for it), never the
  * selector, which is the head's tooltip. A pin on the page as a whole is
- * the page.
+ * the page; one in a file CawCo's viewer shows, its place in the file.
  */
 export function pinName(pin: Pin): string {
   if (pin.title) {
@@ -123,6 +124,11 @@ export function pinName(pin: Pin): string {
   const { anchor } = pin;
   if (!("selector" in anchor)) {
     return `Element ${anchor.element}`;
+  }
+  // In a file CawCo's viewer shows: where in it ("Page 3, near the top left", "Lines 12–14").
+  const file = readFileSpot(anchor.file);
+  if (file) {
+    return fileSpotName(file);
   }
   if (wholePage(anchor)) {
     return PAGE_WORDS;

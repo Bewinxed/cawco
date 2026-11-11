@@ -50,6 +50,7 @@
     "idiomorph": "0.8.0",
     "image-size": "2.0.4",
     "modern-screenshot": "4.7.0",
+    "pdfjs-dist": "6.5.438",
     "perfect-freehand": "1.2.3",
     "playwright-core": "^1.65.0",
     "react": "19.3.0",

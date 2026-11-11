@@ -29,7 +29,7 @@
   app mounts seconds after its frame's load), its wait saying so until then,
   or, `DRAW_MS` past its load, the last file its server sent it (core
   `EMBED_ARRIVING`) and the last second its server held a request of it
-  (core `previewPing`): a cold dev server still compiling, or holding the
+  (core `previewHeld`): a cold dev server still compiling, or holding the
   page's modules or data, is still opening, that it showed nothing. A
   component canvas draws the stories its `stories` names (every one
   when it names none) as the component alone, each at the width it names
@@ -68,7 +68,7 @@
     askHubReach,
     PREVIEW_REACH_PATH,
     type PreviewWays,
-    previewPing,
+    previewHeld,
     previewsNeedWords,
     previewUnreachedWords,
     probePreview,
@@ -254,13 +254,6 @@
     }).catch(() => undefined);
   };
 
-  /** A whole screen shows something of its own ({@link appDrawn}): the page's turn is the next screen's. */
-  const screenShown = () => {
-    appDrawn = true;
-    turnState = "fetched";
-    turn?.done();
-  };
-
   /** What a whole screen's overlay says of the document its frame holds, heard: true for its words, false for any other. */
   const heardScreen = (type: unknown): boolean => {
     // A new document in its frame (its overlay's first word, each load): a
@@ -281,7 +274,9 @@
     }
     // A whole screen's app has mounted (its overlay saw it show something of its own): the page's turn is the next screen's.
     if (type === EMBED_DRAWN) {
-      screenShown();
+      appDrawn = true;
+      turnState = "fetched";
+      turn?.done();
       return true;
     }
     return false;
@@ -415,15 +410,6 @@
    * `EMBED_ARRIVING`). Its {@link DRAW_MS} runs from the last.
    */
   let arrived = $state(0);
-  /**
-   * When the frame's document before the one it holds stood: its attempt's
-   * start, then each load. A file the browser draws itself (a PDF, an
-   * image, plain text) is what it holds when its origin's ping says it
-   * answered one since (core `PREVIEW_BARE_HEADER`): no overlay reaches it,
-   * so it never says `EMBED_DRAWN`, and it shows itself.
-   */
-  let sinceLoad = 0;
-  let lastLoad = 0;
   /** The frame stood unseen under its wait (its skeleton), so its showing is the skeleton's reveal. */
   let underWait = false;
   /**
@@ -624,7 +610,7 @@
    * cold Vite holds every module that imports a dependency until it has
    * scanned and bundled them, and a route waits on its data; so its clock
    * starts again too each second the server holds a request of the page
-   * (core `previewPing`, the machine's listener's word). So it says so only
+   * (core `previewHeld`, the machine's listener's word). So it says so only
    * of a page that showed nothing for 30 s with nothing more coming and
    * nothing held; until then it is opening.
    */
@@ -655,22 +641,12 @@
     const { origin } = new URL(embed);
     let gone = false;
     const ask = async () => {
-      const ping = await previewPing(origin);
-      if (gone) {
-        return;
-      }
-      // A file the browser draws itself: it shows itself (`sinceLoad`).
-      if (
-        ping.bareAgo !== null &&
-        ping.bareAgo <= performance.now() - sinceLoad
-      ) {
-        screenShown();
-        return;
-      }
-      if (ping.held) {
+      if ((await previewHeld(origin)) && !gone) {
         arrived += 1;
       }
-      next = setTimeout(ask, PING_MS);
+      if (!gone) {
+        next = setTimeout(ask, PING_MS);
+      }
     };
     let next = setTimeout(ask, PING_MS);
     return () => {
@@ -682,7 +658,6 @@
     const embed = held?.embed;
     track(attempt);
     ready = null;
-    lastLoad = performance.now();
     rest = null;
     told = false;
     drawn = false;
@@ -1045,8 +1020,6 @@
             data-turn={turnState}
             onload={() => {
               drawn = true;
-              sinceLoad = lastLoad;
-              lastLoad = performance.now();
               // A canvas's page that told no graph by its load has none to
               // fetch (a stage's error page): it holds no turn. One that told
               // it has its turn already; told again here, it would take a

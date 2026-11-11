@@ -68,10 +68,12 @@
 
 import { humanSize } from "./attachments";
 import type { DocMap, MapDoc } from "./doc-maps";
+import { type FileSpot, fileSpotDetail, readFileSpot } from "./file-spot";
 import { fnv1a } from "./fnv1a";
 import type { PreviewElement } from "./index";
 import type { InkGroup } from "./ink";
 import type { Interaction } from "./stage";
+import { fileViewerWords } from "./words/file-viewer";
 
 /**
  * The preview pane's modes, its head's segmented control (V, C, D), told to
@@ -204,6 +206,13 @@ export interface PageAnchor {
    * `data-cawco-artifact`): a component canvas, a dev server's preview, a page.
    */
   embed?: { artifact: string };
+  /**
+   * Where it stands in a file that is no HTML page, shown by CawCo's file
+   * viewer (file-spot.ts): a point on the image or on a PDF's page, a text's
+   * line or lines, or the file as a whole. The element is the viewer's spot
+   * for it; this is what finds it again and what the agent is told.
+   */
+  file?: FileSpot;
   /**
    * The frames it stands in, outermost first, each by its selector in its
    * parent's document; none at the top. A frame of another origin is read
@@ -1119,6 +1128,9 @@ export function pinProblem(value: unknown): string | null {
   if (value.thread.length > COMMENT_LIMITS.entries) {
     return `A pin's thread keeps at most ${COMMENT_LIMITS.entries} entries.`;
   }
+  if (fileSpotProblem(value.anchor)) {
+    return FILE_SPOT_PROBLEM;
+  }
   for (const entry of value.thread) {
     const problem = entryProblem(entry);
     if (problem) {
@@ -1127,6 +1139,14 @@ export function pinProblem(value: unknown): string | null {
   }
   return null;
 }
+
+/** Why a mark's place in a file may not be kept: its anchor names a `file` that is no file spot (file-spot.ts). */
+export const FILE_SPOT_PROBLEM =
+  "A mark's place in a file is a point on its image or a PDF's page, a text's line or lines, or the file as a whole.";
+
+/** Whether `anchor` names a `file` that is no file spot ({@link FILE_SPOT_PROBLEM}). */
+export const fileSpotProblem = (anchor: Record<string, unknown>): boolean =>
+  anchor.file !== undefined && readFileSpot(anchor.file) === null;
 
 /** Why a pin's head is not one: its parts are its own keys, never inside it. */
 const headProblem = (head: unknown): string | null =>
@@ -2113,7 +2133,29 @@ function amongWritten<E, D>(
   return el && named.holds(el) ? { by: "selector", el } : null;
 }
 
-/** A section's head and what its pin stands on: the element by selector, source, page and text, or a canvas's element. */
+/** What a section's head says a page's mark stands on: its spot in a file, the page as a whole, else its element's selector. */
+const spotHead = (anchor: PageAnchor): string => {
+  const file = readFileSpot(anchor.file);
+  if (file) {
+    return file.kind === "file" ? "the file as a whole" : "the file";
+  }
+  return wholePage(anchor) ? "the whole page" : anchor.selector;
+};
+
+/** What a stroke group's head says it is drawn over: the file, the page as a whole, else its element's selector. */
+const inkOver = (anchor: PageAnchor): string => {
+  if (readFileSpot(anchor.file)) {
+    return "the file";
+  }
+  return wholePage(anchor) ? "the page as a whole" : anchor.selector;
+};
+
+/** Where in a file a mark stands, as its section's line (file-spot.ts); none off a file. */
+const inFileLine = (anchor: PageAnchor): string[] => {
+  const file = readFileSpot(anchor.file);
+  return file ? [`- ${fileViewerWords.inFile}: ${fileSpotDetail(file)}`] : [];
+};
+
 /**
  * What a pin stands on, one line per fact, under its heading: the element by
  * its selector (or a canvas's element), the frames and artifact it stands
@@ -2137,7 +2179,8 @@ export const pinStandsOn = (pin: Pin, url?: string): string[] => {
       : "";
   const chain = chainWords(anchor);
   return [
-    `## ${pin.number}. ${pin.kind} on ${wholePage(anchor) ? "the whole page" : anchor.selector}`,
+    `## ${pin.number}. ${pin.kind} on ${spotHead(anchor)}`,
+    ...inFileLine(anchor),
     ...(anchor.embed
       ? [`- Inside the artifact ${anchor.embed.artifact}, shown in this page`]
       : []),
@@ -2187,6 +2230,7 @@ export const changedAnchor = (
   (now.page !== undefined && was.page !== now.page) ||
   JSON.stringify(was.source) !== JSON.stringify(now.source) ||
   JSON.stringify(was.chain ?? []) !== JSON.stringify(now.chain ?? []) ||
+  JSON.stringify(was.file ?? null) !== JSON.stringify(now.file ?? null) ||
   JSON.stringify(was.sheet ?? null) !== JSON.stringify(now.sheet ?? null);
 
 /**
@@ -2259,7 +2303,8 @@ export function inkSection(
   const lines =
     "selector" in anchor
       ? [
-          `## ${what} over ${wholePage(anchor) ? "the page as a whole" : anchor.selector}`,
+          `## ${what} over ${inkOver(anchor)}`,
+          ...inFileLine(anchor),
           ...(over.length > 1 ? ["- Encloses:", ...over] : []),
           ...(anchor.frames?.length
             ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]

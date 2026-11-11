@@ -69,6 +69,7 @@ import { getStroke } from "perfect-freehand";
 import { absences } from "./absent";
 import { artifact, PLACED } from "./artifact";
 import { STAND_INS } from "./embeds";
+import { linesOver } from "./file-spot";
 import {
   type Box,
   clipOf,
@@ -176,8 +177,8 @@ const viewOf = (points: [number, number][]): [number, number][] =>
 
 /** What the overlay lends the ink: its own describers, the pins, the host's chrome. */
 export interface InkDeps {
-  /** What a page's mark stands on, read from `el` as it is now. */
-  anchorOf: (el: Element) => PageAnchor;
+  /** What a page's mark stands on, read from `el` as it is now; at `point` on it (fractions of its box), where in the file viewer's file that is. */
+  anchorOf: (el: Element, point?: { x: number; y: number }) => PageAnchor;
   /** A mark's anchor as this page may read it, `at` when the mark was made (page.ts `anchorToday`). */
   anchorToday: (anchor: PageAnchor, at: string) => PageAnchor;
   /** The count of the page's changes an anchor may read otherwise after (its nodes, words and names: page.ts `changesNow`). */
@@ -1021,15 +1022,22 @@ export function startInk(deps: InkDeps): Ink {
       round((p[1] - ab.y) / ab.h),
       round(p[2]),
     ];
+    const box = {
+      x: round((groupBox.x - ab.x) / ab.w),
+      y: round((groupBox.y - ab.y) / ab.h),
+      w: round(groupBox.w / ab.w),
+      h: round(groupBox.h / ab.h),
+    };
+    // In the file viewer: the group's middle on its spot, or the text lines it marks.
+    const lines = linesOver(over);
+    const anchored = deps.anchorOf(anchor, {
+      x: box.x + box.w / 2,
+      y: box.y + box.h / 2,
+    });
     return {
       id: open?.id ?? newId(),
-      anchor: deps.anchorOf(anchor),
-      box: {
-        x: round((groupBox.x - ab.x) / ab.w),
-        y: round((groupBox.y - ab.y) / ab.h),
-        w: round(groupBox.w / ab.w),
-        h: round(groupBox.h / ab.h),
-      },
+      anchor: lines ? { ...anchored, file: lines } : anchored,
+      box,
       page: {
         x: Math.round(groupBox.x),
         y: Math.round(groupBox.y),
@@ -1041,7 +1049,7 @@ export function startInk(deps: InkDeps): Ink {
         at: stroke.at,
       })),
       at: open?.at ?? at,
-      over: over.map(deps.anchorOf),
+      over: over.map((el) => deps.anchorOf(el)),
       ...(open?.illustration ? { illustration: true as const } : {}),
       ...(onOwnScroll
         ? { scrolled: { x: anchor.scrollLeft, y: anchor.scrollTop } }
@@ -1343,7 +1351,13 @@ export function startInk(deps: InkDeps): Ink {
     el: Element,
     by: AnchorFound<Element>["by"]
   ): InkGroup | null {
-    const now = deps.anchorOf(el);
+    // Where in a file it stands was read as it was drawn, and stands.
+    const now = {
+      ...deps.anchorOf(el),
+      ...("selector" in group.anchor && group.anchor.file
+        ? { file: group.anchor.file }
+        : {}),
+    };
     return "selector" in group.anchor &&
       (changedAnchor(group.anchor, now, by) ||
         liveWords(group.id, group.anchor, now, by))

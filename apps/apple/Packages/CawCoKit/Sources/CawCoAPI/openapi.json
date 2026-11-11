@@ -45363,6 +45363,94 @@
               "artifact"
             ]
           },
+          "file": {
+            "description": "Where it stands in a file that is no HTML page, shown by CawCo's file\nviewer (file-spot.ts): a point on the image or on a PDF's page, a text's\nline or lines, or the file as a whole. The element is the viewer's spot\nfor it; this is what finds it again and what the agent is told.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "image"
+                    ]
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "x",
+                  "y"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "pdf"
+                    ]
+                  },
+                  "page": {
+                    "type": "number"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "page",
+                  "x",
+                  "y"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "end": {
+                    "type": "number"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "text"
+                    ]
+                  },
+                  "line": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "line"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "file"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
+          },
           "frames": {
             "description": "The frames it stands in, outermost first, each by its selector in its\nparent's document; none at the top. A frame of another origin is read\nthrough its own overlay (agent preview-overlay embeds.ts), and the\nselector, source, text, chain and sheet are read in the innermost frame's\ndocument either way.",
             "type": "array",

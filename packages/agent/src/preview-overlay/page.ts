@@ -31,6 +31,7 @@ import {
   withdrawPin,
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
+import { readFileSpot } from "@cawco/core/file-spot";
 import {
   PAGE_TOUCHED_MESSAGE,
   PERSONS_INPUT,
@@ -92,6 +93,14 @@ import {
 } from "./embeds";
 import { faultsGoTo } from "./faults";
 import { fillFields, trackFields } from "./fields";
+import {
+  fileSpotAt,
+  inViewer,
+  markable,
+  spotElement,
+  spotOf,
+  viewerLoading,
+} from "./file-spot";
 import {
   type Box,
   deepElementAt,
@@ -940,10 +949,10 @@ function themed() {
   }
 }
 
-/** This page draws in the host's theme: a page artifact or a sheet, never a preview. */
+/** This page draws in the host's theme: a page artifact, a sheet or CawCo's file viewer, never a preview's own page. */
 function themesWithHost(): boolean {
   const kind = artifact.kind();
-  return kind === "page" || kind === "component";
+  return kind === "page" || kind === "component" || inViewer();
 }
 
 /**
@@ -1763,7 +1772,7 @@ function elementAt(x: number, y: number): Element | null {
   layer.style.pointerEvents = "none";
   const element = document.elementFromPoint(x, y);
   layer.style.removeProperty("pointer-events");
-  return element === host ? null : deepElementAt(element, x, y);
+  return element === host ? null : markable(deepElementAt(element, x, y));
 }
 
 /**
@@ -1779,7 +1788,8 @@ function elementsAt(points: [x: number, y: number][]): (Element | null)[] {
       document
         .elementsFromPoint(x, y)
         .find((hit) => hit !== host && !hit.closest(OVERLAY_OWN)) ?? null;
-    return deepElementAt(element, x, y);
+    // In the file viewer, the spot holding the hit: a PDF's page, never a word its text layer draws.
+    return markable(deepElementAt(element, x, y));
   });
 }
 
@@ -2001,7 +2011,12 @@ function nameOf(el: Element): { name?: string } {
   return name ? { name } : {};
 }
 
-function anchorOf(el: Element): PageAnchor {
+/**
+ * `el`'s anchor; in the file viewer with where in the file it stands
+ * (./file-spot.ts), at `point` on it (fractions of its box, a pin's
+ * `point`) when the mark stands at one.
+ */
+function anchorOf(el: Element, point?: { x: number; y: number }): PageAnchor {
   const remote = embeds.anchorOf(el);
   if (remote) {
     return remote;
@@ -2025,6 +2040,7 @@ function anchorOf(el: Element): PageAnchor {
     ...(whole ? {} : { text: textOf(el) }),
     ...(whole ? {} : nameOf(el)),
     ...(hash && !stableSelector(selector) ? { page: hash } : {}),
+    ...fileOf(el, point),
     box: {
       x: Math.round(x + scrollX),
       y: Math.round(y + scrollY),
@@ -2032,6 +2048,15 @@ function anchorOf(el: Element): PageAnchor {
       h: Math.round(height),
     },
   };
+}
+
+/** Where in the viewer's file `el` at `point` stands, as an anchor keeps it; nothing outside the viewer. */
+function fileOf(
+  el: Element,
+  point: { x: number; y: number } | undefined
+): Pick<PageAnchor, "file"> {
+  const file = fileSpotAt(el, point);
+  return file ? { file } : {};
 }
 
 /** The same-origin frame `selector` names in `within`, by its document; null when it is not there or not of this origin. */
@@ -2067,6 +2092,10 @@ function embedToCome(anchor: PageAnchor): boolean {
  * found yet, and is not gone either.
  */
 function waiting(anchor: PageAnchor): boolean {
+  // A mark in the viewer's file while its spots are still being laid out.
+  if (!anchor.frames?.length && readFileSpot(anchor.file) && viewerLoading()) {
+    return true;
+  }
   const remote = embeds.find(anchor);
   if (remote) {
     return remote.state === "waiting";
@@ -2351,7 +2380,14 @@ function byKey(
 const sourceKey = (file: string, line: number) => `${file}:${line}`;
 
 /** {@link locate} in this page and its same-origin frames: core `findAnchor` alone, over the page read once ({@link pageRead}). */
-function findAnchorHere(anchor: PageAnchor) {
+function findAnchorHere(anchor: PageAnchor): AnchorFound<Element> | null {
+  // A mark in the viewer's file stands on its spot there: a PDF's page, a
+  // text's line, the image, the file as a whole.
+  const inFile = anchor.frames?.length ? null : readFileSpot(anchor.file);
+  const spot = inFile && inViewer() ? spotElement(inFile) : null;
+  if (spot) {
+    return { by: "selector", el: spot };
+  }
   return findAnchor<Element, Document>(anchor, {
     top: document,
     frame: frameIn,
@@ -2560,9 +2596,9 @@ const drawsWords = (el: Element): boolean =>
     (node) => node.nodeType === Node.TEXT_NODE && !!node.textContent?.trim()
   );
 
-/** Whether `el` is content however big it stands: it draws words, it is a frame, or an embed named it. */
+/** Whether `el` is content however big it stands: it draws words, it is a frame, an embed named it, or it is a spot of the file viewer's (an image as big as the page is the image). */
 const isContent = (el: Element): boolean =>
-  drawsWords(el) || isFrame(el) || !!embeds.read(el);
+  drawsWords(el) || isFrame(el) || !!embeds.read(el) || spotOf(el) === el;
 
 /**
  * What the hover label says of `el` (the page's root: {@link WHOLE_PAGE}):
@@ -2976,12 +3012,14 @@ function draftWritten(
   const point = at.chosen === 0 ? at.point : undefined;
   const el = draftEl();
   if (el) {
+    const on =
+      el === el.ownerDocument.body
+        ? undefined
+        : (point ?? pins.pointOn(el, at.x, at.y));
     return {
-      anchor: anchorOf(el),
+      anchor: anchorOf(el, on),
       elements: [describe(el)],
-      ...(el === el.ownerDocument.body
-        ? {}
-        : { point: point ?? pins.pointOn(el, at.x, at.y) }),
+      ...(on ? { point: on } : {}),
     };
   }
   return atPress ? { ...atPress, ...(point ? { point } : {}) } : null;

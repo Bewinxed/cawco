@@ -379,6 +379,8 @@ export default {
         "src/standalone-setup.ts",
         // The canvas host page's Bun.build entrypoint: packages/core/src/canvas-host.ts:91.
         "src/canvas-host/host.tsx",
+        // The file viewer's Bun.build entrypoint: packages/core/src/file-viewer.ts `buildViewerScript`.
+        "src/file-viewer/viewer.ts",
       ],
       // Read by Bun.resolveSync (src/preview-overlay/glyphs.ts:21), which
       // Knip does not follow (it follows require.resolve and
