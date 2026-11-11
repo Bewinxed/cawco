@@ -26,13 +26,11 @@
  * to the natural size: its going, and anything inside it, starts no tween
  * and retargets none in flight. Nor is what is put in or taken out in place
  * of what stood there at its size (`data-in-place`, on what is put in or
- * on the element changed: a MorphText paragraph's letters taking its
- * text's place, written inside a ResizeObserver delivery, morph-text/
- * morph.ts; a MorphText's plain text coming back at the size its letters'
- * box was drawn at, morph-text.svelte): measured there, the page was laid
- * out again for nothing. A MorphText's swap is measured where it starts, the
- * box taking the larger of its two sides, and where its text comes back at
- * another size.
+ * on the element changed; torph's `torph-in-place` on a MorphText whose
+ * plain text came back at the size its morph's box was held at): measured
+ * there, the page was laid out again for nothing. A MorphText's swap is
+ * measured where it starts, the box taking the larger of its two sides, and
+ * where its text comes back at another size.
  *
  * The one ResizeObserver here watches the container itself and only reads:
  * the size it was laid out at, the size a tween starts from. A size change
@@ -413,17 +411,16 @@ export function morph({
       }
       return false;
     };
+    const inPlace = (one: Node) =>
+      one instanceof HTMLElement &&
+      (one.dataset.inPlace !== undefined || one.hasAttribute("torph-in-place"));
     const blank = (one: Node) =>
       one.nodeType === Node.COMMENT_NODE ||
       (one.nodeType === Node.TEXT_NODE && !one.textContent?.trim()) ||
-      (one instanceof HTMLElement && one.dataset.inPlace !== undefined);
+      inPlace(one);
     /** A change that can move the box's natural size. */
     const sizes = (record: MutationRecord) =>
-      !(
-        outOfFlow(record.target) ||
-        (record.target instanceof HTMLElement &&
-          record.target.dataset.inPlace !== undefined)
-      ) &&
+      !(outOfFlow(record.target) || inPlace(record.target)) &&
       (record.type !== "childList" ||
         ![...record.addedNodes, ...record.removedNodes].every(
           (one) => blank(one) || outOfFlow(one)

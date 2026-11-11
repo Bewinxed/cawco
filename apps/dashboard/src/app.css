@@ -161,38 +161,16 @@
 }
 
 /* ---- Rules into DOM a component does not render: a library's (Svelte Flow,
-   Streamdown; PhotoSwipe's in lightbox/photoswipe.css), a script's (the morph's letters, the editors'
+   Streamdown; PhotoSwipe's in lightbox/photoswipe.css), a script's (torph's morph, the editors'
    chips) or a kit part's internals, which take no
    class from the markup that hosts them. Each is anchored on the host's own
    hook. */
 @layer components {
-  /* The layers the morph (ui/morph-text/morph.ts) writes into its box, all
-     in its one cell, each step's letters on its lines, broken only at "\n":
-     each letter a box of its own. A paragraph's words written as text to
-     read where they wrap (`data-probe`) wrap as the text at rest does,
-     unseen. A digit rolls in a slot that clips it on the block axis only
-     (clip, unlike hidden, keeps the text's baseline), so a glyph's overhang
-     is never shaved. */
-  [data-slot="letters"] > * {
-    grid-area: 1 / 1;
-  }
-  [data-slot="letters"] > [data-probe] {
-    visibility: hidden;
-  }
-  [data-slot="letters"] > [data-layer] {
-    white-space: nowrap;
-
-    > :not(br) {
-      display: inline-block;
-      white-space: pre;
-    }
-    > [data-roll] {
-      overflow-x: visible;
-      overflow-y: clip;
-    }
-    > [data-roll] > span {
-      display: inline-block;
-    }
+  /* A MorphText paragraph trims its lines as the run around it does (the
+     mark line's text-box): torph draws a morph's words in a grid, which takes
+     no trim from around it, and hands its probes the root's own. */
+  [data-slot="morph-text"][data-wrap] {
+    text-box: inherit;
   }
 
   /* Streamdown (svelte-streamdown 4.2.1, the latest) writes its token and

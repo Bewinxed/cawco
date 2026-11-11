@@ -358,7 +358,7 @@ const stageChecks = async (kit: Kit) => {
           label: button.textContent?.trim(),
           textNodes: nodes.length,
           oneNode: nodes.length === 1 && text.includes(" "),
-          letters: !!button.querySelector('[data-slot="letters"]'),
+          letters: !!button.querySelector("[torph-cell]"),
           parent: `${node.parentElement?.localName}[${node.parentElement?.getAttribute("data-slot") ?? ""}]`,
           gap: Number(((second.left - first.right) / scale).toFixed(3)),
           space: Number((space.width / scale).toFixed(3)),

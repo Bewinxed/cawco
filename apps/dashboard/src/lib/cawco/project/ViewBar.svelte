@@ -128,7 +128,7 @@
       [{ inlineSize: `${from}px` }, { inlineSize: `${to}px` }],
       { duration: dur("--dur-morph"), easing: ease("--ease-out") }
     );
-    // The morph's letters start now (morph.ts pins theirs to the timeline's
+    // The morph's letters start now (torph pins theirs to the timeline's
     // time), not at the next frame as a fresh run would.
     run.startTime = document.timeline.currentTime;
   });

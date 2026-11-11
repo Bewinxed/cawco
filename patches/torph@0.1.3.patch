@@ -1,0 +1,3489 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index 71450921c005d323a927c824c6f9335ff9ce5467..7c454215fd220b40b3afa5943d7b019e23421f49 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -62,24 +62,57 @@ declare class TextMorph {
+     private element;
+     private options;
+     private data;
+-    private currentMeasures;
+-    private prevMeasures;
+-    private previousSegments;
++    /** The segments of the value drawn last, so the next morph matches against them. */
++    private segments;
+     private isInitialRender;
+     private reducedMotion;
+-    private srNode;
+     private hasSetup;
++    private run;
++    private step;
++    /** A layer written but not read yet: a step that comes first takes it out. */
++    private pending;
++    /** When the step not read yet was written, on the document's timeline. */
++    private writtenAt;
++    /**
++     * Whether the root is laid out as a block (a paragraph): its cell is then a
++     * block as well. Read once the root is first laid out; an inline root has
++     * no box of its own to observe, and stays inline.
++     */
++    private block;
+     constructor(options: TextMorphOptions);
+-    /** Deferred, not done in the constructor: `prefers-reduced-motion` can change after it. */
+     private setup;
+     destroy(): void;
+-    private isDisabled;
++    /** Less motion: nothing travels, the old value fades out where it stands and the new one in. */
++    private get fade();
+     /** `cursorIndex` switches a single-number value from place matching to caret matching. */
+     update(value: HTMLElement | string | number, cursorIndex?: number): void;
+-    private createTextGroup;
+-    private updateStyles;
+-    /** Holds the value as plain text — the segments are split and aria-hidden, so unreadable. */
+-    private syncAccessibleText;
++    /**
++     * Writes the step's layer and its probe into the cell, before the frame is
++     * laid out, and reads where everything lies once it is (laid-out.ts).
++     */
++    private begin;
++    private layer;
++    /** A step written and not read yet gives way to the one coming: its layer out. */
++    private drop;
++    /**
++     * The drawn word `id` as its letters, in its place: each moves as the word
++     * was moving, on the same clock, so nothing drawn changes.
++     */
++    private split;
++    /**
++     * Every box the step needs, read at once: where each drawn segment stands
++     * now and how opaque, where the text the morph starts from stood, and where
++     * each new segment comes to rest.
++     */
++    private read;
++    /** Where a block root's line puts the cell: the share of its spare width before it. */
++    private textAlign;
++    /** Every animation of the step, on one start, duration and curve. */
++    private play;
++    /** The morph has settled: the plain text takes the box's place, at its own size. */
++    private land;
++    /** Takes the morph down, the value back as plain text. */
++    private settle;
+ }
+ 
+ declare function segmentText(value: string, locale: Intl.LocalesArgument, numbers?: boolean): Segment[];
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 71450921c005d323a927c824c6f9335ff9ce5467..7c454215fd220b40b3afa5943d7b019e23421f49 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -62,24 +62,57 @@ declare class TextMorph {
+     private element;
+     private options;
+     private data;
+-    private currentMeasures;
+-    private prevMeasures;
+-    private previousSegments;
++    /** The segments of the value drawn last, so the next morph matches against them. */
++    private segments;
+     private isInitialRender;
+     private reducedMotion;
+-    private srNode;
+     private hasSetup;
++    private run;
++    private step;
++    /** A layer written but not read yet: a step that comes first takes it out. */
++    private pending;
++    /** When the step not read yet was written, on the document's timeline. */
++    private writtenAt;
++    /**
++     * Whether the root is laid out as a block (a paragraph): its cell is then a
++     * block as well. Read once the root is first laid out; an inline root has
++     * no box of its own to observe, and stays inline.
++     */
++    private block;
+     constructor(options: TextMorphOptions);
+-    /** Deferred, not done in the constructor: `prefers-reduced-motion` can change after it. */
+     private setup;
+     destroy(): void;
+-    private isDisabled;
++    /** Less motion: nothing travels, the old value fades out where it stands and the new one in. */
++    private get fade();
+     /** `cursorIndex` switches a single-number value from place matching to caret matching. */
+     update(value: HTMLElement | string | number, cursorIndex?: number): void;
+-    private createTextGroup;
+-    private updateStyles;
+-    /** Holds the value as plain text — the segments are split and aria-hidden, so unreadable. */
+-    private syncAccessibleText;
++    /**
++     * Writes the step's layer and its probe into the cell, before the frame is
++     * laid out, and reads where everything lies once it is (laid-out.ts).
++     */
++    private begin;
++    private layer;
++    /** A step written and not read yet gives way to the one coming: its layer out. */
++    private drop;
++    /**
++     * The drawn word `id` as its letters, in its place: each moves as the word
++     * was moving, on the same clock, so nothing drawn changes.
++     */
++    private split;
++    /**
++     * Every box the step needs, read at once: where each drawn segment stands
++     * now and how opaque, where the text the morph starts from stood, and where
++     * each new segment comes to rest.
++     */
++    private read;
++    /** Where a block root's line puts the cell: the share of its spare width before it. */
++    private textAlign;
++    /** Every animation of the step, on one start, duration and curve. */
++    private play;
++    /** The morph has settled: the plain text takes the box's place, at its own size. */
++    private land;
++    /** Takes the morph down, the value back as plain text. */
++    private settle;
+ }
+ 
+ declare function segmentText(value: string, locale: Intl.LocalesArgument, numbers?: boolean): Segment[];
+diff --git a/dist/index.js b/dist/index.js
+index b39fd811d30915896b85a14f1b8dbf7b5255823d..b77851621e7da3225b590389b6a4ccdd74c78c63 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,38 +1,791 @@
+-'use strict';var _t={locale:"en",duration:400,ease:"cubic-bezier(0.19, 1, 0.22, 1)",disabled:false,respectReducedMotion:true};function Dt(e,t,n){if(n<1){let u=t*Math.sqrt(1-n*n);return 1-Math.exp(-n*t*e)*(Math.cos(u*e)+n*t/u*Math.sin(u*e))}let i=Math.sqrt(n*n-1),r=-t*(n+i),s=-t*(n-i),o=-r/(s-r);return 1-(1-o)*Math.exp(r*e)-o*Math.exp(s*e)}function Ie(e,t,n){let s=0;for(let o=0;o<10;o+=.001)if(Math.abs(Dt(o,e,t)-1)>n)s=0;else if(s+=.001,s>.1)return Math.ceil((o-s+.001)*1e3);return Math.ceil(10*1e3)}function Ft(e,t){if(typeof e=="object"){let n=Le(e);return {ease:n.easing,duration:n.duration}}return {ease:e,duration:t}}var $t=new Map;function Le(e){let{stiffness:t=100,damping:n=10,mass:i=1,precision:r=.001}=e??{},s=`${t}:${n}:${i}:${r}`,o=$t.get(s);if(o)return o;let a=Math.sqrt(t/i),u=n/(2*Math.sqrt(t*i)),c=Ie(a,u,r),f=Math.min(100,Math.max(32,Math.round(c/15))),l=[];for(let d=0;d<f;d++){let h=d/(f-1)*(c/1e3),M=d===f-1?1:Dt(h,a,u);l.push(Math.round(M*1e4)/1e4+"");}for(;l.length>2&&l[l.length-2]==="1";)l.splice(l.length-2,1);let m={easing:`linear(${l.join(", ")})`,duration:c};return $t.set(s,m),m}function G(e,t){let n=e.length,i=t.length,r=Array.from({length:n+1},()=>Array(i+1).fill(0));for(let c=n-1;c>=0;c--)for(let f=i-1;f>=0;f--)r[c][f]=e[c]===t[f]?r[c+1][f+1]+1:Math.max(r[c+1][f],r[c][f+1]);let s=[],o=[],a=0,u=0;for(;a<n&&u<i;)e[a]===t[u]?(s.push(a),o.push(u),a++,u++):r[a+1][u]>=r[a][u+1]?a++:u++;return [s,o]}var Ne="\0n",ke=0;function ht(){return `${Ne}${ke++}`}function k(e){return e>="0"&&e<="9"}function q(e){for(let t of e)if(k(t))return  true;return  false}function gt(e){let t="";for(let n of e)!k(n)&&!bt.includes(n)&&(t+=n);return t}var bt=".,'\xA0\u202F\u2009\u2007",He="+-\u2212(#",Oe=`%.,!?:;)"'\u201D\u2019`,_e=/\p{Sc}/u;function Pt(e,t){return t.includes(e)||_e.test(e)}function J(e){let t=0,n=e.length;for(;t<n&&Pt(e[t],He);)t++;for(;n>t&&Pt(e[n-1],Oe);)n--;if(t>=n||!k(e[t])||!k(e[n-1]))return  false;for(let i=t;i<n;i++){let r=e[i];if(!k(r)&&!bt.includes(r))return  false}return  true}function at(e){return k(e)?"digit":"symbol"}var Ct=new Map;function xt(e){let t=String(e),n=Ct.get(t);if(n)return n;let i=".";try{i=new Intl.NumberFormat(e).formatToParts(1.1).find(r=>r.type==="decimal")?.value??".";}catch{}return Ct.set(t,i),i}function U(e,t,n,i="."){let r=e.split("");if(!t||t.length===0)return $e(r);let s=t.map(c=>c.string==="\xA0"?" ":c.string),o=n!=null?De(s,r,n,i):Fe(s,r,i),a=new Set;for(let[,c]of o)a.add(t[c].id);let u=[];for(let c=0;c<r.length;c++){let f=r[c],l=at(f),m=f===" "?"\xA0":f;if(o.has(c)){let d=o.get(c);u.push({id:t[d].id,string:m,kind:l});}else {let d=ht();for(;a.has(d);)d=ht();a.add(d),u.push({id:d,string:m,kind:l});}}return u}function $e(e){return e.map(t=>({id:ht(),string:t===" "?"\xA0":t,kind:at(t)}))}function De(e,t,n,i){let r=new Map,s=Xt(e,i),o=Xt(t,i),a=(m,d)=>r.set(o[m],s[d]),u=0;for(;u<o.length&&o[u]<n;)u++;let c=o.length-s.length;if(c>0){let m=u-c;for(let d=0;d<m&&d<s.length;d++)a(d,d);for(let d=u;d<o.length;d++){let h=d-c;h>=0&&h<s.length&&a(d,h);}}else if(c<0){for(let m=0;m<u&&m<o.length;m++)a(m,m);for(let m=u;m<o.length;m++){let d=m-c;d>=0&&d<s.length&&a(m,d);}}else for(let m=0;m<o.length;m++)t[o[m]]===e[s[m]]&&a(m,m);let f=Bt(e,i),l=Bt(t,i);for(let m=1;m<=f.length&&m<=l.length;m++){let d=f[f.length-m],h=l[l.length-m];e[d]===t[h]&&r.set(h,d);}return r}function Kt(e,t){return e!==t&&bt.includes(e)}function Xt(e,t){let n=[];for(let i=0;i<e.length;i++)Kt(e[i],t)||n.push(i);return n}function Bt(e,t){let n=[];for(let i=0;i<e.length;i++)Kt(e[i],t)&&n.push(i);return n}function Fe(e,t,n){let i=new Map,r=0;for(;r<e.length&&r<t.length&&e[r]===t[r]&&!k(e[r]);)i.set(r,r),r++;let s=e.length,o=t.length;for(;s>r&&o>r&&e[s-1]===t[o-1]&&!k(e[s-1]);)i.set(o-1,s-1),s--,o--;let a=Ut(e,r,s,n),u=Ut(t,r,o,n),c=Gt(e,r,a),f=Gt(t,r,u);if(c>0&&f>0&&Math.abs(c-f)>=Pe)return i;if(!d(r,a,r,u,true))for(let h=1;a-h>=r&&u-h>=r;h++)m(a-h,u-h);if(a<s&&u<o){i.set(u,a);for(let h=1;a+h<s&&u+h<o;h++)m(a+h,u+h);d(a+1,s,u+1,o,false);}function m(h,M){let x=e[h];k(x)||x===t[M]&&i.set(M,h);}function d(h,M,x,T,L){let E=Wt(e,h,M),N=Wt(t,x,T);if(E.length===N.length||!L){let A=Math.min(E.length,N.length);for(let _=0;_<A;_++){let B=E[_],rt=N[_];e[B]===t[rt]&&i.set(rt,B);}return  false}let g=E.map(A=>e[A]).reverse(),v=N.map(A=>t[A]).reverse(),[R,O]=G(g,v);for(let A=0;A<R.length;A++){let _=E[E.length-1-R[A]],B=N[N.length-1-O[A]];i.set(B,_);}return R.length>0}return i}function Wt(e,t,n){let i=[];for(let r=t;r<n;r++)k(e[r])&&i.push(r);return i}var Pe=3;function Gt(e,t,n){let i=0;for(let r=t;r<n;r++)k(e[r])&&i++;return i}function Ut(e,t,n,i){for(let r=n-1;r>=t;r--)if(e[r]===i)return r;return n}function yt(){let e=new Set;return {reserve(t){e.add(t);},has(t){return e.has(t)},take(t){if(!e.has(t))return e.add(t),t;let n=1;for(;e.has(`${t}~${n}`);)n++;let i=`${t}~${n}`;return e.add(i),i}}}function zt(e){let t=[],n=[],i=()=>{n.length!==0&&(t.push({word:n.map(r=>r.string).join(""),segments:n}),n=[]);};for(let r of e)r.string==="\xA0"||r.string===`
+-`?i():n.push(r);return i(),t}function Yt(e){let t=[],n=[],i=()=>{if(n.length===0)return;let r=n.map(s=>s.string).join("");J(r)?t.push(...U(r)):t.push(...n),n=[];};for(let r of e)r.string==="\xA0"||r.string===`
+-`?(i(),t.push(r)):n.push(r);return i(),t}function K(e,t,n=true){let i=e.includes(`
+-`),r=e.includes(" ")||i,s=yt();if(i){let a=e.split(`
+-`),u=[],c=0;return a.forEach((f,l)=>{l>0&&(u.push({id:s.take(`newline-${c}`),string:`
+-`}),c+=1),f.length>0&&u.push(...jt(f,t,true,c,s)),c+=f.length;}),n?Yt(u):u}let o=jt(e,t,r,0,s);return n?Yt(o):o}function jt(e,t,n,i,r){if(typeof Intl.Segmenter<"u"){let s=new Intl.Segmenter(t,{granularity:n?"word":"grapheme"});return Ce(s.segment(e)[Symbol.iterator](),i,r)}return Xe(e,n,i,r)}function Ce(e,t,n){let i=[];for(let r of Array.from(e)){let s=t+r.index;r.segment===" "?i.push({id:n.take(`space-${s}`),string:"\xA0"}):i.push({id:qt(r.segment,s,n),string:r.segment});}return i}function qt(e,t,n){return n.has(e)?n.take(`${e}-${t}`):n.take(e)}function Xe(e,t,n,i){let r=t?e.split(" "):e.split(""),s=[],o=n;return r.forEach((a,u)=>{t&&u>0&&(s.push({id:i.take(`space-${o}`),string:"\xA0"}),o+=1),s.push({id:qt(a,o,i),string:a}),o+=a.length;}),s}var Y="torph-root",Q="torph-item",w="torph-id",V="torph-kind",F="torph-slot",H="torph-exiting",P="torph-sr",Z="torph-debug",tt="empty";var Be={linear:[0,0,1,1],ease:[.25,.1,.25,1],"ease-in":[.42,0,1,1],"ease-out":[0,0,.58,1],"ease-in-out":[.42,0,.58,1]},Jt=(e,t,n)=>{let i=1-n;return 3*i*i*n*e+3*i*n*n*t+n*n*n};function Qt(e,t,n,i){return r=>{if(r<=0)return 0;if(r>=1)return 1;let s=0,o=1;for(let a=0;a<24;a+=1){let u=(s+o)/2;Jt(e,n,u)<r?s=u:o=u;}return Jt(t,i,(s+o)/2)}}function We(e){let t=[...e];(t[0]===null||t[0]===void 0)&&(t[0]=0),t[t.length-1]===null&&(t[t.length-1]=1);for(let n=1;n<t.length;n+=1){if(t[n]!==null)continue;let i=n;for(;t[i]===null;)i+=1;let r=t[n-1],s=(t[i]-r)/(i-n+1);for(let o=n;o<i;o+=1)t[o]=r+s*(o-n+1);}return t.map((n,i,r)=>i===0?n:Math.max(n,r[i-1]))}function Ge(e){let t=[],n=[];for(let r of e.split(",")){let s=r.trim().split(/\s+/).filter(Boolean),o=Number(s[0]);if(!Number.isFinite(o))return null;let a=s.slice(1);if(a.length>2)return null;if(a.length===0){t.push(o),n.push(null);continue}for(let u of a){if(!u.endsWith("%"))return null;let c=Number(u.slice(0,-1));if(!Number.isFinite(c))return null;t.push(o),n.push(c/100);}}if(t.length<2)return null;let i=We(n);return r=>{if(r<=i[0])return t[0];let s=i.length-1;if(r>=i[s])return t[s];let o=0;for(;o<s&&i[o+1]<r;)o+=1;let a=i[o+1]-i[o];return a===0?t[o+1]:t[o]+(t[o+1]-t[o])*(r-i[o])/a}}function Vt(e){let t=e.trim().toLowerCase(),n=Be[t];if(n)return Qt(...n);let i=/^cubic-bezier\(([^)]*)\)$/.exec(t);if(i){let s=i[1].split(",").map(o=>Number(o.trim()));return s.length!==4||s.some(o=>!Number.isFinite(o))?null:Qt(s[0],s[1],s[2],s[3])}let r=/^linear\(([^)]*)\)$/.exec(t);return r?Ge(r[1]):null}var St=1e-4;function Mt(e,t){let n=Math.min(Math.max(t,0),1-St);return (e(n+St)-e(n))/St}function lt(e,t){return e*t}function X(e){let t=getComputedStyle(e).transform;if(!t||t==="none")return {tx:0,ty:0};let n=t.match(/matrix\(([^)]+)\)/);if(!n)return {tx:0,ty:0};let i=n[1].split(",").map(Number);return {tx:i[4]||0,ty:i[5]||0}}function et(e){let t=getComputedStyle(e),n=parseFloat(t.width),i=parseFloat(t.height);if(Number.isNaN(n)||Number.isNaN(i)){let r=e.getBoundingClientRect();return {width:r.width,height:r.height}}return {width:n,height:i}}function j(e){let{tx:t,ty:n}=X(e),i=Number(getComputedStyle(e).opacity)||1;return e.getAnimations().forEach(r=>r.cancel()),{tx:t,ty:n,opacity:i}}var Ue=8,Ke=.1,Ye=.5,je=.5,ee=()=>performance.now();function ze(e,t){let n=Math.max(0,Math.min(Ue,t)-Mt(e,0));if(!(n>0))return {curve:e,k:0};let i=Math.max(3,Math.ceil(n/(Math.E*Ke))-1);return {curve:r=>r>=1?1:e(r)+n*r*Math.pow(1-r,i),k:n}}function qe(e,t){let n=Math.min(120,Math.max(32,Math.round(t/8))),i=[];for(let r=0;r<n;r+=1){let s=r/(n-1),o=r===n-1?1:e(s);i.push(`${Math.round(o*1e4)/1e4}`);}return `linear(${i.join(", ")})`}function Zt(e,t,n,i,r,s,o,a){let u=(m,d,h,M,x)=>{let T=e.animate([{[t]:`${m}px`},{[t]:`${d}px`}],{duration:s,easing:h,fill:"both"});return x!==void 0&&(T.currentTime=x),{anim:T,from:m,to:d,easing:h,curve:M,startedAt:ee()-(x??0)}};if(r&&r.elapsed!==null&&Math.abs(r.to-i)<je)return u(r.from,r.to,r.easing,r.curve,r.elapsed);let c=i-n,f=o,l=a;if(a&&Math.abs(c)>Ye){let m=ze(a,(r?.velocity??0)*s/c);m.k>0&&(l=m.curve,f=qe(m.curve,s));}return u(n,i,f,l)}function te(e,t){let n=e.anim.currentTime===null,i=ee()-e.startedAt,s=n||!Number.isFinite(i)||i>=t||i<0?null:i;return {from:e.from,to:e.to,easing:e.easing,curve:e.curve,elapsed:s,velocity:s===null||!e.curve?0:(e.to-e.from)*Mt(e.curve,s/t)/t}}var D=new WeakMap;function Je(e){return D.get(e)?.snapshot()}function ut(e){e.style.width="",e.style.height="",e.style.transitionProperty="";}function ne(e){let t=D.get(e);t&&(D.delete(e),t.stop(),t.onCancel?.());}function re(e){let t=D.get(e);t&&(D.delete(e),t.stop()),ut(e);}function ie(e,t,n,i,r,s,o){let a=Je(e);if(ne(e),t===0||n===0){ut(e),o?.();return}e.style.transitionProperty="none",e.style.width="",e.style.height="",e.offsetWidth;let{width:u,height:c}=et(e),f=Vt(r),l=Zt(e,"width",t,u,a?.width,i,r,f),m=Zt(e,"height",n,c,a?.height,i,r,f),d=()=>{l.anim.cancel(),m.anim.cancel();};l.anim.onfinish=()=>{D.delete(e),d(),ut(e),s?.();},D.set(e,{stop:d,onCancel:o,snapshot:()=>({width:te(l,i),height:te(m,i)})});}function se(e,t,n,i,r,s){ne(e),e.style.transitionProperty="none",e.style.width=`${t}px`,e.style.height=`${n}px`;let o=setTimeout(()=>{D.delete(e),ut(e),r?.();},i),a=u=>({from:u,to:u,easing:"linear",curve:null,elapsed:null,velocity:0});D.set(e,{stop:()=>clearTimeout(o),onCancel:s,snapshot:()=>({width:a(t),height:a(n)})});}function ct(e){let t=Array.from(e.children),n={},i=e.getBoundingClientRect();return t.forEach((r,s)=>{if(r.hasAttribute(H)||r.hasAttribute(P)||r.tagName==="BR")return;let o=r.getAttribute(w)||`child-${s}`,a=r.getBoundingClientRect(),{tx:u,ty:c}=X(r);n[o]={x:a.left-i.left-u,y:a.top-i.top-c};}),n}function Tt(e,t,n){let i=e[n],r=t[n];return !i||!r?{dx:0,dy:0}:{dx:i.x-r.x,dy:i.y-r.y}}function Et(e,t,n,i="backward-first"){let[r,s]=i==="backward-first"?["backward","forward"]:["forward","backward"],o=a=>{if(a==="backward"){for(let u=e-1;u>=0;u--)if(n.has(t[u]))return t[u]}else for(let u=e+1;u<t.length;u++)if(n.has(t[u]))return t[u];return null};return o(r)??o(s)}function oe(e,t,n,i){let r=new Set(n.filter((o,a)=>i.has(o)&&!t.has(e[a]))),s=new Map;for(let o=0;o<e.length;o++){let a=e[o];t.has(a)&&s.set(a,Et(o,n,r,"forward-first"));}return s}function ae(e,t){let{dx:n,dy:i,duration:r,ease:s,scale:o}=t;e.animate({transform:o?`translate(${n}px, ${i}px) scale(0.95)`:`translate(${n}px, ${i}px)`,offset:1},{duration:r,easing:s,fill:"both"});let a=e.animate({opacity:0,offset:1},{duration:lt(r,.25),easing:"linear",fill:"both"});a.onfinish=()=>e.remove();}function ue(e,t){let{deltaX:n,deltaY:i,isNew:r,duration:s,ease:o}=t,a=j(e),u=n+a.tx,c=i+a.ty,f=r&&a.opacity>=1?0:a.opacity;e.animate([{transform:`translate(${u}px, ${c}px) scale(${r?.95:1})`},{transform:"none"}],{duration:s,easing:o,fill:"both"}),f<1&&e.animate([{opacity:f},{opacity:1}],{duration:lt(s,r?.5:.25),delay:r?lt(s,.25):0,easing:"linear",fill:"both"});}function Qe(e,t){let n=0,i=0;for(let r=e;r&&r!==t;r=r.offsetParent)n+=r.offsetLeft,i+=r.offsetTop;return {x:n,y:i}}function At(e,t){let n=document.createElement(e);return n.setAttribute(Q,""),n.setAttribute(w,t),n.setAttribute("aria-hidden","true"),n}function le(e,t){let n=new Map;for(let i of t){if(i.tagName==="BR")continue;let{x:r,y:s}=Qe(i,e),{tx:o,ty:a}=X(i),{width:u,height:c}=et(i),f=Number(getComputedStyle(i).opacity)||1;i.getAnimations().forEach(l=>l.cancel()),n.set(i,{left:r+o,top:s+a,width:u,height:c,opacity:f});}for(let i=t.length-1;i>=0;i--)t[i].tagName==="BR"&&(t[i].remove(),t.splice(i,1));t.forEach(i=>{let r=n.get(i);i.setAttribute(H,""),i.style.position="absolute",i.style.pointerEvents="none",i.style.left=`${r.left}px`,i.style.top=`${r.top}px`,i.style.width=`${r.width}px`,i.style.height=`${r.height}px`,i.style.opacity=String(r.opacity);});}function ce(e,t){if(t.size===0)return;let n=Array.from(e.children),i=new Set;for(let r of n){if(r.hasAttribute(H))continue;let s=r.getAttribute(w);if(!s||i.has(s))continue;let o=t.get(s);if(o){i.add(s);for(let a of o){let u=At("span",a.id);wt(u,a),r.before(u);}r.remove();}}}function wt(e,t){if(!t.kind){e.removeAttribute(V),e.removeAttribute(F),e.textContent=t.string;return}e.setAttribute(V,t.kind),e.setAttribute(F,"");let n=e.firstElementChild;n||(e.textContent="",n=document.createElement("span"),e.appendChild(n)),n.textContent=t.string;}function vt(e){return e.hasAttribute(F)?e.firstElementChild??e:e}function me(e,t,n,i){let r=new Map;t.forEach(s=>{let o=s.getAttribute(w);n.has(o)&&!s.hasAttribute(H)&&(r.set(o,s),s.remove());}),Array.from(e.childNodes).forEach(s=>{s.nodeType===Node.TEXT_NODE&&s.remove();}),i.forEach(s=>{let o=r.get(s.id);if(o&&r.delete(s.id),s.string===`
+-`){o&&o.tagName==="BR"?e.appendChild(o):e.appendChild(At("br",s.id));return}if(o&&o.tagName!=="BR")o.style.transformOrigin="",wt(o,s),e.appendChild(o);else {let a=At("span",s.id);wt(a,s),e.appendChild(a);}});}var Ve=.45,Ze=.25;function pe(e,t){let{dx:n,dy:i,slideDistance:r,duration:s,ease:o}=t,a=vt(e);e.animate({transform:`translate(${n}px, ${i}px)`,offset:1},{duration:s,easing:o,fill:"both"}),a.animate({transform:`translate(0px, ${r}px)`,offset:1},{duration:s,easing:o,fill:"both"});let u=a.animate({opacity:0,offset:1},{duration:s*Ve,easing:"linear",fill:"both"});u.onfinish=()=>e.remove();}function fe(e,t){let{deltaX:n,deltaY:i,slideDistance:r,kind:s,duration:o,ease:a}=t;Rt(e,{deltaX:n,deltaY:i,duration:o,ease:a});let u=vt(e),c=j(u),f=s==="digit"?-r:r;u.animate({transform:`translate(0px, ${c.ty+f}px)`,offset:0},{duration:o,easing:a,fill:"both"});let l=c.opacity>=1?0:c.opacity;l<1&&u.animate([{opacity:l},{opacity:1}],{duration:o*Ze,easing:"linear",fill:"both"});}function Rt(e,t){let{deltaX:n,deltaY:i,duration:r,ease:s}=t,{tx:o,ty:a}=X(e);e.getAnimations().forEach(f=>f.cancel());let u=n+o,c=i+a;u===0&&c===0||e.animate({transform:`translate(${u}px, ${c}px)`,offset:0},{duration:r,easing:s,fill:"both"});}var tn=6,de=.8,en=.45,nn=.35;function he(e){let t=e.map(u=>u.getBoundingClientRect()),n=Math.min(...t.map(u=>u.left)),i=Math.max(...t.map(u=>u.right)),r=Math.min(...t.map(u=>u.top)),s=Math.max(...t.map(u=>u.bottom)),o=(n+i)/2,a=(r+s)/2;return t.map(u=>`${o-u.left}px ${a-u.top}px`)}function ge(e,t){let{duration:n,ease:i}=t,r=he(e);e.forEach((s,o)=>{s.getAnimations().forEach(u=>u.cancel()),s.style.transformOrigin=r[o],s.animate({transform:`scale(${de})`,offset:1},{duration:n,easing:i,fill:"both"});let a=s.animate({opacity:0,offset:1},{duration:n*en,easing:"linear",fill:"both"});a.onfinish=()=>s.remove();});}function be(e,t){let{duration:n,ease:i}=t,r=he(e);e.forEach((s,o)=>{let a=j(s);s.style.transformOrigin=r[o],s.animate({transform:`scale(${de})`,offset:0},{duration:n,easing:i,fill:"both"});let u=a.opacity>=1?0:a.opacity;s.animate([{opacity:u},{opacity:1}],{duration:n*nn,easing:"linear",fill:"both"});});}function It(e,t){let n=[],i=[],r=()=>{i.length>=tn&&n.push(i),i=[];};for(let s of e)t.has(s)?i.push(s):r();return r(),n}var rn="\0#";function xe(e,t){if(e.segments.length!==1||e.word.length<=1)return e.segments;let n=e.segments[0],i=e.word.split("").map((r,s)=>({id:`${n.id}:${s}`,string:r}));return t.set(n.id,i),i}function sn(e){return e.map(t=>({...t,kind:t.kind??at(t.string)}))}function on(e,t){if(e.length===0||t.length===0)return 0;let[n]=G(e.split(""),t.split(""));return n.length/Math.max(e.length,t.length)}function ye(e,t){let n=[],i=0;for(let r=0;r<e;r++)n.push(i),t.has(r)&&i++;return n}var an=.4;function un(e,t){return (q(e)||q(t))&&gt(e)===gt(t)?1:on(e,t)}var ln=2500,cn=1e6;function Lt(e,t,n,i={}){let r=t.includes(" "),s=t.includes(`
+-`),o=zt(e),a=i.numbers!==false,u=p=>a&&J(p),c=p=>u(p)?rn:p,f=a&&(q(t)||o.some(p=>q(p.word)));if(o.length<=1&&!r&&!s&&!f)return {segments:K(t,n,a),splits:new Map};let l=[],m=[],d=t.split(/( |\n)/),h=[];for(let p of d)p===" "||p===`
+-`?h.push(p):p.length>0&&(m.push(h),l.push(p),h=[]);let M=h,x=o.map(p=>p.word);if(x.length*l.length>cn)return {segments:K(t,n,a),splits:new Map};let[T,L]=G(x.map(c),l.map(c)),E=new Set(T),N=new Set(L),g=new Map;for(let p=0;p<L.length;p++)g.set(L[p],T[p]);let v=x.map((p,b)=>b).filter(p=>!E.has(p)),R=l.map((p,b)=>b).filter(p=>!N.has(p)),O=new Set;for(let p of R)for(let b of v)if(!O.has(b)&&c(l[p])===c(x[b])){g.set(p,b),O.add(b);break}O.size>0&&(v=v.filter(p=>!O.has(p)),R=R.filter(p=>!g.has(p)));let A=new Map,_=new Set,B=ye(x.length,E),rt=ye(l.length,N);if(v.length*R.length<=ln)for(let p of R){let b=-1,S=an;for(let y of v){if(_.has(y)||B[y]!==rt[p])continue;let it=un(x[y],l[p]);it>S&&(S=it,b=y);}b>=0&&(A.set(p,b),_.add(b));}let pt=l.map((p,b)=>{let S=g.get(b),y=S??A.get(b);return y===void 0?{mode:"fresh"}:u(p)?{mode:"number",oi:y}:S!==void 0?{mode:"reuse",oi:y}:{mode:"morph",oi:y}}),kt=pt.filter(p=>p.mode==="number").length===1?i.cursorIndex:void 0,Ae=xt(n),W=yt();for(let p of pt){if(p.mode==="fresh")continue;let b=o[p.oi];if(p.mode!=="reuse"&&b.segments.length===1){let S=b.segments[0];for(let y=0;y<b.word.length;y++)W.reserve(`${S.id}:${y}`);}else for(let S of b.segments)W.reserve(S.id);}let $=[],ft=new Map,z=0;function Ht(p){for(let b of p)b===`
+-`?$.push({id:W.take(`newline-${z}`),string:`
+-`}):$.push({id:W.take(`space-${z}`),string:"\xA0"}),z++;}for(let p=0;p<l.length;p++){Ht(m[p]??(p>0?[" "]:[]));let b=pt[p],S=l[p];if(b.mode==="reuse")for(let y of o[b.oi].segments)$.push(y);else if(b.mode==="number"){let y=o[b.oi];$.push(...U(S,sn(xe(y,ft)),kt===void 0?void 0:kt-z,Ae));}else if(b.mode==="morph"){let y=o[b.oi],it=y.word,we=xe(y,ft),ve=it.split(""),st=S.split(""),[Re,Ot]=G(ve,st),dt=new Map;for(let I=0;I<Ot.length;I++){let ot=we[Re[I]];ot&&dt.set(Ot[I],ot);}for(let I=0;I<st.length;I++)if(dt.has(I)){let ot=dt.get(I);$.push({id:ot.id,string:st[I]});}else $.push({id:W.take(`${S}~${I}`),string:st[I]});}else u(S)?$.push(...U(S)):$.push({id:W.take(S),string:S});z+=S.length;}return Ht(M),{segments:$,splits:ft}}var mn=`
+-[${Y}] {
+-  display: inline-block;
+-  position: relative;
+-  vertical-align: top;
+-  will-change: width, height;
++'use strict';
++
++// src/lib/utils/types.ts
++var BASE_DEFAULTS = {
++  locale: "en",
++  duration: 400,
++  ease: "cubic-bezier(0.19, 1, 0.22, 1)",
++  disabled: false,
++  respectReducedMotion: true
++};
++
++// src/lib/utils/spring.ts
++function springPosition(t, omega0, zeta) {
++  if (zeta < 1) {
++    const omegaD = omega0 * Math.sqrt(1 - zeta * zeta);
++    return 1 - Math.exp(-zeta * omega0 * t) * (Math.cos(omegaD * t) + zeta * omega0 / omegaD * Math.sin(omegaD * t));
++  }
++  const s = Math.sqrt(zeta * zeta - 1);
++  const r1 = -omega0 * (zeta + s);
++  const r2 = -omega0 * (zeta - s);
++  const B = -r1 / (r2 - r1);
++  const A = 1 - B;
++  return 1 - A * Math.exp(r1 * t) - B * Math.exp(r2 * t);
++}
++function computeDuration(omega0, zeta, precision) {
++  const step = 1e-3;
++  const maxDuration = 10;
++  let settledSince = 0;
++  for (let t = 0; t < maxDuration; t += step) {
++    if (Math.abs(springPosition(t, omega0, zeta) - 1) > precision) {
++      settledSince = 0;
++    } else {
++      settledSince += step;
++      if (settledSince > 0.1) {
++        return Math.ceil((t - settledSince + step) * 1e3);
++      }
++    }
++  }
++  return Math.ceil(maxDuration * 1e3);
++}
++function resolveEase(ease, fallbackDuration) {
++  if (typeof ease === "object") {
++    const resolved = spring(ease);
++    return { ease: resolved.easing, duration: resolved.duration };
++  }
++  return { ease, duration: fallbackDuration };
++}
++var cache = /* @__PURE__ */ new Map();
++function spring(params) {
++  const {
++    stiffness = 100,
++    damping = 10,
++    mass = 1,
++    precision = 1e-3
++  } = params ?? {};
++  const key = `${stiffness}:${damping}:${mass}:${precision}`;
++  const cached = cache.get(key);
++  if (cached) return cached;
++  const omega0 = Math.sqrt(stiffness / mass);
++  const zeta = damping / (2 * Math.sqrt(stiffness * mass));
++  const duration = computeDuration(omega0, zeta, precision);
++  const numPoints = Math.min(100, Math.max(32, Math.round(duration / 15)));
++  const points = [];
++  for (let i = 0; i < numPoints; i++) {
++    const t = i / (numPoints - 1) * (duration / 1e3);
++    const value = i === numPoints - 1 ? 1 : springPosition(t, omega0, zeta);
++    points.push(Math.round(value * 1e4) / 1e4 + "");
++  }
++  while (points.length > 2 && points[points.length - 2] === "1") {
++    points.splice(points.length - 2, 1);
++  }
++  const result = {
++    easing: `linear(${points.join(", ")})`,
++    duration
++  };
++  cache.set(key, result);
++  return result;
++}
++
++// src/lib/utils/lcs.ts
++function lcsIndices(a, b) {
++  const m = a.length;
++  const n = b.length;
++  const dp = Array.from(
++    { length: m + 1 },
++    () => Array(n + 1).fill(0)
++  );
++  for (let i2 = m - 1; i2 >= 0; i2--) {
++    for (let j2 = n - 1; j2 >= 0; j2--) {
++      dp[i2][j2] = a[i2] === b[j2] ? dp[i2 + 1][j2 + 1] + 1 : Math.max(dp[i2 + 1][j2], dp[i2][j2 + 1]);
++    }
++  }
++  const ai = [];
++  const bi = [];
++  let i = 0;
++  let j = 0;
++  while (i < m && j < n) {
++    if (a[i] === b[j]) {
++      ai.push(i);
++      bi.push(j);
++      i++;
++      j++;
++    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
++      i++;
++    } else {
++      j++;
++    }
++  }
++  return [ai, bi];
++}
++
++// src/lib/text-morph/utils/number.ts
++var MINTED_PREFIX = "\0n";
++var nextNewId = 0;
++function mintId() {
++  return `${MINTED_PREFIX}${nextNewId++}`;
++}
++function isDigit(char) {
++  return char >= "0" && char <= "9";
++}
++function hasDigit(value) {
++  for (const char of value) {
++    if (isDigit(char)) return true;
++  }
++  return false;
++}
++function numericSkeleton(word) {
++  let out = "";
++  for (const char of word) {
++    if (!isDigit(char) && !CORE_SEPARATORS.includes(char)) out += char;
++  }
++  return out;
++}
++var CORE_SEPARATORS = ".,'\xA0\u202F\u2009\u2007";
++var PREFIX_CHARS = "+-\u2212(#";
++var SUFFIX_CHARS = `%.,!?:;)"'\u201D\u2019`;
++var CURRENCY = /\p{Sc}/u;
++function isAffix(char, set) {
++  return set.includes(char) || CURRENCY.test(char);
++}
++function isNumericWord(word) {
++  let start = 0;
++  let end = word.length;
++  while (start < end && isAffix(word[start], PREFIX_CHARS)) start++;
++  while (end > start && isAffix(word[end - 1], SUFFIX_CHARS)) end--;
++  if (start >= end) return false;
++  if (!isDigit(word[start]) || !isDigit(word[end - 1])) return false;
++  for (let i = start; i < end; i++) {
++    const char = word[i];
++    if (!isDigit(char) && !CORE_SEPARATORS.includes(char)) return false;
++  }
++  return true;
++}
++function classifyKind(char) {
++  return isDigit(char) ? "digit" : "symbol";
++}
++var separators = /* @__PURE__ */ new Map();
++function decimalSeparator(locale) {
++  const key = String(locale);
++  const cached = separators.get(key);
++  if (cached) return cached;
++  let separator = ".";
++  try {
++    separator = new Intl.NumberFormat(locale).formatToParts(1.1).find((part) => part.type === "decimal")?.value ?? ".";
++  } catch {
++  }
++  separators.set(key, separator);
++  return separator;
++}
++function segmentNumber(value, prevSegments, cursorIndex, decimalChar = ".") {
++  const chars = value.split("");
++  if (!prevSegments || prevSegments.length === 0) {
++    return simpleSegment(chars);
++  }
++  const oldChars = prevSegments.map(
++    (s) => s.string === "\xA0" ? " " : s.string
++  );
++  const matches = cursorIndex != null ? cursorMatch(oldChars, chars, cursorIndex, decimalChar) : placeMatch(oldChars, chars, decimalChar);
++  const usedIds = /* @__PURE__ */ new Set();
++  for (const [, oldIdx] of matches) {
++    usedIds.add(prevSegments[oldIdx].id);
++  }
++  const result = [];
++  for (let i = 0; i < chars.length; i++) {
++    const char = chars[i];
++    const kind = classifyKind(char);
++    const displayChar = char === " " ? "\xA0" : char;
++    if (matches.has(i)) {
++      const oldIdx = matches.get(i);
++      result.push({
++        id: prevSegments[oldIdx].id,
++        string: displayChar,
++        kind
++      });
++    } else {
++      let id = mintId();
++      while (usedIds.has(id)) {
++        id = mintId();
++      }
++      usedIds.add(id);
++      result.push({ id, string: displayChar, kind });
++    }
++  }
++  return result;
++}
++function simpleSegment(chars) {
++  return chars.map((char) => ({
++    id: mintId(),
++    string: char === " " ? "\xA0" : char,
++    kind: classifyKind(char)
++  }));
++}
++function cursorMatch(oldChars, newChars, cursor, decimalChar) {
++  const matches = /* @__PURE__ */ new Map();
++  const oldKept = keptIndices(oldChars, decimalChar);
++  const newKept = keptIndices(newChars, decimalChar);
++  const pair = (ni, oi) => matches.set(newKept[ni], oldKept[oi]);
++  let keptCursor = 0;
++  while (keptCursor < newKept.length && newKept[keptCursor] < cursor)
++    keptCursor++;
++  const lenDiff = newKept.length - oldKept.length;
++  if (lenDiff > 0) {
++    const editStart = keptCursor - lenDiff;
++    for (let i = 0; i < editStart && i < oldKept.length; i++) {
++      pair(i, i);
++    }
++    for (let i = keptCursor; i < newKept.length; i++) {
++      const oldIdx = i - lenDiff;
++      if (oldIdx >= 0 && oldIdx < oldKept.length) {
++        pair(i, oldIdx);
++      }
++    }
++  } else if (lenDiff < 0) {
++    for (let i = 0; i < keptCursor && i < newKept.length; i++) {
++      pair(i, i);
++    }
++    for (let i = keptCursor; i < newKept.length; i++) {
++      const oldIdx = i - lenDiff;
++      if (oldIdx >= 0 && oldIdx < oldKept.length) {
++        pair(i, oldIdx);
++      }
++    }
++  } else {
++    for (let i = 0; i < newKept.length; i++) {
++      if (newChars[newKept[i]] === oldChars[oldKept[i]]) {
++        pair(i, i);
++      }
++    }
++  }
++  const oldSeps = groupingIndices(oldChars, decimalChar);
++  const newSeps = groupingIndices(newChars, decimalChar);
++  for (let k = 1; k <= oldSeps.length && k <= newSeps.length; k++) {
++    const oldIdx = oldSeps[oldSeps.length - k];
++    const newIdx = newSeps[newSeps.length - k];
++    if (oldChars[oldIdx] === newChars[newIdx]) matches.set(newIdx, oldIdx);
++  }
++  return matches;
++}
++function isGrouping(char, decimalChar) {
++  return char !== decimalChar && CORE_SEPARATORS.includes(char);
++}
++function keptIndices(chars, decimalChar) {
++  const indices = [];
++  for (let i = 0; i < chars.length; i++) {
++    if (!isGrouping(chars[i], decimalChar)) indices.push(i);
++  }
++  return indices;
++}
++function groupingIndices(chars, decimalChar) {
++  const indices = [];
++  for (let i = 0; i < chars.length; i++) {
++    if (isGrouping(chars[i], decimalChar)) indices.push(i);
++  }
++  return indices;
++}
++function placeMatch(oldChars, newChars, decimalChar) {
++  const matches = /* @__PURE__ */ new Map();
++  let start = 0;
++  while (start < oldChars.length && start < newChars.length && oldChars[start] === newChars[start] && !isDigit(oldChars[start])) {
++    matches.set(start, start);
++    start++;
++  }
++  let oldEnd = oldChars.length;
++  let newEnd = newChars.length;
++  while (oldEnd > start && newEnd > start && oldChars[oldEnd - 1] === newChars[newEnd - 1] && !isDigit(oldChars[oldEnd - 1])) {
++    matches.set(newEnd - 1, oldEnd - 1);
++    oldEnd--;
++    newEnd--;
++  }
++  const oldPivot = findPivot(oldChars, start, oldEnd, decimalChar);
++  const newPivot = findPivot(newChars, start, newEnd, decimalChar);
++  const oldDigits = integerDigits(oldChars, start, oldPivot);
++  const newDigits = integerDigits(newChars, start, newPivot);
++  if (oldDigits > 0 && newDigits > 0 && Math.abs(oldDigits - newDigits) >= MAGNITUDE_JUMP) {
++    return matches;
++  }
++  const reshaped = matchDigits(start, oldPivot, start, newPivot, true);
++  if (!reshaped) {
++    for (let k = 1; oldPivot - k >= start && newPivot - k >= start; k++) {
++      matchSeparator(oldPivot - k, newPivot - k);
++    }
++  }
++  if (oldPivot < oldEnd && newPivot < newEnd) {
++    matches.set(newPivot, oldPivot);
++    for (let k = 1; oldPivot + k < oldEnd && newPivot + k < newEnd; k++) {
++      matchSeparator(oldPivot + k, newPivot + k);
++    }
++    matchDigits(oldPivot + 1, oldEnd, newPivot + 1, newEnd, false);
++  }
++  function matchSeparator(oldIndex, newIndex) {
++    const char = oldChars[oldIndex];
++    if (isDigit(char)) return;
++    if (char === newChars[newIndex]) matches.set(newIndex, oldIndex);
++  }
++  function matchDigits(oldFrom, oldTo, newFrom, newTo, towardsPivot) {
++    const oldIndices = digitIndices(oldChars, oldFrom, oldTo);
++    const newIndices = digitIndices(newChars, newFrom, newTo);
++    if (oldIndices.length === newIndices.length || !towardsPivot) {
++      const pairs = Math.min(oldIndices.length, newIndices.length);
++      for (let k = 0; k < pairs; k++) {
++        const oi = oldIndices[k];
++        const ni = newIndices[k];
++        if (oldChars[oi] === newChars[ni]) matches.set(ni, oi);
++      }
++      return false;
++    }
++    const oldRun = oldIndices.map((i) => oldChars[i]).reverse();
++    const newRun = newIndices.map((i) => newChars[i]).reverse();
++    const [ai, bi] = lcsIndices(oldRun, newRun);
++    for (let k = 0; k < ai.length; k++) {
++      const oi = oldIndices[oldIndices.length - 1 - ai[k]];
++      const ni = newIndices[newIndices.length - 1 - bi[k]];
++      matches.set(ni, oi);
++    }
++    return ai.length > 0;
++  }
++  return matches;
++}
++function digitIndices(chars, from, to) {
++  const indices = [];
++  for (let i = from; i < to; i++) if (isDigit(chars[i])) indices.push(i);
++  return indices;
++}
++var MAGNITUDE_JUMP = 3;
++function integerDigits(chars, start, pivot) {
++  let count = 0;
++  for (let i = start; i < pivot; i++) if (isDigit(chars[i])) count++;
++  return count;
++}
++function findPivot(chars, start, end, decimalChar) {
++  for (let i = end - 1; i >= start; i--) {
++    if (chars[i] === decimalChar) return i;
++  }
++  return end;
++}
++
++// src/lib/text-morph/utils/segment.ts
++function createIdAllocator() {
++  const used = /* @__PURE__ */ new Set();
++  return {
++    reserve(id) {
++      used.add(id);
++    },
++    has(id) {
++      return used.has(id);
++    },
++    take(base) {
++      if (!used.has(base)) {
++        used.add(base);
++        return base;
++      }
++      let i = 1;
++      while (used.has(`${base}~${i}`)) i++;
++      const id = `${base}~${i}`;
++      used.add(id);
++      return id;
++    }
++  };
++}
++function groupIntoWords(segments) {
++  const groups = [];
++  let current = [];
++  const flush = () => {
++    if (current.length === 0) return;
++    groups.push({
++      word: current.map((s) => s.string).join(""),
++      segments: current
++    });
++    current = [];
++  };
++  for (const seg of segments) {
++    if (seg.string === "\xA0" || seg.string === "\n") flush();
++    else current.push(seg);
++  }
++  flush();
++  return groups;
++}
++function expandNumbers(segments) {
++  const out = [];
++  let run = [];
++  const flush = () => {
++    if (run.length === 0) return;
++    const word = run.map((s) => s.string).join("");
++    if (isNumericWord(word)) out.push(...segmentNumber(word));
++    else out.push(...run);
++    run = [];
++  };
++  for (const seg of segments) {
++    if (seg.string === "\xA0" || seg.string === "\n") {
++      flush();
++      out.push(seg);
++    } else {
++      run.push(seg);
++    }
++  }
++  flush();
++  return out;
++}
++function segmentText(value, locale, numbers = true) {
++  const hasNewlines = value.includes("\n");
++  const byWord = value.includes(" ") || hasNewlines;
++  const alloc = createIdAllocator();
++  if (hasNewlines) {
++    const lines = value.split("\n");
++    const allSegments = [];
++    let offset = 0;
++    lines.forEach((line, lineIndex) => {
++      if (lineIndex > 0) {
++        allSegments.push({
++          id: alloc.take(`newline-${offset}`),
++          string: "\n"
++        });
++        offset += 1;
++      }
++      if (line.length > 0) {
++        allSegments.push(...segmentLine(line, locale, true, offset, alloc));
++      }
++      offset += line.length;
++    });
++    return numbers ? expandNumbers(allSegments) : allSegments;
++  }
++  const segments = segmentLine(value, locale, byWord, 0, alloc);
++  return numbers ? expandNumbers(segments) : segments;
++}
++function segmentLine(line, locale, byWord, offset, alloc) {
++  if (typeof Intl.Segmenter !== "undefined") {
++    const segmenter = new Intl.Segmenter(locale, {
++      granularity: byWord ? "word" : "grapheme"
++    });
++    return segmentsFromIntl(
++      segmenter.segment(line)[Symbol.iterator](),
++      offset,
++      alloc
++    );
++  }
++  return segmentsFallback(line, byWord, offset, alloc);
++}
++function segmentsFromIntl(iterator, offset, alloc) {
++  const segments = [];
++  for (const data of Array.from(iterator)) {
++    const index = offset + data.index;
++    if (data.segment === " ") {
++      segments.push({ id: alloc.take(`space-${index}`), string: "\xA0" });
++    } else {
++      segments.push({
++        id: allocSegmentId(data.segment, index, alloc),
++        string: data.segment
++      });
++    }
++  }
++  return segments;
++}
++function allocSegmentId(part, index, alloc) {
++  return alloc.has(part) ? alloc.take(`${part}-${index}`) : alloc.take(part);
++}
++function segmentsFallback(value, byWord, offset, alloc) {
++  const parts = byWord ? value.split(" ") : value.split("");
++  const segments = [];
++  let index = offset;
++  parts.forEach((part, i) => {
++    if (byWord && i > 0) {
++      segments.push({ id: alloc.take(`space-${index}`), string: "\xA0" });
++      index += 1;
++    }
++    segments.push({ id: allocSegmentId(part, index, alloc), string: part });
++    index += part.length;
++  });
++  return segments;
++}
++
++// src/lib/text-morph/utils/diff.ts
++var NUMBER_TOKEN = "\0#";
++function splitIfWhole(oldGroup, splits) {
++  if (oldGroup.segments.length !== 1 || oldGroup.word.length <= 1) {
++    return oldGroup.segments;
++  }
++  const wordSeg = oldGroup.segments[0];
++  const charSegs = oldGroup.word.split("").map((char, i) => ({
++    id: `${wordSeg.id}:${i}`,
++    string: char
++  }));
++  splits.set(wordSeg.id, charSegs);
++  return charSegs;
++}
++function asNumberSegments(segments) {
++  return segments.map((seg) => ({
++    ...seg,
++    kind: seg.kind ?? classifyKind(seg.string)
++  }));
++}
++function charSimilarity(a, b) {
++  if (a.length === 0 || b.length === 0) return 0;
++  const [matched] = lcsIndices(a.split(""), b.split(""));
++  return matched.length / Math.max(a.length, b.length);
++}
++function gapIndices(count, matched) {
++  const gaps = [];
++  let anchors = 0;
++  for (let i = 0; i < count; i++) {
++    gaps.push(anchors);
++    if (matched.has(i)) anchors++;
++  }
++  return gaps;
++}
++var MIN_SIMILARITY = 0.4;
++function pairAffinity(a, b) {
++  if ((hasDigit(a) || hasDigit(b)) && numericSkeleton(a) === numericSkeleton(b)) {
++    return 1;
++  }
++  return charSimilarity(a, b);
++}
++var MAX_MORPH_PAIRINGS = 2500;
++var MAX_LCS_CELLS = 1e6;
++function diffSegments(oldSegments, newText, locale, options = {}) {
++  const newHasSpaces = newText.includes(" ");
++  const newHasNewlines = newText.includes("\n");
++  const oldWords = groupIntoWords(oldSegments);
++  const numbersOn = options.numbers !== false;
++  const isNum = (word) => numbersOn && isNumericWord(word);
++  const token = (word) => isNum(word) ? NUMBER_TOKEN : word;
++  const digitsInvolved = numbersOn && (hasDigit(newText) || oldWords.some((g) => hasDigit(g.word)));
++  if (oldWords.length <= 1 && !newHasSpaces && !newHasNewlines && !digitsInvolved) {
++    return {
++      segments: segmentText(newText, locale, numbersOn),
++      splits: /* @__PURE__ */ new Map()
++    };
++  }
++  const newWordStrings = [];
++  const newSeparators = [];
++  const parts = newText.split(/( |\n)/);
++  let pendingSeps = [];
++  for (const part of parts) {
++    if (part === " " || part === "\n") {
++      pendingSeps.push(part);
++    } else if (part.length > 0) {
++      newSeparators.push(pendingSeps);
++      newWordStrings.push(part);
++      pendingSeps = [];
++    }
++  }
++  const trailingSeparators = pendingSeps;
++  const oldWordStrings = oldWords.map((g) => g.word);
++  if (oldWordStrings.length * newWordStrings.length > MAX_LCS_CELLS) {
++    return {
++      segments: segmentText(newText, locale, numbersOn),
++      splits: /* @__PURE__ */ new Map()
++    };
++  }
++  const [oldLcsIdx, newLcsIdx] = lcsIndices(
++    oldWordStrings.map(token),
++    newWordStrings.map(token)
++  );
++  const oldMatchedSet = new Set(oldLcsIdx);
++  const newMatchedSet = new Set(newLcsIdx);
++  const newToOldWord = /* @__PURE__ */ new Map();
++  for (let k = 0; k < newLcsIdx.length; k++) {
++    newToOldWord.set(newLcsIdx[k], oldLcsIdx[k]);
++  }
++  let oldUnmatched = oldWordStrings.map((_, i) => i).filter((i) => !oldMatchedSet.has(i));
++  let newUnmatched = newWordStrings.map((_, i) => i).filter((i) => !newMatchedSet.has(i));
++  const exactUsed = /* @__PURE__ */ new Set();
++  for (const ni of newUnmatched) {
++    for (const oi of oldUnmatched) {
++      if (exactUsed.has(oi)) continue;
++      if (token(newWordStrings[ni]) === token(oldWordStrings[oi])) {
++        newToOldWord.set(ni, oi);
++        exactUsed.add(oi);
++        break;
++      }
++    }
++  }
++  if (exactUsed.size > 0) {
++    oldUnmatched = oldUnmatched.filter((i) => !exactUsed.has(i));
++    newUnmatched = newUnmatched.filter((i) => !newToOldWord.has(i));
++  }
++  const morphPairs = /* @__PURE__ */ new Map();
++  const usedOld = /* @__PURE__ */ new Set();
++  const oldGaps = gapIndices(oldWordStrings.length, oldMatchedSet);
++  const newGaps = gapIndices(newWordStrings.length, newMatchedSet);
++  if (oldUnmatched.length * newUnmatched.length <= MAX_MORPH_PAIRINGS) {
++    for (const ni of newUnmatched) {
++      let bestOi = -1;
++      let bestSim = MIN_SIMILARITY;
++      for (const oi of oldUnmatched) {
++        if (usedOld.has(oi)) continue;
++        if (oldGaps[oi] !== newGaps[ni]) continue;
++        const sim = pairAffinity(oldWordStrings[oi], newWordStrings[ni]);
++        if (sim > bestSim) {
++          bestSim = sim;
++          bestOi = oi;
++        }
++      }
++      if (bestOi >= 0) {
++        morphPairs.set(ni, bestOi);
++        usedOld.add(bestOi);
++      }
++    }
++  }
++  const plans = newWordStrings.map((newWord, ni) => {
++    const lcsOi = newToOldWord.get(ni);
++    const oi = lcsOi ?? morphPairs.get(ni);
++    if (oi === void 0) return { mode: "fresh" };
++    if (isNum(newWord)) return { mode: "number", oi };
++    return lcsOi !== void 0 ? { mode: "reuse", oi } : { mode: "morph", oi };
++  });
++  const cursorIndex = plans.filter((plan) => plan.mode === "number").length === 1 ? options.cursorIndex : void 0;
++  const decimalChar = decimalSeparator(locale);
++  const alloc = createIdAllocator();
++  for (const plan of plans) {
++    if (plan.mode === "fresh") continue;
++    const oldGroup = oldWords[plan.oi];
++    if (plan.mode !== "reuse" && oldGroup.segments.length === 1) {
++      const wordSeg = oldGroup.segments[0];
++      for (let i = 0; i < oldGroup.word.length; i++) {
++        alloc.reserve(`${wordSeg.id}:${i}`);
++      }
++    } else {
++      for (const seg of oldGroup.segments) alloc.reserve(seg.id);
++    }
++  }
++  const segments = [];
++  const splits = /* @__PURE__ */ new Map();
++  let charOffset = 0;
++  function pushSeparators(seps) {
++    for (const sep of seps) {
++      if (sep === "\n") {
++        segments.push({
++          id: alloc.take(`newline-${charOffset}`),
++          string: "\n"
++        });
++      } else {
++        segments.push({
++          id: alloc.take(`space-${charOffset}`),
++          string: "\xA0"
++        });
++      }
++      charOffset++;
++    }
++  }
++  for (let ni = 0; ni < newWordStrings.length; ni++) {
++    pushSeparators(newSeparators[ni] ?? (ni > 0 ? [" "] : []));
++    const plan = plans[ni];
++    const newWord = newWordStrings[ni];
++    if (plan.mode === "reuse") {
++      for (const seg of oldWords[plan.oi].segments) segments.push(seg);
++    } else if (plan.mode === "number") {
++      const oldGroup = oldWords[plan.oi];
++      segments.push(
++        ...segmentNumber(
++          newWord,
++          asNumberSegments(splitIfWhole(oldGroup, splits)),
++          cursorIndex === void 0 ? void 0 : cursorIndex - charOffset,
++          decimalChar
++        )
++      );
++    } else if (plan.mode === "morph") {
++      const oldGroup = oldWords[plan.oi];
++      const oldWord = oldGroup.word;
++      const oldCharSegs = splitIfWhole(oldGroup, splits);
++      const oldChars = oldWord.split("");
++      const newChars = newWord.split("");
++      const [oldCharLcs, newCharLcs] = lcsIndices(oldChars, newChars);
++      const newCharToOldSeg = /* @__PURE__ */ new Map();
++      for (let k = 0; k < newCharLcs.length; k++) {
++        const oldSeg = oldCharSegs[oldCharLcs[k]];
++        if (oldSeg) {
++          newCharToOldSeg.set(newCharLcs[k], oldSeg);
++        }
++      }
++      for (let ci = 0; ci < newChars.length; ci++) {
++        if (newCharToOldSeg.has(ci)) {
++          const oldSeg = newCharToOldSeg.get(ci);
++          segments.push({ id: oldSeg.id, string: newChars[ci] });
++        } else {
++          segments.push({
++            id: alloc.take(`${newWord}~${ci}`),
++            string: newChars[ci]
++          });
++        }
++      }
++    } else if (isNum(newWord)) {
++      segments.push(...segmentNumber(newWord));
++    } else {
++      segments.push({ id: alloc.take(newWord), string: newWord });
++    }
++    charOffset += newWord.length;
++  }
++  pushSeparators(trailingSeparators);
++  return { segments, splits };
++}
++
++// src/lib/utils/constants.ts
++var ATTR_ROOT = "torph-root";
++var ATTR_CELL = "torph-cell";
++var ATTR_BLOCK = "torph-block";
++var ATTR_PROBE = "torph-probe";
++var ATTR_LAYER = "torph-layer";
++var ATTR_ITEM = "torph-item";
++var ATTR_ROLL = "torph-roll";
++var ATTR_SR = "torph-sr";
++var ATTR_IN_PLACE = "torph-in-place";
++var ATTR_DEBUG = "torph-debug";
++
++// src/lib/utils/styles.ts
++var TORPH_CSS = `
++[${ATTR_CELL}] {
++  display: inline-grid;
++  overflow-x: clip;
++}
++
++/* In a root that is a block, the cell is one too: the paragraph's box. */
++[${ATTR_CELL}][${ATTR_BLOCK}] {
++  display: grid;
++}
++
++[${ATTR_CELL}] > * {
++  grid-area: 1 / 1;
++}
++
++/*
++ * The probes trim their lines as the root does (text-box): a grid takes no
++ * trim from around it, so the root's own is handed down for the plain text
++ * the probe stands for.
++ */
++[${ATTR_CELL}],
++[${ATTR_PROBE}] {
++  text-box: inherit;
++}
++
++[${ATTR_PROBE}] {
++  visibility: hidden;
++  align-self: start;
++}
++
++[${ATTR_LAYER}] {
++  width: 0;
++  height: 0;
++  justify-self: start;
++  align-self: start;
+   white-space: nowrap;
+-  text-align: inherit;
++  pointer-events: none;
++}
++
++[${ATTR_ITEM}] {
++  display: inline-block;
++  white-space: pre;
++}
++
++/*
++ * A digit rolls in a slot that clips it on the block axis only, so a glyph's
++ * overhang is never shaved; clip, not hidden, keeps the slot's baseline.
++ */
++[${ATTR_ROLL}] {
++  overflow-x: visible;
++  overflow-y: clip;
+ }
+ 
+-[${Q}]:not(br) {
++[${ATTR_ROLL}] > span {
+   display: inline-block;
+-  position: relative;
+-  will-change: opacity, transform;
+-  transform: none;
+-  opacity: 1;
+ }
+ 
+ /*
+- * The value once as plain text \u2014 every other child is an aria-hidden fragment.
+- * Out of flow, because the engine measures every child of the root. Clipped
+- * rather than display: none, which would take it out of the a11y tree as well.
+- * user-select: none, or a copied selection pastes the value twice.
++ * The value once as plain text while the segments are drawn: they are
++ * aria-hidden. Clipped rather than display: none, which would take it out of
++ * the a11y tree as well. user-select: none, or a copied selection pastes the
++ * value twice.
+  */
+-[${P}] {
++[${ATTR_SR}] {
+   position: absolute;
+   width: 1px;
+   height: 1px;
+@@ -46,55 +799,774 @@
+   user-select: none;
+ }
+ 
+-/*
+- * A digit slides a whole line box to arrive, so it needs its own box to hide
+- * behind. Not the root: that spans every line, so clipping there leaves a digit
+- * on a middle line sliding over its neighbour in view. The transform sits on the
+- * child, so the slide never touches the slot's rect and the FLIP pass stays
+- * oblivious. clip-path, not overflow \u2014 an inline-block whose overflow is
+- * anything but visible has its baseline synthesized to the bottom margin edge
+- * (CSS 2.1 \xA710.8.1), and engines disagree on whether overflow: clip counts.
+- * The inline axis stays open so glyph overhang is not shaved.
+- */
+-[${F}] {
+-  clip-path: inset(0 -100vw);
++[${ATTR_ROOT}][${ATTR_DEBUG}] {
++  outline: 2px solid magenta;
++  [${ATTR_ITEM}] {
++    outline: 2px solid cyan;
++    outline-offset: -4px;
++  }
++}`;
++var styleEl = null;
++var refCount = 0;
++function addStyles() {
++  refCount++;
++  if (styleEl) return;
++  styleEl = document.createElement("style");
++  styleEl.dataset.torph = "true";
++  styleEl.textContent = TORPH_CSS;
++  document.head.appendChild(styleEl);
++}
++function removeStyles() {
++  refCount--;
++  if (refCount > 0 || !styleEl) return;
++  styleEl.remove();
++  styleEl = null;
+ }
+ 
+-[${F}] > span {
+-  display: inline-block;
+-  will-change: opacity, transform;
++// src/lib/utils/alignment.ts
++var px = (value) => Number.parseFloat(value) || 0;
++function autoMargins(el, axis) {
++  const map = el.computedStyleMap?.();
++  if (!map) return [false, false];
++  const [a, b] = axis === "x" ? ["margin-left", "margin-right"] : ["margin-top", "margin-bottom"];
++  return [map.get(a)?.toString() === "auto", map.get(b)?.toString() === "auto"];
++}
++function onLine(rect, of, axis) {
++  const [a0, a1, b0, b1] = axis === "x" ? [rect.top, rect.bottom, of.top, of.bottom] : [rect.left, rect.right, of.left, of.right];
++  return Math.min(a1, b1) - Math.max(a0, b0) > 0.5;
++}
++function share(parent, style, child, childRect, axis) {
++  const horizontal = axis === "x";
++  const box = parent.getBoundingClientRect();
++  const lead = horizontal ? box.left + px(style.borderLeftWidth) + px(style.paddingLeft) : box.top + px(style.borderTopWidth) + px(style.paddingTop);
++  const trail = horizontal ? box.right - px(style.borderRightWidth) - px(style.paddingRight) : box.bottom - px(style.borderBottomWidth) - px(style.paddingBottom);
++  const display = style.display;
++  const flex = display.includes("flex");
++  const grid = display.includes("grid");
++  const mainAxis = flex && (style.flexDirection.startsWith("row") ? "x" : "y") === axis;
++  const gap = flex || grid ? px(horizontal ? style.columnGap : style.rowGap) : 0;
++  const spans = [];
++  const range = document.createRange();
++  for (const node of Array.from(parent.childNodes)) {
++    if (node.nodeType === Node.TEXT_NODE) {
++      range.selectNodeContents(node);
++      for (const rect of Array.from(range.getClientRects())) {
++        if (rect.width === 0 && rect.height === 0) continue;
++        if (!onLine(rect, childRect, axis)) continue;
++        spans.push({
++          start: horizontal ? rect.left : rect.top,
++          end: horizontal ? rect.right : rect.bottom,
++          self: false,
++          grow: 0
++        });
++      }
++      continue;
++    }
++    if (!(node instanceof Element)) continue;
++    const own = getComputedStyle(node);
++    if (own.display === "none" || own.position === "absolute" || own.position === "fixed") {
++      continue;
++    }
++    const self = node === child;
++    const rects = self ? [childRect] : Array.from(node.getClientRects());
++    const [autoBefore, autoAfter] = autoMargins(node, axis);
++    const before2 = autoBefore ? 0 : px(horizontal ? own.marginLeft : own.marginTop);
++    const after2 = autoAfter ? 0 : px(horizontal ? own.marginRight : own.marginBottom);
++    for (const rect of rects) {
++      if (!self && !onLine(rect, childRect, axis)) continue;
++      spans.push({
++        start: (horizontal ? rect.left : rect.top) - before2,
++        end: (horizontal ? rect.right : rect.bottom) + after2,
++        self,
++        grow: mainAxis ? px(own.flexGrow) : 0
++      });
++    }
++  }
++  spans.sort((a, b) => a.start - b.start);
++  const at = spans.findIndex((span) => span.self);
++  if (at === -1) return null;
++  let before = Math.max(0, spans[0].start - lead);
++  let after = Math.max(0, trail - spans[spans.length - 1].end);
++  for (let i = 0; i + 1 < spans.length; i++) {
++    const room = Math.max(0, spans[i + 1].start - spans[i].end - gap);
++    if (i < at) before += room;
++    else after += room;
++  }
++  if (before + after > 0.5) return before / (before + after);
++  if (mainAxis && spans[at].grow === 0) {
++    let growBefore = 0;
++    let growAfter = 0;
++    spans.forEach((span, i) => {
++      if (i < at) growBefore += span.grow;
++      if (i > at) growAfter += span.grow;
++    });
++    if (growBefore + growAfter > 0) return growBefore / (growBefore + growAfter);
++  }
++  return null;
++}
++function holdsItsSize(el, style, axis) {
++  const overflow = axis === "x" ? style.overflowX : style.overflowY;
++  if (overflow !== "visible" && overflow !== "clip") return true;
++  const map = el.computedStyleMap?.();
++  const size = map?.get(axis === "x" ? "width" : "height")?.toString();
++  return size !== void 0 && size !== "auto" && !size.endsWith("%");
++}
++function alignment(root, rect, axis) {
++  const fallback = axis === "x" && getComputedStyle(root).direction === "rtl" ? 1 : 0;
++  let child = root;
++  let childRect = rect;
++  let parent = root.parentElement;
++  for (let depth = 0; parent && depth < 16; depth++) {
++    const style = getComputedStyle(parent);
++    if (style.display === "inline" || style.display === "contents") {
++      child = parent;
++      childRect = parent.getBoundingClientRect();
++      parent = parent.parentElement;
++      continue;
++    }
++    const k = share(parent, style, child, childRect, axis);
++    if (k !== null) return k;
++    if (holdsItsSize(parent, style, axis)) return fallback;
++    child = parent;
++    childRect = parent.getBoundingClientRect();
++    parent = parent.parentElement;
++  }
++  return fallback;
+ }
+ 
+-/*
+- * Softens the clip above into a gradient, positionally rather than on a timer, so
+- * it stays in step with the slide at any duration. The band (--torph-fade, 0 for a
+- * hard edge) must eat into the box: the clip trims at the border box, so a ramp
+- * reaching past it sits in territory already removed and is never seen. no-clip
+- * plus repeat-x is what carries the profile across glyph overhang.
+- */
+-@supports (mask-clip: no-clip) or (-webkit-mask-clip: no-clip) {
+-  [${F}] {
+-    --torph-mask: linear-gradient(
+-      to bottom,
+-      transparent,
+-      #000 var(--torph-fade, 0.15em),
+-      #000 calc(100% - var(--torph-fade, 0.15em)),
+-      transparent
+-    );
+-    -webkit-mask-image: var(--torph-mask);
+-    mask-image: var(--torph-mask);
+-    -webkit-mask-repeat: repeat-x;
+-    mask-repeat: repeat-x;
+-    -webkit-mask-clip: no-clip;
+-    mask-clip: no-clip;
++// src/lib/utils/laid-out.ts
++var waiting = /* @__PURE__ */ new Map();
++var observer;
++function deliver(entries) {
++  const reads = [];
++  for (const { target } of entries) {
++    const read = waiting.get(target);
++    observer?.unobserve(target);
++    if (read) {
++      waiting.delete(target);
++      reads.push(read);
++    }
+   }
++  const writes = reads.map((read) => read());
++  for (const write of writes) write?.();
++}
++function onceLaidOut(el, read) {
++  observer ??= new ResizeObserver(deliver);
++  waiting.set(el, read);
++  observer.unobserve(el);
++  observer.observe(el);
++}
++function forget(el) {
++  waiting.delete(el);
++  observer?.unobserve(el);
+ }
+ 
+-[${Y}][${Z}] {
+-  outline: 2px solid magenta;
+-  [${Q}] {
+-    outline: 2px solid cyan;
+-    outline-offset: -4px;
++// src/lib/utils/reduced-motion.ts
++function createReducedMotionListener() {
++  if (typeof window === "undefined") {
++    return { prefersReducedMotion: false, destroy: () => {
++    } };
++  }
++  const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
++  const state = { prefersReducedMotion: mediaQuery.matches, destroy };
++  function onChange(event) {
++    state.prefersReducedMotion = event.matches;
++  }
++  function destroy() {
++    mediaQuery.removeEventListener("change", onChange);
++  }
++  mediaQuery.addEventListener("change", onChange);
++  return state;
++}
++
++// src/lib/text-morph/controller.ts
++var MorphController = class _MorphController {
++  instance = null;
++  lastText = "";
++  lastCursorIndex;
++  configKey = "";
++  attach(element, options) {
++    this.instance?.destroy();
++    this.instance = new TextMorph({ element, ...options });
++    this.configKey = _MorphController.serializeConfig(options);
++    if (this.lastText !== "") {
++      this.instance.update(this.lastText, this.lastCursorIndex);
++    }
++  }
++  update(text, cursorIndex) {
++    this.lastText = text;
++    this.lastCursorIndex = cursorIndex;
++    this.instance?.update(text, cursorIndex);
++  }
++  needsRecreate(options) {
++    return _MorphController.serializeConfig(options) !== this.configKey;
+   }
+-}`,C=null,Nt=0;function Se(){Nt++,!C&&(C=document.createElement("style"),C.dataset.torph="true",C.textContent=mn,document.head.appendChild(C));}function Me(){Nt--,!(Nt>0||!C)&&(C.remove(),C=null);}function Te(){if(typeof window>"u")return {prefersReducedMotion:false,destroy:()=>{}};let e=window.matchMedia("(prefers-reduced-motion: reduce)"),t={prefersReducedMotion:e.matches,destroy:i};function n(r){t.prefersReducedMotion=r.matches;}function i(){e.removeEventListener("change",n);}return e.addEventListener("change",n),t}var mt=class e{instance=null;lastText="";lastCursorIndex;configKey="";attach(t,n){this.instance?.destroy(),this.instance=new nt({element:t,...n}),this.configKey=e.serializeConfig(n),this.lastText!==""&&this.instance.update(this.lastText,this.lastCursorIndex);}update(t,n){this.lastText=t,this.lastCursorIndex=n,this.instance?.update(t,n);}needsRecreate(t){return e.serializeConfig(t)!==this.configKey}destroy(){this.instance?.destroy(),this.instance=null;}static serializeConfig(t){return JSON.stringify({ease:t.ease,duration:t.duration,locale:t.locale,scale:t.scale,numbers:t.numbers,decimals:t.decimals,debug:t.debug,disabled:t.disabled,respectReducedMotion:t.respectReducedMotion})}};var pn="span",Ee={..._t,debug:false,scale:true,numbers:true},nt=class{element;options={};data;currentMeasures={};prevMeasures={};previousSegments=[];isInitialRender=true;reducedMotion=null;srNode=null;hasSetup=false;constructor(t){let n=Object.fromEntries(Object.entries(t).filter(([,a])=>a!==void 0)),{ease:i,...r}={...Ee,...n},{ease:s,duration:o}=Ft(i,r.duration);this.options={...r,ease:s,duration:o},this.element=t.element,this.options.respectReducedMotion&&(this.reducedMotion=Te()),this.data="",this.isDisabled()||this.setup();}setup(){this.hasSetup||(this.hasSetup=true,this.element.setAttribute(Y,""),this.options.debug&&this.element.setAttribute(Z,""),Se());}destroy(){this.reducedMotion?.destroy(),re(this.element),this.element.getAnimations().forEach(t=>t.cancel()),this.srNode?.remove(),this.srNode=null,this.element.removeAttribute(Y),this.element.removeAttribute(Z),this.hasSetup&&(this.hasSetup=false,Me());}isDisabled(){return !!(this.options.disabled||this.reducedMotion?.prefersReducedMotion)}update(t,n){let i=typeof t=="number"?t.toLocaleString(this.options.locale,{minimumFractionDigits:this.options.decimals,maximumFractionDigits:this.options.decimals}):t;if(i!==this.data){if(this.data=i,this.isDisabled()){typeof i=="string"&&(this.srNode=null,this.element.textContent=i,this.previousSegments=[],this.isInitialRender=true);return}if(this.setup(),this.data instanceof HTMLElement)throw new Error("HTMLElement not yet supported");this.options.onAnimationStart&&!this.isInitialRender&&this.options.onAnimationStart(),this.createTextGroup(this.data,this.element,n);}}createTextGroup(t,n,i){let{width:r,height:s}=et(n),o=this.options.numbers!==false;this.syncAccessibleText(t);let a,u;if(this.previousSegments.length>0){let g=Lt(this.previousSegments,t,this.options.locale,{numbers:o,cursorIndex:i});a=g.segments,u=g.splits;}else a=K(t,this.options.locale,o),u=new Map;let c=a.length===0;c&&(a=[{id:tt,string:"\u200B"}]),ce(n,u),this.prevMeasures=ct(this.element);let f=Array.from(n.children).filter(g=>!g.hasAttribute(P)),l=new Set(a.map(g=>g.id)),m=f.filter(g=>!l.has(g.getAttribute(w))&&!g.hasAttribute(H)),d=new Set(m),h=f.map(g=>g.getAttribute(w)),M=oe(f,d,h,l);le(n,m),me(n,f,l,a),this.currentMeasures=ct(this.element);let x=a.reduce((g,v)=>v.string===`
+-`?g+1:g,1),T=(n.offsetHeight||20*x)/x;n.style.width=`${r}px`,n.offsetWidth;let L=ct(this.element);n.style.width="",this.updateStyles(a,L,T);let E=this.isInitialRender?[]:It(f,new Set(m)),N=new Set(E.flat());for(let g of E)ge(g,{duration:this.options.duration,ease:this.options.ease});if(m.forEach(g=>{if(this.isInitialRender||g.getAttribute(w)===tt){g.remove();return}if(N.has(g))return;let v=M.get(g),{dx:R,dy:O}=v?Tt(this.currentMeasures,this.prevMeasures,v):{dx:0,dy:0};g.hasAttribute(V)?pe(g,{dx:R,dy:O,slideDistance:T,duration:this.options.duration,ease:this.options.ease}):ae(g,{dx:R,dy:O,duration:this.options.duration,ease:this.options.ease,scale:this.options.scale});}),this.previousSegments=a,this.isInitialRender){this.isInitialRender=false,n.style.width="",n.style.height="";return}c?se(n,r,s,this.options.duration,this.options.onAnimationComplete,this.options.onAnimationCancel):ie(n,r,s,this.options.duration,this.options.ease,this.options.onAnimationComplete,this.options.onAnimationCancel);}updateStyles(t,n,i){if(this.isInitialRender)return;let r=Array.from(this.element.children).filter(l=>!l.hasAttribute(P)),s=t.map(l=>l.id),o=new Map(t.map(l=>[l.id,l.kind])),a=r.filter(l=>!l.hasAttribute(H)&&l.tagName!=="BR"&&l.getAttribute(w)!==tt),u=new Set(a.filter(l=>!this.prevMeasures[l.getAttribute(w)])),c=new Set;for(let l of It(a,u))l.forEach(m=>c.add(m)),be(l,{duration:this.options.duration,ease:this.options.ease});let f=new Set(s.filter(l=>this.prevMeasures[l]));r.forEach((l,m)=>{if(l.hasAttribute(H)||l.tagName==="BR"||c.has(l))return;let d=l.getAttribute(w)||`child-${m}`;if(d===tt)return;let h=!this.prevMeasures[d],M=h?Et(t.findIndex(E=>E.id===d),s,f):d,{dx:x,dy:T}=M?Tt(this.prevMeasures,n,M):{dx:0,dy:0},L=o.get(d);L&&h?fe(l,{deltaX:x,deltaY:T,slideDistance:i,kind:L,duration:this.options.duration,ease:this.options.ease}):L?Rt(l,{deltaX:x,deltaY:T,duration:this.options.duration,ease:this.options.ease}):ue(l,{deltaX:x,deltaY:T,isNew:h,duration:this.options.duration,ease:this.options.ease});});}syncAccessibleText(t){if(!this.srNode||this.srNode.parentNode!==this.element){let n=document.createElement("span");n.setAttribute(P,""),this.element.prepend(n),this.srNode=n;}this.srNode.textContent=t;}};exports.DEFAULT_AS=pn;exports.DEFAULT_TEXT_MORPH_OPTIONS=Ee;exports.MorphController=mt;exports.TextMorph=nt;exports.decimalSeparator=xt;exports.diffSegments=Lt;exports.isNumericWord=J;exports.segmentNumber=U;exports.segmentText=K;
+\ No newline at end of file
++  destroy() {
++    this.instance?.destroy();
++    this.instance = null;
++  }
++  static serializeConfig(options) {
++    return JSON.stringify({
++      ease: options.ease,
++      duration: options.duration,
++      locale: options.locale,
++      scale: options.scale,
++      numbers: options.numbers,
++      decimals: options.decimals,
++      debug: options.debug,
++      disabled: options.disabled,
++      respectReducedMotion: options.respectReducedMotion
++    });
++  }
++};
++
++// src/lib/text-morph/index.ts
++var DEFAULT_AS = "span";
++var DEFAULT_TEXT_MORPH_OPTIONS = {
++  ...BASE_DEFAULTS,
++  debug: false,
++  scale: true,
++  numbers: true
++};
++var SHRINK = 0.95;
++var placed = /* @__PURE__ */ new WeakMap();
++function place(el, x, y) {
++  placed.set(el, { x, y });
++  el.style.translate = x === 0 && y === 0 ? "" : `${x}px ${y}px`;
++}
++function fill(el, value) {
++  const lines = value.split("\n");
++  const nodes = [];
++  lines.forEach((line, i) => {
++    if (i > 0) nodes.push(document.createElement("br"));
++    if (line) nodes.push(document.createTextNode(line));
++  });
++  el.replaceChildren(...nodes);
++}
++function item(segment) {
++  if (segment.string === "\n") return document.createElement("br");
++  const el = document.createElement("span");
++  el.setAttribute(ATTR_ITEM, "");
++  if (segment.kind === "digit") {
++    el.setAttribute(ATTR_ROLL, "");
++    const face = document.createElement("span");
++    face.textContent = segment.string;
++    el.append(face);
++  } else {
++    el.textContent = segment.string;
++  }
++  return el;
++}
++var faceOf = (el) => el.hasAttribute(ATTR_ROLL) ? el.firstElementChild ?? el : el;
++var centre = (rect) => ({
++  x: rect.left + rect.width / 2,
++  y: rect.top + rect.height / 2
++});
++function textCentre(el, range) {
++  const face = faceOf(el);
++  const text = face.firstChild;
++  if (!text) return centre(el.getBoundingClientRect());
++  range.selectNodeContents(text);
++  return centre(range.getBoundingClientRect());
++}
++function lay(layer) {
++  const at = /* @__PURE__ */ new Map();
++  const texts = Array.from(layer.probe.childNodes).filter(
++    (node) => node.nodeType === Node.TEXT_NODE
++  );
++  const range = document.createRange();
++  let line = 0;
++  let offset = 0;
++  let left = Infinity;
++  let right = -Infinity;
++  for (const segment of layer.segments) {
++    if (segment.string === "\n") {
++      line += 1;
++      offset = 0;
++      continue;
++    }
++    const node = texts[line];
++    const el = layer.items.get(segment.id);
++    const length = segment.string.length;
++    if (!node || !el) {
++      offset += length;
++      continue;
++    }
++    range.setStart(node, Math.min(offset, node.length));
++    range.setEnd(node, Math.min(offset + length, node.length));
++    const rects = range.getClientRects();
++    const rect = rects[0] ?? range.getBoundingClientRect();
++    at.set(el, centre(rect));
++    for (const one of Array.from(rects)) {
++      left = Math.min(left, one.left);
++      right = Math.max(right, one.right);
++    }
++    offset += length;
++  }
++  const box = layer.probe.getBoundingClientRect();
++  if (left === Infinity) {
++    left = box.left;
++    right = box.left;
++  }
++  return { at, left, width: right - left, height: box.height };
++}
++function linesOf(probe, value) {
++  const lines = value.split("\n");
++  const nodes = [];
++  lines.forEach((line, i) => {
++    if (i > 0) nodes.push(document.createElement("br"));
++    nodes.push(document.createTextNode(line));
++  });
++  probe.replaceChildren(...nodes);
++}
++var TextMorph = class {
++  element;
++  options = {};
++  data;
++  /** The segments of the value drawn last, so the next morph matches against them. */
++  segments = [];
++  isInitialRender = true;
++  reducedMotion = null;
++  hasSetup = false;
++  run = null;
++  step = 0;
++  /** A layer written but not read yet: a step that comes first takes it out. */
++  pending = null;
++  /** When the step not read yet was written, on the document's timeline. */
++  writtenAt = 0;
++  /**
++   * Whether the root is laid out as a block (a paragraph): its cell is then a
++   * block as well. Read once the root is first laid out; an inline root has
++   * no box of its own to observe, and stays inline.
++   */
++  block = false;
++  constructor(options) {
++    const given = Object.fromEntries(
++      Object.entries(options).filter(([, value]) => value !== void 0)
++    );
++    const { ease: rawEase, ...rest } = {
++      ...DEFAULT_TEXT_MORPH_OPTIONS,
++      ...given
++    };
++    const { ease, duration } = resolveEase(rawEase, rest.duration);
++    this.options = { ...rest, ease, duration };
++    this.element = options.element;
++    if (this.options.respectReducedMotion) {
++      this.reducedMotion = createReducedMotionListener();
++    }
++    this.data = "";
++    if (!this.options.disabled) this.setup();
++  }
++  setup() {
++    if (this.hasSetup) return;
++    this.hasSetup = true;
++    this.element.setAttribute(ATTR_ROOT, "");
++    if (this.options.debug) this.element.setAttribute(ATTR_DEBUG, "");
++    addStyles();
++    const root = this.element;
++    onceLaidOut(root, () => {
++      this.block = getComputedStyle(root).display !== "inline";
++      return void 0;
++    });
++  }
++  destroy() {
++    this.reducedMotion?.destroy();
++    this.settle(false);
++    forget(this.element);
++    this.element.removeAttribute(ATTR_ROOT);
++    this.element.removeAttribute(ATTR_DEBUG);
++    if (this.hasSetup) {
++      this.hasSetup = false;
++      removeStyles();
++    }
++  }
++  /** Less motion: nothing travels, the old value fades out where it stands and the new one in. */
++  get fade() {
++    return Boolean(this.reducedMotion?.prefersReducedMotion);
++  }
++  /** `cursorIndex` switches a single-number value from place matching to caret matching. */
++  update(value, cursorIndex) {
++    const formatted = typeof value === "number" ? value.toLocaleString(this.options.locale, {
++      minimumFractionDigits: this.options.decimals,
++      maximumFractionDigits: this.options.decimals
++    }) : value;
++    if (formatted === this.data) return;
++    if (formatted instanceof HTMLElement) {
++      throw new Error("HTMLElement not yet supported");
++    }
++    const from = this.data;
++    this.data = formatted;
++    const numbers = this.options.numbers !== false;
++    if (this.options.disabled || this.isInitialRender || !this.options.duration) {
++      this.settle(false);
++      if (this.element.textContent !== formatted) fill(this.element, formatted);
++      this.segments = segmentText(formatted, this.options.locale, numbers);
++      this.isInitialRender = false;
++      return;
++    }
++    this.setup();
++    if (this.run) {
++      this.options.onAnimationCancel?.();
++    }
++    this.options.onAnimationStart?.();
++    this.begin(from, formatted, numbers, cursorIndex);
++  }
++  /**
++   * Writes the step's layer and its probe into the cell, before the frame is
++   * laid out, and reads where everything lies once it is (laid-out.ts).
++   */
++  begin(from, value, numbers, cursorIndex) {
++    this.drop();
++    this.element.removeAttribute(ATTR_IN_PLACE);
++    this.step += 1;
++    const step = this.step;
++    let run = this.run;
++    if (!run) {
++      const cell = document.createElement("span");
++      cell.setAttribute(ATTR_CELL, "");
++      if (this.block) cell.setAttribute(ATTR_BLOCK, "");
++      cell.setAttribute("aria-hidden", "true");
++      const sr = document.createElement("span");
++      sr.setAttribute(ATTR_SR, "");
++      sr.style.position = "absolute";
++      const first = this.layer(from, this.segments);
++      cell.append(first.probe, first.el);
++      this.element.replaceChildren(cell, sr);
++      run = this.run = {
++        cell,
++        sr,
++        layers: [first],
++        clock: [],
++        fromText: true,
++        size: null,
++        inPlace: false
++      };
++    }
++    run.sr.textContent = value;
++    const drawn = run.layers[0];
++    let segments;
++    if (this.fade) {
++      segments = segmentText(value, this.options.locale, numbers);
++    } else {
++      const diff = diffSegments(drawn.segments, value, this.options.locale, {
++        numbers,
++        cursorIndex
++      });
++      segments = diff.segments;
++      for (const [id, pieces] of diff.splits) this.split(drawn, id, pieces);
++    }
++    const next = this.layer(value, segments);
++    run.cell.prepend(next.probe, next.el);
++    if (!value) {
++      const lead = run.layers.find((layer) => layer.value)?.probe;
++      if (lead) run.cell.prepend(lead);
++    }
++    this.pending = next;
++    this.writtenAt = document.timeline.currentTime;
++    onceLaidOut(run.cell, () => {
++      if (step !== this.step || this.pending !== next) return;
++      const reads = this.read(next);
++      return () => this.play(next, reads, step);
++    });
++  }
++  layer(value, segments) {
++    const probe = document.createElement("span");
++    probe.setAttribute(ATTR_PROBE, "");
++    linesOf(probe, value);
++    const el = document.createElement("span");
++    el.setAttribute(ATTR_LAYER, "");
++    const items = /* @__PURE__ */ new Map();
++    el.append(
++      ...segments.map((segment) => {
++        const one = item(segment);
++        if (one.tagName !== "BR") items.set(segment.id, one);
++        return one;
++      })
++    );
++    return { value, segments, probe, el, items };
++  }
++  /** A step written and not read yet gives way to the one coming: its layer out. */
++  drop() {
++    const run = this.run;
++    const pending = this.pending;
++    if (!run || !pending) return;
++    this.pending = null;
++    forget(run.cell);
++    pending.probe.remove();
++    pending.el.remove();
++  }
++  /**
++   * The drawn word `id` as its letters, in its place: each moves as the word
++   * was moving, on the same clock, so nothing drawn changes.
++   */
++  split(drawn, id, pieces) {
++    const whole = drawn.items.get(id);
++    const run = this.run;
++    if (!whole || !run) return;
++    const els = pieces.map(item);
++    const offset = placed.get(whole);
++    const carried = run.clock.filter(
++      (animation) => animation.effect?.target === whole
++    );
++    whole.replaceWith(...els);
++    drawn.items.delete(id);
++    pieces.forEach((piece, i) => {
++      const el = els[i];
++      if (el.tagName === "BR") return;
++      drawn.items.set(piece.id, el);
++      if (offset) place(el, offset.x, offset.y);
++      el.style.visibility = whole.style.visibility;
++      for (const animation of carried) {
++        const effect = animation.effect;
++        const copy = el.animate(effect.getKeyframes(), effect.getTiming());
++        copy.startTime = animation.startTime;
++        run.clock.push(copy);
++      }
++    });
++    drawn.segments = drawn.segments.flatMap(
++      (segment) => segment.id === id ? pieces : [segment]
++    );
++  }
++  /**
++   * Every box the step needs, read at once: where each drawn segment stands
++   * now and how opaque, where the text the morph starts from stood, and where
++   * each new segment comes to rest.
++   */
++  read(next) {
++    const run = this.run;
++    const cellRect = run.cell.getBoundingClientRect();
++    const root = this.element;
++    const style = getComputedStyle(root);
++    const inline = style.display === "inline";
++    let hugsX = true;
++    let hugsY = true;
++    let box = cellRect;
++    if (!inline) {
++      box = root.getBoundingClientRect();
++      const px2 = (v) => Number.parseFloat(v) || 0;
++      const innerW = box.width - px2(style.paddingLeft) - px2(style.paddingRight) - px2(style.borderLeftWidth) - px2(style.borderRightWidth);
++      const innerH = box.height - px2(style.paddingTop) - px2(style.paddingBottom) - px2(style.borderTopWidth) - px2(style.borderBottomWidth);
++      hugsX = Math.abs(innerW - cellRect.width) < 0.5;
++      hugsY = Math.abs(innerH - cellRect.height) < 0.5;
++    }
++    let kx = null;
++    let ky = null;
++    const shareX = () => kx ??= alignment(root, box, "x");
++    const shareY = () => ky ??= alignment(root, box, "y");
++    const shiftOf = (text) => {
++      const dw = cellRect.width - text.width;
++      const dh = cellRect.height - text.height;
++      return {
++        x: hugsX && Math.abs(dw) > 0.25 ? cellRect.left + shareX() * dw - text.left : hugsX ? cellRect.left - text.left : 0,
++        y: hugsY && Math.abs(dh) > 0.25 ? shareY() * dh : 0
++      };
++    };
++    const stale = document.timeline.currentTime - this.writtenAt > this.options.duration;
++    const nextText = lay(next);
++    const nextShift = shiftOf(nextText);
++    const rest = /* @__PURE__ */ new Map();
++    const laid = /* @__PURE__ */ new Map();
++    const range = document.createRange();
++    for (const [el, at] of nextText.at) {
++      rest.set(el, { x: at.x + nextShift.x, y: at.y + nextShift.y });
++      laid.set(el, textCentre(el, range));
++    }
++    const drawn = /* @__PURE__ */ new Map();
++    const [, ...older] = [next, ...run.layers];
++    if (run.fromText) {
++      const first = older[older.length - 1];
++      const text = lay(first);
++      const shift = shiftOf(text);
++      for (const [el, at] of text.at) {
++        drawn.set(el, {
++          at: { x: at.x + shift.x, y: at.y + shift.y },
++          laid: textCentre(el, range),
++          opacity: 1,
++          scale: 1,
++          roll: 0
++        });
++      }
++    } else {
++      let drift = { x: 0, y: 0 };
++      const was = run.size;
++      if (was) {
++        const dw = cellRect.width - was.width;
++        const dh = cellRect.height - was.height;
++        const corner = next.el.getBoundingClientRect();
++        const end = cellRect.width > 0 ? (corner.left - cellRect.left) / cellRect.width : 0;
++        const moved = (share2) => share2 - end;
++        drift = {
++          x: Math.abs(dw) > 0.25 ? moved(hugsX ? shareX() : this.textAlign(cellRect, root, style)) * dw : 0,
++          y: Math.abs(dh) > 0.25 && hugsY ? shareY() * dh : 0
++        };
++      }
++      for (const layer of older) {
++        for (const el of layer.items.values()) {
++          if (el.style.visibility === "hidden") continue;
++          const own = getComputedStyle(el);
++          const matrix = own.transform && own.transform !== "none" ? new DOMMatrixReadOnly(own.transform) : null;
++          const offset = placed.get(el) ?? { x: 0, y: 0 };
++          const face = faceOf(el);
++          let roll = 0;
++          if (face !== el) {
++            const turned = getComputedStyle(face).transform;
++            if (turned && turned !== "none") roll = new DOMMatrixReadOnly(turned).f;
++          }
++          const glyph = textCentre(el, range);
++          const now = { x: glyph.x, y: glyph.y - roll };
++          drawn.set(el, {
++            at: { x: now.x + drift.x, y: now.y + drift.y },
++            laid: {
++              x: now.x - offset.x - (matrix?.e ?? 0),
++              y: now.y - offset.y - (matrix?.f ?? 0)
++            },
++            opacity: Number(own.opacity),
++            scale: matrix?.a ?? 1,
++            roll
++          });
++        }
++      }
++    }
++    return {
++      drawn,
++      rest,
++      laid,
++      cell: { width: cellRect.width, height: cellRect.height },
++      inPlace: Math.abs(nextText.height - cellRect.height) < 0.5 && (!hugsX || Math.abs(nextText.width - cellRect.width) < 0.5),
++      stale
++    };
++  }
++  /** Where a block root's line puts the cell: the share of its spare width before it. */
++  textAlign(cellRect, root, style) {
++    const px2 = (v) => Number.parseFloat(v) || 0;
++    const box = root.getBoundingClientRect();
++    const start = box.left + px2(style.borderLeftWidth) + px2(style.paddingLeft);
++    const end = box.right - px2(style.borderRightWidth) - px2(style.paddingRight);
++    const spare = end - start - cellRect.width;
++    return spare > 0.5 ? (cellRect.left - start) / spare : 0;
++  }
++  /** Every animation of the step, on one start, duration and curve. */
++  play(next, reads, step) {
++    const run = this.run;
++    for (const animation of run.clock) animation.cancel();
++    const fade = this.fade;
++    const scale = this.options.scale !== false && !fade;
++    const timing = {
++      duration: this.options.duration,
++      easing: this.options.ease,
++      fill: "both"
++    };
++    const clock = [];
++    const animate = (el, keyframes) => {
++      clock.push(el.animate(keyframes, timing));
++    };
++    const drawnLayer = run.layers[0];
++    const taken = /* @__PURE__ */ new Set();
++    for (const [id, el] of next.items) {
++      const rest = reads.rest.get(el);
++      const laid = reads.laid.get(el);
++      if (rest && laid) place(el, rest.x - laid.x, rest.y - laid.y);
++      if (reads.stale || !rest) continue;
++      const kept = fade ? void 0 : drawnLayer.items.get(id);
++      const was = kept && reads.drawn.get(kept);
++      if (kept && was) {
++        taken.add(kept);
++        const dx = was.at.x - rest.x;
++        const dy = was.at.y - rest.y;
++        if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || was.scale !== 1) {
++          animate(el, [
++            { transform: `translate(${dx}px, ${dy}px) scale(${was.scale})` },
++            { transform: "none" }
++          ]);
++        }
++        if (was.opacity < 1) {
++          animate(el, [{ opacity: was.opacity }, { opacity: 1 }]);
++        }
++        if (was.roll !== 0) {
++          animate(faceOf(el), [
++            { transform: `translateY(${was.roll}px)` },
++            { transform: "none" }
++          ]);
++        }
++        continue;
++      }
++      animate(el, [{ opacity: 0 }, { opacity: 1 }]);
++      if (fade) continue;
++      if (el.hasAttribute(ATTR_ROLL)) {
++        animate(faceOf(el), [
++          { transform: "translateY(100%)" },
++          { transform: "none" }
++        ]);
++      } else if (scale) {
++        animate(el, [{ transform: `scale(${SHRINK})` }, { transform: "none" }]);
++      }
++    }
++    for (const [el, was] of reads.drawn) {
++      place(el, was.at.x - was.laid.x, was.at.y - was.laid.y);
++      if (taken.has(el) || was.opacity <= 1e-3 || reads.stale) {
++        el.style.visibility = "hidden";
++        continue;
++      }
++      animate(el, [{ opacity: was.opacity }, { opacity: 0 }]);
++      if (fade) continue;
++      if (el.hasAttribute(ATTR_ROLL)) {
++        animate(faceOf(el), [
++          { transform: `translateY(${was.roll}px)` },
++          { transform: "translateY(-100%)" }
++        ]);
++      } else if (scale) {
++        animate(el, [
++          { transform: `scale(${was.scale})` },
++          { transform: `scale(${SHRINK})` }
++        ]);
++      }
++    }
++    const start = document.timeline.currentTime;
++    for (const animation of clock) animation.startTime = start;
++    run.layers.unshift(next);
++    run.clock = clock;
++    run.fromText = false;
++    run.size = reads.cell;
++    run.inPlace = reads.inPlace;
++    this.pending = null;
++    if (clock.length === 0) {
++      requestAnimationFrame(() => {
++        if (step === this.step && !this.pending) this.land();
++      });
++      return;
++    }
++    Promise.all(clock.map((animation) => animation.finished)).then(
++      () => {
++        if (step === this.step && !this.pending) this.land();
++      },
++      () => void 0
++    );
++  }
++  /** The morph has settled: the plain text takes the box's place, at its own size. */
++  land() {
++    this.settle(true);
++    this.options.onAnimationComplete?.();
++  }
++  /** Takes the morph down, the value back as plain text. */
++  settle(done) {
++    const run = this.run;
++    if (!run) return;
++    this.run = null;
++    this.pending = null;
++    forget(run.cell);
++    for (const animation of run.clock) animation.cancel();
++    if (done) this.segments = run.layers[0].segments;
++    if (done && run.inPlace) this.element.setAttribute(ATTR_IN_PLACE, "");
++    fill(this.element, this.data);
++  }
++};
++
++exports.DEFAULT_AS = DEFAULT_AS;
++exports.DEFAULT_TEXT_MORPH_OPTIONS = DEFAULT_TEXT_MORPH_OPTIONS;
++exports.MorphController = MorphController;
++exports.TextMorph = TextMorph;
++exports.decimalSeparator = decimalSeparator;
++exports.diffSegments = diffSegments;
++exports.isNumericWord = isNumericWord;
++exports.segmentNumber = segmentNumber;
++exports.segmentText = segmentText;
+diff --git a/dist/index.mjs b/dist/index.mjs
+index b857eac7b66450ee6bf07a0925a1ad929be07d49..a50e7e10a2cb291509687328cbee55c2abe737cf 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -1,38 +1,789 @@
+-var _t={locale:"en",duration:400,ease:"cubic-bezier(0.19, 1, 0.22, 1)",disabled:false,respectReducedMotion:true};function Dt(e,t,n){if(n<1){let u=t*Math.sqrt(1-n*n);return 1-Math.exp(-n*t*e)*(Math.cos(u*e)+n*t/u*Math.sin(u*e))}let i=Math.sqrt(n*n-1),r=-t*(n+i),s=-t*(n-i),o=-r/(s-r);return 1-(1-o)*Math.exp(r*e)-o*Math.exp(s*e)}function Ie(e,t,n){let s=0;for(let o=0;o<10;o+=.001)if(Math.abs(Dt(o,e,t)-1)>n)s=0;else if(s+=.001,s>.1)return Math.ceil((o-s+.001)*1e3);return Math.ceil(10*1e3)}function Ft(e,t){if(typeof e=="object"){let n=Le(e);return {ease:n.easing,duration:n.duration}}return {ease:e,duration:t}}var $t=new Map;function Le(e){let{stiffness:t=100,damping:n=10,mass:i=1,precision:r=.001}=e??{},s=`${t}:${n}:${i}:${r}`,o=$t.get(s);if(o)return o;let a=Math.sqrt(t/i),u=n/(2*Math.sqrt(t*i)),c=Ie(a,u,r),f=Math.min(100,Math.max(32,Math.round(c/15))),l=[];for(let d=0;d<f;d++){let h=d/(f-1)*(c/1e3),M=d===f-1?1:Dt(h,a,u);l.push(Math.round(M*1e4)/1e4+"");}for(;l.length>2&&l[l.length-2]==="1";)l.splice(l.length-2,1);let m={easing:`linear(${l.join(", ")})`,duration:c};return $t.set(s,m),m}function G(e,t){let n=e.length,i=t.length,r=Array.from({length:n+1},()=>Array(i+1).fill(0));for(let c=n-1;c>=0;c--)for(let f=i-1;f>=0;f--)r[c][f]=e[c]===t[f]?r[c+1][f+1]+1:Math.max(r[c+1][f],r[c][f+1]);let s=[],o=[],a=0,u=0;for(;a<n&&u<i;)e[a]===t[u]?(s.push(a),o.push(u),a++,u++):r[a+1][u]>=r[a][u+1]?a++:u++;return [s,o]}var Ne="\0n",ke=0;function ht(){return `${Ne}${ke++}`}function k(e){return e>="0"&&e<="9"}function q(e){for(let t of e)if(k(t))return  true;return  false}function gt(e){let t="";for(let n of e)!k(n)&&!bt.includes(n)&&(t+=n);return t}var bt=".,'\xA0\u202F\u2009\u2007",He="+-\u2212(#",Oe=`%.,!?:;)"'\u201D\u2019`,_e=/\p{Sc}/u;function Pt(e,t){return t.includes(e)||_e.test(e)}function J(e){let t=0,n=e.length;for(;t<n&&Pt(e[t],He);)t++;for(;n>t&&Pt(e[n-1],Oe);)n--;if(t>=n||!k(e[t])||!k(e[n-1]))return  false;for(let i=t;i<n;i++){let r=e[i];if(!k(r)&&!bt.includes(r))return  false}return  true}function at(e){return k(e)?"digit":"symbol"}var Ct=new Map;function xt(e){let t=String(e),n=Ct.get(t);if(n)return n;let i=".";try{i=new Intl.NumberFormat(e).formatToParts(1.1).find(r=>r.type==="decimal")?.value??".";}catch{}return Ct.set(t,i),i}function U(e,t,n,i="."){let r=e.split("");if(!t||t.length===0)return $e(r);let s=t.map(c=>c.string==="\xA0"?" ":c.string),o=n!=null?De(s,r,n,i):Fe(s,r,i),a=new Set;for(let[,c]of o)a.add(t[c].id);let u=[];for(let c=0;c<r.length;c++){let f=r[c],l=at(f),m=f===" "?"\xA0":f;if(o.has(c)){let d=o.get(c);u.push({id:t[d].id,string:m,kind:l});}else {let d=ht();for(;a.has(d);)d=ht();a.add(d),u.push({id:d,string:m,kind:l});}}return u}function $e(e){return e.map(t=>({id:ht(),string:t===" "?"\xA0":t,kind:at(t)}))}function De(e,t,n,i){let r=new Map,s=Xt(e,i),o=Xt(t,i),a=(m,d)=>r.set(o[m],s[d]),u=0;for(;u<o.length&&o[u]<n;)u++;let c=o.length-s.length;if(c>0){let m=u-c;for(let d=0;d<m&&d<s.length;d++)a(d,d);for(let d=u;d<o.length;d++){let h=d-c;h>=0&&h<s.length&&a(d,h);}}else if(c<0){for(let m=0;m<u&&m<o.length;m++)a(m,m);for(let m=u;m<o.length;m++){let d=m-c;d>=0&&d<s.length&&a(m,d);}}else for(let m=0;m<o.length;m++)t[o[m]]===e[s[m]]&&a(m,m);let f=Bt(e,i),l=Bt(t,i);for(let m=1;m<=f.length&&m<=l.length;m++){let d=f[f.length-m],h=l[l.length-m];e[d]===t[h]&&r.set(h,d);}return r}function Kt(e,t){return e!==t&&bt.includes(e)}function Xt(e,t){let n=[];for(let i=0;i<e.length;i++)Kt(e[i],t)||n.push(i);return n}function Bt(e,t){let n=[];for(let i=0;i<e.length;i++)Kt(e[i],t)&&n.push(i);return n}function Fe(e,t,n){let i=new Map,r=0;for(;r<e.length&&r<t.length&&e[r]===t[r]&&!k(e[r]);)i.set(r,r),r++;let s=e.length,o=t.length;for(;s>r&&o>r&&e[s-1]===t[o-1]&&!k(e[s-1]);)i.set(o-1,s-1),s--,o--;let a=Ut(e,r,s,n),u=Ut(t,r,o,n),c=Gt(e,r,a),f=Gt(t,r,u);if(c>0&&f>0&&Math.abs(c-f)>=Pe)return i;if(!d(r,a,r,u,true))for(let h=1;a-h>=r&&u-h>=r;h++)m(a-h,u-h);if(a<s&&u<o){i.set(u,a);for(let h=1;a+h<s&&u+h<o;h++)m(a+h,u+h);d(a+1,s,u+1,o,false);}function m(h,M){let x=e[h];k(x)||x===t[M]&&i.set(M,h);}function d(h,M,x,T,L){let E=Wt(e,h,M),N=Wt(t,x,T);if(E.length===N.length||!L){let A=Math.min(E.length,N.length);for(let _=0;_<A;_++){let B=E[_],rt=N[_];e[B]===t[rt]&&i.set(rt,B);}return  false}let g=E.map(A=>e[A]).reverse(),v=N.map(A=>t[A]).reverse(),[R,O]=G(g,v);for(let A=0;A<R.length;A++){let _=E[E.length-1-R[A]],B=N[N.length-1-O[A]];i.set(B,_);}return R.length>0}return i}function Wt(e,t,n){let i=[];for(let r=t;r<n;r++)k(e[r])&&i.push(r);return i}var Pe=3;function Gt(e,t,n){let i=0;for(let r=t;r<n;r++)k(e[r])&&i++;return i}function Ut(e,t,n,i){for(let r=n-1;r>=t;r--)if(e[r]===i)return r;return n}function yt(){let e=new Set;return {reserve(t){e.add(t);},has(t){return e.has(t)},take(t){if(!e.has(t))return e.add(t),t;let n=1;for(;e.has(`${t}~${n}`);)n++;let i=`${t}~${n}`;return e.add(i),i}}}function zt(e){let t=[],n=[],i=()=>{n.length!==0&&(t.push({word:n.map(r=>r.string).join(""),segments:n}),n=[]);};for(let r of e)r.string==="\xA0"||r.string===`
+-`?i():n.push(r);return i(),t}function Yt(e){let t=[],n=[],i=()=>{if(n.length===0)return;let r=n.map(s=>s.string).join("");J(r)?t.push(...U(r)):t.push(...n),n=[];};for(let r of e)r.string==="\xA0"||r.string===`
+-`?(i(),t.push(r)):n.push(r);return i(),t}function K(e,t,n=true){let i=e.includes(`
+-`),r=e.includes(" ")||i,s=yt();if(i){let a=e.split(`
+-`),u=[],c=0;return a.forEach((f,l)=>{l>0&&(u.push({id:s.take(`newline-${c}`),string:`
+-`}),c+=1),f.length>0&&u.push(...jt(f,t,true,c,s)),c+=f.length;}),n?Yt(u):u}let o=jt(e,t,r,0,s);return n?Yt(o):o}function jt(e,t,n,i,r){if(typeof Intl.Segmenter<"u"){let s=new Intl.Segmenter(t,{granularity:n?"word":"grapheme"});return Ce(s.segment(e)[Symbol.iterator](),i,r)}return Xe(e,n,i,r)}function Ce(e,t,n){let i=[];for(let r of Array.from(e)){let s=t+r.index;r.segment===" "?i.push({id:n.take(`space-${s}`),string:"\xA0"}):i.push({id:qt(r.segment,s,n),string:r.segment});}return i}function qt(e,t,n){return n.has(e)?n.take(`${e}-${t}`):n.take(e)}function Xe(e,t,n,i){let r=t?e.split(" "):e.split(""),s=[],o=n;return r.forEach((a,u)=>{t&&u>0&&(s.push({id:i.take(`space-${o}`),string:"\xA0"}),o+=1),s.push({id:qt(a,o,i),string:a}),o+=a.length;}),s}var Y="torph-root",Q="torph-item",w="torph-id",V="torph-kind",F="torph-slot",H="torph-exiting",P="torph-sr",Z="torph-debug",tt="empty";var Be={linear:[0,0,1,1],ease:[.25,.1,.25,1],"ease-in":[.42,0,1,1],"ease-out":[0,0,.58,1],"ease-in-out":[.42,0,.58,1]},Jt=(e,t,n)=>{let i=1-n;return 3*i*i*n*e+3*i*n*n*t+n*n*n};function Qt(e,t,n,i){return r=>{if(r<=0)return 0;if(r>=1)return 1;let s=0,o=1;for(let a=0;a<24;a+=1){let u=(s+o)/2;Jt(e,n,u)<r?s=u:o=u;}return Jt(t,i,(s+o)/2)}}function We(e){let t=[...e];(t[0]===null||t[0]===void 0)&&(t[0]=0),t[t.length-1]===null&&(t[t.length-1]=1);for(let n=1;n<t.length;n+=1){if(t[n]!==null)continue;let i=n;for(;t[i]===null;)i+=1;let r=t[n-1],s=(t[i]-r)/(i-n+1);for(let o=n;o<i;o+=1)t[o]=r+s*(o-n+1);}return t.map((n,i,r)=>i===0?n:Math.max(n,r[i-1]))}function Ge(e){let t=[],n=[];for(let r of e.split(",")){let s=r.trim().split(/\s+/).filter(Boolean),o=Number(s[0]);if(!Number.isFinite(o))return null;let a=s.slice(1);if(a.length>2)return null;if(a.length===0){t.push(o),n.push(null);continue}for(let u of a){if(!u.endsWith("%"))return null;let c=Number(u.slice(0,-1));if(!Number.isFinite(c))return null;t.push(o),n.push(c/100);}}if(t.length<2)return null;let i=We(n);return r=>{if(r<=i[0])return t[0];let s=i.length-1;if(r>=i[s])return t[s];let o=0;for(;o<s&&i[o+1]<r;)o+=1;let a=i[o+1]-i[o];return a===0?t[o+1]:t[o]+(t[o+1]-t[o])*(r-i[o])/a}}function Vt(e){let t=e.trim().toLowerCase(),n=Be[t];if(n)return Qt(...n);let i=/^cubic-bezier\(([^)]*)\)$/.exec(t);if(i){let s=i[1].split(",").map(o=>Number(o.trim()));return s.length!==4||s.some(o=>!Number.isFinite(o))?null:Qt(s[0],s[1],s[2],s[3])}let r=/^linear\(([^)]*)\)$/.exec(t);return r?Ge(r[1]):null}var St=1e-4;function Mt(e,t){let n=Math.min(Math.max(t,0),1-St);return (e(n+St)-e(n))/St}function lt(e,t){return e*t}function X(e){let t=getComputedStyle(e).transform;if(!t||t==="none")return {tx:0,ty:0};let n=t.match(/matrix\(([^)]+)\)/);if(!n)return {tx:0,ty:0};let i=n[1].split(",").map(Number);return {tx:i[4]||0,ty:i[5]||0}}function et(e){let t=getComputedStyle(e),n=parseFloat(t.width),i=parseFloat(t.height);if(Number.isNaN(n)||Number.isNaN(i)){let r=e.getBoundingClientRect();return {width:r.width,height:r.height}}return {width:n,height:i}}function j(e){let{tx:t,ty:n}=X(e),i=Number(getComputedStyle(e).opacity)||1;return e.getAnimations().forEach(r=>r.cancel()),{tx:t,ty:n,opacity:i}}var Ue=8,Ke=.1,Ye=.5,je=.5,ee=()=>performance.now();function ze(e,t){let n=Math.max(0,Math.min(Ue,t)-Mt(e,0));if(!(n>0))return {curve:e,k:0};let i=Math.max(3,Math.ceil(n/(Math.E*Ke))-1);return {curve:r=>r>=1?1:e(r)+n*r*Math.pow(1-r,i),k:n}}function qe(e,t){let n=Math.min(120,Math.max(32,Math.round(t/8))),i=[];for(let r=0;r<n;r+=1){let s=r/(n-1),o=r===n-1?1:e(s);i.push(`${Math.round(o*1e4)/1e4}`);}return `linear(${i.join(", ")})`}function Zt(e,t,n,i,r,s,o,a){let u=(m,d,h,M,x)=>{let T=e.animate([{[t]:`${m}px`},{[t]:`${d}px`}],{duration:s,easing:h,fill:"both"});return x!==void 0&&(T.currentTime=x),{anim:T,from:m,to:d,easing:h,curve:M,startedAt:ee()-(x??0)}};if(r&&r.elapsed!==null&&Math.abs(r.to-i)<je)return u(r.from,r.to,r.easing,r.curve,r.elapsed);let c=i-n,f=o,l=a;if(a&&Math.abs(c)>Ye){let m=ze(a,(r?.velocity??0)*s/c);m.k>0&&(l=m.curve,f=qe(m.curve,s));}return u(n,i,f,l)}function te(e,t){let n=e.anim.currentTime===null,i=ee()-e.startedAt,s=n||!Number.isFinite(i)||i>=t||i<0?null:i;return {from:e.from,to:e.to,easing:e.easing,curve:e.curve,elapsed:s,velocity:s===null||!e.curve?0:(e.to-e.from)*Mt(e.curve,s/t)/t}}var D=new WeakMap;function Je(e){return D.get(e)?.snapshot()}function ut(e){e.style.width="",e.style.height="",e.style.transitionProperty="";}function ne(e){let t=D.get(e);t&&(D.delete(e),t.stop(),t.onCancel?.());}function re(e){let t=D.get(e);t&&(D.delete(e),t.stop()),ut(e);}function ie(e,t,n,i,r,s,o){let a=Je(e);if(ne(e),t===0||n===0){ut(e),o?.();return}e.style.transitionProperty="none",e.style.width="",e.style.height="",e.offsetWidth;let{width:u,height:c}=et(e),f=Vt(r),l=Zt(e,"width",t,u,a?.width,i,r,f),m=Zt(e,"height",n,c,a?.height,i,r,f),d=()=>{l.anim.cancel(),m.anim.cancel();};l.anim.onfinish=()=>{D.delete(e),d(),ut(e),s?.();},D.set(e,{stop:d,onCancel:o,snapshot:()=>({width:te(l,i),height:te(m,i)})});}function se(e,t,n,i,r,s){ne(e),e.style.transitionProperty="none",e.style.width=`${t}px`,e.style.height=`${n}px`;let o=setTimeout(()=>{D.delete(e),ut(e),r?.();},i),a=u=>({from:u,to:u,easing:"linear",curve:null,elapsed:null,velocity:0});D.set(e,{stop:()=>clearTimeout(o),onCancel:s,snapshot:()=>({width:a(t),height:a(n)})});}function ct(e){let t=Array.from(e.children),n={},i=e.getBoundingClientRect();return t.forEach((r,s)=>{if(r.hasAttribute(H)||r.hasAttribute(P)||r.tagName==="BR")return;let o=r.getAttribute(w)||`child-${s}`,a=r.getBoundingClientRect(),{tx:u,ty:c}=X(r);n[o]={x:a.left-i.left-u,y:a.top-i.top-c};}),n}function Tt(e,t,n){let i=e[n],r=t[n];return !i||!r?{dx:0,dy:0}:{dx:i.x-r.x,dy:i.y-r.y}}function Et(e,t,n,i="backward-first"){let[r,s]=i==="backward-first"?["backward","forward"]:["forward","backward"],o=a=>{if(a==="backward"){for(let u=e-1;u>=0;u--)if(n.has(t[u]))return t[u]}else for(let u=e+1;u<t.length;u++)if(n.has(t[u]))return t[u];return null};return o(r)??o(s)}function oe(e,t,n,i){let r=new Set(n.filter((o,a)=>i.has(o)&&!t.has(e[a]))),s=new Map;for(let o=0;o<e.length;o++){let a=e[o];t.has(a)&&s.set(a,Et(o,n,r,"forward-first"));}return s}function ae(e,t){let{dx:n,dy:i,duration:r,ease:s,scale:o}=t;e.animate({transform:o?`translate(${n}px, ${i}px) scale(0.95)`:`translate(${n}px, ${i}px)`,offset:1},{duration:r,easing:s,fill:"both"});let a=e.animate({opacity:0,offset:1},{duration:lt(r,.25),easing:"linear",fill:"both"});a.onfinish=()=>e.remove();}function ue(e,t){let{deltaX:n,deltaY:i,isNew:r,duration:s,ease:o}=t,a=j(e),u=n+a.tx,c=i+a.ty,f=r&&a.opacity>=1?0:a.opacity;e.animate([{transform:`translate(${u}px, ${c}px) scale(${r?.95:1})`},{transform:"none"}],{duration:s,easing:o,fill:"both"}),f<1&&e.animate([{opacity:f},{opacity:1}],{duration:lt(s,r?.5:.25),delay:r?lt(s,.25):0,easing:"linear",fill:"both"});}function Qe(e,t){let n=0,i=0;for(let r=e;r&&r!==t;r=r.offsetParent)n+=r.offsetLeft,i+=r.offsetTop;return {x:n,y:i}}function At(e,t){let n=document.createElement(e);return n.setAttribute(Q,""),n.setAttribute(w,t),n.setAttribute("aria-hidden","true"),n}function le(e,t){let n=new Map;for(let i of t){if(i.tagName==="BR")continue;let{x:r,y:s}=Qe(i,e),{tx:o,ty:a}=X(i),{width:u,height:c}=et(i),f=Number(getComputedStyle(i).opacity)||1;i.getAnimations().forEach(l=>l.cancel()),n.set(i,{left:r+o,top:s+a,width:u,height:c,opacity:f});}for(let i=t.length-1;i>=0;i--)t[i].tagName==="BR"&&(t[i].remove(),t.splice(i,1));t.forEach(i=>{let r=n.get(i);i.setAttribute(H,""),i.style.position="absolute",i.style.pointerEvents="none",i.style.left=`${r.left}px`,i.style.top=`${r.top}px`,i.style.width=`${r.width}px`,i.style.height=`${r.height}px`,i.style.opacity=String(r.opacity);});}function ce(e,t){if(t.size===0)return;let n=Array.from(e.children),i=new Set;for(let r of n){if(r.hasAttribute(H))continue;let s=r.getAttribute(w);if(!s||i.has(s))continue;let o=t.get(s);if(o){i.add(s);for(let a of o){let u=At("span",a.id);wt(u,a),r.before(u);}r.remove();}}}function wt(e,t){if(!t.kind){e.removeAttribute(V),e.removeAttribute(F),e.textContent=t.string;return}e.setAttribute(V,t.kind),e.setAttribute(F,"");let n=e.firstElementChild;n||(e.textContent="",n=document.createElement("span"),e.appendChild(n)),n.textContent=t.string;}function vt(e){return e.hasAttribute(F)?e.firstElementChild??e:e}function me(e,t,n,i){let r=new Map;t.forEach(s=>{let o=s.getAttribute(w);n.has(o)&&!s.hasAttribute(H)&&(r.set(o,s),s.remove());}),Array.from(e.childNodes).forEach(s=>{s.nodeType===Node.TEXT_NODE&&s.remove();}),i.forEach(s=>{let o=r.get(s.id);if(o&&r.delete(s.id),s.string===`
+-`){o&&o.tagName==="BR"?e.appendChild(o):e.appendChild(At("br",s.id));return}if(o&&o.tagName!=="BR")o.style.transformOrigin="",wt(o,s),e.appendChild(o);else {let a=At("span",s.id);wt(a,s),e.appendChild(a);}});}var Ve=.45,Ze=.25;function pe(e,t){let{dx:n,dy:i,slideDistance:r,duration:s,ease:o}=t,a=vt(e);e.animate({transform:`translate(${n}px, ${i}px)`,offset:1},{duration:s,easing:o,fill:"both"}),a.animate({transform:`translate(0px, ${r}px)`,offset:1},{duration:s,easing:o,fill:"both"});let u=a.animate({opacity:0,offset:1},{duration:s*Ve,easing:"linear",fill:"both"});u.onfinish=()=>e.remove();}function fe(e,t){let{deltaX:n,deltaY:i,slideDistance:r,kind:s,duration:o,ease:a}=t;Rt(e,{deltaX:n,deltaY:i,duration:o,ease:a});let u=vt(e),c=j(u),f=s==="digit"?-r:r;u.animate({transform:`translate(0px, ${c.ty+f}px)`,offset:0},{duration:o,easing:a,fill:"both"});let l=c.opacity>=1?0:c.opacity;l<1&&u.animate([{opacity:l},{opacity:1}],{duration:o*Ze,easing:"linear",fill:"both"});}function Rt(e,t){let{deltaX:n,deltaY:i,duration:r,ease:s}=t,{tx:o,ty:a}=X(e);e.getAnimations().forEach(f=>f.cancel());let u=n+o,c=i+a;u===0&&c===0||e.animate({transform:`translate(${u}px, ${c}px)`,offset:0},{duration:r,easing:s,fill:"both"});}var tn=6,de=.8,en=.45,nn=.35;function he(e){let t=e.map(u=>u.getBoundingClientRect()),n=Math.min(...t.map(u=>u.left)),i=Math.max(...t.map(u=>u.right)),r=Math.min(...t.map(u=>u.top)),s=Math.max(...t.map(u=>u.bottom)),o=(n+i)/2,a=(r+s)/2;return t.map(u=>`${o-u.left}px ${a-u.top}px`)}function ge(e,t){let{duration:n,ease:i}=t,r=he(e);e.forEach((s,o)=>{s.getAnimations().forEach(u=>u.cancel()),s.style.transformOrigin=r[o],s.animate({transform:`scale(${de})`,offset:1},{duration:n,easing:i,fill:"both"});let a=s.animate({opacity:0,offset:1},{duration:n*en,easing:"linear",fill:"both"});a.onfinish=()=>s.remove();});}function be(e,t){let{duration:n,ease:i}=t,r=he(e);e.forEach((s,o)=>{let a=j(s);s.style.transformOrigin=r[o],s.animate({transform:`scale(${de})`,offset:0},{duration:n,easing:i,fill:"both"});let u=a.opacity>=1?0:a.opacity;s.animate([{opacity:u},{opacity:1}],{duration:n*nn,easing:"linear",fill:"both"});});}function It(e,t){let n=[],i=[],r=()=>{i.length>=tn&&n.push(i),i=[];};for(let s of e)t.has(s)?i.push(s):r();return r(),n}var rn="\0#";function xe(e,t){if(e.segments.length!==1||e.word.length<=1)return e.segments;let n=e.segments[0],i=e.word.split("").map((r,s)=>({id:`${n.id}:${s}`,string:r}));return t.set(n.id,i),i}function sn(e){return e.map(t=>({...t,kind:t.kind??at(t.string)}))}function on(e,t){if(e.length===0||t.length===0)return 0;let[n]=G(e.split(""),t.split(""));return n.length/Math.max(e.length,t.length)}function ye(e,t){let n=[],i=0;for(let r=0;r<e;r++)n.push(i),t.has(r)&&i++;return n}var an=.4;function un(e,t){return (q(e)||q(t))&&gt(e)===gt(t)?1:on(e,t)}var ln=2500,cn=1e6;function Lt(e,t,n,i={}){let r=t.includes(" "),s=t.includes(`
+-`),o=zt(e),a=i.numbers!==false,u=p=>a&&J(p),c=p=>u(p)?rn:p,f=a&&(q(t)||o.some(p=>q(p.word)));if(o.length<=1&&!r&&!s&&!f)return {segments:K(t,n,a),splits:new Map};let l=[],m=[],d=t.split(/( |\n)/),h=[];for(let p of d)p===" "||p===`
+-`?h.push(p):p.length>0&&(m.push(h),l.push(p),h=[]);let M=h,x=o.map(p=>p.word);if(x.length*l.length>cn)return {segments:K(t,n,a),splits:new Map};let[T,L]=G(x.map(c),l.map(c)),E=new Set(T),N=new Set(L),g=new Map;for(let p=0;p<L.length;p++)g.set(L[p],T[p]);let v=x.map((p,b)=>b).filter(p=>!E.has(p)),R=l.map((p,b)=>b).filter(p=>!N.has(p)),O=new Set;for(let p of R)for(let b of v)if(!O.has(b)&&c(l[p])===c(x[b])){g.set(p,b),O.add(b);break}O.size>0&&(v=v.filter(p=>!O.has(p)),R=R.filter(p=>!g.has(p)));let A=new Map,_=new Set,B=ye(x.length,E),rt=ye(l.length,N);if(v.length*R.length<=ln)for(let p of R){let b=-1,S=an;for(let y of v){if(_.has(y)||B[y]!==rt[p])continue;let it=un(x[y],l[p]);it>S&&(S=it,b=y);}b>=0&&(A.set(p,b),_.add(b));}let pt=l.map((p,b)=>{let S=g.get(b),y=S??A.get(b);return y===void 0?{mode:"fresh"}:u(p)?{mode:"number",oi:y}:S!==void 0?{mode:"reuse",oi:y}:{mode:"morph",oi:y}}),kt=pt.filter(p=>p.mode==="number").length===1?i.cursorIndex:void 0,Ae=xt(n),W=yt();for(let p of pt){if(p.mode==="fresh")continue;let b=o[p.oi];if(p.mode!=="reuse"&&b.segments.length===1){let S=b.segments[0];for(let y=0;y<b.word.length;y++)W.reserve(`${S.id}:${y}`);}else for(let S of b.segments)W.reserve(S.id);}let $=[],ft=new Map,z=0;function Ht(p){for(let b of p)b===`
+-`?$.push({id:W.take(`newline-${z}`),string:`
+-`}):$.push({id:W.take(`space-${z}`),string:"\xA0"}),z++;}for(let p=0;p<l.length;p++){Ht(m[p]??(p>0?[" "]:[]));let b=pt[p],S=l[p];if(b.mode==="reuse")for(let y of o[b.oi].segments)$.push(y);else if(b.mode==="number"){let y=o[b.oi];$.push(...U(S,sn(xe(y,ft)),kt===void 0?void 0:kt-z,Ae));}else if(b.mode==="morph"){let y=o[b.oi],it=y.word,we=xe(y,ft),ve=it.split(""),st=S.split(""),[Re,Ot]=G(ve,st),dt=new Map;for(let I=0;I<Ot.length;I++){let ot=we[Re[I]];ot&&dt.set(Ot[I],ot);}for(let I=0;I<st.length;I++)if(dt.has(I)){let ot=dt.get(I);$.push({id:ot.id,string:st[I]});}else $.push({id:W.take(`${S}~${I}`),string:st[I]});}else u(S)?$.push(...U(S)):$.push({id:W.take(S),string:S});z+=S.length;}return Ht(M),{segments:$,splits:ft}}var mn=`
+-[${Y}] {
+-  display: inline-block;
+-  position: relative;
+-  vertical-align: top;
+-  will-change: width, height;
++// src/lib/utils/types.ts
++var BASE_DEFAULTS = {
++  locale: "en",
++  duration: 400,
++  ease: "cubic-bezier(0.19, 1, 0.22, 1)",
++  disabled: false,
++  respectReducedMotion: true
++};
++
++// src/lib/utils/spring.ts
++function springPosition(t, omega0, zeta) {
++  if (zeta < 1) {
++    const omegaD = omega0 * Math.sqrt(1 - zeta * zeta);
++    return 1 - Math.exp(-zeta * omega0 * t) * (Math.cos(omegaD * t) + zeta * omega0 / omegaD * Math.sin(omegaD * t));
++  }
++  const s = Math.sqrt(zeta * zeta - 1);
++  const r1 = -omega0 * (zeta + s);
++  const r2 = -omega0 * (zeta - s);
++  const B = -r1 / (r2 - r1);
++  const A = 1 - B;
++  return 1 - A * Math.exp(r1 * t) - B * Math.exp(r2 * t);
++}
++function computeDuration(omega0, zeta, precision) {
++  const step = 1e-3;
++  const maxDuration = 10;
++  let settledSince = 0;
++  for (let t = 0; t < maxDuration; t += step) {
++    if (Math.abs(springPosition(t, omega0, zeta) - 1) > precision) {
++      settledSince = 0;
++    } else {
++      settledSince += step;
++      if (settledSince > 0.1) {
++        return Math.ceil((t - settledSince + step) * 1e3);
++      }
++    }
++  }
++  return Math.ceil(maxDuration * 1e3);
++}
++function resolveEase(ease, fallbackDuration) {
++  if (typeof ease === "object") {
++    const resolved = spring(ease);
++    return { ease: resolved.easing, duration: resolved.duration };
++  }
++  return { ease, duration: fallbackDuration };
++}
++var cache = /* @__PURE__ */ new Map();
++function spring(params) {
++  const {
++    stiffness = 100,
++    damping = 10,
++    mass = 1,
++    precision = 1e-3
++  } = params ?? {};
++  const key = `${stiffness}:${damping}:${mass}:${precision}`;
++  const cached = cache.get(key);
++  if (cached) return cached;
++  const omega0 = Math.sqrt(stiffness / mass);
++  const zeta = damping / (2 * Math.sqrt(stiffness * mass));
++  const duration = computeDuration(omega0, zeta, precision);
++  const numPoints = Math.min(100, Math.max(32, Math.round(duration / 15)));
++  const points = [];
++  for (let i = 0; i < numPoints; i++) {
++    const t = i / (numPoints - 1) * (duration / 1e3);
++    const value = i === numPoints - 1 ? 1 : springPosition(t, omega0, zeta);
++    points.push(Math.round(value * 1e4) / 1e4 + "");
++  }
++  while (points.length > 2 && points[points.length - 2] === "1") {
++    points.splice(points.length - 2, 1);
++  }
++  const result = {
++    easing: `linear(${points.join(", ")})`,
++    duration
++  };
++  cache.set(key, result);
++  return result;
++}
++
++// src/lib/utils/lcs.ts
++function lcsIndices(a, b) {
++  const m = a.length;
++  const n = b.length;
++  const dp = Array.from(
++    { length: m + 1 },
++    () => Array(n + 1).fill(0)
++  );
++  for (let i2 = m - 1; i2 >= 0; i2--) {
++    for (let j2 = n - 1; j2 >= 0; j2--) {
++      dp[i2][j2] = a[i2] === b[j2] ? dp[i2 + 1][j2 + 1] + 1 : Math.max(dp[i2 + 1][j2], dp[i2][j2 + 1]);
++    }
++  }
++  const ai = [];
++  const bi = [];
++  let i = 0;
++  let j = 0;
++  while (i < m && j < n) {
++    if (a[i] === b[j]) {
++      ai.push(i);
++      bi.push(j);
++      i++;
++      j++;
++    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
++      i++;
++    } else {
++      j++;
++    }
++  }
++  return [ai, bi];
++}
++
++// src/lib/text-morph/utils/number.ts
++var MINTED_PREFIX = "\0n";
++var nextNewId = 0;
++function mintId() {
++  return `${MINTED_PREFIX}${nextNewId++}`;
++}
++function isDigit(char) {
++  return char >= "0" && char <= "9";
++}
++function hasDigit(value) {
++  for (const char of value) {
++    if (isDigit(char)) return true;
++  }
++  return false;
++}
++function numericSkeleton(word) {
++  let out = "";
++  for (const char of word) {
++    if (!isDigit(char) && !CORE_SEPARATORS.includes(char)) out += char;
++  }
++  return out;
++}
++var CORE_SEPARATORS = ".,'\xA0\u202F\u2009\u2007";
++var PREFIX_CHARS = "+-\u2212(#";
++var SUFFIX_CHARS = `%.,!?:;)"'\u201D\u2019`;
++var CURRENCY = /\p{Sc}/u;
++function isAffix(char, set) {
++  return set.includes(char) || CURRENCY.test(char);
++}
++function isNumericWord(word) {
++  let start = 0;
++  let end = word.length;
++  while (start < end && isAffix(word[start], PREFIX_CHARS)) start++;
++  while (end > start && isAffix(word[end - 1], SUFFIX_CHARS)) end--;
++  if (start >= end) return false;
++  if (!isDigit(word[start]) || !isDigit(word[end - 1])) return false;
++  for (let i = start; i < end; i++) {
++    const char = word[i];
++    if (!isDigit(char) && !CORE_SEPARATORS.includes(char)) return false;
++  }
++  return true;
++}
++function classifyKind(char) {
++  return isDigit(char) ? "digit" : "symbol";
++}
++var separators = /* @__PURE__ */ new Map();
++function decimalSeparator(locale) {
++  const key = String(locale);
++  const cached = separators.get(key);
++  if (cached) return cached;
++  let separator = ".";
++  try {
++    separator = new Intl.NumberFormat(locale).formatToParts(1.1).find((part) => part.type === "decimal")?.value ?? ".";
++  } catch {
++  }
++  separators.set(key, separator);
++  return separator;
++}
++function segmentNumber(value, prevSegments, cursorIndex, decimalChar = ".") {
++  const chars = value.split("");
++  if (!prevSegments || prevSegments.length === 0) {
++    return simpleSegment(chars);
++  }
++  const oldChars = prevSegments.map(
++    (s) => s.string === "\xA0" ? " " : s.string
++  );
++  const matches = cursorIndex != null ? cursorMatch(oldChars, chars, cursorIndex, decimalChar) : placeMatch(oldChars, chars, decimalChar);
++  const usedIds = /* @__PURE__ */ new Set();
++  for (const [, oldIdx] of matches) {
++    usedIds.add(prevSegments[oldIdx].id);
++  }
++  const result = [];
++  for (let i = 0; i < chars.length; i++) {
++    const char = chars[i];
++    const kind = classifyKind(char);
++    const displayChar = char === " " ? "\xA0" : char;
++    if (matches.has(i)) {
++      const oldIdx = matches.get(i);
++      result.push({
++        id: prevSegments[oldIdx].id,
++        string: displayChar,
++        kind
++      });
++    } else {
++      let id = mintId();
++      while (usedIds.has(id)) {
++        id = mintId();
++      }
++      usedIds.add(id);
++      result.push({ id, string: displayChar, kind });
++    }
++  }
++  return result;
++}
++function simpleSegment(chars) {
++  return chars.map((char) => ({
++    id: mintId(),
++    string: char === " " ? "\xA0" : char,
++    kind: classifyKind(char)
++  }));
++}
++function cursorMatch(oldChars, newChars, cursor, decimalChar) {
++  const matches = /* @__PURE__ */ new Map();
++  const oldKept = keptIndices(oldChars, decimalChar);
++  const newKept = keptIndices(newChars, decimalChar);
++  const pair = (ni, oi) => matches.set(newKept[ni], oldKept[oi]);
++  let keptCursor = 0;
++  while (keptCursor < newKept.length && newKept[keptCursor] < cursor)
++    keptCursor++;
++  const lenDiff = newKept.length - oldKept.length;
++  if (lenDiff > 0) {
++    const editStart = keptCursor - lenDiff;
++    for (let i = 0; i < editStart && i < oldKept.length; i++) {
++      pair(i, i);
++    }
++    for (let i = keptCursor; i < newKept.length; i++) {
++      const oldIdx = i - lenDiff;
++      if (oldIdx >= 0 && oldIdx < oldKept.length) {
++        pair(i, oldIdx);
++      }
++    }
++  } else if (lenDiff < 0) {
++    for (let i = 0; i < keptCursor && i < newKept.length; i++) {
++      pair(i, i);
++    }
++    for (let i = keptCursor; i < newKept.length; i++) {
++      const oldIdx = i - lenDiff;
++      if (oldIdx >= 0 && oldIdx < oldKept.length) {
++        pair(i, oldIdx);
++      }
++    }
++  } else {
++    for (let i = 0; i < newKept.length; i++) {
++      if (newChars[newKept[i]] === oldChars[oldKept[i]]) {
++        pair(i, i);
++      }
++    }
++  }
++  const oldSeps = groupingIndices(oldChars, decimalChar);
++  const newSeps = groupingIndices(newChars, decimalChar);
++  for (let k = 1; k <= oldSeps.length && k <= newSeps.length; k++) {
++    const oldIdx = oldSeps[oldSeps.length - k];
++    const newIdx = newSeps[newSeps.length - k];
++    if (oldChars[oldIdx] === newChars[newIdx]) matches.set(newIdx, oldIdx);
++  }
++  return matches;
++}
++function isGrouping(char, decimalChar) {
++  return char !== decimalChar && CORE_SEPARATORS.includes(char);
++}
++function keptIndices(chars, decimalChar) {
++  const indices = [];
++  for (let i = 0; i < chars.length; i++) {
++    if (!isGrouping(chars[i], decimalChar)) indices.push(i);
++  }
++  return indices;
++}
++function groupingIndices(chars, decimalChar) {
++  const indices = [];
++  for (let i = 0; i < chars.length; i++) {
++    if (isGrouping(chars[i], decimalChar)) indices.push(i);
++  }
++  return indices;
++}
++function placeMatch(oldChars, newChars, decimalChar) {
++  const matches = /* @__PURE__ */ new Map();
++  let start = 0;
++  while (start < oldChars.length && start < newChars.length && oldChars[start] === newChars[start] && !isDigit(oldChars[start])) {
++    matches.set(start, start);
++    start++;
++  }
++  let oldEnd = oldChars.length;
++  let newEnd = newChars.length;
++  while (oldEnd > start && newEnd > start && oldChars[oldEnd - 1] === newChars[newEnd - 1] && !isDigit(oldChars[oldEnd - 1])) {
++    matches.set(newEnd - 1, oldEnd - 1);
++    oldEnd--;
++    newEnd--;
++  }
++  const oldPivot = findPivot(oldChars, start, oldEnd, decimalChar);
++  const newPivot = findPivot(newChars, start, newEnd, decimalChar);
++  const oldDigits = integerDigits(oldChars, start, oldPivot);
++  const newDigits = integerDigits(newChars, start, newPivot);
++  if (oldDigits > 0 && newDigits > 0 && Math.abs(oldDigits - newDigits) >= MAGNITUDE_JUMP) {
++    return matches;
++  }
++  const reshaped = matchDigits(start, oldPivot, start, newPivot, true);
++  if (!reshaped) {
++    for (let k = 1; oldPivot - k >= start && newPivot - k >= start; k++) {
++      matchSeparator(oldPivot - k, newPivot - k);
++    }
++  }
++  if (oldPivot < oldEnd && newPivot < newEnd) {
++    matches.set(newPivot, oldPivot);
++    for (let k = 1; oldPivot + k < oldEnd && newPivot + k < newEnd; k++) {
++      matchSeparator(oldPivot + k, newPivot + k);
++    }
++    matchDigits(oldPivot + 1, oldEnd, newPivot + 1, newEnd, false);
++  }
++  function matchSeparator(oldIndex, newIndex) {
++    const char = oldChars[oldIndex];
++    if (isDigit(char)) return;
++    if (char === newChars[newIndex]) matches.set(newIndex, oldIndex);
++  }
++  function matchDigits(oldFrom, oldTo, newFrom, newTo, towardsPivot) {
++    const oldIndices = digitIndices(oldChars, oldFrom, oldTo);
++    const newIndices = digitIndices(newChars, newFrom, newTo);
++    if (oldIndices.length === newIndices.length || !towardsPivot) {
++      const pairs = Math.min(oldIndices.length, newIndices.length);
++      for (let k = 0; k < pairs; k++) {
++        const oi = oldIndices[k];
++        const ni = newIndices[k];
++        if (oldChars[oi] === newChars[ni]) matches.set(ni, oi);
++      }
++      return false;
++    }
++    const oldRun = oldIndices.map((i) => oldChars[i]).reverse();
++    const newRun = newIndices.map((i) => newChars[i]).reverse();
++    const [ai, bi] = lcsIndices(oldRun, newRun);
++    for (let k = 0; k < ai.length; k++) {
++      const oi = oldIndices[oldIndices.length - 1 - ai[k]];
++      const ni = newIndices[newIndices.length - 1 - bi[k]];
++      matches.set(ni, oi);
++    }
++    return ai.length > 0;
++  }
++  return matches;
++}
++function digitIndices(chars, from, to) {
++  const indices = [];
++  for (let i = from; i < to; i++) if (isDigit(chars[i])) indices.push(i);
++  return indices;
++}
++var MAGNITUDE_JUMP = 3;
++function integerDigits(chars, start, pivot) {
++  let count = 0;
++  for (let i = start; i < pivot; i++) if (isDigit(chars[i])) count++;
++  return count;
++}
++function findPivot(chars, start, end, decimalChar) {
++  for (let i = end - 1; i >= start; i--) {
++    if (chars[i] === decimalChar) return i;
++  }
++  return end;
++}
++
++// src/lib/text-morph/utils/segment.ts
++function createIdAllocator() {
++  const used = /* @__PURE__ */ new Set();
++  return {
++    reserve(id) {
++      used.add(id);
++    },
++    has(id) {
++      return used.has(id);
++    },
++    take(base) {
++      if (!used.has(base)) {
++        used.add(base);
++        return base;
++      }
++      let i = 1;
++      while (used.has(`${base}~${i}`)) i++;
++      const id = `${base}~${i}`;
++      used.add(id);
++      return id;
++    }
++  };
++}
++function groupIntoWords(segments) {
++  const groups = [];
++  let current = [];
++  const flush = () => {
++    if (current.length === 0) return;
++    groups.push({
++      word: current.map((s) => s.string).join(""),
++      segments: current
++    });
++    current = [];
++  };
++  for (const seg of segments) {
++    if (seg.string === "\xA0" || seg.string === "\n") flush();
++    else current.push(seg);
++  }
++  flush();
++  return groups;
++}
++function expandNumbers(segments) {
++  const out = [];
++  let run = [];
++  const flush = () => {
++    if (run.length === 0) return;
++    const word = run.map((s) => s.string).join("");
++    if (isNumericWord(word)) out.push(...segmentNumber(word));
++    else out.push(...run);
++    run = [];
++  };
++  for (const seg of segments) {
++    if (seg.string === "\xA0" || seg.string === "\n") {
++      flush();
++      out.push(seg);
++    } else {
++      run.push(seg);
++    }
++  }
++  flush();
++  return out;
++}
++function segmentText(value, locale, numbers = true) {
++  const hasNewlines = value.includes("\n");
++  const byWord = value.includes(" ") || hasNewlines;
++  const alloc = createIdAllocator();
++  if (hasNewlines) {
++    const lines = value.split("\n");
++    const allSegments = [];
++    let offset = 0;
++    lines.forEach((line, lineIndex) => {
++      if (lineIndex > 0) {
++        allSegments.push({
++          id: alloc.take(`newline-${offset}`),
++          string: "\n"
++        });
++        offset += 1;
++      }
++      if (line.length > 0) {
++        allSegments.push(...segmentLine(line, locale, true, offset, alloc));
++      }
++      offset += line.length;
++    });
++    return numbers ? expandNumbers(allSegments) : allSegments;
++  }
++  const segments = segmentLine(value, locale, byWord, 0, alloc);
++  return numbers ? expandNumbers(segments) : segments;
++}
++function segmentLine(line, locale, byWord, offset, alloc) {
++  if (typeof Intl.Segmenter !== "undefined") {
++    const segmenter = new Intl.Segmenter(locale, {
++      granularity: byWord ? "word" : "grapheme"
++    });
++    return segmentsFromIntl(
++      segmenter.segment(line)[Symbol.iterator](),
++      offset,
++      alloc
++    );
++  }
++  return segmentsFallback(line, byWord, offset, alloc);
++}
++function segmentsFromIntl(iterator, offset, alloc) {
++  const segments = [];
++  for (const data of Array.from(iterator)) {
++    const index = offset + data.index;
++    if (data.segment === " ") {
++      segments.push({ id: alloc.take(`space-${index}`), string: "\xA0" });
++    } else {
++      segments.push({
++        id: allocSegmentId(data.segment, index, alloc),
++        string: data.segment
++      });
++    }
++  }
++  return segments;
++}
++function allocSegmentId(part, index, alloc) {
++  return alloc.has(part) ? alloc.take(`${part}-${index}`) : alloc.take(part);
++}
++function segmentsFallback(value, byWord, offset, alloc) {
++  const parts = byWord ? value.split(" ") : value.split("");
++  const segments = [];
++  let index = offset;
++  parts.forEach((part, i) => {
++    if (byWord && i > 0) {
++      segments.push({ id: alloc.take(`space-${index}`), string: "\xA0" });
++      index += 1;
++    }
++    segments.push({ id: allocSegmentId(part, index, alloc), string: part });
++    index += part.length;
++  });
++  return segments;
++}
++
++// src/lib/text-morph/utils/diff.ts
++var NUMBER_TOKEN = "\0#";
++function splitIfWhole(oldGroup, splits) {
++  if (oldGroup.segments.length !== 1 || oldGroup.word.length <= 1) {
++    return oldGroup.segments;
++  }
++  const wordSeg = oldGroup.segments[0];
++  const charSegs = oldGroup.word.split("").map((char, i) => ({
++    id: `${wordSeg.id}:${i}`,
++    string: char
++  }));
++  splits.set(wordSeg.id, charSegs);
++  return charSegs;
++}
++function asNumberSegments(segments) {
++  return segments.map((seg) => ({
++    ...seg,
++    kind: seg.kind ?? classifyKind(seg.string)
++  }));
++}
++function charSimilarity(a, b) {
++  if (a.length === 0 || b.length === 0) return 0;
++  const [matched] = lcsIndices(a.split(""), b.split(""));
++  return matched.length / Math.max(a.length, b.length);
++}
++function gapIndices(count, matched) {
++  const gaps = [];
++  let anchors = 0;
++  for (let i = 0; i < count; i++) {
++    gaps.push(anchors);
++    if (matched.has(i)) anchors++;
++  }
++  return gaps;
++}
++var MIN_SIMILARITY = 0.4;
++function pairAffinity(a, b) {
++  if ((hasDigit(a) || hasDigit(b)) && numericSkeleton(a) === numericSkeleton(b)) {
++    return 1;
++  }
++  return charSimilarity(a, b);
++}
++var MAX_MORPH_PAIRINGS = 2500;
++var MAX_LCS_CELLS = 1e6;
++function diffSegments(oldSegments, newText, locale, options = {}) {
++  const newHasSpaces = newText.includes(" ");
++  const newHasNewlines = newText.includes("\n");
++  const oldWords = groupIntoWords(oldSegments);
++  const numbersOn = options.numbers !== false;
++  const isNum = (word) => numbersOn && isNumericWord(word);
++  const token = (word) => isNum(word) ? NUMBER_TOKEN : word;
++  const digitsInvolved = numbersOn && (hasDigit(newText) || oldWords.some((g) => hasDigit(g.word)));
++  if (oldWords.length <= 1 && !newHasSpaces && !newHasNewlines && !digitsInvolved) {
++    return {
++      segments: segmentText(newText, locale, numbersOn),
++      splits: /* @__PURE__ */ new Map()
++    };
++  }
++  const newWordStrings = [];
++  const newSeparators = [];
++  const parts = newText.split(/( |\n)/);
++  let pendingSeps = [];
++  for (const part of parts) {
++    if (part === " " || part === "\n") {
++      pendingSeps.push(part);
++    } else if (part.length > 0) {
++      newSeparators.push(pendingSeps);
++      newWordStrings.push(part);
++      pendingSeps = [];
++    }
++  }
++  const trailingSeparators = pendingSeps;
++  const oldWordStrings = oldWords.map((g) => g.word);
++  if (oldWordStrings.length * newWordStrings.length > MAX_LCS_CELLS) {
++    return {
++      segments: segmentText(newText, locale, numbersOn),
++      splits: /* @__PURE__ */ new Map()
++    };
++  }
++  const [oldLcsIdx, newLcsIdx] = lcsIndices(
++    oldWordStrings.map(token),
++    newWordStrings.map(token)
++  );
++  const oldMatchedSet = new Set(oldLcsIdx);
++  const newMatchedSet = new Set(newLcsIdx);
++  const newToOldWord = /* @__PURE__ */ new Map();
++  for (let k = 0; k < newLcsIdx.length; k++) {
++    newToOldWord.set(newLcsIdx[k], oldLcsIdx[k]);
++  }
++  let oldUnmatched = oldWordStrings.map((_, i) => i).filter((i) => !oldMatchedSet.has(i));
++  let newUnmatched = newWordStrings.map((_, i) => i).filter((i) => !newMatchedSet.has(i));
++  const exactUsed = /* @__PURE__ */ new Set();
++  for (const ni of newUnmatched) {
++    for (const oi of oldUnmatched) {
++      if (exactUsed.has(oi)) continue;
++      if (token(newWordStrings[ni]) === token(oldWordStrings[oi])) {
++        newToOldWord.set(ni, oi);
++        exactUsed.add(oi);
++        break;
++      }
++    }
++  }
++  if (exactUsed.size > 0) {
++    oldUnmatched = oldUnmatched.filter((i) => !exactUsed.has(i));
++    newUnmatched = newUnmatched.filter((i) => !newToOldWord.has(i));
++  }
++  const morphPairs = /* @__PURE__ */ new Map();
++  const usedOld = /* @__PURE__ */ new Set();
++  const oldGaps = gapIndices(oldWordStrings.length, oldMatchedSet);
++  const newGaps = gapIndices(newWordStrings.length, newMatchedSet);
++  if (oldUnmatched.length * newUnmatched.length <= MAX_MORPH_PAIRINGS) {
++    for (const ni of newUnmatched) {
++      let bestOi = -1;
++      let bestSim = MIN_SIMILARITY;
++      for (const oi of oldUnmatched) {
++        if (usedOld.has(oi)) continue;
++        if (oldGaps[oi] !== newGaps[ni]) continue;
++        const sim = pairAffinity(oldWordStrings[oi], newWordStrings[ni]);
++        if (sim > bestSim) {
++          bestSim = sim;
++          bestOi = oi;
++        }
++      }
++      if (bestOi >= 0) {
++        morphPairs.set(ni, bestOi);
++        usedOld.add(bestOi);
++      }
++    }
++  }
++  const plans = newWordStrings.map((newWord, ni) => {
++    const lcsOi = newToOldWord.get(ni);
++    const oi = lcsOi ?? morphPairs.get(ni);
++    if (oi === void 0) return { mode: "fresh" };
++    if (isNum(newWord)) return { mode: "number", oi };
++    return lcsOi !== void 0 ? { mode: "reuse", oi } : { mode: "morph", oi };
++  });
++  const cursorIndex = plans.filter((plan) => plan.mode === "number").length === 1 ? options.cursorIndex : void 0;
++  const decimalChar = decimalSeparator(locale);
++  const alloc = createIdAllocator();
++  for (const plan of plans) {
++    if (plan.mode === "fresh") continue;
++    const oldGroup = oldWords[plan.oi];
++    if (plan.mode !== "reuse" && oldGroup.segments.length === 1) {
++      const wordSeg = oldGroup.segments[0];
++      for (let i = 0; i < oldGroup.word.length; i++) {
++        alloc.reserve(`${wordSeg.id}:${i}`);
++      }
++    } else {
++      for (const seg of oldGroup.segments) alloc.reserve(seg.id);
++    }
++  }
++  const segments = [];
++  const splits = /* @__PURE__ */ new Map();
++  let charOffset = 0;
++  function pushSeparators(seps) {
++    for (const sep of seps) {
++      if (sep === "\n") {
++        segments.push({
++          id: alloc.take(`newline-${charOffset}`),
++          string: "\n"
++        });
++      } else {
++        segments.push({
++          id: alloc.take(`space-${charOffset}`),
++          string: "\xA0"
++        });
++      }
++      charOffset++;
++    }
++  }
++  for (let ni = 0; ni < newWordStrings.length; ni++) {
++    pushSeparators(newSeparators[ni] ?? (ni > 0 ? [" "] : []));
++    const plan = plans[ni];
++    const newWord = newWordStrings[ni];
++    if (plan.mode === "reuse") {
++      for (const seg of oldWords[plan.oi].segments) segments.push(seg);
++    } else if (plan.mode === "number") {
++      const oldGroup = oldWords[plan.oi];
++      segments.push(
++        ...segmentNumber(
++          newWord,
++          asNumberSegments(splitIfWhole(oldGroup, splits)),
++          cursorIndex === void 0 ? void 0 : cursorIndex - charOffset,
++          decimalChar
++        )
++      );
++    } else if (plan.mode === "morph") {
++      const oldGroup = oldWords[plan.oi];
++      const oldWord = oldGroup.word;
++      const oldCharSegs = splitIfWhole(oldGroup, splits);
++      const oldChars = oldWord.split("");
++      const newChars = newWord.split("");
++      const [oldCharLcs, newCharLcs] = lcsIndices(oldChars, newChars);
++      const newCharToOldSeg = /* @__PURE__ */ new Map();
++      for (let k = 0; k < newCharLcs.length; k++) {
++        const oldSeg = oldCharSegs[oldCharLcs[k]];
++        if (oldSeg) {
++          newCharToOldSeg.set(newCharLcs[k], oldSeg);
++        }
++      }
++      for (let ci = 0; ci < newChars.length; ci++) {
++        if (newCharToOldSeg.has(ci)) {
++          const oldSeg = newCharToOldSeg.get(ci);
++          segments.push({ id: oldSeg.id, string: newChars[ci] });
++        } else {
++          segments.push({
++            id: alloc.take(`${newWord}~${ci}`),
++            string: newChars[ci]
++          });
++        }
++      }
++    } else if (isNum(newWord)) {
++      segments.push(...segmentNumber(newWord));
++    } else {
++      segments.push({ id: alloc.take(newWord), string: newWord });
++    }
++    charOffset += newWord.length;
++  }
++  pushSeparators(trailingSeparators);
++  return { segments, splits };
++}
++
++// src/lib/utils/constants.ts
++var ATTR_ROOT = "torph-root";
++var ATTR_CELL = "torph-cell";
++var ATTR_BLOCK = "torph-block";
++var ATTR_PROBE = "torph-probe";
++var ATTR_LAYER = "torph-layer";
++var ATTR_ITEM = "torph-item";
++var ATTR_ROLL = "torph-roll";
++var ATTR_SR = "torph-sr";
++var ATTR_IN_PLACE = "torph-in-place";
++var ATTR_DEBUG = "torph-debug";
++
++// src/lib/utils/styles.ts
++var TORPH_CSS = `
++[${ATTR_CELL}] {
++  display: inline-grid;
++  overflow-x: clip;
++}
++
++/* In a root that is a block, the cell is one too: the paragraph's box. */
++[${ATTR_CELL}][${ATTR_BLOCK}] {
++  display: grid;
++}
++
++[${ATTR_CELL}] > * {
++  grid-area: 1 / 1;
++}
++
++/*
++ * The probes trim their lines as the root does (text-box): a grid takes no
++ * trim from around it, so the root's own is handed down for the plain text
++ * the probe stands for.
++ */
++[${ATTR_CELL}],
++[${ATTR_PROBE}] {
++  text-box: inherit;
++}
++
++[${ATTR_PROBE}] {
++  visibility: hidden;
++  align-self: start;
++}
++
++[${ATTR_LAYER}] {
++  width: 0;
++  height: 0;
++  justify-self: start;
++  align-self: start;
+   white-space: nowrap;
+-  text-align: inherit;
++  pointer-events: none;
+ }
+ 
+-[${Q}]:not(br) {
++[${ATTR_ITEM}] {
+   display: inline-block;
+-  position: relative;
+-  will-change: opacity, transform;
+-  transform: none;
+-  opacity: 1;
++  white-space: pre;
+ }
+ 
+ /*
+- * The value once as plain text \u2014 every other child is an aria-hidden fragment.
+- * Out of flow, because the engine measures every child of the root. Clipped
+- * rather than display: none, which would take it out of the a11y tree as well.
+- * user-select: none, or a copied selection pastes the value twice.
++ * A digit rolls in a slot that clips it on the block axis only, so a glyph's
++ * overhang is never shaved; clip, not hidden, keeps the slot's baseline.
+  */
+-[${P}] {
++[${ATTR_ROLL}] {
++  overflow-x: visible;
++  overflow-y: clip;
++}
++
++[${ATTR_ROLL}] > span {
++  display: inline-block;
++}
++
++/*
++ * The value once as plain text while the segments are drawn: they are
++ * aria-hidden. Clipped rather than display: none, which would take it out of
++ * the a11y tree as well. user-select: none, or a copied selection pastes the
++ * value twice.
++ */
++[${ATTR_SR}] {
+   position: absolute;
+   width: 1px;
+   height: 1px;
+@@ -46,55 +797,766 @@ var _t={locale:"en",duration:400,ease:"cubic-bezier(0.19, 1, 0.22, 1)",disabled:
+   user-select: none;
+ }
+ 
+-/*
+- * A digit slides a whole line box to arrive, so it needs its own box to hide
+- * behind. Not the root: that spans every line, so clipping there leaves a digit
+- * on a middle line sliding over its neighbour in view. The transform sits on the
+- * child, so the slide never touches the slot's rect and the FLIP pass stays
+- * oblivious. clip-path, not overflow \u2014 an inline-block whose overflow is
+- * anything but visible has its baseline synthesized to the bottom margin edge
+- * (CSS 2.1 \xA710.8.1), and engines disagree on whether overflow: clip counts.
+- * The inline axis stays open so glyph overhang is not shaved.
+- */
+-[${F}] {
+-  clip-path: inset(0 -100vw);
++[${ATTR_ROOT}][${ATTR_DEBUG}] {
++  outline: 2px solid magenta;
++  [${ATTR_ITEM}] {
++    outline: 2px solid cyan;
++    outline-offset: -4px;
++  }
++}`;
++var styleEl = null;
++var refCount = 0;
++function addStyles() {
++  refCount++;
++  if (styleEl) return;
++  styleEl = document.createElement("style");
++  styleEl.dataset.torph = "true";
++  styleEl.textContent = TORPH_CSS;
++  document.head.appendChild(styleEl);
++}
++function removeStyles() {
++  refCount--;
++  if (refCount > 0 || !styleEl) return;
++  styleEl.remove();
++  styleEl = null;
+ }
+ 
+-[${F}] > span {
+-  display: inline-block;
+-  will-change: opacity, transform;
++// src/lib/utils/alignment.ts
++var px = (value) => Number.parseFloat(value) || 0;
++function autoMargins(el, axis) {
++  const map = el.computedStyleMap?.();
++  if (!map) return [false, false];
++  const [a, b] = axis === "x" ? ["margin-left", "margin-right"] : ["margin-top", "margin-bottom"];
++  return [map.get(a)?.toString() === "auto", map.get(b)?.toString() === "auto"];
++}
++function onLine(rect, of, axis) {
++  const [a0, a1, b0, b1] = axis === "x" ? [rect.top, rect.bottom, of.top, of.bottom] : [rect.left, rect.right, of.left, of.right];
++  return Math.min(a1, b1) - Math.max(a0, b0) > 0.5;
++}
++function share(parent, style, child, childRect, axis) {
++  const horizontal = axis === "x";
++  const box = parent.getBoundingClientRect();
++  const lead = horizontal ? box.left + px(style.borderLeftWidth) + px(style.paddingLeft) : box.top + px(style.borderTopWidth) + px(style.paddingTop);
++  const trail = horizontal ? box.right - px(style.borderRightWidth) - px(style.paddingRight) : box.bottom - px(style.borderBottomWidth) - px(style.paddingBottom);
++  const display = style.display;
++  const flex = display.includes("flex");
++  const grid = display.includes("grid");
++  const mainAxis = flex && (style.flexDirection.startsWith("row") ? "x" : "y") === axis;
++  const gap = flex || grid ? px(horizontal ? style.columnGap : style.rowGap) : 0;
++  const spans = [];
++  const range = document.createRange();
++  for (const node of Array.from(parent.childNodes)) {
++    if (node.nodeType === Node.TEXT_NODE) {
++      range.selectNodeContents(node);
++      for (const rect of Array.from(range.getClientRects())) {
++        if (rect.width === 0 && rect.height === 0) continue;
++        if (!onLine(rect, childRect, axis)) continue;
++        spans.push({
++          start: horizontal ? rect.left : rect.top,
++          end: horizontal ? rect.right : rect.bottom,
++          self: false,
++          grow: 0
++        });
++      }
++      continue;
++    }
++    if (!(node instanceof Element)) continue;
++    const own = getComputedStyle(node);
++    if (own.display === "none" || own.position === "absolute" || own.position === "fixed") {
++      continue;
++    }
++    const self = node === child;
++    const rects = self ? [childRect] : Array.from(node.getClientRects());
++    const [autoBefore, autoAfter] = autoMargins(node, axis);
++    const before2 = autoBefore ? 0 : px(horizontal ? own.marginLeft : own.marginTop);
++    const after2 = autoAfter ? 0 : px(horizontal ? own.marginRight : own.marginBottom);
++    for (const rect of rects) {
++      if (!self && !onLine(rect, childRect, axis)) continue;
++      spans.push({
++        start: (horizontal ? rect.left : rect.top) - before2,
++        end: (horizontal ? rect.right : rect.bottom) + after2,
++        self,
++        grow: mainAxis ? px(own.flexGrow) : 0
++      });
++    }
++  }
++  spans.sort((a, b) => a.start - b.start);
++  const at = spans.findIndex((span) => span.self);
++  if (at === -1) return null;
++  let before = Math.max(0, spans[0].start - lead);
++  let after = Math.max(0, trail - spans[spans.length - 1].end);
++  for (let i = 0; i + 1 < spans.length; i++) {
++    const room = Math.max(0, spans[i + 1].start - spans[i].end - gap);
++    if (i < at) before += room;
++    else after += room;
++  }
++  if (before + after > 0.5) return before / (before + after);
++  if (mainAxis && spans[at].grow === 0) {
++    let growBefore = 0;
++    let growAfter = 0;
++    spans.forEach((span, i) => {
++      if (i < at) growBefore += span.grow;
++      if (i > at) growAfter += span.grow;
++    });
++    if (growBefore + growAfter > 0) return growBefore / (growBefore + growAfter);
++  }
++  return null;
++}
++function holdsItsSize(el, style, axis) {
++  const overflow = axis === "x" ? style.overflowX : style.overflowY;
++  if (overflow !== "visible" && overflow !== "clip") return true;
++  const map = el.computedStyleMap?.();
++  const size = map?.get(axis === "x" ? "width" : "height")?.toString();
++  return size !== void 0 && size !== "auto" && !size.endsWith("%");
++}
++function alignment(root, rect, axis) {
++  const fallback = axis === "x" && getComputedStyle(root).direction === "rtl" ? 1 : 0;
++  let child = root;
++  let childRect = rect;
++  let parent = root.parentElement;
++  for (let depth = 0; parent && depth < 16; depth++) {
++    const style = getComputedStyle(parent);
++    if (style.display === "inline" || style.display === "contents") {
++      child = parent;
++      childRect = parent.getBoundingClientRect();
++      parent = parent.parentElement;
++      continue;
++    }
++    const k = share(parent, style, child, childRect, axis);
++    if (k !== null) return k;
++    if (holdsItsSize(parent, style, axis)) return fallback;
++    child = parent;
++    childRect = parent.getBoundingClientRect();
++    parent = parent.parentElement;
++  }
++  return fallback;
+ }
+ 
+-/*
+- * Softens the clip above into a gradient, positionally rather than on a timer, so
+- * it stays in step with the slide at any duration. The band (--torph-fade, 0 for a
+- * hard edge) must eat into the box: the clip trims at the border box, so a ramp
+- * reaching past it sits in territory already removed and is never seen. no-clip
+- * plus repeat-x is what carries the profile across glyph overhang.
+- */
+-@supports (mask-clip: no-clip) or (-webkit-mask-clip: no-clip) {
+-  [${F}] {
+-    --torph-mask: linear-gradient(
+-      to bottom,
+-      transparent,
+-      #000 var(--torph-fade, 0.15em),
+-      #000 calc(100% - var(--torph-fade, 0.15em)),
+-      transparent
+-    );
+-    -webkit-mask-image: var(--torph-mask);
+-    mask-image: var(--torph-mask);
+-    -webkit-mask-repeat: repeat-x;
+-    mask-repeat: repeat-x;
+-    -webkit-mask-clip: no-clip;
+-    mask-clip: no-clip;
++// src/lib/utils/laid-out.ts
++var waiting = /* @__PURE__ */ new Map();
++var observer;
++function deliver(entries) {
++  const reads = [];
++  for (const { target } of entries) {
++    const read = waiting.get(target);
++    observer?.unobserve(target);
++    if (read) {
++      waiting.delete(target);
++      reads.push(read);
++    }
++  }
++  const writes = reads.map((read) => read());
++  for (const write of writes) write?.();
++}
++function onceLaidOut(el, read) {
++  observer ??= new ResizeObserver(deliver);
++  waiting.set(el, read);
++  observer.unobserve(el);
++  observer.observe(el);
++}
++function forget(el) {
++  waiting.delete(el);
++  observer?.unobserve(el);
++}
++
++// src/lib/utils/reduced-motion.ts
++function createReducedMotionListener() {
++  if (typeof window === "undefined") {
++    return { prefersReducedMotion: false, destroy: () => {
++    } };
++  }
++  const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
++  const state = { prefersReducedMotion: mediaQuery.matches, destroy };
++  function onChange(event) {
++    state.prefersReducedMotion = event.matches;
++  }
++  function destroy() {
++    mediaQuery.removeEventListener("change", onChange);
+   }
++  mediaQuery.addEventListener("change", onChange);
++  return state;
+ }
+ 
+-[${Y}][${Z}] {
+-  outline: 2px solid magenta;
+-  [${Q}] {
+-    outline: 2px solid cyan;
+-    outline-offset: -4px;
++// src/lib/text-morph/controller.ts
++var MorphController = class _MorphController {
++  instance = null;
++  lastText = "";
++  lastCursorIndex;
++  configKey = "";
++  attach(element, options) {
++    this.instance?.destroy();
++    this.instance = new TextMorph({ element, ...options });
++    this.configKey = _MorphController.serializeConfig(options);
++    if (this.lastText !== "") {
++      this.instance.update(this.lastText, this.lastCursorIndex);
++    }
++  }
++  update(text, cursorIndex) {
++    this.lastText = text;
++    this.lastCursorIndex = cursorIndex;
++    this.instance?.update(text, cursorIndex);
++  }
++  needsRecreate(options) {
++    return _MorphController.serializeConfig(options) !== this.configKey;
+   }
+-}`,C=null,Nt=0;function Se(){Nt++,!C&&(C=document.createElement("style"),C.dataset.torph="true",C.textContent=mn,document.head.appendChild(C));}function Me(){Nt--,!(Nt>0||!C)&&(C.remove(),C=null);}function Te(){if(typeof window>"u")return {prefersReducedMotion:false,destroy:()=>{}};let e=window.matchMedia("(prefers-reduced-motion: reduce)"),t={prefersReducedMotion:e.matches,destroy:i};function n(r){t.prefersReducedMotion=r.matches;}function i(){e.removeEventListener("change",n);}return e.addEventListener("change",n),t}var mt=class e{instance=null;lastText="";lastCursorIndex;configKey="";attach(t,n){this.instance?.destroy(),this.instance=new nt({element:t,...n}),this.configKey=e.serializeConfig(n),this.lastText!==""&&this.instance.update(this.lastText,this.lastCursorIndex);}update(t,n){this.lastText=t,this.lastCursorIndex=n,this.instance?.update(t,n);}needsRecreate(t){return e.serializeConfig(t)!==this.configKey}destroy(){this.instance?.destroy(),this.instance=null;}static serializeConfig(t){return JSON.stringify({ease:t.ease,duration:t.duration,locale:t.locale,scale:t.scale,numbers:t.numbers,decimals:t.decimals,debug:t.debug,disabled:t.disabled,respectReducedMotion:t.respectReducedMotion})}};var pn="span",Ee={..._t,debug:false,scale:true,numbers:true},nt=class{element;options={};data;currentMeasures={};prevMeasures={};previousSegments=[];isInitialRender=true;reducedMotion=null;srNode=null;hasSetup=false;constructor(t){let n=Object.fromEntries(Object.entries(t).filter(([,a])=>a!==void 0)),{ease:i,...r}={...Ee,...n},{ease:s,duration:o}=Ft(i,r.duration);this.options={...r,ease:s,duration:o},this.element=t.element,this.options.respectReducedMotion&&(this.reducedMotion=Te()),this.data="",this.isDisabled()||this.setup();}setup(){this.hasSetup||(this.hasSetup=true,this.element.setAttribute(Y,""),this.options.debug&&this.element.setAttribute(Z,""),Se());}destroy(){this.reducedMotion?.destroy(),re(this.element),this.element.getAnimations().forEach(t=>t.cancel()),this.srNode?.remove(),this.srNode=null,this.element.removeAttribute(Y),this.element.removeAttribute(Z),this.hasSetup&&(this.hasSetup=false,Me());}isDisabled(){return !!(this.options.disabled||this.reducedMotion?.prefersReducedMotion)}update(t,n){let i=typeof t=="number"?t.toLocaleString(this.options.locale,{minimumFractionDigits:this.options.decimals,maximumFractionDigits:this.options.decimals}):t;if(i!==this.data){if(this.data=i,this.isDisabled()){typeof i=="string"&&(this.srNode=null,this.element.textContent=i,this.previousSegments=[],this.isInitialRender=true);return}if(this.setup(),this.data instanceof HTMLElement)throw new Error("HTMLElement not yet supported");this.options.onAnimationStart&&!this.isInitialRender&&this.options.onAnimationStart(),this.createTextGroup(this.data,this.element,n);}}createTextGroup(t,n,i){let{width:r,height:s}=et(n),o=this.options.numbers!==false;this.syncAccessibleText(t);let a,u;if(this.previousSegments.length>0){let g=Lt(this.previousSegments,t,this.options.locale,{numbers:o,cursorIndex:i});a=g.segments,u=g.splits;}else a=K(t,this.options.locale,o),u=new Map;let c=a.length===0;c&&(a=[{id:tt,string:"\u200B"}]),ce(n,u),this.prevMeasures=ct(this.element);let f=Array.from(n.children).filter(g=>!g.hasAttribute(P)),l=new Set(a.map(g=>g.id)),m=f.filter(g=>!l.has(g.getAttribute(w))&&!g.hasAttribute(H)),d=new Set(m),h=f.map(g=>g.getAttribute(w)),M=oe(f,d,h,l);le(n,m),me(n,f,l,a),this.currentMeasures=ct(this.element);let x=a.reduce((g,v)=>v.string===`
+-`?g+1:g,1),T=(n.offsetHeight||20*x)/x;n.style.width=`${r}px`,n.offsetWidth;let L=ct(this.element);n.style.width="",this.updateStyles(a,L,T);let E=this.isInitialRender?[]:It(f,new Set(m)),N=new Set(E.flat());for(let g of E)ge(g,{duration:this.options.duration,ease:this.options.ease});if(m.forEach(g=>{if(this.isInitialRender||g.getAttribute(w)===tt){g.remove();return}if(N.has(g))return;let v=M.get(g),{dx:R,dy:O}=v?Tt(this.currentMeasures,this.prevMeasures,v):{dx:0,dy:0};g.hasAttribute(V)?pe(g,{dx:R,dy:O,slideDistance:T,duration:this.options.duration,ease:this.options.ease}):ae(g,{dx:R,dy:O,duration:this.options.duration,ease:this.options.ease,scale:this.options.scale});}),this.previousSegments=a,this.isInitialRender){this.isInitialRender=false,n.style.width="",n.style.height="";return}c?se(n,r,s,this.options.duration,this.options.onAnimationComplete,this.options.onAnimationCancel):ie(n,r,s,this.options.duration,this.options.ease,this.options.onAnimationComplete,this.options.onAnimationCancel);}updateStyles(t,n,i){if(this.isInitialRender)return;let r=Array.from(this.element.children).filter(l=>!l.hasAttribute(P)),s=t.map(l=>l.id),o=new Map(t.map(l=>[l.id,l.kind])),a=r.filter(l=>!l.hasAttribute(H)&&l.tagName!=="BR"&&l.getAttribute(w)!==tt),u=new Set(a.filter(l=>!this.prevMeasures[l.getAttribute(w)])),c=new Set;for(let l of It(a,u))l.forEach(m=>c.add(m)),be(l,{duration:this.options.duration,ease:this.options.ease});let f=new Set(s.filter(l=>this.prevMeasures[l]));r.forEach((l,m)=>{if(l.hasAttribute(H)||l.tagName==="BR"||c.has(l))return;let d=l.getAttribute(w)||`child-${m}`;if(d===tt)return;let h=!this.prevMeasures[d],M=h?Et(t.findIndex(E=>E.id===d),s,f):d,{dx:x,dy:T}=M?Tt(this.prevMeasures,n,M):{dx:0,dy:0},L=o.get(d);L&&h?fe(l,{deltaX:x,deltaY:T,slideDistance:i,kind:L,duration:this.options.duration,ease:this.options.ease}):L?Rt(l,{deltaX:x,deltaY:T,duration:this.options.duration,ease:this.options.ease}):ue(l,{deltaX:x,deltaY:T,isNew:h,duration:this.options.duration,ease:this.options.ease});});}syncAccessibleText(t){if(!this.srNode||this.srNode.parentNode!==this.element){let n=document.createElement("span");n.setAttribute(P,""),this.element.prepend(n),this.srNode=n;}this.srNode.textContent=t;}};export{pn as DEFAULT_AS,Ee as DEFAULT_TEXT_MORPH_OPTIONS,mt as MorphController,nt as TextMorph,xt as decimalSeparator,Lt as diffSegments,J as isNumericWord,U as segmentNumber,K as segmentText};
+\ No newline at end of file
++  destroy() {
++    this.instance?.destroy();
++    this.instance = null;
++  }
++  static serializeConfig(options) {
++    return JSON.stringify({
++      ease: options.ease,
++      duration: options.duration,
++      locale: options.locale,
++      scale: options.scale,
++      numbers: options.numbers,
++      decimals: options.decimals,
++      debug: options.debug,
++      disabled: options.disabled,
++      respectReducedMotion: options.respectReducedMotion
++    });
++  }
++};
++
++// src/lib/text-morph/index.ts
++var DEFAULT_AS = "span";
++var DEFAULT_TEXT_MORPH_OPTIONS = {
++  ...BASE_DEFAULTS,
++  debug: false,
++  scale: true,
++  numbers: true
++};
++var SHRINK = 0.95;
++var placed = /* @__PURE__ */ new WeakMap();
++function place(el, x, y) {
++  placed.set(el, { x, y });
++  el.style.translate = x === 0 && y === 0 ? "" : `${x}px ${y}px`;
++}
++function fill(el, value) {
++  const lines = value.split("\n");
++  const nodes = [];
++  lines.forEach((line, i) => {
++    if (i > 0) nodes.push(document.createElement("br"));
++    if (line) nodes.push(document.createTextNode(line));
++  });
++  el.replaceChildren(...nodes);
++}
++function item(segment) {
++  if (segment.string === "\n") return document.createElement("br");
++  const el = document.createElement("span");
++  el.setAttribute(ATTR_ITEM, "");
++  if (segment.kind === "digit") {
++    el.setAttribute(ATTR_ROLL, "");
++    const face = document.createElement("span");
++    face.textContent = segment.string;
++    el.append(face);
++  } else {
++    el.textContent = segment.string;
++  }
++  return el;
++}
++var faceOf = (el) => el.hasAttribute(ATTR_ROLL) ? el.firstElementChild ?? el : el;
++var centre = (rect) => ({
++  x: rect.left + rect.width / 2,
++  y: rect.top + rect.height / 2
++});
++function textCentre(el, range) {
++  const face = faceOf(el);
++  const text = face.firstChild;
++  if (!text) return centre(el.getBoundingClientRect());
++  range.selectNodeContents(text);
++  return centre(range.getBoundingClientRect());
++}
++function lay(layer) {
++  const at = /* @__PURE__ */ new Map();
++  const texts = Array.from(layer.probe.childNodes).filter(
++    (node) => node.nodeType === Node.TEXT_NODE
++  );
++  const range = document.createRange();
++  let line = 0;
++  let offset = 0;
++  let left = Infinity;
++  let right = -Infinity;
++  for (const segment of layer.segments) {
++    if (segment.string === "\n") {
++      line += 1;
++      offset = 0;
++      continue;
++    }
++    const node = texts[line];
++    const el = layer.items.get(segment.id);
++    const length = segment.string.length;
++    if (!node || !el) {
++      offset += length;
++      continue;
++    }
++    range.setStart(node, Math.min(offset, node.length));
++    range.setEnd(node, Math.min(offset + length, node.length));
++    const rects = range.getClientRects();
++    const rect = rects[0] ?? range.getBoundingClientRect();
++    at.set(el, centre(rect));
++    for (const one of Array.from(rects)) {
++      left = Math.min(left, one.left);
++      right = Math.max(right, one.right);
++    }
++    offset += length;
++  }
++  const box = layer.probe.getBoundingClientRect();
++  if (left === Infinity) {
++    left = box.left;
++    right = box.left;
++  }
++  return { at, left, width: right - left, height: box.height };
++}
++function linesOf(probe, value) {
++  const lines = value.split("\n");
++  const nodes = [];
++  lines.forEach((line, i) => {
++    if (i > 0) nodes.push(document.createElement("br"));
++    nodes.push(document.createTextNode(line));
++  });
++  probe.replaceChildren(...nodes);
++}
++var TextMorph = class {
++  element;
++  options = {};
++  data;
++  /** The segments of the value drawn last, so the next morph matches against them. */
++  segments = [];
++  isInitialRender = true;
++  reducedMotion = null;
++  hasSetup = false;
++  run = null;
++  step = 0;
++  /** A layer written but not read yet: a step that comes first takes it out. */
++  pending = null;
++  /** When the step not read yet was written, on the document's timeline. */
++  writtenAt = 0;
++  /**
++   * Whether the root is laid out as a block (a paragraph): its cell is then a
++   * block as well. Read once the root is first laid out; an inline root has
++   * no box of its own to observe, and stays inline.
++   */
++  block = false;
++  constructor(options) {
++    const given = Object.fromEntries(
++      Object.entries(options).filter(([, value]) => value !== void 0)
++    );
++    const { ease: rawEase, ...rest } = {
++      ...DEFAULT_TEXT_MORPH_OPTIONS,
++      ...given
++    };
++    const { ease, duration } = resolveEase(rawEase, rest.duration);
++    this.options = { ...rest, ease, duration };
++    this.element = options.element;
++    if (this.options.respectReducedMotion) {
++      this.reducedMotion = createReducedMotionListener();
++    }
++    this.data = "";
++    if (!this.options.disabled) this.setup();
++  }
++  setup() {
++    if (this.hasSetup) return;
++    this.hasSetup = true;
++    this.element.setAttribute(ATTR_ROOT, "");
++    if (this.options.debug) this.element.setAttribute(ATTR_DEBUG, "");
++    addStyles();
++    const root = this.element;
++    onceLaidOut(root, () => {
++      this.block = getComputedStyle(root).display !== "inline";
++      return void 0;
++    });
++  }
++  destroy() {
++    this.reducedMotion?.destroy();
++    this.settle(false);
++    forget(this.element);
++    this.element.removeAttribute(ATTR_ROOT);
++    this.element.removeAttribute(ATTR_DEBUG);
++    if (this.hasSetup) {
++      this.hasSetup = false;
++      removeStyles();
++    }
++  }
++  /** Less motion: nothing travels, the old value fades out where it stands and the new one in. */
++  get fade() {
++    return Boolean(this.reducedMotion?.prefersReducedMotion);
++  }
++  /** `cursorIndex` switches a single-number value from place matching to caret matching. */
++  update(value, cursorIndex) {
++    const formatted = typeof value === "number" ? value.toLocaleString(this.options.locale, {
++      minimumFractionDigits: this.options.decimals,
++      maximumFractionDigits: this.options.decimals
++    }) : value;
++    if (formatted === this.data) return;
++    if (formatted instanceof HTMLElement) {
++      throw new Error("HTMLElement not yet supported");
++    }
++    const from = this.data;
++    this.data = formatted;
++    const numbers = this.options.numbers !== false;
++    if (this.options.disabled || this.isInitialRender || !this.options.duration) {
++      this.settle(false);
++      if (this.element.textContent !== formatted) fill(this.element, formatted);
++      this.segments = segmentText(formatted, this.options.locale, numbers);
++      this.isInitialRender = false;
++      return;
++    }
++    this.setup();
++    if (this.run) {
++      this.options.onAnimationCancel?.();
++    }
++    this.options.onAnimationStart?.();
++    this.begin(from, formatted, numbers, cursorIndex);
++  }
++  /**
++   * Writes the step's layer and its probe into the cell, before the frame is
++   * laid out, and reads where everything lies once it is (laid-out.ts).
++   */
++  begin(from, value, numbers, cursorIndex) {
++    this.drop();
++    this.element.removeAttribute(ATTR_IN_PLACE);
++    this.step += 1;
++    const step = this.step;
++    let run = this.run;
++    if (!run) {
++      const cell = document.createElement("span");
++      cell.setAttribute(ATTR_CELL, "");
++      if (this.block) cell.setAttribute(ATTR_BLOCK, "");
++      cell.setAttribute("aria-hidden", "true");
++      const sr = document.createElement("span");
++      sr.setAttribute(ATTR_SR, "");
++      sr.style.position = "absolute";
++      const first = this.layer(from, this.segments);
++      cell.append(first.probe, first.el);
++      this.element.replaceChildren(cell, sr);
++      run = this.run = {
++        cell,
++        sr,
++        layers: [first],
++        clock: [],
++        fromText: true,
++        size: null,
++        inPlace: false
++      };
++    }
++    run.sr.textContent = value;
++    const drawn = run.layers[0];
++    let segments;
++    if (this.fade) {
++      segments = segmentText(value, this.options.locale, numbers);
++    } else {
++      const diff = diffSegments(drawn.segments, value, this.options.locale, {
++        numbers,
++        cursorIndex
++      });
++      segments = diff.segments;
++      for (const [id, pieces] of diff.splits) this.split(drawn, id, pieces);
++    }
++    const next = this.layer(value, segments);
++    run.cell.prepend(next.probe, next.el);
++    if (!value) {
++      const lead = run.layers.find((layer) => layer.value)?.probe;
++      if (lead) run.cell.prepend(lead);
++    }
++    this.pending = next;
++    this.writtenAt = document.timeline.currentTime;
++    onceLaidOut(run.cell, () => {
++      if (step !== this.step || this.pending !== next) return;
++      const reads = this.read(next);
++      return () => this.play(next, reads, step);
++    });
++  }
++  layer(value, segments) {
++    const probe = document.createElement("span");
++    probe.setAttribute(ATTR_PROBE, "");
++    linesOf(probe, value);
++    const el = document.createElement("span");
++    el.setAttribute(ATTR_LAYER, "");
++    const items = /* @__PURE__ */ new Map();
++    el.append(
++      ...segments.map((segment) => {
++        const one = item(segment);
++        if (one.tagName !== "BR") items.set(segment.id, one);
++        return one;
++      })
++    );
++    return { value, segments, probe, el, items };
++  }
++  /** A step written and not read yet gives way to the one coming: its layer out. */
++  drop() {
++    const run = this.run;
++    const pending = this.pending;
++    if (!run || !pending) return;
++    this.pending = null;
++    forget(run.cell);
++    pending.probe.remove();
++    pending.el.remove();
++  }
++  /**
++   * The drawn word `id` as its letters, in its place: each moves as the word
++   * was moving, on the same clock, so nothing drawn changes.
++   */
++  split(drawn, id, pieces) {
++    const whole = drawn.items.get(id);
++    const run = this.run;
++    if (!whole || !run) return;
++    const els = pieces.map(item);
++    const offset = placed.get(whole);
++    const carried = run.clock.filter(
++      (animation) => animation.effect?.target === whole
++    );
++    whole.replaceWith(...els);
++    drawn.items.delete(id);
++    pieces.forEach((piece, i) => {
++      const el = els[i];
++      if (el.tagName === "BR") return;
++      drawn.items.set(piece.id, el);
++      if (offset) place(el, offset.x, offset.y);
++      el.style.visibility = whole.style.visibility;
++      for (const animation of carried) {
++        const effect = animation.effect;
++        const copy = el.animate(effect.getKeyframes(), effect.getTiming());
++        copy.startTime = animation.startTime;
++        run.clock.push(copy);
++      }
++    });
++    drawn.segments = drawn.segments.flatMap(
++      (segment) => segment.id === id ? pieces : [segment]
++    );
++  }
++  /**
++   * Every box the step needs, read at once: where each drawn segment stands
++   * now and how opaque, where the text the morph starts from stood, and where
++   * each new segment comes to rest.
++   */
++  read(next) {
++    const run = this.run;
++    const cellRect = run.cell.getBoundingClientRect();
++    const root = this.element;
++    const style = getComputedStyle(root);
++    const inline = style.display === "inline";
++    let hugsX = true;
++    let hugsY = true;
++    let box = cellRect;
++    if (!inline) {
++      box = root.getBoundingClientRect();
++      const px2 = (v) => Number.parseFloat(v) || 0;
++      const innerW = box.width - px2(style.paddingLeft) - px2(style.paddingRight) - px2(style.borderLeftWidth) - px2(style.borderRightWidth);
++      const innerH = box.height - px2(style.paddingTop) - px2(style.paddingBottom) - px2(style.borderTopWidth) - px2(style.borderBottomWidth);
++      hugsX = Math.abs(innerW - cellRect.width) < 0.5;
++      hugsY = Math.abs(innerH - cellRect.height) < 0.5;
++    }
++    let kx = null;
++    let ky = null;
++    const shareX = () => kx ??= alignment(root, box, "x");
++    const shareY = () => ky ??= alignment(root, box, "y");
++    const shiftOf = (text) => {
++      const dw = cellRect.width - text.width;
++      const dh = cellRect.height - text.height;
++      return {
++        x: hugsX && Math.abs(dw) > 0.25 ? cellRect.left + shareX() * dw - text.left : hugsX ? cellRect.left - text.left : 0,
++        y: hugsY && Math.abs(dh) > 0.25 ? shareY() * dh : 0
++      };
++    };
++    const stale = document.timeline.currentTime - this.writtenAt > this.options.duration;
++    const nextText = lay(next);
++    const nextShift = shiftOf(nextText);
++    const rest = /* @__PURE__ */ new Map();
++    const laid = /* @__PURE__ */ new Map();
++    const range = document.createRange();
++    for (const [el, at] of nextText.at) {
++      rest.set(el, { x: at.x + nextShift.x, y: at.y + nextShift.y });
++      laid.set(el, textCentre(el, range));
++    }
++    const drawn = /* @__PURE__ */ new Map();
++    const [, ...older] = [next, ...run.layers];
++    if (run.fromText) {
++      const first = older[older.length - 1];
++      const text = lay(first);
++      const shift = shiftOf(text);
++      for (const [el, at] of text.at) {
++        drawn.set(el, {
++          at: { x: at.x + shift.x, y: at.y + shift.y },
++          laid: textCentre(el, range),
++          opacity: 1,
++          scale: 1,
++          roll: 0
++        });
++      }
++    } else {
++      let drift = { x: 0, y: 0 };
++      const was = run.size;
++      if (was) {
++        const dw = cellRect.width - was.width;
++        const dh = cellRect.height - was.height;
++        const corner = next.el.getBoundingClientRect();
++        const end = cellRect.width > 0 ? (corner.left - cellRect.left) / cellRect.width : 0;
++        const moved = (share2) => share2 - end;
++        drift = {
++          x: Math.abs(dw) > 0.25 ? moved(hugsX ? shareX() : this.textAlign(cellRect, root, style)) * dw : 0,
++          y: Math.abs(dh) > 0.25 && hugsY ? shareY() * dh : 0
++        };
++      }
++      for (const layer of older) {
++        for (const el of layer.items.values()) {
++          if (el.style.visibility === "hidden") continue;
++          const own = getComputedStyle(el);
++          const matrix = own.transform && own.transform !== "none" ? new DOMMatrixReadOnly(own.transform) : null;
++          const offset = placed.get(el) ?? { x: 0, y: 0 };
++          const face = faceOf(el);
++          let roll = 0;
++          if (face !== el) {
++            const turned = getComputedStyle(face).transform;
++            if (turned && turned !== "none") roll = new DOMMatrixReadOnly(turned).f;
++          }
++          const glyph = textCentre(el, range);
++          const now = { x: glyph.x, y: glyph.y - roll };
++          drawn.set(el, {
++            at: { x: now.x + drift.x, y: now.y + drift.y },
++            laid: {
++              x: now.x - offset.x - (matrix?.e ?? 0),
++              y: now.y - offset.y - (matrix?.f ?? 0)
++            },
++            opacity: Number(own.opacity),
++            scale: matrix?.a ?? 1,
++            roll
++          });
++        }
++      }
++    }
++    return {
++      drawn,
++      rest,
++      laid,
++      cell: { width: cellRect.width, height: cellRect.height },
++      inPlace: Math.abs(nextText.height - cellRect.height) < 0.5 && (!hugsX || Math.abs(nextText.width - cellRect.width) < 0.5),
++      stale
++    };
++  }
++  /** Where a block root's line puts the cell: the share of its spare width before it. */
++  textAlign(cellRect, root, style) {
++    const px2 = (v) => Number.parseFloat(v) || 0;
++    const box = root.getBoundingClientRect();
++    const start = box.left + px2(style.borderLeftWidth) + px2(style.paddingLeft);
++    const end = box.right - px2(style.borderRightWidth) - px2(style.paddingRight);
++    const spare = end - start - cellRect.width;
++    return spare > 0.5 ? (cellRect.left - start) / spare : 0;
++  }
++  /** Every animation of the step, on one start, duration and curve. */
++  play(next, reads, step) {
++    const run = this.run;
++    for (const animation of run.clock) animation.cancel();
++    const fade = this.fade;
++    const scale = this.options.scale !== false && !fade;
++    const timing = {
++      duration: this.options.duration,
++      easing: this.options.ease,
++      fill: "both"
++    };
++    const clock = [];
++    const animate = (el, keyframes) => {
++      clock.push(el.animate(keyframes, timing));
++    };
++    const drawnLayer = run.layers[0];
++    const taken = /* @__PURE__ */ new Set();
++    for (const [id, el] of next.items) {
++      const rest = reads.rest.get(el);
++      const laid = reads.laid.get(el);
++      if (rest && laid) place(el, rest.x - laid.x, rest.y - laid.y);
++      if (reads.stale || !rest) continue;
++      const kept = fade ? void 0 : drawnLayer.items.get(id);
++      const was = kept && reads.drawn.get(kept);
++      if (kept && was) {
++        taken.add(kept);
++        const dx = was.at.x - rest.x;
++        const dy = was.at.y - rest.y;
++        if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || was.scale !== 1) {
++          animate(el, [
++            { transform: `translate(${dx}px, ${dy}px) scale(${was.scale})` },
++            { transform: "none" }
++          ]);
++        }
++        if (was.opacity < 1) {
++          animate(el, [{ opacity: was.opacity }, { opacity: 1 }]);
++        }
++        if (was.roll !== 0) {
++          animate(faceOf(el), [
++            { transform: `translateY(${was.roll}px)` },
++            { transform: "none" }
++          ]);
++        }
++        continue;
++      }
++      animate(el, [{ opacity: 0 }, { opacity: 1 }]);
++      if (fade) continue;
++      if (el.hasAttribute(ATTR_ROLL)) {
++        animate(faceOf(el), [
++          { transform: "translateY(100%)" },
++          { transform: "none" }
++        ]);
++      } else if (scale) {
++        animate(el, [{ transform: `scale(${SHRINK})` }, { transform: "none" }]);
++      }
++    }
++    for (const [el, was] of reads.drawn) {
++      place(el, was.at.x - was.laid.x, was.at.y - was.laid.y);
++      if (taken.has(el) || was.opacity <= 1e-3 || reads.stale) {
++        el.style.visibility = "hidden";
++        continue;
++      }
++      animate(el, [{ opacity: was.opacity }, { opacity: 0 }]);
++      if (fade) continue;
++      if (el.hasAttribute(ATTR_ROLL)) {
++        animate(faceOf(el), [
++          { transform: `translateY(${was.roll}px)` },
++          { transform: "translateY(-100%)" }
++        ]);
++      } else if (scale) {
++        animate(el, [
++          { transform: `scale(${was.scale})` },
++          { transform: `scale(${SHRINK})` }
++        ]);
++      }
++    }
++    const start = document.timeline.currentTime;
++    for (const animation of clock) animation.startTime = start;
++    run.layers.unshift(next);
++    run.clock = clock;
++    run.fromText = false;
++    run.size = reads.cell;
++    run.inPlace = reads.inPlace;
++    this.pending = null;
++    if (clock.length === 0) {
++      requestAnimationFrame(() => {
++        if (step === this.step && !this.pending) this.land();
++      });
++      return;
++    }
++    Promise.all(clock.map((animation) => animation.finished)).then(
++      () => {
++        if (step === this.step && !this.pending) this.land();
++      },
++      () => void 0
++    );
++  }
++  /** The morph has settled: the plain text takes the box's place, at its own size. */
++  land() {
++    this.settle(true);
++    this.options.onAnimationComplete?.();
++  }
++  /** Takes the morph down, the value back as plain text. */
++  settle(done) {
++    const run = this.run;
++    if (!run) return;
++    this.run = null;
++    this.pending = null;
++    forget(run.cell);
++    for (const animation of run.clock) animation.cancel();
++    if (done) this.segments = run.layers[0].segments;
++    if (done && run.inPlace) this.element.setAttribute(ATTR_IN_PLACE, "");
++    fill(this.element, this.data);
++  }
++};
++
++export { DEFAULT_AS, DEFAULT_TEXT_MORPH_OPTIONS, MorphController, TextMorph, decimalSeparator, diffSegments, isNumericWord, segmentNumber, segmentText };
+diff --git a/dist/svelte/TextMorph.svelte b/dist/svelte/TextMorph.svelte
+index fdff42d36d673c49dfdc514ded7b676c5cfdc7f2..90040da407253a725103def86e01214020abb708 100644
+--- a/dist/svelte/TextMorph.svelte
++++ b/dist/svelte/TextMorph.svelte
+@@ -1,6 +1,7 @@
+ <script lang="ts">
+   import { DEFAULT_AS, DEFAULT_TEXT_MORPH_OPTIONS, type TextMorphOptions } from 'torph';
+   import { MorphController } from 'torph';
++  import { untrack } from 'svelte';
+ 
+   type Props = Omit<TextMorphOptions, "element"> & {
+     text: string;
+@@ -27,6 +28,9 @@
+   }: Props = $props();
+ 
+   let containerRef = $state<HTMLElement>();
++  // The first value as text, in the server's markup too; the morph takes the
++  // element's children over from there and draws the first value as it is.
++  const first = untrack(() => text);
+   const controller = new MorphController();
+ 
+   const options = $derived({
+@@ -56,5 +60,4 @@
+   });
+ </script>
+ 
+-<svelte:element this={as} bind:this={containerRef} {...props}>
+-</svelte:element>
++<svelte:element this={as} bind:this={containerRef} {...props}>{first}</svelte:element>
+diff --git a/dist/svelte/index.d.mts b/dist/svelte/index.d.mts
+index 1c6daf0758f267f990308cab6847eed3be84a6a6..7a63e4b965763e7e65d42db1af6f679b54b85671 100644
+--- a/dist/svelte/index.d.mts
++++ b/dist/svelte/index.d.mts
+@@ -1,4 +1,5 @@
+ import { Component } from 'svelte';
++import { HTMLAttributes } from 'svelte/elements';
+ 
+ interface SpringParams {
+     stiffness?: number;
+@@ -29,7 +30,8 @@ interface TextMorphOptions extends BaseMorphOptions {
+     onAnimationCancel?: () => void;
+ }
+ 
+-interface TextMorphProps extends Omit<TextMorphOptions, "element"> {
++/** The morph's own options, and the attributes its element takes (they are spread onto it). */
++interface TextMorphProps extends Omit<TextMorphOptions, "element">, Omit<HTMLAttributes<HTMLElement>, "children"> {
+     text: string;
+     class?: string;
+     style?: string;
+diff --git a/dist/svelte/index.d.ts b/dist/svelte/index.d.ts
+index 1c6daf0758f267f990308cab6847eed3be84a6a6..7a63e4b965763e7e65d42db1af6f679b54b85671 100644
+--- a/dist/svelte/index.d.ts
++++ b/dist/svelte/index.d.ts
+@@ -1,4 +1,5 @@
+ import { Component } from 'svelte';
++import { HTMLAttributes } from 'svelte/elements';
+ 
+ interface SpringParams {
+     stiffness?: number;
+@@ -29,7 +30,8 @@ interface TextMorphOptions extends BaseMorphOptions {
+     onAnimationCancel?: () => void;
+ }
+ 
+-interface TextMorphProps extends Omit<TextMorphOptions, "element"> {
++/** The morph's own options, and the attributes its element takes (they are spread onto it). */
++interface TextMorphProps extends Omit<TextMorphOptions, "element">, Omit<HTMLAttributes<HTMLElement>, "children"> {
+     text: string;
+     class?: string;
+     style?: string;

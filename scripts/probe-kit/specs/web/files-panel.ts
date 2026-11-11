@@ -359,9 +359,7 @@ const filesAtRest = async (page: Page): Promise<string | null> => {
         })
         .join(" | ");
     const morphing = () =>
-      document.querySelector(
-        '[data-slot="morph-text"] [data-slot="letters"]'
-      ) !== null;
+      document.querySelector('[data-slot="morph-text"] [torph-cell]') !== null;
     const deadline = performance.now() + 5000;
     let last = read();
     for (let same = 0; same < 3;) {
