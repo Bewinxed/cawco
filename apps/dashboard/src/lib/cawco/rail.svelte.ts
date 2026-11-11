@@ -7,7 +7,8 @@
 
 import { RailLayoutShape } from "#lib/cawco/stored-shapes.js";
 import type { Machine } from "./client.svelte";
-import { readJson, writeJson } from "./storage";
+import { drawnFrom } from "./kept.svelte";
+import { parseJson, stored, writeJson } from "./storage";
 
 const RAIL_LAYOUT_KEY = "cawco-rail-layout";
 
@@ -27,32 +28,31 @@ export interface RailLayout {
 const isPin = (value: Pin | undefined): value is Pin =>
   typeof value?.id === "string" && value.kind === "project";
 
-function read(): RailLayout {
-  const kept = readJson(
-    RAIL_LAYOUT_KEY,
-    RailLayoutShape.partial().nullable(),
-    null
-  );
-  const stored = kept && typeof kept === "object" ? kept : {};
+function layoutOf(raw: string | null): RailLayout {
+  const kept = parseJson(raw, RailLayoutShape.partial().nullable(), null);
+  const read = kept && typeof kept === "object" ? kept : {};
   return {
-    pins: Array.isArray(stored.pins) ? stored.pins.filter(isPin) : [],
-    machines: Array.isArray(stored.machines)
-      ? stored.machines.filter((id) => typeof id === "string")
+    pins: Array.isArray(read.pins) ? read.pins.filter(isPin) : [],
+    machines: Array.isArray(read.machines)
+      ? read.machines.filter((id) => typeof id === "string")
       : [],
   };
 }
 
 // Module scope, so the drawer copy of the rail and the desktop one agree.
-const layout = $state<RailLayout>(read());
+const layout = $state<RailLayout>(layoutOf(stored("local", RAIL_LAYOUT_KEY)));
+
+/** The layout as drawn: the server's copy while the first paint holds (kept.svelte.ts). */
+const drawn = (): RailLayout => drawnFrom(RAIL_LAYOUT_KEY, layout, layoutOf);
 
 const save = () => writeJson(RAIL_LAYOUT_KEY, layout);
 
 export const rail = {
   get machineOrder(): string[] {
-    return layout.machines;
+    return drawn().machines;
   },
   isPinned: (projectId: string): boolean =>
-    layout.pins.some((pin) => pin.id === projectId),
+    drawn().pins.some((pin) => pin.id === projectId),
   togglePin(projectId: string): void {
     const at = layout.pins.findIndex((pin) => pin.id === projectId);
     if (at === -1) {
@@ -75,7 +75,7 @@ export const rail = {
 export function orderMachines<
   M extends Pick<Machine, "hostname" | "machineId">,
 >(machines: M[]): M[] {
-  const placed = new Map(layout.machines.map((id, index) => [id, index]));
+  const placed = new Map(drawn().machines.map((id, index) => [id, index]));
   return [...machines].sort((a, b) => {
     const left = placed.get(a.machineId);
     const right = placed.get(b.machineId);

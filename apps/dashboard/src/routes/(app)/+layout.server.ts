@@ -1,9 +1,15 @@
 import { harnessNamed } from "@cawco/core/harness";
 import type { HubAuthState } from "@cawco/core/hub-auth";
 import { hubRequest } from "@cawco/core/hub-request";
-import type { AgentRow, InstanceRow, SessionPulse } from "@cawco/core/protocol";
+import type { InstanceRow, SessionPulse } from "@cawco/core/protocol";
+import type {
+  Machine,
+  ProjectRow,
+  ServedBoard,
+} from "#lib/cawco/client.svelte.js";
+import type { Area } from "#lib/cawco/home/areas.svelte.js";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
-import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
+import { KEPT, type Pref, prefCookie } from "#lib/cawco/prefs.js";
 import {
   isSessionTab,
   projectOfTab,
@@ -86,17 +92,40 @@ export const load: LayoutServerLoad = async ({
   // is shown the pairing screen from the first paint, and a paired one the
   // app. Its cookie is SameSite=Lax, so it rides a link from another site
   // too.
-  // How many machines the bar's Machines counts (MachinesButton), so its
-  // number is in the first paint and the bar does not widen when the
-  // socket's list lands; null where the hub would not say.
-  const [authRead, machinesRead] = await Promise.all([
+  // The board (client.svelte.ts `ServedBoard`): the sidebar's Recent and
+  // Projects, the bar's Machines and every row the store draws are in the
+  // server's HTML and on the first paint, and none of them waits on the
+  // socket. All of it or none: a part the hub would not give leaves the
+  // store to read it all itself.
+  const [
+    authRead,
+    rowsRead,
+    pulsesRead,
+    machinesRead,
+    projectsRead,
+    areasRead,
+  ] = await Promise.all([
     readHub<HubAuthState>(fetch, hubRequest("GET /api/auth")),
-    readHub<AgentRow[]>(fetch, hubRequest("GET /api/agents")),
+    readHub<InstanceRow[]>(fetch, hubRequest("GET /api/instances")),
+    readHub<Record<string, SessionPulse>>(fetch, hubRequest("GET /api/pulses")),
+    readHub<Machine[]>(fetch, hubRequest("GET /api/agents")),
+    readHub<ProjectRow[]>(fetch, hubRequest("GET /api/projects")),
+    readHub<{ areas: Area[] }>(fetch, hubRequest("GET /api/areas")),
   ]);
   const auth = authRead.ok ? authRead.value : null;
-  const machineCount =
-    machinesRead.ok && Array.isArray(machinesRead.value)
-      ? machinesRead.value.length
+  const board: ServedBoard | null =
+    rowsRead.ok &&
+    pulsesRead.ok &&
+    machinesRead.ok &&
+    projectsRead.ok &&
+    areasRead.ok
+      ? {
+          instances: rowsRead.value,
+          pulses: pulsesRead.value,
+          machines: machinesRead.value,
+          projects: projectsRead.value,
+          areas: areasRead.value.areas,
+        }
       : null;
   const stored = Number(pref(RAIL_KEY));
   const railWidth =
@@ -105,6 +134,17 @@ export const load: LayoutServerLoad = async ({
       : null;
   /** The sidebar put away on a desk (Shell's Hide sidebar), drawn so from the first paint. */
   const railHidden = pref(RAIL_HIDDEN_KEY) === "1";
+
+  // How the sidebar's lists are grouped, folded, pinned and unfolded, as
+  // this browser last sent them (kept.svelte.ts): the first paint groups
+  // the board's rows as the page will.
+  const kept: Partial<Record<Pref, string>> = {};
+  for (const name of Object.values(KEPT)) {
+    const value = pref(name);
+    if (value !== undefined) {
+      kept[name] = value;
+    }
+  }
 
   // Each folder tab's box as last measured, so its shape is drawn true from
   // the first paint (fluid-tabs/fold-memory.ts).
@@ -160,8 +200,6 @@ export const load: LayoutServerLoad = async ({
   // Each open tab's name as the hub gave it, or why the hub could not: a tab
   // whose name read failed says so in the strip until the fleet names it.
   const names: Record<string, HubRead<string>> = {};
-  /** Each open tab's pulse as the hub held it for this request. */
-  const pulses: Record<string, SessionPulse> = {};
   if (!workspace) {
     return {
       railWidth,
@@ -170,10 +208,10 @@ export const load: LayoutServerLoad = async ({
       workspace,
       names,
       resolved: [] as string[],
-      pulses,
       foldBoxes,
       auth,
-      machineCount,
+      board,
+      kept,
     };
   }
 
@@ -182,18 +220,12 @@ export const load: LayoutServerLoad = async ({
   const projectTabs = leavesOf(workspace.root).flatMap((leaf) =>
     leaf.tabs.filter((tab) => !isSessionTab(tab))
   );
-  if (projectTabs.length > 0) {
-    const projects = await readHub<{ id: string; name: string }[]>(
-      fetch,
-      hubRequest("GET /api/projects")
-    );
-    for (const tab of projectTabs) {
-      const project = projects.ok
-        ? projects.value.find((row) => row.id === projectOfTab(tab))
-        : undefined;
-      if (project) {
-        names[tab] = { ok: true, value: project.name };
-      }
+  for (const tab of projectTabs) {
+    const project = projectsRead.ok
+      ? projectsRead.value.find((row) => row.id === projectOfTab(tab))
+      : undefined;
+    if (project) {
+      names[tab] = { ok: true, value: project.name };
     }
   }
 
@@ -209,29 +241,15 @@ export const load: LayoutServerLoad = async ({
       workspace,
       names,
       resolved: [] as string[],
-      pulses,
       foldBoxes,
       auth,
-      machineCount,
+      board,
+      kept,
     };
   }
 
-  // What the fleet calls these conversations, and what each is doing as the
-  // hub's pulses say: the store draws these until the socket's first frame
-  // (client.svelte.ts `pulseOf`), so a working tab is drawn working from the
-  // first paint. A read that fails leaves the socket to say it, as before.
-  const [listing, pulseRead] = await Promise.all([
-    readHub<InstanceRow[]>(fetch, hubRequest("GET /api/instances")),
-    readHub<Record<string, SessionPulse>>(fetch, hubRequest("GET /api/pulses")),
-  ]);
-  if (pulseRead.ok) {
-    for (const id of open) {
-      const pulse = pulseRead.value[id];
-      if (pulse) {
-        pulses[id] = pulse;
-      }
-    }
-  }
+  // What the fleet calls these conversations, off the board's rows.
+  const listing = rowsRead;
   // The open tabs the hub lists as sessions under their own id: named
   // already (workspace.svelte.ts, Naming the tabs), so the client asks the
   // hub nothing of them, and the pane reading one is never left unwatched
@@ -293,9 +311,9 @@ export const load: LayoutServerLoad = async ({
     workspace,
     names,
     resolved,
-    pulses,
     foldBoxes,
     auth,
-    machineCount,
+    board,
+    kept,
   };
 };

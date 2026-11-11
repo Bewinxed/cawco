@@ -16,7 +16,11 @@ export interface Area {
   position: number;
 }
 
-const state = $state<{ areas: Area[] }>({ areas: [] });
+/** The areas as last read, and whether this page has read them: until it has, the served board's (client.svelte.ts `ServedBoard`). */
+const state = $state<{ areas: Area[]; read: boolean }>({
+  areas: [],
+  read: false,
+});
 // A bench stands its own areas in (the /motion benches, dev only).
 if (import.meta.env.DEV) {
   devDebug({ areas: state });
@@ -37,6 +41,7 @@ async function read(): Promise<void> {
     // Reads overlap when the projects change fast: the newest answer stands.
     if (ticket === asked) {
       state.areas = areas;
+      state.read = true;
     }
   } catch {
     // The next change of the projects reads them again; the last read stands.
@@ -57,7 +62,7 @@ export const areas = {
       readFor = projects;
       queueMicrotask(read);
     }
-    return state.areas;
+    return state.read ? state.areas : (cawco.servedAreas ?? state.areas);
   },
   /** An area's name, or null for one not (yet) read. */
   nameOf(id: string): string | null {

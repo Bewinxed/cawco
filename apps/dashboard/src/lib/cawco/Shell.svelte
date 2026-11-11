@@ -19,6 +19,7 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { sendKept } from "#lib/cawco/kept.svelte.js";
   import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
   import {
     crossOut,
@@ -854,6 +855,7 @@
     const release = () => {
       firstRender.release();
       workspace.restore();
+      sendKept();
     };
     if (document.hidden) {
       release();

@@ -85,7 +85,7 @@
   const groups = $derived(groupEntries(entries, levels));
   /** No project above the rows: each row names its own under its title. */
   const tall = $derived(!levels.includes("project"));
-  const stale = $derived(!home.live);
+  const stale = $derived(home.stale);
 
   /** The section, for the root a regroup moves (`data-regroup-root`). */
   let section = $state<HTMLElement | null>(null);

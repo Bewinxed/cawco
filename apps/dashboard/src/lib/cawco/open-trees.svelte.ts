@@ -6,7 +6,8 @@
  */
 import { SvelteSet } from "svelte/reactivity";
 import { z } from "zod";
-import { readJson, writeJson } from "./storage";
+import { drawnFrom } from "./kept.svelte";
+import { parseJson, stored, writeJson } from "./storage";
 
 /** A list that shows trees: the rail's Recent, the phone home's, and the running sessions a project unfolds in the rail's Projects. */
 export type TreeList = "rail-recent" | "home-recent" | "rail-projects";
@@ -19,12 +20,14 @@ const LISTS: readonly TreeList[] = [
 
 const keyOf = (list: TreeList): string => `cawco-open-trees:${list}`;
 
-function storedIds(list: TreeList): string[] {
-  return readJson(keyOf(list), z.array(z.string()), []);
-}
+const idsOf = (raw: string | null): string[] =>
+  parseJson(raw, z.array(z.string()), []);
 
 const open = Object.fromEntries(
-  LISTS.map((list) => [list, new SvelteSet<string>(storedIds(list))])
+  LISTS.map((list) => [
+    list,
+    new SvelteSet<string>(idsOf(stored("local", keyOf(list)))),
+  ])
 ) as Record<TreeList, SvelteSet<string>>;
 
 /**
@@ -37,7 +40,12 @@ export const olderOpen = Object.fromEntries(
 
 export const openTrees = {
   has(id: string, list: TreeList): boolean {
-    return open[list].has(id);
+    // The server's copy while the first paint holds (kept.svelte.ts).
+    return drawnFrom<ReadonlySet<string>>(
+      keyOf(list),
+      open[list],
+      (raw) => new Set(idsOf(raw))
+    ).has(id);
   },
   set(id: string, opened: boolean, list: TreeList): void {
     const ids = open[list];

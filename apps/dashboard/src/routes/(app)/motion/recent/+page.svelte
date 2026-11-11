@@ -73,7 +73,10 @@
   /** The client's stores as a bench writes them (dev `__cawcoDebug`). */
   interface Bench {
     adoptInstances: (rows: InstanceRow[]) => void;
-    areas: { areas: { id: string; name: string; position: number }[] };
+    areas: {
+      areas: { id: string; name: string; position: number }[];
+      read: boolean;
+    };
     frame: (frame: PulseFrame | PermissionRequestFrame | object) => void;
     leaveHub: () => void;
     standCatalog: (machineId: string, sessions: NeutralSessionInfo[]) => void;
@@ -675,6 +678,7 @@
   function standReal(from: Real): void {
     debug.state.machines = from.agents;
     debug.areas.areas = from.areas.areas;
+    debug.areas.read = true;
     debug.state.projects = from.projects;
     debug.state.projectsRead = true;
     rows = from.instances;
@@ -713,6 +717,7 @@
         : {}),
     }));
     debug.areas.areas = AREAS;
+    debug.areas.read = true;
     if (stays) {
       // The accounts a session's details offer: two of Claude's, signed in
       // on both machines.

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { asPref, KEPT, keepPrefs } from "./prefs";
 /**
  * The one way to reach the browser's storage, `localStorage` (`"local"`) and
  * `sessionStorage` (`"session"`); lint refuses both globals everywhere else
@@ -67,7 +68,15 @@ export function readJson<S extends z.ZodType>(
   fallback: z.output<S>,
   area: Area = "local"
 ): z.output<S> {
-  const raw = stored(area, key);
+  return parseJson(stored(area, key), schema, fallback);
+}
+
+/** `raw` parsed as JSON and checked against `schema`: `fallback` for none, bad JSON, or another shape. */
+export function parseJson<S extends z.ZodType>(
+  raw: string | null,
+  schema: S,
+  fallback: z.output<S>
+): z.output<S> {
   if (raw === null) {
     return fallback;
   }
@@ -79,10 +88,19 @@ export function readJson<S extends z.ZodType>(
   }
 }
 
+/**
+ * Keeps `value` under `key` as JSON. A key the server draws from (prefs.ts
+ * `KEPT`) sends its copy to the server with it.
+ */
 export function writeJson(
   key: string,
   value: unknown,
   area: Area = "local"
 ): void {
-  store(area, key, JSON.stringify(value));
+  const raw = JSON.stringify(value);
+  store(area, key, raw);
+  const pref = area === "local" ? KEPT[key] : undefined;
+  if (pref) {
+    keepPrefs({ [pref]: asPref(raw) });
+  }
 }

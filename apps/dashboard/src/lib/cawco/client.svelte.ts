@@ -201,6 +201,7 @@ import { readInstalls, takeInstallsFrame } from "./connect/installs.svelte";
 import { type DelegateRecord, delegateRecord } from "./delegate-record";
 import { devDebug } from "./dev-debug";
 import { heardFrame, heardSince, readLeaves } from "./heard";
+import type { Area } from "./home/areas.svelte";
 import { mustPair, readAuth, takeAuthFrame } from "./hub-auth.svelte";
 import {
   deadlineIn,
@@ -783,6 +784,57 @@ let catalog = $state.raw<Record<string, NeutralSessionInfo[]>>({});
 const catalogsTried = $state<Record<string, true>>({});
 
 /**
+ * The board as this page's server load read it (the (app) layout's
+ * `board`): the hub's rows, their pulses, the machines, the projects and
+ * their areas, read in the request that rendered the page. The store draws
+ * from it until its own reads land: the rows, pulses and machines until the
+ * socket's first snapshot ({@link servedLive}), the projects until their
+ * first read, the areas until theirs (home/areas.svelte.ts). So the
+ * server's HTML and the hydrated page draw the same lists from the first
+ * paint, and none of them waits on the socket. Read during a render on the
+ * server, as `page` is: the store's own state is the client's alone. Null
+ * where the server could not read the hub whole.
+ */
+export interface ServedBoard {
+  areas: Area[];
+  instances: InstanceRow[];
+  machines: Machine[];
+  projects: ProjectRow[];
+  pulses: Record<string, SessionPulse>;
+}
+
+function servedBoard(): ServedBoard | null {
+  return (servedPage.data as { board?: ServedBoard | null }).board ?? null;
+}
+
+/** The served board while the socket's first snapshot is not in: its rows, pulses and machines are the ones drawn. */
+const servedLive = (): ServedBoard | null =>
+  state.liveRead ? null : servedBoard();
+
+/** The served rows looked up by id and by session, built once per list (on the server, once per request). */
+const servedIndexes = new WeakMap<InstanceRow[], InstanceIndex<InstanceRow>>();
+function servedIndex(rows: InstanceRow[]): InstanceIndex<InstanceRow> {
+  const held = servedIndexes.get(rows);
+  if (held) {
+    return held;
+  }
+  const byId = new Map<string, InstanceRow>();
+  const bySession = new Map<string, InstanceRow[]>();
+  for (const row of rows) {
+    byId.set(row.id, row);
+    if (row.sessionId) {
+      bySession.set(row.sessionId, [
+        ...(bySession.get(row.sessionId) ?? []),
+        row,
+      ]);
+    }
+  }
+  const index = { byId, bySession };
+  servedIndexes.set(rows, index);
+  return index;
+}
+
+/**
  * Every instance the hub knows, in the hub's order, as immutable rows
  * replaced whole — never edited in place. Raw state: the fleet is ~two
  * thousand rows, and a deep proxy made every field read of every row a
@@ -790,8 +842,8 @@ const catalogsTried = $state<Record<string, true>>({});
  * id is read from {@link rowsById}, which wakes on that row alone.
  */
 let hubRows = $state.raw<InstanceRow[]>([]);
-/** The hub's rows, as every walk over the rows reads them. */
-const instances = $derived(hubRows);
+/** The hub's rows, as every walk over the rows reads them: the served board's until the socket's first snapshot ({@link servedLive}). */
+const instances = $derived(servedLive()?.instances ?? hubRows);
 /** Each hub row by its id, each key its own signal (board.svelte.ts). */
 const rowsById = new Keyed<InstanceRow>();
 /** Each session key's rows, by key, the same way. */
@@ -1118,13 +1170,35 @@ const sessionChild = (row: InstanceRow): TrayChild => {
 
 /**
  * The rows looked up by id and by session: one object for good, each
- * lookup a keyed read ({@link rowsById}, {@link rowsBySession}). Rebuilt
- * whole on every change, it woke every reader of every row.
+ * lookup a keyed read ({@link rowsById}, {@link rowsBySession}), the
+ * served board's until the socket's first snapshot. Rebuilt whole on every
+ * change, it woke every reader of every row.
  */
 const instanceIndex: InstanceIndex<BoardRow> = {
-  byId: rowsById,
-  bySession: rowsBySession,
+  get byId(): ReadonlyMap<string, BoardRow> {
+    const served = servedLive();
+    return served ? servedIndex(served.instances).byId : rowsById;
+  },
+  get bySession(): ReadonlyMap<string, readonly BoardRow[]> {
+    const served = servedLive();
+    return served ? servedIndex(served.instances).bySession : rowsBySession;
+  },
 };
+
+/** One hub row by its id, as {@link instanceIndex} draws it. */
+const rowById = (id: string): InstanceRow | undefined => {
+  const served = servedLive();
+  return served ? servedIndex(served.instances).byId.get(id) : rowsById.get(id);
+};
+
+/** The machines as drawn: the served board's until the socket's first snapshot. */
+const machinesNow = (): Machine[] => servedLive()?.machines ?? state.machines;
+
+/** The projects as drawn: the served board's until their first read. */
+const projectsNow = (): ProjectRow[] =>
+  state.projectsRead
+    ? state.projects
+    : (servedBoard()?.projects ?? state.projects);
 
 /**
  * A derived list that hands back the array it handed back before while it
@@ -1537,6 +1611,7 @@ function standHub(
   // What the bench stood in is the fleet as read, live and stored alike.
   state.fleetRead = true;
   state.liveRead = true;
+  state.projectsRead = true;
 }
 
 /** The bench is gone: the page reaches for the real hub again (dev only). */
@@ -2421,21 +2496,14 @@ function prependTranscriptPage(
 /**
  * A session's pulse, the daemon's now-state: the store's, seeded by the
  * socket's first `instances` frame and moved by each `pulse` frame after.
- * Until that first frame, the hub's pulses as the layout's server load read
- * them for this page (`/api/pulses`), so the server's HTML and the hydrated
- * page draw a working session working from the first paint: without them a
- * tab the browser follows no stream of read quiet until the socket answered
- * (tab-strip's reload trace `--- wqq www`). Read during a render on the
- * server, as `page` (`servedPage`) is: the store's own state is the
- * client's alone.
+ * Until that first frame, the served board's ({@link ServedBoard}), so the
+ * server's HTML and the hydrated page draw a working session working from
+ * the first paint: without them a tab the browser follows no stream of
+ * read quiet until the socket answered (tab-strip's reload trace
+ * `--- wqq www`).
  */
 function pulseOf(instanceId: string): PulseReading | undefined {
-  const held = heldPulse(instanceId);
-  if (held || state.liveRead) {
-    return held;
-  }
-  return (servedPage.data as { pulses?: Record<string, SessionPulse> })
-    .pulses?.[instanceId];
+  return heldPulse(instanceId) ?? servedLive()?.pulses[instanceId];
 }
 
 /**
@@ -8488,7 +8556,7 @@ function awayFault(
 
 /** A machine as the fleet list names it (its label), else its id. */
 function machineName(machineId: string): string {
-  const hostname = state.machines.find(
+  const hostname = machinesNow().find(
     (row) => row.machineId === machineId
   )?.hostname;
   return hostname ? machineLabel(hostname) : machineId;
@@ -9726,9 +9794,7 @@ const itemParents = $derived(
 /** The session that started `instanceId`, by its row, else by its work item; null for none. */
 function parentOf(instanceId: string): string | null {
   return (
-    rowsById.get(instanceId)?.parentInstanceId ??
-    itemParents.get(instanceId) ??
-    null
+    rowById(instanceId)?.parentInstanceId ?? itemParents.get(instanceId) ?? null
   );
 }
 
@@ -9763,7 +9829,7 @@ let waitingWas: ReadonlySet<string> = new Set();
 
 /** What a session needs from you — `idle` for one nothing has been heard from. */
 function activityNow(instanceId: string): Activity {
-  const row = rowsById.get(instanceId);
+  const row = rowById(instanceId);
   return sessionActivity({
     waiting: waiting.has(instanceId),
     moving: row?.status === "moving",
@@ -9792,8 +9858,8 @@ const blocked = $derived.by((): BlockedRequest[] => {
     // are answered or the session ends for good. One whose machine the hub
     // cannot reach (`unknown`) is marked stale. Across a reconnect the asks
     // hold as last read until the hub's read replaces them (`adoptPending`).
-    const row = rowsById.get(target.instanceId);
-    const machine = state.machines.find(
+    const row = rowById(target.instanceId);
+    const machine = machinesNow().find(
       (one) => one.machineId === target.machineId
     );
     for (const request of target.pending) {
@@ -9873,6 +9939,18 @@ export const cawco = {
   get liveRead() {
     return state.liveRead;
   },
+  /**
+   * The board is in hand: the rows, machines and projects as the server
+   * read them for this page ({@link ServedBoard}), or the store's own first
+   * read of them. What the lists draw from; it only rises.
+   */
+  get boardRead(): boolean {
+    return state.fleetRead || servedBoard() !== null;
+  },
+  /** The areas as the server read them for this page; null where it could not. */
+  get servedAreas(): Area[] | null {
+    return servedBoard()?.areas ?? null;
+  },
   /** Every online machine's stored sessions have been read, or failed to be. */
   get catalogsRead() {
     return (
@@ -9943,15 +10021,15 @@ export const cawco = {
   get moves(): MoveJob[] {
     return state.moves;
   },
-  get machines() {
-    return state.machines;
+  get machines(): Machine[] {
+    return machinesNow();
   },
   /** What the hub is running; `undefined` until its first frame. */
   get hubBuild() {
     return state.hubBuild;
   },
   get onlineMachines() {
-    return state.machines.filter((machine) => machine.status === "online");
+    return machinesNow().filter((machine) => machine.status === "online");
   },
   /** Every Claude account's own limits, by account id. */
   get claudeLimits(): Readonly<Record<string, ClaudeLimits>> {
@@ -9985,11 +10063,10 @@ export const cawco = {
     return instances;
   },
   /** One hub row by its id, read on its own: it wakes when that row moves, and no other. */
-  rowOf: (instanceId: string): InstanceRow | undefined =>
-    rowsById.get(instanceId),
+  rowOf: (instanceId: string): InstanceRow | undefined => rowById(instanceId),
   /** Whether the hub still reaches this session (one of `runningInstances`), read off its own row. */
   liveId: (instanceId: string): boolean => {
-    const row = rowsById.get(instanceId);
+    const row = rowById(instanceId);
     return row !== undefined && isLive(row);
   },
   get instanceIndex() {
@@ -10048,7 +10125,7 @@ export const cawco = {
    * `enter`). Null for any other view.
    */
   storedSource(id: string): ForkSource | null {
-    if (rowsById.has(id)) {
+    if (rowById(id) !== undefined) {
       return null;
     }
     for (const machine of state.machines) {
@@ -10105,28 +10182,25 @@ export const cawco = {
   /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
   hasStored: (machineId: string): boolean =>
     (catalog[machineId] ?? []).some(listedInHistory),
-  get projects() {
-    return state.projects;
+  get projects(): ProjectRow[] {
+    return projectsNow();
   },
   /** The projects have been read once: an empty list is a fleet with none. */
   get projectsRead() {
     return state.projectsRead;
   },
   projectsOn: (machineId: string): ProjectRow[] =>
-    state.projects.filter((project) => placedOn(project, machineId)),
+    projectsNow().filter((project) => placedOn(project, machineId)),
   project: (id: string): ProjectRow | null =>
-    state.projects.find((project) => project.id === id) ?? null,
+    projectsNow().find((project) => project.id === id) ?? null,
   /** The project's spend cap while it holds the project back now; null otherwise. */
   capHolding: (id: string): ProjectCap | null => {
-    const cap =
-      state.projects.find((project) => project.id === id)?.cap ?? null;
+    const cap = projectsNow().find((project) => project.id === id)?.cap ?? null;
     return capHolds(cap, minute.now) ? cap : null;
   },
   /** The projects whose spend cap holds them back now. */
   get capped(): ProjectRow[] {
-    return state.projects.filter((project) =>
-      capHolds(project.cap, minute.now)
-    );
+    return projectsNow().filter((project) => capHolds(project.cap, minute.now));
   },
   /** Approved actions waiting on you: proposed, or failed or unknown until put away. */
   get actions(): ApprovedActionView[] {
@@ -10202,7 +10276,7 @@ export const cawco = {
     if (item) {
       return itemChild(item);
     }
-    const row = rowsById.get(instanceId);
+    const row = rowById(instanceId);
     return row && isStarted(row) ? sessionChild(row) : undefined;
   },
   /** A followed session's plan, live: its steps, its spec, an attempt's to-dos. */

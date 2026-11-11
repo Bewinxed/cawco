@@ -25,16 +25,14 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { IconServerLinear } from "#lib/icons.js";
-  import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
   import { connect } from "./connect/installs.svelte";
   import { home } from "./home/home-state.svelte";
 
   /**
-   * How many machines, from the first paint: the layout's count until this
-   * page has heard the list (the first fleet read, or a frame carrying
-   * machines), then the live one, which wins straight from the server's
-   * with no empty moment between.
+   * Machines being added that the fleet does not list yet: counted with
+   * the machines, which are drawn from the first paint (the board the
+   * server read for this page, then the live one).
    */
   const adding = $derived(
     connect.installs.filter(
@@ -47,12 +45,7 @@
   const unsettled = $derived(
     connect.band.filter((one) => one.state !== "running").length
   );
-  const count = $derived(
-    (cawco.fleetRead || cawco.machines.length > 0
-      ? cawco.machines.length
-      : ((page.data as { machineCount?: number | null }).machineCount ?? 0)) +
-      adding
-  );
+  const count = $derived(cawco.machines.length + adding);
   /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
   const tone = $derived.by(() => {
     if (home.exceptions.length === 0) {

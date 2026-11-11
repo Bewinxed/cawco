@@ -16,7 +16,6 @@
    */
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { sidebarWords } from "@cawco/core/words/sidebar";
-  import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -194,31 +193,6 @@
   /** The rail itself: its session rows open the session card (SessionHover). */
   let railEl = $state<HTMLElement>();
 
-  /**
-   * How far the fleet's first read has come: 1 nothing yet, 2 machines and
-   * sessions, 3 every online machine's stored sessions (or the hub is known
-   * to be unreachable). It only climbs: a machine coming online later is a
-   * live change, not part of the first read. A rail mounted after the read
-   * (the drawer opening, the window widening past the drawer's line) starts
-   * where the read stands, so its groups are drawn in the update that
-   * mounts it and its scroll can be put back over them (`scroller`).
-   */
-  const readSoFar = (): number => {
-    if (cawco.hub === "unreachable") {
-      return 3;
-    }
-    if (!cawco.fleetRead) {
-      return 1;
-    }
-    return cawco.catalogsRead ? 3 : 2;
-  };
-  let stage = $state(untrack(readSoFar));
-  $effect(() => {
-    const next = readSoFar();
-    if (next > stage) {
-      stage = next;
-    }
-  });
   /**
    * Every row in the rail shares one hover ghost that glides from row to row
    * across the groups; the nav and each session list carry their own
@@ -522,9 +496,7 @@
 
 {#snippet pending(rows: number)}
   <!-- Rows where the next groups will stand, while their read is out, at the
-       height of the rows that replace them (a list row's). Each stage has
-       its own, gone when that stage's groups arrive, so nothing drawn is
-       ever pushed down. -->
+       height of the rows that replace them (a list row's). -->
   <Sidebar.Group
     aria-busy="true"
     aria-label="Loading"
@@ -652,7 +624,7 @@
         instance={row}
         machineId={row.machineId}
         peek={false}
-        stale={!home.live}
+        stale={home.stale}
         title={instanceTitle(row)}
         trail={ageOf(row)}
       />
@@ -867,9 +839,10 @@
          line, the starts under way, the one Recent list). -->
     <Home active={activeSession} variant="rail" />
 
-    <!-- Projects come in once every read they need is in (`stage` 3).
-         Until then, rows standing where they will be. -->
-    {#if stage >= 3}
+    <!-- Projects stand from the first paint, as the board was read for
+         this page (home `ready`). Until it is in hand, rows standing where
+         they will be. -->
+    {#if home.ready}
       <!-- Projects, the index of every project: one row each, its running
            count on its mark, which unfolds those sessions under it, grouped
            by the same kind of menu as Recent (area first). A seam and room

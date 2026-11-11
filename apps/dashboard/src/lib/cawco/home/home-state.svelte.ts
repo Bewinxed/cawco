@@ -317,7 +317,12 @@ let ticker: ReturnType<typeof setInterval> | undefined;
 /** The minute-grained now every wait and elapsed time reads. */
 export const clock = {
   get now(): number {
-    if (ticker === undefined && typeof window !== "undefined") {
+    // The server renders each page at its own moment, never at the
+    // module's load.
+    if (typeof window === "undefined") {
+      return Date.now();
+    }
+    if (ticker === undefined) {
       ticker = setInterval(() => {
         tick = Date.now();
       }, 15_000);
@@ -997,14 +1002,25 @@ class Home {
   }
 
   /**
-   * The first full read is in: machines, sessions, every online
-   * machine's stored sessions, and the socket's own snapshot of what is
-   * mid-turn (or the hub is known to be unreachable). It only rises: a
-   * reconnect later does not take the home back to its skeleton.
+   * The home's one readiness rule: the board is in hand (`cawco.boardRead`:
+   * the rows, machines and projects as the server read them for this page,
+   * or the store's own first read). Recent and Projects draw from it, and
+   * stand as skeletons only until it is; what the machines store and the
+   * hub's answer for it join the lists as they arrive and hold neither back.
+   * It only rises: a reconnect later does not take the home back to its
+   * skeleton.
    */
-  #ready = $state(false);
   get ready(): boolean {
-    return this.#ready;
+    return cawco.boardRead;
+  }
+
+  /**
+   * The rows are an old read: the hub went away after the page read it
+   * live, or cannot be reached. Before the socket's first snapshot the
+   * served board is as fresh as the server's read, and is not.
+   */
+  get stale(): boolean {
+    return cawco.hub === "unreachable" || (!this.live && cawco.liveRead);
   }
 
   /**
@@ -1016,7 +1032,7 @@ class Home {
     if (cawco.hub !== "connected") {
       return cawco.hub;
     }
-    return this.#ready ? "connected" : "reading";
+    return this.ready ? "connected" : "reading";
   }
 
   /**
@@ -1056,17 +1072,6 @@ class Home {
             .catch(() => {
               // The next change reads it again; Needs you keeps the last read.
             });
-        }
-      });
-      $effect(() => {
-        if (
-          cawco.hub === "unreachable" ||
-          (cawco.fleetRead &&
-            cawco.liveRead &&
-            cawco.catalogsRead &&
-            cawco.storedRead)
-        ) {
-          this.#ready = true;
         }
       });
       // The hub's echo of a mark (a row's `seenAt` reaching it) drops it.

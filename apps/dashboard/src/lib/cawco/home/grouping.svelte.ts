@@ -1,5 +1,6 @@
 /**
- * How the sidebar's two lists are grouped, kept per browser the way
+ * How the sidebar's two lists are grouped, kept per browser (and copied to
+ * the server, which draws the first paint by them: kept.svelte.ts) the way
  * folder-prefs keeps a shut folder: Recent's up to three levels (Day,
  * Project, Area, Machine; Day then Project until the reader picks) and
  * Projects' up to two (Area, Machine; Area first). The rail and the phone's
@@ -7,7 +8,8 @@
  * too, by their path: Older starts folded, every other group open.
  */
 import { z } from "zod";
-import { readJson, writeJson } from "../storage";
+import { drawnFrom } from "../kept.svelte";
+import { parseJson, stored, writeJson } from "../storage";
 
 /** What one level of Recent groups its sessions by. */
 export type GroupBy = "day" | "project" | "area" | "machine";
@@ -29,13 +31,13 @@ const RECENT_KEY = "cawco-recent-groups";
 const PROJECTS_KEY = "cawco-project-groups";
 const FOLDS_KEY = "cawco-recent-folds";
 
-/** The levels as stored, each one an option or cleared, `count` of them. */
-function storedLevels<T extends string>(
-  key: string,
+/** The levels as `raw` holds them, each one an option or cleared, `count` of them. */
+function levelsOf<T extends string>(
+  raw: string | null,
   options: readonly T[],
   fallback: Levels<T>
 ): Levels<T> {
-  const kept = readJson(key, z.array(z.string().nullable()), fallback);
+  const kept = parseJson(raw, z.array(z.string().nullable()), fallback);
   if (kept.length !== fallback.length) {
     return fallback;
   }
@@ -46,18 +48,18 @@ function storedLevels<T extends string>(
   );
 }
 
+const recentOf = (raw: string | null) =>
+  levelsOf<GroupBy>(raw, RECENT_OPTIONS, ["day", "project", null]);
+const projectsOf = (raw: string | null) =>
+  levelsOf<ProjectGroupBy>(raw, PROJECT_OPTIONS, ["area", null]);
+const foldsOf = (raw: string | null): Record<string, boolean> =>
+  parseJson(raw, z.record(z.string(), z.boolean()), {});
+
 const state = $state({
-  recent: storedLevels<GroupBy>(RECENT_KEY, RECENT_OPTIONS, [
-    "day",
-    "project",
-    null,
-  ]),
-  projects: storedLevels<ProjectGroupBy>(PROJECTS_KEY, PROJECT_OPTIONS, [
-    "area",
-    null,
-  ]),
+  recent: recentOf(stored("local", RECENT_KEY)),
+  projects: projectsOf(stored("local", PROJECTS_KEY)),
   /** Each group parent's path, against its default: Older's folded, the rest open. */
-  folds: readJson(FOLDS_KEY, z.record(z.string(), z.boolean()), {}),
+  folds: foldsOf(stored("local", FOLDS_KEY)),
 });
 
 /**
@@ -94,10 +96,10 @@ const foldedAtFirst = (path: string): boolean =>
 
 export const grouping = {
   get recent(): Levels<GroupBy> {
-    return state.recent;
+    return drawnFrom(RECENT_KEY, state.recent, recentOf);
   },
   get projects(): Levels<ProjectGroupBy> {
-    return state.projects;
+    return drawnFrom(PROJECTS_KEY, state.projects, projectsOf);
   },
   pickRecent(at: number, by: GroupBy): void {
     state.recent = picked(state.recent, at, by);
@@ -109,7 +111,9 @@ export const grouping = {
   },
   /** Whether the parent at `path` is folded. */
   folded(path: string): boolean {
-    return state.folds[path] ?? foldedAtFirst(path);
+    return (
+      drawnFrom(FOLDS_KEY, state.folds, foldsOf)[path] ?? foldedAtFirst(path)
+    );
   },
   toggle(path: string): void {
     const folded = !grouping.folded(path);

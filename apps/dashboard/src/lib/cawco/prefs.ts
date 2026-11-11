@@ -2,8 +2,9 @@
  * The values the server renders the first paint from: the rail's width and
  * whether it is put away, the
  * last narrow-or-wide, the config page's card heights, the workspace's
- * layout and its sessions' places, and the folder tabs' measured shapes
- * (fluid-tabs/fold-memory.ts). The page keeps each in its own
+ * layout and its sessions' places, the folder tabs' measured shapes
+ * (fluid-tabs/fold-memory.ts), and how the sidebar's lists are grouped,
+ * folded and pinned ({@link KEPT}). The page keeps each in its own
  * localStorage, which is its source; the server's copy is a cookie only the
  * server writes and reads (`/prefs`, HttpOnly), so no page script reads or
  * writes one. A previewed app shares this host in port mode, and cookies are
@@ -18,8 +19,33 @@ export const PREFS = [
   "cawco-workspace",
   "cawco-workspace-ctx",
   "cawco-tab-boxes",
+  "cawco-recent-groups",
+  "cawco-project-groups",
+  "cawco-recent-folds",
+  "cawco-rail-layout",
+  "cawco-open-trees-rail-recent",
+  "cawco-open-trees-home-recent",
+  "cawco-open-trees-rail-projects",
 ] as const;
 export type Pref = (typeof PREFS)[number];
+
+/**
+ * The localStorage documents the sidebar's lists are drawn by (their
+ * groupings, folds, pins and unfolded trees), each with the pref its server
+ * copy is kept under: every write of one sends its copy (storage.ts
+ * `writeJson`), and the layout's load hands the copies to the first paint
+ * (kept.svelte.ts). A cookie's name takes no `:`, so a key's pref is named
+ * apart from it.
+ */
+export const KEPT: Readonly<Record<string, Pref>> = {
+  "cawco-recent-groups": "cawco-recent-groups",
+  "cawco-project-groups": "cawco-project-groups",
+  "cawco-recent-folds": "cawco-recent-folds",
+  "cawco-rail-layout": "cawco-rail-layout",
+  "cawco-open-trees:rail-recent": "cawco-open-trees-rail-recent",
+  "cawco-open-trees:home-recent": "cawco-open-trees-home-recent",
+  "cawco-open-trees:rail-projects": "cawco-open-trees-rail-projects",
+};
 
 /** A year: these are preferences, kept until changed. */
 export const PREF_MAX_AGE = 31_536_000;

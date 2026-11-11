@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import { cawHeadWords } from "@cawco/core/words/caw-head";
   import { needs as needCount } from "@cawco/core/words/helpers";
+  import { cawco } from "./client.svelte";
   import { home } from "./home/home-state.svelte";
 
   /**
@@ -460,14 +461,14 @@
     };
   }
 
-  /** What he has already seen, by key; null until the fleet is first read. */
+  /** What he has already seen, by key; null until the hub's parked asks are first read (`fleetRead`). */
   let seen: Set<string> | null = null;
 
   // A new ask, or a new notice: his beat, once. A notice draws nothing on
   // his rim (the arcs are needs you's), so the beat is how it arrives.
   $effect(() => {
     const keys = [...needs.map((item) => item.key), ...cawNotices.keys];
-    if (!home.ready) {
+    if (!cawco.fleetRead) {
       return;
     }
     untrack(() => {
