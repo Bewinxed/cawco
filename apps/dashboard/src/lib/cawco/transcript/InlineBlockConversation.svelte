@@ -29,10 +29,13 @@
     kept?: { slug: string; title: string }[];
   } = $props();
 
+  /** Its own session: each story's replies are a conversation of their own. */
+  const uid = $props.id();
+  const session = `inline-block-story-${uid}`;
   const messages = $derived(
     replies.map((content, at): Message => ({
       id: `reply-${at}`,
-      instanceId: "inline-block-story",
+      instanceId: session,
       type: "assistant",
       content,
       timestamp: new Date(Date.UTC(2026, 10, 11, 14, at)).toISOString(),
@@ -40,7 +43,7 @@
   );
   provideInlineBlocks(
     new ConversationBlocks(
-      () => ({ instanceId: "inline-block-story", messages, streaming: "" }),
+      () => ({ instanceId: session, messages, streaming: "" }),
       (slug) => {
         const one = kept.find((each) => each.slug === slug);
         return one

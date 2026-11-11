@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { bringIntoView } from "@cawco/core/bring-into-view";
   /**
    * An agent's block where its reply stands in a transcript (tsk-330): the
    * named `openui` fence markdown hands over, drawn as InlineBlock in the
@@ -16,6 +15,7 @@
    *   (artifact-api.ts `keepBlock`); the block turns `promoted` once the
    *   session's artifacts list it, and its capsule opens it there.
    */
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { inlineBlockSlug } from "@cawco/core/inline-blocks";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { keepBlock, showArtifact } from "../artifact-api";
@@ -25,13 +25,14 @@
   import { failureWords } from "../hub-read";
   import type { MarkdownBlockProps } from "../markdown-blocks";
   import { motionOk } from "../motion/curves.svelte";
-  import InlineBlock from "./InlineBlock.svelte";
   import {
     type BlockPlace,
     blockKey,
     type ConversationBlocks,
     inlineBlocksHere,
     keptOf,
+    loadedBlock,
+    loadInlineBlock,
   } from "./inline-blocks.svelte";
 
   let { at, name, source, streaming }: MarkdownBlockProps = $props();
@@ -58,23 +59,29 @@
   /** Its frozen drawing, from the conversation's keep when it has one. */
   let frozen = $state<Element | undefined>();
   $effect.pre(() => {
-    frozen = still ? keptOf(key).frozen : undefined;
+    frozen = still ? keptOf(key, source).frozen : undefined;
   });
   function freeze(drawn: Element) {
-    keptOf(key).frozen = drawn;
+    keptOf(key, source).frozen = drawn;
     frozen = drawn;
   }
 
   /** It has come near the viewport once while its row stands: it draws. */
   let near = $state(false);
-  const draws = $derived(near || streaming || frozen !== undefined);
+  const wanted = $derived(near || streaming || frozen !== undefined);
+  $effect(() => {
+    if (wanted) {
+      loadInlineBlock();
+    }
+  });
+  const draws = $derived(wanted && loadedBlock.InlineBlock !== null);
   /** The room it stands in until it draws: its measured height, else its fold or an estimate. */
-  const room = $derived(keptOf(key).height);
+  const room = $derived(keptOf(key, source).height);
 
   let box = $state<HTMLElement>();
   $effect(() => {
     const element = box;
-    if (!element || draws) {
+    if (!element || wanted) {
       return;
     }
     const seen = new IntersectionObserver(
@@ -95,7 +102,7 @@
       () => node.getBoundingClientRect().height,
       (height: number) => {
         if (height > 0) {
-          keptOf(key).height = height;
+          keptOf(key, source).height = height;
         }
       }
     )(node);
@@ -155,10 +162,11 @@
   }
 </script>
 
-<div bind:this={box} class="min-w-0" data-block-key={key}>
-  {#if draws}
+<!-- not-prose: the reply's prose styles stop at the block, whose parts draw their own look. -->
+<div bind:this={box} class="not-prose min-w-0" data-block-key={key}>
+  {#if draws && loadedBlock.InlineBlock}
     <div {@attach measured}>
-      <InlineBlock
+      <loadedBlock.InlineBlock
         artifact={artifact ?? null}
         {frozen}
         {keeping}
