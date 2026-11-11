@@ -3972,8 +3972,6 @@
         count: { glyph: IconChat, n: listOpen ? 0 : openCount, of: "Comments" },
       });
     }
-    // Tune (the map, the move, the dials) beside Comments, its column hung
-    // from its button the same way; only while it has something to show.
     // What acts on the artifact as a whole, rare: in the head's More, last
     // in the glass.
     if (documentMenu) {
