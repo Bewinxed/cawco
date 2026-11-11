@@ -5,15 +5,16 @@
   /** Its callers' looks: the rail's section labels on its rows' inline
       axis; one with an action at its end, which ends where the rows do
       (no end pad of its own) and whose height is a finger's under one; and
-      a section's head (Recent, Projects): a hairline seam and room above
-      it, its name in strong ink. */
+      a section's head (Recent, Projects): a straight hairline seam (no
+      corner rounding to bend its ends) and room above it, its name in
+      strong ink. */
   const sidebarGroupLabelVariants = tv({
     variants: {
       pad: { rail: "px-2.5" },
       end: { action: "pointer-coarse:h-11 pr-0" },
       seam: {
         section:
-          "mt-space-2 h-auto min-h-space-8 border-t border-t-border-hairline pt-space-2 text-ink-strong",
+          "mt-space-2 h-auto min-h-space-8 rounded-none border-t border-t-border-hairline pt-space-2 text-ink-strong",
       },
     },
   });
