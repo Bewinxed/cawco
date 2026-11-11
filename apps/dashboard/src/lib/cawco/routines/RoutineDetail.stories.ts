@@ -13,5 +13,5 @@ export default {
   parameters: { viewport: 1440 },
 };
 
-/** Monday's run proposed a trim; the Monday before found nothing. */
+/** I opened the routine after Monday's run proposed a trim. */
 export const TrimRan = {};

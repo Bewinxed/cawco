@@ -91,26 +91,17 @@ export const AQuestionWithNoOptions = {
   args: { request: openRequest },
 };
 
-/**
- * The unused skills and servers routine asks to trim Cawco-Dev's starting
- * set: what leaves it, 43 items, as the table of its sessions' calls.
- */
+/** The routine asks to trim Cawco-Dev's starting set. */
 export const Trim = {
   args: { request: TRIM_REQUEST, asker: "Unused skills and servers" },
 };
 
-/**
- * Caw proposes Harbourline Bakery's starting set while he sets it up: the
- * whole new set, 25 items, as the table of the fleet's calls.
- */
+/** Caw asks me to approve Harbourline Bakery's starting set. */
 export const NewSet = {
   args: { request: NEW_SET_REQUEST },
 };
 
-/**
- * A session asks to change the build type: two items join its set, drawn
- * with the fleet's calls, and one leaves, drawn with its sessions'.
- */
+/** A session asks to change the build type's starting set. */
 export const TypeSetChange = {
   args: {
     request: TYPE_SET_REQUEST,

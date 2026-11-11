@@ -16,11 +16,11 @@ export default {
   parameters: { viewport: "desk" },
 };
 
-/** Caw offers a routine I could turn on. */
+/** Caw suggests a routine I could turn on. */
 export const Offered = {};
 
-/** The same offer where it cannot be waved away: one act. */
+/** Caw suggests a routine I can't wave away. */
 export const OfferedOnly = { args: { dismissable: false } };
 
-/** The longest offer he writes, its words wrapping beside him. */
+/** Caw's longest suggestion of a routine. */
 export const OfferedLong = { args: { words: "long" } };

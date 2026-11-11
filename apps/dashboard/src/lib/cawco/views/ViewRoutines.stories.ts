@@ -15,14 +15,14 @@ export default {
   parameters: { viewport: 1440 },
 };
 
-/** Caw suggests the routine as the next row, under the ledger's card. */
-export const InRoutines = {};
+/** Caw suggests a routine under my routines. */
+export const Suggested = {};
 
-/** A project with no routine yet: the suggestion is the block's whole body. */
-export const OfferedEmpty = { decorators: [hubAs("connected", STATES.empty)] };
+/** I have no routines yet, and Caw suggests one. */
+export const NoRoutinesYet = { decorators: [hubAs("connected", STATES.empty)] };
 
-/** Turned on: a routine like the others, and the suggestion gone. */
+/** I turned it on. It sits with my other routines. */
 export const TurnedOn = { decorators: [hubAs("connected", STATES.on)] };
 
-/** Monday's run delivered: its row says so in Last run. */
+/** It ran on Monday and delivered. */
 export const Ran = { decorators: [hubAs("connected", STATES.ran)] };

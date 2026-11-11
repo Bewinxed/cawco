@@ -16,14 +16,11 @@ export default {
   parameters: { viewport: 400 },
 };
 
-/** Cawco-Dev's Monday run: 41 skills and 2 servers no session called in 30 days. */
+/** Monday's run asks to unlist Cawco-Dev's unused items. */
 export const MondayRun = {};
 
-/** A delegate type's set: two items, one called before the window. */
+/** Two items leave a delegate type's starting set. */
 export const Short = { args: { table: UNLISTED_SHORT } };
 
-/**
- * Caw's proposal at setup: Harbourline Bakery's new set, 20 skills and 5
- * servers, each with the fleet's calls of it; two no session called.
- */
+/** Caw proposes Harbourline Bakery's starting set at setup. */
 export const SetupProposal = { args: { table: NEW_SET_TABLE } };
