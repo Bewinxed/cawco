@@ -13,6 +13,7 @@
    * the typography plugin, so the root is restated here.
    */
   import { Markdown } from "#lib/components/ui/markdown/index.js";
+  import { REPLY_FRAME } from "./transcript/reply-frame";
 
   let {
     source,
@@ -42,7 +43,10 @@
 <div
   data-slot="msg"
   data-wrap={wrap === "pretty" ? "pretty" : undefined}
-  class="max-w-c-measure has-[[data-block-key]]:max-w-none text-size-body leading-body font-normal text-ink-strong"
+  class={[
+    REPLY_FRAME,
+    "text-size-body leading-body font-normal text-ink-strong",
+  ]}
 >
   <Markdown blocksAt={at} {fades} {said} {source} {streaming} />
 </div>

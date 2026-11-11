@@ -396,6 +396,8 @@ export type TokenSize =
   | "size.c-block-view"
   | "size.c-block-body-max"
   | "size.c-inline-block-fossil-h"
+  | "size.c-diagram-small"
+  | "size.c-diagram-medium"
   | "size.c-block-drop-line"
   | "size.c-block-drop-dot"
   | "size.c-tray-chip"

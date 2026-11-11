@@ -30,7 +30,7 @@ Text(text: string, variant?: "title" | "label" | "body" | "meta") — Words, in 
 Badge(text: string, tone?: "neutral" | "live" | "attn" | "done" | "fail") — A short label in a status pair, like a stage's kind.
 StatTile(label: string, value: number | string, tone?: "neutral" | "live" | "attn" | "done" | "fail", unit?: string) — One figure with its label, like a count of tasks in a stage.
 Table(columns: string[], rows: (string | number | Badge)[][]) — Rows under headings, one cell per heading: a cell is words, a number or a Badge. On a phone each row stands as a card.
-Diagram(mermaid: string, caption?: string) — A Mermaid diagram or chart, drawn on the house look: a flowchart, sequenceDiagram, stateDiagram-v2, erDiagram, classDiagram, mindmap, or a chart: xychart-beta (bar and line), pie, quadrantChart, radar-beta, sankey-beta, treemap-beta, venn-beta, gantt, timeline.
+Diagram(mermaid: string, caption?: string, size?: "small" | "medium" | "full") — A Mermaid diagram or chart, drawn on the house look: a flowchart, sequenceDiagram, stateDiagram-v2, erDiagram, classDiagram, mindmap, or a chart: xychart-beta (bar and line), pie, quadrantChart, radar-beta, sankey-beta, treemap-beta, venn-beta, gantt, timeline.
 
 ## Hoisting and streaming
 
@@ -55,7 +55,7 @@ table = Table(["Pull request", "Owner", "Checks"], [["Inline blocks", "Ana", Bad
 
 ```openui name="Weekly spend"
 root = Column([chart])
-chart = Diagram("xychart-beta\ntitle \"Spend per week\"\nx-axis [W1, W2, W3, W4]\ny-axis \"USD\"\nbar [42, 58, 37, 61]", "Delegated work, last four weeks")
+chart = Diagram("xychart-beta\ntitle \"Spend per week\"\nx-axis [W1, W2, W3, W4]\ny-axis \"USD\"\nbar [42, 58, 37, 61]", "Delegated work, last four weeks", "small")
 ```
 
 ## Final Verification
@@ -72,4 +72,5 @@ Before finishing, walk your output and verify:
 - No URLs, images or markup in its words: its text is plain. A Diagram's Mermaid is the one place for diagram syntax.
 - A heading is a Text in the program, where the block needs one; the block draws no title of its own.
 - Charts are Diagrams: xychart-beta (bar and line), pie, quadrantChart, radar-beta, sankey-beta, treemap-beta, venn-beta, gantt, timeline, in Mermaid's own syntax.
+- A Diagram's third argument is its size. "small": a glance beside the words, such as a 3 to 6 bar chart or a pie. "medium": a chart someone reads. "full": a dense diagram, such as a flowchart or sankey of many nodes. Left out, it fits the reply's words. A diagram never draws wider than it does on its own, and the block is only as wide as what it holds.
 - Use only the components listed. A name outside them is dropped and reported, never drawn.

@@ -5,8 +5,14 @@
    * its rows cards under a 640px ledger (`stacks="phone"`): the lead cell
    * the card's first line, each other cell under it with its heading, so a
    * phone's 390 never scrolls it sideways.
+   *
+   * In an agent's block it says when it needs more room than the reply's
+   * measure (`data-block-wide`, MessageBody): a cell's words wrap onto a
+   * second line. Once it needs the room it keeps needing it, so the reply
+   * widening under it never takes the room back.
    */
   import * as Table from "#lib/components/ui/table/index.js";
+  import { frameSize } from "../../frame-observer.js";
   import type { OpenUIRenderProps } from "./OpenUiRenderer.svelte";
 
   let {
@@ -22,11 +28,35 @@
       ? props.rows.map((row) => (Array.isArray(row) ? row : []))
       : []
   );
+
+  /** A cell's words run onto a second line (one line of its text stands wholly under another): the table needs more room than it has. */
+  const wraps = (ledger: HTMLElement): boolean =>
+    [...ledger.querySelectorAll("td, th")].some((cell) => {
+      const lines: DOMRect[] = [];
+      const texts = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      const words = document.createRange();
+      for (let text = texts.nextNode(); text; text = texts.nextNode()) {
+        words.selectNodeContents(text);
+        lines.push(...words.getClientRects());
+      }
+      return lines.some((one) =>
+        lines.some((other) => other.top >= one.bottom)
+      );
+    });
+  /** Its words wrapped once at the reply's measure: its reply gives it the turn's width, and keeps giving it. */
+  let wide = $state(false);
+  const needsRoom = frameSize(wraps, (wrapped: boolean) => {
+    if (wrapped) {
+      wide = true;
+    }
+  });
 </script>
 
 <div
+  data-block-wide={wide || undefined}
   data-slot="ledger"
   class="overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+  {@attach needsRoom}
 >
   <Table.Root fadeEdges stacks="phone" style="--card-cols: minmax(0, 1fr)">
     <Table.Header>

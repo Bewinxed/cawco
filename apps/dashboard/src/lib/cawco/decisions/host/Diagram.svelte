@@ -14,11 +14,27 @@
   @excalidraw/mermaid-to-excalidraw 2.2.2 draws as elements (flowchart,
   sequence, class, state, ER); it draws any other as a picture. The view
   library's Diagram is this one (a view, an agent's block in its reply).
+
+  A Diagram given a size (views-library `DIAGRAM_SIZES`: its agent's pick,
+  or `fit` where its program names none, BlockDiagram.svelte) draws no
+  wider than that size's room: `small` and `medium` their token
+  (`c-diagram-small`, `c-diagram-medium`) under its size container's width,
+  `full` that whole width (`100cqi`: in a reply, MessageBody's, which takes
+  the turn's width once it holds a `full` one, `data-block-wide`), and on a
+  phone every size that whole width, the screen's less its padding. An
+  unseen ruler of that width tells it the room in px. Pele lays a drawing
+  wider than the room out again at it (`maxWidth`: an xychart, a pie and a
+  timeline re-lay their axes and words to it, pele.run/api), and one that
+  still stands wider (a flowchart, which keeps its layout) is scaled down to
+  it, its height following its viewBox; a drawing narrower than the room
+  stands at its natural size, never scaled up. Its well hugs the drawing.
 -->
 <script lang="ts">
   import { CANVAS_DIAGRAMS } from "@cawco/core/decisions";
+  import { DIAGRAM_SIZES, type DiagramSize } from "@cawco/core/views-library";
   import { decisionsWords } from "@cawco/core/words/decisions";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { frameSize } from "../../frame-observer.js";
   import { hubRefusal } from "../../hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { overlayTag } from "./page.svelte.js";
@@ -27,7 +43,33 @@
   let {
     props,
     statementId,
-  }: OpenUIRenderProps<{ mermaid: unknown; caption?: unknown }> = $props();
+    fit,
+  }: OpenUIRenderProps<{
+    mermaid: unknown;
+    caption?: unknown;
+    size?: unknown;
+  }> & {
+    /** The size it takes where its program names none: a block's diagram fits the reply (BlockDiagram). None on a decision page or a view, where an unsized one stands at its natural size. */
+    fit?: DiagramSize;
+  } = $props();
+
+  /** The room each size draws in: its token under the size container's width, or that whole width; on a phone every size takes the whole width. */
+  const ROOM: Record<DiagramSize, string> = {
+    small: "w-c-diagram-small max-w-[100cqi] max-phone:w-[100cqi]",
+    medium: "w-c-diagram-medium max-w-[100cqi]",
+    full: "w-[100cqi]",
+  };
+  const size = $derived(DIAGRAM_SIZES.find((one) => one === props.size) ?? fit);
+  /** Its size's room, px, as its ruler measures it; null until measured. */
+  let room = $state<number | null>(null);
+  const measureRoom = frameSize(
+    (ruler: HTMLElement) => Math.floor(ruler.getBoundingClientRect().width),
+    (width: number) => {
+      if (width > 0 && width !== room) {
+        room = width;
+      }
+    }
+  );
 
   /** Whether it can open as a canvas: on a decision page, of a type the converter draws as elements (core `CANVAS_DIAGRAMS`). */
   const drawsAsCanvas = (named: string | null): boolean =>
@@ -45,7 +87,9 @@
   $effect(() => {
     const source = text;
     const element = box;
-    if (!element) {
+    // A sized one draws once its room is known, and again as it changes.
+    const cap = size ? room : undefined;
+    if (!element || cap === null) {
       return;
     }
     let gone = false;
@@ -58,14 +102,22 @@
       }
       type = pele.detectType(source);
       try {
-        const drawing = await pele.renderAsync(source, {
+        const options = {
           links: false,
           images: false,
           autoDirection: false,
           responsive: false,
           fontFamily: getComputedStyle(element).fontFamily,
           fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
-        });
+        };
+        let drawing = await pele.renderAsync(source, options);
+        if (cap !== undefined && drawing.width > cap) {
+          // Wider than its room: laid out again at it.
+          drawing = await pele.renderAsync(source, {
+            ...options,
+            maxWidth: cap,
+          });
+        }
         if (gone) {
           return;
         }
@@ -74,10 +126,11 @@
         const svg = element.querySelector("svg");
         const { width, height } = drawing;
         if (svg && width > 0 && height > 0) {
-          // At its natural size: its height follows its viewBox.
-          svg.style.inlineSize = `${width}px`;
+          // At its natural size, or scaled down to its room: its height follows its viewBox.
+          const shown = cap === undefined ? width : Math.min(width, cap);
+          svg.style.inlineSize = `${shown}px`;
           svg.style.blockSize = "auto";
-          drawn = width;
+          drawn = shown;
         } else {
           drawn = null;
         }
@@ -132,14 +185,38 @@
   {/if}
 {/snippet}
 
-<Well
-  action={drawsAsCanvas(type) ? open : undefined}
-  caption={props.caption ? String(props.caption) : undefined}
-  picture={drawn ?? undefined}
-  {said}
->
-  <div bind:this={box} class="type-label flex-none" data-slot="diagram"></div>
-  {#if failed}
-    <p class="type-meta text-center text-ink-muted wrap-anywhere">{failed}</p>
-  {/if}
-</Well>
+{#snippet well()}
+  <Well
+    action={drawsAsCanvas(type) ? open : undefined}
+    caption={props.caption ? String(props.caption) : undefined}
+    picture={drawn ?? undefined}
+    {said}
+  >
+    <div bind:this={box} class="type-label flex-none" data-slot="diagram"></div>
+    {#if failed}
+      <p class="type-meta text-center text-ink-muted wrap-anywhere">{failed}</p>
+    {/if}
+  </Well>
+{/snippet}
+
+{#if size}
+  <!-- Its ruler stands out of the flow, so the box hugs the drawing; a `full` one asks its reply for the turn's width. -->
+  <div
+    class="relative min-w-0"
+    data-block-wide={size === "full" || undefined}
+    data-diagram-size={size}
+  >
+    <div
+      aria-hidden="true"
+      class={[
+        "pointer-events-none invisible absolute start-0 top-0 h-0",
+        ROOM[size],
+      ]}
+      data-slot="diagram-room"
+      {@attach measureRoom}
+    ></div>
+    {@render well()}
+  </div>
+{:else}
+  {@render well()}
+{/if}

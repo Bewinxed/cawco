@@ -20,6 +20,10 @@
    * - `promoted`: the block moved into an artifact. The same fold and veil,
    *   the capsule naming the artifact and opening it in the panel.
    *
+   * It is as wide as what it shows, never wider (a Diagram hugs its
+   * drawing), save a Table, which stands its room (its ledger asks no width
+   * of its own).
+   *
    * A folded block draws its program once, then stands as that drawing in
    * plain markup (`frozen`, handed back by `onfreeze` once it has settled):
    * a transcript of replaced blocks holds no live renderer.
@@ -166,7 +170,7 @@
   style:--mark-in={marked
     ? "kit-fade-in var(--dur-panel) var(--ease-out)"
     : undefined}
-  class="group/block relative my-space-4 min-w-0 data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-space-2 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
+  class="group/block relative my-space-4 w-fit max-w-full min-w-0 has-data-[slot=ledger]:w-auto data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-space-2 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
 >
   {#if still}
     <!-- Replaced: its first rows as they were drawn, under the scrim, inert; the one act is the capsule standing on the veil. -->

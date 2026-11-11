@@ -1099,6 +1099,14 @@
           },
           "caption": {
             "type": "string"
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "small",
+              "medium",
+              "full"
+            ]
           }
         },
         "required": [

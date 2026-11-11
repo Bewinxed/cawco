@@ -120,7 +120,7 @@ export const MovedToArtifact = {
   },
 };
 
-/** A chart the agent drew: a Mermaid bar chart through Pele, in its well. */
+/** A chart the agent drew with no size: it fits the reply's words. */
 export const Chart = {
   args: {
     name: "Delegated spend",
@@ -129,5 +129,44 @@ export const Chart = {
     after: "Week four's rise is the design runs, which ran with no cap.",
     source: `root = Column([chart])
 chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Delegated work, last four weeks")`,
+  },
+};
+
+/** A small pie beside the words, a glance at where the week went. */
+export const SmallChart = {
+  args: {
+    name: "Where the week went",
+    asked: "where did this week's agent time go?",
+    before: "Most of it went to design, as you asked:",
+    after:
+      "Review stayed small because the merge checks caught the two failures before anyone read them.",
+    source: `root = Column([chart])
+chart = Diagram("pie\\n\\"Design\\" : 42\\n\\"Build\\" : 31\\n\\"Review\\" : 12\\n\\"Research\\" : 9", "Hours by kind of work, this week", "small")`,
+  },
+};
+
+/** A medium line chart of twelve weeks, read at the reply's measure. */
+export const MediumChart = {
+  args: {
+    name: "Merged per week",
+    asked: "is the fleet landing more work than it did in the summer?",
+    before: "Yes. Merged changes per week since August, every machine counted:",
+    after:
+      "The dip in week seven is the hub migration, when merges were held for two days.",
+    source: `root = Column([chart])
+chart = Diagram("xychart-beta\\ntitle \\"Merged changes per week\\"\\nx-axis [W1, W2, W3, W4, W5, W6, W7, W8, W9, W10, W11, W12]\\ny-axis \\"Merged\\"\\nline [18, 22, 21, 27, 31, 30, 14, 33, 38, 41, 39, 46]", "Merged to main, August to November", "medium")`,
+  },
+};
+
+/** A dense flow the agent drew full: the reply takes the turn's width for it. */
+export const FullDiagram = {
+  args: {
+    name: "How a delegate lands",
+    asked: "walk me through what happens between delegate and main",
+    before: "From the brief to main, with every place it can come back:",
+    after:
+      "A failed check or a conflict goes back to the same session, which fixes and finishes again.",
+    source: `root = Column([flow])
+flow = Diagram("flowchart LR\\nA[Brief] --> B[Workspace cut]\\nB --> C[Session reads the code]\\nC --> D[Edits and commits]\\nD --> E[finish_item]\\nE --> F[Rebase onto main]\\nF --> G{Merge checks}\\nG -->|pass| H[Pushed to main]\\nG -->|fail| I[Back to the session]\\nF -->|conflict| I\\nI --> D\\nH --> J[Report to parent]", "A delegate's path to main", "full")`,
   },
 };

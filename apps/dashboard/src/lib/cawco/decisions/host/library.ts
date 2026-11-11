@@ -7,6 +7,7 @@
  */
 import { decisionLibrary } from "@cawco/core/decisions-library";
 import { blockLibrary } from "@cawco/core/views-library";
+import BlockDiagram from "../../views/openui/BlockDiagram.svelte";
 import type { OpenUIComponent } from "../../views/openui/OpenUiRenderer.svelte";
 import ViewStat from "../../views/openui/ViewStat.svelte";
 import ViewTable from "../../views/openui/ViewTable.svelte";
@@ -48,8 +49,9 @@ export const DECISION_LIBRARY = decisionLibrary<OpenUIComponent>({
 /**
  * A kept block's library on the host page (core `blockLibrary`, tsk-330):
  * the host's own Text, Badge, Row and Column, as a decision page draws
- * them, with the dashboard's figure, table and this host's Diagram, so a
- * block kept as an artifact draws in the panel as it did in the reply.
+ * them, with the dashboard's figure, table and this host's Diagram as a
+ * block sizes it (BlockDiagram), so a block kept as an artifact draws in
+ * the panel as it did in the reply.
  */
 export const HOST_BLOCK_LIBRARY = blockLibrary<OpenUIComponent>({
   Column,
@@ -58,5 +60,5 @@ export const HOST_BLOCK_LIBRARY = blockLibrary<OpenUIComponent>({
   Badge,
   StatTile: ViewStat,
   Table: ViewTable,
-  Diagram,
+  Diagram: BlockDiagram,
 });

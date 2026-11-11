@@ -12,6 +12,7 @@
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
   import InlineBlock from "./InlineBlock.svelte";
+  import { REPLY_FRAME } from "./reply-frame";
 
   let {
     asked,
@@ -39,7 +40,12 @@
   <Turn>
     <Who name="Claude" timestamp="2026-11-11T14:03:00Z" />
     <MessageBody source={before} streaming={block.streaming} />
-    <InlineBlock {...block} />
+    <!-- Where the reply's markdown stands its block (MessageBody, TranscriptBlock). -->
+    <div class={[REPLY_FRAME, "text-size-body"]}>
+      <div class="min-w-0" data-block-key="story">
+        <InlineBlock {...block} />
+      </div>
+    </div>
     {#if after}<MessageBody source={after} />{/if}
   </Turn>
 </div>

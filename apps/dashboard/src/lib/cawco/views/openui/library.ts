@@ -10,6 +10,7 @@
  */
 import { blockLibrary, viewLibrary } from "@cawco/core/views-library";
 import Diagram from "../../decisions/host/Diagram.svelte";
+import BlockDiagram from "./BlockDiagram.svelte";
 import type { OpenUIComponent } from "./OpenUiRenderer.svelte";
 import ViewBadge from "./ViewBadge.svelte";
 import ViewBoard from "./ViewBoard.svelte";
@@ -31,11 +32,12 @@ const BLOCK_RENDERERS = {
   Badge: ViewBadge,
   StatTile: ViewStat,
   Table: ViewTable,
-  Diagram,
+  Diagram: BlockDiagram,
 } satisfies Record<string, OpenUIComponent>;
 
 export const VIEW_LIBRARY = viewLibrary<OpenUIComponent>({
   ...BLOCK_RENDERERS,
+  Diagram,
   Board: ViewBoard,
   StageColumn: ViewStageColumn,
   TaskCard: ViewTaskCard,

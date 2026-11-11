@@ -4567,6 +4567,31 @@
       },
       "$description": "How tall an agent's block stands in its reply once a later version or an artifact replaced it (tsk-330): its head and a few rows under the veil, so a replaced block takes a third of its room."
     },
+    "c-diagram-small": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "A diagram an agent sized `small` in its block (views-library Diagram, Diagram.svelte): a glance beside the words, a 3 to 6 bar chart or a pie, about a third of the reply's measure (c-measure, 72ch). Diagram.svelte holds it under its room (the reply, its size container), so a phone draws it at the screen's width less its padding; a `full` diagram takes the whole room, the turn's width.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"],
+          "css": "30ch"
+        }
+      }
+    },
+    "c-diagram-medium": {
+      "$type": "dimension",
+      "$value": "{size.c-measure}",
+      "$description": "A diagram sized `medium`, or a block's diagram that names no size: the reply's text measure (c-measure), never past its room.",
+      "$extensions": {
+        "dev.cawco": {
+          "platforms": ["web"],
+          "css": "{size.c-measure}"
+        }
+      }
+    },
     "c-block-drop-line": {
       "$type": "dimension",
       "$value": {

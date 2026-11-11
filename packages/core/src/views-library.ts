@@ -336,6 +336,10 @@ export const BLOCK_COMPONENTS = [
 ] as const satisfies readonly ViewComponentName[];
 export type BlockComponentName = (typeof BLOCK_COMPONENTS)[number];
 
+/** How wide a Diagram draws, as its agent picks (Diagram.svelte, tokens `c-diagram-*`): a glance, the reply's measure, the turn's width. */
+export const DIAGRAM_SIZES = ["small", "medium", "full"] as const;
+export type DiagramSize = (typeof DIAGRAM_SIZES)[number];
+
 /** The Mermaid types Pele draws as charts (pele.run), as the block prompt names them. */
 const PELE_CHARTS =
   "xychart-beta (bar and line), pie, quadrantChart, radar-beta, sankey-beta, treemap-beta, venn-beta, gantt, timeline";
@@ -436,6 +440,12 @@ export const viewLibrary = <C>(
           'Mermaid text, lines split with \\n: "flowchart LR\\nA --> B".'
         ),
       caption: z.string().optional().describe("A line under it."),
+      size: z
+        .enum(DIAGRAM_SIZES)
+        .optional()
+        .describe(
+          'How wide it draws: "small" for a glance beside the words (a 3 to 6 bar chart, a pie), "medium" for a chart someone reads, "full" for a dense diagram (a flowchart or sankey of many nodes). Left out, it fits the reply\'s words. Never wider than it draws on its own.'
+        ),
     })
   );
   const TaskTable = define(
@@ -606,7 +616,7 @@ table = Table(["Pull request", "Owner", "Checks"], [["Inline blocks", "Ana", Bad
   fenced(
     "Weekly spend",
     `root = Column([chart])
-chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Delegated work, last four weeks")`
+chart = Diagram("xychart-beta\\ntitle \\"Spend per week\\"\\nx-axis [W1, W2, W3, W4]\\ny-axis \\"USD\\"\\nbar [42, 58, 37, 61]", "Delegated work, last four weeks", "small")`
   ),
 ];
 
@@ -630,6 +640,7 @@ export const blockPromptOptions = (): PromptOptions => ({
     "No URLs, images or markup in its words: its text is plain. A Diagram's Mermaid is the one place for diagram syntax.",
     "A heading is a Text in the program, where the block needs one; the block draws no title of its own.",
     `Charts are Diagrams: ${PELE_CHARTS}, in Mermaid's own syntax.`,
+    'A Diagram\'s third argument is its size. "small": a glance beside the words, such as a 3 to 6 bar chart or a pie. "medium": a chart someone reads. "full": a dense diagram, such as a flowchart or sankey of many nodes. Left out, it fits the reply\'s words. A diagram never draws wider than it does on its own, and the block is only as wide as what it holds.',
     "Use only the components listed. A name outside them is dropped and reported, never drawn.",
   ],
 });

@@ -411,6 +411,8 @@
   --spacing-c-block-view: var(--c-block-view);
   --spacing-c-block-body-max: var(--c-block-body-max);
   --spacing-c-inline-block-fossil-h: var(--c-inline-block-fossil-h);
+  --spacing-c-diagram-small: var(--c-diagram-small);
+  --spacing-c-diagram-medium: var(--c-diagram-medium);
   --spacing-c-block-drop-line: var(--c-block-drop-line);
   --spacing-c-block-drop-dot: var(--c-block-drop-dot);
   /* Switches with its context: no literal maps to it. */

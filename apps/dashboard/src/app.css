@@ -293,10 +293,11 @@
       padding: 0;
       font-size: inherit;
     }
-    /* A reply holding an agent's block (TranscriptBlock, tsk-330): the block
-       stands the turn's width, as the program's table or figures need
-       (MessageBody lifts its measure), and the reply's words keep theirs. */
-    &:has([data-block-key]) .prose > :not([data-block-key]) {
+    /* A reply holding an agent's block that needs the room (TranscriptBlock,
+       tsk-330: a `full` Diagram, a Table wider than the measure,
+       `data-block-wide`): the block stands the turn's width (MessageBody
+       lifts its measure), and the reply's words keep theirs. */
+    &:has([data-block-wide]) .prose > :not([data-block-key]) {
       max-inline-size: var(--c-measure);
     }
   }
