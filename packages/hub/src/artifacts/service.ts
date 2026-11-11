@@ -1930,7 +1930,8 @@ export interface ArtifactServiceDeps {
   docs: ArtifactDocs;
   /**
    * Page `name`'s source taken out of project `projectId`'s folder
-   * (`decisions/<name>/page.oui` or its built `index.html`) in one commit by
+   * (hub kept-blocks.ts `pageSourcePaths`: `decisions/<name>/page.oui` or its
+   * built `index.html`, or a block's `artifacts/<name>/page.oui`) in one commit by
    * `instance`: a project's page lives as long as it. Why not, when the
    * folder refuses.
    */
@@ -1980,8 +1981,9 @@ export interface ArtifactServiceDeps {
    */
   itemEnded: (instance: InstanceRow) => boolean;
   /**
-   * Page `name`'s source kept in `instance`'s project folder at
-   * `decisions/<name>/`, as a build with `keep` keeps it: a held next
+   * Page `name`'s source kept in `instance`'s project folder (a decision
+   * page's at `decisions/<name>/`, a block's at `artifacts/<name>/`), as a
+   * build with `keep` keeps it: a held next
    * version's, once its parent opens it. Why not, when the folder refuses.
    */
   keepPage: (
@@ -9559,7 +9561,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * Project `projectId`'s page `name` once its source left the folder
-     * (`decisions/<name>/` holds no page.oui or index.html now): it goes,
+     * (hub kept-blocks.ts `pageSourcePaths` holds none now): it goes,
      * and the panel that showed it closes. Nothing when it has none.
      */
     sourceGone: (projectId: string, name: string): void => {

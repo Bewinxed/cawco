@@ -97,4 +97,10 @@ export const transcriptWords = {
   /** A block kept as an artifact: what the panel's head asks of the person. */
   keptBlockAsk: (title: string): string =>
     `Pin anything in ${title} that reads wrong`,
+  /** A kept block refused for a URL in its words (hub decision-program.ts), the URL's start quoted. */
+  blockUrlRefused: (url: string): string =>
+    `“${url}” is a URL: a block reaches no network. Write what it shows into the block.`,
+  /** A kept block refused for markup in its words, the markup's start quoted. */
+  blockMarkupRefused: (markup: string): string =>
+    `“${markup}” holds markup: a block's words are plain.`,
 };

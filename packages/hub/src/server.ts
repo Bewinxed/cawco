@@ -864,6 +864,13 @@ import {
   keepAliveUsage,
   promptCacheExpiresAt,
 } from "./keep-alive";
+import {
+  blockFolder,
+  isBlockProgram,
+  moveKeptBlocks,
+  pageSourceKept,
+  pageSourcePaths,
+} from "./kept-blocks";
 import { boardTitle, type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { quote } from "./landing";
 import { createLaws } from "./laws";
@@ -1189,9 +1196,9 @@ const withContext = (text: string, line: string | undefined): string => {
   return `${text.slice(0, at)}${line}\n\n${text.slice(at)}`;
 };
 
-/** A project's page source in its folder (`decisions/<name>/page.oui` or its built `index.html`), its name at 1. */
+/** A project's page source in its folder (kept-blocks.ts `pageSourcePaths`): a decision page's `decisions/<name>/page.oui` or built `index.html`, or a block's `artifacts/<name>/page.oui`; its name at 1. */
 const PAGE_SOURCE =
-  /^decisions\/([a-z0-9][a-z0-9-]{0,62})\/(?:page\.oui|index\.html)$/u;
+  /^(?:decisions\/([a-z0-9][a-z0-9-]{0,62})\/(?:page\.oui|index\.html)|artifacts\/([a-z0-9][a-z0-9-]{0,62})\/page\.oui)$/u;
 const NOT_NAME = /[^a-z0-9]+/gu;
 const NAME_ENDS = /^-+|-+$/gu;
 const NAME_TAIL = /-+$/u;
@@ -14008,7 +14015,13 @@ export const createServer = (
         : undefined;
     }
     if ("folder" in from && row.projectId) {
-      const text = await folderText(row.projectId, `${folder}/${PROGRAM_FILE}`);
+      // A decision page's program, else a kept block's (kept-blocks.ts).
+      const text =
+        (await folderText(row.projectId, `${folder}/${PROGRAM_FILE}`)) ??
+        (await folderText(
+          row.projectId,
+          `${blockFolder(posix.basename(folder))}/${PROGRAM_FILE}`
+        ));
       return text === undefined ? undefined : { text, inFolder: true };
     }
   };
@@ -14041,38 +14054,38 @@ export const createServer = (
   };
 
   /**
-   * A project's decision page kept in its folder as its source: a
-   * program's page.oui, or an HTML page's built index.html, the other taken
-   * out so the folder holds one; one commit by the session, none when the
-   * folder holds it already.
+   * Page `name`'s source kept in its project's folder (kept-blocks.ts
+   * `pageSourceKept`): a decision page's program or built page under
+   * `decisions/<name>/`, a block's program under `artifacts/<name>/`, its
+   * other forms taken out so the folder holds one; one commit by the
+   * session, none when the folder holds it already.
    */
-  const keepInFolder = async (
+  const keepPage = async (
     row: InstanceRow,
     name: string,
-    keep: { content: string; path: string },
-    drop: string
+    page: { html: string; program?: string }
   ): Promise<PageRefusal | undefined> => {
     const { projectId } = row;
     if (!projectId) {
       return;
     }
+    const { keep, drop } = pageSourceKept(name, page);
+    const block = isBlockProgram(page.program);
     try {
-      const [kept, dropped] = await Promise.all([
+      const [kept, ...held] = await Promise.all([
         folderText(projectId, keep.path),
-        folderText(projectId, drop),
+        ...drop.map((path) => folderText(projectId, path)),
       ]);
-      if (kept === keep.content && dropped === undefined) {
+      const deletes = drop.filter((_, at) => held[at] !== undefined);
+      if (kept === keep.content && deletes.length === 0) {
         return;
       }
       await changeFolderFiles(
         projectId,
-        {
-          writes: kept === keep.content ? [] : [keep],
-          deletes: dropped === undefined ? [] : [drop],
-        },
+        { writes: kept === keep.content ? [] : [keep], deletes },
         {
           author: { name: sessionLabel(row).name },
-          message: `decisions: ${name}`,
+          message: `${block ? "artifacts" : "decisions"}: ${name}`,
         }
       );
     } catch (error) {
@@ -14083,34 +14096,6 @@ export const createServer = (
     }
     decisionsChanged(projectId);
   };
-
-  /** Page `name`'s source kept in its project's folder ({@link keepInFolder}): a program's, else its HTML. */
-  const keepPage = (
-    row: InstanceRow,
-    name: string,
-    page: { html: string; program?: string }
-  ): Promise<PageRefusal | undefined> => {
-    const folder = `decisions/${name}`;
-    return page.program === undefined
-      ? keepInFolder(
-          row,
-          name,
-          { path: `${folder}/index.html`, content: page.html },
-          `${folder}/${PROGRAM_FILE}`
-        )
-      : keepInFolder(
-          row,
-          name,
-          { path: `${folder}/${PROGRAM_FILE}`, content: page.program },
-          `${folder}/index.html`
-        );
-  };
-
-  /** Page `name`'s source files in a project's folder: a program's, or an HTML page's built page. */
-  const pageSourcesOf = (name: string): string[] => [
-    `decisions/${name}/${PROGRAM_FILE}`,
-    `decisions/${name}/index.html`,
-  ];
 
   /**
    * Page `name`'s source taken out of project `projectId`'s folder in one
@@ -14125,7 +14110,7 @@ export const createServer = (
   ): Promise<PageRefusal | undefined> => {
     try {
       const held = await Promise.all(
-        pageSourcesOf(name).map(async (path) =>
+        pageSourcePaths(name).map(async (path) =>
           (await folderText(projectId, path)) === undefined ? [] : [path]
         )
       );
@@ -14138,7 +14123,7 @@ export const createServer = (
         { writes: [], deletes },
         {
           author: { name: sessionLabel(row).name },
-          message: `decisions: ${name} deleted`,
+          message: `pages: ${name} deleted`,
         }
       );
     } catch (error) {
@@ -14934,7 +14919,7 @@ export const createServer = (
         settling.personWrote(id, keys);
       }
       const row = db.artifacts.get(id);
-      if (row?.kind === "page" && row.projectId) {
+      if (row && isDecisionPage(row) && row.projectId) {
         decisionsChanged(row.projectId);
         recordFollows(row.projectId, row.name);
       }
@@ -15461,7 +15446,7 @@ export const createServer = (
         plans.waitsMoved(to.session.id);
       }
       // His Send of a project's decision page decides it: its record and log are written from these picks.
-      if (artifact.kind === "page" && artifact.projectId) {
+      if (isDecisionPage(artifact) && artifact.projectId) {
         await decisions.decide(artifact.projectId, artifact.name, artifact.id);
       }
       // A project's setup page: its name, shape and account applied before
@@ -15728,6 +15713,9 @@ export const createServer = (
       );
     },
   });
+  /** Whether `row` is a decision page: a page, but not a kept block (kept-blocks.ts), which asks nothing. */
+  const isDecisionPage = (row: ArtifactRow): boolean =>
+    row.kind === "page" && !isBlockProgram(artifacts.program(row.id));
   /**
    * A browser session's item ended: its browser artifact goes from every
    * list (artifacts/service.ts `dropBrowser`), made again if the item is
@@ -15802,8 +15790,9 @@ export const createServer = (
   }
   /**
    * A project's page lives as long as its source in the project's folder:
-   * a commit that takes `decisions/<name>/`'s page.oui or index.html out and
-   * leaves neither there (a person's delete, folder_write's, a move away,
+   * a commit that takes its source out (kept-blocks.ts `pageSourcePaths`:
+   * `decisions/<name>/`'s page.oui or index.html, a block's
+   * `artifacts/<name>/page.oui`) and leaves none there (a person's delete, folder_write's, a move away,
    * artifact_delete's own) takes the page with it (artifacts/service.ts
    * `sourceGone`). Keeping a program drops the built page, and the page
    * stays.
@@ -15811,7 +15800,8 @@ export const createServer = (
   onFolderCommits((projectId, { deleted }) => {
     const names = new Set(
       deleted.flatMap((path) => {
-        const name = PAGE_SOURCE.exec(path)?.[1];
+        const found = PAGE_SOURCE.exec(path);
+        const name = found?.[1] ?? found?.[2];
         return name ? [name] : [];
       })
     );
@@ -15819,7 +15809,7 @@ export const createServer = (
       detach(
         (async () => {
           const left = await Promise.all(
-            pageSourcesOf(name).map((path) => folderText(projectId, path))
+            pageSourcePaths(name).map((path) => folderText(projectId, path))
           );
           if (left.every((text) => text === undefined)) {
             artifacts.sourceGone(projectId, name);
@@ -27307,6 +27297,7 @@ export const createServer = (
   );
   // The project page's Decisions tab (decisions.ts): its pages, their sends
   // and Make tasks, its graph. A record keeps its tasks as they are filed.
+  // A kept block is a page that asks nothing (kept-blocks.ts): none of it.
   const decisions = createDecisions({
     // Who hears him on a page: where his marks and the hub's own send go.
     taker: (artifact) =>
@@ -27320,7 +27311,7 @@ export const createServer = (
     artifacts: (projectId) =>
       db.artifacts
         .ofProject(projectId)
-        .filter((row) => row.kind === "page")
+        .filter((row) => isDecisionPage(row))
         .toSorted((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
     changed: decisionsChanged,
     commit: async (projectId, change, message) => {
@@ -28183,6 +28174,26 @@ export const createServer = (
       options: { author: { name: string }; message: string }
     ) => changeFolderFiles(projectId, { writes, deletes: [] }, options),
   };
+  /** Kept blocks filed under decisions/ moved to artifacts/ once (kept-blocks.ts), over every project's folder. */
+  const keptBlocks = {
+    dataMigrated: (name: string) => db.dataMigrated(name),
+    markDataMigrated: (name: string) => db.markDataMigrated(name),
+    projectIds: () => db.listProjects().map((project) => project.id),
+    folders: async (projectId: string, dir: string): Promise<string[]> =>
+      // Reading a folder makes it: a project with none keeps no pages.
+      (await hasProjectFolder(projectId))
+        ? await folderFileNames(projectId, dir)
+        : [],
+    read: (projectId: string, path: string) => folderText(projectId, path),
+    move: (
+      projectId: string,
+      change: {
+        writes: { content: string; path: string }[];
+        deletes: string[];
+      },
+      options: { author: { name: string }; message: string }
+    ) => changeFolderFiles(projectId, change, options),
+  };
   offBoot.push(() => {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
@@ -28197,8 +28208,9 @@ export const createServer = (
     detach(
       mergeSameRemote(merging)
         .then(() => tasks.syncAll())
-        .then(() => renameViewTaskTables(viewTaskTables)),
-      "project merge, task catch-up and the views' task tables"
+        .then(() => renameViewTaskTables(viewTaskTables))
+        .then(() => moveKeptBlocks(keptBlocks)),
+      "project merge, task catch-up, the views' task tables and kept blocks"
     );
   });
   // Connections (connections.ts): outside services the hub signs in to and

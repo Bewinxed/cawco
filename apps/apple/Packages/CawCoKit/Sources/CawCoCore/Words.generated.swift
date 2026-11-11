@@ -1157,6 +1157,16 @@ public enum Words {
         public static func keptBlockAsk(title: String) -> String {
             "Pin anything in \(title) that reads wrong"
         }
+
+        /// A kept block refused for a URL in its words (hub decision-program.ts), the URL's start quoted.
+        public static func blockUrlRefused(url: String) -> String {
+            "“\(url)” is a URL: a block reaches no network. Write what it shows into the block."
+        }
+
+        /// A kept block refused for markup in its words, the markup's start quoted.
+        public static func blockMarkupRefused(markup: String) -> String {
+            "“\(markup)” holds markup: a block's words are plain."
+        }
     }
 
     public enum Asks {

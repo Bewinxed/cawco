@@ -58,6 +58,7 @@ import {
 } from "@cawco/core/house-faces";
 import { programLibraryOf } from "@cawco/core/inline-blocks";
 import { unhandled } from "@cawco/core/unhandled";
+import { transcriptWords } from "@cawco/core/words/transcript";
 import {
   type ASTNode,
   createParser,
@@ -124,29 +125,39 @@ const isElement = (value: unknown): value is ElementNode =>
   value !== null &&
   (value as { type?: unknown }).type === "element";
 
-/** Why one of its words can't stand: a URL or markup; null when it can. A Diagram's Mermaid is Pele's to escape. */
+/** The library a program is written over (core inline-blocks.ts `programLibraryOf`): its refusals speak of it. */
+type Library = ReturnType<typeof programLibraryOf>;
+
+/** Why one of its words can't stand: a URL or markup, said for its library; null when it can. A Diagram's Mermaid is Pele's to escape. */
 const wordProblem = (
   value: string,
   prop: string,
-  component: string
+  component: string,
+  library: Library
 ): string | null => {
   if (component === "Diagram" && prop === "mermaid") {
     return null;
   }
+  const quoted = value.slice(0, 60);
   if (URL_LIKE.test(value)) {
-    return `“${value.slice(0, 60)}” is a URL: a decision page reaches no network; show the thing with Image, Canvas or Preview.`;
+    return library === "block"
+      ? transcriptWords.blockUrlRefused(quoted)
+      : `“${quoted}” is a URL: a decision page reaches no network; show the thing with Image, Canvas or Preview.`;
   }
-  return MARKUP.test(value)
-    ? `“${value.slice(0, 60)}” holds markup: a page's words are plain.`
-    : null;
+  if (!MARKUP.test(value)) {
+    return null;
+  }
+  return library === "block"
+    ? transcriptWords.blockMarkupRefused(quoted)
+    : `“${quoted}” holds markup: a page's words are plain.`;
 };
 
 /** Its words that point outside the page or hold markup. */
-const unsafeWords = (root: ElementNode | null): string[] => {
+const unsafeWords = (root: ElementNode | null, library: Library): string[] => {
   const found: string[] = [];
   const look = (value: unknown, prop: string, component: string): void => {
     if (typeof value === "string") {
-      const problem = wordProblem(value, prop, component);
+      const problem = wordProblem(value, prop, component, library);
       if (problem) {
         found.push(problem);
       }
@@ -595,6 +606,8 @@ const droppedIn = (result: ReturnType<typeof parser.parse>): string[] => [
 
 /** What a program's checks refuse in their own words: a Query, a Mutation, `$variables`, and drawing nothing. */
 interface ParsedWords {
+  /** The library the program is written over, whose words its refusals use. */
+  library: Library;
   mutation: string;
   nothing: string;
   query: string;
@@ -632,7 +645,10 @@ const refuseParsed = (
   if (problems.length > 0) {
     refuse(problems);
   }
-  const unsafe = [...unsafeWords(result.root), ...undrawnWords(result.root)];
+  const unsafe = [
+    ...unsafeWords(result.root, words.library),
+    ...undrawnWords(result.root),
+  ];
   if (unsafe.length > 0) {
     refuse(unsafe);
   }
@@ -648,6 +664,7 @@ const refuseParsed = (
 const checkBlock = (program: string): CheckedProgram => {
   const result = blockParser.parse(program);
   refuseParsed(result, {
+    library: "block",
     query: "a block holds its data as you wrote it.",
     mutation: "a block runs none.",
     state: "A block keeps no $variables: write its values as they are.",
@@ -700,6 +717,7 @@ const checkProgram = (
   }
   const result = parser.parse(program);
   refuseParsed(result, {
+    library: "decisions",
     query:
       "a decision page holds your words and the person's picks, never data.",
     mutation: "a decision page runs none.",
