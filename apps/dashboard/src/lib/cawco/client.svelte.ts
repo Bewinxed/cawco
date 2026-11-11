@@ -946,6 +946,19 @@ function askStoredSoon(): void {
   );
 }
 
+/**
+ * A session the board no longer lists changed on the hub (Done pressed on
+ * it): the board says nothing of it, so the hub's answer for the stored
+ * transcripts is read again, now, and the row is as the hub has it when
+ * this settles. A session the board lists is heard of on its frame.
+ */
+async function olderMoved(id: string): Promise<void> {
+  if (olderRows.some((row) => row.id === id)) {
+    clearTimeout(storedTimer);
+    await readStored();
+  }
+}
+
 /** The stored transcripts a list draws, by harness key: asked of the hub when they change. */
 function askStored(keys: string[]): void {
   storedKeys = keys;
@@ -9770,6 +9783,8 @@ export const cawco = {
   },
   /** Asks the hub what it holds behind these stored transcripts, by harness key. */
   askStored,
+  /** Reads a session the board no longer lists again, after a change to it the hub took. */
+  olderMoved,
   /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),

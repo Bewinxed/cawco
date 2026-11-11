@@ -1034,6 +1034,14 @@ export type TabNamed =
   | { asked: string; kind: "none" | "unknown" };
 
 /**
+ * How many tabs one `POST /api/instances/named` answers for: the hub's
+ * bound on a request (a hand-written body cannot turn one into a sweep of
+ * the fleet's transcripts), and the size a reader's tabs are asked in, so a
+ * strip of more than this many is named whole.
+ */
+export const TAB_NAMES_PER_ASK = 64;
+
+/**
  * What the hub holds behind stored transcripts (`POST
  * /api/instances/stored`), asked with the harness keys of the transcripts a
  * list would draw, once for the whole list.

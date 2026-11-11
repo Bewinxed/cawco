@@ -22,7 +22,8 @@ import { artifactStopOf } from "@cawco/core/artifact-needs";
 import { detach } from "@cawco/core/detach";
 import { type HarnessKind, harnessNamed } from "@cawco/core/harness";
 import { hubRequest } from "@cawco/core/hub-request";
-import type { TabNamed } from "@cawco/core/protocol";
+import { TAB_NAMES_PER_ASK, type TabNamed } from "@cawco/core/protocol";
+import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { hubFetch } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
@@ -122,17 +123,22 @@ const held = $state<WorkspaceV1>(blankWorkspace());
 
 /* ── Naming the tabs ──────────────────────────────────────────────────
    A tab kept from an earlier visit (the tree localStorage and the cookie
-   keep), or given by an address, may name a session the hub no longer
-   holds, a session by its short id, or something that is no session at all
-   (a kind of tab CawCo no longer has). Each is asked of the hub before
-   anything reads it (`POST /api/instances/named`, core `TabNamed`): a tab
-   that names a session under another id takes that id (`retarget`), one
-   that names nothing is dropped and the tree saved without it, so it never
-   reaches the cookie again. Until the hub answers, nothing is read or
-   followed for it: a read of an id that names nothing is a 404. A tab the
-   server drew this page with whose id the hub lists as a session (`serve`,
-   the layout's `resolved`) is named already and asked nothing: asked, the
-   pane reading it would be unwatched while the ask is out. */
+   keep), or one entering a group (an address, a link, a row dragged onto a
+   pane or into a strip, Open in split view), may name a session the hub no
+   longer holds, a session by its short id or its harness key, or something
+   that is no session at all (a kind of tab CawCo no longer has). Each is
+   asked of the hub before anything reads it (`POST /api/instances/named`,
+   core `TabNamed`): a tab that names a session under another id takes that
+   id (`retarget`), one that names nothing is dropped and the tree saved
+   without it, so it never reaches the cookie again. Until the hub answers,
+   nothing is read or followed for it: a read of an id that names nothing
+   is a 404, and a send under a harness key is refused ("This session is
+   gone"). A tab is asked once, as it enters the tree (`enter`, the one
+   place a group takes a tab it did not hold; `restore`, for the tree kept).
+   One the hub lists as a session under that id is named already and asked
+   nothing: a tab the server drew this page with (`serve`, the layout's
+   `resolved`), or a row this browser holds by that id. Asked, the pane
+   reading it would be unwatched while the ask is out. */
 
 /** Tab ids asked of the hub and not answered yet: nothing reads them. */
 const unnamed = new SvelteSet<string>();
@@ -143,7 +149,13 @@ const toName = new Set<string>();
 
 /** Asks the hub what tab `id` names, beside every other tab asked in this task. */
 function askName(id: string): void {
-  if (!(browser && isSessionTab(id)) || unnamed.has(id) || resolved.has(id)) {
+  if (
+    !(browser && isSessionTab(id)) ||
+    unnamed.has(id) ||
+    resolved.has(id) ||
+    // The hub's own row under this id: read off the event, never a reader's.
+    untrack(() => cawco.instanceIndex.byId.has(id))
+  ) {
     return;
   }
   unnamed.add(id);
@@ -153,9 +165,16 @@ function askName(id: string): void {
   }
 }
 
+/** Sends the names waiting, as many to a request as the hub answers (core `TAB_NAMES_PER_ASK`). */
 function sendNames(): void {
-  const asked = [...toName];
+  const waiting = [...toName];
   toName.clear();
+  for (let at = 0; at < waiting.length; at += TAB_NAMES_PER_ASK) {
+    sendNamesOf(waiting.slice(at, at + TAB_NAMES_PER_ASK));
+  }
+}
+
+function sendNamesOf(asked: string[]): void {
   hubFetch(
     hubRequest("POST /api/instances/named", {
       body: {
@@ -277,6 +296,16 @@ function leafHolding(sessionId: string): LeafNode | null {
    it returns me to the tab i was on"). */
 
 /**
+ * A tab about to enter a group: one no group holds is asked of the hub
+ * (Naming the tabs), whichever way it came (`place`, `split`, `move`).
+ */
+function enter(sessionId: string): void {
+  if (!leafHolding(sessionId)) {
+    askName(sessionId);
+  }
+}
+
+/**
  * Puts a conversation in a group's strip if it is not there yet: just after
  * the tab in front, which it was opened from, else (the board in front) at
  * the end.
@@ -285,6 +314,7 @@ function place(leaf: LeafNode, sessionId: string): void {
   if (leaf.tabs.includes(sessionId)) {
     return;
   }
+  enter(sessionId);
   const from = leaf.active;
   const at = from ? leaf.tabs.indexOf(from) : -1;
   if (!from || at === -1) {
@@ -724,9 +754,8 @@ export const workspace = {
     }
     const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
     if (sessionId) {
+      // An address can name anything: asked of the hub as it enters (`place`).
       place(leaf, sessionId);
-      // An address can name anything: asked of the hub before it is read.
-      askName(sessionId);
     }
     show(leaf, sessionId);
     held.focusedLeaf = leaf.id;
@@ -971,6 +1000,7 @@ export const workspace = {
     if (from === target && target.tabs.length < 2) {
       return;
     }
+    enter(sessionId);
     if (from) {
       takeOut(from, sessionId);
     }
@@ -1001,6 +1031,7 @@ export const workspace = {
       return;
     }
     const from = leafHolding(sessionId);
+    enter(sessionId);
     if (from) {
       takeOut(from, sessionId);
     }

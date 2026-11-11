@@ -16,8 +16,10 @@
  * in (`wroteAt`), never a delegate (it folds under its session), a session
  * continued into another only as that other one (`continuedInto`: the
  * continuation takes its row), and one pressed Done (`doneAt` past the
- * person's last word) only while it needs them. A session a project or a
- * task started stands only while it needs the person.
+ * person's last word) only while something of it waits on them (an ask, a
+ * stop at its limit). A session that failed leaves with Done as a quiet one
+ * does, and never without that press. A session a project or a task
+ * started stands only while it needs the person.
  *
  * A transcript stored on a machine (its catalog, `cawco.catalogOf`) that was
  * run inside a project's folder there (core `projectAt`) is asked of the
@@ -119,9 +121,12 @@ const stamped = (value: unknown): boolean =>
 /** The person's own work: they started it, or wrote in it (the hub's rule too). */
 const theirs = personsOwn;
 
-/** An ask waits on the person, or it failed, or it stopped at its account's limit. */
-const needsThem = (row: BoardRow): boolean =>
-  cawco.activityOf(row.id) === "blocked" || isFailed(row) || !!row.stalled;
+/** Something of it waits on the person: an ask, or its stop at its account's limit. */
+const waitsOnThem = (row: BoardRow): boolean =>
+  cawco.activityOf(row.id) === "blocked" || !!row.stalled;
+
+/** It waits on the person, or it failed. */
+const needsThem = (row: BoardRow): boolean => waitsOnThem(row) || isFailed(row);
 
 /** When the person last wrote to it, else when it started. */
 const placeOf = (row: BoardRow): number =>
@@ -203,8 +208,14 @@ function listedHere(row: BoardRow, from: BoardRow | undefined): boolean {
   if (isDelegate(row) || continued(row)) {
     return false;
   }
-  const own = theirs(row) || (from !== undefined && theirs(from));
-  return needsThem(row) || (own && !done(row));
+  if (waitsOnThem(row)) {
+    return true;
+  }
+  // Done takes a failed session off as it takes a quiet one.
+  if (done(row)) {
+    return false;
+  }
+  return isFailed(row) || theirs(row) || (from !== undefined && theirs(from));
 }
 
 /**

@@ -14,8 +14,9 @@
    * have not read, 400 otherwise; its age stands in the rail's column. A
    * delegate never has a row of its own: its session's mark counts them and
    * opens them, as every tree in the app opens (motion/branch). Done is the
-   * row's archive (its press, its swipe): the row closes where it stood and
-   * the rows under it slide up (motion/rows `reflow`, the rail's own).
+   * row's archive (its press, its swipe), offered on a Your turn row and on
+   * one that failed: the row closes where it stood and the rows under it
+   * slide up (motion/rows `reflow`, the rail's own).
    *
    * The whole tree is one flat keyed list (tree-lines.ts `flatTree`): the
    * group parents, the sessions, the delegates a session has unfolded and
@@ -32,7 +33,7 @@
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
-  import type { BoardRow } from "../client.svelte";
+  import { type BoardRow, isFailed } from "../client.svelte";
   import { rowHref, sessionTitle } from "../links";
   import { type BranchOptions, branch } from "../motion/branch.svelte";
   import { echoBeat } from "../motion/echo.svelte";
@@ -286,7 +287,9 @@
         line={entry && tall ? projectOfRow(row) : ""}
         machineId={row.machineId}
         mark={entry?.mark}
-        onarchive={entry?.status === "yours" && home.archivable(row)
+        onarchive={entry &&
+        (entry.status === "yours" || isFailed(row)) &&
+        home.archivable(row)
           ? () => archive(home.treeOf(row.id))
           : undefined}
         peek={false}

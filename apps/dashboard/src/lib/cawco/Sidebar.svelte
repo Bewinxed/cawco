@@ -563,8 +563,8 @@
              many of its sessions run now and is the switch that unfolds
              them under the row, as a session's mark unfolds its delegates;
              its press never reaches the link. Under a finger the switch
-             reaches sideways to the name, the row's own gap (`row="list"`),
-             as a session row's does. -->
+             reaches sideways to the name, the row's own gap (`row="list"`,
+             a compact row's), as a session row's does. -->
         <a
           {href}
           {...props}
@@ -572,7 +572,7 @@
           aria-current={here ? "page" : undefined}
           onclickcapture={(event) => openProjectTab(event, project.id)}
           class="{props.class} mark-line coarse:h-c-btn-h-lg"
-          style:--mark-hit-gap="var(--space-3)"
+          style:--mark-hit-gap="var(--row-compact-gap)"
           data-regroup="regroup:project:{project.id}"
           {@attach landRegroup(() => `regroup:project:${project.id}`)}
         >

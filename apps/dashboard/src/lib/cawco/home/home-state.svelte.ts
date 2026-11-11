@@ -273,6 +273,8 @@ export function archive(ids: string[]): void {
             cleared.delete(id);
           });
           settleSeen();
+          // One the board no longer lists leaves on the hub's answer too.
+          await cawco.olderMoved(id);
         },
         () => archive([id])
       ),

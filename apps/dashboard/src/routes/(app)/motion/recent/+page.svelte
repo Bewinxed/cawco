@@ -5,6 +5,7 @@
     InstanceRow,
     SessionPulse,
     StoredSessions,
+    TabNamed,
   } from "@cawco/core/protocol";
   import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
   import { onMount } from "svelte";
@@ -31,11 +32,17 @@
    * each machine's listing answers them: three in a project's folder, two
    * in none, one behind a listed session and one behind a session the
    * person pressed Done on ("Refund flow edge cases", which stays hidden).
-   * Four more are behind sessions the board no longer lists, which the
+   * Five more are behind sessions the board no longer lists, which the
    * bench answers for as the hub does (`POST /api/instances/stored`): a
    * session the person stopped four days ago ("Move invoices to the new
    * ledger", in Older under storefront, by its own id) with two delegates
-   * folded under it, and a check nobody wrote in, which stands nowhere.
+   * folded under it, one of theirs that failed five days ago ("Reconcile
+   * the ledger export", in Older with its failure and its Done), and a
+   * check nobody wrote in, which stands nowhere. Each of those sessions'
+   * transcripts is stored under its harness key, never its id, and the
+   * bench answers what a tab's id names as the hub does (`POST
+   * /api/instances/named`), so a tab opened by such a key takes the
+   * session's id.
    */
 
   /** The client's stores as a bench writes them (dev `__cawcoDebug`). */
@@ -311,14 +318,34 @@
     doing: "yours",
     ago: 4 * DAY_MS,
   };
-  /** It and its two delegates: what the hub answers its transcripts with. */
-  const olderRows: InstanceRow[] = [
-    rowOf(OLDER, olderSeed, { status: "stopped" }),
+  /** An older session's harness key, which its transcript is stored under: never its id. */
+  const keyOf = (n: number) =>
+    `0c1a0d00-0000-4000-9000-${String(n).padStart(12, "0")}`;
+  /** One of theirs that failed five days ago, and nobody has pressed Done on. */
+  const FAILED = idOf(95);
+  /** It, its two delegates and the failed one: what the hub answers their transcripts with. */
+  let olderRows: InstanceRow[] = [
+    rowOf(OLDER, olderSeed, { sessionId: keyOf(91), status: "stopped" }),
+    rowOf(
+      FAILED,
+      {
+        title: "Reconcile the ledger export",
+        project: "p-storefront",
+        doing: "yours",
+        ago: 5 * DAY_MS,
+      },
+      {
+        sessionId: keyOf(95),
+        status: "error",
+        lastError: "The export ran out of memory",
+      }
+    ),
     ...["Port the invoice schema", "Check totals against last quarter"].map(
       (title, n): InstanceRow => ({
         ...rowOf(idOf(92 + n), { ...olderSeed, title }),
         origin: "delegate",
         parentInstanceId: OLDER,
+        sessionId: keyOf(92 + n),
         status: "sleeping",
         wroteAt: null,
       })
@@ -328,6 +355,7 @@
   const olderCheck: InstanceRow = {
     ...rowOf(idOf(94), { ...olderSeed, title: "Review the ledger migration" }),
     origin: "check",
+    sessionId: keyOf(94),
     status: "sleeping",
     wroteAt: null,
   };
@@ -388,6 +416,11 @@
   };
   const patch = (id: string, change: Partial<InstanceRow>) => {
     rows = rows.map((row) => (row.id === id ? { ...row, ...change } : row));
+    // One the board no longer lists is changed where the hub holds it: its
+    // answer for the stored transcripts says it, never a board frame.
+    olderRows = olderRows.map((row) =>
+      row.id === id ? { ...row, ...change } : row
+    );
     adopt();
   };
 
@@ -457,6 +490,32 @@
   }
 
   /**
+   * What a tab's id names, as the hub answers `/api/instances/named` (core
+   * `TabNamed`): a row's own id, the row a harness key is the transcript
+   * of, else a stored transcript read by its own key.
+   */
+  const NamedBody = z.object({ ids: z.array(z.object({ id: z.string() })) });
+  function answerNamed(
+    input: RequestInfo | URL,
+    init: RequestInit | undefined
+  ): Promise<Response> | undefined {
+    const url = input instanceof Request ? input.url : String(input);
+    if (!(url.includes("/api/instances/named") && init?.body)) {
+      return;
+    }
+    const held = [...rows, ...olderRows, olderCheck];
+    const answer: TabNamed[] = NamedBody.parse(
+      JSON.parse(String(init.body))
+    ).ids.map(({ id: asked }) => {
+      const row =
+        held.find((one) => one.id === asked) ??
+        held.find((one) => one.sessionId === asked);
+      return { asked, kind: "session", id: row?.id ?? asked };
+    });
+    return Promise.resolve(Response.json(answer));
+  }
+
+  /**
    * A live hub's own rows, when a check stands them in before the page loads
    * (`__rbReal`: `/api/instances`, `/api/projects`, `/api/agents` and
    * `/api/areas` from a hub opened on a copy of its database): the bench
@@ -521,10 +580,12 @@
     }));
     debug.state.projectsRead = true;
     adopt();
-    const listing = storedListing(now, idOf(3), DONE, [
-      ...olderRows.map((row) => row.id),
-      olderCheck.id,
-    ]);
+    const listing = storedListing(
+      now,
+      idOf(3),
+      DONE,
+      [...olderRows, olderCheck].flatMap((row) => row.sessionId ?? [])
+    );
     for (const [machineId, sessions] of Object.entries(listing)) {
       debug.standCatalog(machineId, sessions);
     }
@@ -548,6 +609,7 @@
     window.fetch = (input, init) =>
       answerSeen(input, init) ??
       answerStored(input, init) ??
+      answerNamed(input, init) ??
       fetchWas(input, init);
     debug.standHub(() => undefined);
     if (real) {
@@ -560,6 +622,8 @@
         SKETCH.map(([letter], n) => [letter, idOf(n + 1)])
       ),
       done: DONE,
+      failed: FAILED,
+      older: OLDER,
       status,
       wrote: (id: string) => {
         patch(id, { wroteAt: Date.now(), doneAt: null });

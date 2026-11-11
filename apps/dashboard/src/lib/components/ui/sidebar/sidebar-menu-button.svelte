@@ -17,12 +17,14 @@
       },
       /** The rail's own rows: a destination in the nav band (body type, the
           nav row's height, 44px under a finger), a project in the list (a
-          30px row, its end pad the sessions' so their counts stand in one
-          column), and the avatar: a 30px square that pads nothing, its
-          touch area reaching 44px past its box (The 44 Touch Rule). */
+          row of the rail's trees, on a compact session row's axes and
+          height, `--row-compact-*`, so its name stands on the column a
+          project's group in Recent and every session under either stand
+          on), and the avatar: a 30px square that pads nothing, its touch
+          area reaching 44px past its box (The 44 Touch Rule). */
       row: {
         nav: "gap-2.5 px-2.5 text-body",
-        list: "h-c-btn-h-sm gap-2.5 py-0 pr-2 pl-2.5",
+        list: "h-(--row-compact-h) gap-(--row-compact-gap) py-0 pr-(--row-compact-pad-end) pl-(--row-compact-gap)",
         avatar: "touch-hit size-c-btn-h-sm justify-center overflow-visible p-0",
       },
     },

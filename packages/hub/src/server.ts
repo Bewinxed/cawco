@@ -424,6 +424,7 @@ import {
   startRefused,
   startsAny,
   strategiesFor,
+  TAB_NAMES_PER_ASK,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
   taskLink,
@@ -34070,8 +34071,9 @@ export const createServer = (
         async ({ body }) => {
           const asked = new Map<string, string | null>();
           for (const ask of body.ids) {
-            // Bounded as the titles ask is: a reader's tabs, never a sweep.
-            if (asked.size >= TITLE_ASK_LIMIT) {
+            // Bounded: a reader's tabs, never a sweep. A strip of more is
+            // asked in requests of this many (core `TAB_NAMES_PER_ASK`).
+            if (asked.size >= TAB_NAMES_PER_ASK) {
               break;
             }
             if (ask.id) {
