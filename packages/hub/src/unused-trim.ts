@@ -39,13 +39,13 @@
  * defined in a project's own `delegates/*.md`, which cannot name a set yet.
  */
 import {
+  type CalledItem,
   type DelegateType,
   type InstanceRow,
   type SetOwner,
   type SetStanding,
   type StartingSet,
   startingSetProblem,
-  type UnlistedRow,
 } from "@cawco/core";
 import { type AskRecord, PROJECT_SETTINGS } from "@cawco/core/asks";
 import { routinesWords } from "@cawco/core/words/routines";
@@ -211,10 +211,7 @@ export const createTrim = (deps: TrimDeps) => {
    * `set`'s items its sessions called, by the set's own names: a server is
    * named by its fleet name in a set and by its tools' prefix in the count.
    */
-  const callsOf = (
-    set: StartingSet,
-    rows: RoleCalls[]
-  ): (UnlistedRow & { lastAt: number })[] => {
+  const callsOf = (set: StartingSet, rows: RoleCalls[]): CalledItem[] => {
     const called = new Map<string, { lastAt: number; sessions: number }>();
     for (const row of rows) {
       const key = itemKey({ kind: kindOf(row), name: row.name });
@@ -225,7 +222,7 @@ export const createTrim = (deps: TrimDeps) => {
         sessions: (was?.sessions ?? 0) + row.sessions,
       });
     }
-    const out: (UnlistedRow & { lastAt: number })[] = [];
+    const out: CalledItem[] = [];
     const add = (kind: KeptItem["kind"], name: string, counted: string) => {
       const found = called.get(itemKey({ kind, name: counted }));
       if (found) {
@@ -242,10 +239,11 @@ export const createTrim = (deps: TrimDeps) => {
   };
 
   /**
-   * A set as it stands and its sessions' calls: what an approval draws
-   * against (core `SetStanding`). Over every day the hub keeps, so an item
-   * a run proposes (no call in {@link TRIM_DAYS} days) still says when it
-   * was last called before them.
+   * A set as it stands, its sessions' calls and the fleet's: what an
+   * approval draws against (core `SetStanding`). Over every day the hub
+   * keeps, so an item a run proposes (no call in {@link TRIM_DAYS} days)
+   * still says when it was last called before them, and an item a proposed
+   * set lists says when any session on the fleet last called it.
    */
   const standingOf = (owner: Owner): SetStanding => {
     const set = setOf(owner);
@@ -254,6 +252,8 @@ export const createTrim = (deps: TrimDeps) => {
       label: labelOf(owner),
       days: CALLS_MAX_DAYS,
       calls: set ? callsOf(set, rowsOf(owner, CALLS_MAX_DAYS)) : [],
+      fleetCalls: (asked) =>
+        callsOf(asked, deps.calls({ days: CALLS_MAX_DAYS }).rows),
     };
   };
 
@@ -670,8 +670,9 @@ export const createTrim = (deps: TrimDeps) => {
     owner: SetOwner,
     projectId: string | null
   ): SetStanding | undefined => {
+    // A type the write adds has no set yet: what it lists joins one.
     if (owner.kind === "type") {
-      return types.get(owner.name) ? standingOf(owner) : undefined;
+      return standingOf(owner);
     }
     return projectId ? standingOf({ kind: "project", projectId }) : undefined;
   };

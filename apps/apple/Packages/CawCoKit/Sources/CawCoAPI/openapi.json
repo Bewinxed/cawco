@@ -65848,13 +65848,16 @@
             "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
             "type": "string"
           },
+          "setTables": {
+            "description": "What a change to a starting set does to it, each side a table the hub\nfills from the count of calls (hub unused-trim.ts `standing`): what\njoins it (a set that is new or gains items), then what leaves it (a\ntrim). Absent when the call changes no starting set, or moves nothing\nin or out of one.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SetChangeTable"
+            }
+          },
           "summary": {
             "description": "What will happen and why, in one line: \"Change the fleet's CLAUDE.md\";\nfor a shell call, the session's own reason for it (\"Check whether the\ntwo commits are on origin/main\"), its command under it in `command`.",
             "type": "string"
-          },
-          "unlisted": {
-            "$ref": "#/components/schemas/UnlistedTable",
-            "description": "What a change to a starting set takes out of it, with what its sessions\ncalled of each (hub unused-trim.ts): drawn as a table. Absent when the\ncall changes no starting set, or takes nothing out of one."
           }
         },
         "required": [
@@ -65913,10 +65916,13 @@
           "value"
         ]
       },
-      "UnlistedTable": {
-        "description": "What leaves a starting set, row by row: the never-called first, then the longest unused.",
+      "SetChangeTable": {
+        "description": "One side of a change to a starting set, row by row, the never-called\nfirst, then the longest unused. What joins is drawn with every session's\ncalls on the fleet; what leaves, with the set's own sessions' calls.",
         "type": "object",
         "properties": {
+          "change": {
+            "$ref": "#/components/schemas/SetChangeTableChange"
+          },
           "days": {
             "description": "The window the count covers, in days.",
             "type": "number"
@@ -65924,29 +65930,30 @@
           "rows": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/UnlistedRow"
+              "$ref": "#/components/schemas/SetItemRow"
             }
           },
           "set": {
-            "description": "The set, as the person knows it: \"Cawco-Dev's own set\", \"the build type's set\".",
+            "description": "The set, as the person knows it: \"Cawco-Dev's starting set\", \"the build type's starting set\".",
             "type": "string"
           }
         },
         "required": [
+          "change",
           "days",
           "rows",
           "set"
         ]
       },
-      "UnlistedRow": {
-        "description": "One skill or server a change takes out of a starting set, as the set's sessions called it.",
+      "SetItemRow": {
+        "description": "One skill or server a change moves into or out of a starting set, with the calls behind it.",
         "type": "object",
         "properties": {
           "kind": {
-            "$ref": "#/components/schemas/UnlistedRowKind"
+            "$ref": "#/components/schemas/SetItemRowKind"
           },
           "lastAt": {
-            "description": "Its last call in the window, ms epoch; null when no session of the set called it.",
+            "description": "Its last call in the window, ms epoch; null when no session counted called it.",
             "type": [
               "null",
               "number"
@@ -65957,7 +65964,7 @@
             "type": "string"
           },
           "sessions": {
-            "description": "How many of the set's sessions called it in the window.",
+            "description": "How many of the sessions counted called it in the window.",
             "type": "number"
           }
         },
@@ -68290,6 +68297,20 @@
           "working"
         ]
       },
+      "SetChangeTableChange": {
+        "type": "string",
+        "enum": [
+          "joins",
+          "leaves"
+        ]
+      },
+      "SetItemRowKind": {
+        "type": "string",
+        "enum": [
+          "server",
+          "skill"
+        ]
+      },
       "SlashCommandKind": {
         "type": "string",
         "enum": [
@@ -68408,13 +68429,6 @@
           "text",
           "thinking",
           "tool"
-        ]
-      },
-      "UnlistedRowKind": {
-        "type": "string",
-        "enum": [
-          "server",
-          "skill"
         ]
       },
       "WorkspaceToolNeed": {

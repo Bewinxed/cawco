@@ -89,7 +89,7 @@
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
-  import UnlistedTable from "./UnlistedTable.svelte";
+  import SetChangeTable from "./SetChangeTable.svelte";
 
   let {
     request,
@@ -1202,11 +1202,13 @@
           {/each}
         </div>
       {/if}
-      <!-- What a trim takes out of a starting set: the count's rows as a
-           table, the hub's, never an agent's text (UnlistedTable). -->
-      {#if presentation.unlisted}
-        <div class="mb-space-3">
-          <UnlistedTable table={presentation.unlisted} />
+      <!-- What joins a starting set and what leaves it: the count's rows
+           as tables, the hub's, never an agent's text (SetChangeTable). -->
+      {#if presentation.setTables && presentation.setTables.length > 0}
+        <div class="flex flex-col gap-space-3 mb-space-3">
+          {#each presentation.setTables as table (table.change)}
+            <SetChangeTable {table} />
+          {/each}
         </div>
       {/if}
       <!-- The rest of the input, shown rather than disclosed: each field's

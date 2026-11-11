@@ -277,12 +277,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    asked for (`DesignCard.thumb`, a link's own counts). A page built for
  *    56 offers a Map that reads a route the hub no longer serves, so it
  *    reloads first.
+ * 58: an ask's presentation draws a change to a starting set as its
+ *    `setTables` (what joins the set, what leaves it) in place of
+ *    `unlisted`, which drew only what leaves. A page built for 57 reads an
+ *    `unlisted` the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 57;
+export const WIRE_PROTOCOL = 58;
 
 /**
  * What a session's stream carries: the changes each frame made to its

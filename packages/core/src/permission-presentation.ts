@@ -72,104 +72,189 @@ export interface PermissionPresentation {
   /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
   project?: string;
   /**
+   * What a change to a starting set does to it, each side a table the hub
+   * fills from the count of calls (hub unused-trim.ts `standing`): what
+   * joins it (a set that is new or gains items), then what leaves it (a
+   * trim). Absent when the call changes no starting set, or moves nothing
+   * in or out of one.
+   */
+  setTables?: SetChangeTable[];
+  /**
    * What will happen and why, in one line: "Change the fleet's CLAUDE.md";
    * for a shell call, the session's own reason for it ("Check whether the
    * two commits are on origin/main"), its command under it in `command`.
    */
   summary: string;
-  /**
-   * What a change to a starting set takes out of it, with what its sessions
-   * called of each (hub unused-trim.ts): drawn as a table. Absent when the
-   * call changes no starting set, or takes nothing out of one.
-   */
-  unlisted?: UnlistedTable;
 }
 
-/** One skill or server a change takes out of a starting set, as the set's sessions called it. */
-export interface UnlistedRow {
+/** One skill or server a change moves into or out of a starting set, with the calls behind it. */
+export interface SetItemRow {
   kind: "skill" | "server";
-  /** Its last call in the window, ms epoch; null when no session of the set called it. */
+  /** Its last call in the window, ms epoch; null when no session counted called it. */
   lastAt: number | null;
   /** A skill as a listing names it (`plugin:skill`), a server by its fleet name. */
   name: string;
-  /** How many of the set's sessions called it in the window. */
+  /** How many of the sessions counted called it in the window. */
   sessions: number;
 }
 
-/** What leaves a starting set, row by row: the never-called first, then the longest unused. */
-export interface UnlistedTable {
+/**
+ * One side of a change to a starting set, row by row, the never-called
+ * first, then the longest unused. What joins is drawn with every session's
+ * calls on the fleet; what leaves, with the set's own sessions' calls.
+ */
+export interface SetChangeTable {
+  change: "joins" | "leaves";
   /** The window the count covers, in days. */
   days: number;
-  rows: UnlistedRow[];
-  /** The set, as the person knows it: "Cawco-Dev's own set", "the build type's set". */
+  rows: SetItemRow[];
+  /** The set, as the person knows it: "Cawco-Dev's starting set", "the build type's starting set". */
   set: string;
 }
+
+/** A skill or server some session called: its last call and how many sessions. */
+export type CalledItem = SetItemRow & { lastAt: number };
 
 /** Whose starting set a change writes: the asker's project's own, or a delegate type's. */
 export type SetOwner = { kind: "project" } | { kind: "type"; name: string };
 
-/** A starting set as the hub reads it now, and what its sessions called of what it lists. */
+/** A starting set as the hub reads it now, and the calls a change to it is drawn with. */
 export interface SetStanding {
   /** Its sessions' calls in the window, of the items they called. */
-  calls: (UnlistedRow & { lastAt: number })[];
+  calls: CalledItem[];
   days: number;
+  /** `items`' calls by every session on the fleet in the window, of the items called. */
+  fleetCalls: (items: StartingSet) => CalledItem[];
   /** The set, as the person knows it. */
   label: string;
   /** The set; null when there is none, and its sessions start with everything. */
   set: StartingSet | null;
 }
 
+type SetItem = Pick<SetItemRow, "kind" | "name">;
+
+const itemsOf = (set: StartingSet): SetItem[] => [
+  ...set.skills.map((name) => ({ kind: "skill" as const, name })),
+  ...set.servers.map((name) => ({ kind: "server" as const, name })),
+];
+
+/** What `set` names that `other` does not; all of it when `other` is null. */
+const beyond = (set: StartingSet, other: StartingSet | null): SetItem[] =>
+  itemsOf(set).filter(
+    (item) =>
+      !(
+        other &&
+        (item.kind === "skill" ? other.skills : other.servers).includes(
+          item.name
+        )
+      )
+  );
+
+/** `items` as one side's rows, each with its calls, the never-called first. */
+const rowsWith = (items: SetItem[], calls: CalledItem[]): SetItemRow[] =>
+  items
+    .map((item) => {
+      const called = calls.find(
+        (call) => call.kind === item.kind && call.name === item.name
+      );
+      return {
+        ...item,
+        lastAt: called?.lastAt ?? null,
+        sessions: called?.sessions ?? 0,
+      };
+    })
+    .sort(
+      (a, b) =>
+        (a.lastAt ?? 0) - (b.lastAt ?? 0) ||
+        a.kind.localeCompare(b.kind) ||
+        a.name.localeCompare(b.name)
+    );
+
 /**
- * What going from `standing`'s set to `after` takes out, each item with its
- * calls; undefined when nothing leaves (`after` null starts with everything).
+ * What going from `standing`'s set to `after` moves, as its tables: what
+ * joins (all of `after` when there was no set) with the fleet's calls, then
+ * what leaves with the set's own sessions' calls. Empty when the hub read no
+ * standing, or `after` is null (everything installed: no set to draw).
  */
-export const unlistedOf = (
+export const setTablesOf = (
   standing: SetStanding | undefined,
   after: StartingSet | null | undefined
-): UnlistedTable | undefined => {
-  const before = standing?.set;
-  if (!(standing && before && after)) {
-    return;
+): SetChangeTable[] => {
+  if (!(standing && after)) {
+    return [];
   }
-  const leaving = [
-    ...before.skills
-      .filter((name) => !after.skills.includes(name))
-      .map((name) => ({ kind: "skill" as const, name })),
-    ...before.servers
-      .filter((name) => !after.servers.includes(name))
-      .map((name) => ({ kind: "server" as const, name })),
+  const before = standing.set;
+  const joining = beyond(after, before);
+  const leaving = before ? beyond(before, after) : [];
+  const table = (
+    change: SetChangeTable["change"],
+    items: SetItem[],
+    calls: () => CalledItem[]
+  ): SetChangeTable[] =>
+    items.length === 0
+      ? []
+      : [
+          {
+            change,
+            set: standing.label,
+            days: standing.days,
+            rows: rowsWith(items, calls()),
+          },
+        ];
+  return [
+    ...table("joins", joining, () => standing.fleetCalls(after)),
+    ...table("leaves", leaving, () => standing.calls),
   ];
-  if (leaving.length === 0) {
-    return;
-  }
-  const rows: UnlistedRow[] = leaving.map((item) => {
-    const called = standing.calls.find(
-      (call) => call.kind === item.kind && call.name === item.name
-    );
-    return {
-      ...item,
-      lastAt: called?.lastAt ?? null,
-      sessions: called?.sessions ?? 0,
-    };
-  });
-  rows.sort(
-    (a, b) =>
-      (a.lastAt ?? 0) - (b.lastAt ?? 0) ||
-      a.kind.localeCompare(b.kind) ||
-      a.name.localeCompare(b.name)
-  );
-  return { set: standing.label, days: standing.days, rows };
 };
 
-/** A trim's own lines: how many items leave which set, and of what kinds. */
-const unlistedWords = (
-  table: UnlistedTable
-): Pick<PermissionPresentation, "detail" | "summary" | "unlisted"> => {
-  const skills = table.rows.filter((row) => row.kind === "skill").length;
+/** "3 skills and 1 server", as a set change's lines count them. */
+const kindsOf = (rows: SetItemRow[]): string => {
+  const skills = rows.filter((row) => row.kind === "skill").length;
+  return routinesWords.setKinds(skills, rows.length - skills);
+};
+
+/**
+ * A set change's own lines: how many items join or leave which set, and of
+ * what kinds; `fresh` when there was no set before.
+ */
+const setChangeWords = (
+  tables: SetChangeTable[],
+  fresh: boolean
+): Pick<PermissionPresentation, "detail" | "setTables" | "summary"> => {
+  const joins = tables.find((one) => one.change === "joins");
+  const leaves = tables.find((one) => one.change === "leaves");
+  const set = (joins ?? leaves)?.set ?? "";
+  if (joins && leaves) {
+    return {
+      summary: routinesWords.changeSetSummary(
+        joins.rows.length,
+        leaves.rows.length,
+        set
+      ),
+      detail: routinesWords.changeSetDetail(
+        kindsOf(joins.rows),
+        kindsOf(leaves.rows)
+      ),
+      setTables: tables,
+    };
+  }
+  if (joins) {
+    return {
+      summary: routinesWords.listSummary(joins.rows.length, set),
+      detail: fresh
+        ? routinesWords.newSetDetail(kindsOf(joins.rows))
+        : routinesWords.listDetail(
+            kindsOf(joins.rows),
+            joins.rows.length === 1
+          ),
+      setTables: tables,
+    };
+  }
+  const rows = leaves?.rows ?? [];
   return {
-    summary: routinesWords.unlistSummary(table.rows.length, table.set),
-    detail: routinesWords.unlistDetail(skills, table.rows.length - skills),
-    unlisted: table,
+    summary: routinesWords.unlistSummary(rows.length, set),
+    detail: routinesWords.unlistDetail(kindsOf(rows), rows.length === 1),
+    setTables: tables,
   };
 };
 
@@ -1082,14 +1167,32 @@ function delegateTypesWrite(
     return only(`Remove delegate type ${name}`);
   }
   const before = context.current("delegate_types", name);
+  // What joins its starting set and what leaves it, each a table of calls.
+  const proposed = (input.startingSet as StartingSet | undefined) ?? null;
+  const tables = setTablesOf(
+    context.startingSet?.({ kind: "type", name }),
+    proposed
+  );
+  /** Its fields as shown: a set its tables draw is not written out again. */
+  const besides = (fields: PermissionField[]) =>
+    tables.length > 0
+      ? fields.filter((field) => field.key !== "startingSet")
+      : fields;
   if (!before) {
     const route = [text(input.harness), text(input.model), text(input.effort)]
       .filter(Boolean)
       .join(" · ");
-    return only(
+    const added = only(
       `Add delegate type ${name}${route ? ` (${route})` : ""}`,
-      fieldsOf(input, ["action", "name", "harness", "model", "effort"])
+      besides(fieldsOf(input, ["action", "name", "harness", "model", "effort"]))
     );
+    return tables.length > 0
+      ? {
+          ...added,
+          detail: setChangeWords(tables, true).detail,
+          setTables: tables,
+        }
+      : added;
   }
   // A put replaces the type: a field it leaves out is cleared.
   const after = Object.fromEntries(
@@ -1099,13 +1202,12 @@ function delegateTypesWrite(
     DELEGATE_TYPE_FIELDS.map((key) => [key, before[key] ?? null])
   );
   const changed = changedFields(kept, after, context);
-  // What leaves its starting set is a table of its sessions' calls.
-  const unlisted = unlistedOf(
-    context.startingSet?.({ kind: "type", name }),
-    (input.startingSet as StartingSet | undefined) ?? null
-  );
-  if (unlisted) {
-    return { ...unlistedWords(unlisted), changes: [], fields: changed };
+  if (tables.length > 0) {
+    return {
+      ...setChangeWords(tables, !before.startingSet),
+      changes: [],
+      fields: besides(changed),
+    };
   }
   return {
     summary: `Change delegate type ${name}`,
@@ -1125,6 +1227,7 @@ const DELEGATE_TYPE_FIELDS = [
   "denyTools",
   "mayStart",
   "connections",
+  "startingSet",
 ] as const;
 
 /** `admin_connections_write`: a service the hub signs in to, never its key. */
@@ -1548,19 +1651,18 @@ function projectSettings(
   context: PresentationContext
 ): Presented {
   const changes = settingChanges(input);
-  const trim =
-    changes.length === 1 && changes[0]?.kind === "set_starting_set"
-      ? unlistedOf(
-          context.startingSet?.({ kind: "project" }),
-          changes[0].startingSet
-        )
-      : undefined;
-  if (trim) {
-    return {
-      ...unlistedWords(trim),
-      changes: [],
-      fields: fieldsOf(input, ["changes", "ask", "project"]),
-    };
+  // A change to its starting set alone is drawn as its tables of calls.
+  const alone = changes.length === 1 ? changes[0] : undefined;
+  if (alone?.kind === "set_starting_set") {
+    const standing = context.startingSet?.({ kind: "project" });
+    const tables = setTablesOf(standing, alone.startingSet);
+    if (tables.length > 0) {
+      return {
+        ...setChangeWords(tables, !standing?.set),
+        changes: [],
+        fields: fieldsOf(input, ["changes", "ask", "project"]),
+      };
+    }
   }
   const published = changes.find(
     (one): one is Extract<ProjectSettingChange, { kind: "create_repo" }> =>

@@ -7956,6 +7956,82 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/SetChangeTableChange`.
+    public enum SetChangeTableChange: OpenEnum {
+        case joins
+        case leaves
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "joins": self = .joins
+            case "leaves": self = .leaves
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .joins: "joins"
+            case .leaves: "leaves"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.joins, .leaves]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/SetItemRowKind`.
+    public enum SetItemRowKind: OpenEnum {
+        case server
+        case skill
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "server": self = .server
+            case "skill": self = .skill
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .server: "server"
+            case .skill: "skill"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.server, .skill]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/SettingSource`.
     public enum SettingSource: OpenEnum {
         case area
@@ -9601,44 +9677,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.agent, .connection, .delegateType, .harnessConfig, .hook, .marketplace, .mcp, .memory, .memoryDoc, .plugin, .rule, .skill]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/UnlistedRowKind`.
-    public enum UnlistedRowKind: OpenEnum {
-        case server
-        case skill
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "server": self = .server
-            case "skill": self = .skill
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .server: "server"
-            case .skill: "skill"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.server, .skill]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -191,6 +191,8 @@ typeOverrides:
     SendState: OpenEnums.SendState
     SessionOrigin: OpenEnums.SessionOrigin
     SessionPulseActivity: OpenEnums.SessionPulseActivity
+    SetChangeTableChange: OpenEnums.SetChangeTableChange
+    SetItemRowKind: OpenEnums.SetItemRowKind
     SettingSource: OpenEnums.SettingSource
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState
@@ -225,7 +227,6 @@ typeOverrides:
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
     TrashKind: OpenEnums.TrashKind
-    UnlistedRowKind: OpenEnums.UnlistedRowKind
     Verb: OpenEnums.Verb
     WaitKind: OpenEnums.WaitKind
     WaitReason: OpenEnums.WaitReason

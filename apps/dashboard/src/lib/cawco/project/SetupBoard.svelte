@@ -54,7 +54,7 @@
     delegates: SetupDelegate[];
     /** Stages he has still to write. */
     coming: number;
-    /** His open questions on the setup, oldest first. */
+    /** His open questions on the setup, oldest first: his `ask` calls, and the settings changes he asks to have approved (a starting set). */
     asks: BlockedRequest[];
     /** The ids of the setup page's cards beside the draft (`account`, `routines`, `what-moves`). */
     cards?: string[];

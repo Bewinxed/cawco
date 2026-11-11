@@ -7,7 +7,11 @@
  * them: pending.ts `askEnvelope`), and the draft his setup page holds.
  */
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
-import { presentPermission } from "@cawco/core/permission-presentation";
+import {
+  PROJECT_SETTINGS_TOOL,
+  presentPermission,
+} from "@cawco/core/permission-presentation";
+import { DAY_MS, HOUR_MS } from "@cawco/core/time";
 import type { BlockedRequest } from "../client.svelte";
 import type { Message } from "../types";
 import type { Stage as DraftStage, SetupDelegate } from "./setup-stage";
@@ -154,3 +158,86 @@ export const PR_ASKS: BlockedRequest[] = [
     { blocks: false, meanwhile: "a researcher who looks at remote roles first" }
   ),
 ];
+
+/**
+ * The skills and servers Caw proposes the PR team's sessions start with
+ * (the project-setup skill's starting set), each with every session's calls
+ * of it on the fleet: kind, name, days since its last call (null: none in
+ * the days the hub keeps) and how many sessions called it.
+ */
+const PR_SET: [
+  kind: "skill" | "server",
+  name: string,
+  ago: number | null,
+  sessions: number,
+][] = [
+  ["skill", "humanizer", 1, 64],
+  ["skill", "interfaces:better-writing", 4, 22],
+  ["skill", "x-twitter-growth-system", 23, 3],
+  ["skill", "x-account-warmup", null, 0],
+  ["skill", "zele", 44, 1],
+  ["skill", "deep-research", 9, 17],
+  ["skill", "clean-copy", 5, 52],
+  ["server", "Exa_ai", 1, 178],
+  ["server", "crw", 2, 88],
+  ["server", "claude.ai Gmail", 6, 12],
+  ["server", "claude.ai Google Drive", 13, 8],
+];
+
+/** His proposal of the PR team's starting set, parked as the hub parks `project_settings` with `ask: true`. */
+export const PR_SET_ASK: BlockedRequest = (() => {
+  const now = Date.now();
+  const set = {
+    skills: PR_SET.filter(([kind]) => kind === "skill").map(([, name]) => name),
+    servers: PR_SET.filter(([kind]) => kind === "server").map(
+      ([, name]) => name
+    ),
+  };
+  const input = {
+    changes: [{ kind: "set_starting_set", startingSet: set }],
+    reason:
+      "Sessions writing posts, applications and email on the fleet called these; your PR team's work needs the same.",
+    ask: true,
+    project: PR_NAME,
+  };
+  return {
+    cwd: "/srv/cawco/projects/pr-team",
+    hostname: "hub",
+    instanceId: "pr-team-conversation",
+    machineId: "hub",
+    stale: false,
+    request: {
+      heard: 0,
+      instanceId: "pr-team-conversation",
+      requestId: "ask-starting-set",
+      toolName: PROJECT_SETTINGS_TOOL,
+      input,
+      presentation: presentPermission(PROJECT_SETTINGS_TOOL, input, {
+        asker: "Caw",
+        current: () => undefined,
+        memory: () => undefined,
+        project: PR_NAME,
+        projectName: () => undefined,
+        startingSet: () => ({
+          set: null,
+          label: `${PR_NAME}'s starting set`,
+          days: 120,
+          calls: [],
+          fleetCalls: () =>
+            PR_SET.flatMap(([kind, name, ago, sessions]) =>
+              ago === null
+                ? []
+                : [
+                    {
+                      kind,
+                      name,
+                      lastAt: now - ago * DAY_MS - 2 * HOUR_MS,
+                      sessions,
+                    },
+                  ]
+            ),
+        }),
+      }),
+    },
+  };
+})();

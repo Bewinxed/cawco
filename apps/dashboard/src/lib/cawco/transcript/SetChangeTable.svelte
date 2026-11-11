@@ -1,32 +1,38 @@
 <script lang="ts">
   /**
-   * What a trim takes out of a starting set, on its approval (core
-   * permission-presentation.ts `unlisted`, filled by the hub from the
-   * count of calls: hub unused-trim.ts): a ledger of the kit's own Table,
-   * one row per skill or server, the never-called first. Item (its name,
-   * and whether it is a skill or a server), Last call (how long ago, the
-   * exact time on hover; "None in 30 days" for one no session of the set
-   * called) and Sessions (how many of the set's sessions called it). The
-   * rows are the hub's; nothing here is written by an agent.
+   * One side of a change to a starting set, on its approval (core
+   * permission-presentation.ts `setTables`, filled by the hub from the count
+   * of calls: hub unused-trim.ts `standing`): a ledger of the kit's own
+   * Table, one row per skill or server, the never-called first. What joins
+   * a set (a set that is new or gains items) is drawn with every session's
+   * calls on the fleet; what leaves it (a trim), with the set's own
+   * sessions' calls. Item (its name, and whether it is a skill or a
+   * server), Last call (how long ago, the exact time on hover; "None in 120
+   * days" for one no session counted called) and Sessions (how many of
+   * those sessions called it). The rows are the hub's; nothing here is
+   * written by an agent.
    */
-  import type { UnlistedTable } from "@cawco/core/permission-presentation";
+  import type { SetChangeTable } from "@cawco/core/permission-presentation";
   import { routinesWords as words } from "@cawco/core/words/routines";
   import { exactOf } from "#lib/cawco/routines/schedule.js";
   import { since } from "#lib/cawco/rules.js";
   import * as Table from "#lib/components/ui/table/index.js";
 
-  let { table }: { table: UnlistedTable } = $props();
+  let { table }: { table: SetChangeTable } = $props();
 
   const captionId = $props.id();
 </script>
 
 <section
-  data-slot="unlisted"
+  data-change={table.change}
+  data-slot="set-change"
   aria-labelledby={captionId}
   class="flex min-w-0 flex-col gap-space-2"
 >
   <p class="m-0 type-meta text-ink-muted" id={captionId}>
-    {words.unlistedCaption(table.days)}
+    {table.change === "joins"
+      ? words.listedCaption(table.days)
+      : words.unlistedCaption(table.days)}
   </p>
   <div
     class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
@@ -45,7 +51,7 @@
       </Table.Header>
       <Table.Body>
         {#each table.rows as row (`${row.kind}:${row.name}`)}
-          <Table.Row data-unlisted-row variant="unruled">
+          <Table.Row data-set-row variant="unruled">
             <Table.Cell rule="top" variant="ledger">
               <span class="flex min-w-0 items-baseline gap-space-2">
                 <span

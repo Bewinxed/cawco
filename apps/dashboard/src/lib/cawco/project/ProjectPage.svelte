@@ -8,6 +8,7 @@
     viewOfBlock,
   } from "@cawco/core/blocks";
   import { detach } from "@cawco/core/detach";
+  import { PROJECT_SETTINGS_TOOL } from "@cawco/core/permission-presentation";
   import { todoProgress } from "@cawco/core/plan";
   /**
    * The project's views (design §2, PRD §5.2): the head with Caw's face,
@@ -1619,12 +1620,19 @@
   const setupPage = $derived(
     decisions.list?.pages.find((one) => one.name === SETUP_PAGE) ?? null
   );
-  /** A parked ask that is a question of his (his `ask` call), not a permission. */
-  const isQuestion = (request: PendingPermission): boolean =>
-    request.toolName === ASK_USER_QUESTION;
+  /**
+   * A parked ask of his that is one of his setup questions: a question (his
+   * `ask` call), or a change to the project's settings he asks the person
+   * to approve (`project_settings` with `ask: true`), as the starting set
+   * he proposes (the project-setup skill). Any other permission stays in
+   * his composer.
+   */
+  const isSetupAsk = (request: PendingPermission): boolean =>
+    request.toolName === ASK_USER_QUESTION ||
+    request.toolName === PROJECT_SETTINGS_TOOL;
   /** His questions on the setup, oldest first, while the project is not set up. */
   const setupAsks = $derived<BlockedRequest[]>(
-    notSetUp ? lead.asks.filter((one) => isQuestion(one.request)) : []
+    notSetUp ? lead.asks.filter((one) => isSetupAsk(one.request)) : []
   );
   /**
    * The board draws his questions (a desk's scene; on a phone his sheet
@@ -1632,7 +1640,7 @@
    */
   const asksOnBoard = $derived(notSetUp && !phone);
   const asksElsewhere = (request: PendingPermission): boolean =>
-    asksOnBoard && isQuestion(request);
+    asksOnBoard && isSetupAsk(request);
   /**
    * The setup page Caw has stood at rest over, by its artifact: the draft
    * he handed over (the project-setup skill hands it over by ending the

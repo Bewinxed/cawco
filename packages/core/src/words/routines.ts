@@ -259,17 +259,31 @@ export const routinesWords = {
   refusedTrimOn: (why: string) => `The routine wasn't turned on. ${why}`,
   refusedTrimNotNow: (why: string) => `The suggestion is still here. ${why}`,
 
-  // A trim's approval: what leaves a starting set, as a table (core
-  // permission-presentation.ts `unlisted`).
+  // A change to a starting set, on its approval: what joins it and what
+  // leaves it, each a table (core permission-presentation.ts `setTables`).
+  setKinds: (skills: number, servers: number) =>
+    `${skills > 0 ? `${skills} ${skills === 1 ? "skill" : "skills"}` : ""}${skills > 0 && servers > 0 ? " and " : ""}${servers > 0 ? `${servers} ${servers === 1 ? "server" : "servers"}` : ""}`,
   unlistSummary: (count: number, set: string) =>
     `Unlist ${count} ${count === 1 ? "item" : "items"} from ${set}`,
-  unlistDetail: (skills: number, servers: number) =>
-    `${skills > 0 ? `${skills} ${skills === 1 ? "skill" : "skills"}` : ""}${skills > 0 && servers > 0 ? " and " : ""}${servers > 0 ? `${servers} ${servers === 1 ? "server" : "servers"}` : ""} ${skills + servers === 1 ? "leaves" : "leave"} it. Each stays installed.`,
+  unlistDetail: (kinds: string, one: boolean) =>
+    `${kinds} ${one ? "leaves" : "leave"} it. Each stays installed.`,
+  listSummary: (count: number, set: string) =>
+    `List ${count} ${count === 1 ? "item" : "items"} in ${set}`,
+  listDetail: (kinds: string, one: boolean) =>
+    `${kinds} ${one ? "joins" : "join"} it.`,
+  newSetDetail: (kinds: string) =>
+    `A new set of ${kinds}. Its sessions start with these and CawCo's own; everything else stays installed.`,
+  changeSetSummary: (joins: number, leaves: number, set: string) =>
+    `Change ${set}: ${joins} ${joins === 1 ? "joins" : "join"}, ${leaves} ${leaves === 1 ? "leaves" : "leave"}`,
+  changeSetDetail: (joining: string, leaving: string) =>
+    `Joining: ${joining}. Leaving: ${leaving}, each still installed.`,
   /** A starting set, as a trim's approval names it. */
   projectSet: (project: string) => `${project}'s starting set`,
   typeSet: (type: string) => `the ${type} type's starting set`,
   unlistedCaption: (days: number) =>
     `What leaves the set, by its sessions' calls in the last ${days} days`,
+  listedCaption: (days: number) =>
+    `What joins the set, by the fleet's calls in the last ${days} days`,
   columnItem: "Skill or server",
   columnLastCall: "Last call",
   columnSessions: "Sessions",

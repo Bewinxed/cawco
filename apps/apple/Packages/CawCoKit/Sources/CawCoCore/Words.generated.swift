@@ -3070,12 +3070,36 @@ public enum Words {
             "The suggestion is still here. \(why)"
         }
 
+        public static func setKinds(skills: Int, servers: Int) -> String {
+            "\(skills > 0 ? "\(skills) \(skills == 1 ? "skill" : "skills")" : "")\(skills > 0 && servers > 0 ? " and " : "")\(servers > 0 ? "\(servers) \(servers == 1 ? "server" : "servers")" : "")"
+        }
+
         public static func unlistSummary(count: Int, set: String) -> String {
             "Unlist \(count) \(count == 1 ? "item" : "items") from \(set)"
         }
 
-        public static func unlistDetail(skills: Int, servers: Int) -> String {
-            "\(skills > 0 ? "\(skills) \(skills == 1 ? "skill" : "skills")" : "")\(skills > 0 && servers > 0 ? " and " : "")\(servers > 0 ? "\(servers) \(servers == 1 ? "server" : "servers")" : "") \(skills + servers == 1 ? "leaves" : "leave") it. Each stays installed."
+        public static func unlistDetail(kinds: String, one: Bool) -> String {
+            "\(kinds) \(one ? "leaves" : "leave") it. Each stays installed."
+        }
+
+        public static func listSummary(count: Int, set: String) -> String {
+            "List \(count) \(count == 1 ? "item" : "items") in \(set)"
+        }
+
+        public static func listDetail(kinds: String, one: Bool) -> String {
+            "\(kinds) \(one ? "joins" : "join") it."
+        }
+
+        public static func newSetDetail(kinds: String) -> String {
+            "A new set of \(kinds). Its sessions start with these and CawCo's own; everything else stays installed."
+        }
+
+        public static func changeSetSummary(joins: Int, leaves: Int, set: String) -> String {
+            "Change \(set): \(joins) \(joins == 1 ? "joins" : "join"), \(leaves) \(leaves == 1 ? "leaves" : "leave")"
+        }
+
+        public static func changeSetDetail(joining: String, leaving: String) -> String {
+            "Joining: \(joining). Leaving: \(leaving), each still installed."
         }
 
         /// A starting set, as a trim's approval names it.
@@ -3089,6 +3113,10 @@ public enum Words {
 
         public static func unlistedCaption(days: Int) -> String {
             "What leaves the set, by its sessions' calls in the last \(days) days"
+        }
+
+        public static func listedCaption(days: Int) -> String {
+            "What joins the set, by the fleet's calls in the last \(days) days"
         }
 
         public static let columnItem = "Skill or server"

@@ -199,7 +199,7 @@ const definition = z.object({
 });
 
 const DESCRIPTION =
-  "Read your project's settings (no changes) or change them, noted in the project's conversation; ask: true asks the person first (create_repo and set_review always do).";
+  "Read your project's settings (no changes) or change them, noted in the project's conversation; ask: true asks the person first (create_repo and set_review always do). A starting set can be proposed again at any time, the same way.";
 
 /** What a malformed call is told, after what it got wrong. */
 const INPUT_HELP = `changes is a list of ${PROJECT_SETTING_KINDS.join(", ")}, and reason one sentence; leave changes out to read the settings.`;

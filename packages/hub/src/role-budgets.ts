@@ -114,9 +114,13 @@ type DelegationOptions = Parameters<typeof createDelegationMcp>[0];
  * measured).
  * 2026-11-11: trimmer, a run of the unused skills and servers routine
  * (unused-trim.ts): set_title, finish_item, calls_by_role and trim_propose.
+ * 2026-11-11: project_settings' description says a starting set can be
+ * proposed again at any time (tsk-348), the owner's "with the option to
+ * change it later" on card `role-starting-set#own-sessions` (worker 30,502
+ * measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 30_500,
+  worker: 30_550,
   delegate: 11_250,
   overseer: 770,
   "web-facing": 3400,

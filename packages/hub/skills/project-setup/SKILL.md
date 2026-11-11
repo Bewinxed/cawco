@@ -5,7 +5,7 @@ description: Set up a project with the person — its name, what it is for, its 
 
 # Setting a project up
 
-A setup is one decision page, `setup`, that you open early and draft on, your questions asked as they come up, and that the person sends once. The project's board draws the page as you write it: what it is for, then each stage as a column the person changes where it stands, and Set up in the board's draft bar. Your open questions stand on the board on a desk and in your conversation on a phone. Nothing is written into the project before they send it: no stages.md, no delegate types, no AGENTS.md, no template. Their Send approves the whole page, so what you write from it goes in directly.
+A setup is one decision page, `setup`, that you open early and draft on, your questions asked as they come up, and that the person sends once. The project's board draws the page as you write it: what it is for, then each stage as a column the person changes where it stands, and Set up in the board's draft bar. Your open questions stand on the board on a desk and in your conversation on a phone. Nothing is written into the project before they send it: no stages.md, no delegate types, no AGENTS.md, no template. Their Send approves the whole page, so what you write from it goes in directly. The one part with its own approval is the project's starting set (step 4), which their Approve on its ask writes.
 
 Where the page stands depends on whether the project is set up (it has stages.md or a template), and every way to it lands there, your `artifact_create` and `artifact_show` included; it never opens in a panel:
 
@@ -63,6 +63,14 @@ Draft the rest from their words: the stages, who does the work, any routine. Add
 - **`blocks: false`** for everything else, with `meanwhile` saying the assumption you go on with ("drafting for LinkedIn and X"), then keep drafting.
 - Ask only what would change the draft and that neither their words nor `project_setup`'s records answer, one question per call, two to four options each, the one you would pick first marked as yours. Never ask what the page itself settles (the name, a stage's name or look, which types to keep).
 - When a shipped template fits the work as they described it, ask whether to start from it (options: that template, and "Caw drafts the stages from what you wrote"), `blocks: false`, going on with your own draft meanwhile.
+
+**The starting set.** While you draft, propose the skills and MCP servers the project's sessions start with, so they list what its work needs instead of everything installed:
+
+1. Call `calls_by_role` with `project: "all"`. Read the rows of the roles doing this kind of work (a delegate type that does it, `person` in projects like this one): which skills and servers they called, and how many sessions.
+2. Name the set this project's work needs from those rows. Add an item no session called only when the work plainly needs it; CawCo's own skills and server come with every set, so leave them out.
+3. Ask with `project_settings`: `changes: [{ kind: "set_starting_set", starting_set: { skills, servers } }]`, `ask: true`, and a `reason` of one sentence saying what the set is drawn from. It stands with your questions and in Needs you, drawn as a table of each item's calls on the fleet. Approve writes the set; a rejection leaves the project starting with everything.
+
+Done when the set is asked, or when `calls_by_role` shows no session doing this kind of work: then say so in one line and go on. A set can be proposed again at any time, the same way.
 
 Each answer reaches you as a message. Fold it into the draft; when it changes something already drafted, say what you redo in one line ("Redrafting the posting stages for X alone"), then go on. An unanswered question stays open, your assumption kept. Done when the page holds every part that applies, and no other, and nothing that blocks is open.
 
