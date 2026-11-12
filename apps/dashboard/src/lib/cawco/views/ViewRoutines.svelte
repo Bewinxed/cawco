@@ -49,8 +49,8 @@
    * row, inside its card on its own columns, at a routine row's height and
    * in its type: Caw's still in the state column, its name with a Suggested
    * chip over why, Turn on where Next run's times start, and an ✕ (Not now)
-   * where a row's ⋯ stands, the row traced in the suggestion's coral dotted
-   * edge. It does not open. Turn on makes it, a row like the others; Not now
+   * where a row's ⋯ stands, the row traced in the rows' own hairline,
+   * dashed: an offer, not yet a routine. It does not open. Turn on makes it, a row like the others; Not now
    * waves it away; either keeps it gone from this project (hub
    * unused-trim.ts). With no routine yet the empty state stands whole,
    * and the suggestion is its last chip: its ask in the composer, unsent,
@@ -1099,9 +1099,9 @@
 {/snippet}
 
 <!-- Caw's suggestion, the ledger's last row: on its columns, at a routine
-     row's height and in its type, traced in the suggestion's coral dotted
-     edge drawn inside its box (so no column moves), its lower corners on
-     the card's while it is the card's last. It opens nothing. Why the hub
+     row's height and in its type, traced in the hairline that rules the
+     rows (`border-hairline`, 1px), dashed, inside its box (so no column
+     moves), its lower corners on the card's while it is the card's last. It opens nothing. Why the hub
      refused an answer stands under it, as a routine's refusal does. -->
 {#snippet trimRow()}
   {@const busy = answering !== null}
@@ -1114,7 +1114,7 @@
         <span
           data-slot="suggestion-edge"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-0 outline-2 -outline-offset-2 outline-brand-solid outline-dotted data-card-last:rounded-b-lg"
+          class="pointer-events-none absolute inset-0 outline-1 -outline-offset-1 outline-border-hairline outline-dashed data-card-last:rounded-b-lg"
           data-card-last={trimRefused ? undefined : ""}
         ></span>
         <span
