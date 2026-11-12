@@ -50,12 +50,12 @@ additionalimagestores = [$([[ -n $images ]] && printf '"%s"' "$images")]
 CONF
   printf '{"auths":{}}\n' > "$root.auth.json"
   # The run dir, recorded beside the storage: a release that stops sweeps exactly the run dirs its staging records
-  # (test-sweep.sh), never another test's by its name.
+  # (proof-sweep.sh), never another test's by its name.
   echo "$run" > "$root.run-dir"
   # The storage comes from storage.conf alone: any of --root, --runroot or --storage-driver on the command line drops
   # its driver options, `additionalimagestores` among them (measured on podman 5.7: `info` shows GraphOptions {} and
   # the store's images are pulled from a registry instead), so the instance would never see the image store.
-  echo "env CONTAINERS_CONF=$root.containers.conf CONTAINERS_STORAGE_CONF=$root.storage.conf REGISTRY_AUTH_FILE=$root.auth.json podman --tmpdir $run/tmp"
+  echo "env CONTAINERS_CONF=$root.containers.conf CONTAINERS_STORAGE_CONF=$root.storage.conf REGISTRY_AUTH_FILE=$root.auth.json podman"
 }
 
 # The instance's run dir and config files, its storage kept (the image store's instance).
@@ -64,11 +64,11 @@ podman_instance_closed() {
   rm -rf "$(podman_instance_run "$name")" "$root.containers.conf" "$root.storage.conf" "$root.auth.json" "$root.run-dir" 2> /dev/null || true
 }
 
-TEST_SWEEP=$(dirname "$(realpath "${BASH_SOURCE[0]}")")/test-sweep.sh
+TEST_SWEEP=$(dirname "$(realpath "${BASH_SOURCE[0]}")")/proof-sweep.sh
 
 # The instance gone whole, once its containers were removed through it: whatever still names its run dir or storage
 # (a container whose removal failed, its conmon, the rootless netns' pasta and aardvark-dns) ended, their mounts
-# unmounted and both dirs removed from inside the user namespace that wrote them (test-sweep.sh), then its config
+# unmounted and both dirs removed from inside the user namespace that wrote them (proof-sweep.sh), then its config
 # files.
 podman_instance_gone() {
   local name=$1 root=$2 rc=0
