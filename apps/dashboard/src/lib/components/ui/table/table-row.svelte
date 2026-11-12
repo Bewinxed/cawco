@@ -34,6 +34,13 @@
          */
         "picks-stacks":
           "border-b-none [&:is(tbody>tr):last-child]:border-b-none",
+        /**
+         * A row the list would hold, offered and not there yet (Caw's
+         * suggested routine): unruled, on the page's own ground rather than
+         * the card's raised one, an open slot at the card's end.
+         */
+        offered:
+          "border-b-none bg-surface-page [&:is(tbody>tr):last-child]:border-b-none",
       },
       /** A row whose subject is away (an offline machine). */
       inactive: { true: "opacity-50" },

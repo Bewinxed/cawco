@@ -7,6 +7,10 @@
     variants: {
       variant: {
         default: "",
+        /* A badge on a recessed ground (the page's own, behind a card, as
+           an offered row stands on it): the raised surface, where the
+           recess would melt into that ground. */
+        raised: "bg-surface-raised",
         secondary: "text-ink-muted",
         outline: "",
         ghost: "bg-transparent text-ink-muted",

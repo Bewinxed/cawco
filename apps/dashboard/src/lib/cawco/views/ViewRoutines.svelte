@@ -16,8 +16,7 @@
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { connect } from "#lib/cawco/connect/installs.svelte.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
-  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
-  import Caw from "#lib/cawco/home/Caw.svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { hubSeam } from "#lib/cawco/hub-live.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
@@ -46,12 +45,14 @@
    * On a narrow ledger Last and Next fold into the schedule's line.
    *
    * Caw suggests the unused skills and servers routine as the ledger's last
-   * row, inside its card on its own columns, at a routine row's height and
-   * in its type: Caw's still in the state column, its name with a Suggested
-   * chip over why, Turn on where Next run's times start, and an ✕ (Not now)
-   * where a row's ⋯ stands, the row traced in the rows' own hairline,
-   * dashed: an offer, not yet a routine. It does not open. Turn on makes it, a row like the others; Not now
-   * waves it away; either keeps it gone from this project (hub
+   * row, inside its card on its own columns, in a routine row's type: the
+   * suggestion's glyph (the starters' stars) in the state column; its name
+   * with a Suggested chip, over why, wrapped whole across the Routine and
+   * Last run columns; Turn on where Next run's times start; an ✕ (Not now)
+   * where a row's ⋯ stands; the row on the page's own ground in the rows'
+   * hairline, dashed: an open slot, not yet a routine. It does not open.
+   * Turn on makes it, a row like the others; Not now waves it away; either
+   * keeps it gone from this project (hub
    * unused-trim.ts). With no routine yet the empty state stands whole,
    * and the suggestion is its last chip: its ask in the composer, unsent,
    * and Caw turns the routine on when it goes (hub routines.ts
@@ -277,24 +278,8 @@
   // --- Caw's suggestion: the unused skills and servers routine -------------------
 
   const offered = $derived(page?.trimOffered ?? false);
-  /** Caw's still in the state column: as wide as the column's lead (`--c-row-lead`, 28px). */
-  const CAW_LEAD = 28;
-  /** The Suggested chip stands under the name: beside it, the name would be cut. */
-  let chipUnder = $state(false);
-  /** Whether the name, the gap and the chip are wider than the cell's words column. */
-  function chipCrowds(column: HTMLElement): boolean {
-    const name = column.querySelector('[data-slot="name"]');
-    const chip = column.querySelector('[data-slot="trim-chip"]');
-    const line = column.querySelector('[data-slot="name-line"]');
-    if (!(name && chip && line)) {
-      return false;
-    }
-    const gap = Number.parseFloat(getComputedStyle(line).columnGap) || 0;
-    return (
-      name.scrollWidth + gap + chip.getBoundingClientRect().width >
-      column.clientWidth
-    );
-  }
+  /** The suggestion's mark in the state column: the starters' glyph for an idea. */
+  const SuggestionGlyph = GLYPHS.ideas;
   /** The answer on its way to the hub; null at rest. */
   let answering = $state<"on" | "dismissed" | null>(null);
   /** Why the hub refused the last answer, said under the suggestion until the next. */
@@ -414,7 +399,11 @@
    * columns spanned would share the name's room (Last and Next fold under
    * the Routines block's measure, table.svelte `measure`).
    */
-  let span = $state(5);
+  /** The ledger's columns, every one shown: state, routine, Last run, Next run, actions. */
+  const LEDGER_COLUMNS = 5;
+  let span = $state(LEDGER_COLUMNS);
+  /** The ledger shows its Last run column: the suggestion's routine cell takes it too. */
+  const lastShown = $derived(span === LEDGER_COLUMNS);
   function countColumns(ledger: HTMLElement) {
     // Its own band's heads only: a routine's detail holds ledgers of its own.
     const count = () => {
@@ -1098,15 +1087,16 @@
   </Collapsible.Root>
 {/snippet}
 
-<!-- Caw's suggestion, the ledger's last row: on its columns, at a routine
-     row's height and in its type, traced in the hairline that rules the
-     rows (`border-hairline`, 1px), dashed, inside its box (so no column
-     moves), its lower corners on the card's while it is the card's last. It opens nothing. Why the hub
+<!-- Caw's suggestion, the ledger's last row: on its columns, in a routine
+     row's type, on the page's own ground (an open slot, not a routine yet)
+     traced in the hairline that rules the rows (`border-hairline`, 1px),
+     dashed, inside its box (so no column moves), its lower corners on the
+     card's while it is the card's last. It opens nothing. Why the hub
      refused an answer stands under it, as a routine's refusal does. -->
 {#snippet trimRow()}
   {@const busy = answering !== null}
   <Table.Body data-view-routines-suggestion>
-    <Table.Row class="relative" variant="unruled">
+    <Table.Row class="relative" variant="offered">
       <Table.Cell class="w-(--col-state)" variant="list">
         <!-- The edge, an element of the row's first cell standing over the
              whole row (the row is its containing block): a pseudo-element
@@ -1120,48 +1110,40 @@
         <span
           data-slot="lead"
           aria-label={words.trimLabel}
-          class="grid w-c-row-lead place-items-center *:shrink-0"
-          role="img"><Caw size={CAW_LEAD} status="ready" still /></span
+          class="grid w-c-row-lead place-items-center text-ink-muted"
+          role="img"><SuggestionGlyph class="size-icon-md" /></span
         >
       </Table.Cell>
-      <Table.Cell variant="list">
-        <!-- Its name and the Suggested chip on one line while they fit;
-             where they don't, the chip goes under the name, before why,
-             so the name is never cut for it and the row keeps two lines.
-             The chip's line box is its line's, so it adds no height. -->
-        <div
-          class="min-w-0"
-          {@attach frameSize(chipCrowds, (crowds) => {
-            chipUnder = crowds;
-          })}
+      <!-- Its Last run would stand empty, so the routine cell takes that
+           column too wherever it is shown: the name and its chip hold one
+           line and why wraps whole, never cut. -->
+      <Table.Cell colspan={lastShown ? 2 : undefined} variant="list">
+        <!-- The chip follows the name on its line, dropping under it only
+             when the name alone fills the line. -->
+        <span
+          data-slot="name-line"
+          class="flex flex-wrap items-center gap-x-space-2 gap-y-space-1 type-label"
         >
-          <span
-            data-slot="name-line"
-            class="flex items-center gap-x-space-2 type-label"
+          <span data-slot="name" class="min-w-0 truncate text-ink-row"
+            >{words.trimName}</span
           >
-            <span data-slot="name" class="min-w-0 truncate text-ink-row"
-              >{words.trimName}</span
-            >
-            {#if !chipUnder}{@render suggestedChip()}{/if}
-          </span>
-          <span
-            data-slot="sub"
-            class="flex items-center gap-x-space-2 type-meta text-ink-muted"
+          <span data-slot="trim-chip" class="flex h-lh shrink-0 items-center"
+            ><Badge variant="raised"><span>{words.trimSuggested}</span></Badge
+            ></span
           >
-            {#if chipUnder}{@render suggestedChip()}{/if}
-            <span class="min-w-0 truncate" title={words.trimReason}
-              >{words.trimReason}</span
-            >
-          </span>
-          <!-- On a narrow ledger, Turn on under the line, on the name's edge. -->
-          <span
-            data-slot="folded"
-            class="hidden pt-space-2 @max-table-34rem/table:block"
-            >{@render turnOn(busy)}</span
-          >
-        </div>
+        </span>
+        <span
+          data-slot="sub"
+          class="block whitespace-normal text-pretty type-meta text-ink-muted"
+          >{words.trimReason}</span
+        >
+        <!-- On a narrow ledger, Turn on under why, on the name's edge. -->
+        <span
+          data-slot="folded"
+          class="hidden pt-space-2 @max-table-34rem/table:block"
+          >{@render turnOn(busy)}</span
+        >
       </Table.Cell>
-      <Table.Cell data-col-last fold="measure" variant="list" />
       <Table.Cell data-cell="next" fold="measure" variant="list">
         {@render turnOn(busy)}
       </Table.Cell>
@@ -1195,11 +1177,6 @@
       </tr>
     {/if}
   </Table.Body>
-{/snippet}
-{#snippet suggestedChip()}
-  <span data-slot="trim-chip" class="flex h-lh shrink-0 items-center"
-    ><Badge><span>{words.trimSuggested}</span></Badge></span
-  >
 {/snippet}
 {#snippet turnOn(busy: boolean)}
   <Button

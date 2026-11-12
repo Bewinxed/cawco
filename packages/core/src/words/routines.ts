@@ -255,7 +255,7 @@ export const routinesWords = {
   trimSuggested: "Suggested",
   trimReason:
     "Each Monday, counts what this project's sessions call and proposes unlisting what nobody has called in 30 days.",
-  trimLabel: "Caw suggests a routine",
+  trimLabel: "Suggested routine",
   trimTurnOn: "Turn on",
   trimNotNow: "Not now",
   /**

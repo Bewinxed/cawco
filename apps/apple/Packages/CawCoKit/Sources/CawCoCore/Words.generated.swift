@@ -3119,7 +3119,7 @@ public enum Words {
 
         public static let trimReason = "Each Monday, counts what this project's sessions call and proposes unlisting what nobody has called in 30 days."
 
-        public static let trimLabel = "Caw suggests a routine"
+        public static let trimLabel = "Suggested routine"
 
         public static let trimTurnOn = "Turn on"
 
