@@ -71,7 +71,7 @@ const RULES: {
     pattern: "(^|[^-[:alnum:]])dur-[a-z]",
   },
   {
-    name: "a failure is never a toast (DESIGN.md, The Work Outlives Its Surface Rule): say it where it happened, in the error formula, with its way out (RowFault, the pane's line, the composer's)",
+    name: "a failure is never a toast (DESIGN.md, Flow: a failure leaves the person where they were): say it where it happened, in the error formula, with its way out (RowFault, the pane's line, the composer's)",
     pattern: "(^|[^[:alnum:]_$])toast\\.(error|warning)([^[:alnum:]_$]|$)",
   },
 ];

@@ -17,8 +17,8 @@ UIKit reads the stores through automatic observation tracking: a view
 controller's `updateProperties()` and `viewWillLayoutSubviews()` re-run when an
 `@Observable` property they read changes.
 
-Tokens are generated, never edited: DESIGN.md (the token source paragraph)
-documents the command and its outputs. The icon catalog
+Colours are the colour sets in `CawCoDesign/Resources/Tokens.xcassets`, kept to
+the dashboard's tokens (`apps/dashboard/src/lib/tokens/theme.css`). The icon catalog
 (`CawCoDesign/Resources/Icons.xcassets`) is written by
 `bun apps/apple/scripts/icons.ts` from the dashboard's own Solar icon set.
 

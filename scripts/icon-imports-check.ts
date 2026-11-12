@@ -30,7 +30,7 @@ if (out.exitCode > 1) {
 if (out.exitCode === 0 && lines) {
   const hits = lines.split("\n");
   console.log(
-    `An icon is imported from the barrel, never from unplugin-icons directly (DESIGN.md, The Solar Duotone Rule: "imported through \`$lib/icons.ts\`"). Name it in packages/icons/src/index.ts and import it from #lib/icons.js (a brand mark: packages/icons/src/marks.ts, imported from @cawco/icons/marks):\n${hits.map((hit) => `  ${hit}`).join("\n")}`
+    `An icon is imported from the barrel, never from unplugin-icons directly (icons are imported through \`#lib/icons.js\`, the dashboard's one icon module). Name it in packages/icons/src/index.ts and import it from #lib/icons.js (a brand mark: packages/icons/src/marks.ts, imported from @cawco/icons/marks):\n${hits.map((hit) => `  ${hit}`).join("\n")}`
   );
   process.exit(1);
 }

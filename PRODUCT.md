@@ -111,7 +111,7 @@ Away from a desk, the operator uses the Caw&Co app on iPhone, iPad and Mac, or t
 - **Button labels:** always [Verb]+[Object], from an allowlisted imperative-verb set.
 - **Terminology discipline:** one concept → one canonical term everywhere, enforced by lint.
 - **No humor** in error, warning, destructive-confirm, or permission-approval copy.
-- **Copy authority:** every user-facing string lives in `packages/core/src/words/**`, written to DESIGN.md's Voice section (the voice, punctuation, contractions, error and empty-state formulas, button labels).
+- **Copy authority:** every user-facing string lives in `packages/core/src/words/**`, written to DESIGN.md's Words section (naming, error and empty-state wording, button labels).
 - **Identity constraints (owner-stated):** every product icon is Solar's bold-duotone cut, and it stays; indigo is never a brand hue; the action is graphite, not a hue. DESIGN.md records how these are drawn.
 
 ## Evidence on Hand

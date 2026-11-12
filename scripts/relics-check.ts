@@ -168,7 +168,7 @@ console.log(
 );
 if (total > 0) {
   console.log(
-    "relics: each kind must read 0 (the value's token, a DESIGN.md step or a kit component; a residual <style> opens with its tailwind: docs reason)"
+    "relics: each kind must read 0 (the value's token in theme.css, a house spacing step or a kit component; a residual <style> opens with its tailwind: docs reason)"
   );
   process.exit(1);
 }

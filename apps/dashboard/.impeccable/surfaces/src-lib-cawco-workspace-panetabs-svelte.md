@@ -7,7 +7,7 @@ related_targets: []
 
 # Session tabs, the session card and the tab's menu
 
-The owner's picks for the session strip (PaneTabs on the desk and the phone), drawn on fluid-tabs' folder variant (DESIGN.md, Shapes, Folder tabs; `components/ui/fluid-tabs/TabItem.svelte`, `fold-path.ts`) and `HangCard`.
+The owner's picks for the session strip (PaneTabs on the desk and the phone), drawn on fluid-tabs' folder variant (the folder-tab shape: `components/ui/fluid-tabs/TabItem.svelte`, `fold-path.ts`) and `HangCard`.
 
 ## Folder tabs
 - The strip is a drawer of real folders: the chosen tab approaches from the horizon while the others recede and fold back, almost 3D (his approved mockup).

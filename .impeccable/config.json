@@ -8,35 +8,35 @@
         "rule": "design-system-font",
         "value": "nunito variable",
         "createdAt": "2026-10-24T17:31:04.938Z",
-        "reason": "DESIGN.md's Typography declares it: 'Wordmark font: Nunito Variable (--font-wordmark)'; the hook reads only the frontmatter"
+        "reason": "--font-wordmark in apps/dashboard/src/lib/tokens/theme.css declares it ('Nunito Variable'); DESIGN.md no longer lists fonts for the detector to read"
       },
       {
         "rule": "cream-palette",
         "value": "*",
         "files": ["design-previews/caw-panel/index.html"],
         "createdAt": "2026-10-24T18:29:13.267Z",
-        "reason": "DESIGN.md: the surface is warm paper by day (neutral hue ~85); the preview draws the house tokens"
+        "reason": "the surface is warm paper by day (neutral hue ~85, in theme.css); the preview draws the house tokens"
       },
       {
         "rule": "flat-type-hierarchy",
         "value": "*",
         "files": ["design-previews/caw-panel/index.html"],
         "createdAt": "2026-10-24T18:29:13.284Z",
-        "reason": "static scan cannot resolve var(--type-*); rendered: title 18px/500 over body 14px and label 13px, DESIGN.md Hierarchy"
+        "reason": "static scan cannot resolve var(--type-*); rendered: title 18px/500 over body 14px and label 13px (the type roles in theme.css)"
       },
       {
         "rule": "cramped-padding",
         "value": "*",
         "files": ["design-previews/caw-panel/index.html"],
         "createdAt": "2026-10-24T18:29:13.302Z",
-        "reason": "the segmented control's 2px groove round its thumbs is DESIGN.md's segmented recipe, the labels carry space-3 padding"
+        "reason": "the segmented control's 2px groove round its thumbs is the segmented control's own design, the labels carry space-3 padding"
       },
       {
         "rule": "flat-type-hierarchy",
         "value": "*",
         "files": ["design-previews/pairing/index.html"],
         "createdAt": "2026-10-24T19:36:45.835Z",
-        "reason": "leaf call: the preview sets type only through DESIGN.md's locked roles (--type-title, --type-body, --type-meta), which CLAUDE.md makes law; no one-off size steps allowed"
+        "reason": "leaf call: the preview sets type only through theme.css's type roles (--type-title, --type-body, --type-meta), which CLAUDE.md makes law; no one-off size steps allowed"
       },
       {
         "rule": "design-system-font",

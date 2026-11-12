@@ -336,7 +336,7 @@ export function rawMotion(model, { curves = false } = {}) {
     findings.push({
       start: node.start,
       end: node.end,
-      message: `This writes ${said}. A duration or a curve is a motion token (apps/dashboard/src/lib/tokens/theme.css, DESIGN.md Motion grammar).`,
+      message: `This writes ${said}. A duration or a curve is a motion token (apps/dashboard/src/lib/tokens/theme.css, DESIGN.md, Motion: each kind of motion has a house helper).`,
     });
   eachNode(model, (node) => {
     const found = READERS[node.type]?.(model, node, { curves });

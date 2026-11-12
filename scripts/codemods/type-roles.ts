@@ -460,8 +460,26 @@ const whyNot = (e: Effective) => {
   return `complete, at a size no role has (${e.get("font-size")})`;
 };
 
+/**
+ * Class lists that stay as written because the element is mono through its
+ * tag, not through a class: a `type-*` utility is a `font` shorthand and sets
+ * `--font-sans`, which would override the face a `<code>` element takes from
+ * the base layer. (An element that carries `font-mono` itself needs no entry:
+ * that utility sorts after every `type-*`, so it keeps winning.) Keyed by file;
+ * a list is matched on its tokens, in order.
+ */
+const KEEP: Record<string, string[]> = {
+  "apps/dashboard/src/lib/cawco/CopyBox.svelte": [
+    "min-w-0 basis-full overflow-x-auto overscroll-x-contain text-meta whitespace-normal text-ink-strong",
+    "min-w-0 flex-1 truncate text-meta text-ink-strong",
+  ],
+};
+
 /** One class list (a literal's plain tokens). Returns the new text. */
 const foldList = (body: string): string => {
+  if (KEEP[currentFile]?.includes(body.trim().split(/\s+/u).join(" "))) {
+    return body;
+  }
   const parts = body.split(/(\s+)/u);
   const idx: { i: number; kind: Kind; token: string }[] = [];
   let opaque = false;

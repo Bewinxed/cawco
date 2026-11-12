@@ -82,19 +82,21 @@ const weekRim = (hue: string) =>
   `color-mix(in oklch, {color.account-${hue}}, {color.account-week-toward} calc({motion.account-week-mix} * 100%))`;
 
 const S = {
-  action: "DESIGN.md, Coral Action",
-  brandInk: "DESIGN.md, Brand ink and wash",
-  selected: "DESIGN.md, Selected",
-  chosen: "DESIGN.md, Chosen option; tokens chip-chosen-ink, action-solid",
-  inkSolid: "DESIGN.md, Ink-solid",
-  chips: "DESIGN.md, Tertiary: status (each chip 4.5:1)",
-  syntax: "DESIGN.md, Syntax; token code-ink",
-  contrastEdge: "DESIGN.md, Edges; token border-contrast",
-  inks: "DESIGN.md, Inks",
-  subtle: "DESIGN.md, Inks; token ink-subtle",
-  identity: "DESIGN.md, Project identity; token identity-ink",
+  action: "DESIGN.md, Colour, focus and type: coral is the act",
+  brandInk: "DESIGN.md, Colour, focus and type: coral ink and wash",
+  selected: "DESIGN.md, Colour, focus and type: coral marks what is selected",
+  chosen:
+    "DESIGN.md, Colour, focus and type: the option chip; tokens chip-chosen-ink, action-solid",
+  inkSolid: "the ink-solid fill (theme.css)",
+  chips: "DESIGN.md, Colour, focus and type: status hues (each chip 4.5:1)",
+  syntax: "syntax colours (theme.css); token code-ink",
+  contrastEdge: "token border-contrast (theme.css)",
+  inks: "the text inks (theme.css)",
+  subtle: "token ink-subtle (theme.css)",
+  identity:
+    "DESIGN.md, Colour, focus and type: identity hues; token identity-ink",
   rowOutline:
-    "DESIGN.md, Borders are graded; token border-row-outline, a form field's edge (non-text 3:1, WCAG 2.2 SC 1.4.11)",
+    "token border-row-outline, a form field's edge (non-text 3:1, WCAG 2.2 SC 1.4.11)",
   rim: "session tabs' surface brief (PaneTabs), Status rim; token tab-rim-mix-chosen/-idle",
   recall: "the recall wheel's rows (Composer), text 4.5:1 (WCAG 2.2 SC 1.4.3)",
   hairline:
@@ -104,9 +106,9 @@ const S = {
   week: "usage week mark (UsageMeter)",
   spent: "usage cell at its limit (UsageMeter); token ring-track-spent",
   notes: "release-note labels (UpdateCard); token note-new-ink",
-  ring: "DESIGN.md, The One Ring Rule (non-text 3:1, WCAG 2.2 SC 1.4.11)",
+  ring: "DESIGN.md, Colour, focus and type: the focus ring (non-text 3:1, WCAG 2.2 SC 1.4.11)",
   glyphs: "token status-live-glyph",
-  breath: "DESIGN.md, Live work breathes; token breath-floor",
+  breath: "DESIGN.md, State: live marks breathe; token breath-floor",
   nest: "token nest-ink ('about 2.3:1 to 2.5:1')",
 };
 
@@ -158,7 +160,8 @@ const PAIRS: Pair[] = [
     fg: "selected-ink",
     bg: ["selected-bg"],
     floor: TEXT,
-    source: "DESIGN.md The Row Dress Rule; TaskCard picked",
+    source:
+      "a picked task card (TaskCard); DESIGN.md, Colour, focus and type: coral marks what is selected",
   },
   // White on coral: the action, every gradient stop, hover, the chosen chip.
   ...(
@@ -264,7 +267,7 @@ const PAIRS: Pair[] = [
     fg: "border-control",
     bg: ["surface-raised"],
     floor: { light: 1.36, dark: 1.43 },
-    source: "DESIGN.md, Borders are graded; token border-control",
+    source: "token border-control (theme.css)",
   },
   ...["surface-page", "surface-raised", "surface-recess"].map((bg) => ({
     label: `border-row-outline on ${bg}`,

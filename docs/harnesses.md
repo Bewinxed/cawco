@@ -42,7 +42,7 @@ parts that span several members.
    `OPENCODE_CAPABILITIES` and `PI_CAPABILITIES` do.
 5. **Add its words.** Its name in `packages/core/src/words/accounts.ts`
    (`harnesses`), its refusals and not-installed text in
-   `packages/core/src/words/harness.ts`, written to DESIGN.md's Voice.
+   `packages/core/src/words/harness.ts`, written to DESIGN.md's Words section.
 6. **Meet every part below** before any work item runs on it. A harness that
    cannot close the workspace boundary runs no work item.
 

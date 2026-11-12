@@ -37,6 +37,6 @@ or {
     $filename <: not includes "apps/dashboard/src/lib/tokens/",
     $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
     $hit <: r"(?i)^ease(?:-in|-out|-in-out)?$",
-    register_diagnostic(span=$hit, message="CSS's own curve: write var(--ease-…), or linear for a discrete property (DESIGN.md: the house does not use CSS ease).")
+    register_diagnostic(span=$hit, message="CSS's own curve: write var(--ease-…), or linear for a discrete property (the house does not use CSS's ease keywords).")
   }
 }

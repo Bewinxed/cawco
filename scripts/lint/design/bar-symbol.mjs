@@ -32,10 +32,10 @@ const LINE_GLYPHS = new Set([
 ]);
 
 const MESSAGE =
-  "A bar's symbol is Solar's linear cut (the owner's pick, Solar Linear; DESIGN.md, The Solar Duotone Rule): hand BarItem the icon's `…Linear` twin from #lib/icons.js (packages/icons), adding one there where it has none.";
+  "A bar's symbol is Solar's linear cut (the owner's pick, Solar Linear): hand BarItem the icon's `…Linear` twin from #lib/icons.js (packages/icons), adding one there where it has none.";
 
 const OS_MESSAGE =
-  "A bar's symbol is Solar's linear cut (DESIGN.md, The Solar Duotone Rule): an OsMark standing in a BarItem is drawn in its linear face, `face=\"linear\"`.";
+  "A bar's symbol is Solar's linear cut: an OsMark standing in a BarItem is drawn in its linear face, `face=\"linear\"`.";
 
 const linear = (name) => name.endsWith("Linear") || LINE_GLYPHS.has(name);
 

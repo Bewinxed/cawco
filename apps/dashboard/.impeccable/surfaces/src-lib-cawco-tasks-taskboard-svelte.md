@@ -19,7 +19,7 @@ Mode: Operate. The person comes here to see where every task of a project stands
 
 - **Where it lands: the foot of its stage.** The board draws a stage's cards in the hub's order: ranked tasks by rank, then the rest by number (hub `byRank`). A task just added has no rank and the newest number, so its place is last. Drawing it at the top would put it where the hub's next read moves it from, so it lands at the foot, right above the form it was typed in.
 - **It is brought into view** in its column and its column on the board's strip (core `bringIntoView`, nearest, and `bringIntoStrip`), before the frame its arrival is read in, so the house's row arrival (`motion/rows`) uncovers it where the person is looking; when the hub's echo redraws the board it is brought into view again.
-- **It is marked new for a moment**: `data-new` on its row for `row-flash`'s length (3 × `--dur-fade`), the card fading up from `row-flash`'s opacity as a saved settings row does. `row-flash` is a fade (opacity alone, nothing travels), so it runs with reduced motion too (DESIGN.md, The Reduced Motion Rule: fades still run); the card comes into view either way.
+- **It is marked new for a moment**: `data-new` on its row for `row-flash`'s length (3 × `--dur-fade`), the card fading up from `row-flash`'s opacity as a saved settings row does. `row-flash` is a fade (opacity alone, nothing travels), so it runs with reduced motion too (a fade still runs under reduced motion); the card comes into view either way.
 
 ## States
 

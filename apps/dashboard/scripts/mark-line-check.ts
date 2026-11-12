@@ -603,7 +603,7 @@ if (import.meta.main) {
     find: check,
     said: (one) => `${one.tag}  ${one.what}`,
     failed: (count) =>
-      `mark-line:check: ${count} row(s) set words beside a mark that the mark line cannot centre. Give the row the recipe (class="mark-line", or a kit primitive that draws it), put its words in elements, and mark a box on the line with data-box; where the mark is not beside the words, say so with <!-- mark-line: why --> directly above the row (apps/dashboard/scripts/mark-line-check.ts, DESIGN.md The Mark Line Rule).`,
+      `mark-line:check: ${count} row(s) set words beside a mark that the mark line cannot centre. Give the row the recipe (class="mark-line", or a kit primitive that draws it), put its words in elements, and mark a box on the line with data-box; where the mark is not beside the words, say so with <!-- mark-line: why --> directly above the row (apps/dashboard/scripts/mark-line-check.ts; DESIGN.md, Alignment: a mark sits nearer its text than anything else).`,
     passed: (files) =>
       `mark-line:check: ${files} file(s), every mark line's words are elements on the recipe`,
   });

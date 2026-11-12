@@ -1398,7 +1398,7 @@ async function drawable(): Promise<string[]> {
     }
     if (!existsSync(join(colours, `${section.hue}.colorset`))) {
       problems.push(
-        `${section.slug}: the app has no colour set ${section.hue} (bun run tokens)`
+        `${section.slug}: the app has no colour set ${section.hue} (add it to CawCoDesign/Resources/Tokens.xcassets)`
       );
     }
   }

@@ -20,7 +20,7 @@ One person's control room for a fleet of coding agents. The finder is used dozen
 
 > **Rows of three heights** — In the typing wireframe the first row is two lines, the second is three because "6d" wrapped, the third is four with its ↳ line. The age is the fact that tells the two "Orchestrate cockpit fleet" rows apart and it sits in three different places. One row recipe: the age right-aligned on the title line on every row; the meta line one line; the ↳ line one line, clipped.
 
-> **Glyph without the word** — Every row opens with `[working]`, `[asleep]`, `[needs]`: a 16 px Solar glyph and nothing else says the state. DESIGN.md's Glyph, Word, Hue Rule reads glyph, then word, then hue, and the option's own table promises "state word read before the title". Two siblings with the same title are told apart by a moon versus a refresh circle. The word goes first on the meta line: "Working · cockpit · yours · linux".
+> **Glyph without the word** — Every row opens with `[working]`, `[asleep]`, `[needs]`: a 16 px Solar glyph and nothing else says the state. DESIGN.md's Colour, focus and type reads status as glyph, then word, then hue, and the option's own table promises "state word read before the title". Two siblings with the same title are told apart by a moon versus a refresh circle. The word goes first on the meta line: "Working · cockpit · yours · linux".
 
 > **Two row recipes in one list** — The doorway ("nothing typed") draws one-line rows with the project and age on the title line; typing redraws them as two-line rows. The same session changes shape when he types a letter. The doorway uses the two-line row.
 
@@ -34,7 +34,7 @@ One person's control room for a fleet of coding agents. The finder is used dozen
 
 > **Answers to a query he no longer typed** — Each keystroke asks three machines, each answering within 1.5 s; "orch" can land after "orch fleet". The head never says which words a section answers, and nothing stops an older answer from replacing a newer one. The TOM lets a per-keystroke lookup hit the index; the surface still has to ask on a settle and label the answer.
 
-> **An empty state that contradicts the list under it** — "No conversations for 'nsenter'" + "Search inside conversations instead" is drawn while that search is already running and about to list conversations. The Claim Of Nothing Rule says an empty state renders only once the data is known to be empty; here two sections are read at different speeds and the first claims nothing while the second is still being read.
+> **An empty state that contradicts the list under it** — "No conversations for 'nsenter'" + "Search inside conversations instead" is drawn while that search is already running and about to list conversations. DESIGN.md's State section says an empty state renders only once the data is known to be empty; here two sections are read at different speeds and the first claims nothing while the second is still being read.
 
 > **Purpose is one key away** — The TOM's recogniser list for a session is title, *what it is doing or last did*, project, state, when. The row carries four of the five; purpose is in the peek. For two rows with the same title, project and state (two attempts at one task), the row alone does not settle it. Acceptable because → is one key, but say so.
 
@@ -114,7 +114,7 @@ One person's control room for a fleet of coding agents. The finder is used dozen
 
 > **Day heads cost 28 px each** — Today and Yesterday heads on a 499 px card leave about 367 px for rows: nine one-line rows.
 
-> **720 px over a 1055 px page** — The card covers 68 % of the width. "The page live under it" is a strip 335 px wide. The Stay In Context Rule is kept in letter and lost in effect.
+> **720 px over a 1055 px page** — The card covers 68 % of the width. "The page live under it" is a strip 335 px wide. DESIGN.md's Flow (ask beside the thing, the rest of the page live) is kept in letter and lost in effect.
 
 **Interface design.**
 

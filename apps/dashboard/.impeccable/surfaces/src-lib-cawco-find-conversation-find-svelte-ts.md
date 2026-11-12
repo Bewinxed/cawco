@@ -23,7 +23,7 @@ Mode: Operate. The person comes back to a conversation for something said in it 
 - Closed at the place found: the place keeps its wash until the reader moves on (a wheel, a touch, a scroll key); Back to where you were stands in Jump to latest's place; the caret goes back to the message.
 
 ## Keys
-Command-F opens find in the conversation the keyboard is in, else the tab in front, else the one conversation on screen; again closes it; in the field with its words not chosen, chooses them. Enter and Shift-Enter step; Escape closes (in the field or the message). Keys land at once (The Frequency Rule).
+Command-F opens find in the conversation the keyboard is in, else the tab in front, else the one conversation on screen; again closes it; in the field with its words not chosen, chooses them. Enter and Shift-Enter step; Escape closes (in the field or the message). Keys land at once (DESIGN.md, Flow: ceremony matches consequence).
 
 ## Widths
 390, 680, 1440 and 2529: the composer's layer at each, the composer standing on the transcript's column.

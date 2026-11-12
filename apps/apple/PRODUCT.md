@@ -29,7 +29,7 @@ The same board as the dashboard, on the operator's own devices, and the only cha
 ## Capabilities and Constraints
 
 - One UIKit codebase for iOS and Mac Catalyst; no SwiftUI. Deployment target iOS 18.0 (`project.yml`). Bundle id `dev.cawco.app`.
-- Tokens are generated from the same DTCG source as the dashboard (`design/tokens/cawco.resolver.json`); DESIGN.md decides every pixel.
+- Colours are the colour sets in `CawCoDesign/Resources/Tokens.xcassets`, kept to the dashboard's tokens in `apps/dashboard/src/lib/tokens/theme.css`; DESIGN.md decides every pixel.
 - Signing, device builds and TestFlight run only from the owner's shell, never from an agent's workspace.
 
 ## Evidence on Hand

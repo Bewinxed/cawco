@@ -2,7 +2,7 @@
 
 <!-- The split doctrine: what belongs in the hub, the daemon, and the UI, why the split is
      drawn where it is, and the one law the codebase was violating when this document was
-     written. Pairs with JOURNEY.md (structural/temporal spec) and DESIGN.md (visual tokens);
+     written. Pairs with JOURNEY.md (structural/temporal spec) and DESIGN.md (the design rules);
      this document is neither — it is the runtime topology underneath both. -->
 
 ## The operator's question

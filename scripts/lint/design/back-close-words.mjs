@@ -43,7 +43,7 @@ const BAR_SLOTS = new Set([
 ]);
 
 const MESSAGE =
-  'Back and Close in a bar are symbols, named by where they go (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "Back and Close are symbols, named by where they go, never the words Back or Close"): a BarItem with the glyph as its `icon` and the place in its `label` (commonWords.backTo, commonWords.close), no words beside the glyph.';
+  "Back and Close in a bar are symbols, named by where they go (never the words Back or Close): a BarItem with the glyph as its `icon` and the place in its `label` (commonWords.backTo, commonWords.close), no words beside the glyph.";
 
 /** Each local name bound to a back or close glyph by the file's imports. */
 function glyphNames(model) {
