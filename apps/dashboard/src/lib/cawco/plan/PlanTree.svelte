@@ -83,7 +83,7 @@
   import { branch } from "../motion/branch.svelte";
   import { reflow } from "../motion/rows.svelte";
   import TreeLine from "../TreeLine.svelte";
-  import { flatTree, lineAttrs, treeLines } from "../tree-lines";
+  import { flatTree, lineAttrs } from "../tree-lines";
 
   let { nodes }: { nodes: PlanNode[] } = $props();
 
@@ -177,13 +177,14 @@
      step brought to from elsewhere (`data-linked`, PlanPane) lights as one
      band with every row under it (`linkedBand`): each row's fill stands from
      the step's own inset edge (--band-start) and reaches up over the gap
-     above it, rounded only at the band's ends, fading in and out. -->
+     above it, rounded only at the band's ends, fading in and out. Its
+     lines meet each step's mark: an icon wide and a label line tall, at the
+     row's start and top (design.css `kit-tree-plan`). -->
 <ul
   data-slot="rows"
-  class="kit-tree flex flex-col"
+  class="kit-tree kit-tree-plan flex flex-col"
   style:--line-gap="var(--space-1)"
   {@attach reflow()}
-  {@attach treeLines(MARK)}
   {@attach linkedBand}
 >
   {#each rows as { key, line, node } (key)}

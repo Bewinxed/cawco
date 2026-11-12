@@ -40,7 +40,6 @@
   failed={failedIn(own.older.flatMap((held) => [held.row, ...held.under]))}
   {flatten}
   front={inFront(own.older, active)}
-  glyph="[data-tree-mark]"
   id={own.row.id}
   {list}
   {row}

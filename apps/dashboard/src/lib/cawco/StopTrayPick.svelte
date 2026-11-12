@@ -85,7 +85,7 @@
   import RowFault from "./RowFault.svelte";
   import TreeLine from "./TreeLine.svelte";
   import TreeMark from "./TreeMark.svelte";
-  import { flatTree, lineAttrs, treeLines } from "./tree-lines";
+  import { flatTree, lineAttrs } from "./tree-lines";
 
   let {
     class: className,
@@ -515,13 +515,14 @@
           </label>
         {/if}
         <!-- About ten rows tall, then it scrolls, the next row peeking
-             under the house edge fade. -->
+             under the house edge fade. Its lines meet each row's mark on
+             the title's first line, under the row's pad. -->
         <ul
           data-slot="sessions"
           aria-label={words.list}
           class="kit-tree kit-edge-fade-block flex flex-col max-h-(--list-cap) overflow-x-clip overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           style:--list-cap={"calc(10.5 * (2lh + 2 * var(--space-1) + var(--tree-gap)))"}
-          {@attach treeLines("[data-tree-mark]")}
+          style:--tree-y={"calc(var(--space-1) + var(--text-label) * var(--leading-label) / 2)"}
         >
           {@render branch()}
         </ul>

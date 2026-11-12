@@ -12,7 +12,7 @@
   import OsMark from "./OsMark.svelte";
   import SessionMark from "./SessionMark.svelte";
   import TreeLine from "./TreeLine.svelte";
-  import { flatTree, lineAttrs, treeLines } from "./tree-lines";
+  import { flatTree, lineAttrs } from "./tree-lines";
 
   let { items, label }: { items: AskItem[]; label: string } = $props();
 
@@ -84,7 +84,6 @@
   data-roots="touch"
   style:--reach-max="calc(var(--row-compact-h) * 8)"
   {@attach echoBeat()}
-  {@attach treeLines("[data-tree-mark]")}
 >
   {#each rows as { key, line, node } (key)}
     <li

@@ -81,7 +81,7 @@
   import type { StopJob, StopRow } from "./stop-work.svelte";
   import TreeLine from "./TreeLine.svelte";
   import TreeMark from "./TreeMark.svelte";
-  import { flatTree, lineAttrs, treeLines } from "./tree-lines";
+  import { flatTree, lineAttrs } from "./tree-lines";
 
   let {
     class: className,
@@ -492,8 +492,11 @@
         cwd: row.s.cwd,
         id: row.s.id,
       })}
+    <!-- Away, on a narrow tray, its status takes a second line: its mark
+         stands at the top of a first line as tall as the mark, and its
+         lines meet it there. -->
     <li
-      class="kit-tree-row col-span-full grid grid-cols-subgrid"
+      class="kit-tree-row col-span-full grid grid-cols-subgrid @max-stop-tray/stop-tray:has-data-away:kit-tree-on-mark"
       {...lineAttrs(line)}
       data-row={row.s.id}
       style:--line-depth={line.depth}
@@ -676,7 +679,6 @@
           data-roots="touch"
           style:--tray-cols={TRAY_COLS}
           {@attach echoBeat()}
-          {@attach treeLines("[data-tree-mark]")}
         >
           {@render branch()}
         </ul>

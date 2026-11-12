@@ -52,7 +52,7 @@
   import { type BranchOptions, branch } from "./motion/branch.svelte";
   import { failedWords, OLDER_ROWS } from "./older";
   import TreeMark from "./TreeMark.svelte";
-  import { type FlatRow, treeLines } from "./tree-lines";
+  import type { FlatRow } from "./tree-lines";
 
   let {
     id,
@@ -62,7 +62,6 @@
     failed = 0,
     flatten,
     row,
-    glyph,
     front = false,
     tall = false,
     still = false,
@@ -82,8 +81,6 @@
     flatten: (trees: T[]) => FlatRow<R>[];
     /** One row, drawn as the list draws its rows: its `li`, keyed here. */
     row: Snippet<[FlatRow<R>]>;
-    /** The glyph its rows' lines are placed by. */
-    glyph: string;
     /** The conversation in front is one of them: the box is out, on it. */
     front?: boolean;
     /** Among two-line rows (the home's): the row stands at their height. */
@@ -259,7 +256,7 @@
          attributes). -->
   <ul
     data-slot="older-rows-box"
-    class="kit-tree flex flex-col max-h-(--older-max) mt-(--tree-gap) overflow-y-auto overscroll-contain scrollbar-thin not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
+    class="kit-tree kit-tree-rail flex flex-col max-h-(--older-max) mt-(--tree-gap) overflow-y-auto overscroll-contain scrollbar-thin not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
     data-flip-anchor
     style:--fade="var(--space-4)"
     style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
@@ -273,7 +270,6 @@
     out:branch={TREE}
     {@attach scrollEdges}
     {@attach fill}
-    {@attach treeLines(glyph)}
   >
     {#each flatten(trees.slice(0, drawn)) as item (item.key)}
       {@render row(item)}

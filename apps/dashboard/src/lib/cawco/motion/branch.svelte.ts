@@ -87,8 +87,8 @@
  * words), so none is placed by arithmetic. A fold reads its rows' boxes
  * and its parent's glyph alone, then takes them out of the flow as its
  * last write, and motion/rows reads after it. A tree opening has one layout
- * to pay in the task that shows it, its rows', and its rows' lines are
- * placed before it (tree-lines `settleLines`).
+ * to pay in the task that shows it, its rows', and its rows' lines stand
+ * in it already: CSS places them (design.css `kit-tree`).
  *
  * Markup. A tree is one flat list (tree-lines.ts, design.css `kit-tree`):
  * the group is the rows a parent shows, every row of its subtree that
@@ -111,7 +111,6 @@
  */
 
 import type { TransitionConfig } from "svelte/transition";
-import { settleLines } from "../tree-lines";
 import {
   CURVE,
   dur,
@@ -207,6 +206,8 @@ function restOf(glyph: HTMLElement): { x: number; y: number } {
 
 /** A row of a flat tree (tree-lines.ts). */
 const ROW = "[data-line-row]";
+/** A row's start of the line under its glyph, while its first child follows it (TreeLine). */
+const START = ":scope > [data-tree-line] > [data-line-down]";
 
 const depthOf = (row: Element): number =>
   Number((row as HTMLElement).dataset.lineDepth ?? 0);
@@ -286,6 +287,21 @@ interface GroupRow {
   strokes: { line: HTMLElement | null; span: HTMLElement }[];
 }
 
+/**
+ * A first child's line starts under its parent's glyph, in its parent's
+ * row (TreeLine `data-line-down`): that stroke is the top of the line the
+ * child hangs from (`hung`), before its elbow.
+ */
+function startStroke(
+  row: HTMLElement,
+  hung: HTMLElement | null | undefined
+): GroupRow["strokes"] {
+  const start = row.hasAttribute("data-line-first")
+    ? row.previousElementSibling?.querySelector<HTMLElement>(START)
+    : null;
+  return start && hung !== undefined ? [{ line: hung, span: start }] : [];
+}
+
 function rowsOf(group: Group): GroupRow[] {
   const { parent } = group;
   const home = parent.parentElement;
@@ -321,7 +337,8 @@ function rowsOf(group: Group): GroupRow[] {
       const chain = chains.get(list) ?? [];
       chains.set(list, chain);
       chain.length = depth;
-      const strokes: GroupRow["strokes"] = [];
+      const hung = lineAt(list, depth - 1);
+      const strokes = startStroke(row, hung);
       for (const span of row.querySelectorAll<HTMLElement>(
         ":scope > [data-tree-line] > [data-line-level]"
       )) {
@@ -330,11 +347,24 @@ function rowsOf(group: Group): GroupRow[] {
           strokes.push({ line, span });
         }
       }
-      found.push({ row, hangs: lineAt(list, depth - 1) ?? null, strokes });
+      found.push({ row, hangs: hung ?? null, strokes });
       chain[depth] = row;
     }
   }
   return found;
+}
+
+/**
+ * The line's start under the group's parent's glyph (TreeLine
+ * `data-line-down`), drawn while the group's first row follows the parent;
+ * none for a box of rows.
+ */
+function startOf(group: Group): HTMLElement | null {
+  const [first] = group.els;
+  return first?.matches("[data-line-first]") &&
+    first.previousElementSibling === group.parent
+    ? group.parent.querySelector<HTMLElement>(START)
+    : null;
 }
 
 /** The group's strokes, cut as the head passes (design.css `data-branch-cut`). */
@@ -1943,19 +1973,18 @@ function open(group: Group): void {
     // Just mounted, it is drawn in this update and laid out in a task of its
     // own: drawn and laid out in the click's task, a tree of forty in the
     // rail ran it to 19–27ms. Shown, it takes its room (reflow hears
-    // `data-state`, and holds the rows under it) and its rows' lines are
-    // placed before reflow reads them. Out of the layout until then, it
-    // moves nothing, and the frame between shows the rail as it was.
+    // `data-state`, and holds the rows under it), its rows' lines standing
+    // where layout puts them. Out of the layout until then, it moves
+    // nothing, and the frame between shows the rail as it was.
     for (const el of group.els) {
       el.style.display = "none";
       unshown.add(el);
     }
     const shown = setTimeout(() => {
-      // Every write first, then the one layout its rows' lines and its own
-      // shape are read in, and reflow reads it as it stands.
+      // Every write first, then the one layout its shape is read in, and
+      // reflow reads it as it stands.
       show(group);
       stateOf(group, "open");
-      settleLines(rowsOf(group).map(({ row }) => row));
       const speed = begin();
       build(lay(speed));
     }, 0);
@@ -2059,6 +2088,9 @@ function fold(group: Group): void {
   const { held, now } = stopFlight(parent, items);
   let places: Box[] = [];
   let shuts: Span[] = [];
+  // What the edge cuts: every element of the group, and the line's start
+  // under the parent's glyph, which the first of them follows.
+  let shut: HTMLElement[] = [];
   let folding: Flight | null = null;
   let rooms: Animation[] = [];
   afterWrites({
@@ -2085,7 +2117,9 @@ function fold(group: Group): void {
       // element of it, each cut there. Then it stays shut until it
       // unmounts: out of the flow, it stands under the rows that slide up,
       // and would show over them once the room had closed.
-      shuts = group.els.map((el) => {
+      const start = startOf(group);
+      shut = start ? [...group.els, start] : group.els;
+      shuts = shut.map((el) => {
         const box = el.getBoundingClientRect();
         return shutFrames(
           box.top - frame.top,
@@ -2120,7 +2154,7 @@ function fold(group: Group): void {
       if (!folding) {
         return;
       }
-      rooms = group.els.map((el, i) => {
+      rooms = shut.map((el, i) => {
         const { frames, delay, duration } = shuts[i];
         const room = el.animate(frames, {
           delay,

@@ -91,7 +91,7 @@
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
   import TreeLine from "./TreeLine.svelte";
-  import { type FlatRow, flatTree, lineAttrs, treeLines } from "./tree-lines";
+  import { type FlatRow, flatTree, lineAttrs } from "./tree-lines";
   import UsageMeter from "./UsageMeter.svelte";
   import { projectTab, tabOfPath } from "./workspace/tabs";
   import { workspace } from "./workspace/workspace.svelte";
@@ -585,7 +585,11 @@
   {@const node = item.node}
   {@const sub = node.kind === "session" || node.kind === "older"}
   <li
-    class={["kit-tree-row", sub ? "group/menu-sub-item" : "group/menu-item"]}
+    class={[
+      "kit-tree-row",
+      sub ? "group/menu-sub-item" : "group/menu-item",
+      node.kind === "older" && "kit-tree-compact",
+    ]}
     {...lineAttrs(item.line)}
     data-flip="box"
     data-line-open={projectOpen(node) || undefined}
@@ -915,13 +919,12 @@
                  between the groups at the root; ungrouped, the projects
                  a list's two pixels apart. -->
             <ul
-              class="kit-tree flex w-full flex-col"
+              class="kit-tree kit-tree-rail flex w-full flex-col"
               data-sidebar="menu"
               data-slot="sidebar-menu"
               style:--line-root-gap={projectLevels.length > 0
                 ? "var(--space-3)"
                 : "var(--space-row)"}
-              {@attach treeLines("[data-tree-mark]")}
             >
               {#each projectRows as item (item.key)}
                 {@render projectTreeRow(item)}

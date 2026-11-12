@@ -1834,11 +1834,10 @@ const settling = new Set<() => void>();
  * Runs `settle` once, before the next change reads where rows are: in the
  * frame's callbacks after the update that made it (`heard`), which come after
  * everything the update set off (Svelte starts a transition in a microtask
- * of its own). A
- * tree's new rows are read here (tree-lines.ts `treeLines`), so their lines
- * stand in place in the frame that shows them: read in a microtask of
- * their own, a fold's rows were read before the transition that holds them
- * out of the layout, and laid out a tree of forty in the click.
+ * of its own). A fold's turns are read here (motion/branch `afterWrites`):
+ * read in a microtask of their own, a fold's rows were read before the
+ * transition that holds them out of the layout, and laid out a tree of
+ * forty in the click.
  */
 export function beforeReflow(settle: () => void): void {
   settling.add(settle);

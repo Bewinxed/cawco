@@ -43,7 +43,7 @@
   import { openTrees, type TreeList } from "../open-trees.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import TreeLine from "../TreeLine.svelte";
-  import { type FlatRow, flatTree, lineAttrs, treeLines } from "../tree-lines";
+  import { type FlatRow, flatTree, lineAttrs } from "../tree-lines";
   import GroupMenu from "./GroupMenu.svelte";
   import GroupParent from "./GroupParent.svelte";
   import { grouping, inForce, RECENT_OPTIONS } from "./grouping.svelte";
@@ -234,8 +234,15 @@
 
   /** How every row opens and folds: off its mark (motion/branch). */
   const TREE: BranchOptions = { glyph: "[data-tree-mark]" };
-  /** The glyph each row's lines are placed by. */
-  const GLYPH = "[data-tree-mark]";
+
+  /**
+   * Whether a row is drawn as a two-line session row (SessionRow not
+   * compact): its lines stand on that recipe (design.css `kit-tree-tall`).
+   */
+  const isTall = (node: Node): boolean =>
+    tall &&
+    ((node.kind === "session" && node.entry !== null) ||
+      node.kind === "stored");
 </script>
 
 <!-- A row of the tree, keyed in the one list (`rows`, or an "N older"
@@ -245,7 +252,11 @@
 {#snippet treeRow(item: FlatRow<Node>)}
   {@const node = item.node}
   <li
-    class="kit-tree-row group/menu-sub-item"
+    class={[
+      "kit-tree-row group/menu-sub-item",
+      isTall(node) && "kit-tree-tall",
+      node.kind === "older" && "kit-tree-compact",
+    ]}
     {...lineAttrs(item.line)}
     data-flip="box"
     data-line-open={isOpen(node) || undefined}
@@ -376,9 +387,9 @@
       <!-- One flat tree, every row keyed (`rows`); between the groups at
            the root, a section's room. -->
       <ul
-        class="kit-tree flex flex-col"
+        class="kit-tree kit-tree-rail flex flex-col"
+        data-roots-tall={levels.length === 0 || undefined}
         style:--line-root-gap={levels.length > 0 ? "var(--space-3)" : undefined}
-        {@attach treeLines(GLYPH)}
       >
         {#each rows as item (item.key)}
           {@render treeRow(item)}
