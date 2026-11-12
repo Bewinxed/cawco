@@ -11,8 +11,8 @@
  * worktree because a release builds from a fresh one; the five newest stay.
  */
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
 import { cp, mkdir, readdir, rename, rm, stat, utimes } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 const KEPT = 5;
@@ -21,6 +21,7 @@ const DASHBOARD = "apps/dashboard";
 const git = async (root: string, args: string[]): Promise<string> => {
   const child = Bun.spawn(["git", ...args], {
     cwd: root,
+    env: process.env,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -36,10 +37,12 @@ const git = async (root: string, args: string[]): Promise<string> => {
 };
 
 /** `apps/dashboard` and the directory of each workspace package it depends on, directly or through another. */
-export const dashboardClosure = async (root: string): Promise<string[]> => {
+const dashboardClosure = async (root: string): Promise<string[]> => {
   const dirs = new Map<string, string>();
   for (const entry of await readdir(join(root, "packages"))) {
-    const manifest = await Bun.file(join(root, "packages", entry, "package.json"))
+    const manifest = await Bun.file(
+      join(root, "packages", entry, "package.json")
+    )
       .json()
       .catch(() => undefined);
     if (manifest?.name) {
@@ -72,7 +75,7 @@ export const dashboardClosure = async (root: string): Promise<string[]> => {
 const keyFor = async (root: string, closure: string[]) => {
   const paths = [...closure, "bun.lock", "package.json"];
   if ((await git(root, ["status", "--porcelain", "--", ...paths])) !== "") {
-    return undefined;
+    return;
   }
   const hashes = await Promise.all(
     paths.map((path) => git(root, ["rev-parse", `HEAD:${path}`]))
@@ -94,7 +97,9 @@ export const dashboardBuild = async (
   const key = await keyFor(root, closure);
   const out = join(root, DASHBOARD, "build");
   if (key === undefined) {
-    console.log("dashboard build cache: off (inputs changed in the working tree)");
+    console.log(
+      "dashboard build cache: off (inputs changed in the working tree)"
+    );
     await build();
     return;
   }
@@ -118,7 +123,9 @@ export const dashboardBuild = async (
   const temp = `${entry}.${process.pid}.tmp`;
   await rm(temp, { recursive: true, force: true });
   await cp(out, temp, { recursive: true });
-  await rename(temp, entry).catch(() => rm(temp, { recursive: true, force: true }));
+  await rename(temp, entry).catch(() =>
+    rm(temp, { recursive: true, force: true })
+  );
   const kept = await Promise.all(
     (await readdir(store))
       .filter((name) => !name.endsWith(".tmp"))
@@ -131,6 +138,8 @@ export const dashboardBuild = async (
   await Promise.all(
     kept
       .slice(KEPT)
-      .map(({ name }) => rm(join(store, name), { recursive: true, force: true }))
+      .map(({ name }) =>
+        rm(join(store, name), { recursive: true, force: true })
+      )
   );
 };

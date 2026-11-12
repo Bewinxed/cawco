@@ -37,6 +37,7 @@ import {
 import { homedir } from "node:os";
 import { extname, join, relative } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
+import { DAY_MS } from "@cawco/core/time";
 import type { Adapter, Builder } from "@sveltejs/kit";
 
 /**
@@ -79,7 +80,7 @@ const gzip = (bytes: Buffer): Buffer => gzipSync(bytes, { level: 9 });
 
 /** Deletes kept files not read (modified: a read touches it) for {@link MAX_AGE_DAYS} days. */
 const prune = async (): Promise<void> => {
-  const oldest = Date.now() - MAX_AGE_DAYS * 86_400_000;
+  const oldest = Date.now() - MAX_AGE_DAYS * DAY_MS;
   await Promise.all(
     (await readdir(cache)).map(async (name) => {
       const path = join(cache, name);

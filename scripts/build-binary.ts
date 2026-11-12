@@ -32,7 +32,6 @@ import {
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
-import { dashboardBuild } from "./dashboard-build-cache";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { agentReact } from "../packages/core/src/agent-react";
 import { bundled } from "../packages/core/src/bundled";
@@ -41,6 +40,7 @@ import { decisionHostAssets } from "../packages/core/src/decision-host";
 import { fileViewerAssets } from "../packages/core/src/file-viewer";
 import { bundleOverlay } from "../packages/core/src/preview-proxy";
 import { publishedFile } from "../packages/core/src/runtime";
+import { dashboardBuild } from "./dashboard-build-cache";
 
 export const PINNED_BUN = "1.4.4";
 export const TARGETS = [
@@ -203,14 +203,18 @@ const writeDashboardHandler = async (): Promise<void> => {
   // directory of its own module, `dirname(fileURLToPath(import.meta.url))`,
   // which a bundle keeps for run time, so it names the published
   // `dashboard/` tree.
-  await writeBundle("The dashboard's server", join(WORK, "dashboard-handler.js"), {
-    entrypoints: [join(ROOT, "apps/dashboard/build/handler.js")],
-    target: "bun",
-    format: "esm",
-    minify: true,
-    define: { "process.env.NODE_ENV": '"production"' },
-    plugins: [agentReact],
-  });
+  await writeBundle(
+    "The dashboard's server",
+    join(WORK, "dashboard-handler.js"),
+    {
+      entrypoints: [join(ROOT, "apps/dashboard/build/handler.js")],
+      target: "bun",
+      format: "esm",
+      minify: true,
+      define: { "process.env.NODE_ENV": '"production"' },
+      plugins: [agentReact],
+    }
+  );
 };
 
 /**
