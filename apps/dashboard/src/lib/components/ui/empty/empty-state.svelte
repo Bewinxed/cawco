@@ -28,12 +28,13 @@
          title, the why and the action start on one left edge. The action
          spans the block (emptyActionVariants), so the mark stands over its
          middle; where it draws nothing (its box empty), the block shrinks
-         to its words, so the mark stands over their middle, never over an
-         empty column. */
+         to its words and is centred in the room it had, so the mark stands
+         over their middle, never over an empty column, and the block keeps
+         its surface's centre. */
       centre: {
         block:
           "[&>:not([data-box])]:self-center [&>:not([data-box])]:text-center",
-        mark: "[&>:first-child]:self-center has-[>[data-box]:empty]:w-fit has-[>[data-box]:empty]:max-w-full",
+        mark: "[&>:first-child]:self-center has-[>[data-box]:empty]:mx-auto has-[>[data-box]:empty]:w-fit has-[>[data-box]:empty]:max-w-full",
       },
       pad: {
         pane: "px-space-6",
