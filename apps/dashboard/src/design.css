@@ -179,6 +179,25 @@
     /* How far each level of a tree is set in from the one above it, mark to
        mark: the same in every tree, whatever inset its rows keep. */
     --tree-step: calc(var(--space-1) + var(--space-2) + var(--space-3));
+    /* One device pixel as a CSS length, from the screen's resolution: a
+       hairline drawn outside a box (a session mark's rim) is sized in whole
+       device pixels with it (`round(1.5px, var(--dpx))`), so the pixel grid
+       moves each of its edges by the same amount as the box's own. Set by
+       media queries, so the server's HTML has it from the first paint and
+       it follows a zoom or a move to another display. */
+    --dpx: 1px;
+    @media (resolution >= 1.25dppx) {
+      --dpx: calc(1px / 1.25);
+    }
+    @media (resolution >= 1.5dppx) {
+      --dpx: calc(1px / 1.5);
+    }
+    @media (resolution >= 2dppx) {
+      --dpx: calc(1px / 2);
+    }
+    @media (resolution >= 3dppx) {
+      --dpx: calc(1px / 3);
+    }
     /* A tree's nesting line, one device pixel at the least and a whole
        number of them (.kit-tree-line); the task graph's part-of edge is
        drawn at it too. */
@@ -2285,7 +2304,7 @@
    below while the fold holds them (`data-branch-hold`); a parent's start
    of the line is cut with its first child's elbow.
    The line's weight and every length it is placed by are whole device
-   pixels (--dpx, device-pixel.ts), so it is the same crisp line in every
+   pixels (--dpx, from the screen's resolution), so it is the same crisp line in every
    frame. */
 @utility kit-tree {
   /* The gap between the rows of a level, and between a parent and its

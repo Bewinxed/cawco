@@ -12,7 +12,6 @@
   import "#lib/theme.svelte.js";
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
-  import { trackDevicePixel } from "#lib/cawco/device-pixel.js";
   import { watchEdgeFades } from "#lib/cawco/motion/fade-runs.svelte.js";
   import { trackKeyed } from "#lib/cawco/motion/keyed.svelte.js";
   import ScreenEdges from "#lib/cawco/ScreenEdges.svelte";
@@ -24,9 +23,6 @@
   // attached before the taps app.html held are replayed: app.html holds them
   // on every route.
   onMount(() => window.releaseHeldTaps());
-  // Hairlines drawn outside a box stand on whole device pixels: app.css draws
-  // the kit's hairlines on `--dpx`, an artifact's pane's among them.
-  onMount(trackDevicePixel);
   // Bottom sheets rest on the keyboard, and a focused field stays in view: a
   // pin's reply and a page's place picker are fields on a phone too.
   onMount(trackVisibleViewport);
