@@ -167,7 +167,7 @@
        * (`@container/table`: a head's or cell's `fold` reads its width).
        */
       container: "@container/table relative w-full overflow-x-auto",
-      table: "w-full caption-bottom text-body",
+      table: "w-full caption-bottom type-body",
     },
     variants: {
       layout: {

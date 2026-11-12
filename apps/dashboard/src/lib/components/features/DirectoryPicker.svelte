@@ -222,7 +222,7 @@
             {:else if errorMessage}
               <span
                 data-slot="block"
-                class="block px-2 py-space-1 text-meta text-error-9"
+                class="block px-2 py-space-1 type-meta text-error-9"
                 >{errorMessage}</span
               >
             {:else}
@@ -246,7 +246,7 @@
                 {:else}
                   <span
                     data-slot="block"
-                    class="block px-2 py-space-1 text-meta text-ink-muted"
+                    class="block px-2 py-space-1 type-meta text-ink-muted"
                     >No subdirectories.</span
                   >
                 {/each}

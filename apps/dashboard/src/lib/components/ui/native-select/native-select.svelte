@@ -54,7 +54,7 @@
   data-slot="native-select-wrapper"
 >
   <select
-    class="h-(--select-h) w-full focus-visible:outline-off min-w-0 overflow-hidden text-ellipsis whitespace-nowrap select-none appearance-none rounded-md border border-transparent bg-transparent pr-space-8 pl-3 text-body text-ink-strong [--select-h:var(--spacing-c-input-h)] [--select-reach:max(calc((var(--select-h)-var(--spacing-c-touch-floor))/2),calc(var(--hit-gap-y,var(--spacing-c-touch-floor))/-2))] selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-[calc(var(--select-reach)+var(--hit-nudge))] coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach)-var(--hit-nudge))]"
+    class="h-(--select-h) w-full focus-visible:outline-off min-w-0 overflow-hidden text-ellipsis whitespace-nowrap select-none appearance-none rounded-md border border-transparent bg-transparent pr-space-8 pl-3 type-body text-ink-strong [--select-h:var(--spacing-c-input-h)] [--select-reach:max(calc((var(--select-h)-var(--spacing-c-touch-floor))/2),calc(var(--hit-gap-y,var(--spacing-c-touch-floor))/-2))] selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-[calc(var(--select-reach)+var(--hit-nudge))] coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach)-var(--hit-nudge))]"
     data-slot="native-select"
     bind:this={ref}
     bind:value

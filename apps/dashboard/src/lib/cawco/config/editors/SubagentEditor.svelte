@@ -190,10 +190,7 @@ You are a <role>, working in one repository at a time.
   title={agent ? agent.name : "New subagent"}
 >
   {#snippet header()}
-    <h1
-      data-slot="title"
-      class="type-title tracking-title wrap-anywhere text-ink-strong"
-    >
+    <h1 data-slot="title" class="type-title wrap-anywhere text-ink-strong">
       {agent ? agent.name : front.name || "New subagent"}
     </h1>
     <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">

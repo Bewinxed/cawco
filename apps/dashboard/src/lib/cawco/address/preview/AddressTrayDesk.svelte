@@ -173,10 +173,7 @@
       </section>
     {:else}
       <section aria-labelledby="address-settings-head" class="grid gap-space-2">
-        <h2
-          id="address-settings-head"
-          class="m-0 type-title tracking-title text-ink-strong"
-        >
+        <h2 id="address-settings-head" class="m-0 type-title text-ink-strong">
           Devices
         </h2>
         <DevicesList>

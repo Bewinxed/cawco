@@ -10,7 +10,7 @@
 </script>
 
 <AlertDialogPrimitive.Title
-  class={cn("font-medium text-title", className)}
+  class={cn("type-title", className)}
   data-slot="alert-dialog-title"
   bind:ref
   {...restProps}

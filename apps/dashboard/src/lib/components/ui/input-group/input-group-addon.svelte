@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   const inputGroupAddonVariants = tv({
-    base: "flex h-auto cursor-text select-none items-center justify-center gap-2 py-2 font-medium text-ink-muted text-label group-data-[disabled=true]/input-group:opacity-50 [&>svg:not([class*='size-'])]:size-icon-md",
+    base: "flex h-auto cursor-text select-none items-center justify-center gap-2 py-2 text-ink-muted type-label group-data-[disabled=true]/input-group:opacity-50 [&>svg:not([class*='size-'])]:size-icon-md",
     variants: {
       align: {
         "inline-start": "order-first pl-3 has-[>button]:-ml-space-1",
@@ -23,7 +23,7 @@
        * `swatch`: a colour's swatch leading its value, its picker over it.
        */
       look: {
-        unit: "ps-space-1 font-normal text-body",
+        unit: "ps-space-1 type-body",
         swatch: "relative ps-space-2 pe-0",
       },
     },

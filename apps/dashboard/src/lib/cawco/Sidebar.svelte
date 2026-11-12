@@ -893,7 +893,7 @@
           </div>
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
-          <p class="px-space-3 text-meta text-ink-muted" data-flip>
+          <p class="px-space-3 type-meta text-ink-muted" data-flip>
             {cawco.machines.length === 0
               ? sidebarWords.noProjectsNoMachines
               : sidebarWords.noProjects}

@@ -555,7 +555,7 @@
           />
         </form>
       {:else}
-        <h2 data-slot="title" class="m-0 type-title tracking-title">
+        <h2 data-slot="title" class="m-0 type-title">
           <button
             class="select-none block w-(--title-w) -mx-space-1 p-space-1 rounded-sm type-title text-ink-strong text-start text-balance hover:enabled:bg-surface-hover press-tint focus-inset"
             disabled={!shown}

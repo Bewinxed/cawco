@@ -79,9 +79,7 @@
   >
     <div class="grid content-start gap-space-3 px-space-1 pt-space-4">
       {#if tray.source === "needs"}
-        <h2 class="m-0 px-space-3 type-title tracking-title text-ink-strong">
-          Needs you
-        </h2>
+        <h2 class="m-0 px-space-3 type-title text-ink-strong">Needs you</h2>
         <div class="grid gap-space-1">
           {#if !tray.stopped}
             <AddressRow
@@ -98,9 +96,7 @@
           />
         </div>
       {:else}
-        <h2 class="m-0 px-space-3 type-title tracking-title text-ink-strong">
-          Devices
-        </h2>
+        <h2 class="m-0 px-space-3 type-title text-ink-strong">Devices</h2>
         <div class="grid px-space-3">
           <SettingsRow
             line={started

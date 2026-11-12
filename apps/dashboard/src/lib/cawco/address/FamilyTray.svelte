@@ -89,7 +89,7 @@
         <h2
           id={titleId}
           class={[
-            "m-0 min-w-0 type-title tracking-title text-balance text-ink-strong",
+            "m-0 min-w-0 type-title text-balance text-ink-strong",
             tray.back ? "col-2" : "col-start-1 col-end-3",
             failed && "text-center",
           ]}

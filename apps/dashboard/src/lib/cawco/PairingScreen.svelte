@@ -60,7 +60,7 @@
         {#if stage.kind === "waiting"}
           <h1
             data-slot="title"
-            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-ink-strong"
           >
             Pair this browser
           </h1>
@@ -91,7 +91,7 @@
         {:else if stage.kind === "denied"}
           <h1
             data-slot="title"
-            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-ink-strong"
           >
             Pairing was denied
           </h1>
@@ -105,7 +105,7 @@
         {:else if stage.kind === "expired"}
           <h1
             data-slot="title"
-            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-ink-strong"
           >
             The code expired
           </h1>
@@ -118,7 +118,7 @@
         {:else if stage.kind === "failed"}
           <h1
             data-slot="title"
-            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-ink-strong"
           >
             Pairing didn't start
           </h1>
@@ -130,7 +130,7 @@
         {:else}
           <h1
             data-slot="title"
-            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-ink-strong"
           >
             Pair this browser
           </h1>

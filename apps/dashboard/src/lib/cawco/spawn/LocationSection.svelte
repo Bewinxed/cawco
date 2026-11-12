@@ -222,7 +222,7 @@
        popover past a phone's edge. -->
   <div
     data-slot="location-section-field"
-    class="field-edge min-w-0 overflow-clip rounded-md border border-border-control bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
+    class="field-edge min-w-0 overflow-clip rounded-md border bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
     data-locked={locked || undefined}
   >
     <div
@@ -406,7 +406,7 @@
           >
             <span
               data-slot="path"
-              class="max-phone:basis-full min-w-0 truncate font-(family-name:--font-mono) text-size-meta leading-label font-normal text-ink-muted"
+              class="max-phone:basis-full min-w-0 truncate font-(family-name:--font-mono) type-meta text-ink-muted"
               title={path}>{path}</span
             >
             <Button
@@ -433,7 +433,7 @@
       >
         <div
           data-slot="location-section-field"
-          class="field-edge overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-xs transition-control"
+          class="field-edge overflow-hidden rounded-md border bg-surface-raised shadow-xs transition-control"
         >
           <div
             data-slot="row"

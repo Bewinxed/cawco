@@ -43,7 +43,7 @@
         <button
           class={cn(
             menuItemVariants(),
-            "flex w-full items-center border-none bg-transparent px-space-3 text-start text-ink-strong text-label can-hover:hover:bg-surface-hover"
+            "flex w-full items-center border-none bg-transparent px-space-3 text-start text-ink-strong type-label can-hover:hover:bg-surface-hover"
           )}
           data-menu-item
           type="button">{row}</button

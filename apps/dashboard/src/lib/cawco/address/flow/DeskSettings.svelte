@@ -55,10 +55,7 @@
   data-frame="settings"
   style:--float-room={flow.open.settings ? `${floatHeight}px` : "0px"}
 >
-  <h2
-    id="flow-settings-head"
-    class="m-0 type-title tracking-title text-ink-strong"
-  >
+  <h2 id="flow-settings-head" class="m-0 type-title text-ink-strong">
     Devices
   </h2>
   <DevicesList>

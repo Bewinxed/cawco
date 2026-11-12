@@ -2287,7 +2287,7 @@
          on one line. -->
       <h2
         data-slot="title"
-        class="type-title tracking-title m-0 min-w-0 text-ink-strong not-data-wraps:truncate data-wraps:text-balance"
+        class="type-title m-0 min-w-0 text-ink-strong not-data-wraps:truncate data-wraps:text-balance"
         data-wraps={moveStep || undefined}
       >
         <MorphText text={headTitle} wrap={moveStep} />
@@ -2347,7 +2347,7 @@
       </div>
       <div
         data-slot="composer"
-        class="field-edge relative grid grid-cols-1 rounded-lg border border-border-control bg-surface-raised shadow-xs transition-control"
+        class="field-edge relative grid grid-cols-1 rounded-lg border bg-surface-raised shadow-xs transition-control"
       >
         <div class="contents group-data-stepped:hidden">
           <PromptEditor

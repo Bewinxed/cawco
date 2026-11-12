@@ -12,7 +12,7 @@
     variants: {
       face: { mono: "font-mono" },
       text: {
-        label: "text-label",
+        label: "type-label",
         "pin-field": "group-data-sheet/pin:text-(length:--field-fs)",
       },
       height: { tall: "min-h-80" },
@@ -93,7 +93,7 @@
       // edge of its own (the composer's pill is its field).
       look !== "note" && "field-edge",
       "bg-surface-raised px-3 text-ink-strong",
-      "text-body placeholder:text-ink-muted",
+      "type-body placeholder:text-ink-muted",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "aria-invalid:border-error-9",
       "dark:aria-invalid:border-error-9/50",

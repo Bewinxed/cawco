@@ -554,7 +554,7 @@
          headline() bounds its length; the wrap is the layout's. -->
     {#if brief}
       <p
-        class="rail-hang mt-space-1 mb-0 text-size-body font-normal text-ink-muted leading-body max-w-c-measure wrap-anywhere"
+        class="rail-hang mt-space-1 mb-0 type-body text-ink-muted max-w-c-measure wrap-anywhere"
       >
         {headline(brief)}
       </p>
@@ -611,7 +611,7 @@
       {#each waiting as ask (ask.key)}
         <li
           data-slot="ask"
-          class="rail-line items-baseline text-size-body font-normal leading-body text-ink-strong min-w-0 first:mt-space-1"
+          class="rail-line items-baseline type-body text-ink-strong min-w-0 first:mt-space-1"
           data-flip
           title={ask.detail}
         >

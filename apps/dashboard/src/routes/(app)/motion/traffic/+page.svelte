@@ -443,7 +443,7 @@
   <header
     class="flex flex-col gap-space-2 border-b border-b-border-hairline py-space-4 ps-space-7 pe-space-6 max-desk:px-space-5"
   >
-    <h1 class="type-title tracking-title text-ink-strong">Arrival traffic</h1>
+    <h1 class="type-title text-ink-strong">Arrival traffic</h1>
     <p class="type-body text-pretty text-ink-muted">
       The real transcript, driven without a model. Sequence it from
       <code class="type-code">window.__traffic</code>, or use these.

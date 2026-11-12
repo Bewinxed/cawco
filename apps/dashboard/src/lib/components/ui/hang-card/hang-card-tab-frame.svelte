@@ -127,7 +127,7 @@
         >
           <div class="flex w-full flex-col p-space-3">
             {#each rows as row (row)}
-              <p class="py-space-2 text-label text-ink-strong">{row}</p>
+              <p class="py-space-2 type-label text-ink-strong">{row}</p>
             {/each}
           </div>
         </HangCard>

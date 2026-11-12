@@ -402,7 +402,7 @@
   <!-- The mark's echo runs only on a beat (motion/echo): this line is its
        list of one, so a working session's mark echoes here too. -->
   <div
-    class="mark-line flex items-center gap-2 px-4 pb-3 text-meta"
+    class="mark-line flex items-center gap-2 px-4 pb-3 type-meta"
     {@attach echoBeat()}
   >
     <SessionMark
@@ -468,12 +468,12 @@
     <div
       class="mx-4 mb-3 flex flex-col gap-2 rounded-md bg-status-attn-bg px-3 py-2.5 text-status-attn-ink"
     >
-      <p class="text-body">{summary}</p>
+      <p class="type-body">{summary}</p>
       {#if !question && request.presentation.command}
         <!-- What runs, under why: Approve here is made on the command. -->
         <code
           data-slot="block"
-          class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) text-meta text-ink-muted"
+          class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) type-meta text-ink-muted"
           >{request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}
@@ -533,7 +533,7 @@
   {#if failed}
     <!-- The failure as the house alert, in the failed pair. -->
     <p
-      class="mx-4 mb-3 rounded-md bg-status-fail-bg px-3 py-2.5 text-body text-status-fail-ink"
+      class="mx-4 mb-3 rounded-md bg-status-fail-bg px-3 py-2.5 type-body text-status-fail-ink"
     >
       {row?.lastError || "Failed without saying why."}
     </p>
@@ -541,12 +541,12 @@
     <!-- A damaged record that does not stop the session (its wake-ups), or
          one whose process still runs: said where its failure would be. -->
     <p
-      class="mx-4 mb-3 rounded-md bg-status-fail-bg px-3 py-2.5 text-body text-status-fail-ink"
+      class="mx-4 mb-3 rounded-md bg-status-fail-bg px-3 py-2.5 type-body text-status-fail-ink"
     >
       {damagedWords(row.damaged)}
     </p>
   {:else if stale}
-    <p class="border-t border-border/50 px-4 py-3 text-meta text-ink-muted">
+    <p class="border-t border-border/50 px-4 py-3 type-meta text-ink-muted">
       {UNKNOWN_HINT}
     </p>
   {/if}
@@ -556,7 +556,7 @@
        its own section rather than pushing the tail off. -->
   {#if progress && progress.total > 0}
     <div class="flex flex-col border-t border-border/50 pb-3">
-      <p class="px-4 pt-3 pb-space-1 text-label">
+      <p class="px-4 pt-3 pb-space-1 type-label">
         {planWords.plan} · {progress.done} of {progress.total}
       </p>
       <div
@@ -580,20 +580,20 @@
       {@attach followTail()}
     >
       {#if session?.loading && tail.length === 0}
-        <p class="mark-line flex items-center gap-space-2 text-meta">
+        <p class="mark-line flex items-center gap-space-2 type-meta">
           <LiveDot /><span>Reading…</span>
         </p>
       {:else if session?.readFault && tail.length === 0}
         <!-- A read that failed is not a session with nothing to say. -->
-        <p class="text-meta text-error-9">
+        <p class="type-meta text-error-9">
           Couldn't read this session: {session.readFault.message}
         </p>
       {:else if tail.length === 0 && !session?.streaming}
-        <p class="text-meta">Nothing said yet.</p>
+        <p class="type-meta">Nothing said yet.</p>
       {:else}
         {#each tail as message, index (message.id ?? index)}
           {#if message.type === "tool.use" || message.type === "tool.handoff"}
-            <p class="flex items-baseline gap-1.5 text-meta text-ink-muted">
+            <p class="flex items-baseline gap-1.5 type-meta text-ink-muted">
               <span class="shrink-0"
                 >{toolWord(message.metadata?.toolName ?? message.content)}</span
               >
@@ -609,26 +609,26 @@
           {:else if message.type === "user.peer"}
             <!-- The one voice worth tinting: what the session was asked. -->
             <p
-              class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body wrap-break-word whitespace-pre-wrap"
+              class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 type-body wrap-break-word whitespace-pre-wrap"
             >
               {message.content}
             </p>
           {:else if message.type === "result.error"}
             <!-- A failed turn's last words are the agent's too: flat. -->
-            <p class="line-clamp-3 text-body wrap-break-word text-error-9">
+            <p class="line-clamp-3 type-body wrap-break-word text-error-9">
               {plainMarkdown(message.content)}
             </p>
           {:else}
             <!-- The agent's words read flat: its markdown, without the syntax. -->
             <p
-              class="line-clamp-6 text-body wrap-break-word whitespace-pre-wrap"
+              class="line-clamp-6 type-body wrap-break-word whitespace-pre-wrap"
             >
               {plainMarkdown(message.content)}
             </p>
           {/if}
         {/each}
         {#if session?.streaming}
-          <p class="text-body wrap-break-word whitespace-pre-wrap">
+          <p class="type-body wrap-break-word whitespace-pre-wrap">
             {streamed}
             <span
               class="inline-block h-icon-md w-space-1 rounded-xs bg-action-solid/60 align-text-bottom"

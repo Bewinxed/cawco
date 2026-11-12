@@ -134,11 +134,11 @@
       class="mark-line flex items-center gap-2 border-b border-border px-3 py-2.5"
     >
       <IconWindow class="size-icon-md text-ink-muted" />
-      <span class="text-label font-medium">Context window</span>
+      <span class="type-label">Context window</span>
       {#if usage}
         <span
           class={[
-            "ml-auto text-label tabular-nums",
+            "ml-auto type-label tabular-nums",
             band === "critical" && "text-error-9",
             band === "warn" && "text-warning-9",
             band !== "critical" && band !== "warn" && "text-ink-muted",
@@ -148,7 +148,7 @@
     </div>
 
     {#if !usage}
-      <p class="px-3 py-4 text-label text-ink-muted">
+      <p class="px-3 py-4 type-label text-ink-muted">
         No reading yet. A session has to be running to report what its window
         holds.
       </p>
@@ -165,7 +165,7 @@
             ></span>
           {/each}
         </div>
-        <p class="mt-2 text-label tabular-nums text-ink-muted">
+        <p class="mt-2 type-label tabular-nums text-ink-muted">
           {usage.totalTokens.toLocaleString()}
           of {usage.maxTokens.toLocaleString()} tokens used
         </p>
@@ -173,7 +173,7 @@
 
       <ul class="max-h-56 overflow-y-auto border-t border-border px-3 py-2">
         {#each usage.categories as category, index (category.name)}
-          <li class="flex items-center gap-2 py-space-1 text-label">
+          <li class="flex items-center gap-2 py-space-1 type-label">
             <span
               class="size-2 shrink-0 rounded-hair"
               style:background-color={swatch(index)}
@@ -189,13 +189,13 @@
 
     {#if compacting}
       <p
-        class="mark-line flex items-center gap-2 border-t border-border px-3 py-2 text-label"
+        class="mark-line flex items-center gap-2 border-t border-border px-3 py-2 type-label"
       >
         <IconCompact class="loops size-space-4 animate-pulse" />
         <span>Compacting now — the session is rewriting its own context.</span>
       </p>
     {:else if compaction}
-      <p class="border-t border-border px-3 py-2 text-label text-ink-muted">
+      <p class="border-t border-border px-3 py-2 type-label text-ink-muted">
         {#if compaction.result === "failed"}
           Last compaction failed{compaction.error
             ? `: ${compaction.error}`

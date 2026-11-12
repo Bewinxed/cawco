@@ -53,7 +53,7 @@
         bind:joined
       >
         {#each rows as row (row)}
-          <p class="px-space-2 py-space-2 text-label text-ink-strong">{row}</p>
+          <p class="px-space-2 py-space-2 type-label text-ink-strong">{row}</p>
         {/each}
       </HangCard>
     </Popover.Root>

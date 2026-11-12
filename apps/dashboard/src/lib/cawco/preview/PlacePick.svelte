@@ -93,7 +93,7 @@
 >
   <h2 class="type-title text-ink-strong">{words.title}</h2>
   <div class="flex flex-col gap-space-1">
-    <span class="text-label text-ink-muted" id="place-machine-label"
+    <span class="type-label text-ink-muted" id="place-machine-label"
       >{words.machine}</span
     >
     <Select.Root
@@ -126,7 +126,7 @@
             {words.machineOption(machineLabel(row.hostname), row.os)}
           </Select.Item>
         {:else}
-          <span data-slot="block" class="block px-2 py-1.5 text-label"
+          <span data-slot="block" class="block px-2 py-1.5 type-label"
             >{words.noMachines}</span
           >
         {/each}
@@ -134,7 +134,7 @@
     </Select.Root>
   </div>
   <div class="flex flex-col gap-space-1">
-    <label class="text-label text-ink-muted" for="place-folder"
+    <label class="type-label text-ink-muted" for="place-folder"
       >{words.folder}</label
     >
     <Input
@@ -172,7 +172,7 @@
     />
     <Button label={words.cancel} onclick={oncancel} size="sm" variant="ghost" />
     {#if problem}
-      <span class="text-label text-error-9" role="alert" in:appear
+      <span class="type-label text-error-9" role="alert" in:appear
         >{problem}</span
       >
     {/if}

@@ -8,7 +8,7 @@
       face at the label size. Read out but not drawn
       (`visible: false`) where the dialog's content names itself on screen. */
   const dialogTitleVariants = tv({
-    base: "text-title",
+    base: "type-title",
     variants: {
       lead: { glyph: "mark-line flex items-center gap-2" },
       look: { path: "dir-rtl truncate font-mono text-label" },

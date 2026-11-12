@@ -62,7 +62,7 @@
   const dialogBodyVariants = tv({
     slots: {
       frame:
-        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--spacing-space-5)-var(--hit-foot))] text-body text-ink-strong coarse:[--hit-foot:calc((var(--spacing-c-touch-floor)-var(--spacing-c-btn-h-xs))/2+var(--hit-nudge))] max-phone:coarse:pb-[calc(--spacing(4)+var(--safe-bottom)-var(--hit-foot))]",
+        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--spacing-space-5)-var(--hit-foot))] type-body text-ink-strong coarse:[--hit-foot:calc((var(--spacing-c-touch-floor)-var(--spacing-c-btn-h-xs))/2+var(--hit-nudge))] max-phone:coarse:pb-[calc(--spacing(4)+var(--safe-bottom)-var(--hit-foot))]",
       grid: "grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain coarse:pb-(--hit-foot)",
     },
     variants: {

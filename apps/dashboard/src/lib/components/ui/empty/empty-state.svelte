@@ -162,7 +162,7 @@
          no break in it (a view's, a filter's) breaks rather than pushing
          the block past its column. -->
     <p
-      class="max-w-c-measure-short type-title tracking-title text-ink-strong text-balance wrap-anywhere"
+      class="max-w-c-measure-short type-title text-ink-strong text-balance wrap-anywhere"
       data-slot="empty-title"
     >
       {title}

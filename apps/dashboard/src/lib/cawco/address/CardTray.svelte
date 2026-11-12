@@ -77,7 +77,7 @@
       <TrayCaw pose={tray.pose.pose} size={CAW} />
       <h2
         id={titleId}
-        class="m-0 min-w-0 px-space-7 type-title tracking-title text-balance text-ink-strong"
+        class="m-0 min-w-0 px-space-7 type-title text-balance text-ink-strong"
         data-slot="title"
       >
         <MorphText text={words.title} wrap />

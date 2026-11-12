@@ -42,7 +42,7 @@
     "pointer-events-none absolute inset-y-0 end-space-1 my-auto flex h-c-badge-h min-w-c-badge-h",
     "select-none items-center justify-center",
     "rounded-xs px-space-1",
-    "num text-meta",
+    "num type-meta",
     sidebarMenuBadgeVariants({ tone }),
     className
   )}

@@ -57,7 +57,7 @@
   class={cn(
     "touch-hit hit-under [--hit-edge:1px]",
     "relative flex h-9 w-full min-w-0 items-center rounded-md",
-    "border border-border-control",
+    "border",
     "field-edge bg-surface-raised shadow-xs",
     "[transition:var(--transition-control)]",
     "has-[>[data-align=block-end]]:h-auto",

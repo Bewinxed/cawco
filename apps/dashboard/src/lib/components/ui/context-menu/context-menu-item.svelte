@@ -19,7 +19,7 @@
   class={cn(
     menuItemVariants(),
     "group/context-menu-item relative flex",
-    "cursor-default select-none items-center gap-2.5 text-label",
+    "cursor-default select-none items-center gap-2.5 type-label",
     "outline-hidden data-disabled:pointer-events-none",
     "data-inset:pl-9.5",
     "data-[variant=destructive]:text-error-9",

@@ -141,7 +141,7 @@
   <div data-slot="body" class="relative grid" {@attach morph()}>
     {#if failure}
       <div
-        class="mark-line row-start-1 col-start-1 min-w-0 flex items-center justify-center gap-2 p-space-8 text-label text-error-9"
+        class="mark-line row-start-1 col-start-1 min-w-0 flex items-center justify-center gap-2 p-space-8 type-label text-error-9"
         role="alert"
         in:crossIn
         out:crossOut

@@ -4,7 +4,7 @@
   import { tableColumn } from "./table.svelte";
 
   const tableHeadVariants = tv({
-    base: "whitespace-nowrap px-space-3 text-start align-middle text-ink-strong text-label",
+    base: "whitespace-nowrap px-space-3 text-start align-middle text-ink-strong type-label",
     variants: {
       variant: {
         /**

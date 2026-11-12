@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   const tabsContentVariants = tv({
-    base: "focus-inset flex-1 rounded-lg text-body",
+    base: "focus-inset flex-1 rounded-lg type-body",
     variants: {
       layout: {
         /** A pane whose own scroller takes its height: a column that can shrink. */

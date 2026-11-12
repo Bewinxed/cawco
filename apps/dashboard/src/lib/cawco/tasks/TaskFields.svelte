@@ -87,7 +87,7 @@
             <input
               data-slot="task-fields-field"
               aria-label={key}
-              class="field-edge transition-control h-c-btn-h-sm min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 type-body text-ink-strong"
+              class="field-edge transition-control h-c-btn-h-sm min-w-0 flex-auto rounded-sm border bg-surface-raised px-space-2 type-body text-ink-strong"
               onblur={() => commit(key)}
               onkeydown={(event) => {
                 if (event.key === "Enter") {
@@ -140,7 +140,7 @@
       <input
         data-slot="task-fields-field"
         aria-label="Field name"
-        class="field-edge transition-control h-c-btn-h-sm min-w-0 shrink grow-0 basis-24 rounded-sm border border-border-control bg-surface-raised px-space-2 type-code text-ink-strong"
+        class="field-edge transition-control h-c-btn-h-sm min-w-0 shrink grow-0 basis-24 rounded-sm border bg-surface-raised px-space-2 type-code text-ink-strong"
         placeholder="name"
         bind:value={newKey}
         {@attach (node) => node.focus()}
@@ -148,7 +148,7 @@
       <input
         data-slot="task-fields-field"
         aria-label="Field value"
-        class="field-edge transition-control h-c-btn-h-sm min-w-0 flex-auto rounded-sm border border-border-control bg-surface-raised px-space-2 type-body text-ink-strong"
+        class="field-edge transition-control h-c-btn-h-sm min-w-0 flex-auto rounded-sm border bg-surface-raised px-space-2 type-body text-ink-strong"
         placeholder="value"
         bind:value={newValue}
       />

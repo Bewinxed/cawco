@@ -66,7 +66,7 @@
     role="status"
   >
     <p
-      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line text-size-body font-normal leading-body text-ink-strong"
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line type-body text-ink-strong"
     >
       <IconFolder
         data-project-offer-glyph
@@ -98,7 +98,7 @@
     data-offer={instanceId}
   >
     <p
-      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line text-size-body font-normal leading-body text-ink-strong"
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line type-body text-ink-strong"
     >
       <IconFolder
         data-project-offer-glyph

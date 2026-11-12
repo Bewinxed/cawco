@@ -441,10 +441,7 @@
         />
       {/if}
     </div>
-    <h1
-      data-slot="title"
-      class="type-title tracking-title wrap-anywhere text-ink-strong"
-    >
+    <h1 data-slot="title" class="type-title wrap-anywhere text-ink-strong">
       {label}
     </h1>
     {#if !main}
@@ -526,7 +523,7 @@
          inside has focus (`field-edge`). -->
     <div
       data-slot="field"
-      class="field-edge transition-control min-h-80 rounded-md border border-border-control bg-surface-raised px-space-2 py-space-1 shadow-xs"
+      class="field-edge transition-control min-h-80 rounded-md border bg-surface-raised px-space-2 py-space-1 shadow-xs"
     >
       <!-- Crepe reads its text once, when it is made: it waits for a draft
            kept for this file to be back. -->

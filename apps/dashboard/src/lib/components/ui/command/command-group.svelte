@@ -23,7 +23,7 @@
 >
   {#if heading}
     <CommandPrimitive.GroupHeading
-      class="px-2 py-1.5 text-label text-ink-muted"
+      class="px-2 py-1.5 type-label text-ink-muted"
     >
       {heading}
     </CommandPrimitive.GroupHeading>

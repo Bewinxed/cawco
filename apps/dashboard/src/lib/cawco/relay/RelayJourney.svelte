@@ -350,11 +350,11 @@
     text.match(/\([^)]*\)|\S+/gu) ?? [text];
 
   /** A step's note: meta, muted; a failure's in the fail ink. */
-  const NOTE = "min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere";
+  const NOTE = "min-w-0 type-meta text-ink-muted text-pretty wrap-anywhere";
   const FAIL =
-    "min-w-0 text-meta text-status-fail-ink text-pretty wrap-anywhere";
+    "min-w-0 type-meta text-status-fail-ink text-pretty wrap-anywhere";
   /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line, at every width. */
-  const META = "min-w-0 max-w-full truncate text-meta text-ink-muted";
+  const META = "min-w-0 max-w-full truncate type-meta text-ink-muted";
   /** A step's controls: side by side, each the column's width in a narrow card (one grid column), `space-2` apart. */
   const CONTROLS =
     "flex min-w-0 flex-wrap items-center gap-space-2 @max-field-group:grid @max-field-group:grid-cols-1";
@@ -466,7 +466,7 @@
         <IconMonitor aria-hidden="true" class="size-icon-md" />
       {/if}
     </span>
-    <h3 class="min-w-0 text-label text-ink-strong text-balance">
+    <h3 class="min-w-0 type-label text-ink-strong text-balance">
       {words.title}
     </h3>
   </div>
@@ -495,10 +495,10 @@
     data-relay-choice={choice.machineId}
   >
     <div class="flex min-w-0 flex-col gap-space-1">
-      <span class="min-w-0 text-label text-ink-strong wrap-anywhere"
+      <span class="min-w-0 type-label text-ink-strong wrap-anywhere"
         >{choice.name}</span
       >
-      <p class="min-w-0 text-meta text-ink-muted wrap-anywhere">
+      <p class="min-w-0 type-meta text-ink-muted wrap-anywhere">
         <code class="font-mono text-ink-strong">{choice.address}</code
         >{#if choice.lan}{`, ${words.behindRouter}`}{/if}{#if !choice.online}{` · ${words.offline}`}{/if}
       </p>
@@ -780,7 +780,7 @@
 {#snippet journey()}
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2 text-body"
+    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2 type-body"
     data-relay-journey
   >
     {@render head(false)}
@@ -790,12 +790,12 @@
     >
       {#if lead}
         <p
-          class="text-body text-ink-strong text-pretty @max-field-group:hidden"
+          class="type-body text-ink-strong text-pretty @max-field-group:hidden"
         >
           {domain ? words.leadDomain(domain) : words.leadPlain}
         </p>
         <p
-          class="hidden text-body text-ink-strong text-pretty @max-field-group:block"
+          class="hidden type-body text-ink-strong text-pretty @max-field-group:block"
         >
           {domain ? words.leadDomainShort(domain) : words.leadPlainShort}
         </p>
@@ -810,7 +810,7 @@
               ? "waiting"
               : markOf(step)}
           <li
-            class="mark-line grid grid-cols-mark-fluid items-start gap-x-space-2 gap-y-space-1 text-label"
+            class="mark-line grid grid-cols-mark-fluid items-start gap-x-space-2 gap-y-space-1 type-label"
             data-open={index === open || undefined}
             data-state={step.state}
             data-step={step.step}
@@ -818,7 +818,7 @@
             {@render stepMark(mark, index + 1)}
             <span
               class={[
-                "min-w-0 text-label wrap-anywhere",
+                "min-w-0 type-label wrap-anywhere",
                 mark === "done" || mark === "waiting"
                   ? "text-ink-muted"
                   : "text-ink-strong",
@@ -878,12 +878,12 @@
     data-relay-entry
   >
     <p
-      class="text-body text-ink-strong text-pretty wrap-anywhere @max-field-group:hidden"
+      class="type-body text-ink-strong text-pretty wrap-anywhere @max-field-group:hidden"
     >
       {words.entry(domain)}
     </p>
     <p
-      class="hidden text-body text-ink-strong text-pretty wrap-anywhere @max-field-group:block"
+      class="hidden type-body text-ink-strong text-pretty wrap-anywhere @max-field-group:block"
     >
       {words.entryShort(domain)}
     </p>
@@ -910,7 +910,7 @@
       class="{UNDER_TITLE} items-start gap-space-3"
       style:--title-edge={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
     >
-      <p class="text-body text-ink-strong text-pretty wrap-anywhere">
+      <p class="type-body text-ink-strong text-pretty wrap-anywhere">
         {domain ? words.leadDomain(domain) : words.leadPlain}
       </p>
       <Button
@@ -936,7 +936,7 @@
       class="{UNDER_TITLE} items-start gap-space-2"
       style:--title-edge={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
     >
-      <p class="text-body text-ink-strong text-pretty wrap-anywhere">
+      <p class="type-body text-ink-strong text-pretty wrap-anywhere">
         {words.doneRow(summary.name ?? summary.machine.address)}
       </p>
       {#if row}
@@ -971,7 +971,7 @@
       <div class="flex min-w-0 flex-col gap-space-1">
         <div class="flex min-w-0 flex-wrap items-center gap-space-2">
           <span
-            class="min-w-0 text-label text-ink-strong wrap-anywhere"
+            class="min-w-0 type-label text-ink-strong wrap-anywhere"
             data-relay-machine>{summary.machine.name}</span
           >
           <Badge data-relay-state variant={badge.tint}
@@ -979,7 +979,7 @@
           >
         </div>
         <p
-          class="min-w-0 text-meta text-ink-muted wrap-anywhere"
+          class="min-w-0 type-meta text-ink-muted wrap-anywhere"
           data-relay-line
         >
           <code class="font-mono text-ink-strong"
@@ -1029,7 +1029,7 @@
       </div>
       {#if busy}
         <p
-          class="col-span-full text-meta text-ink-muted text-pretty"
+          class="col-span-full type-meta text-ink-muted text-pretty"
           data-relay-wait
           id="relay-stop-wait"
         >
@@ -1054,7 +1054,7 @@
         </ul>
         {#each summary.ports.filter((port) => port.error) as port (port.name)}
           <p
-            class="col-span-full min-w-0 text-meta text-ink-muted wrap-anywhere"
+            class="col-span-full min-w-0 type-meta text-ink-muted wrap-anywhere"
             data-relay-port-error={port.name}
           >
             <span class="text-ink-strong">{port.name}:</span>
@@ -1078,7 +1078,7 @@
         class="col-span-full grid min-w-0 grid-cols-fluid-auto items-center gap-x-space-3 gap-y-space-2 @max-field-group:grid-cols-1 @max-field-group:justify-items-start"
       >
         <p
-          class="min-w-0 text-meta text-ink-muted text-pretty wrap-anywhere"
+          class="min-w-0 type-meta text-ink-muted text-pretty wrap-anywhere"
           data-relay-proven
         >
           {#if summary.endsAt}{words.certificateEnds(
@@ -1097,7 +1097,7 @@
           variant="outline"
         />
         {#if !summary.name}
-          <p class="min-w-0 text-meta text-ink-muted text-pretty">
+          <p class="min-w-0 type-meta text-ink-muted text-pretty">
             {words.noName}
           </p>
           <Button

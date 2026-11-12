@@ -99,7 +99,7 @@
             variant="ghost"
           />
         </div>
-        <div data-slot="num" class="num flex items-center gap-2 text-meta">
+        <div data-slot="num" class="num flex items-center gap-2 type-meta">
           <span class="text-success-9">+{stats.additions}</span>
           <span class="text-error-9">-{stats.deletions}</span>
         </div>

@@ -10,7 +10,7 @@
 </script>
 
 <CommandPrimitive.Empty
-  class={cn("py-6 text-center text-label", className)}
+  class={cn("py-6 text-center type-label", className)}
   data-slot="command-empty"
   bind:ref
   {...restProps}

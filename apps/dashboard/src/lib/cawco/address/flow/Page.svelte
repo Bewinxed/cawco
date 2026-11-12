@@ -234,9 +234,7 @@
   >
     <header class="grid max-w-c-measure gap-space-4" data-slot="bar">
       <div class="grid gap-space-1">
-        <h1 class="m-0 type-title tracking-title text-ink-strong">
-          Open CawCo by one word
-        </h1>
+        <h1 class="m-0 type-title text-ink-strong">Open CawCo by one word</h1>
         <p class="m-0 type-body text-pretty text-ink-muted">
           One tray, at its real size: in Needs you, over Configure › Devices,
           and as a phone's sheet. Its own buttons move it on; a waiting state

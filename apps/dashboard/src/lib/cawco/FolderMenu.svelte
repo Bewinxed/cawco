@@ -106,10 +106,10 @@
       </ContextMenu.SubTrigger>
       <ContextMenu.SubContent frame="panel-high" pad="card" width="wide">
         <div class="flex items-center justify-between pb-2 pl-space-1">
-          <span class="text-label font-medium text-ink-muted">Colour</span>
+          <span class="type-label text-ink-muted">Colour</span>
           {#if pickedHue !== undefined}
             <button
-              class="select-none rounded-full px-2 py-0.5 text-label text-ink-muted
+              class="select-none rounded-full px-2 py-0.5 type-label text-ink-muted
                      transition-colors duration-(--duration-control) hover:bg-accent hover:text-ink-strong"
               onclick={() => folderPrefs.setHue(cwd, undefined)}
               type="button"

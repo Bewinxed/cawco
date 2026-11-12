@@ -256,7 +256,7 @@
     {align}
     class={cn(
       floatingSurface({ motion }),
-      "z-(--layer-float) flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 text-label outline-hidden",
+      "z-(--layer-float) flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 type-label outline-hidden",
       bare &&
         "border-current border-none bg-none bg-transparent p-0 shadow-none",
       popoverContentVariants({

@@ -3,7 +3,7 @@
   import { tv } from "#lib/utils.js";
 
   const kbdVariants = tv({
-    base: "pointer-events-none inline-flex h-icon-lg w-fit min-w-5 select-none items-center justify-center gap-space-1 rounded-xs bg-surface-recess px-space-1 font-sans text-ink-muted text-meta [&_svg:not([class*='size-'])]:size-icon-sm",
+    base: "pointer-events-none inline-flex h-icon-lg w-fit min-w-5 select-none items-center justify-center gap-space-1 rounded-xs bg-surface-recess px-space-1 text-ink-muted type-meta [&_svg:not([class*='size-'])]:size-icon-sm",
     variants: {
       /**
        * A key named in a hint (the default): in a tooltip it takes the

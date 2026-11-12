@@ -125,7 +125,7 @@
         </div>
         <h2
           id={titleId}
-          class="m-0 min-w-0 text-start type-title tracking-title text-balance text-ink-strong"
+          class="m-0 min-w-0 text-start type-title text-balance text-ink-strong"
           data-slot="title"
         >
           <MorphText text={words.title} wrap />

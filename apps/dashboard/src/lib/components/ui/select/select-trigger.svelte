@@ -76,7 +76,7 @@
     "items-center justify-between gap-1.5 whitespace-nowrap",
     "border border-border-row-outline [--hit-edge:1px]",
     "bg-surface-raised px-3 text-ink-strong",
-    "text-body disabled:cursor-not-allowed",
+    "type-body disabled:cursor-not-allowed",
     "disabled:opacity-50 aria-invalid:border-error-9",
     "data-placeholder:text-ink-muted",
     "*:data-[slot=select-value]:line-clamp-1",

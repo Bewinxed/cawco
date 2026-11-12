@@ -1687,18 +1687,20 @@
   line-clamp: --value(integer);
 }
 
-/* A text field with a frame of its own (DESIGN.md, The Caret Rule): while
-   its text has focus the frame's border steps up to the strong control
-   edge, on the frame's own radius, and nothing else is drawn. On the field
+/* A text field with a frame of its own (DESIGN.md, The Caret Rule): the
+   frame rests on `border-row-outline` (3:1 on the surface it stands on,
+   WCAG 1.4.11) and while its text has focus the border steps up to the
+   strong control edge, on the frame's own radius, and nothing else is drawn. On the field
    itself (the kit's Input and Textarea) or on a frame round a borderless
    editor with its own controls beside it (a search with an icon, a path
    with Browse): the frame steps for the text inside, not for one of its
    chips or buttons, which keep their own ring. A field marked invalid keeps
-   its error edge. This selector outweighs the field's own border utility
-   (`border-border-control`) on purpose (scripts/specificity-trap.ts).
+   its error edge. This selector outweighs a border-colour utility on the field
+   on purpose (scripts/specificity-trap.ts).
    A field that is the whole surface (Find's strip, the composer) carries
    none: its caret is the whole indicator. */
 @utility field-edge {
+  border-color: var(--color-border-row-outline);
   &:is(
       :focus-visible,
       :has(:is(input, textarea, [contenteditable]):focus-visible)

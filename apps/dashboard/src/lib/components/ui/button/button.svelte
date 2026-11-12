@@ -48,12 +48,12 @@
       size: {
         default:
           "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:var(--spacing-space-1)] [--btn-icon:var(--spacing-icon-sm)] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
+        xs: "h-6 gap-(--btn-gap) px-2 type-label [--btn-gap:var(--spacing-space-1)] [--btn-icon:var(--spacing-icon-sm)] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
         /* In a head control's compact form (side/head.ts, `data-form`), its
            words not drawn, it stands as its glyph: the icon size's square,
            the glyph centred inside its edge, and a count it still says kept
            that inset from the glyph and the edge. */
-        sm: "h-c-btn-h-sm glass-item:h-c-bar-item in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--spacing-c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 text-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        sm: "h-c-btn-h-sm glass-item:h-c-bar-item in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--spacing-c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 type-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (the composer's surface brief, Composer:
            "34px Attach … and Send/Stop … each at the concentric 4px
@@ -106,9 +106,8 @@
       /** Its box: a prompt's answer (the label size at medium weight, the
           small corner), or 24px square. */
       fit: {
-        prompt: "gap-(--btn-gap) rounded-sm px-space-3 font-medium text-label",
-        "prompt-wide":
-          "gap-(--btn-gap) rounded-sm px-space-4 font-medium text-label",
+        prompt: "gap-(--btn-gap) rounded-sm px-space-3 type-label",
+        "prompt-wide": "gap-(--btn-gap) rounded-sm px-space-4 type-label",
         "square-24": "h-6 w-6",
       },
       /** A control inset in a composer shell takes its concentric corner:

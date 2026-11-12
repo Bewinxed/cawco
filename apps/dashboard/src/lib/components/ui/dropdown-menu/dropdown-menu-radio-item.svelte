@@ -42,7 +42,7 @@
 <DropdownMenuPrimitive.RadioItem
   class={cn(
     menuItemVariants(),
-    "relative flex cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-inset:pl-9.5 data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "relative flex cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 type-label outline-hidden data-[disabled]:pointer-events-none data-inset:pl-9.5 data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     row === "artifact" && "min-h-c-artifact-row-h aria-busy:opacity-50",
     row === "described" && "min-h-c-artifact-row-h py-space-2",
     tile &&

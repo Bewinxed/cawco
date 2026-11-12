@@ -113,7 +113,7 @@
        cell); the icon's box is at least that square and a line tall. -->
   <div
     class={cn(
-      "flex min-w-0 gap-space-2 text-size-body font-normal leading-body size-compact:text-size-meta",
+      "flex min-w-0 gap-space-2 type-body size-compact:text-size-meta",
       className
     )}
     data-size={size?.() ?? "default"}

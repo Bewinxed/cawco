@@ -693,7 +693,7 @@
       out:crossOut
     >
       <p
-        class="m-0 min-w-0 flex-initial text-size-body font-normal leading-body wrap-anywhere text-status-fail-ink"
+        class="m-0 min-w-0 flex-initial type-body wrap-anywhere text-status-fail-ink"
       >
         {failure(slot)}
       </p>
@@ -712,7 +712,7 @@
   {:else if pending(slot)}
     <p
       data-slot="feedback"
-      class="mark-line mt-space-2 flex items-start gap-space-2 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
+      class="mark-line mt-space-2 flex items-start gap-space-2 type-body wrap-anywhere text-ink-muted"
       role="status"
       in:crossIn
       out:crossOut
@@ -728,7 +728,7 @@
     <p
       data-feedback
       data-slot="done"
-      class="mark-line mt-space-2 flex items-center gap-space-1 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
+      class="mark-line mt-space-2 flex items-center gap-space-1 type-body wrap-anywhere text-ink-muted"
       role="status"
       in:crossIn
       out:crossOut
@@ -1011,7 +1011,7 @@
             <p
               data-slot="feedback"
               data-resumes
-              class="mt-space-2 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
+              class="mt-space-2 type-body wrap-anywhere text-ink-muted"
               in:crossIn
               out:crossOut
             >
@@ -1023,7 +1023,7 @@
             <p
               data-slot="feedback"
               data-locked
-              class="mt-space-2 text-size-body font-normal leading-body wrap-anywhere text-ink-muted"
+              class="mt-space-2 type-body wrap-anywhere text-ink-muted"
               in:crossIn
               out:crossOut
             >

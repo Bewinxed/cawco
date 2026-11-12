@@ -321,7 +321,7 @@
   {#each questions as q, index (index)}
     <p
       data-slot="lede"
-      class="rail-hang text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-c-measure"
+      class="rail-hang type-body text-ink-strong mb-space-2 max-w-c-measure"
     >
       {q.question}
     </p>
@@ -357,7 +357,7 @@
     </div>
     {#if otherText(q)}
       <p
-        class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
+        class="rail-hang type-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
         in:crossIn
       >
         <span
@@ -370,7 +370,7 @@
 
   {#if freeform}
     <p
-      class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
+      class="rail-hang type-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
       in:crossIn
     >
       <span

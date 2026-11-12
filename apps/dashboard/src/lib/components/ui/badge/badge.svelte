@@ -54,9 +54,9 @@
         "cell-tall":
           "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-space-1 text-start",
         count:
-          "pointer-events-none px-[clamp(var(--spacing-space-1),calc(var(--spacing-space-2)_-_var(--tight,0px)_*_1000),var(--spacing-space-2))] text-meta tabular-nums",
+          "pointer-events-none px-[clamp(var(--spacing-space-1),calc(var(--spacing-space-2)_-_var(--tight,0px)_*_1000),var(--spacing-space-2))] type-meta tabular-nums",
         /** A count standing in its row (a filter's, a section's faults): at least square, its figures in the meta role and tabular widths, centred. */
-        tally: "min-w-icon-lg px-space-1 text-meta tabular-nums",
+        tally: "min-w-icon-lg px-space-1 type-meta tabular-nums",
         /**
          * A control's count, the usual notification badge on its glyph's
          * top trailing corner (HIG, Tab bars: "a badge — a red oval
@@ -80,7 +80,7 @@
          * as a held row's pill is.
          */
         corner:
-          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--spacing-icon-md)_/_2)] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--spacing-icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-strong px-space-1 font-medium text-label text-on-ink tabular-nums data-[look=attn]:bg-status-attn-bg data-[look=attn]:text-status-attn-ink data-[look=held]:border data-[look=held]:border-ink-muted data-[look=held]:bg-surface-raised data-[look=held]:text-ink-strong",
+          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--spacing-icon-md)_/_2)] start-[calc(50%_+_var(--count-glyph)_/_2_-_var(--spacing-icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-strong px-space-1 type-label text-on-ink tabular-nums data-[look=attn]:bg-status-attn-bg data-[look=attn]:text-status-attn-ink data-[look=held]:border data-[look=held]:border-ink-muted data-[look=held]:bg-surface-raised data-[look=held]:text-ink-strong",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },

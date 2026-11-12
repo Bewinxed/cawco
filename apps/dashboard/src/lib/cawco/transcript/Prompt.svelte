@@ -802,7 +802,7 @@
     >
       <p
         data-slot="lede"
-        class="text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty"
+        class="type-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty"
       >
         {browserAsk.reason}
       </p>
@@ -959,7 +959,7 @@
              does. -->
         <p
           data-slot="lede"
-          class="text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty group-data-railed/body:ps-space-2"
+          class="type-body text-ink-strong mb-space-2 max-w-c-measure wrap-anywhere text-pretty group-data-railed/body:ps-space-2"
           id="{claimId}-q{qi}"
           bind:this={ledes[qi]}
         >

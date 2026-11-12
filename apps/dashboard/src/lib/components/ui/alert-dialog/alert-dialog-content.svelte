@@ -63,7 +63,7 @@
           data-slot="grid"
           class={cn(
             tray.body(),
-            "grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-ink-strong"
+            "grid grid-cols-[minmax(0,1fr)] gap-6 type-body text-ink-strong"
           )}
           {@attach resize}
         >

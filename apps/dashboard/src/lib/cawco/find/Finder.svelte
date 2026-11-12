@@ -747,7 +747,7 @@
   {:else if item.t === "head"}
     <div
       data-slot="head"
-      class="flex-none h-7 px-space-3 type-caps leading-7 uppercase tracking-caps text-ink-muted truncate"
+      class="flex-none h-7 px-space-3 type-caps leading-7 uppercase text-ink-muted truncate"
       data-flip
       role="presentation"
     >

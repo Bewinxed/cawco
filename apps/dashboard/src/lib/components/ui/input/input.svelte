@@ -11,9 +11,9 @@
     variants: {
       face: { mono: { field: "font-mono" } },
       text: {
-        meta: { field: "text-meta" },
-        label: { field: "text-label" },
-        title: { field: "text-title" },
+        meta: { field: "type-meta" },
+        label: { field: "type-label" },
+        title: { field: "type-title" },
       },
       /** A field for a short figure (a share, minutes, thousands of
           tokens): the number field's width, tight pads, and its figure
@@ -113,9 +113,9 @@
       Typed in, its edge steps up (`field-edge`): the caret is its focus. */
   const own = [
     "field-edge rounded-md shadow-xs transition-control",
-    "h-c-input-h w-full min-w-0 border border-border-row-outline",
+    "h-c-input-h w-full min-w-0 border",
     "bg-surface-raised px-3 text-ink-strong",
-    "text-body file:inline-flex file:h-7",
+    "type-body file:inline-flex file:h-7",
     "file:border-0 file:bg-transparent file:font-medium",
     "file:text-ink-strong file:text-label",
     "placeholder:text-ink-muted",

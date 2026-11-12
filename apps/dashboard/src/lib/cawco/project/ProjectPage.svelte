@@ -2373,7 +2373,7 @@
 
 {#if !project}
   <div class="flex flex-1 items-center justify-center p-space-7">
-    <p class="text-body text-ink-muted">
+    <p class="type-body text-ink-muted">
       No such project. It may have been removed; pick another from the rail.
     </p>
   </div>

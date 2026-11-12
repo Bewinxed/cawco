@@ -43,10 +43,7 @@
 <div
   data-slot="msg"
   data-wrap={wrap === "pretty" ? "pretty" : undefined}
-  class={[
-    REPLY_FRAME,
-    "text-size-body leading-body font-normal text-ink-strong",
-  ]}
+  class={[REPLY_FRAME, "type-body text-ink-strong"]}
 >
   <Markdown blocksAt={at} {fades} {said} {source} {streaming} />
 </div>

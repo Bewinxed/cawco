@@ -85,7 +85,7 @@
         {#if fleet === "none"}
           <h1
             data-slot="title"
-            class="m-0 type-title tracking-title text-balance text-ink-strong"
+            class="m-0 type-title text-balance text-ink-strong"
           >
             {shellWords.noMachines}
           </h1>
@@ -130,7 +130,7 @@
         {:else}
           <h1
             data-slot="title"
-            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+            class="m-0 type-title text-center text-balance text-ink-strong"
           >
             {shellWords.noneOnline}
           </h1>

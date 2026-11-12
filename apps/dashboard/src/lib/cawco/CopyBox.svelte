@@ -46,7 +46,7 @@
          words and never inside one; a word wider than the box scrolls the
          command sideways. -->
     <code
-      class="min-w-0 basis-full overflow-x-auto overscroll-x-contain text-meta whitespace-normal text-ink-strong"
+      class="min-w-0 basis-full overflow-x-auto overscroll-x-contain type-meta whitespace-normal text-ink-strong"
       title={text}
       >{#each words as word, index (index)}{#if index > 0}{" "}{/if}<span
           data-slot="word"
@@ -54,7 +54,7 @@
         >{/each}</code
     >
   {:else}
-    <code class="min-w-0 flex-1 truncate text-meta text-ink-strong" title={text}
+    <code class="min-w-0 flex-1 truncate type-meta text-ink-strong" title={text}
       >{text}</code
     >
   {/if}

@@ -14,7 +14,7 @@ import { tv } from "#lib/utils.js";
 export const sheetHeadVariants = tv({
   slots: {
     head: "flex flex-none items-center justify-between gap-space-2 pb-space-3",
-    title: "min-w-0 text-title text-balance text-ink-strong",
+    title: "min-w-0 type-title text-balance text-ink-strong",
   },
 });
 

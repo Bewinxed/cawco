@@ -169,7 +169,7 @@
                 <ProviderLogo model={trimmed} />
                 <span class="flex flex-col" data-box>
                   <span>Use <span class="font-mono">{trimmed}</span></span>
-                  <span class="text-meta text-ink-muted">
+                  <span class="type-meta text-ink-muted">
                     Sent to the selected harness exactly as typed
                   </span>
                 </span>
@@ -211,7 +211,7 @@
             >
               <span class="flex flex-col" data-box>
                 <span>Default</span>
-                <span class="text-meta text-ink-muted">
+                <span class="type-meta text-ink-muted">
                   Whatever the selected harness would have picked
                 </span>
               </span>
@@ -228,7 +228,7 @@
               <ProviderLogo model={row.value} />
               <span class="flex flex-col" data-box>
                 <span>{name}</span>
-                <span class="text-meta text-ink-muted">{row.description}</span>
+                <span class="type-meta text-ink-muted">{row.description}</span>
               </span>
             </Command.Item>
           {/each}

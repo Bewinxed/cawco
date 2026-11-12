@@ -663,8 +663,6 @@
   --text-code: 0.75rem;
   --text-title: clamp(1.125rem, 1.048rem + 0.3155vi, 1.25rem);
   --text-kpi: clamp(1.25rem, 1.0962rem + 0.6309vi, 1.5rem);
-  /* Brand and marketing only. */
-  --text-display: 2.5rem;
   --leading-meta: 1.4;
   --leading-label: 1.4;
   --leading-ui: 1.25;
@@ -689,7 +687,7 @@
   --type-row: 500 var(--text-row) / var(--leading-label) var(--font-sans);
   --type-prose: 400 var(--text-body) / var(--leading-prose) var(--font-sans);
   --type-button: 500 var(--text-body) / var(--leading-kpi) var(--font-sans);
-  /* Set with its tracking: the web's `text-title` utility carries it (app.css @theme, `--text-title--letter-spacing`), and the native role carries the same token. */
+  /* Set with its tracking: the `type-title` utility carries `--tracking-title`, and the native role carries the same token. */
   --type-title: 500 var(--text-title) / var(--leading-ui) var(--font-sans);
   --type-kpi: 500 var(--text-kpi) / var(--leading-kpi) var(--font-sans);
   --type-code: 400 var(--text-code) / var(--leading-code) var(--font-mono);
@@ -1921,6 +1919,7 @@
 @utility type-title {
   --tw-sort: vertical-align;
   font: var(--type-title);
+  letter-spacing: var(--tracking-title);
 }
 
 @utility type-kpi {
@@ -1937,6 +1936,7 @@
 @utility type-caps {
   --tw-sort: vertical-align;
   font: var(--type-caps);
+  letter-spacing: var(--tracking-caps);
 }
 
 @utility text-size-meta {
@@ -1951,28 +1951,12 @@
   font-size: var(--text-body);
 }
 
-@utility text-size-row {
-  font-size: var(--text-row);
-}
-
 @utility text-size-code {
   font-size: var(--text-code);
 }
 
 @utility text-size-title {
   font-size: var(--text-title);
-}
-
-@utility text-size-kpi {
-  font-size: var(--text-kpi);
-}
-
-@utility text-size-display {
-  font-size: var(--text-display);
-}
-
-@utility text-size-field-floor {
-  font-size: var(--text-field-floor);
 }
 
 @utility text-meta {
@@ -1991,19 +1975,6 @@
   font-size: var(--text-body);
   line-height: var(--tw-leading, var(--leading-body));
   font-weight: var(--tw-font-weight, var(--font-weight-normal));
-}
-
-@utility text-title {
-  font-size: var(--text-title);
-  line-height: var(--tw-leading, var(--leading-ui));
-  letter-spacing: var(--tw-tracking, var(--tracking-title));
-  font-weight: var(--tw-font-weight, var(--font-weight-medium));
-}
-
-@utility text-kpi {
-  font-size: var(--text-kpi);
-  line-height: var(--tw-leading, var(--leading-kpi));
-  font-weight: var(--tw-font-weight, var(--font-weight-medium));
 }
 
 @utility transition-control {

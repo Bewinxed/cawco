@@ -146,7 +146,7 @@
     <ProviderMark {provider} />
   {/snippet}
   {#snippet header()}
-    <h1 data-slot="title" class="type-title tracking-title text-ink-strong">
+    <h1 data-slot="title" class="type-title text-ink-strong">
       {title}
     </h1>
     {#if refused}

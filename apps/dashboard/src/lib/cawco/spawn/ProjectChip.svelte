@@ -138,7 +138,7 @@
     <div class="ns-panel grid gap-space-2 p-space-1">
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 shadow-xs"
+        class="field-edge transition-control flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border bg-surface-raised px-space-3 shadow-xs"
       >
         <Files class="size-icon-md flex-none text-ink-subtle" />
         <input
@@ -153,13 +153,13 @@
       </label>
       <label
         data-slot="project-chip-field"
-        class="field-edge transition-control flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 shadow-xs"
+        class="field-edge transition-control flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border bg-surface-raised px-space-3 shadow-xs"
       >
         <Folder class="size-icon-md flex-none text-ink-subtle" />
         <input
           aria-label={spawnWords.project.path}
           autocapitalize="off"
-          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-body font-normal text-ink-strong placeholder:text-ink-muted"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) type-body text-ink-strong placeholder:text-ink-muted"
           oninput={(event) => {
             if (draft) {
               draft = { ...draft, path: event.currentTarget.value };

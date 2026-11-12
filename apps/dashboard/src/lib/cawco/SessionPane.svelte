@@ -1703,7 +1703,7 @@
     {#if continuedTo}
       <p
         data-slot="continued"
-        class="mx-auto mt-0 mb-space-4 flex max-w-full justify-center gap-space-1 px-space-3 py-space-2 text-center text-meta text-ink-muted"
+        class="mx-auto mt-0 mb-space-4 flex max-w-full justify-center gap-space-1 px-space-3 py-space-2 text-center type-meta text-ink-muted"
         in:crossIn
         out:crossOut
       >
@@ -1716,7 +1716,7 @@
       </p>
     {:else if !fault && (unaddressable || readOnly)}
       <p
-        class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center text-meta text-ink-muted"
+        class="mx-auto mt-0 mb-space-4 px-space-3 py-space-2 text-center type-meta text-ink-muted"
         in:crossIn
         out:crossOut
       >

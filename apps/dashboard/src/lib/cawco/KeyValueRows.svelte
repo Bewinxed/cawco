@@ -32,7 +32,7 @@
 </script>
 
 <fieldset class="flex flex-col gap-1.5" {@attach reflow()}>
-  <legend class="mb-space-1 text-label text-ink-muted">{legend}</legend>
+  <legend class="mb-space-1 type-label text-ink-muted">{legend}</legend>
   <!-- Keyed by the line itself, so removing one removes that line rather
        than shifting every value after it up a box. -->
   {#each rows as row, index (row)}
