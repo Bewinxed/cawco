@@ -2370,14 +2370,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const waitsOnPerson = (row: ArtifactRow): boolean =>
     pendingFor(row) !== null || unsentTry(row);
 
-  /** Every decision page, by the artifact each of its Canvas and Preview pieces shows. */
+  /**
+   * Every decision page, by the artifact each of its Canvas and Preview
+   * pieces shows: in the version the panel stands at and in a next version
+   * held for its parent to open. Read off the shown version alone, a page a
+   * delegate rebuilt on new canvases showed none of them until its parent
+   * opened the new version, so the delegate's workspace serving them
+   * retired the moment its work was over, and the page the person was
+   * reading said "its workspace is gone" (stage-notices, 2026-11-12).
+   */
   const pagesShowing = (): Map<string, ArtifactRow[]> => {
     const shown = new Map<string, ArtifactRow[]>();
     for (const page of db.asking()) {
       if (page.kind !== "page") {
         continue;
       }
-      for (const id of mediaOf(page)) {
+      const held = db.heldOf(page.id);
+      for (const id of new Set([
+        ...mediaOf(page),
+        ...(held ? mediaOf(held) : []),
+      ])) {
         shown.set(id, [...(shown.get(id) ?? []), page]);
       }
     }
