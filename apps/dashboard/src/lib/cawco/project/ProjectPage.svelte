@@ -2264,7 +2264,7 @@
       >
         <EmptyState
           actionWidth="fill"
-          axis
+          axis="mark"
           line={cawLine}
           title="Nothing on the board yet"
         >

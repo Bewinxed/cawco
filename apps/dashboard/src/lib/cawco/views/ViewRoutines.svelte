@@ -1214,19 +1214,21 @@
         <!-- Create routine: the form in the empty state's place. -->
         <div class="max-w-c-starters-w">{@render routineForm()}</div>
       {:else if canTalk}
-        <!-- Caw stands as the mark, centred over the column (DESIGN.md, The
-             Caw Stands On The Axis Rule); the title, the line, the chips and
-             his composer start on the column's one left edge. -->
+        <!-- Caw stands as the mark, centred over the column (EmptyState's
+             `axis="mark"`, DESIGN.md's The Caw Stands On The Axis Rule); the
+             title, the line, the chips and his composer start on the
+             column's one left edge, as on the empty board and Decisions. -->
         <div data-slot="caw-empty" class="mx-auto w-full max-w-c-starters-w">
           <EmptyState
             actionWidth="fill"
+            axis="mark"
             line={words.emptyCaw(project.name)}
             title={words.empty}
           >
             {#snippet mark()}
               <div
                 data-slot="caw-80"
-                class="mb-space-3 grid self-center justify-items-center"
+                class="mb-space-3 grid justify-items-center"
                 data-share="caw:{project.id}"
                 out:sitDown|global
               >

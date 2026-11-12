@@ -19,13 +19,17 @@
         true: "mark-line flex-row flex-wrap items-center gap-x-space-2 gap-y-space-1 py-0",
       },
       /* Caw stands on the composition's axis (DESIGN.md, The Caw Stands On
-         The Axis Rule): the mark, title and why centre on the block's own
-         vertical axis, and so does the action (emptyActionVariants' axis):
-         its box centres what it holds, so a lone button stands under the
-         line as one block, while a child as wide as the box (a column of
-         starters) stays full width. */
+         The Axis Rule). `true`, a hero, a setup card: the mark, title and
+         why centre on the block's own vertical axis, and so does the action
+         (emptyActionVariants' axis): its box centres what it holds, so a
+         lone button stands under the line as one block, while a child as
+         wide as the box stays full width. `mark`, an empty page where Caw
+         starts the work: the mark alone centres over the column; the title,
+         the why and the action (as wide as the column) start on its left
+         edge, in line with the starters under them. */
       axis: {
         true: "[&>:not([data-box])]:self-center [&>:not([data-box])]:text-center",
+        mark: "[&>:first-child]:self-center",
       },
       pad: {
         pane: "px-space-6",
@@ -36,14 +40,15 @@
 
   /**
    * Its action's looks: `fill`, an action as wide as the block (a column of
-   * starters). `axis`: the box stands on the block's axis and centres what
-   * it holds, `fill` or not; a full-width child still fills it.
+   * starters). `axis` `true`: the box stands on the block's axis and
+   * centres what it holds, `fill` or not; a full-width child still fills
+   * it. `axis` `mark`: the box keeps the block's start edge.
    */
   const emptyActionVariants = tv({
     base: "mt-space-2",
     variants: {
       inline: { true: "mt-0 flex-none" },
-      axis: { true: "flex flex-col items-center self-center" },
+      axis: { true: "flex flex-col items-center self-center", mark: "" },
       actionWidth: { fill: "self-stretch" },
     },
   });
@@ -61,7 +66,9 @@
    * for the glyph where something drawn is the mark (Caw on an empty board).
    * Mark, title, line and action share one start edge
    * (`emptyStateVariants`); a surface places the block, never centres its
-   * lines.
+   * lines. `axis`: Caw's composition (The Caw Stands On The Axis Rule),
+   * `true` centring the whole block on its axis, `mark` centring the mark
+   * alone over a start-aligned column.
    * `inline`: the same claim in a strip's room (the usage strip), on one line
    * with its action beside it.
    */

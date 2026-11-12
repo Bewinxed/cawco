@@ -4,9 +4,9 @@
    * The project page's Decisions tab: its decision pages as one list
    * (DecisionsList, the owner's pick of 10-24), each row opening its page in
    * this same pane (DecisionPage), and its back symbol returning to the
-   * list. Empty, Caw, the title and the why stand on the block's axis over
-   * the starters, a press asking him for a page in his panel (Empty Starts
-   * Work; Caw Stands On The Axis); while the list is first
+   * list. Empty, Caw stands centred over the column, the title, the why and
+   * the starters on its left edge, a press asking him for a page in his
+   * panel (Empty Starts Work; Caw Stands On The Axis); while the list is first
    * read, its frame's skeleton stands (The Claim Of Nothing Rule). The page
    * and the card live in the URL.
    */
@@ -140,7 +140,7 @@
           <div class="mx-auto w-full max-w-c-starters-w" data-slot="first-use">
             <EmptyState
               actionWidth="fill"
-              axis
+              axis="mark"
               line={words.emptyCaw}
               title={words.empty}
             >
