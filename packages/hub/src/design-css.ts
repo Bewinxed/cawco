@@ -35,7 +35,7 @@ const MINUS_TERM = /\s*-\s*/gu;
 export const GRADIENT_DOWN = "to bottom";
 
 /** A `linear-gradient()`'s stops, past a leading `to bottom`. */
-export const gradientStops = (args: string): string[] => {
+const gradientStops = (args: string): string[] => {
   const all = splitTop(args, ",");
   return all[0]?.trim() === GRADIENT_DOWN ? all.slice(1) : all;
 };

@@ -93,6 +93,7 @@
     "./decisions": "./src/decisions.ts",
     "./decides": "./src/decides.ts",
     "./house-faces": "./src/house-faces.ts",
+    "./theme-css": "./src/theme-css.ts",
     "./words/decisions": "./src/words/decisions.ts",
     "./words/onboarding": "./src/words/onboarding.ts",
     "./words/decides": "./src/words/decides.ts",

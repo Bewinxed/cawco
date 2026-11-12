@@ -81,6 +81,7 @@ import {
   CANVAS_EMBED_FAILED,
   CANVAS_EMBED_SEEN,
 } from "../../../packages/core/src/stage";
+import { themeVariablesCss } from "../../../packages/core/src/theme-css";
 import { until } from "../../scratch-fleet";
 import { scratchCertificate } from "../cloudflare-front";
 import {
@@ -2314,10 +2315,7 @@ async function buildCanvases(stage: Stage, files: string[]): Promise<Built> {
   mkdirSync(src, { recursive: true });
   rmSync(BUILT_OUT, { recursive: true, force: true });
   const runtime = join(ROOT, "packages/agent/src/stage-host/canvas/runtime.ts");
-  const tokens = readFileSync(
-    join(ROOT, "packages/hub/skills/decision-page/kit/tokens.css"),
-    "utf8"
-  );
+  const tokens = themeVariablesCss();
   const { houseFaceSheet } =
     await import("../../../packages/core/src/house-faces");
   const faces = await houseFaceSheet("faces/");

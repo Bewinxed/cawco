@@ -71,10 +71,12 @@
  * rules are taste no check here measures.
  */
 // biome-ignore-all lint/performance/useTopLevelRegex: the reads run serialized into the page (`page.evaluate`), so each regex lives inside its function
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { userSkillLayers } from "../../packages/core/src/paths";
+import { themeVariablesCss } from "../../packages/core/src/theme-css";
 import { capture, type Raster } from "./ink";
 import { scan } from "./journeys/scan";
 import { devtoolsPort, installRuns, type Kit, ROOT, Run, settle } from "./kit";
@@ -304,20 +306,9 @@ const CORAL_TOKENS = [
   "selected-icon",
 ];
 
-/** The kit's tokens.css values (the declarations of the dashboard's theme.css), each `var()` written out, for a page whose stylesheet names none of them. A name is a colour token's, read as `--color-<name>`. */
+/** The values of the dashboard's theme.css, each `var()` written out, for a page whose stylesheet names none of them. A name is a colour token's, read as `--color-<name>`. */
 const TOKEN_VALUES = (() => {
-  const css = readFileSync(
-    join(
-      ROOT,
-      "packages",
-      "hub",
-      "skills",
-      "decision-page",
-      "kit",
-      "tokens.css"
-    ),
-    "utf8"
-  );
+  const css = themeVariablesCss();
   const raw = new Map<string, string>();
   for (const m of css.matchAll(/--([\w-]+):\s*([^;]+);/gu)) {
     const [, name, value] = m;

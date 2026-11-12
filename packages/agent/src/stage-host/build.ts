@@ -12,6 +12,7 @@ import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
 import { bundled } from "@cawco/core/bundled";
 import { houseFaceSheet } from "@cawco/core/house-faces";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
+import { themeVariablesCss } from "@cawco/core/theme-css";
 
 const HOST = new URL("./host.ts", import.meta.url).pathname;
 
@@ -103,9 +104,6 @@ const svelteShims = async (): Promise<string> =>
   );
 
 const CANVAS = new URL("./canvas/runtime.ts", import.meta.url).pathname;
-const REPO = new URL("../../../../", import.meta.url).pathname;
-/** CawCo's tokens as plain CSS (the decision-page kit's, the declarations of the dashboard's theme.css), for the canvas page's own style. */
-const TOKENS = join(REPO, "packages/hub/skills/decision-page/kit/tokens.css");
 
 /**
  * The house faces the canvas page's own style is set in (DESIGN.md's type), as every
@@ -145,7 +143,7 @@ async function canvasRuntime(): Promise<string> {
 export async function buildStageHost(): Promise<string> {
   const [runtime, tokens, faces] = await Promise.all([
     canvasRuntime(),
-    readFile(TOKENS, "utf8"),
+    themeVariablesCss(),
     canvasFaces(),
   ]);
   const result = await bundled("The stage host", {

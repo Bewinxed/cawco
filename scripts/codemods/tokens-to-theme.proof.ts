@@ -32,7 +32,7 @@ if (!(beforeDir && afterDir)) {
   process.exit(2);
 }
 const base =
-  process.argv.find((a) => a.startsWith("--base="))?.slice(7) ?? "origin/main";
+  process.argv.find((a) => a.startsWith("--base="))?.slice(7) ?? "fd02d9b65";
 
 const map = JSON.parse(
   readFileSync(join(ROOT, "scripts/codemods/tokens-to-theme.map.json"), "utf8")
@@ -140,6 +140,9 @@ const ESCAPED = /\\(.)/gu;
 const SHADOW_COLOUR = /var\(--tw-(?:drop-)?shadow-color,\s*/u;
 const SHADOW_TOKEN = /^(?:drop-shadow\()?var\((--[\w-]+)\)\)?$/u;
 const SHADOW_KEY = /--tw-(drop-)?shadow/u;
+/** A utility written with an opacity modifier: `.bg-border\/50`. */
+const OPACITY = /\\\/\d+/u;
+const FONT_SANS = /\.font-sans(?![\w-])/u;
 const RULE_END = / \}$/u;
 const ONE_DECLARATION = /^([\w-]+): var\((--[\w-]+)\)$/u;
 const wanted = (path: string) =>
@@ -360,6 +363,11 @@ for (const [rule, count] of before.rules) {
       "a utility only a deleted file named (build-tokens.ts, tokens.ts, design/tokens): no source uses it",
       name
     );
+  } else if (OPACITY.test(headOf(rule) ?? "")) {
+    explain(
+      "opacity modifiers the old inline theme dropped now apply (a colour utility with /N drew the full colour)",
+      headOf(rule) as string
+    );
   } else {
     differences.push(`rule gone: ${rule}`);
   }
@@ -393,6 +401,13 @@ for (const [rule, count] of after.rules) {
       "a utility the theme's namespace now makes (`--text-body` → text-body) beside the house @utility of the same name: its declarations are already in that rule",
       headOf(rule) as string
     );
+  } else if (OPACITY.test(headOf(rule) ?? "")) {
+    // Named with the rule it replaces, above.
+  } else if (FONT_SANS.test(headOf(rule) ?? "")) {
+    explain(
+      "font-sans: its variable is now a theme key, so the class applies font-family where it did nothing (only a dev fixture uses it)",
+      headOf(rule) as string
+    );
   } else {
     differences.push(`rule new: ${rule}`);
   }
@@ -410,6 +425,11 @@ console.log(
 );
 for (const [why, what] of explained) {
   console.log(`explained (${what.length}): ${why}`);
+  if (why.startsWith("opacity") || why.startsWith("font-sans")) {
+    for (const one of what) {
+      console.log(`    ${one}`);
+    }
+  }
 }
 for (const line of differences) {
   console.log(`  ${line}`);
