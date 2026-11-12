@@ -9,8 +9,8 @@
    * it that it needs is done (the relay and the project need a machine; the
    * project needs a harness), and the one step to do next takes the coral.
    *
-   * Caw stands on the board's axis over the row (The Caw Stands On The Axis
-   * Rule). Asleep until a machine joins; the first machine registering is
+   * Caw stands centred over the row, the mark over what is drawn under him
+   * (DESIGN.md, The Alignment Rule). Asleep until a machine joins; the first machine registering is
    * his arrival, the one moment of delight the first run spends (DESIGN.md,
    * The Frequency Rule: "Delight … belongs only to what is rare: the first
    * run"), with the line naming the machine. The row leaves once every step

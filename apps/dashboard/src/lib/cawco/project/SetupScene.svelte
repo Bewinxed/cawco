@@ -2,7 +2,8 @@
   /**
    * A project's board before it is set up, with no setup under way: Caw off,
    * or a project made without him, or a setup left long ago. The house
-   * empty state on the board's axis (The Caw Stands On The Axis Rule): his
+   * empty state as a short block alone in open room, centred as one block
+   * (EmptyState `centre="block"`, DESIGN.md's The Alignment Rule): his
    * live seat over "Not set up yet", what fills the board, and the one way
    * to start (Set it up with Caw), or the folder glyph alone where he can't
    * start. Once he sets it up, his draft takes the board's place as the
@@ -45,7 +46,7 @@
     {#if seat}
       <EmptyState
         actionWidth="fill"
-        axis
+        centre="block"
         line={setupWords.notSetUpLine}
         mark={seated}
         title={setupWords.notSetUp}
@@ -54,7 +55,7 @@
     {:else}
       <EmptyState
         actionWidth="fill"
-        axis
+        centre="block"
         icon={IconFolder}
         line={setupWords.notSetUpLine}
         title={setupWords.notSetUp}

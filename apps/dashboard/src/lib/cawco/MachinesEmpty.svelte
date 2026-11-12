@@ -2,7 +2,8 @@
   /**
    * The fleet with no machine to run a session on, where the board would
    * be (the wide screen's empty detail, the phone's home). In the shape of
-   * New project: Caw at 80px over a title and one line.
+   * New project: Caw at 80px centred over what stands under him, his title
+   * and line on its left edge (DESIGN.md, The Alignment Rule).
    *
    * - `none`, no machine registered: the two ways in as icon cards, each
    *   opening Add machine on its tab (connect/).
@@ -71,23 +72,27 @@
     class="relative w-full transition-[opacity] duration-(--dur-fade) ease-out group-data-leaving:opacity-0"
   >
     {#key fleet}
+      <!-- Over the cards, the words take the cards' left edge; with one
+           button under them they are a short block, centred as one (DESIGN.md,
+           The Alignment Rule). -->
       <!-- mark-line: a column; the machine cards stand under the words -->
       <div
         data-slot="words"
-        class="flex flex-col items-center gap-space-4"
+        class={[
+          "flex flex-col gap-space-4",
+          fleet === "none" ? "items-start" : "items-center",
+        ]}
         in:crossIn
         out:crossOut
       >
         {#if fleet === "none"}
           <h1
             data-slot="title"
-            class="m-0 type-title tracking-title text-center text-balance text-ink-strong"
+            class="m-0 type-title tracking-title text-balance text-ink-strong"
           >
             {shellWords.noMachines}
           </h1>
-          <p
-            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
-          >
+          <p class="m-0 max-w-c-page-line type-body text-pretty text-ink-muted">
             Sessions run on your own machines. Install CawCo on one and it joins
             this fleet.
           </p>

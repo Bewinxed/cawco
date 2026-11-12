@@ -172,7 +172,7 @@ export class CawLead {
   /**
    * The page's one live Caw stands in his panel's setup element
    * (SetupWell) while he drafts a project's setup: the seat over the board
-   * or in the head stands empty meanwhile (The Caw Stands On The Axis Rule).
+   * or in the head stands empty meanwhile.
    */
   inPanel = $state(false);
   /**

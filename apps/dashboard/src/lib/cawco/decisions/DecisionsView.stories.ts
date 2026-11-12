@@ -2,7 +2,7 @@
  * The project page's Decisions tab (DecisionsView, Component Story Format
  * 3, live components) with no decision page yet and Caw able to start: Caw
  * at 80 centred over the column, the title, the line and his starters on
- * its left edge (EmptyState `axis="mark"`). Its reads arrive as props, so
+ * its left edge (EmptyState `centre="mark"`). Its reads arrive as props, so
  * the list stands in read and empty, and Caw stands in at rest, with no
  * head to sit down in. It stands in the project page's pane inset
  * (ProjectPaneFrame), as the tab does on the page.

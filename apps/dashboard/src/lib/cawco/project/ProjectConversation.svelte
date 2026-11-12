@@ -76,7 +76,6 @@
   } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     TabItem,
     Tabs,
@@ -84,7 +83,6 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
-    IconChatAdd,
     IconClose,
     IconListRowsLinear,
     IconMoveTabLinear,
@@ -93,10 +91,10 @@
   import { barGlass } from "../bar-glass.svelte";
   import { dropStart } from "../spawn/parked.svelte";
   import CawAtWork from "./CawAtWork.svelte";
+  import ConversationHero from "./ConversationHero.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { cawStartsOf, makeHis, startConversation } from "./conversation";
   import SetupWell from "./SetupWell.svelte";
-  import StarterCards from "./StarterCards.svelte";
   import { handedOver, type SetupProgress } from "./setup-progress";
 
   let {
@@ -633,35 +631,8 @@
           style:--composer-clearance="var(--space-4)"
           style:--reserved={reserved}
         >
-          <!-- The hero: the empty board's (project page `.caw-empty`), from the
-             room's top, its inline padding the composer's own column, so its
-             glyph, the title, the line and the starters share the composer's start
-             edge (--space-3 where the composer goes edge to edge, under
-             900px). It clears the composer as a transcript does, and the
-             panel's bar where one floats over it; its scroll is the bar's
-             scroll edge (BarFloat). -->
-          <div
-            class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto scroll-timeline-transcript-head px-(--hero-px) pt-(--bar-room,0px) pb-(--composer-clearance) max-desk:px-space-3"
-            data-slot="conversation-hero"
-            style:--hero-px="calc((100% - var(--c-composer-w)) / 2)"
-            in:crossIn
-          >
-            <EmptyState
-              actionWidth="fill"
-              axis
-              icon={IconChatAdd}
-              line={off
-                ? "Caw is off, so he acts only when you write to him."
-                : undefined}
-              title="What’s next for {projectName}?"
-            >
-              {#snippet action()}
-                {#if starters.length > 0}
-                  <StarterCards onpick={pick} rows {starters} />
-                {/if}
-              {/snippet}
-            </EmptyState>
-          </div>
+          <!-- The hero, on the composer's start edge (ConversationHero). -->
+          <ConversationHero {off} onpick={pick} {projectName} {starters} />
           <FootFade />
           {#if lead.canTalk}
             <!-- No conversation lends this panel a composer yet: it draws its

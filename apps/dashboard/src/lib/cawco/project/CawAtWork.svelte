@@ -15,8 +15,7 @@
    *
    * It stands after the rows while he works (ProjectConversation, Transcript
    * `afterRows`): the bare working line stands down for it. It is the page's
-   * one live Caw while he stands in it (The Caw Stands On The Axis Rule,
-   * `lead.inPanel`). With reduced motion he holds his still and nothing
+   * one live Caw while he stands in it (`lead.inPanel`). With reduced motion he holds his still and nothing
    * breathes; the words still change.
    */
   import type { Snippet } from "svelte";

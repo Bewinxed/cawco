@@ -1,5 +1,5 @@
 /**
- * The board's empty states (The Caw Stands On The Axis Rule), in the
+ * The board's empty states (DESIGN.md, The Alignment Rule), in the
  * project page's pane inset (ProjectPaneFrame). On an empty board, Caw
  * alone centred over the column, the title, the line and the starters on
  * its left edge; before setup, Caw (or the folder glyph where he can't

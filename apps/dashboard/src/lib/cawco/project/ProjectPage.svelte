@@ -2264,8 +2264,7 @@
         in:reveal
       >
         <EmptyState
-          actionWidth="fill"
-          axis="mark"
+          centre="mark"
           line={cawLine}
           title="Nothing on the board yet"
         >

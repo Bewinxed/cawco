@@ -18,18 +18,22 @@
       inline: {
         true: "mark-line flex-row flex-wrap items-center gap-x-space-2 gap-y-space-1 py-0",
       },
-      /* Caw stands on the composition's axis (DESIGN.md, The Caw Stands On
-         The Axis Rule). `true`, a hero, a setup card: the mark, title and
-         why centre on the block's own vertical axis, and so does the action
-         (emptyActionVariants' axis): its box centres what it holds, so a
-         lone button stands under the line as one block, while a child as
-         wide as the box stays full width. `mark`, an empty page where Caw
-         starts the work: the mark alone centres over the column; the title,
-         the why and the action (as wide as the column) start on its left
-         edge, in line with the starters under them. */
-      axis: {
-        true: "[&>:not([data-box])]:self-center [&>:not([data-box])]:text-center",
-        mark: "[&>:first-child]:self-center",
+      /* DESIGN.md, The Alignment Rule. `block`: a short block alone in open
+         room (a mark, a title, a line, one button), centred as one block:
+         the mark, title and why centre on the block's own vertical axis,
+         and so does the action (emptyActionVariants' centre): its box
+         centres what it holds, so a lone button stands under the line as
+         one block, while a child as wide as the box stays full width.
+         `mark`: the mark alone centres over what is drawn under it; the
+         title, the why and the action start on one left edge. The action
+         spans the block (emptyActionVariants), so the mark stands over its
+         middle; where it draws nothing (its box empty), the block shrinks
+         to its words, so the mark stands over their middle, never over an
+         empty column. */
+      centre: {
+        block:
+          "[&>:not([data-box])]:self-center [&>:not([data-box])]:text-center",
+        mark: "[&>:first-child]:self-center has-[>[data-box]:empty]:w-fit has-[>[data-box]:empty]:max-w-full",
       },
       pad: {
         pane: "px-space-6",
@@ -40,15 +44,19 @@
 
   /**
    * Its action's looks: `fill`, an action as wide as the block (a column of
-   * starters). `axis` `true`: the box stands on the block's axis and
+   * starters). `centre` `block`: the box stands on the block's axis and
    * centres what it holds, `fill` or not; a full-width child still fills
-   * it. `axis` `mark`: the box keeps the block's start edge.
+   * it. `centre` `mark`: the box keeps the block's start edge and spans
+   * it, so the mark centred over the block stands over what it draws.
    */
   const emptyActionVariants = tv({
     base: "mt-space-2",
     variants: {
       inline: { true: "mt-0 flex-none" },
-      axis: { true: "flex flex-col items-center self-center", mark: "" },
+      centre: {
+        block: "flex flex-col items-center self-center",
+        mark: "self-stretch",
+      },
       actionWidth: { fill: "self-stretch" },
     },
   });
@@ -66,9 +74,9 @@
    * for the glyph where something drawn is the mark (Caw on an empty board).
    * Mark, title, line and action share one start edge
    * (`emptyStateVariants`); a surface places the block, never centres its
-   * lines. `axis`: Caw's composition (The Caw Stands On The Axis Rule),
-   * `true` centring the whole block on its axis, `mark` centring the mark
-   * alone over a start-aligned column.
+   * lines. `centre` (DESIGN.md, The Alignment Rule): `block` centring a
+   * short block alone in open room as one block, `mark` centring the mark
+   * alone over what is drawn under it, the rest on one left edge.
    * `inline`: the same claim in a strip's room (the usage strip), on one line
    * with its action beside it.
    */
@@ -83,7 +91,7 @@
     line,
     action,
     inline = false,
-    axis = false,
+    centre,
     pad,
     actionWidth,
     class: className,
@@ -109,7 +117,7 @@
 
 <!-- mark-line: the block stacks its mark above the title; `inline` is a mark line through emptyStateVariants -->
 <div
-  class={cn(emptyStateVariants({ inline, axis, pad }), className)}
+  class={cn(emptyStateVariants({ inline, centre, pad }), className)}
   data-slot="empty"
   {...restProps}
 >
@@ -167,7 +175,7 @@
       </p>
     {/if}
   {/if}
-  <div class={emptyActionVariants({ inline, axis, actionWidth })} data-box>
+  <div class={emptyActionVariants({ inline, centre, actionWidth })} data-box>
     {@render action()}
   </div>
 </div>

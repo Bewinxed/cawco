@@ -1,27 +1,4 @@
 <script lang="ts">
-  /**
-   * New project (design §5, PRD §5.6): Caw at 80px asks "What are we working
-   * on?"; the session Composer, four starter chips that put their words in
-   * it, and six template cards with Caw peeking over the one the words fit.
-   *
-   * One live Caw at a time: the first fit sends the 80px Caw away and he
-   * peeks over the card; a different fit moves the peek to it; no fit sends
-   * the peek away and the 80px Caw comes back. The fit is a hint and never a
-   * pick: only a tap picks a card, typing and chips leave the tap where it
-   * is, and a tap on the picked card clears it.
-   *
-   * The send makes the project with Caw (`create`), carrying the tapped
-   * template or none and no name (Caw names it); `onmade` takes the page to
-   * it. A refusal puts the words back in the composer with the reason over
-   * them.
-   *
-   * Its state arrives as props, so every state stands in a story
-   * (NewProject.stories.ts): where the fleet stands (`fleet`, read from the
-   * home's `machines`: nothing is claimed while it is read). The field's
-   * placeholder types its examples once and rests (TypedExamples), and the
-   * cards' glyphs keep their sections' hues (decision page
-   * `onboarding-design`, cards `describe-hint` and `card-hues`).
-   */
   import { detach } from "@cawco/core/detach";
   import { onboardingWords } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
@@ -50,6 +27,30 @@
     chipsVariants,
     chipVariants,
   } from "#lib/components/ui/chip/index.js";
+  /**
+   * New project (design §5, PRD §5.6): Caw at 80px asks "What are we working
+   * on?"; the session Composer, four starter chips that put their words in
+   * it, and six template cards with Caw peeking over the one the words fit.
+   *
+   * One live Caw at a time: the first fit sends the 80px Caw away and he
+   * peeks over the card; a different fit moves the peek to it; no fit sends
+   * the peek away and the 80px Caw comes back. The fit is a hint and never a
+   * pick: only a tap picks a card, typing and chips leave the tap where it
+   * is, and a tap on the picked card clears it.
+   *
+   * The send makes the project with Caw (`create`), carrying the tapped
+   * template or none and no name (Caw names it); `onmade` takes the page to
+   * it. A refusal puts the words back in the composer with the reason over
+   * them.
+   *
+   * Its state arrives as props, so every state stands in a story
+   * (NewProject.stories.ts): where the fleet stands (`fleet`, read from the
+   * home's `machines`: nothing is claimed while it is read). The field's
+   * placeholder types its examples once and rests (TypedExamples), and the
+   * cards' glyphs keep their sections' hues (decision page
+   * `onboarding-design`, cards `describe-hint` and `card-hues`).
+   */
+  import { COMPOSER_EDGE } from "./composer-edge";
 
   let {
     fleet,
@@ -227,9 +228,16 @@
 >
   <!-- His slot goes with him when he peeks over a card, and comes back
        with him: the hero's height tweens (morph) rather than leaving a band. -->
+  <!-- Caw stands over the middle of the field; the title, the no-machine
+       line and the chips stand on its composer's start edge (DESIGN.md, The
+       Alignment Rule), each in a box as wide as the field, inset by
+       --field-px to the composer's drawn edge: its column, centred, and
+       its desk nudge (c-composer-nudge) halved by the centring (--space-3
+       where the composer goes edge to edge). -->
   <div
     data-slot="ask"
     class="flex w-full flex-col items-center gap-space-4"
+    style:--field-px={COMPOSER_EDGE}
     {@attach morph()}
   >
     {#if caw === "page"}
@@ -243,9 +251,14 @@
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
       </div>
     {/if}
-    <h1 data-slot="title" class="type-title text-center text-ink-strong">
-      {onboardingWords.ask}
-    </h1>
+    <div class="w-full max-w-c-new-project-field-w">
+      <h1
+        data-slot="title"
+        class="m-0 px-(--field-px) type-title text-ink-strong max-desk:px-space-3"
+      >
+        {onboardingWords.ask}
+      </h1>
+    </div>
     <div
       data-slot="new-page-field"
       class="relative w-full max-w-c-new-project-field-w"
@@ -278,29 +291,31 @@
       <!-- Known, not guessed: the line stands only once the hub has listed
            the machines. The words stay in the field (the draft survives a
            reload) and Send waits; the cards stay. -->
-      <div
-        data-slot="no-machine"
-        class="mark-line flex w-full max-w-c-new-project-field-w flex-wrap items-center justify-center gap-x-space-3 gap-y-space-2"
-      >
-        <span class="type-body text-center text-pretty text-ink-muted"
-          >{fleet === "none"
-            ? onboardingWords.noMachine
-            : onboardingWords.noneOnline}</span
+      <div class="w-full max-w-c-new-project-field-w">
+        <div
+          data-slot="no-machine"
+          class="mark-line flex flex-wrap items-center gap-x-space-3 gap-y-space-2 px-(--field-px) max-desk:px-space-3"
         >
-        <Button
-          aria-haspopup="dialog"
-          data-box
-          label={fleet === "none"
-            ? onboardingWords.addMachine
-            : onboardingWords.checkMachines}
-          onclick={(event: MouseEvent) =>
-            onmachines(
-              event.currentTarget as HTMLElement,
-              fleet === "none" ? "none" : "offline"
-            )}
-          size="sm"
-          variant="outline"
-        />
+          <span class="type-body text-pretty text-ink-muted"
+            >{fleet === "none"
+              ? onboardingWords.noMachine
+              : onboardingWords.noneOnline}</span
+          >
+          <Button
+            aria-haspopup="dialog"
+            data-box
+            label={fleet === "none"
+              ? onboardingWords.addMachine
+              : onboardingWords.checkMachines}
+            onclick={(event: MouseEvent) =>
+              onmachines(
+                event.currentTarget as HTMLElement,
+                fleet === "none" ? "none" : "offline"
+              )}
+            size="sm"
+            variant="outline"
+          />
+        </div>
       </div>
     {/if}
     <!-- As wide as the field, so the chips stand on its composer's column. -->
@@ -308,9 +323,8 @@
       <div
         data-slot="chips"
         class={chipsVariants({
-          class: "px-(--chips-px) max-desk:px-space-3",
+          class: "px-(--field-px) max-desk:px-space-3",
         })}
-        style:--chips-px="calc((100% - var(--c-composer-w)) / 2)"
       >
         {#each STARTERS as text (text)}
           <button

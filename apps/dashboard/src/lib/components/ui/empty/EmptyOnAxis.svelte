@@ -1,14 +1,16 @@
 <script lang="ts">
   /**
-   * The axis empty state (`EmptyState` with `axis`) as its callers draw it,
-   * for its states file: `setup`, the board before it is set up as Caw
-   * offers it (the real SetupScene with his seat, the whole block on the
-   * axis, one outline button);
-   * `starters`, the empty board as ProjectPage draws it (`axis="mark"`):
-   * Caw at 80 centred over the column, the title, the line and the
-   * starters on its left edge; `none`, the not-set-up board where Caw
-   * can't start: the folder glyph, no action, the whole block on the axis.
-   * Caw stands in at rest, with no head to sit down in.
+   * The board's empty states (`EmptyState` with `centre`) as their callers
+   * draw them, for their states files: `setup`, the board before it is set
+   * up as Caw offers it (the real SetupScene with his seat, a short block
+   * centred as one, one outline button); `starters`, the empty board as
+   * ProjectPage draws it (`centre="mark"`): Caw at 80 centred over the
+   * starters, the title, the line and the starters on their left edge;
+   * `panel`, the same board while his panel is open and holds the
+   * starters, so nothing is drawn under the words and Caw stands over
+   * their middle; `none`, the not-set-up board where Caw can't start: the
+   * folder glyph, no action, centred as one block. Caw stands in at rest,
+   * with no head to sit down in.
    */
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { RESTING_LEAD } from "#lib/cawco/project/caw-lead.fixture.js";
@@ -21,16 +23,15 @@
     look,
     starters = [],
   }: {
-    look: "setup" | "starters" | "none";
+    look: "setup" | "starters" | "panel" | "none";
     starters?: Starter[];
   } = $props();
 </script>
 
-{#if look === "starters"}
+{#if look === "starters" || look === "panel"}
   <div class="mx-auto w-full max-w-c-starters-w">
     <EmptyState
-      actionWidth="fill"
-      axis="mark"
+      centre="mark"
       line="Tell Caw what to do: the tasks Caw files move through Backlog, In progress, Review and Done. One waiting on you shows in Review."
       title="Nothing on the board yet"
     >
@@ -45,7 +46,9 @@
         </div>
       {/snippet}
       {#snippet action()}
-        <StarterCards onpick={() => undefined} {starters} />
+        {#if look === "starters"}
+          <StarterCards onpick={() => undefined} {starters} />
+        {/if}
       {/snippet}
     </EmptyState>
   </div>

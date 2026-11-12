@@ -14,8 +14,7 @@
    * ticked from his own calls (setup-progress.ts), the one he is on
    * breathing.
    *
-   * It is the page's one live Caw while it stands (The Caw Stands On The
-   * Axis Rule): the project's seat stands empty for as long as it holds him
+   * It is the page's one live Caw while it stands: the project's seat stands empty for as long as it holds him
    * (`lead.inPanel`), and he goes back to it once the setup page opens.
    * With reduced motion he holds his still and nothing breathes; the words
    * and the ticks still change.
