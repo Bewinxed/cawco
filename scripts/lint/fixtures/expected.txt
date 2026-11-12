@@ -99,3 +99,4 @@ scripts/lint/fixtures/design/planted-tooltip.svelte:14:1 house/tooltip-provider-
 scripts/lint/fixtures/design/planted-tooltip.svelte:17:1 house/tooltip-provider-at-root
 scripts/lint/fixtures/design/planted-tooltip-bare-root.svelte:1:1 house/tooltip-provider-at-root
 scripts/lint/fixtures/design/planted-tooltip-mount.ts:10:50 house/tooltip-provider-at-root
+scripts/lint/fixtures/design/planted-not-hover.svelte:6:13 house/no-not-hover

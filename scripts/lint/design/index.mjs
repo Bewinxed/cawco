@@ -14,6 +14,7 @@ import { countBadges } from "./count-badge.mjs";
 import { followsProps } from "./follows-props.mjs";
 import { groupNotNeedsAncestor } from "./group-not.mjs";
 import { DASHBOARD, ignored, modelOf, reportAt } from "./model.mjs";
+import { notHover } from "./not-hover.mjs";
 import { rawMotion } from "./raw-motion.mjs";
 import { rawClassValues } from "./raw-values.mjs";
 import { renderDomReads } from "./render-dom.mjs";
@@ -333,6 +334,7 @@ const FIND = {
   "house/back-close-symbol": backCloseWords,
   "house/no-detached-bar-menu": detachedBarMenus,
   "house/tooltip-provider-at-root": tooltipProviderAtRoot,
+  "house/no-not-hover": notHover,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,
