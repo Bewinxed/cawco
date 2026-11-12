@@ -49,8 +49,8 @@
    * suggestion's glyph (the starters' stars) in the state column; its name
    * with a Suggested chip, over why, wrapped whole across the Routine and
    * Last run columns; Turn on where Next run's times start; an ✕ (Not now)
-   * where a row's ⋯ stands; the row on the page's own ground in the rows'
-   * hairline, dashed: an open slot, not yet a routine. It does not open.
+   * where a row's ⋯ stands; the row on the page's own ground in a
+   * suggestion row's edge, dashed: an open slot, not yet a routine. It does not open.
    * Turn on makes it, a row like the others; Not now waves it away; either
    * keeps it gone from this project (hub
    * unused-trim.ts). With no routine yet the empty state stands whole,
@@ -1089,8 +1089,8 @@
 
 <!-- Caw's suggestion, the ledger's last row: on its columns, in a routine
      row's type, on the page's own ground (an open slot, not a routine yet)
-     traced in the hairline that rules the rows (`border-hairline`, 1px),
-     dashed, inside its box (so no column moves), its lower corners on the
+     traced in a suggestion row's edge (`border-row-outline`, 1px, 3:1 on
+     that recessed ground), dashed, inside its box (so no column moves), its lower corners on the
      card's while it is the card's last. It opens nothing. Why the hub
      refused an answer stands under it, as a routine's refusal does. -->
 {#snippet trimRow()}
@@ -1104,7 +1104,7 @@
         <span
           data-slot="suggestion-edge"
           aria-hidden="true"
-          class="pointer-events-none absolute inset-0 outline-1 -outline-offset-1 outline-border-hairline outline-dashed data-card-last:rounded-b-lg"
+          class="pointer-events-none absolute inset-0 outline-1 -outline-offset-1 outline-border-row-outline outline-dashed data-card-last:rounded-b-lg"
           data-card-last={trimRefused ? undefined : ""}
         ></span>
         <span
