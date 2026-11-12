@@ -112,6 +112,29 @@ export const pullImage = async (
   }
 };
 
+/**
+ * What the browser image is built with, as the Engine API's build takes it.
+ * It names no network (`networkmode`, Podman's `nsoptions`), on purpose: the
+ * Dockerfile's RUN steps fetch from the internet, and Podman's
+ * Docker-compatible build, given no `nsoptions`, runs them in the host's
+ * network namespace (pkg/api/handlers/compat/images_build.go, 5.3 to 6.2:
+ * "Name: string(specs.NetworkNamespace), Host: true"), the namespace its
+ * service runs in, which is the machine's own: a rootless Podman's service
+ * makes a user namespace, not a network one. So a build never stands in the
+ * shared rootless namespace whose routes a boot can leave stale (egress.ts).
+ * Its `networkmode` is buildah's network policy, not a mode: anything but
+ * `NetworkDisabled` or `NetworkEnabled` reads as `NetworkDefault`
+ * (`parseNetworkConfigurationPolicy`), so `pasta` would change nothing.
+ * Docker builds on its default bridge, in the machine's namespace when
+ * rootful and RootlessKit's fixed one when rootless.
+ */
+export const browserBuildOptions = (
+  tag: string
+): { labels: Record<string, string>; t: string } => ({
+  t: tag,
+  labels: { "dev.cawco.browser.image": "1" },
+});
+
 /** A build's step line: Docker's `Step 2/5 :`, Podman's `STEP 2/5:`. */
 const STEP = /step (\d+)\/(\d+)/iu;
 
@@ -156,10 +179,10 @@ export const ensureImage = async (
   onProgress({ stage: "building", done: 0, total: 1 });
   await follow(
     docker,
-    await docker.buildImage(Readable.from(Buffer.from(context)), {
-      t: tag,
-      labels: { "dev.cawco.browser.image": "1" },
-    }),
+    await docker.buildImage(
+      Readable.from(Buffer.from(context)),
+      browserBuildOptions(tag)
+    ),
     (event) => {
       const step = event.stream ? STEP.exec(event.stream) : null;
       if (step) {

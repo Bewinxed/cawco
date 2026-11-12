@@ -203,10 +203,23 @@ const LibpodInfoShape = z.object({
 });
 
 /**
- * A rootless Podman's network command, read from its own API's `GET
- * /libpod/info` (the Docker-compatible `/info` does not carry it); undefined
- * when it does not answer, does not say, or names one this agent does not
- * know.
+ * libpod's `/info`, at a versioned path: Podman registers its libpod routes
+ * only under `/v{version}/` (pkg/api/server/register_info.go
+ * `VersionedPath("/libpod/info")`; the bare path answers 404, as Podman 5.7
+ * did on obelisk), and dockerAt's client names no version, so docker-modem
+ * sends the path as given. 4.0.0 is libpod's oldest API level from Podman 4
+ * through 6 (version/version.go `MinimalAPI`), so every Podman that can run
+ * a container in a namespace of its own (5.3 on, egress.ts) takes it, and a
+ * handler that checks the range (`SupportedVersionWithDefaults`) admits it.
+ * Matching `/version`'s own would gain nothing for the one field read here.
+ */
+const LIBPOD_INFO = "/v4.0.0/libpod/info";
+
+/**
+ * A rootless Podman's network command, read from its own API's
+ * {@link LIBPOD_INFO} (the Docker-compatible `/info` does not carry it);
+ * undefined when it does not answer, does not say, or names one this agent
+ * does not know.
  */
 const rootlessNetworkOf = async (
   docker: Docker,
@@ -215,7 +228,7 @@ const rootlessNetworkOf = async (
   try {
     const info = await new Promise<unknown>((resolve, reject) => {
       docker.modem.dial(
-        { path: "/libpod/info", method: "GET", statusCodes: { 200: true } },
+        { path: LIBPOD_INFO, method: "GET", statusCodes: { 200: true } },
         (error: unknown, data: unknown) =>
           error ? reject(error) : resolve(data)
       );

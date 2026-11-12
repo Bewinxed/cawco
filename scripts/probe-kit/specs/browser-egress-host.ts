@@ -5,11 +5,19 @@
  * runtime; this proves the mechanism and the placement on one.
  *
  * - (a) The incident's mechanism in a scratch namespace, the machine
- *   untouched: inside `podman unshare unshare -n`, a veth pair with an
- *   address and no default route; pasta started there copies a namespace
- *   whose `/proc/net/route` holds no default route (egress.ts
- *   `hasDefaultRoute`). With a default route added there, pasta's next copy
- *   holds one.
+ *   untouched: inside `podman unshare unshare -n` (the template), a veth
+ *   pair with an address and no default route. pasta started there, joined
+ *   to a second empty namespace (`--netns`, as Podman runs it for a
+ *   container), copies the template into it: its `/proc/net/route` holds no
+ *   default route (egress.ts `hasDefaultRoute`). With a default route added
+ *   to the template, pasta's next copy holds one. pasta is given a namespace
+ *   to join, not a command to spawn: spawning makes it a user namespace of
+ *   its own, and as uid 0 of `podman unshare`'s user namespace it then maps
+ *   uid 0 of its parent, which since Linux 5.12 needs CAP_SETFCAP in that
+ *   parent; a pasta that writes the map from the new namespace itself
+ *   (`/proc/self/uid_map`) has none there ("Couldn't write to
+ *   /proc/self/uid_map: Operation not permitted", round 557). Joining a
+ *   namespace (`--netns` implies `--netns-only`, passt.1) makes none.
  * - (b) A scratch fleet's project browser, started on this runtime: its
  *   container's `HostConfig.NetworkMode` is `pasta` and it stands on no
  *   `cawco-media`; its namespace is not the user's shared rootless one
@@ -67,18 +75,34 @@ const run = async (
   return { code, out, err };
 };
 
-/** (a) pasta's copy of a scratch namespace, before and after a default route is added there. */
+/**
+ * (a) pasta's copy of the scratch template, before and after a default route
+ * is added there: each into an empty namespace a `sleep` holds, which pasta
+ * joins and configures before it goes to the background (passt.c: the tap
+ * and its routes are set up in `tap_backend_init`, before `__daemon`), read
+ * with `nsenter`, and dropped with its holder (pasta quits once the
+ * namespace's procfs entry goes, passt.1 `--no-netns-quit`).
+ */
 const SCRATCH_NAMESPACE = [
   "set -e",
+  "copy() {",
+  "  unshare -n sleep 60 &",
+  "  holder=$!",
+  '  while [ "$(readlink /proc/$holder/ns/net)" = "$(readlink /proc/self/ns/net)" ]; do sleep 0.05; done',
+  "  pasta --config-net -q --netns /proc/$holder/ns/net",
+  "  nsenter --net=/proc/$holder/ns/net cat /proc/net/route",
+  "  kill $holder",
+  "  wait $holder 2>/dev/null || true",
+  "}",
   "ip link add cawco-egress-a type veth peer name cawco-egress-b",
   "ip addr add 192.0.2.2/24 dev cawco-egress-a",
   "ip link set cawco-egress-a up",
   "ip link set cawco-egress-b up",
-  "pasta --config-net -q -- cat /proc/net/route",
+  "copy",
   "echo ====",
   "ip route add default via 192.0.2.1 dev cawco-egress-a",
-  "pasta --config-net -q -- cat /proc/net/route",
-].join("; ");
+  "copy",
+].join("\n");
 
 async function scratchNamespace(kit: Kit): Promise<void> {
   const { hasDefaultRoute } =

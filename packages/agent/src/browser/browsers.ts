@@ -26,11 +26,12 @@
  * records' dir, so a browser `cawco browser` starts has its gate as its
  * record is written, and one it removes has none.
  *
- * It follows the machine's network ({@link followNetwork}): a container in a
- * namespace of its own copied the machine's network as it started
- * (egress.ts), and is started again once the machine is routed and that copy
- * no longer matches, so it has the internet whenever the machine does,
- * whatever order the machine booted in.
+ * On a runtime that places containers in a namespace of their own
+ * (egress.ts), it follows the machine's network ({@link followNetwork}): such
+ * a container copied the machine's network as it started, and is started
+ * again once the machine is routed and that copy no longer matches, so it
+ * has the internet whenever the machine does, whatever order the machine
+ * booted in. Elsewhere nothing is read.
  */
 import { watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -47,7 +48,12 @@ import type {
 import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
-import { type MachineNetwork, machineNetwork, startAgainDue } from "./egress";
+import {
+  followsNetwork,
+  type MachineNetwork,
+  machineNetwork,
+  startAgainDue,
+} from "./egress";
 import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
@@ -1098,8 +1104,29 @@ export const followNetwork = ({
   return { sweep: () => look(true), stop: () => clearInterval(polls) };
 };
 
-/** The daemon's {@link followNetwork}, while {@link watchBrowsers} runs. */
+/** The daemon's {@link followNetwork}, while {@link watchBrowsers} runs on a runtime that places containers in a namespace of their own. */
 let following: NetworkFollower | undefined;
+
+/**
+ * The machine's network followed while `found` places containers in a
+ * namespace of their own (egress.ts `followsNetwork`), and not otherwise:
+ * started as it first does (its start sweeps), swept on each tick after,
+ * stopped once it no longer does.
+ */
+const followAsPlaced = async (
+  found: Runtime | { missing: string }
+): Promise<void> => {
+  if (!followsNetwork(found)) {
+    following?.stop();
+    following = undefined;
+    return;
+  }
+  if (following) {
+    await following.sweep();
+    return;
+  }
+  following = followNetwork();
+};
 
 /** One tick: the runtime again when due, every browser's gate, the records against their hosts, those that waited on the runtime started again, the local ones moved into a container once it answers, those whose namespace the machine's network outgrew started again, the idle ones down, and the frame. */
 const tick = async (): Promise<void> => {
@@ -1116,7 +1143,9 @@ const tick = async (): Promise<void> => {
     await backFromAway(await allBrowsers());
     await moveLocals(await allBrowsers(), found);
   }
-  await following?.sweep();
+  // After the records are read back: a container the machine's restart
+  // stopped is asleep then, and only a running one starts again.
+  await followAsPlaced(found);
   await idleDown();
   await tell();
 };
@@ -1124,10 +1153,11 @@ const tick = async (): Promise<void> => {
 /**
  * The daemon's part: the runtime and the records read as it starts, every
  * gate served and served again as any record is written (a terminal's
- * `cawco browser start` among them), the machine's network followed
- * ({@link followNetwork}), then a tick every minute. Answers its stop, which
- * the daemon's scope runs as it ends: the records' watch closed, the
- * network's reading and the tick cleared.
+ * `cawco browser start` among them), then a tick every minute, which
+ * follows the machine's network where the runtime asks it
+ * ({@link followAsPlaced}). Answers its stop, which the daemon's scope runs
+ * as it ends: the records' watch closed, the network's reading and the tick
+ * cleared.
  *
  * The watch covers the records' dir alone: a local Chromium writes its
  * profile under `chromium/` (state.ts `chromiumDir`), so on macOS, where a
@@ -1168,9 +1198,6 @@ export const watchBrowsers = async (): Promise<() => void> => {
         : `[browser] runtime ${found.kind} ${found.version} (API ${found.api}${found.rootless ? `, rootless${found.rootlessNetwork ? ` on ${found.rootlessNetwork}` : ""}` : ""}) at ${found.endpoint}`
     );
     await tick();
-    // After the first tick read the records back: a container the machine's
-    // restart stopped is asleep then, and only a running one starts again.
-    following = followNetwork();
   } catch (error) {
     stop();
     throw error;

@@ -29,6 +29,14 @@
  *   readings and sweeps follow.
  * - (f) `machineNetworkOf` reads the default route's interface's IPv4
  *   address and the first nameserver.
+ * - (g) The browser image's build names no network (image.ts
+ *   `browserBuildOptions`), on every placement: Podman's compat build then
+ *   runs its RUN steps in the host's network namespace, never the shared
+ *   rootless one, and its `networkmode` would be buildah's policy, not pasta.
+ * - (h) `followsNetwork`: the machine's network is read only where the
+ *   runtime places containers in a namespace of their own; not with no
+ *   runtime (a Mac with none, local Chromium), on Docker, rootful or
+ *   rootless, nor on a Podman that keeps the media network.
  *
  *   bun scripts/probe-kit/run.ts browser-egress
  */
@@ -98,8 +106,15 @@ const spec: Spec = {
       await import("../../../packages/agent/src/browser/relay-urls");
     const { followNetwork } =
       await import("../../../packages/agent/src/browser/browsers");
-    const { hasDefaultRoute, placementOf, startAgainDue, machineNetworkOf } =
-      egress;
+    const { browserBuildOptions } =
+      await import("../../../packages/agent/src/browser/image");
+    const {
+      followsNetwork,
+      hasDefaultRoute,
+      placementOf,
+      startAgainDue,
+      machineNetworkOf,
+    } = egress;
 
     // (a)
     kit.check(
@@ -318,6 +333,53 @@ const spec: Spec = {
         network.address === "192.168.1.20",
       JSON.stringify(network)
     );
+
+    // (g)
+    const options = browserBuildOptions("cawco-browser:0123456789ab");
+    kit.check(
+      "(g) the browser image's build names no network, so Podman's compat build runs it in the host's network namespace",
+      !("networkmode" in options || "nsoptions" in options) &&
+        options.t === "cawco-browser:0123456789ab",
+      JSON.stringify(options)
+    );
+
+    // (h)
+    const pastaNative = runtime("podman", "5.7.0", true, true, "pasta");
+    const follows: [string, boolean, boolean][] = [
+      [
+        "rootless Podman 5.7 on pasta, native",
+        followsNetwork(pastaNative),
+        true,
+      ],
+      ["no runtime", followsNetwork({ missing: "Install OrbStack" }), false],
+      [
+        "rootful Docker",
+        followsNetwork(runtime("docker", "28.3.0", false, true)),
+        false,
+      ],
+      [
+        "rootless Docker",
+        followsNetwork(runtime("docker", "28.3.0", true, true)),
+        false,
+      ],
+      [
+        "rootless Podman 5.7 on pasta in a VM",
+        followsNetwork(runtime("podman", "5.7.0", true, false, "pasta")),
+        false,
+      ],
+      [
+        "rootless Podman 5.7 whose network command was not read",
+        followsNetwork(runtime("podman", "5.7.0", true, true)),
+        false,
+      ],
+    ];
+    for (const [what, said, wanted] of follows) {
+      kit.check(
+        `(h) ${what}: the machine's network ${wanted ? "is" : "is not"} read`,
+        said === wanted,
+        String(said)
+      );
+    }
   },
 };
 

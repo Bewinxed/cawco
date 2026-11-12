@@ -57,13 +57,14 @@ const mapsGuestAddress = (version: string): boolean => {
   );
 };
 
+/** What of a runtime decides where its containers stand. */
+type Placed = Pick<
+  Runtime,
+  "kind" | "ownNetwork" | "rootless" | "rootlessNetwork" | "version"
+>;
+
 /** Where `runtime`'s containers that need the internet stand, as the module's header says. */
-export const placementOf = (
-  runtime: Pick<
-    Runtime,
-    "kind" | "ownNetwork" | "rootless" | "rootlessNetwork" | "version"
-  >
-): Placement =>
+export const placementOf = (runtime: Placed): Placement =>
   runtime.kind === "podman" &&
   runtime.rootless &&
   runtime.ownNetwork &&
@@ -71,6 +72,15 @@ export const placementOf = (
   mapsGuestAddress(runtime.version)
     ? "own-namespace"
     : "media-network";
+
+/**
+ * Whether the agent follows the machine's network on `found`: only where its
+ * containers stand in a namespace of their own, the one placement whose
+ * containers keep a network to compare. A machine with no runtime, Docker,
+ * or a Podman on the media network reads nothing.
+ */
+export const followsNetwork = (found: Placed | { missing: string }): boolean =>
+  !("missing" in found) && placementOf(found) === "own-namespace";
 
 /** `/proc/net/route`'s columns: Iface, Destination, Gateway, Flags, RefCnt, Use, Metric, Mask. */
 const COLUMNS = { iface: 0, destination: 1, flags: 3, metric: 6, mask: 7 };
