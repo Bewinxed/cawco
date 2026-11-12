@@ -1,7 +1,7 @@
 /**
  * What the hub refused or held, as it says the same in its log and from the
  * same values: the log line is for people, this record for what checks the
- * hub (proofs, probe specs). `hub-record.json` beside the hub's database
+ * hub (the end-to-end tests, probe specs). `hub-record.json` beside the hub's database
  * ({@link hubDbPath}): its latest {@link EVENTS_KEPT} events in order, each
  * with when it happened (`at`, ms since the epoch), written whole within
  * {@link WRITE_AFTER_MS} of each, one write at a time. A hub started again

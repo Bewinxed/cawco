@@ -1,27 +1,28 @@
 /**
  * The binary's container tests, for any commit:
- *   bun scripts/binary-tests.ts [--commit <sha>] [--stage 1|2]
+ *   bun scripts/binary-tests.ts [--commit <sha>] [--only smoke|e2e]
  *
- * Stage 1 is the binary's smoke test (prove-stage1.sh); stage 2 is the
- * end-to-end test of install, join, update and rollback (prove-stage2.sh, one
- * podman rig per scenario). Without --stage both run, side by side. Each runs
- * in a worktree of the commit (default HEAD) built here, and each is skipped
- * when it passed on the same inputs before (scripts/release/binary-tests.ts);
- * a stage 2 that failed runs only its failed rigs again. On success the test
- * cache is pruned of what this commit no longer needs; each rig's time is
- * printed; the exit status is non-zero when a stage fails. Needs podman.
+ * The smoke test (smoke-test.sh) starts the binary's stack under systemd and
+ * loads its dashboard in a browser; the end-to-end tests (e2e-test.sh, one
+ * podman rig per scenario) install, update and roll back a build on real
+ * machines. Without --only both run, side by side. Each runs in a worktree of
+ * the commit (default HEAD) built here, and each is skipped when it passed on
+ * the same inputs before (scripts/release/binary-tests.ts); end-to-end tests
+ * that failed run only their failed rigs again. On success the test cache is
+ * pruned of what this commit no longer needs; each rig's time is printed; the
+ * exit status is non-zero when a test fails. Needs podman.
  */
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { proofInputsKey } from "./binary/proof-inputs";
+import { testInputsKey } from "./binary/test-inputs";
 import {
+  e2eBuilds,
+  e2eTests,
   podmanRefusal,
-  proveStage1,
-  proveStage2,
   pruneTestCache,
   type Runner,
-  stage2Builds,
+  smokeTest,
   type TestState,
 } from "./release/binary-tests";
 
@@ -32,13 +33,13 @@ const argument = (name: string): string | undefined => {
   return at < 0 ? undefined : argv[at + 1];
 };
 const usage =
-  "Usage: bun scripts/binary-tests.ts [--commit <sha>] [--stage 1|2]";
+  "Usage: bun scripts/binary-tests.ts [--commit <sha>] [--only smoke|e2e]";
 if (argv.includes("--help")) {
   console.log(usage);
   process.exit(0);
 }
-const stage = argument("--stage");
-if (stage !== undefined && stage !== "1" && stage !== "2") {
+const only = argument("--only");
+if (only !== undefined && only !== "smoke" && only !== "e2e") {
   console.error(usage);
   process.exit(2);
 }
@@ -87,7 +88,7 @@ const staging = join(
   "binary-tests",
   `staging-${commit.slice(0, 12)}`
 );
-const proofBinary = join(staging, "cawco-proof");
+const testBinary = join(staging, "cawco-test");
 
 /** A command run to its end: its output goes to this run's, and a non-zero exit fails it. */
 const run: Runner = async (command, at, captured, extra) => {
@@ -112,13 +113,13 @@ const run: Runner = async (command, at, captured, extra) => {
   return text.trim();
 };
 
-/** The seconds each rig of stage 2 took, as prove-stage2.sh wrote them. */
+/** The seconds each end-to-end rig took, as e2e-test.sh wrote them. */
 const printRigTimes = async (done: TestState): Promise<void> => {
-  const rigs = done.stage2?.todo ?? [];
+  const rigs = done.e2e?.todo ?? [];
   for (const rig of rigs) {
     const seconds = (
       await readFile(
-        join(staging, "stage2", "rigs", rig, "seconds"),
+        join(staging, "e2e", "rigs", rig, "seconds"),
         "utf8"
       ).catch(() => "")
     ).trim();
@@ -137,7 +138,7 @@ try {
   await mkdir(staging, { recursive: true });
   await run(["git", "worktree", "add", "--detach", tree, commit]);
   await run([process.execPath, "install", "--frozen-lockfile"], tree);
-  state.inputs = await proofInputsKey(tree, commit);
+  state.inputs = await testInputsKey(tree, commit);
   const version = `${(await Bun.file(join(tree, "packages/cli/package.json")).json()).version as string}-test+${commit.slice(0, 12)}`;
   // The dashboard and every target-independent asset, once, for the builds below.
   await run([process.execPath, "scripts/build-binary.ts", "prepare"], tree);
@@ -147,7 +148,7 @@ try {
         process.execPath,
         "scripts/build-binary.ts",
         "linux-x64",
-        proofBinary,
+        testBinary,
         version,
         commit,
         "--proof",
@@ -155,15 +156,15 @@ try {
       ],
       tree
     );
-    await proveStage1(run, tree, staging, proofBinary, state, commit);
+    await smokeTest(run, tree, staging, testBinary, state, commit);
   };
   const endToEnd = async (): Promise<void> => {
-    state.stage2 = await stage2Builds(run, tree, staging, state);
-    await proveStage2(run, tree, staging, state, commit);
+    state.e2e = await e2eBuilds(run, tree, staging, state);
+    await e2eTests(run, tree, staging, state, commit);
   };
   const results = await Promise.allSettled([
-    ...(stage === "2" ? [] : [smoke()]),
-    ...(stage === "1" ? [] : [endToEnd()]),
+    ...(only === "e2e" ? [] : [smoke()]),
+    ...(only === "smoke" ? [] : [endToEnd()]),
   ]);
   for (const result of results) {
     if (result.status === "rejected") {
@@ -176,7 +177,7 @@ try {
     }
   }
   await printRigTimes(state);
-  if (!failed && stage !== "1") {
+  if (!failed && only !== "smoke") {
     await pruneTestCache(run, tree, state);
   }
 } catch (error) {

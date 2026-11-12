@@ -1,7 +1,7 @@
 /**
  * What an update's helper did, as it says the same in its log (`apply.log`)
  * and from the same values: the log line is for people, this record for what
- * checks the updater (proofs). `apply-record.json` beside the log, in the
+ * checks the updater (the end-to-end tests). `apply-record.json` beside the log, in the
  * binary root: its latest {@link EVENTS_KEPT} events in order, each with the
  * process that recorded it (`pid`) and when (`at`, ms since the epoch),
  * written whole at each.

@@ -10,7 +10,7 @@
  * no entry, and its parse hung.
  *
  * This machine's target compiled as a proof build (assets prepared first
- * when none are), and its `proof-stores` (scripts/binary/proof-stores.ts)
+ * when none are), and its `smoke-stores` (scripts/binary/smoke-stores.ts)
  * run in a scratch HOME holding {@link FILES} stored transcripts:
  * (a) the thread answers OpenCode's own sign-ins (none: "absent"), the
  *     search process syncs the index and finds every transcript by its
@@ -22,7 +22,7 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { startedPath } from "../../../packages/core/src/workspace-needs";
-import { FILES } from "../../binary/proof-stores";
+import { FILES } from "../../binary/smoke-stores";
 import { compileBinary, prepareAssets, TARGETS } from "../../build-binary";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -54,7 +54,7 @@ export default {
     // The proof runtime runs only under a scratch HOME it can tell by name.
     const home = join(kit.out, "binary-home");
     await mkdir(home, { recursive: true });
-    const child = Bun.spawn([binary, "proof-stores"], {
+    const child = Bun.spawn([binary, "smoke-stores"], {
       cwd: home,
       env: { PATH: startedPath(), HOME: home },
       stdout: "pipe",
@@ -66,7 +66,7 @@ export default {
       child.exited,
     ]);
     const said = out.trim().split("\n").at(-1) ?? "";
-    kit.note(`the compiled binary's proof-stores exited ${code}: ${said}`);
+    kit.note(`the compiled binary's smoke-stores exited ${code}: ${said}`);
     check(
       `a: in the compiled binary the stores thread answers the sign-ins read ("absent"), the search process (the binary as search-host) syncs the index over ${FILES} transcripts on its own parse threads and finds each, and the thread scans usage`,
       code === 0 && said.includes(`"found":${FILES}`),

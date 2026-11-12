@@ -10,7 +10,7 @@
  * entry the binary embeds (build-binary.ts, loop-watch.ts `WATCHDOG_URL`),
  * not from the source beside it: this machine's target is compiled as a
  * proof build (assets prepared first when none are), and its
- * `proof-loop-held` (scripts/binary/proof-loop-held.ts) starts the loop
+ * `smoke-loop-held` (scripts/binary/smoke-loop-held.ts) starts the loop
  * watch as daemon.ts does, then holds its loop {@link HOLD_MS} in a marked
  * section that spins on the CPU:
  *
@@ -26,7 +26,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { loopWords } from "../../../packages/core/src/words/loop";
 import { startedPath } from "../../../packages/core/src/workspace-needs";
-import { HOLD_MS, SECTION } from "../../binary/proof-loop-held";
+import { HOLD_MS, SECTION } from "../../binary/smoke-loop-held";
 import { compileBinary, prepareAssets, TARGETS } from "../../build-binary";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -58,7 +58,7 @@ export default {
     // The proof runtime runs only under a scratch HOME it can tell by name.
     const home = join(kit.out, "binary-home");
     await mkdir(home, { recursive: true });
-    const child = Bun.spawn([binary, "proof-loop-held"], {
+    const child = Bun.spawn([binary, "smoke-loop-held"], {
       cwd: home,
       env: { PATH: startedPath(), HOME: home },
       stdout: "pipe",
@@ -69,7 +69,7 @@ export default {
       new Response(child.stdout).text(),
       child.exited,
     ]);
-    kit.note(`the compiled binary's proof-loop-held exited ${code}`);
+    kit.note(`the compiled binary's smoke-loop-held exited ${code}`);
     const lines = `${err}${out}`
       .split("\n")
       .filter((line) => line.includes("[loop]"));

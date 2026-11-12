@@ -3,7 +3,7 @@
  * CawCo Bun process starts with it at Bun's ceiling, however it is started:
  * each service unit (cli service.ts `environment`), each update helper's job
  * (agent helper-jobs.ts, the wrapper's resume, binary-wrapper.ts), each
- * process a rig starts (scripts/scratch-fleet.ts, scripts/binary/proof-stack.ts).
+ * process a rig starts (scripts/scratch-fleet.ts, scripts/binary/smoke-stack.ts).
  * The hub and the agent say at start when they find it lower
  * ({@link sayFetchCap}): one started by hand, without it.
  *

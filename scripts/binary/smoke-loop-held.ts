@@ -2,12 +2,12 @@
  * The agent's loop watch, held: `watchLoop` started as daemon.ts starts it,
  * then the loop held in a marked section that spins on the CPU, let go, and
  * the process ended {@link AFTER_MS} later. Run inside the compiled binary
- * as `cawco proof-loop-held` (proof-runtime.ts), so the watch from its own
+ * as `cawco smoke-loop-held` (smoke-runtime.ts), so the watch from its own
  * thread starts from the binary's embedded entry (build-binary.ts,
  * ./scripts/binary/loop-watch-worker.js) as it does in a shipped agent.
  * The probe kit's loop-held-said holds it {@link HOLD_MS}; the release's
- * stage 1 proof (proof-stack.ts) holds it {@link SHORT_HOLD_MS}, as
- * `cawco proof-loop-held short`.
+ * smoke test (smoke-stack.ts) holds it {@link SHORT_HOLD_MS}, as
+ * `cawco smoke-loop-held short`.
  */
 import {
   syncSection,
@@ -17,7 +17,7 @@ import {
 
 /** How long the loop is held: past the watch's second saying, at 30 s. */
 export const HOLD_MS = 35_000;
-/** The release proof's hold: just past the watch's first saying, at 10 s. */
+/** The smoke test's hold: just past the watch's first saying, at 10 s. */
 export const SHORT_HOLD_MS = 12_000;
 /** The marked section the loop is held in. */
 export const SECTION = "probe: a spin on the CPU";

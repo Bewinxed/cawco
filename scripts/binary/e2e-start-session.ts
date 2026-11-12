@@ -2,7 +2,7 @@
  * Asks a hub to start a session the way the dashboard does: a `spawn` frame on
  * its dashboard socket. Run inside a container by the installed binary acting
  * as bun (BUN_BE_BUN=1), so the container needs no runtime of its own.
- *   cawco stage2-start-session.ts <hub http url> <machineId> <instanceId>
+ *   cawco e2e-start-session.ts <hub http url> <machineId> <instanceId>
  * Exits 1 and prints the hub's words when it refuses the start: the frame it
  * answers a refused spawn with (`refusalFrame`, `payload.kind` "error" for
  * this instance), or an answer that says `"ok":false` or "failure".

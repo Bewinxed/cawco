@@ -4,10 +4,10 @@ import { publishRuntime, runtimeTree } from "../../packages/core/src/runtime";
 if (Bun.argv[2] === "search-host") {
   // The agent's search process, as the shipped binary starts it (entry.ts).
   await import("../../packages/agent/src/search/host");
-} else if (Bun.argv[2]?.startsWith("proof-")) {
+} else if (Bun.argv[2]?.startsWith("smoke-")) {
   await publishRuntime();
   process.env.PI_PACKAGE_DIR = runtimeTree("pi");
-  await import("./proof-runtime");
+  await import("./smoke-runtime");
 } else {
   await publishRuntime();
   process.env.PI_PACKAGE_DIR = runtimeTree("pi");
@@ -19,20 +19,14 @@ if (Bun.argv[2] === "search-host") {
     process.env.CAWCO_HUB_URL !== "http://127.0.0.1:43456"
   ) {
     throw new Error(
-      "Proof runtime requires scratch HOME and explicit isolated loopback hub"
+      "The test runtime requires scratch HOME and explicit isolated loopback hub"
     );
   }
   for (const key of Object.keys(process.env)) {
     if (/TOKEN|SECRET|API_KEY/u.test(key)) {
-      throw new Error("Proof may not receive credentials");
+      throw new Error("The test may not receive credentials");
     }
   }
   process.env.CAWCO_NO_MDNS = "1";
-  if (
-    Bun.argv[2] === "dashboard" &&
-    process.env.CAWCO_PROOF_ACTIVATED_FD === "3"
-  ) {
-    process.env.LISTEN_PID = String(process.pid);
-  }
   await import("../../packages/cli/src/cli");
 }

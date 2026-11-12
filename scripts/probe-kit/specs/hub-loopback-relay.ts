@@ -11,8 +11,8 @@
  * ranges (core boundary-reach.ts `DENIED_RESOLVED_ADDRESSES`; "srt's own
  * guard refuses loopback, link-local, multicast, cloud metadata and this
  * host's own addresses besides"), so there this spec fails at its first
- * check, saying so. The relay to a hub on another computer is proven by
- * stage 2's joined machine (scripts/binary/prove-stage2.sh, rig install).
+ * check, saying so. The relay to a hub on another computer has no container
+ * test (scripts/binary/e2e-test.sh's rigs no longer carry it).
  *
  * 0. Runs anywhere, first: the relay over the tailnet's HTTPS. A scratch hub
  *    serves HTTPS on the tailnet stub's address `::1` (tailnet-https.ts's

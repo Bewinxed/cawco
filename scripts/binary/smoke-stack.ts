@@ -1,5 +1,4 @@
-/** Live integration exercise run by the compiled proof binary, never a release. */
-import { dlopen, FFIType, ptr } from "bun:ffi";
+/** Live integration exercise run by the compiled test binary, never a release. */
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { keepJoinedHub } from "../../packages/cli/src/joined-hub";
@@ -18,29 +17,19 @@ import {
 import { WIRE_PROTOCOL } from "../../packages/core/src/stream";
 import { unhandled } from "../../packages/core/src/unhandled";
 import { loopWords } from "../../packages/core/src/words/loop";
-import { SECTION, SHORT_HOLD_MS } from "./proof-loop-held";
+import { SECTION, SHORT_HOLD_MS } from "./smoke-loop-held";
 
 const home = process.env.HOME ?? "";
 if (!home?.includes("binary")) {
-  throw new Error("Stack proof requires scratch HOME");
+  throw new Error("Stack test requires scratch HOME");
 }
 const children: Bun.Subprocess[] = [];
-const libc = dlopen("libc.so.6", {
-  socket: {
-    args: [FFIType.i32, FFIType.i32, FFIType.i32],
-    returns: FFIType.i32,
-  },
-  bind: { args: [FFIType.i32, FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
-  listen: { args: [FFIType.i32, FFIType.i32], returns: FFIType.i32 },
-  close: { args: [FFIType.i32], returns: FFIType.i32 },
-});
-let listener = -1;
 function spawn(
   verb: string,
   args: string[] = [],
   extra: Record<string, string> = {}
 ) {
-  // A proof hub never advertises on the real network: its mDNS would answer
+  // A test hub never advertises on the real network: its mDNS would answer
   // for a scratch stack on whatever link the host sits on.
   const child = Bun.spawn([process.execPath, verb, ...args], {
     // Its units' fetch cap (core fetch-cap.ts).
@@ -69,10 +58,10 @@ async function exec(verb: string) {
 /**
  * The loop watch's thread, started from the binary's embedded entry, says a
  * held loop while it lasts, in the section that holds it, and its end
- * (proof-loop-held.ts, its short hold: the 10 s saying alone).
+ * (smoke-loop-held.ts, its short hold: the 10 s saying alone).
  */
 async function loopHeldSaid() {
-  const child = Bun.spawn([process.execPath, "proof-loop-held", "short"], {
+  const child = Bun.spawn([process.execPath, "smoke-loop-held", "short"], {
     env: process.env,
     stdout: "pipe",
     stderr: "pipe",
@@ -85,8 +74,8 @@ async function loopHeldSaid() {
     child.exited,
   ]);
   await Promise.all([
-    Bun.write(join(home, `proof-loop-held-${child.pid}.out.log`), out),
-    Bun.write(join(home, `proof-loop-held-${child.pid}.err.log`), err),
+    Bun.write(join(home, `smoke-loop-held-${child.pid}.out.log`), out),
+    Bun.write(join(home, `smoke-loop-held-${child.pid}.err.log`), err),
   ]);
   const lines = `${err}${out}`
     .split("\n")
@@ -119,10 +108,10 @@ async function loopHeldSaid() {
 /**
  * The agent's stores thread, started from the binary's embedded entry,
  * answers its reads, and the transcript index it holds parses on threads
- * it starts itself (proof-stores.ts).
+ * it starts itself (smoke-stores.ts).
  */
 async function storesAnswer() {
-  const child = Bun.spawn([process.execPath, "proof-stores"], {
+  const child = Bun.spawn([process.execPath, "smoke-stores"], {
     env: process.env,
     stdout: "pipe",
     stderr: "pipe",
@@ -219,7 +208,7 @@ const watchUnit: Watched = {
 };
 /** The safety deadline: a busy machine is slow, never wrong (nightly e83078b6d). */
 const READY_DEADLINE_MS = 120_000;
-/** The proof's hub, on its own port. */
+/** The test's hub, on its own port. */
 const HUB = "http://127.0.0.1:43456";
 /**
  * Polls `url` every 100 ms until it answers OK with `predicate` true, the
@@ -251,30 +240,6 @@ async function wait(
   throw new Error(
     `Did not become ready within 120 s: ${url}; ${on.name}'s last stderr lines:\n${await on.stderrTail()}`
   );
-}
-function dashboard() {
-  const child = Bun.spawn([process.execPath, "dashboard"], {
-    // The one descriptor (fd 3, `listener`) named as the dashboard's socket
-    // unit names it (`FileDescriptorName=dashboard`); LISTEN_PID is set by
-    // the child itself (proof-entry.ts), whose pid this process cannot know.
-    env: withFetchCap({
-      ...process.env,
-      LISTEN_FDS: "1",
-      LISTEN_FDNAMES: "dashboard",
-      CAWCO_PROOF_ACTIVATED_FD: "3",
-    }),
-    stdio: ["ignore", "pipe", "pipe", listener],
-  });
-  children.push(child);
-  detach(
-    Bun.write(join(home, `dashboard-${child.pid}.out.log`), child.stdout),
-    "write"
-  );
-  detach(
-    Bun.write(join(home, `dashboard-${child.pid}.err.log`), child.stderr),
-    "write"
-  );
-  return child;
 }
 async function openDashboard() {
   const opened = await readWithin(
@@ -336,21 +301,20 @@ const parsed = () =>
         verb?: string;
       }
   );
-const systemd = process.env.CAWCO_PROOF_SYSTEMD === "1";
-/** Set by prove-stage1.sh's browser step: the stack stays up until that file exists. */
-const browserDone = process.env.CAWCO_PROOF_BROWSER_DONE;
+/** Set by smoke-test.sh's browser step: the stack stays up until that file exists. */
+const browserDone = process.env.CAWCO_TEST_BROWSER_DONE;
 /** The session's stub dev server, and the open that shows it as its preview. */
 let devServer: Bun.Server<undefined> | undefined;
 let previewShown: Promise<Record<string, unknown>> | undefined;
 /**
- * The proof's session once it is asked for: stopped through the hub as the
+ * The test's session once it is asked for: stopped through the hub as the
  * run ends, so its held process ends with it rather than outliving a run
  * made outside a container.
  */
 let started: { machineId: string; sessionId: string } | undefined;
 /**
- * Asks the hub to stop the proof's session as the dashboard does, a `stop`
- * frame on a dashboard socket of its own (stage2-stop-session.ts; the
+ * Asks the hub to stop the test's session as the dashboard does, a `stop`
+ * frame on a dashboard socket of its own (e2e-stop-session.ts; the
  * capture socket is closed by then), and waits until the hub no longer has
  * it running. Undefined when it ended or none started; what was left
  * otherwise.
@@ -403,7 +367,7 @@ async function stopStarted(): Promise<string | undefined> {
 }
 try {
   mkdirSync(home, { recursive: true });
-  await exec("proof-fixture");
+  await exec("smoke-fixture");
   spawn("sessiond");
   const hub = watchChild("the hub", "hub", spawn("hub"));
   console.log(
@@ -429,7 +393,7 @@ try {
     JSON.parse(registered) as { machineId: string; status: string }[]
   ).find((row) => row.status === "online");
   if (!machine) {
-    throw new Error("No online proof machine");
+    throw new Error("No online test machine");
   }
   async function post(request: HubRequest) {
     const response = await fetchHub(fetch, HUB, request);
@@ -439,29 +403,9 @@ try {
     }
     return JSON.parse(text) as Record<string, unknown>;
   }
-  if (systemd) {
-    await command(["systemctl", "start", "cawco-binary-dashboard.socket"]);
-  } else {
-    listener = libc.symbols.socket(2, 1, 0);
-    if (listener < 0) {
-      throw new Error("socket failed");
-    }
-    const sockaddr = Buffer.alloc(16);
-    sockaddr.writeUInt16LE(2);
-    sockaddr.writeUInt16BE(43_458, 2);
-    sockaddr.set([127, 0, 0, 1], 4);
-    if (
-      libc.symbols.bind(listener, ptr(sockaddr), 16) !== 0 ||
-      libc.symbols.listen(listener, 128) !== 0
-    ) {
-      throw new Error("Isolated dashboard socket bind/listen failed");
-    }
-  }
-  let worker = systemd ? undefined : dashboard();
-  const page = await wait(
-    "http://127.0.0.1:43458/",
-    worker ? watchChild("the dashboard", "dashboard", worker) : watchUnit,
-    (s) => s.includes("_app/immutable")
+  await command(["systemctl", "start", "cawco-binary-dashboard.socket"]);
+  const page = await wait("http://127.0.0.1:43458/", watchUnit, (s) =>
+    s.includes("_app/immutable")
   );
   console.log(`embedded dashboard served ${page.length} characters`);
   const ws = await openDashboard();
@@ -483,26 +427,26 @@ try {
     throw new Error(`CSRF check was lost: ${crossOrigin.status}`);
   }
   console.log("cross-origin form refused with 403");
-  await exec("proof-worker");
+  await exec("smoke-worker");
   await loopHeldSaid();
   await storesAnswer();
   // The packages the binary runs from their published trees, and pi's
-  // workers by the names pi gives them (proof-runtime.ts).
-  await exec("proof-playwright");
-  await exec("proof-pi");
+  // workers by the names pi gives them (smoke-runtime.ts).
+  await exec("smoke-playwright");
+  await exec("smoke-pi");
   // pi-tui loads its clipboard helper only when DISPLAY is set, and the
-  // helper reads the X display: the leg needs one, which a proof container
-  // has none of (prove-stage1.sh's images carry no X server).
+  // helper reads the X display: the leg needs one, which a test container
+  // has none of (smoke-test.sh's images carry no X server).
   if (process.env.DISPLAY) {
-    await exec("proof-pi-clipboard");
+    await exec("smoke-pi-clipboard");
   } else {
     console.log("pi-tui clipboard leg skipped: no DISPLAY on this machine");
   }
   console.log("playwright-core, photon-node and pi ran from the binary");
-  await exec("proof-migration-check");
-  await exec("proof-custody-start");
+  await exec("smoke-migration-check");
+  await exec("smoke-custody-start");
   // A CawCo account the machine signs in to as it registers again below, as
-  // `claude auth login` leaves one (prove-stage2.sh account-dir.sh): no real
+  // `claude auth login` leaves one (e2e-test.sh account-dir.sh): no real
   // credential, only what lets the stub harness start a session.
   const account = (await post(
     hubRequest("POST /api/accounts", {
@@ -513,12 +457,12 @@ try {
   mkdirSync(accountDir, { recursive: true, mode: 0o700 });
   writeFileSync(
     join(accountDir, ".credentials.json"),
-    '{"claudeAiOauth":{"accessToken":"sk-ant-oat01-proof-not-a-token","refreshToken":"sk-ant-ort01-proof-not-a-token","expiresAt":4102444800000,"scopes":["user:inference","user:profile"],"subscriptionType":"max"}}\n',
+    '{"claudeAiOauth":{"accessToken":"sk-ant-oat01-test-not-a-token","refreshToken":"sk-ant-ort01-test-not-a-token","expiresAt":4102444800000,"scopes":["user:inference","user:profile"],"subscriptionType":"max"}}\n',
     { mode: 0o600 }
   );
   writeFileSync(
     accountClaudeJson(account.id),
-    '{"oauthAccount":{"accountUuid":"00000000-0000-4000-8000-000000000001","emailAddress":"proof@cawco.test","organizationUuid":"00000000-0000-4000-8000-000000000002","organizationName":"CawCo proof","organizationRole":"admin"}}\n',
+    '{"oauthAccount":{"accountUuid":"00000000-0000-4000-8000-000000000001","emailAddress":"test@cawco.test","organizationUuid":"00000000-0000-4000-8000-000000000002","organizationName":"CawCo test","organizationRole":"admin"}}\n',
     { mode: 0o600 }
   );
   agent.kill("SIGTERM");
@@ -528,7 +472,7 @@ try {
   await wait(`${HUB}${hubRequest("GET /api/agents").path}`, restarted, (s) =>
     JSON.parse(s).some((a: { status: string }) => a.status === "online")
   );
-  await exec("proof-custody-check");
+  await exec("smoke-custody-check");
   await wait(`${HUB}${hubRequest("GET /api/accounts").path}`, restarted, (s) =>
     (
       JSON.parse(s) as { signins: { accountId: string; state: string }[] }
@@ -537,7 +481,7 @@ try {
     )
   );
   // Started at once, not after the machine's tools read: the restarted
-  // agent's Claude report says Claude Code is installed (proof-harnesses.ts
+  // agent's Claude report says Claude Code is installed (test-harnesses.ts
   // `detected`), which is what the hub admits a start by.
   // A session started and spoken to the way the app does it, on the capture
   // socket: the board's deltas for it, and its stream's events.
@@ -552,24 +496,24 @@ try {
         instanceId: sessionId,
         cwd: home,
         harness: "claude",
-        // The proof harness runs a held process whatever the model; the
+        // The test harness runs a held process whatever the model; the
         // harness's default is one the hub admits on any listing (core
         // model-names.ts `modelAdmitted`).
         model: "default",
-        title: "Binary proof",
+        title: "Binary test",
       },
     })
   );
   started = { machineId: machine.machineId, sessionId };
   // The hub's refusal of the start, the frame it answers a refused spawn
-  // with (registry.ts `refusalFrame`): the proof fails in its words rather
+  // with (registry.ts `refusalFrame`): the test fails in its words rather
   // than waiting out the deadline for a session that never comes.
   const refusal = () =>
     parsed().find(
       (frame) =>
         frame.instanceId === sessionId && frame.payload?.kind === "error"
     );
-  // A first start materializes the harness's runtime: as long as stage 2 gives one.
+  // A first start materializes the harness's runtime: as long as end-to-end test gives one.
   await wait(
     `${HUB}${hubRequest("GET /api/instances").path}`,
     restarted,
@@ -582,7 +526,7 @@ try {
   const refused = refusal();
   if (refused) {
     throw new Error(
-      `The hub refused the proof's session: ${refused.payload?.message}`
+      `The hub refused the test's session: ${refused.payload?.message}`
     );
   }
   captureWs.send(JSON.stringify({ type: "stream.subscribe", sessionId }));
@@ -598,7 +542,7 @@ try {
         message: {
           type: "user",
           uuid: crypto.randomUUID(),
-          message: { role: "user", content: "binary proof" },
+          message: { role: "user", content: "binary test" },
           parent_tool_use_id: null,
           origin: { kind: "human" },
         },
@@ -620,7 +564,7 @@ try {
     port: 0,
     fetch: () =>
       new Response(
-        "<!doctype html><title>Binary proof preview</title><p>binary proof preview</p>",
+        "<!doctype html><title>Binary test preview</title><p>binary test preview</p>",
         { headers: { "content-type": "text/html; charset=utf-8" } }
       ),
   });
@@ -632,7 +576,7 @@ try {
         does: "try",
         title: "Probe try artifact",
         ask: "Try this page and say whether it works",
-        name: "binary-proof",
+        name: "binary-test",
         port: devServer.port,
       },
     })
@@ -675,81 +619,54 @@ try {
   const closed = new Promise<void>((resolve) => {
     ws.onclose = () => resolve();
   });
-  if (systemd) {
-    const restarting = Bun.spawn(
-      ["systemctl", "restart", "cawco-binary-dashboard.service"],
-      { env: process.env, stdout: "pipe", stderr: "pipe" }
+  const restarting = Bun.spawn(
+    ["systemctl", "restart", "cawco-binary-dashboard.service"],
+    { env: process.env, stdout: "pipe", stderr: "pipe" }
+  );
+  for (let i = 0; i < 50; i += 1) {
+    if (
+      (await command([
+        "systemctl",
+        "show",
+        "-p",
+        "MainPID",
+        "--value",
+        "cawco-binary-dashboard.service",
+      ])) === "0"
+    ) {
+      break;
+    }
+    await Bun.sleep(20);
+  }
+  const response = readWithin(10_000, async (signal) => {
+    const res = await fetch(
+      "http://127.0.0.1:43458/_app/running-version.json",
+      { signal }
     );
-    for (let i = 0; i < 50; i += 1) {
-      if (
-        (await command([
-          "systemctl",
-          "show",
-          "-p",
-          "MainPID",
-          "--value",
-          "cawco-binary-dashboard.service",
-        ])) === "0"
-      ) {
-        break;
-      }
-      await Bun.sleep(20);
-    }
-    const response = readWithin(10_000, async (signal) => {
-      const res = await fetch(
-        "http://127.0.0.1:43458/_app/running-version.json",
-        { signal }
-      );
-      return { ok: res.ok, status: res.status, text: await res.text() };
-    });
-    if ((await restarting.exited) !== 0) {
-      throw new Error(await new Response(restarting.stderr).text());
-    }
-    const res = await response;
-    switch (res.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        throw new Error(
-          `Request during real service restart did not answer within ${res.after} ms (${res.reason})`
-        );
-      default:
-        unhandled("read", res);
-    }
-    if (!res.value.ok) {
+    return { ok: res.ok, status: res.status, text: await res.text() };
+  });
+  if ((await restarting.exited) !== 0) {
+    throw new Error(await new Response(restarting.stderr).text());
+  }
+  const res = await response;
+  switch (res.kind) {
+    case "answered":
+      break;
+    case "unanswered":
       throw new Error(
-        `Request during real service restart failed ${res.value.status}`
+        `Request during real service restart did not answer within ${res.after} ms (${res.reason})`
       );
-    }
-    console.log(
-      `real systemd socket activation: request during restart answered ${res.value.text}`
-    );
-  } else {
-    worker?.kill("SIGTERM");
-    await worker?.exited;
-    const response = readWithin(5000, (signal) =>
-      fetch("http://127.0.0.1:43458/_app/running-version.json", { signal })
-    );
-    await Bun.sleep(100);
-    worker = dashboard();
-    const res = await response;
-    switch (res.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        throw new Error(
-          `Queued restart request did not answer within ${res.after} ms (${res.reason})`
-        );
-      default:
-        unhandled("read", res);
-    }
-    if (!res.value.ok) {
-      throw new Error("Queued restart request failed");
-    }
-    console.log(
-      "held supervisor socket: queued request answered after worker replacement"
+    default:
+      unhandled("read", res);
+  }
+  if (!res.value.ok) {
+    throw new Error(
+      `Request during real service restart failed ${res.value.status}`
     );
   }
+  console.log(
+    `real systemd socket activation: request during restart answered ${res.value.text}`
+  );
   const drained = await readWithin(5000, () => closed);
   switch (drained.kind) {
     case "answered":
@@ -766,7 +683,7 @@ try {
   console.log("old websocket drained; replacement websocket delivers a frame");
   if (browserDone) {
     // The served dashboard, its machine and session on the board, held for a
-    // browser (prove-stage1.sh), which writes the file when it has loaded it.
+    // browser (smoke-test.sh), which writes the file when it has loaded it.
     writeFileSync(join(dirname(browserDone), "stack-ready"), sessionId);
     await until(
       "the browser step loads the dashboard",
@@ -781,11 +698,9 @@ try {
   const left = await stopStarted();
   if (left) {
     console.error(
-      `the proof's session ${started?.sessionId} may outlive the run: ${left}`
+      `the test's session ${started?.sessionId} may outlive the run: ${left}`
     );
   }
-  // What the socket sent, read by the release, or by whoever reads a failed run's evidence.
-  writeFileSync(join(home, "frames.jsonl"), `${captured.join("\n")}\n`);
   devServer?.stop(true);
   for (const child of children) {
     try {
@@ -812,8 +727,4 @@ try {
       }
     })
   );
-  if (listener >= 0) {
-    libc.symbols.close(listener);
-  }
-  libc.close();
 }

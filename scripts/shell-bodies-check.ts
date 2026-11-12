@@ -3,14 +3,14 @@
  * is one its route takes. The hub refuses a field its route doesn't take
  * (hub server.ts `normalize: false`, unknown-fields.ts), and the release
  * rigs reach it from shell, where no type holds the body: the nightly from
- * b67643b96 failed stage 2 because prove-stage2.sh still sent `checks` on a
+ * b67643b96 failed stage 2 because e2e-test.sh still sent `checks` on a
  * work item, which the hub stopped taking in 5566833f4 and, until it was
  * strict, dropped.
  *
  * Over every tracked `.sh` file outside artifacts/ (evaluation rigs that
  * call no hub), each send is read where it is written:
  * - a `curl` (or a helper passing its arguments on to one, as
- *   prove-stage2.sh's `hub_api` does) with `-d`/`--data…`, its method from
+ *   e2e-test.sh's `hub_api` does) with `-d`/`--data…`, its method from
  *   `-X` (POST without), its path the word that holds `/api/`;
  * - a call of a helper whose own send takes its body from a positional
  *   argument (`ws_post`, `put_session_limits`), read at each call;
@@ -45,8 +45,8 @@ const SUB = "\u0000";
 
 /** Bodies this cannot read, by `file:body`, each with where its fields were checked by hand. */
 const UNREAD: Record<string, string> = {
-  "scripts/binary/prove-stage2.sh:@/shared/rule.json":
-    "written by prove-stage2.sh's staging (`JSON.stringify({name, enabled, pattern, matchKind, caseSensitive, wholeWord, watch, reply, timing, repeat, scope})`), every one a field of POST /api/rules",
+  "scripts/binary/e2e-test.sh:@/shared/rule.json":
+    "written by e2e-test.sh's staging (`JSON.stringify({name, enabled, pattern, matchKind, caseSensitive, wholeWord, watch, reply, timing, repeat, scope})`), every one a field of POST /api/rules",
 };
 
 interface Word {
@@ -722,7 +722,7 @@ const toolFailures = toolSends.flatMap((send) => {
 });
 failures.push(...toolFailures);
 
-/** A planted `cawco tool` call with an argument its tool doesn't take, nested as prove-stage2.sh nests one: this must find it, or it reads nothing. */
+/** A planted `cawco tool` call with an argument its tool doesn't take, nested as e2e-test.sh nests one: this must find it, or it reads nothing. */
 const PLANTED_TOOL = `ws_exec "cawco tool wait_item --record '{\\"minutes\\":$M,\\"reason\\":\\"x\\",\\"seconds\\":1}'"`;
 const [planted] = toolSendsOf("planted.sh", PLANTED_TOOL);
 const plantedFields = planted?.text

@@ -22,12 +22,11 @@
  * read where it is written). A leg that proves the refusal writes
  * `title: undefined`, which JSON leaves out.
  *
- * The release pipeline's shell proofs (scripts/binary/*.sh) call the tool as
+ * The binary tests' shell scripts (scripts/binary/*.sh) call the tool as
  * a session does, `cawco tool artifact_create … '<json>'`: each such command,
- * its continued lines joined, must name a `"title"` key. Two of
- * prove-stage2.sh's (the sshadd rig's preview and the workspace rigs'
- * `ws_preview_open`) went without one and failed the ship of 7f23cb06e at
- * stage 2 with "title is required".
+ * its continued lines joined, must name a `"title"` key: two commands of the
+ * old end-to-end test went without one and failed the ship of 7f23cb06e with
+ * "title is required".
  *
  *   bun scripts/probe-creates-check.ts
  */

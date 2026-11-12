@@ -4,7 +4,7 @@
  * the hub's update state every 20 ms with no other sleep, so the window between the machine saying
  * `installing` and the restart it is about to cause is hit by construction, not by luck.
  *
- *   cawco stage2-during-install.ts <hub url> <machineId> <idPrefix>
+ *   cawco e2e-during-install.ts <hub url> <machineId> <idPrefix>
  *
  * Each start goes over the hub's dashboard socket, as the dashboard sends one. Output, one line each:
  * `sent <id> before=<phase> after=<phase> answer=<what came back>`, then `accepted <id>` when the hub

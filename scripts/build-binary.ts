@@ -14,7 +14,7 @@
  *       `--skip-prepare` it prepares first.
  *
  * release.ts runs `prepare` once and every compile (the proof build, stage
- * 2's three, the four release targets) at once beside it; build-stage2.ts and
+ * 2's three, the four release targets) at once beside it; build-e2e.ts and
  * the probe kit call the exports.
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -65,9 +65,6 @@ const PUBLISHED_PACKAGES: Record<string, string> = {
   "@silvia-odwyer/photon-node": "photon-node",
 };
 const PUBLISHED_PACKAGE = /^(?:playwright-core|@silvia-odwyer\/photon-node)$/u;
-/** The wire protocol range core runtime.ts declares, which a proof build's `protocol` replaces. */
-const PROTOCOL_RANGE =
-  /export const protocolRange = \{ min: \d+, max: \d+ \} as const;/u;
 
 export function packageDir(
   name: string,
@@ -322,15 +319,9 @@ export async function compileBinary(options: {
   version: string;
   commit: string;
   proof?: boolean;
-  /** Link the credential-free stub harnesses into the real entry point; for proofs only. */
+  /** Link the credential-free stub harnesses into the real entry point; for the tests only. */
   stubHarness?: boolean;
   testPublicKey?: string;
-  /**
-   * The hub ↔ agent wire protocol range the build speaks in place of this
-   * tree's (core runtime.ts `protocolRange`): a release that moves the
-   * protocol, for proofs only (build-stage2.ts's `wire` build).
-   */
-  protocol?: { max: number; min: number };
 }) {
   pinnedBun();
   if (!TARGETS.includes(options.target as (typeof TARGETS)[number])) {
@@ -383,7 +374,7 @@ export async function compileBinary(options: {
         join(
           ROOT,
           options.proof
-            ? "scripts/binary/proof-entry.ts"
+            ? "scripts/binary/test-entry.ts"
             : "scripts/binary/entry.ts"
         ),
       ],
@@ -472,25 +463,6 @@ export async function compileBinary(options: {
                 })
               );
             }
-            const { protocol } = options;
-            if (protocol) {
-              build.onLoad(
-                { filter: /packages\/core\/src\/runtime\.ts$/u },
-                async ({ path }) => {
-                  const source = await Bun.file(path).text();
-                  const moved = source.replace(
-                    PROTOCOL_RANGE,
-                    `export const protocolRange = { min: ${protocol.min}, max: ${protocol.max} } as const;`
-                  );
-                  if (moved === source) {
-                    throw new Error(
-                      `${path} declares no \`export const protocolRange = { min: N, max: N } as const;\` to move`
-                    );
-                  }
-                  return { contents: moved, loader: "ts" };
-                }
-              );
-            }
             build.onResolve({ filter: /^cawco:pi-runtime$/u }, () => ({
               path: join(ROOT, "packages/agent/src/standalone-setup.ts"),
             }));
@@ -523,35 +495,26 @@ export async function compileBinary(options: {
               path: join(ROOT, "scripts/binary/socket-activation.ts"),
             }));
             if (options.stubHarness) {
-              // The stage 2 proof's builds run the update's timed steps at the
-              // pace its machines set (scripts/binary/proof-clock.ts).
+              // The end-to-end test's builds run the update's timed steps at
+              // the pace its machines set (scripts/binary/test-clock.ts).
               build.onLoad(
                 { filter: /packages\/core\/src\/clock\.ts$/u },
                 () => ({
                   contents: readFileSync(
-                    join(ROOT, "scripts/binary/proof-clock.ts"),
+                    join(ROOT, "scripts/binary/test-clock.ts"),
                     "utf8"
                   ),
                   loader: "ts",
                 })
               );
-              // And answer a retiring keeper's `list` as late as they set
-              // (scripts/binary/proof-list-pace.ts).
-              build.onLoad(
-                { filter: /packages\/sessiond\/src\/list-pace\.ts$/u },
-                () => ({
-                  contents: `export * from ${JSON.stringify(join(ROOT, "scripts/binary/proof-list-pace.ts"))};`,
-                  loader: "ts",
-                })
-              );
             }
             if (options.proof) {
-              // proof-runtime.ts `proof-pi` calls pi's and pi-tui's own
+              // smoke-runtime.ts `smoke-pi` calls pi's and pi-tui's own
               // exports, which the scripts package does not declare.
-              build.onResolve({ filter: /^cawco:proof-pi$/u }, () => ({
+              build.onResolve({ filter: /^cawco:smoke-pi$/u }, () => ({
                 path: join(pi, "dist/index.js"),
               }));
-              build.onResolve({ filter: /^cawco:proof-pi-tui$/u }, () => ({
+              build.onResolve({ filter: /^cawco:smoke-pi-tui$/u }, () => ({
                 path: join(tui, "dist/index.js"),
               }));
             }
@@ -562,7 +525,7 @@ export async function compileBinary(options: {
                   // Its imports are relative to scripts/binary, not to the file it replaces.
                   contents: (
                     await Bun.file(
-                      join(ROOT, "scripts/binary/proof-harnesses.ts")
+                      join(ROOT, "scripts/binary/test-harnesses.ts")
                     ).text()
                   ).replaceAll('"../../packages/', `"${ROOT}/packages/`),
                   loader: "ts",

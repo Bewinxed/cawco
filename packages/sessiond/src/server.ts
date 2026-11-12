@@ -77,7 +77,6 @@ import {
   readGroup,
   removeGroup,
 } from "./cgroup";
-import { paceList } from "./list-pace";
 import { type Listed, processTable } from "./table";
 import { capChildTasks, START_ROOM, spawnRefusal, TASK_RESERVE } from "./tasks";
 
@@ -632,8 +631,7 @@ export class SessiondServer {
       return;
     }
     if (type === "list") {
-      const answer = () => send(conn, this.#welcomeOf());
-      paceList(answer);
+      send(conn, this.#welcomeOf());
       return;
     }
 

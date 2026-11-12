@@ -1,7 +1,7 @@
 /// <reference path="../../packages/agent/src/binary-modules.d.ts" />
 declare module "cawco:pi-runtime";
-/** pi's package entry, in proof builds only (scripts/build-binary.ts). */
-declare module "cawco:proof-pi" {
+/** pi's package entry, in test builds only (scripts/build-binary.ts). */
+declare module "cawco:smoke-pi" {
   export function resizeImage(
     inputBytes: Uint8Array,
     mimeType: string,
@@ -13,8 +13,8 @@ declare module "cawco:proof-pi" {
     mimeType: string;
   } | null>;
 }
-/** pi-tui's package entry, in proof builds only (scripts/build-binary.ts). */
-declare module "cawco:proof-pi-tui" {
+/** pi-tui's package entry, in test builds only (scripts/build-binary.ts). */
+declare module "cawco:smoke-pi-tui" {
   export function getNativeClipboard():
     | {
         getText: () => Promise<string | null | undefined>;

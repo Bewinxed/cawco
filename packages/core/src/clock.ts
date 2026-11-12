@@ -7,9 +7,9 @@
  * sign-ins again. Each is written beside its timer and passed through
  * {@link timerMs}.
  *
- * In this build every length is the one written. The stage 2 container proof's
+ * In this build every length is the one written. The end-to-end test's
  * builds (scripts/build-binary.ts, `stubHarness`) are compiled with
- * scripts/binary/proof-clock.ts in this module's place, which runs them at the
+ * scripts/binary/test-clock.ts in this module's place, which runs them at the
  * pace its machines set; no published binary carries that.
  */
 

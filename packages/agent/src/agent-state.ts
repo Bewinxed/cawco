@@ -1,7 +1,7 @@
 /**
  * What this agent holds now, as it says the same in its log and from the same
  * values: the log line is for people, this record for what checks the agent
- * (proofs, probe specs). `agent-state.json` in CawCo's data dir, written whole
+ * (the end-to-end tests, probe specs). `agent-state.json` in CawCo's data dir, written whole
  * or not at all at each change, one key per subject, each with the agent's pid
  * (`agent`) and when it took it, in ms since the epoch (`at`). It holds only
  * what this process recorded: an earlier agent's values go with its first

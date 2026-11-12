@@ -1,5 +1,5 @@
 /**
- * Fixtures for prove-stage2.sh, run on the host by bun: throwaway signing keys,
+ * Fixtures for e2e-test.sh, run on the host by bun: throwaway signing keys,
  * the installer text, and release folders laid out like a mirror
  * (`<host>/<subdir>/<channel>/release.json`). Never publishes anything.
  */
@@ -68,7 +68,7 @@ if (verb === "keys") {
     })
   );
 } else if (verb === "release") {
-  // release <hostDir> <subdir> <channel> <version> <commit> <binary> <privateKey> <sequence> <schemaVersion> [fault]
+  // release <hostDir> <subdir> <channel> <version> <commit> <binary> <privateKey> <sequence> <schemaVersion>
   const [
     hostDir,
     subdir,
@@ -79,7 +79,6 @@ if (verb === "keys") {
     privateKey,
     sequence,
     schemaVersion,
-    fault,
   ] = args;
   const directory = join(hostDir, subdir, channel);
   await rm(directory, { recursive: true, force: true });
@@ -109,7 +108,7 @@ if (verb === "keys") {
     schemaVersion: Number(schemaVersion),
     protocol,
     sessiondProtocol: SESSIOND_V1,
-    notes: `Proof build ${version}`,
+    notes: `Test build ${version}`,
     testSigned: false,
     artifacts: [],
   };
@@ -126,30 +125,15 @@ if (verb === "keys") {
     },
   ];
   await rm(staging, { recursive: true, force: true });
-  if (fault === "tamper") {
-    // The archive no longer matches what the signed manifest names, at the same size.
-    const bytes = await Bun.file(join(directory, archive)).bytes();
-    bytes[bytes.length - 1] = ((bytes.at(-1) ?? 0) + 1) % 256;
-    await Bun.write(join(directory, archive), bytes);
-  }
-  const signingKey =
-    fault === "bad-signature"
-      ? keyPair().privateKey
-      : await Bun.file(privateKey).text();
-  const signed = signManifest(manifest, signingKey);
+  const signed = signManifest(manifest, await Bun.file(privateKey).text());
   await writeFile(join(directory, "release.json"), signed.text);
-  if (fault !== "no-signature") {
-    await writeFile(
-      join(directory, "release.json.sig"),
-      `${signed.signature}\n`
-    );
-  }
+  await writeFile(join(directory, "release.json.sig"), `${signed.signature}\n`);
 } else if (verb === "broken-binary") {
   // A program that signs and unpacks like a build and cannot start. It says
   // what it was built from as a build of this tree does (`build-info`, which
   // its release's manifest is written from), and its `binary-pins` (run from
   // it before the swap) finds nothing pinned to put on, as a build of this
-  // tree does on the proof's machines, which have no harness. With `migrates`
+  // tree does on the test's machines, which have no harness. With `migrates`
   // it first damages the hub database, as a migration that then fails would
   // leave it.
   const [outFile, mode] = args;

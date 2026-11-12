@@ -1,13 +1,13 @@
 /**
- * Stage 1's browser step (prove-stage1.sh): the dashboard the built binary
+ * The smoke test's browser step (smoke-test.sh): the dashboard the built binary
  * serves, loaded in a headless Chromium (playwright-core, the cached
- * headless shell). It passes when the page shows the proof stack's own
+ * headless shell). It passes when the page shows the test stack's own
  * session's answer, which the served bundle can only show by booting and
  * reading the live hub, and the page neither threw nor logged an error.
  *
- *   bun proof-browser.ts <dashboard url> <stack-ready file> <done file>
+ *   bun smoke-browser.ts <dashboard url> <stack-ready file> <done file>
  *
- * The stack-ready file (proof-stack.ts) names the session. The done file is
+ * The stack-ready file (smoke-stack.ts) names the session. The done file is
  * written whatever happens, so the stack held for this step stops waiting.
  */
 import { chromium } from "playwright-core";
@@ -15,11 +15,11 @@ import { chromium } from "playwright-core";
 const [url, ready, done] = Bun.argv.slice(2);
 if (!(url && ready && done)) {
   throw new Error(
-    "Usage: proof-browser.ts <dashboard url> <stack-ready file> <done file>"
+    "Usage: smoke-browser.ts <dashboard url> <stack-ready file> <done file>"
   );
 }
-/** What the stub harness answers proof-stack.ts's "binary proof" message with. */
-const ANSWER = "proof answered: binary proof";
+/** What the stub harness answers smoke-stack.ts's "binary test" message with. */
+const ANSWER = "test answered: binary test";
 const started = performance.now();
 const session = (await Bun.file(ready).text()).trim();
 const browser = await chromium.launch({ headless: true });
@@ -37,7 +37,7 @@ try {
     }
   });
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  // The stub harness's answer to the stack's message (proof-harnesses.ts):
+  // The stub harness's answer to the stack's message (test-harnesses.ts):
   // on screen only once the bundle booted, its socket reached the hub, and
   // the session's transcript rendered.
   await page

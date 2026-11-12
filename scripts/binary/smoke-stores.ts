@@ -1,7 +1,7 @@
 /**
  * The agent's stores thread (packages/agent/src/stores/) and its search
  * processes (packages/agent/src/search/process.ts), asked inside the compiled
- * binary as `cawco proof-stores` (proof-runtime.ts): the thread starts from
+ * binary as `cawco smoke-stores` (smoke-runtime.ts): the thread starts from
  * the binary's embedded entry (build-binary.ts,
  * ./scripts/binary/stores-worker.js), the search processes (its writer and
  * its reader) as the binary's own `search-host` verb (entry.ts), and the
@@ -33,7 +33,7 @@ const transcript = (sessionId: string): string =>
         uuid: crypto.randomUUID(),
         parentUuid: null,
         sessionId,
-        cwd: "/proof",
+        cwd: "/test",
         timestamp: new Date(Date.UTC(2026, 9, 25) + at * 1000).toISOString(),
         isSidechain: false,
         message:
@@ -51,8 +51,8 @@ const transcript = (sessionId: string): string =>
     )
     .join("\n")}\n`;
 
-export const proveStores = async (): Promise<void> => {
-  const project = join(claudeHome(), "projects", "-proof-stores");
+export const runStores = async (): Promise<void> => {
+  const project = join(claudeHome(), "projects", "-smoke-stores");
   await mkdir(project, { recursive: true });
   const ids = Array.from({ length: FILES }, () => crypto.randomUUID());
   await Promise.all(

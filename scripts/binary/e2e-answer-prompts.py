@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Runs a command under a terminal and answers "n" to every "Run that command now?" prompt.
 
-Usage: stage2-answer-prompts.py COMMAND [ARGS...]
+Usage: e2e-answer-prompts.py COMMAND [ARGS...]
 Prints the whole transcript, then "prompts answered: N", and exits with the command's own status.
 Exits 124 (after printing the transcript) when nothing happens for 120 seconds.
 """

@@ -1,114 +1,26 @@
 import { Database } from "bun:sqlite";
-import { generateKeyPairSync } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
-import { renderCanvas } from "../../packages/agent/src/stage-render";
-import { readWithin } from "../../packages/core/src/bounded";
-import { fetchHub, hubRequest } from "../../packages/core/src/hub-request";
-import {
-  type ReleaseManifest,
-  signManifest,
-  verifyManifest,
-} from "../../packages/core/src/release-manifest";
 import { runtimeTree } from "../../packages/core/src/runtime";
-import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
-import { REPORT_PATH, type RenderReport } from "../../packages/core/src/stage";
-import { unhandled } from "../../packages/core/src/unhandled";
 import { parseMany } from "../../packages/jsonl-parser/src/pool";
 import { welcomed } from "../lib/keeper-dial";
 
 const [, , verb] = Bun.argv;
 const home = process.env.HOME;
 if (!home?.includes("binary")) {
-  throw new Error("Proof requires scratch HOME");
+  throw new Error("Smoke test requires scratch HOME");
 }
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {
-    throw new Error(`Proof requires ${name}`);
+    throw new Error(`Smoke test requires ${name}`);
   }
   return value;
 }
-if (verb === "proof-stack") {
-  await import("./proof-stack");
-} else if (verb === "proof-relay") {
-  await import("./proof-relay");
-} else if (verb === "proof-signing") {
-  const dir = join(home, "test-release-signing");
-  mkdirSync(dir, { recursive: true });
-  try {
-    const keys = generateKeyPairSync("ec", {
-      namedCurve: "prime256v1",
-      privateKeyEncoding: { type: "pkcs8", format: "pem" },
-      publicKeyEncoding: { type: "spki", format: "pem" },
-    });
-    writeFileSync(join(dir, "TEST-private.pem"), keys.privateKey, {
-      mode: 0o600,
-    });
-    writeFileSync(join(dir, "TEST-public.pem"), keys.publicKey);
-    const manifest: ReleaseManifest = {
-      version: "0.1.0-proof",
-      commit: "proof",
-      channel: "nightly",
-      protocol: { min: 1, max: 1 },
-      sequence: 1,
-      schemaVersion: 1,
-      sessiondProtocol: SESSIOND_V1,
-      notes: "Proof only",
-      testSigned: true,
-      artifacts: [],
-    };
-    const { text, signature } = signManifest(manifest, keys.privateKey);
-    writeFileSync(join(dir, "release.json"), text);
-    let refused = false;
-    try {
-      verifyManifest(text, signature);
-    } catch (error) {
-      refused = String(error).includes("Test-signed release refused");
-    }
-    if (!refused) {
-      throw new Error("Test key accepted without explicit public key");
-    }
-    verifyManifest(text, signature, keys.publicKey);
-    console.log(
-      "test-signed manifest refused by default; explicit test public key verifies"
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-  console.log("throwaway TEST keys and manifest deleted");
-} else if (verb === "proof-isolation") {
-  for (const name of ["bun", "node", "git"]) {
-    if (Bun.which(name)) {
-      throw new Error(`${name} must be absent`);
-    }
-  }
-  try {
-    const live = await readWithin(1000, (signal) =>
-      fetchHub(fetch, "http://192.168.3.100:3456", hubRequest("GET /health"), {
-        signal,
-      })
-    );
-    switch (live.kind) {
-      case "answered":
-        throw new Error("Live hub reachable");
-      case "unanswered":
-        console.log(
-          `live hub unreachable: did not answer within ${live.after} ms (${live.reason})`
-        );
-        break;
-      default:
-        unhandled("read", live);
-    }
-  } catch (error) {
-    if (String(error).includes("Live hub reachable")) {
-      throw error;
-    }
-    console.log(`live hub unreachable: ${error}`);
-  }
-  console.log(`no bun, node or git; standalone runtime ${Bun.version}`);
-} else if (verb === "proof-fixture") {
+if (verb === "smoke-stack") {
+  await import("./smoke-stack");
+} else if (verb === "smoke-fixture") {
   const dir = runtimeTree("drizzle");
   const journal = JSON.parse(
     readFileSync(join(dir, "meta/_journal.json"), "utf8")
@@ -125,11 +37,11 @@ if (verb === "proof-stack") {
     ).run(new Bun.CryptoHasher("sha256").update(sql).digest("hex"), entry.when);
   }
   db.exec(
-    "CREATE TABLE binary_proof_history (value text); INSERT INTO binary_proof_history VALUES ('preserved')"
+    "CREATE TABLE binary_history (value text); INSERT INTO binary_history VALUES ('preserved')"
   );
   db.close();
   console.log("existing database fixture created before final migration");
-} else if (verb === "proof-worker") {
+} else if (verb === "smoke-worker") {
   const dir = join(home, "transcripts");
   mkdirSync(dir, { recursive: true });
   const files = ["a", "b"].map((name) => {
@@ -145,56 +57,7 @@ if (verb === "proof-stack") {
     throw new Error("Transcript worker failed");
   }
   console.log("transcript worker parsed two files");
-} else if (verb === "proof-render") {
-  // The component canvas's renderer (agent stage-render.ts) driving the
-  // machine's Chromium through the bundled playwright-core, on a loopback
-  // page that answers as a stage's canvas and report do. Chromium's own
-  // sandbox is off: the proof runs inside a workspace's boundary.
-  const report: RenderReport = {
-    at: new Date().toISOString(),
-    by: "stage",
-    page: { errors: [] },
-    sections: [],
-    unnamed: [],
-  };
-  // The canvas's picture answers (stage-host canvas runtime.ts `CanvasState`), for one frame standing whole at its own size.
-  const page = `<!doctype html><body style="margin:0"><div id="cawco-canvas" style="position:fixed;inset:0"><div class="cawco-frame" data-cawco-story="Proof" data-cawco-interaction="rest" data-cawco-key="proof"><div class="cawco-frame-body" style="width:120px;height:40px;background:#c33">proof</div></div></div><script>
-const body = () => document.querySelector(".cawco-frame-body");
-globalThis.__cawcoCanvas = {
-  reports: 1,
-  swept: true,
-  frameNamed: async (name) => name === "Proof" ? { key: "proof" } : { refused: "No story " + name + "." },
-  lacks: () => ({ w: 0, h: 0 }),
-  pose: () => ({ w: 0, h: 0 }),
-  settled: () => document.fonts.status === "loaded",
-  picture: () => {
-    const rect = body().getBoundingClientRect();
-    return { rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height }, own: { w: body().offsetWidth, h: body().offsetHeight }, scale: devicePixelRatio, whole: true, view: "the proof's page" };
-  },
-};
-</script></body>`;
-  const stage = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: (request) =>
-      new URL(request.url).pathname === REPORT_PATH
-        ? Response.json(report)
-        : new Response(page, { headers: { "content-type": "text/html" } }),
-  });
-  try {
-    const rendered = await renderCanvas(
-      "host",
-      Number(stage.port),
-      { files: ["proof.stories.ts"], png: true, state: { story: "Proof" } },
-      false
-    );
-    console.log(
-      `stage-render drew the canvas: report by ${rendered.report.by}, frame PNG ${Buffer.from(rendered.png ?? "", "base64").length} bytes`
-    );
-  } finally {
-    stage.stop(true);
-  }
-} else if (verb === "proof-playwright") {
+} else if (verb === "smoke-playwright") {
   // playwright-core loaded from the tree the binary publishes (core
   // published-package.ts): its registry reads browsers.json beside itself,
   // and a launch runs its server code from there up to the executable check.
@@ -211,13 +74,13 @@ globalThis.__cawcoCanvas = {
       (error: Error) => error.message.split("\n")[0]
     );
   console.log(`launch with no executable: ${refused}`);
-} else if (verb === "proof-pi") {
+} else if (verb === "smoke-pi") {
   // pi's runtime as pi's own code runs it in the binary: config.js names
   // the codemode worker, image-resize.js spawns the resize worker by the
   // name pi's Bun binary gives it, and that worker loads photon-node from
   // the published tree (scripts/build-binary.ts, the binary's root).
   const { getCodemodeWorkerSpecifier } = await import("cawco:pi-config");
-  const { resizeImage } = await import("cawco:proof-pi");
+  const { resizeImage } = await import("cawco:smoke-pi");
   const { publishedPackage } =
     await import("../../packages/core/src/published-package");
   publishedPackage("photon-node");
@@ -291,7 +154,7 @@ globalThis.__cawcoCanvas = {
   console.log(
     `pi's codemode worker ${codemode} ran its main: ${crash.message}`
   );
-} else if (verb === "proof-pi-clipboard") {
+} else if (verb === "smoke-pi-clipboard") {
   // pi-tui's native clipboard helper, found where its own lookup looks
   // (/$bunfs/root/native/…, scripts/build-binary.ts) and loaded, then its
   // read called as pi's clipboard.js calls it. pi-tui loads the helper only
@@ -299,7 +162,7 @@ globalThis.__cawcoCanvas = {
   // runs only on a machine with a display. What the read answers is said,
   // not judged: an empty clipboard and an unreachable display both answer
   // nothing.
-  const { getNativeClipboard } = await import("cawco:proof-pi-tui");
+  const { getNativeClipboard } = await import("cawco:smoke-pi-tui");
   const clipboard = getNativeClipboard();
   if (!clipboard) {
     throw new Error(
@@ -310,17 +173,17 @@ globalThis.__cawcoCanvas = {
   console.log(
     `pi-tui loaded its native clipboard helper; its read of DISPLAY ${process.env.DISPLAY} answered ${text === undefined ? "undefined" : JSON.stringify(text)}`
   );
-} else if (verb === "proof-child") {
+} else if (verb === "smoke-child") {
   process.stdin.resume();
   process.stdin.on("data", (chunk) => process.stdout.write(chunk));
   console.log("stub child ready");
   await new Promise<void>((resolve) => process.stdin.on("end", resolve));
-} else if (verb === "proof-custody-start") {
+} else if (verb === "smoke-custody-start") {
   const endpoint = required("CAWCO_SESSIOND_ENDPOINT");
   const client = welcomed(endpoint, await SessiondClient.connect(endpoint));
   await client.spawnProc("binary-stub", {
     command: process.execPath,
-    args: ["proof-child"],
+    args: ["smoke-child"],
     cwd: home,
   });
   const proc = (await client.list()).procs.find(
@@ -335,7 +198,7 @@ globalThis.__cawcoCanvas = {
   );
   client.close();
   console.log(`sessiond holds stub child ${proc.pid}`);
-} else if (verb === "proof-custody-check") {
+} else if (verb === "smoke-custody-check") {
   const endpoint = required("CAWCO_SESSIOND_ENDPOINT");
   const client = welcomed(endpoint, await SessiondClient.connect(endpoint));
   const before = JSON.parse(readFileSync(join(home, "child.json"), "utf8"));
@@ -347,16 +210,15 @@ globalThis.__cawcoCanvas = {
   }
   client.close();
   console.log(`same child ${proc.pid} survived agent restart`);
-} else if (verb === "proof-migration-check") {
+} else if (verb === "smoke-migration-check") {
   // The hub is up and writing beside this read. Its file is in WAL (hub
   // db/wal.ts), where a writer does not block a reader, so the read runs
   // beside the hub's commits with no wait (nightly 6786381cb failed it
   // SQLITE_BUSY while the hub kept a rollback journal).
   const db = new Database(required("CAWCO_DB_PATH"));
   if (
-    db
-      .query<{ value: string }, []>("SELECT value FROM binary_proof_history")
-      .get()?.value !== "preserved"
+    db.query<{ value: string }, []>("SELECT value FROM binary_history").get()
+      ?.value !== "preserved"
   ) {
     throw new Error("Existing database history lost");
   }
@@ -372,19 +234,19 @@ globalThis.__cawcoCanvas = {
   console.log(
     "existing database preserved; embedded capability migration applied"
   );
-} else if (verb === "proof-loop-held") {
+} else if (verb === "smoke-loop-held") {
   // The loop watch's thread from the binary's own entry, its loop held
-  // (proof-loop-held.ts): the full hold for the probe kit's loop-held-said,
-  // `short` for the release's stack proof (proof-stack.ts).
+  // (smoke-loop-held.ts): the full hold for the probe kit's loop-held-said,
+  // `short` for the release's stack test (smoke-stack.ts).
   const { HOLD_MS, SHORT_HOLD_MS, holdLoop } =
-    await import("./proof-loop-held");
+    await import("./smoke-loop-held");
   holdLoop(Bun.argv[3] === "short" ? SHORT_HOLD_MS : HOLD_MS);
-} else if (verb === "proof-stores") {
+} else if (verb === "smoke-stores") {
   // The agent's stores thread from the binary's own entry, and the parse
-  // threads its transcript index starts from inside it (proof-stores.ts).
-  const { proveStores } = await import("./proof-stores");
-  await proveStores();
+  // threads its transcript index starts from inside it (smoke-stores.ts).
+  const { runStores } = await import("./smoke-stores");
+  await runStores();
   process.exit(0);
 } else {
-  throw new Error(`Unknown proof command ${verb}`);
+  throw new Error(`Unknown smoke test command ${verb}`);
 }

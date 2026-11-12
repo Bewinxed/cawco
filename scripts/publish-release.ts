@@ -2,7 +2,7 @@
  * Puts a release on GitHub Releases through the GitHub CLI the publisher is
  * already signed in with, so no token passes through this code, in the steps
  * release.ts runs it in: a draft as soon as the build's version is known,
- * each archive uploaded to it as soon as it is made (while the proofs still
+ * each archive uploaded to it as soon as it is made (while the tests still
  * run), and at promotion the signed manifest uploaded and the draft
  * published. A draft is no release to a machine (the installer reads
  * published releases alone; core binary-distribution.ts the same), so none

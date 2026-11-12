@@ -1,14 +1,14 @@
 #!/bin/bash
 # Usage: proof-sweep.sh [--stale] [DIR...]
-# Ends what a container proof left behind under each DIR (a podman instance's run dir, its storage, a release's
+# Ends what a container test left behind under each DIR (a podman instance's run dir, its storage, a release's
 # staging): every process whose command line names a path under DIR, with all it started (conmon and its container,
 # pasta and aardvark-dns of the instance's rootless netns, a podman client), then every mount under DIR in podman's
 # rootless mount namespace (a container's userdata/shm, the instance's rootless-netns), then DIR itself, removed from
 # inside the user namespace that wrote its files. Each run dir a DIR records (`<storage>.run-dir`, podman-instance.sh)
-# is swept with it: a release's staging names its own proofs' instances exactly. --stale adds every `$XDG_RUNTIME_DIR/cawco-proof-<name>-<pid>` run
-# dir whose owner pid is not a live prove-stage script (the pid is gone, or reused by something else). One line per
+# is swept with it: a release's staging names its own tests' instances exactly. --stale adds every `$XDG_RUNTIME_DIR/cawco-proof-<name>-<pid>` run
+# dir whose owner pid is not a live smoke-test or e2e-test script (the pid is gone, or reused by something else). One line per
 # thing ended. Only processes and mounts that name one of these dirs are touched: no other podman container of the
-# host is, and a live proof's run dir is never taken with --stale.
+# host is, and a live test's run dir is never taken with --stale.
 set -euo pipefail
 dirs=()
 runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
@@ -18,8 +18,8 @@ if [[ ${1:-} == --stale ]]; then
   for run in "$runtime"/cawco-proof-*-*; do
     pid=${run##*-}
     [[ $pid =~ ^[0-9]+$ ]] || continue
-    # The owner is alive only while that pid is still the prove-stage script that named the dir.
-    if [[ -r /proc/$pid/cmdline ]] && tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q 'prove-stage'; then
+    # The owner is alive only while that pid is still the test script that named the dir.
+    if [[ -r /proc/$pid/cmdline ]] && tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -qE 'smoke-test|e2e-test'; then
       continue
     fi
     dirs+=("$run")
@@ -30,12 +30,12 @@ for dir in "$@"; do
   dirs+=("${dir%/}")
 done
 # The run dirs a DIR records (podman-instance.sh writes `<storage>.run-dir` beside each instance's storage): a release's
-# staging names its proofs' instances by the exact run dir each wrote, so a stop sweeps those and no other proof's.
+# staging names its tests' instances by the exact run dir each wrote, so a stop sweeps those and no other test's.
 for dir in "$@"; do
   [[ -d $dir ]] || continue
   while IFS= read -r -d '' record; do
     recorded=$(< "$record")
-    # Only a proof run dir itself: `cawco-proof-<name>` directly under the runtime dir.
+    # Only a test run dir itself: `cawco-proof-<name>` directly under the runtime dir.
     if [[ ${recorded%/*} == "$runtime" && ${recorded##*/} == cawco-proof-?* && ${recorded##*/} != *..* ]]; then
       dirs+=("$recorded")
     fi

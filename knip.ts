@@ -176,25 +176,23 @@ export default {
         // scripts/release.ts:471
         "scripts/build-binary.ts",
         // scripts/release.ts:897
-        "scripts/binary/build-stage2.ts",
+        "scripts/binary/build-e2e.ts",
         // scripts/release.ts:533
         "scripts/binary/info-plist.ts",
         // The standalone binary's entry and its worker threads, each a Bun.build entrypoint: scripts/build-binary.ts:376-390.
-        "scripts/binary/{entry,proof-entry,transcript-worker,process-table-worker,loop-watch-worker,stores-worker}.ts",
+        "scripts/binary/{entry,test-entry,transcript-worker,process-table-worker,loop-watch-worker,stores-worker}.ts",
         // Put in place of the `socket-activation` package by the binary build: scripts/build-binary.ts:518.
         "scripts/binary/socket-activation.ts",
-        // Loaded in place of core clock.ts by the stage 2 proof build: scripts/build-binary.ts:527.
-        "scripts/binary/proof-clock.ts",
-        // Loaded in place of sessiond list-pace.ts by the stage 2 proof build: scripts/build-binary.ts:538.
-        "scripts/binary/proof-list-pace.ts",
-        // Loaded in place of agent harnesses/index.ts by the proof builds: scripts/build-binary.ts:560.
-        "scripts/binary/proof-harnesses.ts",
-        // Each bundled by `bun build` and run on the rig's machines: scripts/binary/prove-stage2.sh:289-290.
-        "scripts/binary/stage2-{start-session,stop-session,send,sends,signin,during-install,hook-calls,preview-port}.ts",
-        // scripts/binary/prove-stage2.sh:255
-        "scripts/binary/stage2-fixture.ts",
-        // scripts/binary/prove-stage1.sh:170
-        "scripts/binary/proof-browser.ts",
+        // Loaded in place of core clock.ts by the end-to-end test builds: scripts/build-binary.ts:527.
+        "scripts/binary/test-clock.ts",
+        // Loaded in place of agent harnesses/index.ts by the test builds: scripts/build-binary.ts:560.
+        "scripts/binary/test-harnesses.ts",
+        // Each bundled by `bun build` and run on the rig's machines: scripts/binary/e2e-test.sh machine_helpers.
+        "scripts/binary/e2e-{start-session,stop-session,during-install}.ts",
+        // scripts/binary/e2e-test.sh:255
+        "scripts/binary/e2e-fixture.ts",
+        // scripts/binary/smoke-test.sh:170
+        "scripts/binary/smoke-browser.ts",
         // A Claude Code hook a person installs: scripts/hooks/README.md:30.
         "scripts/hooks/delegate-nudge.ts",
         // `--preload`ed into every scratch fleet service: scripts/scratch-fleet.ts:1647 and :1649.
@@ -332,12 +330,11 @@ export default {
         "!scripts/fixtures/**",
       ],
       // The types TypeScript reads for the sibling .js modules that
-      // src/lib/cawco/own-origin.ts:2, vite.config.ts:26 and
-      // scripts/binary/proof-relay.ts:9 import. Knip resolves each import to
+      // src/lib/cawco/own-origin.ts:2 and vite.config.ts:26 import. Knip resolves each import to
       // the .js itself (node_modules/knip/dist/util/resolve.js:6 tries .js
       // first), so it never sees the declaration read; no entry or plugin
       // names it.
-      ignoreFiles: ["public-origin.d.ts", "inherited-relay.d.ts"],
+      ignoreFiles: ["public-origin.d.ts"],
       vite: {
         // The app's own config, and the address flow's design preview build: scripts/address-preview.vite.ts:8 and src/lib/cawco/address/flow/public/README.md:27 tell a person to build it.
         config: ["vite.config.ts", "scripts/address-preview.vite.ts"],
@@ -380,8 +377,6 @@ export default {
       // knip.dev/reference/configuration: "In files with multiple exports, some of them might be used only internally. If these exports should not be reported, there is a `ignoreExportsUsedInFile` option available." Here for interfaces and types only: createServer's declared type reaches types no file imports (db/index.ts's DbShape names MemoryVersion, MemoryDocRow, SkillVersion and HookVersionMaterial; server.ts BridgedHeldPlace; project-delegate-types.ts DelegateCatalog), and `tsc -b` refuses them unexported with TS4023/TS4058 ("Exported variable 'createServer' has or is using name … but cannot be named"); they are named schemas in openapi.json too. Knip counts a type that another used export of its file names only under this option (node_modules/knip/dist/graph/analyze.js:39-42, `isReferencedInUsedExport`).
       ignoreExportsUsedInFile: { interface: true, type: true },
       entry: [
-        // Spawned by the binary tests: scripts/release/binary-tests.ts (proveStage1).
-        "scripts/wire-frames.ts",
         // Inlined into every decision page as its script: src/decision-page.ts:123.
         "skills/decision-page/kit/page.js",
         // The decision-page skill tells the agent to run it: skills/decision-page/SKILL.md:74.

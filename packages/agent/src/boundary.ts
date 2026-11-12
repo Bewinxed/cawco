@@ -2902,7 +2902,7 @@ export type NarrowCause =
 /**
  * What the agent decided of one of a workspace's boundaries, as it says the
  * same in its log and from the same values: the log line is for people, this
- * record for what checks the agent (proofs, probe specs). Each carries the
+ * record for what checks the agent (the end-to-end tests, probe specs). Each carries the
  * deciding agent's pid (`agent`) and when, in ms since the epoch (`at`).
  *
  * - `kept`, `handed-over`, `replaced`: of a boundary not of this build's

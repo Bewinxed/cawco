@@ -2,8 +2,8 @@
 #   hold_awake <pid> <why>
 # which keeps the machine from idle-sleeping for as long as process <pid>
 # runs, through the platform's own primitive, and returns when <pid> ends.
-# Every long run the repo ships (the release, a probe kit run, the stage-2
-# builds and proofs, a scratch fleet) holds it for its whole life, whether it
+# Every long run the repo ships (the release, a probe kit run, the end-to-end
+# builds and tests, a scratch fleet) holds it for its whole life, whether it
 # started from a terminal, a systemd unit or a session; a TypeScript entry
 # calls it through hold-awake.ts, a bash one as `hold_awake "$$" "…" & disown`.
 #

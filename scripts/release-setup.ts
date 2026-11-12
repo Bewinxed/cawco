@@ -9,7 +9,7 @@
  *
  * What a release needs on its host, beside a clone of the repository:
  * - git, curl, tar, gzip, zip, unzip, ar (binutils), the arm64 binfmt entry (qemu-user-binfmt) that runs the published
- *   linux-arm64 binary, podman with the user's subordinate ids (the container proofs, rootless), gh signed in with
+ *   linux-arm64 binary, podman with the user's subordinate ids (the container tests, rootless), gh signed in with
  *   access to the release repository, and systemd's user manager with lingering (scripts/ship.sh's unit);
  * - rcodesign, pinned (release-tools.ts);
  * - the secrets, in the release env.
@@ -398,7 +398,7 @@ const importSecrets = async (place: string): Promise<void> => {
 
 if (process.platform !== "linux") {
   console.error(
-    "A release host is Linux: the container proofs run on podman there."
+    "A release host is Linux: the container tests run on podman there."
   );
   process.exit(1);
 }

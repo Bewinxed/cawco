@@ -1,5 +1,5 @@
 /**
- * Only linked by an explicitly requested proof build, never a release build.
+ * Only linked by an explicitly requested test build, never a release build.
  *
  * A session here is held the way a real harness's is: its process (a plain
  * `sleep`) is spawned through the session-holding process by the same client
@@ -7,9 +7,9 @@
  * `procIdFor` id), outlives the agent, and is taken back by the same
  * `reattach`/`adopt`/`custodyCandidates` contract after the agent restarts.
  * No model. Claude's sign-ins are read as the real harness reads them
- * ({@link detected}), so the hub places the proof's sessions on an account.
+ * ({@link detected}), so the hub places the test's sessions on an account.
  *
- * The fleet reaches a proof machine as it reaches a real one. Its Claude
+ * The fleet reaches a test machine as it reaches a real one. Its Claude
  * reports that it converges the fleet, as the real adapter's report does
  * (claude.ts `CLAUDE_CAPABILITIES`, whose `fleet` the hub's sync gate reads,
  * server.ts `sendFleetSync`), and converges it with the real adapter's own
@@ -29,9 +29,6 @@
  * list, no account changes to take).
  */
 
-import { appendFileSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import {
   accountReports,
   claudeSignins,
@@ -172,34 +169,6 @@ const toolCalls = async (procId: string, text: string): Promise<string[]> => {
   return said;
 };
 
-/**
- * Every message a session's turn took on this machine, one line each in
- * ~/.cawco-proof/turns.log (`<epoch ms> <instanceId> <uuid> <first line of
- * its words>`), whichever agent process took it: what reached the session,
- * read by the proof on the machine itself. The hub's transcript is no record
- * of it here, for this harness reads no history back once the hub restarts.
- *
- * Written synchronously, in the same tick as the read it goes with
- * ({@link session}'s `send`). The read is the agent's mark that the send was
- * taken (taken-sends.ts `noteTaken`, written as the frame passes), and the
- * agent refuses a second turn on a taken send. A line written after the read,
- * in a later tick, is lost when the agent stops in between: the send is
- * taken, the turn is not in the log, and the proof reads a delivered message
- * as one that never arrived (nightly e9ff155d6, keeperheld:
- * `outcome-1-midupdate-9`, read by agent 1064 at 08:57:45.5 and stopped at
- * 45.766, and "handed over again, taken already: no turn" on agent 1377). A
- * stop runs on the event loop, so it cannot fall between two writes made in
- * one tick.
- */
-const tookTurn = (instanceId: string, uuid: string, text: string): void => {
-  const dir = join(homedir(), ".cawco-proof");
-  mkdirSync(dir, { recursive: true });
-  appendFileSync(
-    join(dir, "turns.log"),
-    `${Date.now()} ${instanceId} ${uuid} ${text.split("\n")[0]}\n`
-  );
-};
-
 /** A session held by `client`'s keeper, as a real session keeps the keeper it was started or adopted on. */
 function session(
   kind: "claude" | "pi",
@@ -233,9 +202,6 @@ function session(
       client
         .write(procId, `${text}\n`)
         .then(() => {
-          // One tick: the turn's line, then the read that marks it taken
-          // ({@link tookTurn}).
-          tookTurn(instanceId, message.uuid, text);
           ctx.frame({
             type: "system",
             subtype: MESSAGES_READ,
@@ -245,7 +211,7 @@ function session(
         .then(() => toolCalls(procId, text))
         .then(
           (said) => {
-            const answer = [`proof answered: ${text}`, ...said].join("\n");
+            const answer = [`test answered: ${text}`, ...said].join("\n");
             ctx.frame({
               type: "assistant",
               uuid: crypto.randomUUID(),
@@ -273,7 +239,7 @@ function session(
 }
 
 /**
- * What Claude can do here, as far as the hub reads it of a proof machine:
+ * What Claude can do here, as far as the hub reads it of a test machine:
  * converge the fleet, as the real adapter reports (claude.ts
  * `CLAUDE_CAPABILITIES.fleet`), and nothing a model would do.
  */
@@ -283,7 +249,7 @@ const CLAUDE_REPORTED = { ...CAPABILITIES_NONE, fleet: true };
  * What Claude reports on this machine, as the real Claude harness reports it:
  * every CawCo account dir (`~/.cawco/accounts/<id>/claude`) and what the
  * installed Claude Code's own `claude auth status` says of it there, the
- * machine's Claude word from those, and that it converges the fleet. A proof
+ * machine's Claude word from those, and that it converges the fleet. A test
  * machine is signed in by giving it an account dir holding a credential and
  * `oauthAccount`, as `claude auth login` would leave it. Installed when the
  * agent finds a Claude Code there, as the real adapter finds it (auth.ts
@@ -386,7 +352,7 @@ for (const kind of HARNESSES) {
           memory: null,
         });
       }
-      // The hub reads a newly signed-in account's model catalog once; the proof's sessions start on Claude Code's default, admitted on an empty list.
+      // The hub reads a newly signed-in account's model catalog once; the test's sessions start on Claude Code's default, admitted on an empty list.
       if (method === CONTROL_PROBE_ACCOUNT && kind === "claude") {
         return Promise.resolve({ models: [] });
       }
@@ -395,7 +361,7 @@ for (const kind of HARNESSES) {
     // harnesses use, unconditionally.
     spawn: async (_payload, ctx) => {
       if (!held) {
-        throw new Error("The proof harness holds no opencode sessions");
+        throw new Error("The test harness holds no opencode sessions");
       }
       // The fleet's denials before anything starts, as every real adapter
       // reads them: a machine that has not heard them waits for its first

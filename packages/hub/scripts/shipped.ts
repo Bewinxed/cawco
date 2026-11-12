@@ -160,10 +160,7 @@ export const newestNightly = (cwd: string): Baseline =>
   publishedNightlies(cwd)[0] as Baseline;
 
 /** Every TestFlight build uploaded in the last 90 days, by platform and build number. */
-export const installableTestFlight = (
-  cwd: string,
-  now = Date.now()
-): Baseline[] =>
+const installableTestFlight = (cwd: string, now = Date.now()): Baseline[] =>
   tags(cwd, "testflight-").flatMap(([tag, commit]) => {
     const match = TESTFLIGHT.exec(tag);
     if (!match) {

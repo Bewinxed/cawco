@@ -2,7 +2,7 @@
  * Asks a hub to stop a session the way the dashboard does: a `stop` frame on
  * its dashboard socket. Run inside a container by the installed binary acting
  * as bun (BUN_BE_BUN=1), so the container needs no runtime of its own.
- *   cawco stage2-stop-session.ts <hub http url> <machineId> <instanceId>
+ *   cawco e2e-stop-session.ts <hub http url> <machineId> <instanceId>
  * Exits 1 and prints the hub's words when it answers the stop with a failure.
  */
 const [, , hub, machineId, instanceId] = Bun.argv;
