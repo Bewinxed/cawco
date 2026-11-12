@@ -344,7 +344,7 @@ ${
   [ -n "$VERSION" ] || fail "the signed release names no version. Nothing was installed."
   printf '%s' "$MANIFEST" | grep -q "\\"channel\\":\\"$CHANNEL\\"" || fail "the signed release is not on the $CHANNEL channel. Nothing was installed."
   ENTRY="$(printf '%s' "$MANIFEST" | grep -o "{\\"target\\":\\"$TARGET\\",\\"archive\\":\\"[^\\"]*\\",\\"sha256\\":\\"[0-9a-f]*\\",\\"size\\":[0-9]*,\\"binarySha256\\":\\"[0-9a-f]*\\"")" \\
-    || fail "this release has no build for $TARGET. Nothing was installed."
+    || fail "The newest CawCo release has no build for $TARGET."
   ARCHIVE="$(printf '%s' "$ENTRY" | sed 's/.*"archive":"\\([^"]*\\)".*/\\1/')"
   ARCHIVE_SHA="$(printf '%s' "$ENTRY" | sed 's/.*"sha256":"\\([0-9a-f]*\\)".*/\\1/')"
   ARCHIVE_SIZE="$(printf '%s' "$ENTRY" | sed 's/.*"size":\\([0-9]*\\).*/\\1/')"

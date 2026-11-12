@@ -106,6 +106,9 @@ import { runBinaryPins } from "./pin-record";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions } from "./sessiond-client";
 
+/** The manifest target this machine runs: the row of a release that has a build for it. */
+const thisTarget = (): string => `${process.platform}-${process.arch}`;
+
 const POLL_MS = 60_000;
 /**
  * The update state's fields earlier builds wrote that nothing reads now
@@ -1372,7 +1375,10 @@ export class BinaryUpdater {
     const { release, dbSchemaVersion, hubWait } =
       await this.#offer(installation);
     const running = await readRunningManifest();
-    const newer = release.manifest.sequence > running.sequence;
+    // A release with no build for this machine's platform is nothing newer: no offer, no failure, no retry.
+    const newer =
+      release.manifest.sequence > running.sequence &&
+      release.manifest.artifacts.some((row) => row.target === thisTarget());
     this.#offered = { newer, version: release.manifest.version };
     // Only a change is written: every write moves `updatedAt`, which the board reads as news.
     if (this.#state.channel !== this.#policy.channel) {
@@ -1602,7 +1608,7 @@ export class BinaryUpdater {
     if (this.#staged === manifest.version && this.#state.phase === "ready") {
       return;
     }
-    const target = `${process.platform}-${process.arch}`;
+    const target = thisTarget();
     const artifact = manifest.artifacts.find((row) => row.target === target);
     if (!artifact) {
       throw new Error(`This release has no build for ${target}`);

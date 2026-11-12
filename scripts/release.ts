@@ -1,7 +1,11 @@
 /**
  * The release pipeline:
  *   bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path
- *     [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--dry-run]
+ *     [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--mac] [--dry-run]
+ *
+ * Without `--mac` a release is the two linux targets: no darwin compile, bundle, signing, notarization,
+ * archive or upload step is in the graph, and the Apple secrets are not needed. `--mac` (`bun run release:mac`)
+ * adds the two darwin targets to the same version and the same manifest.
  *
  * A release names its commit, and is built from exactly that commit: a
  * worktree of it under ~/.worktrees/release-<sha>, on real disk, made here
@@ -42,7 +46,6 @@ import { createPublicKey } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
   cp,
-  lstat,
   mkdir,
   readdir,
   readFile,
@@ -52,7 +55,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { AGENT_BUNDLE_EXECUTABLE } from "../packages/core/src/agent-bundle";
 import { releaseTag } from "../packages/core/src/binary-distribution";
@@ -94,6 +97,7 @@ import { describeSteps, runSteps, type Step } from "./release-graph";
 import { quotaRefusal } from "./release-quota";
 import {
   missingSecrets,
+  SECRET_VARIABLES,
   signingPem,
   takeReleaseSecrets,
   underSigningEnv,
@@ -111,12 +115,13 @@ const commitInput = argument("--commit");
 const channel = argument("--channel");
 const output = argument("--output");
 const publishing = argv.includes("--publish");
+const mac = argv.includes("--mac");
 if (
   !(commitInput && output && isAbsolute(output)) ||
   (channel !== "stable" && channel !== "nightly")
 ) {
   console.error(
-    "Usage: bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--dry-run]"
+    "Usage: bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--mac] [--dry-run]"
   );
   process.exit(2);
 }
@@ -132,6 +137,8 @@ interface Request {
   commit: string;
   /** This request, apart from any other for the same commit. */
   id: string;
+  /** Whether the darwin targets are built too (`--mac`). */
+  mac: boolean;
   /** A nightly's end-user notes, carried with the request so a queued one keeps its own. */
   notes?: string;
   output: string;
@@ -147,7 +154,6 @@ const arm64Root = join(homedir(), ".cache", "cawco-release", "arm64-sysroot");
 const state = join(homedir(), ".cache", "cawco", "release-pipeline");
 /** Where a failed build's proof evidence outlives its staging; the newest few are kept. */
 const failedEvidence = join(homedir(), ".cache", "cawco-release");
-const KEPT_FAILURES = 5;
 /**
  * How many promoted builds `--output` keeps, newest first ({@link pruneOutputs}).
  * Nothing in CawCo reads them: a machine runs and rolls back from its own
@@ -223,6 +229,10 @@ const gatePassed = async (commit: string): Promise<boolean> => {
 const stagingOf = (commit: string): string =>
   join(state, `staging-${commit.slice(0, 12)}`);
 
+/** The targets a request builds: the linux two, and with `--mac` the darwin two. */
+const targetsOf = (asked: Request): readonly (typeof TARGETS)[number][] =>
+  TARGETS.filter((target) => asked.mac || !target.startsWith("darwin"));
+
 /** Whether a target's builds are darwin's: a signed, notarized bundle. */
 const isDarwin = (target: string): boolean => target.startsWith("darwin");
 
@@ -258,6 +268,7 @@ const releaseSteps = (
   gated: boolean
 ): Step[] => {
   const trees = treesOf(current.commit);
+  const targets = targetsOf(current);
   const staging = stagingOf(current.commit);
   const proofBinary = join(staging, "cawco-proof");
   const infoHome = join(staging, "binary-info-home");
@@ -419,7 +430,7 @@ const releaseSteps = (
   };
   const promotion = [
     "gate",
-    ...TARGETS.flatMap((target) => [
+    ...targets.flatMap((target) => [
       `archive ${target}`,
       ...(isDarwin(target) ? [] : [`run ${target}`]),
       ...(publish ? [`upload ${target}`] : []),
@@ -505,17 +516,21 @@ const releaseSteps = (
       ) as Pick<ReleaseManifest, "protocol">;
       manifest().protocol = protocol;
     }),
-    step("bundle files", ["install build"], 0.3, async () => {
-      await mkdir(bundleFiles, { recursive: true });
-      await run(
-        [
-          process.execPath,
-          "scripts/binary/info-plist.ts",
-          join(bundleFiles, "Info.plist"),
-        ],
-        trees.build
-      );
-    }),
+    ...(current.mac
+      ? [
+          step("bundle files", ["install build"], 0.3, async () => {
+            await mkdir(bundleFiles, { recursive: true });
+            await run(
+              [
+                process.execPath,
+                "scripts/binary/info-plist.ts",
+                join(bundleFiles, "Info.plist"),
+              ],
+              trees.build
+            );
+          }),
+        ]
+      : []),
     ...(publish
       ? [
           step("draft", ["version"], 2, async () => {
@@ -534,7 +549,7 @@ const releaseSteps = (
           }),
         ]
       : []),
-    ...TARGETS.flatMap(targetSteps),
+    ...targets.flatMap(targetSteps),
     step("promote", promotion, 5, () =>
       promote(current, publish, staging, manifest(), secrets, notStopped)
     ),
@@ -879,6 +894,7 @@ if (argv.includes("--dry-run")) {
           id: "dry-run",
           output,
           notes: "dry run",
+          mac,
           tag: argument("--tag"),
         },
         publishing,
@@ -982,7 +998,9 @@ if (Bun.version !== PINNED_BUN) {
 }
 const releaseSecrets = takeReleaseSecrets();
 // What the build cannot do without, before anything is queued or built.
-const missing = missingSecrets(releaseSecrets);
+const missing = missingSecrets(releaseSecrets).filter(
+  (name) => mac || name === SECRET_VARIABLES.manifestKey
+);
 if (missing.length > 0) {
   refuse(
     `${missing.join(", ")} missing from the release env: bash scripts/release-setup.sh --check says what is missing, and --import-secrets writes them`
@@ -1229,6 +1247,7 @@ const request: Request = {
   notes: channel === "nightly" ? nightlyNotes : undefined,
   tag: argument("--tag"),
   output,
+  mac,
 };
 
 // THE QUEUE. One request waits: the newest. A request for a commit that a
@@ -1426,79 +1445,6 @@ const unheldStagings = async (): Promise<string[]> => {
     .filter((name) => name.startsWith("staging-"))
     .map((name) => join(state, name))
     .filter((path) => !held.has(path));
-};
-/** The container proofs' folders in a build's staging: stage 1's and stage 2's. */
-const PROOF_DIRS = ["container-proof", "stage2"];
-/**
- * A proof's own working state, not evidence: container storage and scratch,
- * stage 2's published feeds (whole builds) and image recipes, and a rig's
- * storage (by its last two path parts, `rigs/<rig>` holding `storage`).
- */
-const PROOF_SCRATCH = new Set([
-  "storage",
-  "run",
-  "tmp",
-  "cache",
-  "config",
-  "feeds",
-  "images",
-]);
-/**
- * Copies the container proofs' logs and outputs out of `staging` before it is
- * cleared, and prunes older copies. Undefined when the build reached neither.
- */
-const keepEvidence = async (
-  commitId: string,
-  staging: string
-): Promise<string | undefined> => {
-  const found = (
-    await Promise.all(
-      PROOF_DIRS.map(async (name) =>
-        (await stat(join(staging, name)).catch(() => undefined))
-          ? name
-          : undefined
-      )
-    )
-  ).filter((name): name is string => name !== undefined);
-  if (found.length === 0) {
-    return;
-  }
-  const time = new Date().toISOString().replace(/[:.]/gu, "-");
-  const kept = join(failedEvidence, `failed-${commitId.slice(0, 12)}-${time}`);
-  await Promise.all(
-    found.map((name) => {
-      const proof = join(staging, name);
-      return cp(proof, join(kept, name), {
-        recursive: true,
-        filter: async (source) => {
-          const rel = relative(proof, source);
-          if (
-            PROOF_SCRATCH.has(rel) ||
-            PROOF_SCRATCH.has(rel.split("/").at(-1) ?? "")
-          ) {
-            return false;
-          }
-          const info = await lstat(source);
-          return info.isFile() || info.isDirectory();
-        },
-      });
-    })
-  );
-  const older = await Promise.all(
-    (await readdir(failedEvidence))
-      .filter((name) => name.startsWith("failed-"))
-      .map(async (name) => {
-        const path = join(failedEvidence, name);
-        return { path, time: (await stat(path)).mtimeMs };
-      })
-  );
-  older.sort((a, b) => b.time - a.time);
-  await Promise.all(
-    older
-      .slice(KEPT_FAILURES)
-      .map(({ path }) => rm(path, { recursive: true, force: true }))
-  );
-  return kept;
 };
 /**
  * Takes the lock, or says it is held by a live build. A lock whose holder
@@ -1706,14 +1652,7 @@ const build = async (current: Request): Promise<void> => {
         )
       );
     }
-    const kept = await keepEvidence(current.commit, staging);
-    if (!kept) {
-      throw error;
-    }
-    throw new Error(
-      `${error instanceof Error ? error.message : String(error)}; proof evidence kept at ${kept}`,
-      { cause: error }
-    );
+    throw error;
   } finally {
     abandoned = undefined;
     // The Apple secrets' files go first, whatever becomes of the rest of the staging.
