@@ -36,65 +36,68 @@
  * Only the run itself is one at a time: the lock below (no two release runs
  * at once) and its queue of one.
  */
-import { Database } from "bun:sqlite";
-import { createPublicKey } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
-  cp,
   mkdir,
   readdir,
   readFile,
   rename,
   rm,
-  stat,
   writeFile,
 } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import type { Subprocess } from "bun";
-import { AGENT_BUNDLE_EXECUTABLE } from "../packages/core/src/agent-bundle";
-import { releaseTag } from "../packages/core/src/binary-distribution";
 import { readInstallation } from "../packages/core/src/binary-installation";
 import { readWithin } from "../packages/core/src/bounded";
 import { hubInit, hubRequest } from "../packages/core/src/hub-request";
 import { machineFetch } from "../packages/core/src/machine-key";
-import { hubDbPath } from "../packages/core/src/paths";
-import {
-  type ReleaseManifest,
-  signManifest,
-  verifyManifest,
-} from "../packages/core/src/release-manifest";
-import { SESSIOND_V1 } from "../packages/core/src/sessiond";
 import {
   listedPid,
   signalGroup,
   signal as signalPid,
 } from "../packages/core/src/signal";
-import { archiveBundle, signBundle } from "./binary/sign-agent-bundle";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
-import { ask, NoAnswer, persist } from "./lib/outside-call";
-import {
-  createDraft,
-  deleteDraft,
-  endCalls,
-  promoteRelease,
-  uploadAssets,
-} from "./publish-release";
+import { NoAnswer, persist } from "./lib/outside-call";
+import { deleteDraft, endCalls } from "./publish-release";
 import type { Runner } from "./release/binary-tests";
-import { ANNOUNCE_MS, announce } from "./release-announce";
+import { announce } from "./release/steps/announce";
+import { archive } from "./release/steps/archive";
+import { buildInfo } from "./release/steps/build-info";
+import { bundleFiles } from "./release/steps/bundle-files";
+import { check } from "./release/steps/check";
+import { compile } from "./release/steps/compile";
+import { makeDraft } from "./release/steps/draft";
+import { infoBuild } from "./release/steps/info-build";
+import { liveDatabase } from "./release/steps/live-database";
+import { prepare } from "./release/steps/prepare";
+import { promoteStep } from "./release/steps/promote";
+import { runPublished } from "./release/steps/run";
+import {
+  isDarwin,
+  type Learned,
+  type ReleaseSecretsTaken,
+  type Request,
+  repo,
+  stagingOf,
+  state,
+  step,
+  stepContext,
+  treesOf,
+} from "./release/steps/shared";
+import { sign } from "./release/steps/sign";
+import { upload } from "./release/steps/upload";
+import { version } from "./release/steps/version";
+import { ANNOUNCE_MS } from "./release-announce";
 import { describeSteps, runSteps, type Step } from "./release-graph";
 import {
   missingSecrets,
-  signingPem,
   takeReleaseSecrets,
   underSigningEnv,
-  writeAppleSecrets,
 } from "./release-signing";
 import { RCODESIGN_VERSION, rcodesignPath } from "./release-tools";
 
-const repo = resolve(import.meta.dir, "..");
 const argv = Bun.argv.slice(2);
 function argument(name: string): string | undefined {
   const i = argv.indexOf(name);
@@ -117,46 +120,6 @@ if (
 const refuse = (why: string): never => {
   console.error(`Release refused: ${why}`);
   process.exit(2);
-};
-
-/** One release to build, as the queue keeps it. */
-interface Request {
-  channel: "stable" | "nightly";
-  commit: string;
-  /** This request, apart from any other for the same commit. */
-  id: string;
-  /** A nightly's end-user notes, carried with the request so a queued one keeps its own. */
-  notes?: string;
-  output: string;
-  tag?: string;
-}
-
-/** The arm64 userland a published linux-arm64 binary runs on here: see {@link arm64Sysroot}. */
-const ARM64_LIBC = {
-  url: "https://snapshot.debian.org/file/6ee536e6a461ca319776fac983202946f4d3dce8/libc6_2.41-12%2Bdeb13u4_arm64.deb",
-  sha256: "8784eda966b189c777a384dac5ce009e8fc9b52d006926c5a013e7fa8aa688cc",
-};
-const arm64Root = join(homedir(), ".cache", "cawco-release", "arm64-sysroot");
-const state = join(homedir(), ".cache", "cawco", "release-pipeline");
-/** Where a failed build's proof evidence outlives its staging; the newest few are kept. */
-const failedEvidence = join(homedir(), ".cache", "cawco-release");
-/**
- * How many promoted builds `--output` keeps, newest first ({@link pruneOutputs}).
- * Nothing in CawCo reads them: a machine runs and rolls back from its own
- * binary root's `versions/` (core binary-wrapper.ts), and the hub serves and
- * offers each build from the release host (hub binary-updates.ts
- * `assetBase`). They are for a person on this host: the build just made, and
- * the one it replaced, to compare or upload again by hand when the newest has
- * to be pulled. A build whose publish failed is left here too, never reaching
- * the prune, for `ship.sh --republish <version>` (republish.ts) to publish
- * without building it again. Unbounded, 75 nightlies of about 3 GB each filled the hub
- * machine's disk on 2026-10-26.
- */
-const KEPT_OUTPUTS = 2;
-/** The trees a build of `commit` runs in: one builds, one checks (when it must). */
-const treesOf = (commit: string) => {
-  const base = join(homedir(), ".worktrees", `release-${commit.slice(0, 12)}`);
-  return { build: base, check: `${base}-check` };
 };
 
 /** The merge check a release takes as its check (gate.md). */
@@ -212,27 +175,6 @@ const gatePassed = async (commit: string): Promise<boolean> => {
   );
   return ok;
 };
-const stagingOf = (commit: string): string =>
-  join(state, `staging-${commit.slice(0, 12)}`);
-
-/** Whether a target's builds are darwin's: a signed bundle. */
-const isDarwin = (target: string): boolean => target.startsWith("darwin");
-
-/**
- * What a step needs that an earlier step learned: filled in as the build
- * goes, read by the steps after.
- */
-interface Learned {
-  /** The Developer ID identity as the file rcodesign reads, once written. */
-  apple?: Promise<{ identity: string }>;
-  /**
-   * The draft release this build makes, by its exact tag, from the moment it
-   * is asked for: a build that fails or is stopped removes it (`created` has
-   * settled first, so a draft still being made is removed too).
-   */
-  draft?: { created: Promise<unknown>; tag: string };
-  manifest?: ReleaseManifest;
-}
 
 /**
  * Every step of one build of `current`, and what each waits for: the graph
@@ -243,35 +185,21 @@ const releaseSteps = (
   publish: boolean,
   run: Runner,
   learned: Learned,
-  secrets: ReturnType<typeof takeReleaseSecrets>,
+  secrets: ReleaseSecretsTaken,
   /** Holds a GitHub call from starting while a stop is clearing the run: it never returns then. */
   notStopped: () => Promise<void>,
   /** The merge checks passed the check on this commit's tree ({@link gatePassed}). */
   gated: boolean
 ): Step[] => {
-  const trees = treesOf(current.commit);
-  const staging = stagingOf(current.commit);
-  const proofBinary = join(staging, "cawco-proof");
-  const infoHome = join(staging, "binary-info-home");
-  const bundleFiles = join(staging, "agent-bundle");
-  const manifest = (): ReleaseManifest =>
-    learned.manifest ?? fail("the manifest is made by the version step");
-  const tag = (): string => releaseTag(manifest());
-  const archiveName = (target: string): string =>
-    `cawco-${tag()}-${target}.tar.gz`;
-  const step = (
-    name: string,
-    after: string[],
-    expect: number,
-    work: () => Promise<unknown>
-  ): Step => ({
-    name,
-    after,
-    expect,
-    run: async () => {
-      await work();
-    },
-  });
+  const context = stepContext(
+    current,
+    publish,
+    run,
+    learned,
+    secrets,
+    notStopped
+  );
+  const { trees } = context;
   const tree = (which: keyof typeof trees): Step[] => [
     // The release records (shipped.ts): the check's wire check (openapi:check) and the frame
     // read below hold this build to what is in people's hands, as tagged now.
@@ -282,121 +210,50 @@ const releaseSteps = (
       run([process.execPath, "install", "--frozen-lockfile"], trees[which])
     ),
   ];
-  /** A target's archive made and checked: its manifest row and its `.sha256` file. */
-  const recordArchive = async (
-    target: string,
-    executable: string
-  ): Promise<void> => {
-    const archive = archiveName(target);
-    const [sha256, binarySha256] = await Promise.all(
-      [join(staging, archive), executable].map(async (path) =>
-        new Bun.CryptoHasher("sha256")
-          .update(await Bun.file(path).bytes())
-          .digest("hex")
-      )
-    );
-    manifest().artifacts.push({
-      target,
-      archive,
-      sha256: sha256 as string,
-      size: (await stat(join(staging, archive))).size,
-      binarySha256: binarySha256 as string,
-      binarySize: (await stat(executable)).size,
-    });
-    await writeFile(
-      join(staging, `${archive}.sha256`),
-      `${sha256}  ${archive}\n`
-    );
-  };
   const targetSteps = (target: string): Step[] => {
-    const dir = join(staging, target);
-    const binary = join(dir, "cawco");
-    const compile = step(
+    const compileStep = step(
       `compile ${target}`,
       ["prepare", "version"],
       4.7,
-      async () => {
-        await mkdir(dir, { recursive: true });
-        await run(
-          [
-            process.execPath,
-            "scripts/build-binary.ts",
-            target,
-            binary,
-            manifest().version,
-            current.commit,
-            "--skip-prepare",
-          ],
-          trees.build
-        );
-      }
+      () => compile(context, target)
     );
-    const upload: Step[] = publish
+    const uploadStep: Step[] = publish
       ? [
-          step(
-            `upload ${target}`,
-            [`archive ${target}`, "draft"],
-            5,
-            async () => {
-              await notStopped();
-              await uploadAssets(tag(), [
-                join(staging, archiveName(target)),
-                join(staging, `${archiveName(target)}.sha256`),
-              ]);
-            }
+          step(`upload ${target}`, [`archive ${target}`, "draft"], 5, () =>
+            upload(context, target)
           ),
         ]
       : [];
     if (!isDarwin(target)) {
       return [
-        compile,
-        step(`archive ${target}`, [`compile ${target}`], 7.2, async () => {
-          await run(
-            [
-              "tar",
-              "--owner=0",
-              "--group=0",
-              "--numeric-owner",
-              "-czf",
-              join(staging, archiveName(target)),
-              "-C",
-              dir,
-              "cawco",
-            ],
-            trees.build
-          );
-          await recordArchive(target, binary);
-        }),
-        step(`run ${target}`, [`compile ${target}`, "build-info"], 3, () =>
-          runPublished(run, target, binary, infoHome, manifest())
+        compileStep,
+        step(`archive ${target}`, [`compile ${target}`], 7.2, () =>
+          archive(context, target)
         ),
-        ...upload,
+        step(`run ${target}`, [`compile ${target}`, "build-info"], 3, () =>
+          runPublished(
+            run,
+            target,
+            join(context.staging, target, "cawco"),
+            context.infoHome,
+            context.manifest()
+          )
+        ),
+        ...uploadStep,
       ];
     }
     // A darwin build ships as its own CawCo Agent.app, signed with the team's
     // Developer ID, all on this host
     // (sign-agent-bundle.ts), with its Info.plist from this commit.
     return [
-      compile,
-      step(
-        `sign ${target}`,
-        [`compile ${target}`, "bundle files"],
-        3.3,
-        async () => {
-          await cp(join(bundleFiles, "Info.plist"), join(dir, "Info.plist"));
-          learned.apple ??= writeAppleSecrets(join(staging, "apple"), secrets);
-          await signBundle(run, dir, (await learned.apple).identity);
-        }
+      compileStep,
+      step(`sign ${target}`, [`compile ${target}`, "bundle files"], 3.3, () =>
+        sign(context, target)
       ),
-      step(`archive ${target}`, [`sign ${target}`, "gate"], 8, async () => {
-        await archiveBundle(run, dir, manifest().version, archiveName(target));
-        await rename(
-          join(dir, archiveName(target)),
-          join(staging, archiveName(target))
-        );
-        await recordArchive(target, join(dir, AGENT_BUNDLE_EXECUTABLE));
-      }),
-      ...upload,
+      step(`archive ${target}`, [`sign ${target}`, "gate"], 8, () =>
+        archive(context, target)
+      ),
+      ...uploadStep,
     ];
   };
   const promotion = [
@@ -426,12 +283,10 @@ const releaseSteps = (
       ? []
       : [
           ...tree("check"),
-          step("check", ["install check"], 30, () =>
-            run([process.execPath, "run", "check", "--all"], trees.check)
-          ),
+          step("check", ["install check"], 30, () => check(context)),
         ]),
     step("live database", ["install build"], 15, () =>
-      liveDatabase(run, trees.build, staging)
+      liveDatabase(run, trees.build, context.staging)
     ),
     step(
       "gate",
@@ -441,409 +296,21 @@ const releaseSteps = (
         // Nothing to run: what the darwin archives and promotion wait for.
       }
     ),
-    step("version", ["install build"], 1, async () => {
-      learned.manifest = await manifestOf(run, current, trees.build);
-    }),
+    step("version", ["install build"], 1, () => version(context)),
     // The dashboard and every target-independent asset, once, for all seven compiles.
-    step("prepare", ["install build"], 36, () =>
-      run([process.execPath, "scripts/build-binary.ts", "prepare"], trees.build)
-    ),
-    step("info build", ["prepare", "version"], 4.7, () =>
-      run(
-        [
-          process.execPath,
-          "scripts/build-binary.ts",
-          "linux-x64",
-          proofBinary,
-          manifest().version,
-          current.commit,
-          "--proof",
-          "--skip-prepare",
-        ],
-        trees.build
-      )
-    ),
-    // The hub ↔ agent contract this build speaks, as the build itself says: a joined machine installs it only when
-    // it overlaps its hub's. The info build runs only under a scratch HOME and an isolated loopback hub
-    // (scripts/binary/proof-entry.ts), and inherits no credentials, so build-info is asked under exactly those.
-    step("build-info", ["info build"], 0.8, async () => {
-      await mkdir(infoHome, { recursive: true });
-      const { protocol } = JSON.parse(
-        await run(
-          [
-            "env",
-            "-i",
-            `PATH=${process.env.PATH ?? ""}`,
-            `HOME=${infoHome}`,
-            "HOST=127.0.0.1",
-            "CAWCO_HUB_PORT=43456",
-            "CAWCO_HUB_URL=http://127.0.0.1:43456",
-            proofBinary,
-            "build-info",
-          ],
-          trees.build,
-          true
-        )
-      ) as Pick<ReleaseManifest, "protocol">;
-      manifest().protocol = protocol;
-    }),
-    step("bundle files", ["install build"], 0.3, async () => {
-      await mkdir(bundleFiles, { recursive: true });
-      await run(
-        [
-          process.execPath,
-          "scripts/binary/info-plist.ts",
-          join(bundleFiles, "Info.plist"),
-        ],
-        trees.build
-      );
-    }),
+    step("prepare", ["install build"], 36, () => prepare(context)),
+    step("info build", ["prepare", "version"], 4.7, () => infoBuild(context)),
+    step("build-info", ["info build"], 0.8, () => buildInfo(context)),
+    step("bundle files", ["install build"], 0.3, () => bundleFiles(context)),
     ...(publish
-      ? [
-          step("draft", ["version"], 2, async () => {
-            await notStopped();
-            const { channel: on, commit, notes, version } = manifest();
-            const created = createDraft({
-              channel: on,
-              commit,
-              notes,
-              version,
-              tag: tag(),
-            });
-            // Recorded before the first await: a stop from here on removes it.
-            learned.draft = { created, tag: tag() };
-            await created;
-          }),
-        ]
+      ? [step("draft", ["version"], 2, () => makeDraft(context))]
       : []),
     ...TARGETS.flatMap(targetSteps),
-    step("promote", promotion, 5, () =>
-      promote(current, publish, staging, manifest(), secrets, notStopped)
-    ),
+    step("promote", promotion, 5, () => promoteStep(context)),
     ...(publish
-      ? [step("announce", ["promote"], 1, () => announce(manifest()))]
+      ? [step("announce", ["promote"], 1, () => announce(context))]
       : []),
   ];
-};
-
-const fail = (why: string): never => {
-  throw new Error(`Release build: ${why}`);
-};
-
-/** The version a build carries and its manifest so far: no protocol (build-info says it) and no artifact yet. */
-const manifestOf = async (
-  run: Runner,
-  current: Request,
-  checkout: string
-): Promise<ReleaseManifest> => {
-  const base = (
-    await Bun.file(join(checkout, "packages/cli/package.json")).json()
-  ).version as string;
-  // Only grows: no path installs a build whose sequence is not above the running one.
-  const sequence = Number(
-    await run(
-      ["git", "rev-list", "--first-parent", "--count", current.commit],
-      checkout,
-      true
-    )
-  );
-  let version: string;
-  let notes: string;
-  if (current.channel === "stable") {
-    if (
-      current.tag !== `v${base}` ||
-      (await run(
-        ["git", "rev-parse", `${current.tag}^{commit}`],
-        checkout,
-        true
-      )) !== current.commit
-    ) {
-      throw new Error(
-        "Stable builds require a matching vX.Y.Z tag at the input commit"
-      );
-    }
-    notes = await readFile(
-      join(checkout, "docs/releases", `${base}.md`),
-      "utf8"
-    );
-    if (!notes.trim()) {
-      throw new Error("Stable end-user release notes are empty");
-    }
-    version = base;
-  } else {
-    const { notes: given } = current;
-    if (!given?.trim()) {
-      throw new Error("Nightly builds need end-user notes: --notes <file>");
-    }
-    notes = given;
-    version = `${base}-nightly.${sequence}+${current.commit.slice(0, 12)}`;
-  }
-  return {
-    version,
-    commit: current.commit,
-    channel: current.channel,
-    sequence,
-    // How many database migrations this build carries; never installed over a newer database.
-    schemaVersion: (
-      (await Bun.file(
-        join(checkout, "packages/hub/drizzle/meta/_journal.json")
-      ).json()) as { entries: unknown[] }
-    ).entries.length,
-    protocol: { min: 0, max: 0 },
-    sessiondProtocol: SESSIOND_V1,
-    notes,
-    testSigned: false,
-    artifacts: [],
-  };
-};
-
-/**
- * How long the live database's check may run: it passes in about 3 s, and
- * one whose hub never answered sat at 100% CPU for 24 minutes, holding
- * the archives and promotion (nightly 0e08f76f8, 2026-11-04). Our call: far
- * past any real database's migrations, short enough that a hang fails the
- * release while its run is still watched.
- */
-const LIVE_DATABASE_LIMIT_S = 180;
-
-/**
- * The hub's own database, migrated by this build before it ships: a copy of
- * the live one on this host (`VACUUM INTO`, a consistent snapshot, as the
- * update helper takes it, cli binary-apply.ts), checked by
- * `migrations:check --db` (hub migrations-check.ts), which never writes the
- * copy it is given. A host with no hub database has nothing to check, and
- * says so; the check's own migrations:check runs over the fixture there.
- */
-const liveDatabase = async (
-  run: Runner,
-  checkout: string,
-  staging: string
-): Promise<void> => {
-  const live = hubDbPath();
-  if (!(await Bun.file(live).exists())) {
-    console.log(
-      `No hub database on this host at ${live}: the live database's migration check does not run`
-    );
-    return;
-  }
-  await mkdir(staging, { recursive: true });
-  const copy = join(staging, "live-database.sqlite");
-  await rm(copy, { force: true });
-  const handle = new Database(live, { readonly: true });
-  try {
-    handle.run(`VACUUM INTO '${copy.replaceAll("'", "''")}'`);
-  } finally {
-    handle.close();
-  }
-  try {
-    await run(
-      [process.execPath, "run", "migrations:check", "--db", copy],
-      join(checkout, "packages/hub"),
-      false,
-      {},
-      {
-        seconds: LIVE_DATABASE_LIMIT_S,
-        why: "The check's hub started on a copy of the live database and never answered: run the same check on a copy (`bun run migrations:check --db <copy>` in packages/hub) and read where it spins.",
-      }
-    );
-  } finally {
-    await rm(copy, { force: true });
-  }
-};
-
-/**
- * The arm64 userland a published linux-arm64 binary runs on here, through
- * the host's qemu-aarch64 binfmt entry: Debian trixie's glibc, which is all
- * a Bun binary links (libc, ld, libpthread, libdl, libm). Pinned by its
- * snapshot.debian.org address and sha256, unpacked once.
- */
-const arm64Sysroot = async (run: Runner): Promise<string> => {
-  if (
-    await Bun.file(join(arm64Root, "lib", "ld-linux-aarch64.so.1")).exists()
-  ) {
-    return arm64Root;
-  }
-  const deb = (
-    await ask("the arm64 glibc package", ARM64_LIBC.url, {}, 5 * 60_000)
-  ).bytes;
-  const sha256 = new Bun.CryptoHasher("sha256").update(deb).digest("hex");
-  if (sha256 !== ARM64_LIBC.sha256) {
-    throw new Error(
-      `The arm64 glibc package's sha256 is ${sha256}, not the pinned ${ARM64_LIBC.sha256}`
-    );
-  }
-  const temp = `${arm64Root}.${process.pid}`;
-  await rm(temp, { recursive: true, force: true });
-  await mkdir(temp, { recursive: true });
-  await writeFile(join(temp, "libc6.deb"), deb);
-  await run(["ar", "x", "libc6.deb"], temp);
-  await run(
-    [
-      "sh",
-      "-c",
-      "tar -xf data.tar.* && rm -f libc6.deb data.tar.* control.tar.* debian-binary && ln -s usr/lib lib",
-    ],
-    temp
-  );
-  await rm(arm64Root, { recursive: true, force: true });
-  await rename(temp, arm64Root);
-  return arm64Root;
-};
-
-/** `env`'s exit status when it cannot execute the program: here, an arm64 binary with no binfmt entry. */
-const CANNOT_EXECUTE = 126;
-
-/**
- * A published linux binary run on this host before it is published, under a
- * scratch HOME and nothing else of this run's environment: `--version`, and
- * `build-info`, which must name the build's version, commit and protocol.
- * linux-arm64 runs through the qemu-aarch64 binfmt entry on the pinned glibc
- * above; a host without the entry cannot run it, and the release stops there.
- */
-const runPublished = async (
-  run: Runner,
-  target: string,
-  binary: string,
-  home: string,
-  expect: Pick<ReleaseManifest, "commit" | "protocol" | "version">
-): Promise<void> => {
-  const env = [
-    "env",
-    "-i",
-    `PATH=${process.env.PATH ?? ""}`,
-    `HOME=${home}`,
-    ...(target === "linux-arm64"
-      ? [`QEMU_LD_PREFIX=${await arm64Sysroot(run)}`]
-      : []),
-  ];
-  const say = (args: string[]): Promise<string> =>
-    run([...env, binary, ...args], repo, true).catch((error: unknown) => {
-      if (String(error).includes(`exit status ${CANNOT_EXECUTE}:`)) {
-        throw new Error(
-          `The published ${target} binary cannot run on this host: it has no qemu-aarch64 binfmt entry. Install it: sudo apt install qemu-user-binfmt`,
-          { cause: error }
-        );
-      }
-      throw error;
-    });
-  const version = await say(["--version"]);
-  if (!version.includes(expect.version)) {
-    throw new Error(
-      `The published ${target} binary says ${version}, not ${expect.version}`
-    );
-  }
-  const info = JSON.parse(await say(["build-info"])) as Pick<
-    ReleaseManifest,
-    "commit" | "protocol" | "version"
-  >;
-  if (
-    info.version !== expect.version ||
-    info.commit !== expect.commit ||
-    JSON.stringify(info.protocol) !== JSON.stringify(expect.protocol)
-  ) {
-    throw new Error(
-      `The published ${target} binary's build-info ${JSON.stringify(info)} is not this build's ${JSON.stringify(expect)}`
-    );
-  }
-  console.log(`published ${target} binary ran: ${version}, build-info matches`);
-};
-
-/**
- * Every target built: the manifest signed, the
- * build moved into `--output`, and with `--publish` the draft promoted. A
- * finished build is promoted even when a newer commit was queued while it was
- * built: that one is built next (the loop at the end of this file).
- */
-const promote = async (
-  current: Request,
-  publish: boolean,
-  staging: string,
-  manifest: ReleaseManifest,
-  secrets: ReturnType<typeof takeReleaseSecrets>,
-  notStopped: () => Promise<void>
-): Promise<void> => {
-  manifest.artifacts.sort(
-    (a, b) =>
-      TARGETS.indexOf(a.target as (typeof TARGETS)[number]) -
-      TARGETS.indexOf(b.target as (typeof TARGETS)[number])
-  );
-  await writeFile(
-    join(staging, "SHA256SUMS"),
-    manifest.artifacts.map((a) => `${a.sha256}  ${a.archive}\n`).join("")
-  );
-  const privatePem = signingPem(secrets.manifestKey);
-  const { text: manifestText, signature } = signManifest(manifest, privatePem);
-  verifyManifest(
-    manifestText,
-    signature,
-    createPublicKey(privatePem)
-      .export({ type: "spki", format: "pem" })
-      .toString()
-  );
-  // The installer reads the version off the front of the signed text.
-  if (!manifestText.startsWith(`{"version":"${manifest.version}",`)) {
-    throw new Error("The manifest must begin with its version");
-  }
-  await writeFile(join(staging, "release.json"), manifestText);
-  await writeFile(join(staging, "release.json.sig"), `${signature}\n`);
-  // Not artifacts: the Info.plist the bundles were laid out with, and the
-  // Apple secrets' files, which never leave the staging.
-  await Promise.all(
-    ["agent-bundle", "apple"].map((name) =>
-      rm(join(staging, name), { recursive: true, force: true })
-    )
-  );
-  await mkdir(current.output, { recursive: true });
-  const published = join(current.output, manifest.version);
-  await rm(published, { recursive: true, force: true });
-  await rename(staging, published);
-  await writeFile(join(current.output, "release.json"), manifestText);
-  console.log(`Local artifacts ready: ${published}`);
-  if (publish) {
-    await notStopped();
-    await promoteRelease(releaseTag(manifest), published, manifest);
-  }
-  await pruneOutputs(current.output, published);
-};
-
-/**
- * `--output` cut to its newest {@link KEPT_OUTPUTS} builds by time (each a
- * folder holding its `release.json`; nothing else there is touched), `kept`
- * (the one just promoted) always among them, and the release cache cleared of
- * the `out-<sha>` folders an earlier ship.sh wrote, which nothing reads.
- */
-const pruneOutputs = async (folder: string, kept: string): Promise<void> => {
-  const builds = await Promise.all(
-    (await readdir(folder, { withFileTypes: true }))
-      .filter(
-        (entry) =>
-          entry.isDirectory() &&
-          existsSync(join(folder, entry.name, "release.json"))
-      )
-      .map(async ({ name }) => {
-        const path = join(folder, name);
-        return { path, time: (await stat(path)).mtimeMs };
-      })
-  );
-  builds.sort(
-    (a, b) =>
-      Number(b.path === kept) - Number(a.path === kept) || b.time - a.time
-  );
-  const legacy = (await readdir(failedEvidence))
-    .filter((name) => name.startsWith("out-"))
-    .map((name) => join(failedEvidence, name));
-  const gone = [
-    ...builds.slice(KEPT_OUTPUTS).map(({ path }) => path),
-    ...legacy,
-  ];
-  await Promise.all(
-    gone.map((path) => rm(path, { recursive: true, force: true }))
-  );
-  if (gone.length > 0) {
-    console.log(
-      `Removed ${gone.length} older release folder(s), keeping the newest ${KEPT_OUTPUTS} in ${folder}`
-    );
-  }
 };
 
 if (argv.includes("--dry-run")) {
