@@ -871,6 +871,12 @@ export interface HandoffDeps {
   readonly mayStart?: MayStart;
   /** The person's message this session has read still has no reply: `no_reply_needed` refuses. */
   readonly personOwed: () => boolean;
+  /**
+   * The project holding folder `cwd` on machine `machineId` ("" for this
+   * session's own), a project's folder on the hub included (server.ts
+   * `projectAtFolder`): the project `start_session` names.
+   */
+  readonly projectAt: (machineId: string, cwd: string) => string | undefined;
   /** The session's project: its delegate types shadow the fleet's. */
   readonly projectId?: string;
   /**
@@ -1631,6 +1637,7 @@ export const handoffActions = ({
   callId,
   started: startedBy,
   projectId,
+  projectAt,
   ledBy,
   forkOrigins = () => [],
   delegateList,
@@ -1651,6 +1658,20 @@ export const handoffActions = ({
       forkOrigins()
     );
     return { peer, followed };
+  };
+  /**
+   * What a `start_session` in `workdir` on `machineId` runs under: the
+   * project holding its folder, else the caller's, which its payload names
+   * so its row opens there (server.ts `projectOfStart`), and that project's
+   * catalog, whose own types shadow the fleet's.
+   */
+  const startProject = async (machineId: string, workdir: string) => {
+    const project = projectAt(machineId, workdir) ?? projectId;
+    return {
+      project,
+      inProject: project ? { projectId: project } : {},
+      types: await fetchDelegateTypes(project),
+    };
   };
   return {
     async delegateList(query) {
@@ -1971,8 +1992,10 @@ export const handoffActions = ({
       const machineId = target?.machineId ?? "";
       // Nothing is left to the machine's defaults: the type (or `medium`) says
       // what runs, and the caller's own mode is how it answers permissions.
-      // The caller's project's catalog: its own types shadow the fleet's.
-      const types = await fetchDelegateTypes(projectId);
+      const { project, inProject, types } = await startProject(
+        machineId,
+        workdir
+      );
       const { rows } = fleetInstances(fleet);
       const { type, harness, model } = resolveSpawnType(types, {
         type: typeName,
@@ -1999,8 +2022,9 @@ export const handoffActions = ({
         fallbackPermissionMode: callerMode(rows, instanceId),
         ...(type?.effort ? { effort: type.effort } : {}),
         ...(type?.skills?.length ? { skills: type.skills } : {}),
-        ...(typeName ? namedTypeSettings(type, projectId) : {}),
+        ...(typeName ? namedTypeSettings(type, project) : {}),
         ...(spinOff ? { scratch: { baseCwd: workdir } } : {}),
+        ...inProject,
         // Its starter: it nests under this session in every rail, as all
         // work another session started does; it is no work item, so it
         // reports nothing back.

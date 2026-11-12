@@ -39,7 +39,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import { devNull } from "node:os";
-import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
@@ -48,6 +48,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
+import { resolveReal } from "@cawco/core/workspace-judge";
 import { Elysia, status, t } from "elysia";
 
 /**
@@ -359,6 +360,30 @@ export const projectRoot = (projectId: string): string => {
     throw new FolderRefusal(400, `${projectId} is not a project id.`);
   }
   return join(PROJECTS_DIR, projectId);
+};
+
+/**
+ * The id of the project whose folder on the hub holds `cwd`: `projects/<id>`
+ * or a folder inside it, compared as real paths, so a link into the folder
+ * counts and one out of it does not. Undefined for any other folder, the
+ * trash and an area's included. Whether the project exists is the caller's
+ * to read.
+ */
+export const projectOfHubFolder = (cwd: string): string | undefined => {
+  if (!isAbsolute(cwd)) {
+    return undefined;
+  }
+  let inside: string;
+  try {
+    inside = relative(resolveReal(PROJECTS_DIR), resolveReal(cwd));
+  } catch {
+    // A `..` past a folder that does not exist names no folder yet.
+    return undefined;
+  }
+  const [id] = inside.split(sep);
+  return id && id !== ".." && !isAbsolute(inside) && PROJECT_ID.test(id)
+    ? id
+    : undefined;
 };
 
 // --- git -------------------------------------------------------------------

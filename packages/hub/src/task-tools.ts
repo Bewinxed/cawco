@@ -5,7 +5,10 @@
  * that have those tools (roles.ts: a session you started and the project's
  * Caw file and change them, a delegate that orchestrates changes them), and
  * a leaf proposes them through handoff. A session's project is its instance row's
- * `projectId`; a delegate's is its parent's. `task_start` starts an attempt
+ * `projectId`, written as it starts (server.ts `projectOfStart`): the
+ * project its start names, else its parent's, else the one holding its
+ * folder; a delegate's start names its parent's, and `start_session` names
+ * the one holding the folder it starts in. `task_start` starts an attempt
  * at a task (dispatch.ts) that reports to the session calling it, as
  * `delegate` with a `task` does; `task_retry` starts a fresh one in the
  * failed attempt's workspace.

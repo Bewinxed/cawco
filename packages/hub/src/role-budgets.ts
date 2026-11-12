@@ -281,6 +281,7 @@ export const standIn = (
     formerIds: () => ({}),
     forward: () => Promise.resolve(),
     callKeys: { once: (_actor, _name, _key, run) => run() },
+    projectAt: () => undefined,
     spawn: () => Promise.reject(new Error("A budget read starts nothing")),
     deliver: () => Promise.reject(new Error("measuring")),
     handOff: () => Promise.reject(new Error("measuring")),

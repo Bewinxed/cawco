@@ -1,15 +1,20 @@
 /**
  * Whose a session is: one project, its own. The hub writes a session's
- * `projectId` as it starts (a delegate, Caw's work and a check take their
- * parent's), and every reader reads that one field: the rail, the home, the
- * hub's stops before a project is forgotten. Nothing walks outward from a
- * session's folder to find more projects, so a project whose checkout holds
- * another's (one at the home folder) never takes the other's sessions.
+ * `projectId` as it starts (hub server.ts `projectOfStart`): the project its
+ * start names (a delegate's names its parent's; `start_session` names the
+ * one holding its folder, a project's folder on the hub included), else its
+ * parent's, else the one holding its folder. Every reader reads that one
+ * field: the rail, the home, the hub's stops before a project is forgotten.
+ * Nothing walks outward from a session's folder to find more projects, so a
+ * project whose checkout holds another's (one at the home folder) never
+ * takes the other's sessions.
  *
  * What has no row to read a project from (a machine's stored transcript, a
  * session started with no project) is placed once, by its folder: the
- * deepest place on its machine that holds it ({@link projectAt}). The hub's
- * migration that gave every older row its project used the same rule.
+ * deepest place on its machine that holds it ({@link projectAt}). The hub
+ * reads a project's folder on the hub and a delegate workspace's clone
+ * before that (server.ts `projectAtFolder`). The hub's migration that gave
+ * every older row its project used the same rule.
  */
 
 /** A place a project has: a folder on one machine. */

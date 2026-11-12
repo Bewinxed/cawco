@@ -1505,7 +1505,9 @@ export interface DbShape {
     sessionId: string,
     cwd?: MachinePath,
     tooling?: SessionTooling,
-    commands?: SessionCommands
+    commands?: SessionCommands,
+    /** The project holding a folder on a machine (server.ts `projectAtFolder`); default {@link DbShape.projectHolding}. */
+    placeAt?: (machineId: string, cwd: string) => string | undefined
   ) => void;
   /** Keeps a line its machine said on the session's row, the last {@link LIMIT_NOTES_KEPT} of its kind; false when one under its id is already kept. */
   readonly noteMachineLine: (
@@ -6494,7 +6496,14 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    noteInstanceSession: (id, sessionId, cwd, tooling, commands) => {
+    noteInstanceSession: (
+      id,
+      sessionId,
+      cwd,
+      tooling,
+      commands,
+      placeAt = store.projectHolding
+    ) => {
       // A harness key naming the row itself is confusion, never identity: hub
       // ids are hub-minted, harness sids are harness-minted, and the two only
       // meet when a caller echoed the instance id back as the session key
@@ -6537,7 +6546,7 @@ const make = async (path: string): Promise<DbShape> => {
           before.sessionId === null &&
           before.projectId === null &&
           before.parentInstanceId === null
-            ? store.projectHolding(before.machineId, cwd)
+            ? placeAt(before.machineId, cwd)
             : undefined;
         if (before) {
           keepReplacedConversation(tx, id, before, sessionId);

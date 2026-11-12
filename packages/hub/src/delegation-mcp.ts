@@ -243,6 +243,8 @@ export function createDelegationMcp(options: {
   /** The sessions `instanceId` was forked from, nearest first (server.ts `forkLineage`). */
   forkOrigins?: (instanceId: string) => ForkOrigin[];
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
+  /** The project holding folder `cwd` on `machineId` (server.ts `projectAtFolder`): what a session's start_session names. */
+  projectAt: (machineId: string, cwd: string) => string | undefined;
   /** A session's start_session, held until the session is in place; answers its settled folder (delegation-actions `spawn`). */
   spawn: (
     envelope: Parameters<HandoffDeps["spawn"]>[0],
@@ -502,6 +504,9 @@ export function createDelegationMcp(options: {
           throw new Error("Discovery cannot execute tools");
         },
         sendToUser: () => {
+          throw new Error("Discovery cannot execute tools");
+        },
+        projectAt: () => {
           throw new Error("Discovery cannot execute tools");
         },
         spawn: () =>
@@ -817,6 +822,9 @@ export function createDelegationMcp(options: {
         sendToUser: () => {
           throw new Error("Reading the catalog sends nothing");
         },
+        projectAt: () => {
+          throw new Error("Reading the catalog starts nothing");
+        },
         spawn: () =>
           Promise.reject(new Error("Reading the catalog starts nothing")),
       }).find((tool) => tool.name === name);
@@ -1068,6 +1076,8 @@ export function createDelegationMcp(options: {
       forkOrigins: () => options.forkOrigins?.(actor.id) ?? [],
       workItem: !!actor.workItemId,
       projectId: actor.projectId ?? undefined,
+      projectAt: (machineId, cwd) =>
+        options.projectAt(machineId || actor.machineId, cwd),
       delegateList: tree ? (query) => tree(actor, query) : undefined,
       personOwed: () => options.personOwed(actor),
       sendToUser: (message) => options.sendToUser(actor, message),
@@ -1240,6 +1250,9 @@ export function createDelegationMcp(options: {
         },
         sendToUser: () => {
           throw new Error("Instructions send nothing");
+        },
+        projectAt: () => {
+          throw new Error("Instructions start nothing");
         },
         spawn: () => Promise.reject(new Error("Instructions start nothing")),
       },

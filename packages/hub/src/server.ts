@@ -996,6 +996,7 @@ import {
   listFolder,
   onFolderCommits,
   projectFolderRoutes,
+  projectOfHubFolder,
   projectRoot,
   readFolderBytes,
   readFolderFile,
@@ -17215,12 +17216,42 @@ export const createServer = (
   };
 
   /**
-   * The one project a start's row opens in: its parent's, whatever started
-   * it under one (a delegate, Caw's work, a check, a person's start under a
-   * session), none included, since it is listed under that parent; else
-   * the project the start names; else the project whose place on its
-   * machine holds its folder most closely (core `projectAt`). Undefined:
-   * none holds it.
+   * The project whose folder holds `cwd` on `machineId`, the one rule every
+   * placement by folder reads: a project's own folder on the hub
+   * (`projects/<id>`), first, since a project whose checkout is the home
+   * folder would otherwise hold it; else a delegate workspace's clone,
+   * whose project is its work's, none included, for the same reason; else
+   * the project whose place on the machine holds it most closely (core
+   * `projectAt`). `~` is the machine's home, as a spawn's own folder is
+   * settled ({@link spawnPaths}). Undefined: none holds it.
+   */
+  const projectAtFolder = (
+    machineId: string,
+    cwd: string
+  ): string | undefined => {
+    const path = db.machinePathOn(machineId, cwd);
+    if (path instanceof MachinePathRefused) {
+      return undefined;
+    }
+    const hubHeld =
+      machineId === ownMachineIdRead ? projectOfHubFolder(path) : undefined;
+    if (hubHeld && db.project(hubHeld)) {
+      return hubHeld;
+    }
+    const clone = workItems.workspaceHolding(machineId, path);
+    if (clone) {
+      return clone.projectId;
+    }
+    return db.projectHolding(machineId, path);
+  };
+
+  /**
+   * The one project a start's row opens in: the project the start names
+   * (`start_session` names the one holding its folder, a delegate its
+   * parent's, a task's attempt its task's); else its parent's, whatever
+   * started it under one (the summariser, triage, a check), none included,
+   * since those run in its parent's workspace; else the project holding its
+   * folder ({@link projectAtFolder}). Undefined: none.
    */
   const projectOfStart = (
     parentInstanceId: string | undefined,
@@ -17228,16 +17259,16 @@ export const createServer = (
     machineId: string,
     cwd: string
   ): string | undefined => {
+    if (named && db.project(named)) {
+      return named;
+    }
     const [parent] = parentInstanceId
       ? db.getInstancesByIds([parentInstanceId])
       : [];
     if (parent) {
       return parent.projectId ?? undefined;
     }
-    if (named && db.project(named)) {
-      return named;
-    }
-    return db.projectHolding(machineId, cwd);
+    return projectAtFolder(machineId, cwd);
   };
 
   /** Sends a spawn and opens its row, on the account {@link spawnPlacement} gives. */
@@ -29053,6 +29084,7 @@ export const createServer = (
         ...(landed.cut ? { cut: true as const } : {}),
       }));
     },
+    projectAt: projectAtFolder,
     // A session's start_session: the caller's own machine unless it named
     // one, refused to a leaf (one that may not start any type), held until
     // in place.
@@ -40252,7 +40284,8 @@ export const createServer = (
                       ? reportedMachinePath(message.machineId, named.cwd)
                       : undefined,
                     named.tooling,
-                    named.commands
+                    named.commands,
+                    projectAtFolder
                   );
                   if (named.init) {
                     // The session naming its own conversation is the daemon's word

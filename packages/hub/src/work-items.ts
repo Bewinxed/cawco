@@ -10692,6 +10692,33 @@ export const createWorkItems = ({
     /** {@link holdsProjectOn}: whether a machine holds a delegate workspace of a project, one of its places. */
     holdsProjectOn,
 
+    /**
+     * The workspace whose own copy on `machineId` holds `path` (its clone,
+     * or a folder inside it), with the project its work belongs to: its
+     * newest item's, a gate workspace's being the workspace it checks.
+     * Undefined when `path` is in no workspace's copy. A Linux view's path
+     * is the person's folder ({@link ownCopy}), placed as that folder is.
+     */
+    workspaceHolding(
+      machineId: string,
+      path: MachinePath
+    ): { projectId: string | undefined } | undefined {
+      const workspace = [
+        ...db.activeWorkspacesOn(machineId),
+        ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
+      ].find(
+        (one) =>
+          !one.host &&
+          ownCopy(one) &&
+          (path === one.path || path.startsWith(`${one.path}/`))
+      );
+      if (!workspace) {
+        return undefined;
+      }
+      const [item] = db.workItemsIn(workspace.checksFor ?? workspace.id);
+      return { projectId: item?.projectId ?? undefined };
+    },
+
     /** Workspace `id` as a spawn or a stage is bounded to it; undefined when no workspace has that id. */
     workspaceRef(id: string): WorkspaceRef | undefined {
       const workspace = db.workspacesNamed(id).find((one) => one.id === id);
