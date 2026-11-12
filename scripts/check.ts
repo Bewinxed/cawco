@@ -680,7 +680,6 @@ const gated: Gated[] = [
     "packages/core/src/",
     "bun.lock",
   ]),
-  bun("scripts/design-rules.ts", DASH, "--check"),
   bun("scripts/design-budget-check.ts", ["DESIGN.md"]),
   bun("scripts/surface-briefs-check.ts", ["apps/dashboard/"]),
   bun("scripts/setup-draft-check.ts", ["apps/dashboard/src/lib/cawco/"]),

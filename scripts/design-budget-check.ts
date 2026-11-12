@@ -1,7 +1,7 @@
 /**
  * `bun scripts/design-budget-check.ts` (part of `bun run check`): DESIGN.md
- * holds only what spans screens, short enough that a design run reads it
- * whole without crowding out the design. Its body (everything after the
+ * holds the design judgements that span screens and no check can hold, short
+ * enough that every UI session reads it whole. Its body (everything after the
  * frontmatter's closing `---`) stays at or under {@link MAX_WORDS} words,
  * counted as `wc -w` counts them, and no paragraph runs past
  * {@link MAX_PARAGRAPH} characters. A paragraph is a run of non-blank lines;
@@ -14,11 +14,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
-const MAX_WORDS = 8000;
+const MAX_WORDS = 1100;
 const MAX_PARAGRAPH = 800;
 const LIST_ITEM = /^\s*(?:[-*+]|\d+\.)\s/u;
 const WHERE =
-  "A decision about one screen goes in that screen's surface brief (apps/dashboard/.impeccable/surfaces/, `impeccable surface-brief write <file> <body>`); DESIGN.md keeps the principles, what the tokens mean and the kit's recipes, tightened.";
+  "DESIGN.md holds only design judgements that span screens: a rule a tool can check becomes a check, a token's meaning stays in its name, and a decision about one screen goes in that screen's surface brief (apps/dashboard/.impeccable/surfaces/, `impeccable surface-brief write <file> <body>`).";
 
 const lines = readFileSync(join(ROOT, "DESIGN.md"), "utf8").split("\n");
 
