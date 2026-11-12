@@ -6,7 +6,7 @@
    * The one loading placeholder (DESIGN.md, Skeleton): a `surface-fill`
    * block at exactly the size of what it stands for. It pulses while it
    * waits (transitions.dev Skeleton loader and reveal): its opacity down to
-   * `--skeleton-pulse-floor` and back once a `--dur-skeleton-pulse`, on
+   * `--skeleton-pulse-floor` and back once a `--duration-skeleton-pulse`, on
    * ease-in-out; without motion it sits still. Where it hands its place to
    * what it stood for, its block goes by `revealOut` and the content comes
    * by `reveal` (motion/curves). Each prop names what it stands for,

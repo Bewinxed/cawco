@@ -136,7 +136,7 @@
       class="relative mx-auto mb-(--dock-foot) flex w-c-composer-w flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-tile max-desk:mx-space-3 max-desk:w-auto"
       data-composer
       data-safe-bottom
-      style:--dock-foot="calc(var(--space-4) + var(--safe-bottom))"
+      style:--dock-foot="calc(var(--spacing-space-4) + var(--safe-bottom))"
     >
       <MentionField
         bind:this={mentionField}
@@ -202,7 +202,7 @@
         role="dialog"
         aria-label="Jump"
         aria-modal="false"
-        style:--card-max-h="calc(100dvh - var(--c-top-bar-h) - var(--space-6))"
+        style:--card-max-h={"calc(100dvh - var(--spacing-c-top-bar-h) - var(--spacing-space-6))"}
       >
         <Finder
           bind:field

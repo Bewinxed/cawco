@@ -25,7 +25,7 @@
    *
    * A press on a bar, or a drag of it, selects its row (the row's settings
    * open under it). Unless ⌥ is held, a dragged edge settles on another
-   * bar's edge it comes within `--space-2` of, as on a duration token.
+   * bar's edge it comes within `--spacing-space-2` of, as on a duration token.
    * Under a finger a bar's ends grip outside it, so its whole width is its
    * body's: two 44px end areas covered a 29px bar, and no finger could
    * move it. Its ends are
@@ -127,8 +127,8 @@
       onretime(run, next.from, next.to, replay);
     }
   };
-  /** How near a dragged edge must come to another bar's to settle on it: `--space-2` of the lane, in ms. */
-  const NEAR_PX = browser ? numberOf("--space-2") : 0;
+  /** How near a dragged edge must come to another bar's to settle on it: `--spacing-space-2` of the lane, in ms. */
+  const NEAR_PX = browser ? numberOf("--spacing-space-2") : 0;
 
   /**
    * The bar of `run` made an interact.js target: its body draggable, its
@@ -348,7 +348,7 @@
    */
   const GRIPS = 3;
   let grip = $state(0);
-  const POINTER_FLOOR = browser ? numberOf("--c-pointer-floor") : 0;
+  const POINTER_FLOOR = browser ? numberOf("--spacing-c-pointer-floor") : 0;
 </script>
 
 <div
@@ -530,7 +530,7 @@
         aria-hidden="true"
         class="pointer-events-none absolute inset-y-0 start-(--from) grid place-items-center ps-space-1 text-ink-muted"
         style:--from="min({pct(span.to + times * period)}, calc(100% -
-        var(--icon-sm) - var(--space-1)))"
+        var(--spacing-icon-sm) - var(--spacing-space-1)))"
       >
         <IconRepeat class="size-icon-sm" />
       </span>

@@ -30,7 +30,7 @@
   the page.
 
   "Add a note" folds into the note's field on one clock (open over
-  `--dur-pop`, shut over `--dur-exit`, The Fast Exit Rule), inside the
+  `--duration-pop`, shut over `--duration-exit`, The Fast Exit Rule), inside the
   card's height tween; the note is kept as it is typed, and its field stays
   open while it holds words: emptied, it folds back into "Add a note" once
   focus leaves it. Its words name what the note is for when the program
@@ -389,7 +389,7 @@
   let noteKey = false;
   let noteFirst = true;
   // "Add a note" and the field fold on one clock, the field opening over
-  // --dur-pop and shutting over --dur-exit (The Fast Exit Rule), the card's
+  // --duration-pop and shutting over --duration-exit (The Fast Exit Rule), the card's
   // height tween following them (motion/morph); a key's press lands at once.
   $effect(() => {
     const shown = noteOpen;
@@ -406,7 +406,7 @@
       return;
     }
     const clock = {
-      ms: dur(shown ? "--dur-pop" : "--dur-exit"),
+      ms: dur(shown ? "--duration-pop" : "--duration-exit"),
       easing: ease("--ease-out"),
       fade: true,
     };

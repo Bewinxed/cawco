@@ -194,7 +194,7 @@
     const { machineId, toolId } = signinOf(key);
     const timer = setTimeout(() => {
       setOpen(machineId, toolId, false);
-    }, dur("--dur-hold"));
+    }, dur("--duration-hold"));
     return () => clearTimeout(timer);
   });
 
@@ -579,7 +579,7 @@
                 onchange={(next) => showRead(key, next)}
                 open={readOpen === key}
                 triggerClass="pointer-hit touch-hit rounded-xs text-ink-muted transition-colors hover:text-ink-strong"
-                width="var(--c-signin-pop-w)"
+                width="var(--spacing-c-signin-pop-w)"
               >
                 {#snippet trigger()}
                   {toolWords.signinUnknown}
@@ -611,7 +611,7 @@
             onclosefocus={() => closeFocus(key)}
             {open}
             triggerClass={buttonVariants({ variant: "outline", size: "xs" })}
-            width="var(--c-signin-pop-w)"
+            width="var(--spacing-c-signin-pop-w)"
           >
             {#snippet trigger()}
               <span class="grid">

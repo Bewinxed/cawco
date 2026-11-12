@@ -102,7 +102,7 @@
   });
 </script>
 
-<!-- A failure fades up in place (--dur-control), with a retry. -->
+<!-- A failure fades up in place (--duration-control), with a retry. -->
 {#if failed}
   <div
     data-slot="failed"

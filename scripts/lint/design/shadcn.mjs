@@ -422,7 +422,7 @@ export function inlineStyles(model, { allow = [] } = {}) {
     if (said) {
       report(
         at,
-        `${property} writes ${said}. A colour or a size is a theme token: write var(--…), and add the token to design/tokens/cawco.tokens.json first.`
+        `${property} writes ${said}. A colour or a size is a theme token: write var(--…), and add the token to apps/dashboard/src/lib/tokens/theme.css first.`
       );
     }
   };

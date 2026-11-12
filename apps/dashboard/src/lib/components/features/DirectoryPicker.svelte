@@ -59,7 +59,7 @@
   /**
    * A folder's listing arrives from the side it lies on: entering a folder
    * slides it in from 8% to the right, going up a level from 8% to the left,
-   * over --dur-panel on the drawer curve, fading in as it comes. The listing
+   * over --duration-panel on the drawer curve, fading in as it comes. The listing
    * it replaces goes at once. With reduced motion, the fade alone.
    */
   function drill(_node: Element, from: -1 | 0 | 1) {
@@ -68,7 +68,7 @@
     }
     const travel = motionOk.current ? from * 8 : 0;
     return {
-      duration: dur("--dur-panel"),
+      duration: dur("--duration-panel"),
       easing: easeDrawer,
       css: (t: number, u: number) =>
         `opacity: ${t}; transform: translateX(${(u * travel).toFixed(2)}%)`,

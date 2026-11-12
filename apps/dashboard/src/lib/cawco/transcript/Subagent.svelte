@@ -80,7 +80,7 @@
         data-slot="mark"
         aria-hidden="true"
         class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
-        style:--mark-bg="var(--mark-{markHue(seed)})"
+        style:--mark-bg="var(--color-mark-{markHue(seed)})"
         ><Sprite class="size-icon-sm block text-mark-glyph" /></span
       >
       <!-- A narrow head (DESIGN.md, The Truncate Inside Rule: the name
@@ -107,7 +107,7 @@
         <span
           data-slot="chev"
           aria-hidden="true"
-          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
+          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
           data-box><IconChevronRight class="size-icon-sm block" /></span
         >
         {#if title !== branch.subagentType}
@@ -134,7 +134,7 @@
         data-status={phase}
         data-subagent-phase={phase}
         data-box
-        style:--pill-py="calc(var(--space-row) + (1lh - 1ex) / 2)"
+        style:--pill-py="calc(var(--spacing-space-row) + (1lh - 1ex) / 2)"
         {@attach clock.watch}
       >
         {phase}
@@ -181,15 +181,15 @@
            shut): bits-ui keeps a closed Content's children mounted. The
            subagent's own transcript, in a well of its own. Concentric: the
            well's radius is the --radius-xs (5px) its rows carry plus its
-           --space-1 (4px) padding, 9px, so its rows' corners follow its own. The transcript's own x=0 is the text column; the
+           --spacing-space-1 (4px) padding, 9px, so its rows' corners follow its own. The transcript's own x=0 is the text column; the
            well reaches out past it by its padding. -->
       <CollapsibleLazy count={1} open={open.get()}>
         <div
           data-slot="inner"
           class="mt-space-2 mb-0 ms-(--inner-start) me-0 p-space-1 rounded-inner-well bg-surface-recess"
-          style:--inner-start="calc(var(--x-hang) - var(--space-1))"
+          style:--inner-start="calc(var(--x-hang) - var(--spacing-space-1))"
           style:--rail-head="var(--rail)"
-          style:--rail-gap="var(--space-4)"
+          style:--rail-gap="var(--spacing-space-4)"
         >
           {#each rows as row (row.key)}
             {#if row.kind === "tools"}

@@ -23,7 +23,7 @@ function clip(
   element: string,
   property: string,
   start: number,
-  token: `--dur-${string}`,
+  token: `--duration-${string}`,
   values: ClipValue[]
 ): ClipRead {
   ids += 1;
@@ -50,17 +50,27 @@ function clip(
 
 /** The button's press and its label's swap: its old words out and its new in, on the morph. */
 const swap = (start: number): ClipRead[] => [
-  clip(BUTTON, "Button “Create routine”", "--press-by", start, "--dur-morph", [
-    { property: "--press-by", from: "1", to: "0.97" },
-  ]),
-  clip(BUTTON, "Button “Create routine”", "opacity", start, "--dur-morph", [
-    { property: "opacity", from: "1", to: "0" },
-  ]),
+  clip(
+    BUTTON,
+    "Button “Create routine”",
+    "--press-by",
+    start,
+    "--duration-morph",
+    [{ property: "--press-by", from: "1", to: "0.97" }]
+  ),
+  clip(
+    BUTTON,
+    "Button “Create routine”",
+    "opacity",
+    start,
+    "--duration-morph",
+    [{ property: "opacity", from: "1", to: "0" }]
+  ),
 ];
 
 /** A line unfolding under its field: its height and its ink, together. */
 const unfold = (thing: string, element: string, start: number): ClipRead[] => [
-  clip(thing, element, "height, opacity", start, "--dur-pop", [
+  clip(thing, element, "height, opacity", start, "--duration-pop", [
     { property: "height", from: "0px", to: "20px" },
     { property: "opacity", from: "0", to: "1" },
   ]),

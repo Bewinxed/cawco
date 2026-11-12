@@ -52,7 +52,8 @@
   activityOf={(id) => cawco.activityOf(id)}
   bind:this={view}
   class={className}
-  fillOf={(row: StopRow) => `var(--mark-${markHue(sessionPlace(row.s.id))})`}
+  fillOf={(row: StopRow) =>
+    `var(--color-mark-${markHue(sessionPlace(row.s.id))})`}
   {job}
   nameOf={machineName}
   onarrive={(row) => stopWork.arrive(job, row)}

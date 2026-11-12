@@ -9,7 +9,7 @@
    * - `lost`: the socket dropped and the next try is counted down.
    * - `retrying`: a try is out now.
    * - `refused`: this page has never reached the hub; its address shows.
-   * - `back`: the hub answered again after the band showed, for --dur-hold.
+   * - `back`: the hub answered again after the band showed, for --duration-hold.
    * - `older`: the page is on an older wire than the hub's, and reads
    *   nothing more until the update toast's reload: `offered` while the
    *   toast offers the new build (its Update now catches the page up), else
@@ -29,8 +29,8 @@
    * opens and back up as it leaves, with it, never jumping (owner: the band
    * hid "No limits yet" under it on a phone). Its row opens from nothing on
    * the band's own clock while the band slides down from under the bar,
-   * over --dur-panel on the drawer curve, and both go back up over
-   * --dur-exit on ease-out (DESIGN.md, The Fast Exit Rule), as CSS
+   * over --duration-panel on the drawer curve, and both go back up over
+   * --duration-exit on ease-out (DESIGN.md, The Fast Exit Rule), as CSS
    * transitions on its own `data-open`, so a socket that blips turns it
    * back from where it is drawn (The Interruptible Rule). With less motion
    * it fades in place. While it leaves it keeps the words it had, so it
@@ -110,7 +110,7 @@
 
   /**
    * The hub answered after the band had something to say: "back" stands for
-   * --dur-hold. `updated` is the build an announced update went to (null
+   * --duration-hold. `updated` is the build an announced update went to (null
    * when unnamed); undefined after any other outage.
    */
   let back = $state<{ updated: string | null | undefined } | null>(null);
@@ -131,7 +131,7 @@
         clearTimeout(backTimer);
         backTimer = setTimeout(() => {
           back = null;
-        }, dur("--dur-hold"));
+        }, dur("--duration-hold"));
       }
     });
   });
@@ -316,7 +316,7 @@
         data-open={band ? "" : undefined}
         data-tone={tone}
         inert={!band}
-        style:--band-air="var(--space-2)"
+        style:--band-air="var(--spacing-space-2)"
         {@attach morph()}
       >
         <!-- The sentence morphs as a paragraph (`wrap`): its countdown ticks

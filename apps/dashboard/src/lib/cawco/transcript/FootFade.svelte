@@ -11,8 +11,8 @@
    * tab's composer floats over the transcript, so the fade runs under its
    * standing box; docked, the composer has its own place and the fade is a
    * thin edge at the scrollport's foot. With no clearance named it is
-   * `--c-foot-fade`. It is solid at its foot. With `solid` (a length from
-   * the foot) it is solid that high, then dissolves over `--space-8`: rows
+   * `--spacing-c-foot-fade`. It is solid at its foot. With `solid` (a length from
+   * the foot) it is solid that high, then dissolves over `--spacing-space-8`: rows
    * pass behind it as they pass behind the pill, and nothing stands over
    * words being read.
    */
@@ -28,9 +28,9 @@
   class="absolute inset-x-0 bottom-0 z-1 h-(--foot-fade-h) pointer-events-none bg-(image:--foot-fade-image) data-standing:bg-(image:--foot-fade-standing-image)"
   style:--fade-solid={solid ?? null}
   style:--foot-fade-h={solid === undefined
-    ? "var(--composer-clearance, var(--c-foot-fade))"
-    : `calc(${solid} + var(--space-8))`}
-  style:--foot-fade-image={"linear-gradient(to top, var(--surface-recess) 22%, var(--surface-recess-clear))"}
-  style:--foot-fade-standing-image={"linear-gradient(to top, var(--surface-recess) var(--fade-solid), var(--surface-recess-clear))"}
+    ? "var(--composer-clearance, var(--spacing-c-foot-fade))"
+    : `calc(${solid} + var(--spacing-space-8))`}
+  style:--foot-fade-image={"linear-gradient(to top, var(--color-surface-recess) 22%, var(--color-surface-recess-clear))"}
+  style:--foot-fade-standing-image={"linear-gradient(to top, var(--color-surface-recess) var(--fade-solid), var(--color-surface-recess-clear))"}
   transition:fade
 ></div>

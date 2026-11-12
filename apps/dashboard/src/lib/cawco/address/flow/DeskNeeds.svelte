@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Caw's Needs you at its panel's width (--c-panel-w, 380): the address's
+   * Caw's Needs you at its panel's width (--spacing-c-panel-w, 380): the address's
    * onboarding row over a project's budget row (NeedsCard's own NeedsRow).
    * The row grows into the tray in place, its box taking the tray's height
    * in the flow while the row under it slides down (The One Object Rule,

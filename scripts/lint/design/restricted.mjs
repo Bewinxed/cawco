@@ -19,7 +19,7 @@
 //   one axis, through the boxes a person scrolls.
 import { eachNode } from "./model.mjs";
 
-const DURATION_TOKEN = /^--dur-/u;
+const DURATION_TOKEN = /^--duration-/u;
 const DIMENSIONS = new Set([
   "offsetHeight",
   "offsetWidth",

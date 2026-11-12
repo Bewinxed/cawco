@@ -11,14 +11,14 @@ import { dur, easeOut, motionOk, popScale } from "./curves.svelte";
 export function glyphIn(_node: Element): TransitionConfig {
   const scale = motionOk.current ? popScale() : 1;
   return {
-    duration: dur("--dur-control"),
+    duration: dur("--duration-control"),
     easing: easeOut,
     css: (t) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
   };
 }
 export function glyphOut(_node: Element): TransitionConfig {
   return {
-    duration: dur("--dur-control"),
+    duration: dur("--duration-control"),
     easing: easeOut,
     css: (t) => `opacity: ${t}`,
   };

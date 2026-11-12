@@ -33,7 +33,7 @@ import type { Kit, Spec } from "../../kit";
 
 /** How long one states file may take to say its shape or why not, its graph's first transform inside it. Ours. */
 const SAY_MS = 90_000;
-/** How long past its first word a states file is watched for another: past the house's longest motion that ends (`--dur-goo-settle`). Ours. */
+/** How long past its first word a states file is watched for another: past the house's longest motion that ends (`--duration-goo-settle`). Ours. */
 const AFTER_MS = 1500;
 
 /** Every states file under the dashboard's src, as the stage finds them (core `STORY_FILE`). */

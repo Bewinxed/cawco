@@ -41,7 +41,7 @@
       ? "border-brand-solid"
       : "border-border-control can-hover:has-[button:hover]:bg-surface-hover",
     card.against &&
-      "outline-solid outline-(length:--c-change-ring-width) outline-c-change-ring",
+      "outline-solid outline-(length:--spacing-c-change-ring-width) outline-c-change-ring",
   ]}
   style:--xy-handle-background-color="transparent"
   style:--xy-handle-border-color="transparent"

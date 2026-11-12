@@ -265,14 +265,14 @@
    * their own; this only sets the file's `Caw` view model and hears its
    * `entered` (assets/mascot/README.md, Contract). He comes in by his
    * status's drawn enter, or where it has none by a fade up from
-   * --leave-scale over --dur-pop, and `onentered` says when that has ended,
+   * --leave-scale over --duration-pop, and `onentered` says when that has ended,
    * so a place can keep him until then. He goes the same way from any
    * drawing: he holds the one he is on and fades out to --leave-scale over
-   * --dur-fade, so what he stood in for is never under a looping Caw. With
+   * --duration-fade, so what he stood in for is never under a looping Caw. With
    * `present` off `ongone` says when he has gone; on a status change the
    * new status's file comes in once the old one has, so one file is alive
    * at a time. With less motion there is no enter and no scale: he fades
-   * (--dur-fade on --ease-out) in, across and out.
+   * (--duration-fade on --ease-out) in, across and out.
    *
    * `size` is the side of his still in px. His acting reaches past it, so
    * the canvases spill over the box unclipped and never take a pointer.
@@ -493,7 +493,7 @@
 
   /**
    * `layer`'s Caw goes: he holds the drawing he is on and fades out over
-   * --dur-fade, shrinking to --leave-scale, from wherever a fade in had
+   * --duration-fade, shrinking to --leave-scale, from wherever a fade in had
    * brought him; with less motion the fade alone. Then the status asked
    * for comes in afresh, or with `present` off the page is left empty.
    */
@@ -505,7 +505,7 @@
       ? { opacity: 0 }
       : { opacity: 0, transform: `scale(${numberOf("--leave-scale")})` };
     layer.fade = layer.canvas?.animate([end], {
-      duration: dur("--dur-fade"),
+      duration: dur("--duration-fade"),
       easing: ease("--ease-out"),
       fill: "forwards",
     });
@@ -635,8 +635,8 @@
    * Shows `layer`, whose file has begun: his drawn enter is playing, and the
    * file says `entered` at its end. A file with no drawn enter (`enters`
    * off) has him there already, so the canvas fades in from --leave-scale
-   * over --dur-pop; with less motion every file holds his still and the
-   * canvas fades in over --dur-fade, across the Caw below.
+   * over --duration-pop; with less motion every file holds his still and the
+   * canvas fades in over --duration-fade, across the Caw below.
    */
   function show(layer: Layer, canvas: HTMLCanvasElement) {
     const first = !layers.some((l) => l.shown);
@@ -662,7 +662,7 @@
     }
     layer.fade = reducedMotion
       ? canvas.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: dur("--dur-fade"),
+          duration: dur("--duration-fade"),
           easing: ease("--ease-out"),
         })
       : canvas.animate(
@@ -670,7 +670,7 @@
             { opacity: 0, transform: `scale(${numberOf("--leave-scale")})` },
             { opacity: 1, transform: "none" },
           ],
-          { duration: dur("--dur-pop"), easing: ease("--ease-out") }
+          { duration: dur("--duration-pop"), easing: ease("--ease-out") }
         );
     layer.fade.finished
       .then(() => {

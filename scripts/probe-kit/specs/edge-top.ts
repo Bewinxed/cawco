@@ -24,7 +24,7 @@
  * phone outline's half height from the first point of its first arc (18
  * less its y), each one hairline of glass inside the glass's own; the
  * machines' computed `padding-inline`; Jump's glyph's computed size and ink
- * against `--ink-muted`; and the ink gaps from boxes: Jump's glyph to the
+ * against `--color-ink-muted`; and the ink gaps from boxes: Jump's glyph to the
  * machines' symbol (each the union of its shapes' geometry boxes, grown by
  * half a stroke where stroked), and the machines' number to Caw's face (the
  * number's advance box narrowed to its ink by the canvas's measure of the
@@ -158,7 +158,7 @@ const faceInk = (page: Page) =>
     return null;
   });
 
-/** The rim's first arcs' paths, the machines' padding and Jump's glyph's size and ink, with `--ink-muted` resolved. */
+/** The rim's first arcs' paths, the machines' padding and Jump's glyph's size and ink, with `--color-ink-muted` resolved. */
 const glassStyles = (page: Page) =>
   page.evaluate(
     ([machinesSel, jumpSel]) => {
@@ -166,7 +166,7 @@ const glassStyles = (page: Page) =>
       const machines = document.querySelector(machinesSel as string);
       const jump = document.querySelector(jumpSel as string);
       const muted = document.createElement("span");
-      muted.style.color = "var(--ink-muted)";
+      muted.style.color = "var(--color-ink-muted)";
       document.body.append(muted);
       const inkMuted = getComputedStyle(muted).color;
       muted.remove();
@@ -262,11 +262,11 @@ const glassLeg = async (kit: Kit, page: Page, leg: string, desk: boolean) => {
     `padding-inline ${g.pad?.join(" ") ?? "none"}`
   );
   kit.check(
-    `${leg}: Jump's glyph is ${GLASS.jump} square in --ink-muted`,
+    `${leg}: Jump's glyph is ${GLASS.jump} square in --color-ink-muted`,
     g.jump?.inline === GLASS.jump &&
       g.jump?.block === GLASS.jump &&
       g.jump?.color === g.inkMuted,
-    `${g.jump?.inline}×${g.jump?.block}, color ${g.jump?.color}, --ink-muted ${g.inkMuted}`
+    `${g.jump?.inline}×${g.jump?.block}, color ${g.jump?.color}, --color-ink-muted ${g.inkMuted}`
   );
   kit.check(
     `${leg}: ink gaps read`,

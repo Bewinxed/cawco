@@ -1,13 +1,13 @@
 /**
  * A pen stroke held still at its end becomes the shape it was drawn as
  * (Projects spec §5.10, slice 5a): a pen that stays within {@link HOLD_PX}
- * for `--dur-press-hold` before it lifts has its freedraw replaced by the
+ * for `--duration-press-hold` before it lifts has its freedraw replaced by the
  * shape core shapes.ts reads in it, on the stroke's own box, in one step of
  * the canvas's history and one transaction of its doc. A stroke lifted
  * without the hold, or one that is no shape well enough, stays as drawn.
  *
  * The swap crossfades on one clock (DESIGN.md: one shared clock, opacity
- * only): a Web Animation `shape-swap` of `--dur-fade` on `--ease-out` is the
+ * only): a Web Animation `shape-swap` of `--duration-fade` on `--ease-out` is the
  * clock, and each frame reads its progress into the freedraw's ghost (the
  * stroke drawn on, fading out) and the shape (fading up to its own
  * opacity). Neither is written: the doc holds the shape at its own opacity
@@ -201,7 +201,7 @@ const crossfade = (
   const own = shape.opacity;
   view.ghosts.add(ghost.id);
   view.fading.set(shape.id, own);
-  const run = clock(CLOCK, tokenMs("--dur-fade"));
+  const run = clock(CLOCK, tokenMs("--duration-fade"));
   const draw = (progress: number) => {
     const elements: ExcalidrawElement[] = api
       .getSceneElementsIncludingDeleted()

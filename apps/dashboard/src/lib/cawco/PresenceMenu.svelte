@@ -128,7 +128,7 @@
                 data-slot="presence-dot"
                 aria-hidden="true"
                 class={[
-                  "absolute -end-px -bottom-px size-(--status-dot-size) rounded-pill ring-2 ring-surface-page transition-[background-color,box-shadow] duration-(--dur-control) ease-out",
+                  "absolute -end-px -bottom-px size-(--status-dot-size) rounded-pill ring-2 ring-surface-page transition-[background-color,box-shadow] duration-(--duration-control) ease-out",
                   dot === "here" && "bg-presence-online",
                   dot === "away" &&
                     "bg-surface-page inset-ring-1 inset-ring-presence-off",

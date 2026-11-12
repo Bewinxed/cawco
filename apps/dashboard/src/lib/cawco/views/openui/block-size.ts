@@ -20,7 +20,7 @@ export const MEASURE_ROOM = BLOCK_ROOM.medium;
 
 /**
  * A picture given no size: its own size up to the reply's measure, and in
- * a Row a share of the row, never under `--c-picture-min` before the Row
+ * a Row a share of the row, never under `--spacing-c-picture-min` before the Row
  * wraps it.
  */
 export const PICTURE_ROOM =

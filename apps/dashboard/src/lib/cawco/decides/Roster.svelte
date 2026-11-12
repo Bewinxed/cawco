@@ -74,7 +74,7 @@
     kinds.filter((kind) => routes[kind.id] === member);
 
   const [send, receive] = crossfade({
-    duration: () => (motionOk.current ? dur("--dur-morph") : 0),
+    duration: () => (motionOk.current ? dur("--duration-morph") : 0),
     easing: easeOut,
   });
 
@@ -110,7 +110,7 @@
 
 <div
   class="grid grid-cols-(--roster-cols) gap-space-3"
-  style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--c-roster-card-min)), calc((100% - 3 * var(--space-3)) / 4)), 1fr))"}
+  style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
 >
   {#each members as member (member.id)}
     {@const holds = kindsOf(member.id)}

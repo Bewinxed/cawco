@@ -94,13 +94,13 @@
   };
   /** Each column's width, its head's and its cells' alike; the title takes the rest. */
   const COL_W: Record<string, string> = {
-    pick: "calc(var(--icon-md) + 2 * var(--space-3))",
-    id: "var(--c-task-col-id-w)",
-    stage: "var(--c-task-col-stage-w)",
-    labels: "var(--c-task-col-labels-w)",
-    todos: "var(--c-task-col-todos-w)",
-    created: "var(--c-task-col-time-w)",
-    updated: "var(--c-task-col-time-w)",
+    pick: "calc(var(--spacing-icon-md) + 2 * var(--spacing-space-3))",
+    id: "var(--spacing-c-task-col-id-w)",
+    stage: "var(--spacing-c-task-col-stage-w)",
+    labels: "var(--spacing-c-task-col-labels-w)",
+    todos: "var(--spacing-c-task-col-todos-w)",
+    created: "var(--spacing-c-task-col-time-w)",
+    updated: "var(--spacing-c-task-col-time-w)",
   };
   /** A column the ledger holds in its own order. */
   const fixed = { enableSorting: false } as const;

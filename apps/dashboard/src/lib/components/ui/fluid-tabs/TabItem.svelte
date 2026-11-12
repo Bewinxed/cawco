@@ -386,8 +386,8 @@
     "in-variant-folder:[&:not(:has([data-slot=hit]:last-child))]:pe-(--fold-end-pad)",
     "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
     "in-variant-folder:data-tab-item-selected:text-ink-muted",
-    "motion-safe:transition-[color] motion-safe:duration-(--dur-ghost) motion-safe:ease-out",
-    "in-variant-folder:motion-safe:[transition:color_var(--dur-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
+    "motion-safe:transition-[color] motion-safe:duration-(--duration-ghost) motion-safe:ease-out",
+    "in-variant-folder:motion-safe:[transition:color_var(--duration-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "[[data-variant=folder]_[data-ride]_&]:transition-off",
     "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",
     // A glyph alone is narrower than a finger: under one it takes the touch
@@ -401,7 +401,7 @@
   bind:this={node}
   style:--pick={pick}
   style:--z-rest={restAt}
-  style:--end-pad="calc(var(--px) - var(--space-2))"
+  style:--end-pad="calc(var(--px) - var(--spacing-space-2))"
   style:--fold-end-pad="var(--px-end, var(--px))"
 >
   {#if folder && shape}
@@ -494,7 +494,7 @@
     data-hit
     aria-selected={selected}
     class="touch-hit pick-inherit static z-3 flex min-w-0 flex-auto items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px-end,var(--px)) before:absolute before:inset-0 before:-z-1 in-variant-folder:aria-selected:before:-inset-x-(--flare) in-variant-folder:aria-selected:before:clip-tab-foot"
-    style:--hit-gap="calc(var(--gap) + var(--space-1))"
+    style:--hit-gap="calc(var(--gap) + var(--spacing-space-1))"
     style:--hit-ps="var(--px-start, var(--px))"
     draggable={href ? "false" : undefined}
     {href}

@@ -111,7 +111,7 @@
   /** The harness mark arrives from the side the card moved toward. */
   function harnessIn(_node: Element): TransitionConfig {
     return {
-      duration: reduceMotion.current ? 0 : dur("--dur-morph"),
+      duration: reduceMotion.current ? 0 : dur("--duration-morph"),
       easing: easeOut,
       css: (t) =>
         `transform: translateX(calc(var(--pop-rise) * ${1 - t} * var(--dir))); opacity: ${t}`,
@@ -453,7 +453,7 @@
             },
             { transform: "none", opacity: 1 },
           ],
-          { duration: dur("--dur-morph"), easing: CURVE.out }
+          { duration: dur("--duration-morph"), easing: CURVE.out }
         );
       }
     });
@@ -509,7 +509,7 @@
   }
   /*
    * A change that lands says so where it was made: a check on its line for
-   * the hold (--dur-hold), in the place its pending and failed lines take.
+   * the hold (--duration-hold), in the place its pending and failed lines take.
    * Only a change seen going from pending to settled while the card is on
    * this session counts — opening the card shows no old news.
    */
@@ -580,7 +580,7 @@
             slot,
             setTimeout(() => {
               done[slot] = false;
-            }, dur("--dur-hold"))
+            }, dur("--duration-hold"))
           );
         }
       }
@@ -840,8 +840,8 @@
         class="pb-space-2"
         data-copy-refused
         details={copyFault?.text}
-        end="var(--space-5)"
-        indent="var(--space-5)"
+        end="var(--spacing-space-5)"
+        indent="var(--spacing-space-5)"
         reason={copyFault ? copyRefused(copyFault.what) : null}
       />
     </div>
@@ -997,7 +997,7 @@
         <!-- The margin above the line plus the line itself. -->
         <div
           class="relative grid min-h-(--feedback-min) text-size-body leading-body"
-          style:--feedback-min="calc(var(--space-2) + 1lh)"
+          style:--feedback-min="calc(var(--spacing-space-2) + 1lh)"
         >
           {@render feedback("model")}
           {@render feedback("effort")}

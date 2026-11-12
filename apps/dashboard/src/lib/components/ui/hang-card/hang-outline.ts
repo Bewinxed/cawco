@@ -46,11 +46,11 @@ export function outlineLayer(card: HTMLElement): OutlineLayer {
   svg.setAttribute("data-slot", "hang-outline");
   svg.setAttribute("aria-hidden", "true");
   svg.innerHTML = `<defs>
-<linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" data-slot="rim"/><stop offset="1" class="[stop-color:var(--border-control)]"/></linearGradient>
+<linearGradient id="${id}-ink" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="0" y2="1"><stop offset="0" data-slot="rim"/><stop offset="1" class="[stop-color:var(--color-border-control)]"/></linearGradient>
 <clipPath id="${id}-under"><rect data-slot="under" x="-100000" y="0" width="200000" height="200000"/></clipPath>
 <filter id="${id}-cast" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-<feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dy="18" result="far"/><feFlood class="[flood-color:var(--shadow-tint-3)]"/><feComposite in2="far" operator="in" result="farInk"/>
-<feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feOffset dy="2" result="near"/><feFlood class="[flood-color:var(--shadow-tint)]"/><feComposite in2="near" operator="in" result="nearInk"/>
+<feGaussianBlur in="SourceAlpha" stdDeviation="24"/><feOffset dy="18" result="far"/><feFlood class="[flood-color:var(--color-shadow-tint-3)]"/><feComposite in2="far" operator="in" result="farInk"/>
+<feGaussianBlur in="SourceAlpha" stdDeviation="3"/><feOffset dy="2" result="near"/><feFlood class="[flood-color:var(--color-shadow-tint)]"/><feComposite in2="near" operator="in" result="nearInk"/>
 <feMerge result="both"><feMergeNode in="farInk"/><feMergeNode in="nearInk"/></feMerge>
 <feComposite in="both" in2="SourceAlpha" operator="out"/>
 </filter>
@@ -77,7 +77,10 @@ export function outlineLayer(card: HTMLElement): OutlineLayer {
       under.setAttribute("y", String(shape.tab.bottom));
       gradient.setAttribute("y1", String(shape.tab.top + shape.box.radius));
       gradient.setAttribute("y2", String(shape.tab.bottom - shape.box.flare));
-      rimStop.style.setProperty("stop-color", rim || "var(--border-control)");
+      rimStop.style.setProperty(
+        "stop-color",
+        rim || "var(--color-border-control)"
+      );
     },
     show(shown) {
       svg.style.display = shown ? "" : "none";

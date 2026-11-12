@@ -116,6 +116,9 @@ export default {
         "scripts/lint/biome-plugins.ts",
         // scripts/check.ts:533
         "scripts/case-clash-check.ts",
+        // Run by hand, and by a branch written with the old token names after it rebases.
+        "scripts/codemods/tokens-to-theme.ts",
+        "scripts/codemods/tokens-to-theme.proof.ts",
         // scripts/check.ts, beside compress-answer-check.ts
         "scripts/shell-bodies-check.ts",
         // scripts/check.ts, beside compress-answer-check.ts
@@ -336,12 +339,14 @@ export default {
         "scripts/spacing-ratchet.ts",
         // scripts/check.ts:582
         "scripts/css-layers-check.ts",
+        // scripts/check.ts:595
+        "scripts/role-order.ts",
       ],
       project: [
         // Knip's default, with the extensions its Svelte and Tailwind compilers add here.
         "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,svelte,css}",
-        // Written by `bun run tokens` (scripts/build-tokens.ts:87-102) and `bun run variants` (scripts/build-variants.ts:32).
-        "!src/lib/tokens/{tokens.css,tokens.ts,theme.css,selection.css,variants.css}",
+        // The Tailwind theme and the selection sheet are written by hand; `bun run variants` writes variants.css (scripts/build-variants.ts:32).
+        "!src/lib/tokens/{theme.css,selection.css,variants.css}",
         // Written by scripts/house-faces.ts:40.
         "!src/house-faces/**",
         // The planted mistakes scripts/outro-reads-check.ts reads, not code run.
@@ -393,6 +398,11 @@ export default {
     "packages/hub": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
+      // The generators other projects' design systems are made with (design_write), whose dashboard use is gone: the Tailwind theme (`tailwindThemeCss`) and its helpers.
+      ignoreIssues: {
+        "src/design-tokens.ts": ["exports"],
+        "src/design-css.ts": ["exports"],
+      },
       // knip.dev/reference/configuration: "In files with multiple exports, some of them might be used only internally. If these exports should not be reported, there is a `ignoreExportsUsedInFile` option available." Here for interfaces and types only: createServer's declared type reaches types no file imports (db/index.ts's DbShape names MemoryVersion, MemoryDocRow, SkillVersion and HookVersionMaterial; server.ts BridgedHeldPlace; project-delegate-types.ts DelegateCatalog), and `tsc -b` refuses them unexported with TS4023/TS4058 ("Exported variable 'createServer' has or is using name … but cannot be named"); they are named schemas in openapi.json too. Knip counts a type that another used export of its file names only under this option (node_modules/knip/dist/graph/analyze.js:39-42, `isReferencedInUsedExport`).
       ignoreExportsUsedInFile: { interface: true, type: true },
       entry: [

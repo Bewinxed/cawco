@@ -226,7 +226,7 @@ export const leaving = (node: HTMLElement) => node.inert;
 /**
  * The same fold for content an `{#if}` mounts and unmounts, as a Svelte
  * transition: `in:unfold` grows it from nothing to its measured height
- * (--dur-pop), `out:unfold` folds it back (--dur-exit), fading with the height, so
+ * (--duration-pop), `out:unfold` folds it back (--duration-exit), fading with the height, so
  * what sits below slides instead of jumping. In a column with a gap, the
  * gap it brings folds with it. `ms` overrides the length (0: no motion).
  * With reduced motion, a fade in place. A tree's rows open and fold on
@@ -239,7 +239,7 @@ export function unfold(
 ): TransitionConfig {
   rereadOnEnd(node);
   if (!motionOk.current) {
-    return { duration: dur("--dur-control"), css: (t) => `opacity: ${t}` };
+    return { duration: dur("--duration-control"), css: (t) => `opacity: ${t}` };
   }
   const { height } = node.getBoundingClientRect();
   const styles = getComputedStyle(node);
@@ -258,7 +258,8 @@ export function unfold(
     STACKS.test(getComputedStyle(parent).display)
       ? Number.parseFloat(getComputedStyle(parent).rowGap) || 0
       : 0;
-  const duration = ms ?? dur(direction === "out" ? "--dur-exit" : "--dur-pop");
+  const duration =
+    ms ?? dur(direction === "out" ? "--duration-exit" : "--duration-pop");
   unfolding.set(node, {
     height,
     edges: edges as [string, number][],

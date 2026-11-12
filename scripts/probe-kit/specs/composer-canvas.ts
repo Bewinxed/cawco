@@ -7,7 +7,7 @@
  * scrubbed through the DevTools protocol, anim.ts) and the hub's answers.
  *
  * 1. A pen's swipe up on the pill (pen pointer events) starts the grown
- *    shape's growth at --dur-grow; scrubbed to its end, the canvas's iframe
+ *    shape's growth at --duration-grow; scrubbed to its end, the canvas's iframe
  *    fills the column above the field, and the field still takes keys.
  * 2. A finger's swipe up on the pill (a touch screen) brings the recall
  *    wheel, not the canvas.
@@ -27,7 +27,7 @@
  *    animations only.
  *
  * 11. Send/Stop's glyph swap: with prefers-reduced-motion: reduce, pressing
- *    Send runs opacity-only keyframes over --dur-control, scrubbed 0 → ½ → 1;
+ *    Send runs opacity-only keyframes over --duration-control, scrubbed 0 → ½ → 1;
  *    without, the incoming glyph's keys are opacity, transform and filter.
  *    (clock) The clock's guard, run on purpose: a run the page cancels and
  *    starts again on its element, and one whose element it takes away,
@@ -36,18 +36,18 @@
  *    dragged by (+60, −80) widens it by 120 with its centre unmoved and
  *    raises its top by 80; past both bounds it settles on one spring
  *    animation of the slot's height, left and right at the column less
- *    --space-3 and the column less the field, dragged in at the pill's
+ *    --spacing-space-3 and the column less the field, dragged in at the pill's
  *    width and 40% of the column; the field keeps its width; the size
  *    survives Done and reopen (its own box and its foot on the composer's
  *    top, which follows the field); with reduced motion it lands at once.
  * 13. The rail's Remove: a drawn canvas folds as Done's does (on
- *    --dur-grow-exit), no chip is left, the message carries no canvas, and
+ *    --duration-grow-exit), no chip is left, the message carries no canvas, and
  *    the session still lists the artifact.
  * 14. What the canvas shows is what Send sends. The canvas page's sync
  *    socket goes through the iOS probe's gate (ComposerCanvas.swift `gate`,
  *    injected into the canvas's frame here): (a) held from the start (an
  *    upgrade never answered), the refusal line is not drawn at 300 ms and
- *    stands at 1.3 s, mounted no sooner than --dur-wait-grace after the
+ *    stands at 1.3 s, mounted no sooner than --duration-wait-grace after the
  *    page's host, a pen stroke adds 0 elements, and Send says the canvas
  *    isn't connected; still held, the page says its link is lost ("didn't
  *    open") within 25 s and Send still refuses; opened, the page holds no
@@ -55,12 +55,12 @@
  *    the drawing hasn't reached the hub. (b) On a good link (1 to 13) no
  *    canvas page ever starts a refusal run, and Send carries the files (7).
  * 15. The rail stands inside the host's chrome: over the composer
- *    --space-2 under the 44px grab band and --space-3 in from the shape's
- *    sides as drawn; docked, --space-2 from the top and --space-3 in.
+ *    --spacing-space-2 under the 44px grab band and --spacing-space-3 in from the shape's
+ *    sides as drawn; docked, --spacing-space-2 from the top and --spacing-space-3 in.
  * 16. By touch, the rail fits its page at every width: a phone (docked in
  *    the drawer 374px wide, the tools wrapping to two rows) and a tablet at
  *    1024, 768 and 516px (docked 1008, 752 and 500px wide): both groups
- *    inside the page, 44px boxes, --space-3 in from its sides (inside the
+ *    inside the page, 44px boxes, --spacing-space-3 in from its sides (inside the
  *    shoulders over the field), apart; over a phone's field at the foot,
  *    docked at the top, the view's under the tools' where they don't fit
  *    side by side.
@@ -495,7 +495,9 @@ const column = (page: Page) =>
       .querySelector(`${sel} [data-slot="composer"]`)
       ?.getBoundingClientRect();
     const space = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--space-3")
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--spacing-space-3"
+      )
     );
     return dock && composer
       ? {
@@ -682,14 +684,14 @@ const REVERSED_OUTRO = "svelte [";
 /**
  * 11. Send/Stop's glyph swap (DESIGN.md's Reduced Motion Rule: "opacity and
  * colour fades still run … It does not mean an instant swap"): pressing Send
- * swaps the glyph over --dur-control. With reduced motion every run animates
+ * swaps the glyph over --duration-control. With reduced motion every run animates
  * opacity alone, scrubbed 0 → ½ → 1 with no scale, transform or blur; without,
  * the incoming glyph's keys are opacity, transform and filter and the
  * outgoing's opacity, scale and filter.
  */
 const swapCheck = async (on: On, clock: Clock) => {
   const { kit, page } = on;
-  const control = await ms(page, "--dur-control");
+  const control = await ms(page, "--duration-control");
   // First the presses as a person makes them, the clock untouched, on the
   // button as the page made it: it holds a glyph once the hub has the
   // message and the swaps have played out. They come before the held
@@ -886,7 +888,7 @@ const swapCheck = async (on: On, clock: Clock) => {
     side(still1, "in").every((one) => one.opacity === 1) &&
     side(stillHalf, "out").every((one) => one.opacity > 0 && one.opacity < 1);
   kit.check(
-    "11: with reduced motion pressing Send swaps the glyph over --dur-control by opacity alone, scrubbed 0 → ½ → 1 with no scale, transform or blur",
+    "11: with reduced motion pressing Send swaps the glyph over --duration-control by opacity alone, scrubbed 0 → ½ → 1 with no scale, transform or blur",
     stillRuns.length > 0 &&
       stillRuns.some((run) => run.name.endsWith("icon-swap-still")) &&
       stillOut.length > 0 &&
@@ -896,13 +898,13 @@ const swapCheck = async (on: On, clock: Clock) => {
       ) &&
       fades &&
       [still0, stillHalf, still1].every(flat),
-    `--dur-control ${control} ms; runs ${JSON.stringify(stillRuns)}; the outgoing glyph's keys ${JSON.stringify(stillOut)}; ½ ${JSON.stringify(stillHalf)}; 1 ${JSON.stringify(still1)}`
+    `--duration-control ${control} ms; runs ${JSON.stringify(stillRuns)}; the outgoing glyph's keys ${JSON.stringify(stillOut)}; ½ ${JSON.stringify(stillHalf)}; 1 ${JSON.stringify(still1)}`
   );
   const incoming = movingRuns.filter((run) => run.side === "in");
   const outgoing = movingRuns.filter((run) => run.side === "out");
   const movingOut = outgoingKeys([...moving0, ...movingHalf, ...moving1]);
   kit.check(
-    "11: without reduced motion the incoming glyph's keys are opacity, transform and filter, the outgoing's opacity, scale and filter, over --dur-control, and they travel at ½",
+    "11: without reduced motion the incoming glyph's keys are opacity, transform and filter, the outgoing's opacity, scale and filter, over --duration-control, and they travel at ½",
     incoming.length > 0 &&
       movingOut.length > 0 &&
       movingOut.every((keys) => keys === "filter,opacity,scale") &&
@@ -1153,14 +1155,14 @@ const touchCheck = async (on: On) => {
   await page.close();
 };
 
-/** 1. The pen's swipe grows the canvas over --dur-grow; at its end it fills the column above the field; the field takes keys. */
+/** 1. The pen's swipe grows the canvas over --duration-grow; at its end it fills the column above the field; the field takes keys. */
 const openCheck = async (
   on: On,
   clock: Clock,
   pen: ReturnType<typeof penOf>
 ) => {
   const { kit, page } = on;
-  const grow = await ms(page, "--dur-grow");
+  const grow = await ms(page, "--duration-grow");
   const pill = (await box(page, PILL)) as Box;
   const x = pill.left + pill.width * 0.3;
   const y = pill.top + pill.height / 2;
@@ -1226,14 +1228,14 @@ const openCheck = async (
     `${JSON.stringify(halfway)}; grown ${whole}`
   );
   kit.check(
-    "1: a pen's swipe up on the pill starts the grown shape's growth on --dur-grow: the shape and the canvas in it, together",
+    "1: a pen's swipe up on the pill starts the grown shape's growth on --duration-grow: the shape and the canvas in it, together",
     growth.length === 2 &&
       growth.every((one) => one.duration === grow) &&
       started.length === 2 &&
       started.every((one) => one !== null) &&
       near(Number(started[0]), Number(started[1]), 0.5) &&
       caught.length >= 2,
-    `--dur-grow ${grow}; started ${started.join(", ")}; ${JSON.stringify(growth)}`
+    `--duration-grow ${grow}; started ${started.join(", ")}; ${JSON.stringify(growth)}`
   );
   kit.check(
     "1: scrubbed to its end, the canvas's iframe fills the column above the field",
@@ -1357,7 +1359,7 @@ const CORNER_RIGHT =
   '[data-slot="canvas-stage"] [data-canvas-stages-grab="top-right"]';
 const TOP_GRAB = '[data-slot="canvas-stage"] [data-canvas-stages-grab="top"]';
 
-/** The column's sides the width holds to (less --space-3 each side) and the pill's box. */
+/** The column's sides the width holds to (less --spacing-space-3 each side) and the pill's box. */
 const sides = (page: Page) =>
   page.evaluate(
     ([sel, pill]) => {
@@ -1371,7 +1373,9 @@ const sides = (page: Page) =>
         .querySelector(`${sel} [data-slot="shell"]`)
         ?.getBoundingClientRect();
       const space = Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--space-3")
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--spacing-space-3"
+        )
       );
       return dock && field && shell
         ? {
@@ -1453,7 +1457,7 @@ const dragBy = async (
  * the height by its travel up (the top edge; the foot stays on the field).
  * Let go past the bounds, both settle on one spring animation of the slot
  * (its height, left and right on one clock, linear between the spring's
- * keyframes) at the column less --space-3 and the column less the field;
+ * keyframes) at the column less --spacing-space-3 and the column less the field;
  * dragged in, at the pill's width and 40% of the column; the field keeps
  * its width; Done and reopen keep the size; reduced motion lands at once.
  */
@@ -1503,7 +1507,7 @@ const cornerCheck = async (on: On, clock: Clock) => {
     room.right - room.pill.right
   );
   kit.check(
-    "12: dragged past both bounds and let go, it settles on one spring animation of the slot's height, left and right at the column less --space-3 (centred on the pill) and the column less the field; the field keeps its width",
+    "12: dragged past both bounds and let go, it settles on one spring animation of the slot's height, left and right at the column less --spacing-space-3 (centred on the pill) and the column less the field; the field keeps its width",
     !!widest &&
       near(widest.width, room.pill.width + 2 * reachEach, 1.5) &&
       near(widest.centre, before.centre, 0.5) &&
@@ -1626,8 +1630,8 @@ const railAt = async (page: Page) => {
               right: innerWidth - view.right,
               insetTop: px("--canvas-inset-top"),
               insetSide: px("--canvas-inset-side"),
-              space2: px("--space-2"),
-              space3: px("--space-3"),
+              space2: px("--spacing-space-2"),
+              space3: px("--spacing-space-3"),
             }
           : null;
       })
@@ -1636,16 +1640,16 @@ const railAt = async (page: Page) => {
 
 /**
  * 15. The rail stands inside the host's chrome: over the composer
- * --space-2 under the 44px grab band (--c-btn-h-lg) and --space-3 in from
+ * --spacing-space-2 under the 44px grab band (--spacing-c-btn-h-lg) and --spacing-space-3 in from
  * the shape's sides as drawn (the corner's inset), where its corner
- * handles are; docked, --space-2 from the top and --space-3 from the sides.
+ * handles are; docked, --spacing-space-2 from the top and --spacing-space-3 from the sides.
  */
 const railCheck = async (on: On, where: "composer" | "docked") => {
   const { kit, page } = on;
   const band = Number.parseFloat(
     await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue(
-        "--c-btn-h-lg"
+        "--spacing-c-btn-h-lg"
       )
     )
   );
@@ -1666,7 +1670,7 @@ const railCheck = async (on: On, where: "composer" | "docked") => {
   const top = where === "composer" ? band : 0;
   const side = where === "composer" ? corner : 0;
   kit.check(
-    `15: ${where === "composer" ? "over the composer" : "docked"}, the rail's groups stand ${top} + --space-2 below the canvas's top and ${side ? `${side.toFixed(1)} + ` : ""}--space-3 in from its sides`,
+    `15: ${where === "composer" ? "over the composer" : "docked"}, the rail's groups stand ${top} + --spacing-space-2 below the canvas's top and ${side ? `${side.toFixed(1)} + ` : ""}--spacing-space-3 in from its sides`,
     !!rail &&
       near(rail.toolsTop, top + rail.space2, 0.5) &&
       // Too narrow for both side by side (canvas.css, under 560px) the view's stands under the tools'.
@@ -1685,7 +1689,7 @@ const removeCheck = async (
   pen: ReturnType<typeof penOf>
 ) => {
   const { kit, page, fleet, session } = on;
-  const exit = await ms(page, "--dur-grow-exit");
+  const exit = await ms(page, "--duration-grow-exit");
   // The reduced-motion check left its canvas folded to its chip: open it and draw.
   await page.click(`${CHIP} [data-slot="canvas-open"]`);
   await settle(page, 300);
@@ -1727,14 +1731,14 @@ const removeCheck = async (
     hubRequest("GET /api/instances/:id/artifacts", { path: { id: session } })
   );
   kit.check(
-    "13: Remove folds the drawn canvas as Done does (its runs on --dur-grow-exit), leaves no canvas in the message, and the session still lists the artifact",
+    "13: Remove folds the drawn canvas as Done does (its runs on --duration-grow-exit), leaves no canvas in the message, and the session still lists the artifact",
     runs.length > 0 &&
       runs.every((one) => one.duration === exit) &&
       !after.stage &&
       !after.chip &&
       after.atts === 0 &&
       listed.some((one) => one.id === id),
-    `--dur-grow-exit ${exit}; ${JSON.stringify(runs)}; ${JSON.stringify(after)}; listed ${listed.some((one) => one.id === id)}`
+    `--duration-grow-exit ${exit}; ${JSON.stringify(runs)}; ${JSON.stringify(after)}; listed ${listed.some((one) => one.id === id)}`
   );
 };
 
@@ -1865,11 +1869,11 @@ const syncCheck = async (on: On) => {
     () => document.querySelector(".canvas-unlinked-line")?.textContent ?? ""
   );
   const refusedStroke = await stroke(0.2);
-  const grace = await ms(page, "--dur-wait-grace");
+  const grace = await ms(page, "--duration-wait-grace");
   // The recorder (b) reads on the good link hears this line's fade here.
   const heard = await page.evaluate(() => window.kitRefusalRuns ?? []);
   kit.check(
-    "14 (a): refused from the start, the refusal line isn't drawn 300 ms after the page's host mounts and stands at 1.3 s, drawn no sooner than --dur-wait-grace",
+    "14 (a): refused from the start, the refusal line isn't drawn 300 ms after the page's host mounts and stands at 1.3 s, drawn no sooner than --duration-wait-grace",
     !!seen &&
       (seen.samples[300] ?? 0) === 0 &&
       (seen.samples[1300] ?? 0) > 0 &&
@@ -1879,7 +1883,7 @@ const syncCheck = async (on: On) => {
       line.startsWith(
         "The canvas isn't connected to the hub, so what you draw wouldn't reach the agent."
       ),
-    `--dur-wait-grace ${grace} ms; ${JSON.stringify(seen)}; heard ${heard.join(", ")}; "${line}"; ${where}`
+    `--duration-wait-grace ${grace} ms; ${JSON.stringify(seen)}; heard ${heard.join(", ")}; "${line}"; ${where}`
   );
   kit.check(
     "14 (a): refused, a pen stroke adds 0 elements to the page's doc",
@@ -2282,8 +2286,8 @@ const keyCheck = async (on: On) => {
 /** 5. Dock and Undock: the same iframe flies between the field and the panel's well. */
 const dockCheck = async (on: On, clock: Clock) => {
   const { kit, page } = on;
-  const panel = await ms(page, "--dur-panel");
-  const control = await ms(page, "--dur-control");
+  const panel = await ms(page, "--duration-panel");
+  const control = await ms(page, "--duration-control");
   await page.evaluate((sel) => {
     (window as unknown as { __canvas: Element | null }).__canvas =
       document.querySelector(sel);
@@ -2371,7 +2375,7 @@ const dockCheck = async (on: On, clock: Clock) => {
     `${JSON.stringify(docked)}; landed ${JSON.stringify(landedAt)}`
   );
   kit.check(
-    "5: one transform flight of --dur-panel (280 ms) on the drawer curve; the field's room returns over --dur-control (120 ms) on ease-out",
+    "5: one transform flight of --duration-panel (280 ms) on the drawer curve; the field's room returns over --duration-control (120 ms) on ease-out",
     docking.filter((one) => one.id === "canvas-flight").length === 1 &&
       flight?.duration === panel &&
       flight.easing === DRAWER &&
@@ -2599,14 +2603,14 @@ const reducedCheck = async (on: On, clock: Clock) => {
   const folding = await runsOn(page);
   await clock.release();
   await settle(page, 300);
-  const fade = await ms(page, "--dur-fade");
+  const fade = await ms(page, "--duration-fade");
   const only = (runs: Awaited<ReturnType<typeof runsOn>>) =>
     runs.length > 0 &&
     runs.every(
       (one) => one.props.join() === "opacity" && one.duration === fade
     );
   kit.check(
-    "8: with reduced motion the canvas opens and folds by opacity alone, over --dur-fade",
+    "8: with reduced motion the canvas opens and folds by opacity alone, over --duration-fade",
     only(opening) && only(folding),
     `open ${JSON.stringify(opening)}; Done ${JSON.stringify(folding)}`
   );
@@ -2653,17 +2657,17 @@ const touchRail = (frame: Frame) =>
         false,
       insetTop: px("--canvas-inset-top"),
       insetSide: px("--canvas-inset-side"),
-      space2: px("--space-2"),
-      space3: px("--space-3"),
+      space2: px("--spacing-space-2"),
+      space3: px("--spacing-space-3"),
     };
   });
 
 /**
  * The rail fits its page, by touch: both groups inside the page, their
- * boxes 44px, the tools' --space-3 in from the left and the view's from the
+ * boxes 44px, the tools' --spacing-space-3 in from the left and the view's from the
  * right (inside the shoulders over the field), apart. Over the field (a
- * phone) the groups stand at the foot, the tools' --space-3 above it and the
- * view's above them; docked, at the top, the tools' --space-2 down and the
+ * phone) the groups stand at the foot, the tools' --spacing-space-3 above it and the
+ * view's above them; docked, at the top, the tools' --spacing-space-2 down and the
  * view's beside them or under them.
  */
 const railFits = (
@@ -2675,7 +2679,7 @@ const railFits = (
   const { foot } = at;
   const { tools, view, page } = rail;
   const side = rail.insetSide + rail.space3;
-  // Inside the page, and no nearer its sides than the inset and --space-3.
+  // Inside the page, and no nearer its sides than the inset and --spacing-space-3.
   const inside = (group: typeof tools) =>
     !!group &&
     group.left >= side - 0.5 &&

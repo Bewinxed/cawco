@@ -35,7 +35,7 @@
 <div
   data-from-disk
   class="grid min-w-0 grid-cols-1 gap-space-2"
-  style:--box-indent="calc(var(--icon-md) + var(--space-2))"
+  style:--box-indent="calc(var(--spacing-icon-md) + var(--spacing-space-2))"
 >
   <label
     class="mark-line flex min-w-0 items-center gap-space-2 type-label text-ink-strong data-disabled:text-ink-muted"

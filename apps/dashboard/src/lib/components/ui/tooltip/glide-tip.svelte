@@ -4,7 +4,7 @@
    * tethered to, saying the words of the item it stands at. It fades in as
    * every tooltip does (tooltip-content). While it stays open and the
    * pointer moves to another item, it is one shape travelling (DESIGN.md,
-   * Tooltip: "within one glass slides between items over --dur-control"):
+   * Tooltip: "within one glass slides between items over --duration-control"):
    * its place, its width and its height move together on one clock, and its
    * words morph as the house swaps words (MorphText).
    *
@@ -21,7 +21,7 @@
    * closes that distance (its `transform`; its fade in owns its `translate`,
    * kit-tip-in, whose fill would hold it), while its width and height go
    * from the size drawn to the new words' size, both on one clock over
-   * `--dur-control` on the drawer's curve (Web Animations, so each starts
+   * `--duration-control` on the drawer's curve (Web Animations, so each starts
    * from the values given, not from a style the page must lay out first).
    * So its centre and its width each go straight from the last item's to
    * this one's, together; caught mid-way, it starts again from where it is
@@ -78,7 +78,7 @@
   let fits: { h: number; w: number } | null = null;
 
   const timing = (): KeyframeAnimationOptions => ({
-    duration: dur("--dur-control"),
+    duration: dur("--duration-control"),
     easing: ease("--ease-drawer"),
   });
 

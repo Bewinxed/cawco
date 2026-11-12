@@ -89,50 +89,50 @@ export const easeDrawer = bezier(0.32, 0.72, 0, 1);
  * on no document root ({@link tokensOn}: an HTML page's dials).
  */
 const TOKENS = [
-  "--dur-control",
-  "--dur-menu",
-  "--dur-pop",
-  "--dur-panel",
-  "--dur-grow",
-  "--dur-grow-exit",
-  "--dur-lift",
-  "--dur-press-hold",
-  "--dur-exit",
-  "--dur-toggle",
-  "--dur-morph",
-  "--dur-rail",
-  "--dur-fade",
-  "--dur-hold",
-  "--dur-ghost",
-  "--dur-stagger",
-  "--dur-cascade",
-  "--dur-skeleton-reveal",
+  "--duration-control",
+  "--duration-menu",
+  "--duration-pop",
+  "--duration-panel",
+  "--duration-grow",
+  "--duration-grow-exit",
+  "--duration-lift",
+  "--duration-press-hold",
+  "--duration-exit",
+  "--duration-toggle",
+  "--duration-morph",
+  "--duration-rail",
+  "--duration-fade",
+  "--duration-hold",
+  "--duration-ghost",
+  "--duration-stagger",
+  "--duration-cascade",
+  "--duration-skeleton-reveal",
   "--skeleton-reveal-blur",
   "--ease-out",
   "--ease-in-out",
   "--ease-drawer",
   "--pop-scale",
   "--pop-rise",
-  "--space-1",
+  "--spacing-space-1",
   // Read through here as well: each one missing from this pass styled the
   // page on its own the first time it was asked (a turn's first echo,
   // `--echo-scale` from echo.svelte.ts, laid the page out for 6.6ms).
-  "--dur-loop",
-  "--dur-mark-hold",
-  "--dur-peek",
-  "--dur-settle",
-  "--dur-glide",
-  "--dur-wait-grace",
+  "--duration-loop",
+  "--duration-mark-hold",
+  "--duration-peek",
+  "--duration-settle",
+  "--duration-glide",
+  "--duration-wait-grace",
   "--echo-opacity",
   "--echo-scale",
   "--deck-shrink",
   "--deck-step",
   "--press-scale",
   "--ride-fade",
-  "--space-2",
-  "--space-4",
+  "--spacing-space-2",
+  "--spacing-space-4",
   "--text-meta",
-  "--c-pin-card-w",
+  "--spacing-c-pin-card-w",
 ];
 const tokens = new Map<string, string>();
 /** The element the tokens are read off; null for the document's root. */
@@ -170,15 +170,16 @@ const rootToken = (name: string): string => {
   return tokens.get(name) as string;
 };
 /** A `--dur-*` token on the root, in ms. @browser */
-export const dur = (name: `--dur-${string}`): number => msOf(rootToken(name));
+export const dur = (name: `--duration-${string}`): number =>
+  msOf(rootToken(name));
 
 /**
  * The delay of the `n`th of a run of things arriving in turn, as CSS for a
- * `--delay`: --dur-stagger apart, never later than --dur-cascade however
+ * `--delay`: --duration-stagger apart, never later than --duration-cascade however
  * many there are (a tree's rows are paced the same way, `glideSpeed`).
  */
 export const staggered = (n: number): string =>
-  `min(calc(var(--dur-stagger) * ${n}), var(--dur-cascade))`;
+  `min(calc(var(--duration-stagger) * ${n}), var(--duration-cascade))`;
 /** An `--ease-*` token on the root, as CSS. @browser */
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
 /** --pop-scale on the root, as its number. @browser */
@@ -226,11 +227,11 @@ const space = (name: string) => Number.parseFloat(rootToken(name)) || 0;
 
 /**
  * The speed (px a ms) to glide `distance` px past `stops` evenly spaced
- * stops at: --dur-stagger between one stop and the next, and never longer
- * than --dur-cascade for the whole way, its two ends included, however many
+ * stops at: --duration-stagger between one stop and the next, and never longer
+ * than --duration-cascade for the whole way, its two ends included, however many
  * stops there are. With no stops to space (a block opening on its own), the
- * whole way takes --dur-panel, as a panel's does. `least`: the slowest it
- * may go and still take no longer than --dur-cascade.
+ * whole way takes --duration-panel, as a panel's does. `least`: the slowest it
+ * may go and still take no longer than --duration-cascade.
  *
  * @browser
  */
@@ -238,19 +239,19 @@ export function glideSpeed(
   distance: number,
   stops: number
 ): { least: number; speed: number } {
-  const end = space("--space-1");
-  const least = (distance + end) / dur("--dur-cascade");
+  const end = space("--spacing-space-1");
+  const least = (distance + end) / dur("--duration-cascade");
   const own =
     stops > 0
-      ? distance / stops / dur("--dur-stagger")
-      : (distance + end) / dur("--dur-panel");
+      ? distance / stops / dur("--duration-stagger")
+      : (distance + end) / dur("--duration-panel");
   return { least, speed: Math.max(own, least) };
 }
 
 /**
  * A glide: a distance travelled at one steady speed (px a ms), linear from
  * its first frame, so it starts at its speed, and falling evenly to rest over
- * the last --space-1 (--ease-glide-out). A tree's line runs its length this
+ * the last --spacing-space-1 (--ease-glide-out). A tree's line runs its length this
  * way, so the rows it reaches are revealed at even times, and the room it
  * opens and the rows under it travel the same way at the same speed, so they
  * keep step with it. A distance too short for the fall is all fall.
@@ -258,7 +259,7 @@ export function glideSpeed(
  * @browser
  */
 export function glide(distance: number, speed: number) {
-  const outOf = Math.min(distance, space("--space-1"));
+  const outOf = Math.min(distance, space("--spacing-space-1"));
   const steady = (distance - outOf) / speed;
   const fall = (2 * outOf) / speed;
   const duration = steady + fall;
@@ -348,7 +349,7 @@ function between(from: Keyframe, to: Keyframe, p: number): Keyframe {
  */
 export function appear(_node: Element) {
   return {
-    duration: dur("--dur-fade"),
+    duration: dur("--duration-fade"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   };
@@ -357,14 +358,14 @@ export function appear(_node: Element) {
 /** One way an element comes in: its length and curve, and whether it rises from its side. */
 export interface Arrival {
   easing?: `--ease-${string}`;
-  over: `--dur-${string}`;
+  over: `--duration-${string}`;
   /** It comes in from beside where it stands, by --pop-rise along x, as a sheet from its side. */
   rise?: "x";
 }
 
 /**
  * An element's entrance, attached: as it mounts it comes in by one Web
- * Animation on the element itself (`appear` by default: --dur-fade on
+ * Animation on the element itself (`appear` by default: --duration-fade on
  * ease-out, opacity only). For an entrance that rises from its side (Caw's
  * docked panel), which `@starting-style` does not draw in iOS 27.2 Safari:
  * a starting translate set by Tailwind's `starting:translate-x-*` (the
@@ -383,7 +384,7 @@ export interface Arrival {
  */
 export function appearOnMount({
   when = () => true,
-  motion = { over: "--dur-fade" },
+  motion = { over: "--duration-fade" },
   reduced = false,
 }: {
   motion?: Arrival | false;
@@ -414,10 +415,13 @@ export function appearOnMount({
 /**
  * A floating tag coming and going over the transcript's foot ("Jump to
  * latest", the catch-up): it rises --pop-rise and grows from .96 as it fades in,
- * and sinks back out. `token` is its duration: --dur-panel in, --dur-exit
+ * and sinks back out. `token` is its duration: --duration-panel in, --duration-exit
  * out. Without motion it only fades.
  */
-export function rise(_node: Element, token: "--dur-panel" | "--dur-exit") {
+export function rise(
+  _node: Element,
+  token: "--duration-panel" | "--duration-exit"
+) {
   const travel = motionOk.current;
   return {
     duration: dur(token),
@@ -432,14 +436,14 @@ export function rise(_node: Element, token: "--dur-panel" | "--dur-exit") {
 /**
  * One view handing its place to another — a document to the next, a reader
  * to its editor (a skeleton hands its place by `reveal`/`revealOut`): the two cross-fade
- * over --dur-control. The one leaving is taken out of the flow as it starts,
+ * over --duration-control. The one leaving is taken out of the flow as it starts,
  * pinned where it stands (its parent is `position: relative`), so the box is only ever the size of
  * what arrives and a height morph around it has one change to follow.
  * Opacity only, so it runs with or without motion.
  */
 export function crossIn(_node: Element) {
   return {
-    duration: dur("--dur-control"),
+    duration: dur("--duration-control"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   };
@@ -451,7 +455,7 @@ const easeCrossfade = bezier(0.42, 0, 0.58, 1);
 /**
  * The reveal (transitions.dev Skeleton loader and reveal, DESIGN.md
  * Skeleton): a skeleton handing its place to what it stood for. Both layers
- * run on one clock, --dur-skeleton-reveal on --ease-crossfade: the content
+ * run on one clock, --duration-skeleton-reveal on --ease-crossfade: the content
  * fades up out of a --skeleton-reveal-blur blur while the skeleton fades out
  * into one. Every swap from a skeleton to its content takes it: `in:reveal`
  * on what arrives, and `out:revealOut` on the skeleton where it leaves the
@@ -464,7 +468,7 @@ export function reveal(_node?: Element): TransitionConfig {
   }
   const blur = numberOf("--skeleton-reveal-blur");
   return {
-    duration: dur("--dur-skeleton-reveal"),
+    duration: dur("--duration-skeleton-reveal"),
     easing: easeCrossfade,
     css: (t) => `opacity: ${t}; filter: blur(${((1 - t) * blur).toFixed(3)}px)`,
   };
@@ -578,7 +582,7 @@ export function crossOutWith(
     return { duration: 0 };
   }
   return lifting(node, pinned(node, more), {
-    duration: dur("--dur-control"),
+    duration: dur("--duration-control"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   });

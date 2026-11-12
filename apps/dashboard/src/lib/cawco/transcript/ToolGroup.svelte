@@ -275,7 +275,7 @@
   /**
    * A call's status changing is a crossfade on its glyph: the outgoing glyph
    * fades while the new one fades up out of a slight shrink, both on one
-   * cell, over --dur-control. Svelte plays these only when the status
+   * cell, over --duration-control. Svelte plays these only when the status
    * changes under a mounted row — never on a row's first render.
    */
   function glyphIn(_node: Element) {
@@ -283,7 +283,7 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}; scale: ${0.8 + 0.2 * t}`,
     };
@@ -293,19 +293,19 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
   }
   /**
    * A favicon that fails to load gives way to the tool's glyph, the two
-   * cross-fading in one cell over --dur-control. Opacity only, so it runs
+   * cross-fading in one cell over --duration-control. Opacity only, so it runs
    * with reduced motion as well; never on a row's first render.
    */
   function iconSwap(_node: Element) {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -316,7 +316,7 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--dur-menu"),
+      duration: dur("--duration-menu"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -552,7 +552,7 @@
       {/if}
       <!-- One chain, so a fact arriving with its result fades in (Svelte plays
            a local intro only when a block that already ran switches). A fact
-           is a measurement, not a verdict: it reads in --ink-strong, the ink
+           is a measurement, not a verdict: it reads in --color-ink-strong, the ink
            that gives a number presence without passing judgement on it.
            Green is reserved for the added side of a `diff` fact — the one
            measurement that carries a direction — and every diff row agrees
@@ -665,7 +665,7 @@
                 <span class="flex flex-col min-w-0"
                   ><span
                     class="flex items-center gap-space-1 wrap-anywhere"
-                    style:--btn-icon="var(--icon-sm)"
+                    style:--btn-icon="var(--spacing-icon-sm)"
                     ><PendingContent
                       failed={openFailed.has(callId(m))}
                       label={preview?.title || name}
@@ -720,7 +720,7 @@
                    is unchanged. -->
               <span
                 data-slot="chev"
-                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/trow:rotate-90"
+                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-state-open/trow:rotate-90"
                 data-box><IconChevronRight class="size-icon-md block" /></span
               >
             </button>
@@ -750,7 +750,7 @@
                       <ol
                         data-slot="pin-exchange"
                         class="flex flex-col gap-space-3 m-0 mt-space-1 mb-space-3 ms-(--fields-start) p-space-3 list-none rounded-sm bg-surface-recess"
-                        style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
+                        style:--fields-start={"calc(var(--x-hang) - var(--spacing-space-3))"}
                       >
                         {#each exchange as said (said.key)}
                           {@const Speaker =
@@ -830,7 +830,7 @@
                            them by its own padding. -->
                       <div
                         class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-surface-recess"
-                        style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
+                        style:--fields-start={"calc(var(--x-hang) - var(--spacing-space-3))"}
                       >
                         <div
                           data-slot="tool-group-field"
@@ -856,7 +856,7 @@
                     {:else}
                       <div
                         class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--fields-start) p-space-3 rounded-sm bg-surface-recess"
-                        style:--fields-start={"calc(var(--x-hang) - var(--space-3))"}
+                        style:--fields-start={"calc(var(--x-hang) - var(--spacing-space-3))"}
                       >
                         {#each fields as f (f.key)}
                           <div

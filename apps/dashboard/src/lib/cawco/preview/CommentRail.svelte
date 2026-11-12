@@ -46,7 +46,7 @@
    *
    * Until the pane holds the doc nothing is counted or claimed empty (The
    * Claim Of Nothing Rule): the rows' plain surface inside
-   * `--dur-wait-grace` (The Real Wait Rule), then skeleton rows, which the
+   * `--duration-wait-grace` (The Real Wait Rule), then skeleton rows, which the
    * first read replaces in one cross-fade; or the read's fault on its line
    * with Try again (RowFault). While a link of the comments' stands lost the
    * same fault line stands over the rows, which keep their last read.
@@ -197,7 +197,7 @@
   const coarse = new MediaQuery("(pointer: coarse)");
 
   let query = $state("");
-  /** What the rows are searched for: the query once it has rested `--dur-control`. */
+  /** What the rows are searched for: the query once it has rested `--duration-control`. */
   let asked = $state("");
   $effect(() => {
     const now = query;
@@ -205,7 +205,7 @@
       () => {
         asked = now;
       },
-      now ? dur("--dur-control") : 0
+      now ? dur("--duration-control") : 0
     );
     return () => clearTimeout(wait);
   });
@@ -215,7 +215,7 @@
   /**
    * The search field opens from Search's place at the bar's trailing end,
    * across to its leading end, and the bar it replaces is wiped away by the
-   * same edge: one clip on the drawer's curve over --dur-panel, the field's
+   * same edge: one clip on the drawer's curve over --duration-panel, the field's
    * from its leading side and the bar's from its trailing side, so at every
    * frame each stands where the other doesn't and nothing stands on
    * anything (as Safari's and Mail's search fields grow out of their
@@ -225,7 +225,7 @@
   const wipe = (from: "start" | "end") => (t: number) =>
     `clip-path: inset(0 ${from === "end" ? ((1 - t) * 100).toFixed(2) : 0}% 0 ${from === "start" ? ((1 - t) * 100).toFixed(2) : 0}% round var(--radius-pill))`;
   const wiping = (from: "start" | "end") => ({
-    duration: dur("--dur-panel"),
+    duration: dur("--duration-panel"),
     easing: easeDrawer,
     css: wipe(from),
   });
@@ -438,7 +438,7 @@
 
   /**
    * A row leaving the tab in front of him folds shut as it fades, over
-   * `--dur-exit` on `--ease-out`; with less motion it fades. One that goes
+   * `--duration-exit` on `--ease-out`; with less motion it fades. One that goes
    * with its tab (another tab chosen) goes at once.
    */
   function rowOut(node: HTMLElement) {
@@ -447,7 +447,7 @@
     }
     const height = node.offsetHeight;
     return {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: easeOut,
       css: motionOk.current
         ? (t: number) =>
@@ -652,7 +652,7 @@
       aria-current={chosen || undefined}
       data-focused={pin.id === focused || undefined}
       data-moved={gone || undefined}
-      class="flex items-start gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--dur-control) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-border-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+      class="flex items-start gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-space-2 border-none rounded-sm bg-transparent text-start transition-[background-color] duration-(--duration-control) ease-out not-active:not-aria-current:group-hover/row:bg-surface-hover active:not-aria-current:bg-surface-pressed aria-current:bg-surface-hover aria-current:not-focus-visible:outline-1 aria-current:not-focus-visible:-outline-offset-1 aria-current:not-focus-visible:outline-solid aria-current:not-focus-visible:outline-border-control focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
       onblur={() => onhover(null)}
       onclick={(event) =>
@@ -691,7 +691,7 @@
           <span
             data-slot="age"
             class={[
-              "ms-auto flex-none type-meta num transition-opacity duration-(--dur-control) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
+              "ms-auto flex-none type-meta num transition-opacity duration-(--duration-control) ease-out not-coarse:group-hover/row:opacity-0 not-coarse:group-focus-within/row:opacity-0",
               "text-ink-muted",
             ]}>{formatAgeShort(Date.parse(lastActivity(pin)))}</span
           >
@@ -805,7 +805,7 @@
     {/if}
     {#if !coarse.current}
       <span
-        class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--dur-control) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"
+        class="absolute end-space-1 top-space-1 opacity-0 transition-opacity duration-(--duration-control) ease-out group-hover/row:opacity-100 group-focus-within/row:opacity-100"
       >
         <Button
           aria-label={pin.resolvedAt ? said.reopen : said.resolve}
@@ -1159,8 +1159,8 @@
         again={onretry}
         class="shrink-0 py-space-1 px-space-3"
         details={down}
-        end="var(--space-2)"
-        indent="var(--space-2)"
+        end="var(--spacing-space-2)"
+        indent="var(--spacing-space-2)"
         reason={LINK_DROPPED}
       />
     {/if}
@@ -1177,8 +1177,8 @@
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
     }}
-    style:--fault-indent="var(--space-2)"
-    style:--fault-end="var(--space-2)"
+    style:--fault-indent="var(--spacing-space-2)"
+    style:--fault-end="var(--spacing-space-2)"
   >
     {#if hold === "quiet"}
       <!-- Inside the wait's grace: its plain surface (The Real Wait Rule). -->

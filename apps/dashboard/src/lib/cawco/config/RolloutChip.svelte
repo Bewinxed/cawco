@@ -9,7 +9,7 @@
    * the raw string the machine printed.
    *
    * The chip's glyph cross-fades between refused, landed everywhere and a
-   * sync on its way (--dur-control) while its tint turns over --dur-panel.
+   * sync on its way (--duration-control) while its tint turns over --duration-panel.
    */
   import { failureWords } from "#lib/cawco/hub-read.js";
   import PendingContent, {
@@ -116,16 +116,16 @@
     <span
       data-slot="glyph"
       aria-hidden="true"
-      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-space-1 motion-safe:transition-[width,margin] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-space-1 motion-safe:transition-[width,margin] motion-safe:duration-(--duration-control) motion-safe:ease-out"
       data-box
       data-glyph={glyph}
     >
       <IconWarningTriangle
-        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-fail:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--dur-control) motion-safe:ease-out"
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-fail:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-control) motion-safe:ease-out"
         data-for="fail"
       />
       <IconCheck
-        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-done:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--dur-control) motion-safe:ease-out"
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-done:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-control) motion-safe:ease-out"
         data-for="done"
       />
       <Spinner
@@ -193,7 +193,7 @@
                     () => syncing,
                     () => resync(machine)
                   )}
-                  style:--btn-icon="var(--icon-sm)"
+                  style:--btn-icon="var(--spacing-icon-sm)"
                   type="button"
                 >
                   <PendingContent

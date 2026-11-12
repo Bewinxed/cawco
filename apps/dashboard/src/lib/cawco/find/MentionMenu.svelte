@@ -72,7 +72,7 @@
     const out = direction === "out";
     const travel = motionOk.current;
     return {
-      duration: dur(out ? "--dur-exit" : "--dur-pop"),
+      duration: dur(out ? "--duration-exit" : "--duration-pop"),
       easing: out ? easeOut : easeDrawer,
       css: (t: number) =>
         travel
@@ -89,7 +89,7 @@
   data-slot="menu"
   class="group/menu absolute inset-x-0 bottom-(--menu-bottom) z-2 origin-bottom overflow-hidden border border-border-control rounded-lg bg-surface-raised shadow-overlay"
   data-phone={phone || undefined}
-  style:--menu-bottom="calc(100% + var(--space-2))"
+  style:--menu-bottom="calc(100% + var(--spacing-space-2))"
   onmousedown={(event) => event.preventDefault()}
   role="presentation"
   transition:grow|global

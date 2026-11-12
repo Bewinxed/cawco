@@ -179,10 +179,10 @@
       else the limit wash at its limit (lit wins, as its background does). */
   function groundOf(ring: RingAccount): string | undefined {
     if (ring.id === lit) {
-      return "var(--surface-hover)";
+      return "var(--color-surface-hover)";
     }
     if (ring.state === "limit") {
-      return "var(--meter-wash-over)";
+      return "var(--color-meter-wash-over)";
     }
     return undefined;
   }
@@ -474,7 +474,7 @@
       update(next: number) {
         if (next !== at && !motionOk.current) {
           node.animate([{ opacity: 0 }, { opacity: 1 }], {
-            duration: dur("--dur-fade"),
+            duration: dur("--duration-fade"),
             easing: "linear",
           });
         }
@@ -503,7 +503,7 @@
          onto a second row the strip does not show (it stays in the strip's
          label and the popover), rather than Claude's answer being cut: one
          row of cells, 34px (the first line, 3px, the caption). The clip
-         that hides the second row starts --space-1 above the first, its
+         that hides the second row starts --spacing-space-1 above the first, its
          box drawn that much higher and its row put back by as much padding:
          the time's glyphs reach past their 16px line (the label face's
          ascent), and a clip at the line's top cut them (the owner's audit,
@@ -538,7 +538,7 @@
               {#each stripMarks as ring, i (ring.id)}
                 <span
                   data-slot="slot"
-                  class="absolute top-0 grid transition-[inset-inline-start] duration-(--dur-morph) ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid transition-[inset-inline-start] duration-(--duration-morph) ease-in-out motion-reduce:transition-off"
                   style:inset-inline-start={slotAt(
                     i,
                     stripMarks.length + (stripMore > 0 ? 1 : 0)
@@ -554,7 +554,7 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] duration-(--dur-morph) ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] duration-(--duration-morph) ease-in-out motion-reduce:transition-off"
                   data-strip-more
                   style:inset-inline-start={slotAt(
                     stripMarks.length,
@@ -742,7 +742,7 @@
     <!-- The count, 16px. Its touch area reaches the full 44px up and down,
          and space-5 / 2 to either side: a count in the last column stays
          inside the wall's padding, so the accounts never scroll sideways. -->
-    <span class="ms-auto grid" style:--hit-gap-x="var(--space-5)">
+    <span class="ms-auto grid" style:--hit-gap-x="var(--spacing-space-5)">
       <SessionsChip
         account={ring.name}
         name={shown}
@@ -799,7 +799,7 @@
     data-usage-cell
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--dur-fade) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
+    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--duration-fade) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
@@ -877,7 +877,7 @@
         : "max-h-(--pop-max)",
     ]}
     style:--pop-max="calc(var(--bits-popover-content-available-height) - 2px)"
-    style:--ring-ground="var(--surface-raised)"
+    style:--ring-ground="var(--color-surface-raised)"
     {@attach morph()}
   >
     {#if !(shown || gap) && notes.length === 0}
@@ -994,7 +994,7 @@
             data-slot="wall"
             class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--wall-cols={"repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"}
+            style:--wall-cols={"repeat(2, auto var(--spacing-icon-sm) minmax(0, 1fr) var(--spacing-icon-sm) auto)"}
           >
             {#each wall as block (block.org ?? "")}
               <div
@@ -1046,7 +1046,7 @@
             data-slot="wall"
             class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--wall-cols={"repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"}
+            style:--wall-cols={"repeat(2, auto var(--spacing-icon-sm) minmax(0, 1fr) var(--spacing-icon-sm) auto)"}
           >
             {@render cell(openCode, null, sideFor())}
           </div>
@@ -1123,7 +1123,7 @@
   data-variant={variant}
   style:--ring-ground="var(--strip-ground, var(--sidebar))"
   style:--strip-ground={variant === "home"
-    ? "var(--surface-raised)"
+    ? "var(--color-surface-raised)"
     : undefined}
 >
   {#if touch.current}
@@ -1166,7 +1166,7 @@
         pad="none"
         side="top"
         sideOffset={6}
-        style="--usage-pop-w: min(var(--c-panel-w), calc(100vw - 2 * var(--space-2)));"
+        style="--usage-pop-w: min(var(--spacing-c-panel-w), calc(100vw - 2 * var(--spacing-space-2)));"
       >
         {@render limits(false)}
       </Popover.Content>

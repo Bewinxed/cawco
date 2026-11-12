@@ -86,7 +86,7 @@
   })}
   data-side="top"
   data-state="open"
-  style:--waiting-foot="calc(100% + var(--space-2))"
+  style:--waiting-foot="calc(100% + var(--spacing-space-2))"
   bind:this={section}
   {@attach room}
   out:popOut|global={{ side: "top" }}

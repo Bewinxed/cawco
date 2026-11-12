@@ -10,6 +10,6 @@ export function machineRowRadius(
   prev: boolean,
   next: boolean
 ): string {
-  const r = "var(--glide-row-r)";
+  const r = "var(--radius-glide-row)";
   return `${on && prev ? "0 0" : `${r} ${r}`} ${on && next ? "0 0" : `${r} ${r}`}`;
 }

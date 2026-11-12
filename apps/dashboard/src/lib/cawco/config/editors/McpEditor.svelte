@@ -46,7 +46,7 @@
     $props();
 
   const store = configStore();
-  const HUE = "var(--hue-cyan-400)";
+  const HUE = "var(--color-hue-cyan-400)";
 
   type Mode = "bunx" | "command" | "remote";
   const HOW: Record<Mode, string> = {
@@ -267,12 +267,12 @@
       value={mode}
     />
     <!-- One kind's note and fields cross-fade into the next's
-         (--dur-control) in one box, whose height follows over --dur-pop on
+         (--duration-control) in one box, whose height follows over --duration-pop on
          --ease-drawer. -->
     <div
       data-slot="kind"
       class="relative flex flex-col"
-      {@attach morph({ ms: dur("--dur-pop") })}
+      {@attach morph({ ms: dur("--duration-pop") })}
     >
       {#if mode === "bunx"}
         <div
@@ -391,7 +391,7 @@
         <div
           data-slot="kind"
           class="relative flex flex-col"
-          {@attach morph({ ms: dur("--dur-pop") })}
+          {@attach morph({ ms: dur("--duration-pop") })}
         >
           {#if mode === "remote"}
             <div in:crossIn out:crossOut>

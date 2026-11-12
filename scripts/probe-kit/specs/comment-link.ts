@@ -574,7 +574,7 @@ const writeComment = async (
       () =>
         Number.parseFloat(
           getComputedStyle(document.documentElement).getPropertyValue(
-            "--dur-peek"
+            "--duration-peek"
           )
         ) + 100
     )

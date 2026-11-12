@@ -9,11 +9,11 @@
    * wears it, and HangCard's cards.
    *
    * `pop` (DESIGN.md, Navigation, menus and floating surfaces): it opens from its trigger's
-   * side (`--kit-rise`, by bits-ui's `data-side`) over --dur-pop on the
+   * side (`--kit-rise`, by bits-ui's `data-side`) over --duration-pop on the
    * drawer curve, rising --pop-rise and growing from --pop-scale as it fades
    * in from its @starting-style (which iOS 27.2 Safari applies to a surface
    * just added: probe-kit ios-safari-motion, 2026-10-23), and leaves the
-   * same way over --dur-exit.
+   * same way over --duration-exit.
    * Transitions on `data-state`, so a close caught mid-open turns back from
    * where it is; bits-ui holds it mounted until they end (getAnimations()).
    * It grows from its trigger through bits' transform-origin, which each
@@ -30,7 +30,7 @@
    * anchor; it leaves by `popOut` with the same side.
    */
   export const popMotion =
-    "transition-opacity duration-(--dur-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--dur-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
+    "transition-opacity duration-(--duration-pop) ease-drawer [--kit-rise:0_calc(-1*var(--pop-rise))] side-left:[--kit-rise:var(--pop-rise)_0] side-right:[--kit-rise:calc(-1*var(--pop-rise))_0] side-top:[--kit-rise:0_var(--pop-rise)] data-closed:opacity-0 starting:data-open:opacity-0 data-closed:duration-(--duration-exit) motion-safe:data-closed:scale-(--pop-scale) motion-safe:starting:data-open:scale-(--pop-scale) motion-safe:[transition-property:opacity,translate,scale] motion-safe:data-closed:[translate:var(--kit-rise)] motion-safe:starting:data-open:[translate:var(--kit-rise)]";
 
   export const floatingSurface = tv({
     base: "rounded-lg concentric-in r-outer-lg border border-border-control bg-surface-raised p-c-floating-pad text-ink-strong",
@@ -49,7 +49,7 @@
       },
       motion: {
         pop: popMotion,
-        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--dur-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--dur-exit)",
+        hang: "motion-reduce:transition-opacity motion-reduce:duration-(--duration-pop) motion-reduce:ease-drawer motion-reduce:data-closed:opacity-0 motion-reduce:starting:data-open:opacity-0 motion-reduce:data-closed:duration-(--duration-exit)",
       },
       /**
        * Where its edge is drawn, for its rows' concentric radius
@@ -194,7 +194,9 @@
   const inset = $derived(
     collisionPadding ??
       (browser
-        ? numberOf(phone.current ? "--c-screen-margin" : "--space-5")
+        ? numberOf(
+            phone.current ? "--spacing-c-screen-margin" : "--spacing-space-5"
+          )
         : 0)
   );
   /* A hanging card (motion `hang`) frames its own width, a bare one is what
@@ -270,7 +272,7 @@
          gives (a width of its own, or the room bits-ui measures) stands at
          this one under the phone line. */
       phoneWide &&
-        "max-phone:min-w-[calc(100vw-2*var(--c-screen-margin))] max-phone:max-w-[calc(100vw-2*var(--c-screen-margin))]",
+        "max-phone:min-w-[calc(100vw-2*var(--spacing-c-screen-margin))] max-phone:max-w-[calc(100vw-2*var(--spacing-c-screen-margin))]",
       className
     )}
     collisionPadding={inset}

@@ -496,7 +496,7 @@
   /**
    * The words put back from outside (Edit on a failed send, a starter) land
    * with focus and the caret after them, and fade up in the field over
-   * --dur-control rather than replacing what was there in one frame. Their
+   * --duration-control rather than replacing what was there in one frame. Their
    * attachments come back with them, and the row that holds those folds
    * open above the field. The caret waits for the tick: the field draws the
    * words in its own effect, and drawing them drops any selection.
@@ -533,7 +533,7 @@
       focused = document.activeElement === el;
       tick().then(() => mentionField?.select(draft.text.length));
       el.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-control"),
+        duration: dur("--duration-control"),
         easing: ease("--ease-out"),
       });
       draft.focusWanted = false;
@@ -544,13 +544,13 @@
 
   /**
    * The composer arriving where a read-only note stood (and back): the two
-   * cross-fade over --dur-control and the composer rises --pop-rise into place.
+   * cross-fade over --duration-control and the composer rises --pop-rise into place.
    * Reduced motion keeps the fade.
    */
   function rise(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
         still
@@ -567,34 +567,34 @@
   function glyphOut(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
         still
           ? `opacity: ${t}`
-          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--space-1) * ${u}))`,
+          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--spacing-space-1) * ${u}))`,
     };
   }
   function fade(_node: Element): TransitionConfig {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
   }
   /**
    * A minimized question's bar comes into the tray row once the card's
-   * fold (--dur-grow-exit) has landed, so the two never stand in one place
+   * fold (--duration-grow-exit) has landed, so the two never stand in one place
    * at once: the fold speeds up as it goes and only crosses the tray row in
    * its last frames (measured at 390: 210 of its 220ms). It comes up --pop-rise
-   * out of a --part-blur blur over --dur-control, as the card's own parts come up
+   * out of a --part-blur blur over --duration-control, as the card's own parts come up
    * (Prompt `.part`). Reduced motion keeps the fade, with no wait.
    */
   function askedIn(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      delay: still ? 0 : dur("--dur-grow-exit"),
-      duration: dur("--dur-control"),
+      delay: still ? 0 : dur("--duration-grow-exit"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
         still
@@ -602,10 +602,10 @@
           : `opacity: ${t}; translate: 0 calc(var(--pop-rise) * ${u}); filter: blur(calc(var(--part-blur) * ${u}))`,
     };
   }
-  /** The bar gives way to the card growing over it: a fade over --dur-exit. */
+  /** The bar gives way to the card growing over it: a fade over --duration-exit. */
   function askedOut(_node: Element): TransitionConfig {
     return {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -1891,7 +1891,7 @@
    * Where each of the pill's buttons stands in the deck they fold into
    * while the wheel is up, read before anything is written: Send in front,
    * where it is; each one behind it slid toward it until it peeks out by
-   * `--c-deck-peek`, a step smaller (`--c-deck-scale`), whole, so its edge
+   * `--spacing-c-deck-peek`, a step smaller (`--c-deck-scale`), whole, so its edge
    * reads behind the one in front and nothing behind it shows through. With
    * reduced motion nothing slides: the ones behind fade out, and the deck is
    * Send alone. Returns each button's place, and where the deck starts
@@ -1903,7 +1903,9 @@
     from: number
   ): { deck: number; start: number; places: DeckPlace[] } {
     const style = getComputedStyle(row);
-    const peek = Number.parseFloat(style.getPropertyValue("--c-deck-peek"));
+    const peek = Number.parseFloat(
+      style.getPropertyValue("--spacing-c-deck-peek")
+    );
     const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
     const cards = [...row.children]
       .filter((card): card is HTMLElement => card instanceof HTMLElement)
@@ -1983,13 +1985,13 @@
 
   /**
    * The buttons slide together into the deck on the wheel's own growth:
-   * its --dur-grow on the drawer curve. Transform and opacity only, by the
+   * its --duration-grow on the drawer curve. Transform and opacity only, by the
    * Web Animations API, so the buttons' own transitions stay theirs.
    */
   function deckIn(places: DeckPlace[], from: number, to: number): void {
     deckOut(0);
     const timing = {
-      duration: dur("--dur-grow"),
+      duration: dur("--duration-grow"),
       easing: CURVE.drawer,
       fill: "forwards",
     } as const;
@@ -2029,10 +2031,10 @@
 
   /**
    * They fan back out to their places from wherever they are, on the
-   * wheel's fold: its --dur-grow-exit on the drawer curve (`ms`: 0 puts
+   * wheel's fold: its --duration-grow-exit on the drawer curve (`ms`: 0 puts
    * them back at once).
    */
-  function deckOut(ms = dur("--dur-grow-exit")): void {
+  function deckOut(ms = dur("--duration-grow-exit")): void {
     const was = decked;
     decked = null;
     if (!was) {
@@ -2162,7 +2164,7 @@
     clearTimeout(hintBack);
     hintBack = setTimeout(() => {
       hintBack = 0;
-    }, dur("--dur-fade"));
+    }, dur("--duration-fade"));
     await tick();
     const took = was?.text !== draft.text;
     // Back to the draft and asked for again: it comes straight back up. A
@@ -2262,7 +2264,7 @@
   /*
    * A held press or a swipe up on a touch screen. With the keyboard down the
    * composer is a control you can hold: a finger resting on it
-   * --dur-press-hold brings the wheel up under it, and so does one that
+   * --duration-press-hold brings the wheel up under it, and so does one that
    * swipes up off it; dragging while still down rolls it. A swipe's own
    * rise is the opening's: the roll starts where the finger turns back
    * down, so a swipe lifted while still rising leaves the newest message
@@ -2356,7 +2358,7 @@
         hold.lastAt = performance.now();
         felt("hold");
         openRecall(false);
-      }, dur("--dur-press-hold")),
+      }, dur("--duration-press-hold")),
     };
     hold = press;
   }
@@ -2426,7 +2428,7 @@
       swallowClick = true;
       setTimeout(() => {
         swallowClick = false;
-      }, dur("--dur-press-hold"));
+      }, dur("--duration-press-hold"));
       wheel?.release(press.flick);
     };
     document.addEventListener("pointermove", moved, { passive: false });
@@ -2588,7 +2590,7 @@
     const trip = startFlight(asField(field, leaving), from);
     // What the field holds again shows once the words leaving it are gone.
     if (motionOk.current) {
-      landAfter(dur("--dur-lift") * LEFT_BY);
+      landAfter(dur("--duration-lift") * LEFT_BY);
     }
     if (replaced !== undefined) {
       replacing.set(lift.id, replaced);
@@ -2729,7 +2731,7 @@
       return;
     }
     if (editShape) {
-      editShape.morphTo(1, editShape.ext, dur("--dur-grow"));
+      editShape.morphTo(1, editShape.ext, dur("--duration-grow"));
       if (edit) {
         edit.shown = true;
       }
@@ -2754,15 +2756,15 @@
 
   /**
    * The row's entrance: the shape grows `row` up, and its parts come up
-   * partway, once there is room for them: --dur-control into the shape's
+   * partway, once there is room for them: --duration-control into the shape's
    * own clock, which runs on drawn frames (GrownShape `morphTo`). A lift's
    * focus that brings up an on-screen keyboard has iOS Safari hold its
    * frames until the keyboard has risen, and neither the shape nor its
    * parts spend that wait, so both are seen coming up once frames come.
    */
   function growRow(shape: GrownShape, row: number): void {
-    shape.morphTo(1, row, dur("--dur-grow"), shape.base, {
-      ms: motionOk.current ? dur("--dur-control") : 0,
+    shape.morphTo(1, row, dur("--duration-grow"), shape.base, {
+      ms: motionOk.current ? dur("--duration-control") : 0,
       run: () => {
         if (edit && editShape === shape) {
           edit.shown = true;
@@ -2779,7 +2781,7 @@
     if (edit) {
       edit.shown = false;
     }
-    await shape.morphTo(0, shape.ext, dur("--dur-grow-exit"));
+    await shape.morphTo(0, shape.ext, dur("--duration-grow-exit"));
     // Grown again while it folded: it stays.
     if (editShape === shape && !draft.lifted) {
       shape.remove();
@@ -2949,7 +2951,7 @@
       return 0;
     }
     const gap = Number.parseFloat(
-      getComputedStyle(shell).getPropertyValue("--space-8")
+      getComputedStyle(shell).getPropertyValue("--spacing-space-8")
     );
     const { top } = dockEl.getBoundingClientRect();
     // In the layout's px: the panel may still be rising out of its scale.
@@ -3017,7 +3019,7 @@
       bottom: 0,
       height: (askBox?.base ?? 0) + (askBox?.ext ?? 0),
     }));
-    shape.morphTo(1, ext, dur("--dur-grow"));
+    shape.morphTo(1, ext, dur("--duration-grow"));
     // Partway up, once there is room for it.
     setTimeout(
       () => {
@@ -3025,7 +3027,7 @@
           askShown = true;
         }
       },
-      motionOk.current ? dur("--dur-control") : 0
+      motionOk.current ? dur("--duration-control") : 0
     );
   }
 
@@ -3037,7 +3039,7 @@
       draft.askRun += 1;
       askShown = false;
       if (motionOk.current) {
-        await new Promise((done) => setTimeout(done, dur("--dur-exit")));
+        await new Promise((done) => setTimeout(done, dur("--duration-exit")));
       }
       if (turn !== askTurn) {
         return;
@@ -3051,7 +3053,7 @@
     if (askBox) {
       askBox.max = askRoom();
     }
-    fitAsk(dur("--dur-fade"), true);
+    fitAsk(dur("--duration-fade"), true);
     askShown = true;
   }
 
@@ -3069,7 +3071,7 @@
         shape.ext += shape.base - base;
         shape.base = base;
       }
-      await shape.morphTo(0, shape.ext, dur("--dur-grow-exit"));
+      await shape.morphTo(0, shape.ext, dur("--duration-grow-exit"));
     }
     if (turn !== askTurn) {
       return;
@@ -3130,10 +3132,10 @@
       return;
     }
     // In the next frame (frameObserver): the fit eases the shape to the
-    // card over --dur-fade, which resizes it.
+    // card over --duration-fade, which resizes it.
     const sizes = frameObserver(() => {
       if (askRaised) {
-        fitAsk(dur("--dur-fade"));
+        fitAsk(dur("--duration-fade"));
       }
     });
     sizes.observe(node);
@@ -3210,9 +3212,9 @@
    * A draft of more than one line folds to its first line while the field
    * is not being written in, and opens to its full height, growing upward
    * over the transcript, when the field takes focus. Folding and opening
-   * run over --dur-morph (autosize's `data-folding`, on the field while
+   * run over --duration-morph (autosize's `data-folding`, on the field while
    * that height change runs); a typed line grows over the field's own
-   * --dur-control. A press on the pill's own send or attach leaves the
+   * --duration-control. A press on the pill's own send or attach leaves the
    * focus in the field (`ctrls`): taken from it as the press went down, the
    * draft folded, the button moved from under the press, its up landed off
    * it, and nothing was sent.
@@ -3243,9 +3245,9 @@
   const GROUND_BOTTOM = "calc(-1 * var(--dock-foot, 0px))";
   /** As tall as the foot, the composer and the step to the layer, and its dissolve. */
   const GROUND_H =
-    "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--space-8))";
+    "calc(var(--dock-foot, 0px) + var(--layer-foot) + var(--spacing-space-8))";
   const LAYER_GROUND =
-    "linear-gradient(to top, var(--surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--surface-recess-clear))";
+    "linear-gradient(to top, var(--color-surface-recess) calc(var(--dock-foot, 0px) + var(--layer-foot)), var(--color-surface-recess-clear))";
   let panel = $state(0);
   const measurePanel = frameSize(
     (node: HTMLElement) => node.clientHeight,
@@ -3355,9 +3357,10 @@
   bind:this={dockEl}
   style:--dock-foot={flush
     ? undefined
-    : "calc(var(--space-4) + var(--safe-bottom))"}
-  style:--c-composer-w={flush ? "100%" : undefined}
-  style:--layer-foot="calc({panel}px + var(--c-tray-row) + var(--space-2))"
+    : "calc(var(--spacing-space-4) + var(--safe-bottom))"}
+  style:--spacing-c-composer-w={flush ? "100%" : undefined}
+  style:--layer-foot="calc({panel}px + var(--spacing-c-tray-row) +
+  var(--spacing-space-2))"
 >
   <!-- The ground under an open layer (the plan, the tray's shelf, the list
        of what waits on the person). Each
@@ -3391,7 +3394,7 @@
       inert={askRaised}
       bind:this={offers}
       {@attach reflow({ on: ["data-open", "data-railed"] })}
-      style:--prompts-step="calc(var(--space-4) - var(--space-2))"
+      style:--prompts-step={"calc(var(--spacing-space-4) - var(--spacing-space-2))"}
     >
       <!-- Each conversation's offer, built, standing on the stack's foot;
            the one written to is seen, and the stack is as tall as it. What
@@ -3424,7 +3427,7 @@
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate
-       tray's fixed row (app.css `--c-tray-row`), which a transcript keeps
+       tray's fixed row (app.css `--spacing-c-tray-row`), which a transcript keeps
        clear at its foot while something stands in it (SessionPane
        `trayStands`), and the suggestion chips standing on it (out of flow),
        over the transcript's foot. An offer stands on top of both. -->
@@ -3458,7 +3461,7 @@
       <div
         class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none transition-fade-show group-has-slot-waiting/dock:opacity-0 group-has-slot-waiting/dock:invisible group-has-slot-waiting/dock:transition-fade-hide"
         style:--ring-room={planRing
-          ? `calc(${ringWidth}px + var(--space-2))`
+          ? `calc(${ringWidth}px + var(--spacing-space-2))`
           : undefined}
         in:askedIn
         out:askedOut
@@ -3533,7 +3536,7 @@
       <!-- One conversation's tray over the next while they cross-fade, in a
            column the composer's width: an auto column grew to the chips' own
            width. The slot is the tray's one row from the composer's first
-           render, chips or none (app.css `--c-tray-row`; a transcript keeps
+           render, chips or none (app.css `--spacing-c-tray-row`; a transcript keeps
            it clear while a chip stands, SessionPane `trayStands`), with the
            tray standing on its foot: a chip arriving late fills room already
            laid out, and the suggestion row standing on the slot never moves. The tray's shelf and panel
@@ -3542,7 +3545,7 @@
         data-slot="tray-slot"
         class="relative grid grid-cols-1 items-box-end min-h-c-tray-row transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
         style:--ring-room={planRing
-          ? `calc(${ringWidth}px + var(--space-2))`
+          ? `calc(${ringWidth}px + var(--spacing-space-2))`
           : undefined}
       >
         <!-- Each conversation's tray, built, in the slot's one cell: handed
@@ -3738,7 +3741,7 @@
         <div
           data-composer-shown={edit.shown || undefined}
           data-slot="edit-row"
-          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--dur-stagger)"
+          class="group/edit absolute z-3 inset-x-(--edit-inset) flex items-center gap-space-2 pt-space-1 text-size-meta font-medium text-ink-muted pointer-events-none [&_[data-keep]]:opacity-0 [&_[data-keep]]:blur-(--part-blur) [&_[data-keep]]:transition-fade-blur [&_[data-keep]]:hidden [&_[data-keep]]:pointer-events-auto motion-safe:[&_[data-keep]]:translate-y-(--pop-rise) motion-safe:[&_[data-keep]]:transition-fade-slide-blur coarse:[&_[data-keep]]:inline-flex data-composer-shown:[&_[data-keep]]:opacity-100 data-composer-shown:[&_[data-keep]]:translate-none data-composer-shown:[&_[data-keep]]:filter-none data-composer-shown:[&_[data-keep]]:delay-(--duration-stagger)"
           bind:this={editRow}
           style:--edit-inset="{edit.inset}px"
           style:bottom="{edit.base}px"
@@ -3753,7 +3756,7 @@
              was, and the keys are not shown. -->
           <span
             data-slot="hint"
-            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--dur-stagger)"
+            class="inline-flex items-center gap-space-1 whitespace-nowrap coarse:hidden max-phone:hidden opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) motion-safe:transition-fade-slide-blur group-data-composer-shown/edit:opacity-100 group-data-composer-shown/edit:translate-none group-data-composer-shown/edit:filter-none group-data-composer-shown/edit:delay-(--duration-stagger)"
           >
             <Kbd>Enter</Kbd>
             replaces it · <Kbd>Esc</Kbd> keeps it
@@ -3798,7 +3801,7 @@
       <!-- With the keyboard down a touch screen's pill is a control to hold
          (the wheel comes up under it); the field being typed in keeps its
          touches. -->
-      <!-- One shape, always. --radius-lg outside, --space-2 of inset, and the
+      <!-- One shape, always. --radius-lg outside, --spacing-space-2 of inset, and the
            controls inside carry (panel − inset − edge) so the curves are concentric
            rather than two unrelated roundings stacked. The pill is the
            whole surface of its text field: its caret is its focus, and
@@ -3841,8 +3844,8 @@
         onsubmit={(e) => e.preventDefault()}
         ontouchend={onholdnative}
         bind:this={pill}
-        style:--cin-pad="var(--c-composer-inset)"
-        style:--cin-ctl="var(--c-composer-field)"
+        style:--cin-pad="var(--spacing-c-composer-inset)"
+        style:--cin-ctl="var(--spacing-c-composer-field)"
       >
         {#if menuOpen}
           <!-- Above the input, not over it: the sentence being written stays legible
@@ -3873,7 +3876,7 @@
             onmousedown={(event) => event.preventDefault()}
             role="presentation"
             out:popOut={{ side: "top" }}
-            style:--menu-foot="calc(100% + var(--space-2))"
+            style:--menu-foot="calc(100% + var(--spacing-space-2))"
           >
             <Command.Root loop shouldFilter={false} bind:value={highlight}>
               <Command.List>
@@ -3982,10 +3985,10 @@
           style:--roll-move="0 var(--roll-y)"
           style:--roll-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) var(--roll-y))"}
           style:--fold-clip={"inset(calc(var(--roll-reach) * -1) calc(var(--roll-reach) * -1) calc(var(--field-pad) + var(--roll-y, 0px)))"}
-          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--cue-run))"}
-          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--mask-opaque) var(--cue-run))"}
-          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--cue-run), var(--mask-opaque) calc(100% - var(--cue-run)), transparent)"}
-          style:--fold-fade={"linear-gradient(to right, var(--mask-opaque) calc(100% - var(--c-composer-more-w) - var(--space-8)), transparent calc(100% - var(--c-composer-more-w)))"}
+          style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run))"}
+          style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-mask-opaque) var(--cue-run))"}
+          style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run), var(--color-mask-opaque) calc(100% - var(--cue-run)), transparent)"}
+          style:--fold-fade={"linear-gradient(to right, var(--color-mask-opaque) calc(100% - var(--spacing-c-composer-more-w) - var(--spacing-space-8)), transparent calc(100% - var(--spacing-c-composer-more-w)))"}
           style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
           style:--cue-run="1lh"
           onclick={(event) => {
@@ -4002,7 +4005,7 @@
                in it (motion/autosize.svelte.ts), a line at a time over 120ms,
                from one line's worth of the control height to a ceiling, and
                scrolls past that; folding and opening a long draft run over
-               --dur-morph. No scrollbar is drawn, so the text wraps at the
+               --duration-morph. No scrollbar is drawn, so the text wraps at the
                field's full width in every state. While another draft's words
                fly in over it, or an ask's card stands over it, it draws none
                of its own text or caret; while the wheel is up, no caret. -->
@@ -4012,7 +4015,7 @@
             aria-describedby={recallOf ? `${recallId}-way` : undefined}
             aria-expanded={menuOpen || !!recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:data-folding:duration-(--dur-morph) motion-safe:group-data-settling/cin:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--dur-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--dur-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:data-folding:duration-(--duration-morph) motion-safe:group-data-settling/cin:duration-(--duration-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--duration-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
             data-cue-bottom={(cueBottom && !folded) || undefined}
             data-cue-top={(cueTop && !folded) || undefined}
             data-flying={flight !== null || !wordsLanded || undefined}
@@ -4073,7 +4076,7 @@
               data-slot="flight"
               aria-hidden="true"
               class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-body text-(length:--text-field-floor) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
-              style:--flight-clip={"inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)))"}
+              style:--flight-clip={"inset(0 calc(-1 * var(--spacing-space-2)) 0 calc(-1 * var(--spacing-space-3)))"}
             >
               <span
                 data-slot="flight-text"

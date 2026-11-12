@@ -927,8 +927,8 @@
               data-sidebar="menu"
               data-slot="sidebar-menu"
               style:--line-root-gap={projectLevels.length > 0
-                ? "var(--space-3)"
-                : "var(--space-row)"}
+                ? "var(--spacing-space-3)"
+                : "var(--spacing-space-row)"}
             >
               {#each projectRows as item (item.key)}
                 {@render projectTreeRow(item)}

@@ -146,7 +146,7 @@
   /** The preview fades at the control tier. Opacity only, so it runs with or without motion. */
   function previewFade(_node: Element): TransitionConfig {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t) => `opacity: ${0.9 * t}`,
     };
@@ -251,7 +251,7 @@
      the strip, a key, a jump — lands the way a swipe does: the panes slide
      by their distance on the swipe's own spring (gesture.svelte.ts,
      `prepare` and `arrive`). Elsewhere the arriving transcript glides in
-     from the side of the tab it came from and fades up, over --dur-pop on
+     from the side of the tab it came from and fades up, over --duration-pop on
      --ease-drawer (the app's own curve), so the eye reads which
      way it went. The side is read off the strip as it was before the
      switch, so a tab that closed still says where it stood. Only the
@@ -310,7 +310,7 @@
         done: new Promise((resolve) => {
           landed = resolve;
         }),
-        ms: () => (settle ? swipe.settleMs : dur("--dur-pop")),
+        ms: () => (settle ? swipe.settleMs : dur("--duration-pop")),
       };
       if (settle) {
         swipe.prepare(from, id);
@@ -372,7 +372,7 @@
               },
               { transform: "none", opacity: 1 },
             ],
-            { duration: dur("--dur-pop"), easing: ease("--ease-drawer") }
+            { duration: dur("--duration-pop"), easing: ease("--ease-drawer") }
           );
         if (glide) {
           glide.finished.then(done, done);
@@ -425,7 +425,7 @@
     data-pane-leaf-shown={railShown || undefined}
     data-slot="rail"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-y-0 start-0 z-2 w-space-row bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+    class="pointer-events-none absolute inset-y-0 start-0 z-2 w-space-row bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
   ></span>
 
   <!-- Full size puts the strip away with the rail (full-size.svelte.ts). -->
@@ -447,7 +447,7 @@
     <div
       data-slot="drop-preview"
       aria-hidden="true"
-      class="pointer-events-none absolute z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--dur-morph) motion-safe:ease-in-out"
+      class="pointer-events-none absolute z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--duration-morph) motion-safe:ease-in-out"
       style:inset={previewInset}
       transition:previewFade
     ></div>

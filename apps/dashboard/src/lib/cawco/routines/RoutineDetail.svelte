@@ -124,7 +124,7 @@
 <div
   data-slot="detail"
   class="flex flex-col gap-space-4 px-space-3 pb-space-4 @table-400px/table:ps-(--detail-lead)"
-  style:--detail-lead="calc(var(--c-row-lead) + var(--space-3) * 2)"
+  style:--detail-lead={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3) * 2)"}
 >
   <!-- The schedule drawn whole: the row's strip with its days or hours. -->
   <div data-slot="schedule-wrap" class="max-w-c-measure pt-space-2">
@@ -147,7 +147,7 @@
       id="instruction-{routine.id}"
       style:--clamp-h="calc(var(--lines) * 1lh)"
       style:--fade-from="calc(100% - 1lh)"
-      style:--fade-mask={"linear-gradient(to bottom, var(--mask-opaque) var(--fade-from), transparent)"}
+      style:--fade-mask={"linear-gradient(to bottom, var(--color-mask-opaque) var(--fade-from), transparent)"}
       style:--lines="4"
     >
       <Markdown source={routine.prompt} />

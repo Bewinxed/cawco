@@ -598,7 +598,7 @@
           name: accountNameAmong(one, cawco.accounts?.accounts ?? []),
           nick: one.label,
           email: one.email,
-          color: `var(--account-${one.hue})`,
+          color: `var(--color-account-${one.hue})`,
           ring,
           line,
           disabled: ring?.state === "limit",
@@ -867,11 +867,11 @@
       : undefined
   );
   const HUES = [
-    "var(--hue-amber-500)",
-    "var(--hue-green-500)",
-    "var(--hue-cyan-400)",
-    "var(--hue-blue-500)",
-    "var(--hue-orange-500)",
+    "var(--color-hue-amber-500)",
+    "var(--color-hue-green-500)",
+    "var(--color-hue-cyan-400)",
+    "var(--color-hue-blue-500)",
+    "var(--color-hue-orange-500)",
   ];
   const loadLabel = (online: boolean, running: number) => {
     if (!online) {
@@ -2321,7 +2321,7 @@
       : "max-phone:pt-space-3",
   ]}
   style:--body-top={sheet && !moveStep
-    ? "calc(var(--sheet-room) + var(--space-3))"
+    ? "calc(var(--sheet-room) + var(--spacing-space-3))"
     : undefined}
   data-stepped={moveStep || undefined}
   data-vaul-no-drag
@@ -2341,7 +2341,7 @@
     >
       <div class="group-data-stepped:hidden">
         <SectionHeader
-          hue="var(--hue-blue-500)"
+          hue="var(--color-hue-blue-500)"
           icon={Chat}
           label={continueFrom ? spawnWords.nextStep : spawnWords.firstPrompt}
         />

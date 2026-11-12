@@ -242,7 +242,7 @@
     >
       <div
         class="relative flex h-full min-h-0 flex-auto flex-col"
-        style:--bar-room="var(--c-top-bar-h)"
+        style:--bar-room="var(--spacing-c-top-bar-h)"
       >
         <BarFloat tint="bg-surface-recess">
           {#snippet trailing()}
@@ -262,7 +262,7 @@
             browsing={null}
             browsingCwd=""
             browsingHarness={undefined}
-            docked={{ draft, headRoom: "var(--c-top-bar-h)" }}
+            docked={{ draft, headRoom: "var(--spacing-c-top-bar-h)" }}
             focused
             viewId={MAIN}
             visible

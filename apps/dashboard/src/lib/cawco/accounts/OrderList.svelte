@@ -76,7 +76,7 @@
       if (motionOk.current && left !== 0) {
         row.animate(
           [{ transform: `translateY(${left}px)` }, { transform: "none" }],
-          { duration: dur("--dur-exit"), easing: ease("--ease-out") }
+          { duration: dur("--duration-exit"), easing: ease("--ease-out") }
         );
       }
       await tick();

@@ -7,7 +7,7 @@ const cn = (...classes: string[]): string => classes.join(" ");
 export const look = cn("rounded-md p-[3px]", "rounded-huge");
 
 export const settle = (node: HTMLElement): string =>
-  node.style.getPropertyValue("--dur-settle");
+  node.style.getPropertyValue("--duration-hold");
 
 export const cutsAndMoves = [{ translate: "0 4px", clipPath: "inset(2px)" }];
 export const cuts = [{ clipPath: "inset(2px)", opacity: 0 }];

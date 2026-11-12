@@ -4,7 +4,7 @@
    * surface brief, "The top bar's glass, Caw's head and its cards"): the folder as the group's bar symbol in its
    * muted ink and, once there is anything, the number beside it as the
    * machines show theirs (BarItem's `count`): the
-   * number in the label role, `--space-2` past the folder, never on its
+   * number in the label role, `--spacing-space-2` past the folder, never on its
    * ink, so the folder keeps its shape (owner: "the count is bigger than
    * the icon … can't u put it as part of the integrated icon group?").
    * The folder is Solar's bold-duotone `folder-2`: its front at full ink

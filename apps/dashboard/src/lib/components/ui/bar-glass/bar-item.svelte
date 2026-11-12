@@ -5,7 +5,7 @@
   /**
    * A bar item's recipe, every state on its own box so hover, pressed,
    * selected and focus share one contour: the bar's item tall
-   * (`--c-bar-item`), at least as wide, its corners the glass's by where it
+   * (`--spacing-c-bar-item`), at least as wide, its corners the glass's by where it
    * stands (`concentric-at`, BarGlass: the ends' 18 less the 4px pad, 5px
    * toward a neighbour), a capsule where no glass holds it. Bare until the
    * pointer rests on it (the hover only where a fine pointer can rest),
@@ -181,11 +181,11 @@
    * With no room said, the lift is the corner form's.
    */
   const COUNT_FOOT =
-    "max(calc(-1 * var(--c-bar-group-pad) / 2), calc(var(--icon-md) / 2 - var(--c-bar-group-pad) - var(--bar-room, var(--icon-md))))";
+    "max(calc(-1 * var(--spacing-c-bar-group-pad) / 2), calc(var(--spacing-icon-md) / 2 - var(--spacing-c-bar-group-pad) - var(--bar-room, var(--spacing-icon-md))))";
 
   /** Caw's head on the phone's glass: its finger's area centred on the glass's height. */
   const CAW_HIT_TOP =
-    "calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)";
+    "calc((var(--spacing-c-bar-caw-glass-phone) - var(--spacing-c-btn-h-lg)) / 2)";
 
   const counted = $derived(count !== undefined && count !== null && count > 0);
   const lit = $derived(Boolean(pressed) || marked);
@@ -234,7 +234,7 @@
     class={look}
     {href}
     style:--count-foot={COUNT_FOOT}
-    style:--count-glyph="var(--c-bar-symbol)"
+    style:--count-glyph="var(--spacing-c-bar-symbol)"
     style:--caw-hit-top={form === "head" ? CAW_HIT_TOP : undefined}
     type={href ? undefined : "button"}
     bind:this={ref}

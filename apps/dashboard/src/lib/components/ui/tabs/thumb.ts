@@ -24,7 +24,7 @@ import { tv } from "#lib/utils.js";
  * track's ghost.
  */
 export const SEGMENTED_TRACK =
-  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--ghost:var(--groove-hover)] [--item:var(--c-btn-h-sm)] [--pad:var(--c-segmented-pad)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
+  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--ghost:var(--color-groove-hover)] [--item:var(--spacing-c-btn-h-sm)] [--pad:var(--spacing-c-segmented-pad)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
 
 /**
  * The kit's segmented parts: the groove (its recipe above), the thumb that
@@ -49,7 +49,7 @@ export const segmentedVariants = tv({
 /**
  * Slides the thumb of a segmented group (tabs, single toggle group) under
  * its selected item, gliding its position and its size together over
- * --dur-pop on --ease-in-out, the way the new-session ghost follows the
+ * --duration-pop on --ease-in-out, the way the new-session ghost follows the
  * hover. A change caught mid-glide starts from where the thumb is on
  * screen, not from where it was headed, and width and height tween rather
  * than scale, so the thumb's corners never stretch.
@@ -111,7 +111,7 @@ export function slideThumb(
           },
         ],
         {
-          duration: dur("--dur-pop"),
+          duration: dur("--duration-pop"),
           easing: ease("--ease-in-out"),
         }
       );

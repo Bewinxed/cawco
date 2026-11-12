@@ -89,7 +89,7 @@
 <div
   data-slot="preview-tools"
   class={[
-    "pointer-events-none absolute inset-x-0 bottom-space-3 z-1 mb-(--lift) flex flex-nowrap items-end gap-space-2 px-space-3 transition-[translate,opacity] duration-(--dur-panel) ease-drawer",
+    "pointer-events-none absolute inset-x-0 bottom-space-3 z-1 mb-(--lift) flex flex-nowrap items-end gap-space-2 px-space-3 transition-[translate,opacity] duration-(--duration-panel) ease-drawer",
     // Spread, its groups keep their own width, so the row's need is theirs
     // (the surface folds them past it); centred (folded), a group that
     // gives up width (`min-w-0`) takes the row's shortfall.
@@ -104,8 +104,8 @@
     }
   )}
   {@attach measured}
-  in:rise={"--dur-panel"}
-  out:rise={"--dur-exit"}
+  in:rise={"--duration-panel"}
+  out:rise={"--duration-exit"}
 >
   {@render children()}
 </div>

@@ -107,7 +107,7 @@
 <li
   class="@container/arow flex min-h-c-row-h min-w-0 flex-col border-t border-t-border-hairline"
   data-flip
-  style:--link-cols="var(--space-3) minmax(0, 1fr) var(--icon-md)"
+  style:--link-cols={"var(--spacing-space-3) minmax(0, 1fr) var(--spacing-icon-md)"}
 >
   <a
     data-setup={account.setupStep}
@@ -121,7 +121,7 @@
     <i
       data-slot="dot"
       aria-hidden="true"
-      class="col-(--area) row-(--area) size-space-3 rounded-pill bg-(--c) transition-[background-color] duration-(--dur-fade) ease-out"
+      class="col-(--area) row-(--area) size-space-3 rounded-pill bg-(--c) transition-[background-color] duration-(--duration-fade) ease-out"
       style:--area="dot"
       style:--c={hueVar(account.hue)}
     ></i>
@@ -135,7 +135,7 @@
     >
     {#if problem}
       <span
-        class="mark-line col-(--area) row-(--area) flex min-w-0 items-start gap-space-1 type-meta text-status-attn-ink transition-[color] duration-(--dur-panel) ease-out"
+        class="mark-line col-(--area) row-(--area) flex min-w-0 items-start gap-space-1 type-meta text-status-attn-ink transition-[color] duration-(--duration-panel) ease-out"
         data-flip
         style:--area="problem"
       >

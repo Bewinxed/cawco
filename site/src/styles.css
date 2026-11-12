@@ -25,8 +25,8 @@
 
 :root {
   /*
-   * Paper is the page ground. Its value is `color.paper` in
-   * design/tokens/cawco.tokens.json, and the build stops if the two differ.
+   * Paper is the page ground. Its value is `--color-paper` in
+   * apps/dashboard/src/lib/tokens/theme.css, and the build stops if the two differ.
    * Ink and vermilion are the brand board's. Everything else on the page is
    * mixed from these three. Spark yellow belongs to the wordmark, the mascot
    * and brand art: here that is Caw's app icon and his own drawings.

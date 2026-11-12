@@ -6,14 +6,14 @@
    * The dialog (DESIGN.md, Dialog, sheet and drawer). Past the phone line, a
    * recess tray (18px radius, 6px padding, overlay shadow) holding a raised
    * body (12px radius, 18px padding), 6 + 12 = 18, so the corners are
-   * concentric; it enters over --dur-panel on ease-out rising 6px and exits
-   * over --dur-exit, and with reduced motion only the scrim fades. Under it
+   * concentric; it enters over --duration-panel on ease-out rising 6px and exits
+   * over --duration-exit, and with reduced motion only the scrim fades. Under it
    * (Breakpoints: 640px), the drawer's one bottom sheet: the raised surface
    * full-bleed, flush on the screen's foot, 12px top corners, the hairline
    * on its top edge, the grabber, the content 16px in from the sides and
    * 16px plus the safe area above the foot, up to 85vh; it slides its whole
-   * height in over --dur-panel on the drawer curve and out over --dur-exit,
-   * fading over --dur-control with reduced motion, and a finger drags it
+   * height in over --duration-panel on the drawer curve and out over --duration-exit,
+   * fading over --duration-control with reduced motion, and a finger drags it
    * down to put it away. Every kit dialog and alert dialog, with no change
    * at the site.
    */
@@ -26,7 +26,7 @@
       /** Close: the 30px ghost 12px from the tray body's corner; on the
           sheet, at the trailing edge of the title's line under the grabber. */
       close:
-        "absolute top-3 right-3 max-phone:top-[calc(--spacing(7)+var(--c-grabber-h)+(var(--text-title)*var(--leading-ui)-var(--c-btn-h-sm))/2)] max-phone:right-4",
+        "absolute top-3 right-3 max-phone:top-[calc(--spacing(7)+var(--spacing-c-grabber-h)+(var(--text-title)*var(--leading-ui)-var(--spacing-c-btn-h-sm))/2)] max-phone:right-4",
     },
   });
 
@@ -42,7 +42,8 @@
         form: "phone:max-w-128",
         report: "phone:max-w-168",
         document: "phone:max-w-320",
-        connect: "phone:max-w-[calc(var(--c-connect-w)+2*--spacing(1.5))]",
+        connect:
+          "phone:max-w-[calc(var(--spacing-c-connect-w)+2*--spacing(1.5))]",
       },
     },
   });
@@ -61,7 +62,7 @@
   const dialogBodyVariants = tv({
     slots: {
       frame:
-        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--space-5)-var(--hit-foot))] text-body text-ink-strong coarse:[--hit-foot:calc((var(--c-touch-floor)-var(--c-btn-h-xs))/2+var(--hit-nudge))] max-phone:coarse:pb-[calc(--spacing(4)+var(--safe-bottom)-var(--hit-foot))]",
+        "relative flex min-h-0 flex-1 flex-col phone:coarse:pb-[calc(var(--spacing-space-5)-var(--hit-foot))] text-body text-ink-strong coarse:[--hit-foot:calc((var(--spacing-c-touch-floor)-var(--spacing-c-btn-h-xs))/2+var(--hit-nudge))] max-phone:coarse:pb-[calc(--spacing(4)+var(--safe-bottom)-var(--hit-foot))]",
       grid: "grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain coarse:pb-(--hit-foot)",
     },
     variants: {

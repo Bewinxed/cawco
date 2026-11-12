@@ -23,7 +23,7 @@
   {...restProps}
 >
   <div
-    class="size-full flex-1 bg-brand-solid transition-transform duration-(--dur-panel) ease-out"
+    class="size-full flex-1 bg-brand-solid transition-transform duration-(--duration-panel) ease-out"
     data-slot="progress-indicator"
     style:transform="translateX(-{100 - (100 * (value ?? 0)) / (max ?? 1)}%)"
   ></div>

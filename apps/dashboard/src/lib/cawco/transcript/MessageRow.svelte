@@ -147,7 +147,7 @@
 
   /**
    * Copy puts the message's words on the clipboard: the glyph turns to the
-   * drawn check for --dur-hold (PendingContent). A browser that refuses the
+   * drawn check for --duration-hold (PendingContent). A browser that refuses the
    * clipboard (plain http on a LAN address, a denied permission) says so
    * under the words, with the way out.
    */
@@ -324,7 +324,7 @@
    *  tACK    the hub's record of it arrives (well under a second, on a live
    *          hub): "queued" at 0.7, after the live tail, until the session
    *          reads it
-   *  tREAD   presence 0.7 → 1.0 over --dur-menu; Who's note slot swaps to
+   *  tREAD   presence 0.7 → 1.0 over --duration-menu; Who's note slot swaps to
    *          the real clock (the hub's), and the row slides into the place
    *          it was read at (Transcript's FLIP). No scale: arrival is
    *          subtraction.
@@ -332,8 +332,8 @@
    * fail (from the same ghost, instead of settling):
    *    0ms   presence 0.7 → 1.0 — the words matter MORE on failure, not less
    *    0ms   Who's note becomes "not sent"
-   *  +⅓ --dur-control   the reason line and its actions unfold (grid-rows
-   *          0fr → 1fr) over --dur-pop: the chip flips first, the reason
+   *  +⅓ --duration-control   the reason line and its actions unfold (grid-rows
+   *          0fr → 1fr) over --duration-pop: the chip flips first, the reason
    *          follows — cause, then effect. The unfold is the one layout
    *          change, and it is the information: something new must be read.
    * ───────────────────────────────────────────────────────────────────────
@@ -707,7 +707,7 @@
       return;
     }
     requestAnimationFrame(() => {
-      const timing = { duration: dur("--dur-pop"), easing: CURVE.drawer };
+      const timing = { duration: dur("--duration-pop"), easing: CURVE.drawer };
       node.animate(
         [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0)" }],
         { ...timing, pseudoElement: "::before" }
@@ -732,7 +732,7 @@
     data-message-actions
     data-slot="strip"
     data-pending={forkPending || copying || undefined}
-    class="flex items-center gap-space-1 -my-space-1 opacity-0 pointer-events-none motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto has-focus-visible:opacity-100 has-focus-visible:pointer-events-auto data-pending:opacity-100 data-pending:pointer-events-auto"
+    class="flex items-center gap-space-1 -my-space-1 opacity-0 pointer-events-none motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto has-focus-visible:opacity-100 has-focus-visible:pointer-events-auto data-pending:opacity-100 data-pending:pointer-events-auto"
     onfocusin={stripFocus}
     onfocusout={stripBlur}
   >
@@ -865,7 +865,7 @@
     {runsOn}
     you
     {@attach land(() => (grouped ? undefined : sent), {
-      ms: dur("--dur-pop"),
+      ms: dur("--duration-pop"),
       uniform: true,
     })}
   >
@@ -893,10 +893,10 @@
            run reads as one surface. -->
       <div
         data-slot="words"
-        class="flow-root group-data-ghost/turn:opacity-(--ghost-presence) motion-safe:transition-[opacity] motion-safe:duration-(--dur-menu) motion-safe:ease-out"
+        class="flow-root group-data-ghost/turn:opacity-(--ghost-presence) motion-safe:transition-[opacity] motion-safe:duration-(--duration-menu) motion-safe:ease-out"
         bind:this={words}
         {@attach land(() => (grouped ? sent : undefined), {
-          ms: dur("--dur-pop"),
+          ms: dur("--duration-pop"),
           uniform: true,
         })}
       >
@@ -923,7 +923,7 @@
              opens to take them back; the words hide while they fly. -->
         <div
           {@attach folds(() => !lifted, {
-            ms: dur("--dur-panel"),
+            ms: dur("--duration-panel"),
             easing: CURVE.drawer,
           })}
         >
@@ -1087,8 +1087,8 @@
           data-opens
           inert={!open}
           data-open={open || undefined}
-          style:--fail-delay="calc(var(--dur-control) / 3)"
-          class="grid grid-rows-shut opacity-0 data-open:grid-rows-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:duration-(--dur-pop) motion-safe:ease-out motion-safe:delay-(--fail-delay)"
+          style:--fail-delay="calc(var(--duration-control) / 3)"
+          class="grid grid-rows-shut opacity-0 data-open:grid-rows-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:duration-(--duration-pop) motion-safe:ease-out motion-safe:delay-(--fail-delay)"
         >
           <div class="fold-item">
             {#if failed || retried}

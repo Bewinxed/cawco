@@ -97,7 +97,7 @@
   /**
    * The live block the reader just watched arrives as it was — its live
    * label too — and becomes "Reasoning" as it folds shut: the two labels
-   * cross-fade in one place (--dur-control), the one leaving out of the flow
+   * cross-fade in one place (--duration-control), the one leaving out of the flow
    * so the new one's width is the header's at once. The same swap plays when
    * a branch's block stops being live under the reader.
    */
@@ -111,7 +111,7 @@
   const liveLabel = $derived(live || settling);
   function faceIn(_node: Element) {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -121,7 +121,7 @@
       node,
       () => ({ position: "absolute", "inset-inline-start": "0" }),
       {
-        duration: dur("--dur-control"),
+        duration: dur("--duration-control"),
         easing: easeOut,
         css: (t: number) => `opacity: ${t}`,
       }
@@ -153,19 +153,19 @@
           { width: `${cellWas}px`, overflowX: "clip" },
           { width: `${now}px`, overflowX: "clip" },
         ],
-        { duration: dur("--dur-control"), easing: CURVE.out }
+        { duration: dur("--duration-control"), easing: CURVE.out }
       );
     });
   });
   /**
    * Folding shut, the last thought's end rises into the header as the body
-   * closes up under it, on the fold's own length (--dur-exit); opened, it
-   * fades out of the way (--dur-control). Never on a first render.
+   * closes up under it, on the fold's own length (--duration-exit); opened, it
+   * fades out of the way (--duration-control). Never on a first render.
    */
   function tailIn(_node: Element) {
     const rise = motionOk.current;
     return {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: easeOut,
       css: (t: number) =>
         `opacity: ${t}${rise ? `; translate: 0 ${((1 - t) * 0.5).toFixed(3)}lh` : ""}`,
@@ -173,7 +173,7 @@
   }
   function tailOut(_node: Element) {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };

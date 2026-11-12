@@ -25,7 +25,7 @@
  * everywhere"). Then the motion, read through the kit's `readMotion`
  * on the DevTools clock with its loops caught: putting the agent to work
  * starts one run inside the card, the shared `breath` keyframes on the live
- * dot, a loop of `--breath` on `--ease-in-out`; held at 0, ½ and 1 of it
+ * dot, a loop of `--duration-breath` on `--ease-in-out`; held at 0, ½ and 1 of it
  * the dot's opacity reads 1, `--breath-floor` and 1.
  *
  * And at 1440, on Chromium and WebKit, the card is its pill grown (the
@@ -212,7 +212,7 @@ async function boxes(kit: Kit, base: string): Promise<void> {
     for (const { view, width } of VIEWS_READ) {
       const page = await kit.page(view, { theme });
       await open(page, url, DOT);
-      // The card's entrance (the kit's pop, --dur-pop) has landed.
+      // The card's entrance (the kit's pop, --duration-pop) has landed.
       await page.waitForTimeout(400);
       const read = await page.evaluate(readWorking);
       const at = `${width} ${theme}`;
@@ -291,7 +291,7 @@ async function breath(kit: Kit, base: string): Promise<void> {
     // The tokens as the page computes them: one breath's length and curve, and its floor.
     const tokens = await page.evaluate(() => {
       const probe = document.createElement("i");
-      probe.style.animationDuration = "var(--breath)";
+      probe.style.animationDuration = "var(--duration-breath)";
       probe.style.animationTimingFunction = "var(--ease-in-out)";
       document.body.append(probe);
       const style = getComputedStyle(probe);
@@ -387,7 +387,7 @@ async function breath(kit: Kit, base: string): Promise<void> {
     const shares = at.map((one) => one?.progress ?? Number.NaN);
     const curve = motion.at[0]?.value.easing ?? "";
     kit.check(
-      `1440 ${theme}: put to work, the card starts one run, the shared breath on the live dot: a loop of --breath (${tokens.ms}ms) on --ease-in-out, its opacity 1, the floor (${tokens.floor}) and 1 at 0, ½ and 1 of a loop`,
+      `1440 ${theme}: put to work, the card starts one run, the shared breath on the live dot: a loop of --duration-breath (${tokens.ms}ms) on --ease-in-out, its opacity 1, the floor (${tokens.floor}) and 1 at 0, ½ and 1 of a loop`,
       motion.by === "clock" &&
         motion.runs.length === 1 &&
         !!run &&
@@ -466,13 +466,15 @@ function readMorph() {
     shown: Number(getComputedStyle(body).opacity),
     card: rect(card),
     pill: { x: told.left, y: told.top, w: 20, h: 20 },
-    pillFill: colour("--action-solid"),
-    cardFill: colour("--surface-raised"),
+    pillFill: colour("--color-action-solid"),
+    cardFill: colour("--color-surface-raised"),
     cardRadius: Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
     ),
     gap: Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--space-2")
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--spacing-space-2"
+      )
     ),
     room: rect(room),
     side: card.dataset.side ?? "",
@@ -684,7 +686,9 @@ async function scrollFollow(kit: Kit, base: string): Promise<void> {
     await page.waitForTimeout(400);
     const gap = await page.evaluate(() =>
       Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--space-2")
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--spacing-space-2"
+        )
       )
     );
     const pageBox = await page

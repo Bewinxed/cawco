@@ -8,7 +8,7 @@
 
   Sized by its agent it takes that room (block-size.ts); unsized it stands
   at its own size up to the reply's measure, and in a Row it shares the
-  row with the pictures beside it, never under `--c-picture-min` before
+  row with the pictures beside it, never under `--spacing-c-picture-min` before
   the Row wraps it onto a line of its own. A file it can't name, or one
   that didn't load, says so in one line where it would stand.
 -->

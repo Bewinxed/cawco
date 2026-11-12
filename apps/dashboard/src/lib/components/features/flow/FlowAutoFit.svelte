@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * The graph refits whenever it gains or loses a node, gliding to the new
-   * frame over --dur-panel on --ease-in-out (movement on screen). The first
+   * frame over --duration-panel on --ease-in-out (movement on screen). The first
    * frame is the canvas's own `fitView`, drawn in place; Svelte Flow holds a
    * fit until the nodes it frames are measured.
    *
@@ -64,7 +64,7 @@
 
   /** Frames the graph as it opened, gliding there. */
   export function fit(): void {
-    const duration = motionOk.current ? dur("--dur-panel") : 0;
+    const duration = motionOk.current ? dur("--duration-panel") : 0;
     onFocus(fitView({ ...frame(), duration, ease: easeInOut }), duration);
   }
 

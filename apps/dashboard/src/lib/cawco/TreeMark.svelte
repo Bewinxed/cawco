@@ -149,10 +149,10 @@
   data-open={(parent && open) || undefined}
   data-status-count={countIsStatus ? "" : undefined}
   data-switch={switches || rowToggles ? "" : undefined}
-  style:--dot={dot ? `var(--status-${dot}-glyph)` : undefined}
+  style:--dot={dot ? `var(--color-status-${dot}-glyph)` : undefined}
   style:--fill={fill}
   style:--n={Math.min(count, 3)}
-  style:--size="var(--mark-size, var(--space-5))"
+  style:--size="var(--mark-size, var(--spacing-space-5))"
   style:--mark-z="var(--mark-level, 2)"
 >
   {#if has}
@@ -204,17 +204,17 @@
     data-slot="tile"
     aria-hidden="true"
     class={[
-      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:duration-(--dur-toggle) motion-safe:ease-out motion-safe:mark-pressed:press-by-(--press-scale) group-data-dot/mark:mask-(--hole-mask) mark-beating:mask-none",
+      "absolute inset-0 grid place-items-center rounded-xs bg-(--fill) group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:duration-(--duration-toggle) motion-safe:ease-out motion-safe:mark-pressed:press-by-(--press-scale) group-data-dot/mark:mask-(--hole-mask) mark-beating:mask-none",
       !(has && !faceAlways) && "bg-mark-overlay",
     ]}
     style:--hole={dot
       ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
       : undefined}
-    style:--hole-mask={"radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--c-tree-mark-hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--c-tree-mark-hole-edge)))"}
+    style:--hole-mask={"radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--spacing-c-tree-mark-hole-edge)), var(--color-mask-opaque) calc(var(--hole) + var(--spacing-c-tree-mark-hole-edge)))"}
   >
     <span
       data-slot="tree-mark-rest"
-      style:--icon-swap-dur="var(--dur-control)"
+      style:--icon-swap-dur="var(--duration-control)"
       class="col-start-1 row-start-1 inline-grid place-items-center swap-move group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-gone group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-gone"
     >
       {#if has && !faceAlways}
@@ -233,11 +233,11 @@
     {#if parent && !faceAlways}
       <span
         data-slot="chev"
-        style:--icon-swap-dur="var(--dur-control)"
+        style:--icon-swap-dur="var(--duration-control)"
         class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm swap-move swap-gone group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-shown group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-shown"
         ><!-- Open, the chevron points down at the rows. --><ChevronIcon
           aria-hidden="true"
-          class="size-full rotate-(--swap-turn) motion-safe:transition-[--swap-turn] motion-safe:duration-(--dur-toggle) motion-safe:ease-out"
+          class="size-full rotate-(--swap-turn) motion-safe:transition-[--swap-turn] motion-safe:duration-(--duration-toggle) motion-safe:ease-out"
           style={open ? "--swap-turn: 90deg" : undefined}
         /></span
       >
@@ -339,7 +339,7 @@
       aria-label={label}
       class="focus-inset touch-hit select-none touch-callout-none absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs coarse:hit-gap-x-(--hit-stop-x) coarse:hit-gap-y-(--hit-stop-y)"
       style:--reach="calc(var(--status-dot-size) / 2)"
-      style:--hit-max={"var(--mark-hit-max, calc(var(--space-1) + var(--tree-gap)))"}
+      style:--hit-max={"var(--mark-hit-max, calc(var(--spacing-space-1) + var(--tree-gap)))"}
       style:--hit-foot={"calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"}
       style:--hit-stop-x={"calc(2 * (var(--mark-hit-gap, var(--row-compact-gap)) - var(--reach)))"}
       style:--hit-stop-y={"calc(2 * (var(--hit-max) - var(--tree-gap) / 2 - var(--reach)))"}

@@ -114,7 +114,7 @@
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         data-slot="clear"
-        class="ns-check pointer-hit touch-hit select-none relative z-1 -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong"
+        class="ns-check pointer-hit touch-hit select-none relative z-1 -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:text-ink-strong"
         onclick={(event) => {
           event.stopPropagation();
           onclear();
@@ -208,7 +208,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
+        class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] duration-(--duration-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
         data-machine-id={row.machineId}
         data-project-id={row.id}
@@ -239,7 +239,7 @@
     <button
       data-slot="row"
       data-add
-      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--dur-toggle) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
+      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] duration-(--duration-toggle) ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };

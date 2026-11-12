@@ -826,8 +826,8 @@
       again={copyLink}
       data-copy-refused
       details={link}
-      end="var(--space-3)"
-      indent="var(--space-3)"
+      end="var(--spacing-space-3)"
+      indent="var(--spacing-space-3)"
       reason={linkRefused ? copyRefused("Link") : null}
     />
     <!-- The reply takes the keyboard only when he reaches for it (a tap or a

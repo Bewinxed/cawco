@@ -333,7 +333,7 @@
         handOn = false;
         next.focus();
       }
-    }, dur("--dur-grow-exit"));
+    }, dur("--duration-grow-exit"));
   });
 
   /**
@@ -723,7 +723,7 @@
   <h2
     class="mark-line flex items-center gap-space-2 mb-space-2 text-size-label font-medium text-ink-strong opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
     style:--part="0"
-    style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+    style:--part-delay="calc(var(--part) * var(--duration-stagger))"
   >
     <span
       data-slot="glyph"
@@ -798,7 +798,7 @@
       data-slot="body"
       class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
     >
       <p
         data-slot="lede"
@@ -867,7 +867,7 @@
       data-slot="foot"
       class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
     >
       <!-- A refusal stands over the pair: the card grows upward from the
            composer's pill, so nothing under the thumb moves as it appears. -->
@@ -928,16 +928,16 @@
       data-slot="body"
       class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:pb-(--hit-reach) opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}
-      style:--hit-reach="calc((var(--c-touch-floor) - var(--c-btn-h-sm)) / 2)"
+      style:--hit-reach={"calc((var(--spacing-c-touch-floor) - var(--spacing-c-btn-h-sm)) / 2)"}
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
     >
       <!-- The live question's rail, on its lede's inline edge. -->
       {#if rail}
         <span
           data-slot="rail"
           aria-hidden="true"
-          class="absolute top-0 start-0 w-px bg-brand-solid pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:duration-(--dur-control) motion-safe:ease-drawer"
+          class="absolute top-0 start-0 w-px bg-brand-solid pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:duration-(--duration-control) motion-safe:ease-drawer"
           style:block-size="{rail.height}px"
           style:translate="0 {rail.top}px"
         ></span>
@@ -1087,7 +1087,7 @@
       data-slot="foot"
       class="flex-none pt-space-1 coarse:pt-space-2 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
     >
       <div class="flex gap-space-2">
         <Button
@@ -1132,7 +1132,7 @@
       data-slot="body"
       class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:-mx-space-3 coarse:px-space-3 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
-      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
     >
       <!-- What will happen, in the title's weight: the line the grant is
            made on. -->
@@ -1181,7 +1181,7 @@
               variant="ghost"
             >
               <IconChevronDown
-                class="motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-drawer group-data-open/cmd:rotate-180"
+                class="motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-drawer group-data-open/cmd:rotate-180"
               />
             </Button>
           {/if}
@@ -1239,13 +1239,13 @@
       data-slot="foot"
       class="flex-none pt-space-1 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
-      style:--part-delay="calc(var(--part) * var(--dur-stagger))"
+      style:--part-delay="calc(var(--part) * var(--duration-stagger))"
     >
       <!-- JOURNEY §Triage: the full row width sits between grant and
-           refusal. At --space-2 the two sat 7px apart, close enough that a
+           refusal. At --spacing-space-2 the two sat 7px apart, close enough that a
            hand aiming at Approve lands on Deny. The gap is unfillable on
            purpose — no third control belongs between a grant and a refusal
-           — and --space-8 is the floor it never falls below when the row is
+           — and --spacing-space-8 is the floor it never falls below when the row is
            narrow. -->
       <div
         data-slot="choice"
@@ -1297,8 +1297,8 @@
       </div>
       {@render wait()}
       {#if rule}
-        <!-- A clear break from the gate above, on the scale (--space-8 /
-             --space-5). The permission scope actually being granted is
+        <!-- A clear break from the gate above, on the scale (--spacing-space-8 /
+             --spacing-space-5). The permission scope actually being granted is
              consequential text — it reads at --text-label, never the
              10.25px micro-label step. -->
         <div class="mt-space-8 pt-space-5 border-t border-t-border-hairline">

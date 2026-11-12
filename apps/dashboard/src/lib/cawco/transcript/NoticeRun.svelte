@@ -75,7 +75,7 @@
       <span data-slot="chev" class="inline-flex flex-none" data-box
         ><IconChevron
           aria-hidden="true"
-          class="size-icon-sm group-data-open/notice:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out"
+          class="size-icon-sm group-data-open/notice:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-in-out"
         /></span
       ></span
     >

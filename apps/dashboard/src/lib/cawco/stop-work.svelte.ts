@@ -690,7 +690,7 @@ class StopWork {
       const flier = job.open ? this.fliers.get(jobKey(job)) : undefined;
       if (flier) {
         // Its word and glyph turn first; its tile leaves after the fade.
-        this.after(job, dur("--dur-fade"), () => flier.fly(row));
+        this.after(job, dur("--duration-fade"), () => flier.fly(row));
       } else {
         row.departed = true;
         row.gone = true;
@@ -714,10 +714,10 @@ class StopWork {
     const parent = job.rows.find((each) => each.s.id === row.s.parentId);
     const flier = job.open ? this.fliers.get(jobKey(job)) : undefined;
     if (parent && flier) {
-      this.after(job, dur("--dur-stagger"), () => flier.fly(parent));
+      this.after(job, dur("--duration-stagger"), () => flier.fly(parent));
     }
     if (job.rows.every((each) => each.arrived)) {
-      this.after(job, dur("--dur-control"), () => {
+      this.after(job, dur("--duration-control"), () => {
         detach(this.finish(job), "finish");
       });
     }
@@ -774,7 +774,7 @@ class StopWork {
     // label's morph waits for the morph to land.
     const morphing =
       job.rows.length > 0
-        ? dur("--dur-morph") - (performance.now() - started)
+        ? dur("--duration-morph") - (performance.now() - started)
         : 0;
     if (morphing > 0 && job.open) {
       await new Promise<void>((resolve) => setTimeout(resolve, morphing));
@@ -787,7 +787,7 @@ class StopWork {
     this.keep();
     if (job.open) {
       await new Promise<void>((resolve) =>
-        setTimeout(resolve, dur("--dur-hold"))
+        setTimeout(resolve, dur("--duration-hold"))
       );
     }
     if (job.kind !== "caw-off") {
@@ -827,7 +827,7 @@ class StopWork {
     this.keep();
   }
 
-  /** The tray folds away as it is (--dur-exit), then the job goes. */
+  /** The tray folds away as it is (--duration-exit), then the job goes. */
   private close(job: StopJob): void {
     if (!job.open) {
       this.drop(job);
@@ -835,7 +835,7 @@ class StopWork {
     }
     job.open = false;
     this.keep();
-    setTimeout(() => this.drop(job), dur("--dur-exit"));
+    setTimeout(() => this.drop(job), dur("--duration-exit"));
   }
 
   /* ── After a reload ─────────────────────────────────────────────── */

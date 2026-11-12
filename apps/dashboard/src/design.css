@@ -5,14 +5,11 @@
    (lib/cawco/decisions/host/host.css). Each entry states the cascade order
    and imports Tailwind with its own sources before this; a utility here
    draws only where an entry's sources name it. */
-/* Every token the app reads, generated from design/tokens/cawco.tokens.json
-   (`bun run tokens`). This sheet defines none of its own. */
-@import "./lib/tokens/tokens.css";
-/* The Tailwind theme over them (`bun run tokens`): a utility exists only
-   where a token does. */
+/* Every token the app reads, declared once, by hand, in Tailwind's @theme: a
+   utility exists only where a token does. */
 @import "./lib/tokens/theme.css";
-/* The browser's selection in its tint (`bun run tokens`), the value written
-   out so no element restyles its selection with it. */
+/* The browser's selection in its tint, the value written out so no element
+   restyles its selection with it. */
 @import "./lib/tokens/selection.css";
 /* The house's variants and one per attribute state (`bun run variants`). */
 @import "./lib/tokens/variants.css";
@@ -167,18 +164,20 @@
 
     /* Inherited, so it is set once here rather than worked out on every
        element. */
-    scrollbar-color: var(--scrollbar-thumb) transparent;
+    scrollbar-color: var(--color-scrollbar-thumb) transparent;
     /* The seam's inset (the home's seam between one machine's rows and the
        next, and the transcript's user-message hairline): the text column's
        own padding. */
-    --seam-inset: var(--space-3);
+    --seam-inset: var(--spacing-space-3);
     /* The gap between the rows of a tree, and between a parent and its
        first child: one value for every tree (the rail's projects, sessions
        and delegates; the home's Working and Finished). */
-    --tree-gap: var(--space-1);
+    --tree-gap: var(--spacing-space-1);
     /* How far each level of a tree is set in from the one above it, mark to
        mark: the same in every tree, whatever inset its rows keep. */
-    --tree-step: calc(var(--space-1) + var(--space-2) + var(--space-3));
+    --tree-step: calc(
+      var(--spacing-space-1) + var(--spacing-space-2) + var(--spacing-space-3)
+    );
     /* One device pixel as a CSS length, from the screen's resolution: a
        hairline drawn outside a box (a session mark's rim) is sized in whole
        device pixels with it (`round(1.5px, var(--dpx))`), so the pixel grid
@@ -204,45 +203,45 @@
     --tree-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
 
     @media (width < --theme(--breakpoint-desk)) {
-      --seam-inset: var(--space-2);
+      --seam-inset: var(--spacing-space-2);
     }
 
     /* The house code theme (components/features/code-theme.ts): each role
        Shiki's css-variables theme names, on the syntax token DESIGN.md gives
        it. Set here because every code surface reads them: a transcript's
        well, and a diff, whose shadow root inherits them. */
-    --code-syntax-foreground: var(--code-ink);
-    --code-syntax-background: var(--code-bg);
-    --code-syntax-token-keyword: var(--code-keyword);
-    --code-syntax-token-function: var(--code-fn);
-    --code-syntax-token-link: var(--code-fn);
-    --code-syntax-token-string: var(--code-string);
-    --code-syntax-token-string-expression: var(--code-string);
-    --code-syntax-token-constant: var(--code-number);
-    --code-syntax-token-comment: var(--code-comment);
-    --code-syntax-token-parameter: var(--code-ink);
-    --code-syntax-token-punctuation: var(--code-ink);
+    --code-syntax-foreground: var(--color-code-ink);
+    --code-syntax-background: var(--color-code-bg);
+    --code-syntax-token-keyword: var(--color-code-keyword);
+    --code-syntax-token-function: var(--color-code-fn);
+    --code-syntax-token-link: var(--color-code-fn);
+    --code-syntax-token-string: var(--color-code-string);
+    --code-syntax-token-string-expression: var(--color-code-string);
+    --code-syntax-token-constant: var(--color-code-number);
+    --code-syntax-token-comment: var(--color-code-comment);
+    --code-syntax-token-parameter: var(--color-code-ink);
+    --code-syntax-token-punctuation: var(--color-code-ink);
     /* A diff's added, removed and changed lines (@pierre/diffs), on the
        grounds the syntax tokens are measured against (tokens: code-ink). The
        library reads its line colours from a theme's git colours, which a
        css-variables theme hands over as Shiki's placeholders, so everything
        is set where it documents overrides. Line numbers are text: each
        ramp's text step, not its fill. */
-    --diffs-addition-color-override: var(--success-9);
-    --diffs-deletion-color-override: var(--error-9);
-    --diffs-modified-color-override: var(--code-fn);
-    --diffs-bg-addition-override: var(--diff-add-bg);
-    --diffs-bg-deletion-override: var(--diff-del-bg);
-    --diffs-bg-addition-emphasis-override: var(--diff-add-emphasis);
-    --diffs-bg-deletion-emphasis-override: var(--diff-del-emphasis);
-    --diffs-fg-number-addition-override: var(--success-11);
-    --diffs-fg-number-deletion-override: var(--error-11);
+    --diffs-addition-color-override: var(--color-success-9);
+    --diffs-deletion-color-override: var(--color-error-9);
+    --diffs-modified-color-override: var(--color-code-fn);
+    --diffs-bg-addition-override: var(--color-diff-add-bg);
+    --diffs-bg-deletion-override: var(--color-diff-del-bg);
+    --diffs-bg-addition-emphasis-override: var(--color-diff-add-emphasis);
+    --diffs-bg-deletion-emphasis-override: var(--color-diff-del-emphasis);
+    --diffs-fg-number-addition-override: var(--color-success-11);
+    --diffs-fg-number-deletion-override: var(--color-error-11);
 
     /* A native checkbox, radio, range or progress takes the act colour, never
        the browser's blue (DESIGN.md, Coral Action: "checked checkboxes and
        switches"; blue is a status hue). Inherited, so every native control in
        the page takes it. */
-    accent-color: var(--action-solid);
+    accent-color: var(--color-action-solid);
   }
 
   * {
@@ -266,7 +265,7 @@
     [tabindex],
     [contenteditable]:not([contenteditable="false"])
   ) {
-    outline-color: var(--focus-ring);
+    outline-color: var(--color-focus-ring);
   }
 
   /* An enabled button takes the pointer hand; a disabled or pending one
@@ -332,7 +331,7 @@
      lib/tokens/selection.css). */
   input,
   textarea {
-    caret-color: var(--brand-solid);
+    caret-color: var(--color-brand-solid);
   }
 
   /* A native range is a groove with the act's thumb: its track sits below
@@ -344,46 +343,48 @@
     background: transparent;
 
     &::-webkit-slider-runnable-track {
-      block-size: var(--space-1);
+      block-size: var(--spacing-space-1);
       border-radius: var(--radius-pill);
-      background: var(--surface-recess-deep);
+      background: var(--color-surface-recess-deep);
     }
     &::-moz-range-track {
-      block-size: var(--space-1);
+      block-size: var(--spacing-space-1);
       border-radius: var(--radius-pill);
-      background: var(--surface-recess-deep);
+      background: var(--color-surface-recess-deep);
     }
     &::-moz-range-progress {
-      block-size: var(--space-1);
+      block-size: var(--spacing-space-1);
       border-radius: var(--radius-pill);
-      background: var(--action-solid);
+      background: var(--color-action-solid);
     }
     &::-webkit-slider-thumb {
       appearance: none;
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-      margin-block-start: calc((var(--space-1) - var(--icon-md)) / 2);
+      inline-size: var(--spacing-icon-md);
+      block-size: var(--spacing-icon-md);
+      margin-block-start: calc(
+        (var(--spacing-space-1) - var(--spacing-icon-md)) / 2
+      );
       border: none;
       border-radius: var(--radius-pill);
-      background: var(--action-solid);
+      background: var(--color-action-solid);
     }
     &::-moz-range-thumb {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
+      inline-size: var(--spacing-icon-md);
+      block-size: var(--spacing-icon-md);
       border: none;
       border-radius: var(--radius-pill);
-      background: var(--action-solid);
+      background: var(--color-action-solid);
     }
   }
 
-  /* The control's focus ring (tokens: --focus-ring*; DESIGN.md, The One
+  /* The control's focus ring (tokens: --color-focus-ring*; DESIGN.md, The One
      Ring Rule): a button, tab, row or handle reached by the keyboard. An
      outline, so it tracks each element's own radius and survives forced
      colours. Pointer focus shows nothing: :focus-visible is "when it has
      been focused using the keyboard" (tailwindcss.com/docs/hover-focus-
      and-other-states). */
   :focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
     outline-offset: var(--focus-ring-offset);
     /* A scroller brings a focused control in with room for its ring, so
        the scroller's edge never cuts it. */
@@ -458,8 +459,8 @@
      Solar's icons and the local glyphs are drawn at width="1.2em", which
      would size them off the text beside them; this replaces it. */
   svg[width="1.2em"] {
-    width: var(--icon-md);
-    height: var(--icon-md);
+    width: var(--spacing-icon-md);
+    height: var(--spacing-icon-md);
   }
 
   /* Numbers that sit in columns line up. Anywhere else a changing figure
@@ -573,7 +574,7 @@
    Identity is ink — never a status dot. */
 @utility identity-ink {
   /* The token's lightness and chroma per scheme, at the project's hue. */
-  color: oklch(from var(--identity-ink) l c var(--identity-h, 120));
+  color: oklch(from var(--color-identity-ink) l c var(--identity-h, 120));
 }
 
 /* A row held under a finger (utils/longpress.ts marks it `data-holding`,
@@ -584,13 +585,13 @@
    as a pressed control's do. */
 @layer utilities {
   :is([data-holding], #\#) {
-    background-color: var(--surface-pressed);
+    background-color: var(--color-surface-pressed);
   }
   :root:not(.dark) [data-holding] {
-    --ink-muted: var(--ink-strong);
-    --text-muted: var(--ink-strong);
-    --ink-subtle: var(--ink-strong);
-    --selected-ink: var(--ink-strong);
+    --color-ink-muted: var(--color-ink-strong);
+    --color-text-muted: var(--color-ink-strong);
+    --color-ink-subtle: var(--color-ink-strong);
+    --color-selected-ink: var(--color-ink-strong);
   }
 }
 
@@ -600,8 +601,8 @@
    less than the field's own inset). Its hover fill is the whole box. */
 @utility pe-measure {
   padding-inline-end: max(
-    var(--c-field-inline-inset),
-    calc(100% - var(--c-measure))
+    var(--spacing-c-field-inline-inset),
+    calc(100% - var(--spacing-c-measure))
   );
 }
 
@@ -794,8 +795,8 @@
 /* The muted and subtle inks gone strong inside a control (press-tint sets
    these two and two more). */
 @utility inks-strong {
-  --ink-muted: var(--ink-strong);
-  --ink-subtle: var(--ink-strong);
+  --color-ink-muted: var(--color-ink-strong);
+  --color-ink-subtle: var(--color-ink-strong);
 }
 /* Custom properties a component reads, each set from another under a
    state (`coarse:hit-gap-y-(--row-gap)`). */
@@ -930,22 +931,22 @@
 @utility border-suggest-tint {
   border-color: color-mix(
     in srgb,
-    var(--action-solid) calc(var(--tint) * 1.5),
-    var(--surface-raised)
+    var(--color-action-solid) calc(var(--tint) * 1.5),
+    var(--color-surface-raised)
   );
 }
 @utility bg-suggest-tint {
   background: color-mix(
     in srgb,
-    var(--action-solid) var(--tint),
-    var(--surface-raised)
+    var(--color-action-solid) var(--tint),
+    var(--color-surface-raised)
   );
 }
 @utility bg-suggest-tint-hover {
   background: color-mix(
     in srgb,
-    var(--action-solid) calc(var(--tint) + 6%),
-    var(--surface-raised)
+    var(--color-action-solid) calc(var(--tint) + 6%),
+    var(--color-surface-raised)
   );
 }
 
@@ -957,7 +958,7 @@
 @utility transition-control-grow {
   transition:
     var(--transition-control),
-    height var(--dur-control) var(--ease-out);
+    height var(--duration-control) var(--ease-out);
 }
 
 /* A kit sheet under reduced motion: it fades in and out over the control's
@@ -979,7 +980,7 @@
   mask-image: linear-gradient(
     90deg,
     transparent 35%,
-    var(--mask-opaque) 50%,
+    var(--color-mask-opaque) 50%,
     transparent 65%
   );
 }
@@ -989,9 +990,9 @@
 @utility step-shimmer {
   background-image: linear-gradient(
     90deg,
-    var(--ink-muted) 0% 35%,
-    var(--ink-strong) 50%,
-    var(--ink-muted) 65% 100%
+    var(--color-ink-muted) 0% 35%,
+    var(--color-ink-strong) 50%,
+    var(--color-ink-muted) 65% 100%
   );
   background-size: 300% 100%;
   background-repeat: repeat;
@@ -1014,16 +1015,16 @@
     margin-block: 0;
   }
   & .prose > * {
-    margin-block: var(--space-1) 0;
+    margin-block: var(--spacing-space-1) 0;
   }
   & .prose > :first-child {
     margin-block-start: 0;
   }
   & :is(ul, ol) {
-    padding-inline-start: var(--space-5);
+    padding-inline-start: var(--spacing-space-5);
   }
   & strong {
-    color: var(--ink-strong);
+    color: var(--color-ink-strong);
   }
   & code {
     font-family: var(--font-mono);
@@ -1046,7 +1047,7 @@
 /* Caw's attention rim: round-capped arcs of the ring's width, each a dash of
    its own path (pathLength="1"). */
 @utility rim-arc {
-  stroke-width: var(--c-caw-ring);
+  stroke-width: var(--spacing-c-caw-ring);
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
@@ -1056,10 +1057,11 @@
 @utility drag-dots {
   background-image: radial-gradient(
     circle,
-    var(--ink-subtle) 1px,
-    transparent var(--c-drag-dots-edge)
+    var(--color-ink-subtle) 1px,
+    transparent var(--spacing-c-drag-dots-edge)
   );
-  background-size: var(--c-drag-dots-tile) var(--c-drag-dots-tile);
+  background-size: var(--spacing-c-drag-dots-tile)
+    var(--spacing-c-drag-dots-tile);
 }
 
 /* A row's ghost controls rest on the strong fill under a resting pointer by
@@ -1067,7 +1069,7 @@
 @utility ghost-rest-fill {
   @media (hover: hover) and (pointer: fine) {
     :root:not(.dark) & [data-ghost]:hover:not(:disabled) {
-      background-color: var(--surface-fill-strong);
+      background-color: var(--color-surface-fill-strong);
     }
   }
 }
@@ -1098,11 +1100,11 @@
 }
 /* A glyph's column before words that take the rest. */
 @utility grid-cols-mark-fluid {
-  grid-template-columns: var(--icon-md) minmax(0, 1fr);
+  grid-template-columns: var(--spacing-icon-md) minmax(0, 1fr);
 }
 /* A row's 28px lead column, its mark centred there, before words that take the rest. */
 @utility grid-cols-lead-fluid {
-  grid-template-columns: var(--c-row-lead) minmax(0, 1fr);
+  grid-template-columns: var(--spacing-c-row-lead) minmax(0, 1fr);
 }
 /* The artifact masonry's row unit: one pixel, each card spanning its height. */
 @utility auto-rows-line {
@@ -1111,10 +1113,10 @@
 /* The connection band's rows: at least a small button's height; on a phone,
    room for two lines. */
 @utility auto-rows-band {
-  grid-auto-rows: minmax(var(--c-btn-h-sm), auto);
+  grid-auto-rows: minmax(var(--spacing-c-btn-h-sm), auto);
 }
 @utility auto-rows-band-phone {
-  grid-auto-rows: minmax(max(var(--c-btn-h-sm), 2lh), auto);
+  grid-auto-rows: minmax(max(var(--spacing-c-btn-h-sm), 2lh), auto);
 }
 /* A box clipped at its block-start edge only: a hanging card's wrapper, which
    cuts what slides in from behind it while its shadow spills past its sides
@@ -1182,11 +1184,11 @@
   fill: color-mix(
     in oklab,
     var(--sheet) calc(var(--pick) * 100%),
-    var(--tab-fill, var(--surface-recess-deep))
+    var(--tab-fill, var(--color-surface-recess-deep))
   );
 }
 @utility paint-tab-hover {
-  fill: var(--tab-hover, var(--surface-hover));
+  fill: var(--tab-hover, var(--color-surface-hover));
 }
 @utility rim-strength {
   opacity: calc(
@@ -1250,16 +1252,16 @@
 /* A decision page's insets (decisions/host Decisions.svelte's root): the page's own and a card's
    (21px and 18px at a desk, 14px each under a finger),
    what a piece of media reaches past to the screen's edges on a phone (`--bleed`),
-   and the column's cap: the room's width up to `--c-decision-page-max`, until
+   and the column's cap: the room's width up to `--spacing-c-decision-page-max`, until
    a pictured page sets its own (`--page-w`, set inline on the page), or the
    room's whole width where a piece fills its card (`data-fills`). The column
    and the foot's row both stand at `--column-w`, this one width, so their
    edges are one. */
 @utility decision-page-insets {
-  --page-in: var(--space-6);
-  --card-in: var(--space-5);
+  --page-in: var(--spacing-space-6);
+  --card-in: var(--spacing-space-5);
   --bleed: calc(var(--page-in) + var(--card-in));
-  --page-w: var(--c-decision-page-max);
+  --page-w: var(--spacing-c-decision-page-max);
   --column-w: var(--page-w);
 
   &:has([data-fills]) {
@@ -1267,8 +1269,8 @@
   }
 
   @media (pointer: coarse) {
-    --page-in: var(--space-4);
-    --card-in: var(--space-4);
+    --page-in: var(--spacing-space-4);
+    --card-in: var(--spacing-space-4);
   }
 }
 /* The page the window's height: its cards scrolling in the first row, its
@@ -1293,7 +1295,7 @@
 }
 /* A picture in a Row (decisions/host Image.svelte): it asks the
    width that stands the Row's narrowest picture (`--ratio-min`, Row.svelte)
-   at `--c-picture-min` with every picture at one height, and grows by its
+   at `--spacing-c-picture-min` with every picture at one height, and grows by its
    own width over its height (`--ratio`), so the Row's pictures share a line
    at one height. A line that can't give them that wraps them, one to a
    line, each shrunk to fit it. Pressed to its full size, it takes the Row's
@@ -1301,7 +1303,10 @@
 @utility picture-row {
   [data-axis="row"] > & {
     flex: var(--ratio) 1
-      calc(var(--ratio) / var(--ratio-min, var(--ratio)) * var(--c-picture-min));
+      calc(
+        var(--ratio) / var(--ratio-min, var(--ratio)) *
+          var(--spacing-c-picture-min)
+      );
   }
   [data-axis="row"] > &:has([data-full]) {
     flex-basis: 100%;
@@ -1351,31 +1356,32 @@
    selection pill under it on the ghost's own clock. */
 @utility transition-well-surface {
   transition:
-    border-color var(--dur-pop) var(--ease-out),
-    border-radius var(--dur-pop) var(--ease-out),
-    opacity var(--dur-panel) var(--ease-drawer),
-    background-color var(--dur-control) var(--ease-out);
+    border-color var(--duration-pop) var(--ease-out),
+    border-radius var(--duration-pop) var(--ease-out),
+    opacity var(--duration-panel) var(--ease-drawer),
+    background-color var(--duration-control) var(--ease-out);
 }
 /* Tiles as many to a row as fit at their least width, a lone tile no wider
    than its row (Limits, a project's spend). */
 @utility grid-cols-usage-tiles {
   grid-template-columns: repeat(
     auto-fill,
-    minmax(min(100%, var(--c-usage-tile-min)), 1fr)
+    minmax(min(100%, var(--spacing-c-usage-tile-min)), 1fr)
   );
 }
 @utility grid-cols-stat-tiles {
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, var(--c-stat-tile-min)), 1fr)
+    minmax(min(100%, var(--spacing-c-stat-tile-min)), 1fr)
   );
 }
 /* The reserve's hatch on a usage meter. */
 @utility hatched {
   background-image: repeating-linear-gradient(
     -45deg,
-    var(--border-control) 0 var(--border-width),
-    var(--ring-ground, var(--surface-raised)) var(--border-width) var(--space-1)
+    var(--color-border-control) 0 var(--border-width),
+    var(--ring-ground, var(--color-surface-raised)) var(--border-width)
+      var(--spacing-space-1)
   );
 }
 /* A usage ring's week arc, its account ink moved toward the week's, and the
@@ -1384,15 +1390,15 @@
   stroke: color-mix(
     in oklch,
     var(--c),
-    var(--account-week-toward) calc(var(--account-week-mix) * 100%)
+    var(--color-account-week-toward) calc(var(--account-week-mix) * 100%)
   );
 }
 @utility arc-ground {
-  stroke: var(--ring-ground, var(--surface-page));
+  stroke: var(--ring-ground, var(--color-surface-page));
 }
 /* Svelte Flow's handle reads its colour off this property. */
 @utility xy-handle-brand {
-  --xy-handle-background-color: var(--brand-solid);
+  --xy-handle-background-color: var(--color-brand-solid);
 }
 /* ---- The transcript's columns. Every row kind lays out on these four
    edges, measured from the row's own inline start: the rail, the glyph cell
@@ -1403,9 +1409,9 @@
    phone's rows stand the rail on their own edge. */
 @utility tx-columns {
   --x-rail: var(--tx-x-rail);
-  --x-glyph: calc(var(--x-rail) + var(--space-3));
+  --x-glyph: calc(var(--x-rail) + var(--spacing-space-3));
   --w-glyph: var(--tx-w-glyph);
-  --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--space-2));
+  --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--spacing-space-2));
   /* How far a hung body sits from the rail row's content edge (the glyph
      column): the text column, relative. */
   --x-hang: calc(var(--x-text) - var(--x-glyph));
@@ -1419,7 +1425,7 @@
    cell, then the row's words at the text column; a disclosure chevron
    trails the words. Everything the head owns hangs at the text column. */
 @utility rail-row {
-  margin-block-start: var(--rail-gap, var(--space-4));
+  margin-block-start: var(--rail-gap, var(--spacing-space-4));
   margin-inline-start: var(--x-rail);
   padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
   background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
@@ -1447,16 +1453,17 @@
 @utility edge-mask-top {
   mask-image: linear-gradient(
     to bottom,
-    var(--mask-opaque) calc(var(--space-2) + env(safe-area-inset-top)),
+    var(--color-mask-opaque)
+      calc(var(--spacing-space-2) + env(safe-area-inset-top)),
     transparent 0
   );
 }
 /* The shelf's hairline as one background layer over the shelf (Shell). */
 @utility shelf-hairline {
   background:
-    linear-gradient(var(--border-hairline), var(--border-hairline)) bottom /
-      100% 1px no-repeat,
-    var(--surface-shelf);
+    linear-gradient(var(--color-border-hairline), var(--color-border-hairline))
+      bottom / 100% 1px no-repeat,
+    var(--color-surface-shelf);
 }
 /* The bar's glass, a step blurrier than the panel material (Shell). */
 @utility glass-backdrop {
@@ -1497,7 +1504,7 @@
 @utility head-fade-scrub {
   animation: var(--animate-head-fade);
   animation-timeline: --transcript-head;
-  animation-range: 0 var(--c-head-fade);
+  animation-range: 0 var(--spacing-c-head-fade);
 }
 @utility will-change-opacity {
   will-change: opacity;
@@ -1522,16 +1529,16 @@
   & [data-slot="search"] input {
     --autowidth: 1;
     @variant motion-safe {
-      transition: width var(--dur-control) var(--ease-out);
+      transition: width var(--duration-control) var(--ease-out);
     }
   }
   & [data-slot="list"] {
     height: auto;
-    max-height: var(--c-model-list-max);
+    max-height: var(--spacing-c-model-list-max);
     overflow: hidden auto;
     scroll-snap-type: y mandatory;
     /* The row gap, so a snapped row's neighbour shows none of itself. */
-    scroll-padding: var(--space-row);
+    scroll-padding: var(--spacing-space-row);
   }
   & [data-slot="row"] {
     scroll-snap-align: start;
@@ -1544,10 +1551,10 @@
    `text-ink-muted` by weight. */
 @utility pane-tab-needs {
   &[data-needs] [data-ff-tab] {
-    color: var(--ink-strong);
+    color: var(--color-ink-strong);
 
     @variant motion-safe {
-      transition: color var(--dur-panel) var(--ease-out);
+      transition: color var(--duration-panel) var(--ease-out);
     }
   }
 }
@@ -1562,7 +1569,7 @@
   --px-end: calc(var(--px) - var(--border-width));
 
   @media (width < --theme(--breakpoint-desk)) {
-    --px-start: calc(var(--overlap) + var(--c-tab-lead));
+    --px-start: calc(var(--overlap) + var(--spacing-c-tab-lead));
     --px-end: calc(var(--overlap) + var(--radius-lg) - var(--border-width));
   }
 }
@@ -1585,23 +1592,23 @@
    beside the word. It leaves a little quicker than it arrives; a state that
    shows it names the arrival's clock. */
 @utility divider-chevron {
-  --line: var(--brand-solid);
+  --line: var(--color-brand-solid);
   --chev: 0;
-  --chev-dur: var(--dur-control);
+  --chev-dur: var(--duration-control);
   --chev-ease: var(--ease-out);
 
   /* In for keyboard focus and while the brief is open. */
   &:is(:focus-visible, [aria-expanded="true"]) {
     --chev: 1;
-    --chev-dur: var(--dur-toggle);
+    --chev-dur: var(--duration-toggle);
   }
   /* Under the pointer the line and word step to the stronger vermillion and
      the chevron comes in. */
   @media (hover: hover) and (pointer: fine) {
     &:hover:not(:disabled) {
-      --line: var(--brand-ink-strong);
+      --line: var(--color-brand-ink-strong);
       --chev: 1;
-      --chev-dur: var(--dur-toggle);
+      --chev-dur: var(--duration-toggle);
     }
   }
   /* A finger has no hover: what opens always shows that it does. */
@@ -1626,15 +1633,15 @@
     translate var(--chev-dur) var(--chev-ease),
     scale var(--chev-dur) var(--chev-ease),
     filter var(--chev-dur) var(--chev-ease),
-    rotate var(--dur-toggle) var(--ease-in-out);
+    rotate var(--duration-toggle) var(--ease-in-out);
 }
 /* A turn's pad (the transcript skeleton's reader well), a step down at the
    narrow breakpoint. */
 @utility turn-pad {
-  --pad: var(--space-3);
+  --pad: var(--spacing-space-3);
 
   @media (width < --theme(--breakpoint-desk)) {
-    --pad: var(--space-2);
+    --pad: var(--spacing-space-2);
   }
 }
 /* A clip path, from a custom property on the element
@@ -1696,7 +1703,7 @@
       :focus-visible,
       :has(:is(input, textarea, [contenteditable]):focus-visible)
     ):not([aria-invalid="true"], :has([aria-invalid="true"])) {
-    border-color: var(--border-control-strong);
+    border-color: var(--color-border-control-strong);
   }
 }
 
@@ -1720,7 +1727,11 @@
 /* A line pinned to its end whose start fades out over its first 30%
    (Thinking's folded tail: the newest words show, the oldest fade). */
 @utility tail-fade {
-  mask-image: linear-gradient(to right, transparent, var(--mask-opaque) 30%);
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    var(--color-mask-opaque) 30%
+  );
 }
 
 /* Crepe's inline LaTeX editor (MarkdownEditor) writes `class="container"`,
@@ -1820,7 +1831,7 @@
 @keyframes rail-label-in {
   from {
     opacity: 0;
-    transform: translateY(var(--c-rail-label-rise));
+    transform: translateY(var(--spacing-c-rail-label-rise));
   }
 }
 @keyframes kit-fade-in {
@@ -1833,10 +1844,10 @@
     opacity: 0;
   }
 }
-/* Live work breathes (DESIGN.md): one loop of `--breath` on ease-in-out,
+/* Live work breathes (DESIGN.md): one loop of `--duration-breath` on ease-in-out,
    down to `--breath-floor` half a breath in, the lowest opacity at which the
    live glyph still holds 3:1 on every surface. Every breather runs this one:
-   `animation: breath var(--breath) var(--ease-in-out) infinite`. */
+   `animation: breath var(--duration-breath) var(--ease-in-out) infinite`. */
 @keyframes breath {
   50% {
     opacity: var(--breath-floor);
@@ -1844,7 +1855,7 @@
 }
 
 /* ---- The theme switch (theme.svelte.ts): a view transition of the root
-   alone. The old page fades out as the new one fades in, one --dur-fade on
+   alone. The old page fades out as the new one fades in, one --duration-fade on
    --ease-out: the platform's own cross-fade at the product's pace, with no
    shape and no blur. Nothing else on the page carries a
    view-transition-name, so the root is the only thing taken. Only the user
@@ -1853,7 +1864,7 @@
 @layer base {
   ::view-transition-old(root),
   ::view-transition-new(root) {
-    animation-duration: var(--dur-fade);
+    animation-duration: var(--duration-fade);
     animation-timing-function: var(--ease-out);
   }
 }
@@ -1921,17 +1932,23 @@
         translate: none;
       }
       inset-inline: max(
-        min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
+        min(
+          0px,
+          calc(50% - var(--spacing-c-touch-floor) / 2 / var(--hit-scale, 1))
+        ),
         calc(
-          var(--hit-gap-x, var(--c-touch-floor) / var(--hit-scale, 1)) / -2 -
-            var(--hit-edge, 0px)
+          var(--hit-gap-x, var(--spacing-c-touch-floor) / var(--hit-scale, 1)) /
+            -2 - var(--hit-edge, 0px)
         )
       );
       inset-block: max(
-        min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
+        min(
+          0px,
+          calc(50% - var(--spacing-c-touch-floor) / 2 / var(--hit-scale, 1))
+        ),
         calc(
-          var(--hit-gap-y, var(--c-touch-floor) / var(--hit-scale, 1)) / -2 -
-            var(--hit-edge, 0px)
+          var(--hit-gap-y, var(--spacing-c-touch-floor) / var(--hit-scale, 1)) /
+            -2 - var(--hit-edge, 0px)
         )
       );
     }
@@ -1954,17 +1971,23 @@
         translate: none;
       }
       inset-inline: max(
-        min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
+        min(
+          0px,
+          calc(50% - var(--spacing-c-touch-floor) / 2 / var(--hit-scale, 1))
+        ),
         calc(
-          var(--hit-gap-x, var(--c-touch-floor) / var(--hit-scale, 1)) / -2 -
-            var(--hit-edge, 0px)
+          var(--hit-gap-x, var(--spacing-c-touch-floor) / var(--hit-scale, 1)) /
+            -2 - var(--hit-edge, 0px)
         )
       );
       inset-block: max(
-        min(0px, calc(50% - var(--c-touch-floor) / 2 / var(--hit-scale, 1))),
+        min(
+          0px,
+          calc(50% - var(--spacing-c-touch-floor) / 2 / var(--hit-scale, 1))
+        ),
         calc(
-          var(--hit-gap-y, var(--c-touch-floor) / var(--hit-scale, 1)) / -2 -
-            var(--hit-edge, 0px)
+          var(--hit-gap-y, var(--spacing-c-touch-floor) / var(--hit-scale, 1)) /
+            -2 - var(--hit-edge, 0px)
         )
       );
     }
@@ -2001,17 +2024,29 @@
       content: "";
       position: absolute;
       inset-inline: max(
-        min(0px, calc(50% - var(--c-pointer-floor) / 2 / var(--hit-scale, 1))),
+        min(
+          0px,
+          calc(50% - var(--spacing-c-pointer-floor) / 2 / var(--hit-scale, 1))
+        ),
         calc(
-          var(--hit-gap-x, var(--c-pointer-floor) / var(--hit-scale, 1)) / -2 -
-            var(--hit-edge, 0px)
+          var(
+              --hit-gap-x,
+              var(--spacing-c-pointer-floor) / var(--hit-scale, 1)
+            ) /
+            -2 - var(--hit-edge, 0px)
         )
       );
       inset-block: max(
-        min(0px, calc(50% - var(--c-pointer-floor) / 2 / var(--hit-scale, 1))),
+        min(
+          0px,
+          calc(50% - var(--spacing-c-pointer-floor) / 2 / var(--hit-scale, 1))
+        ),
         calc(
-          var(--hit-gap-y, var(--c-pointer-floor) / var(--hit-scale, 1)) / -2 -
-            var(--hit-edge, 0px)
+          var(
+              --hit-gap-y,
+              var(--spacing-c-pointer-floor) / var(--hit-scale, 1)
+            ) /
+            -2 - var(--hit-edge, 0px)
         )
       );
     }
@@ -2094,7 +2129,7 @@
     display: inline-flex;
     grid-area: 1 / 1;
     transition-property: opacity, scale;
-    transition-duration: var(--icon-swap-dur, var(--dur-pop));
+    transition-duration: var(--icon-swap-dur, var(--duration-pop));
     transition-timing-function: var(--icon-swap-ease, var(--ease-out));
   }
   :where(&) > :where([data-active="false"]) {
@@ -2125,7 +2160,7 @@
    brings it back with `swap-shown`. */
 @utility swap-move {
   transition-property: opacity, scale;
-  transition-duration: var(--icon-swap-dur, var(--dur-pop));
+  transition-duration: var(--icon-swap-dur, var(--duration-pop));
   transition-timing-function: var(--icon-swap-ease, var(--ease-out));
 }
 @utility swap-gone {
@@ -2144,10 +2179,10 @@
    and the raised surface, a step a tile (a colour control's swatch). */
 @utility checker {
   background: repeating-conic-gradient(
-      var(--surface-recess-deep) 0 25%,
-      var(--surface-raised) 0 50%
+      var(--color-surface-recess-deep) 0 25%,
+      var(--color-surface-raised) 0 50%
     )
-    0 0 / var(--space-2) var(--space-2);
+    0 0 / var(--spacing-space-2) var(--spacing-space-2);
 }
 
 /* Instant press feedback (DESIGN.md: "a compact control scale to 0.97 on
@@ -2168,8 +2203,8 @@
 @utility pressable {
   --tw-sort: transition-property;
   transition:
-    transform var(--dur-toggle) var(--ease-out),
-    box-shadow var(--dur-control) var(--ease-out);
+    transform var(--duration-toggle) var(--ease-out),
+    box-shadow var(--duration-control) var(--ease-out);
 
   @media (prefers-reduced-motion: no-preference) {
     &:is(:active, [data-pressed]) {
@@ -2187,14 +2222,14 @@
    strong for as long as it is held (8.90:1); night keeps its inks. */
 @utility press-tint {
   &:is(:active, [data-pressed], #\#):not(:disabled, [aria-disabled="true"]) {
-    background-color: var(--surface-pressed);
+    background-color: var(--color-surface-pressed);
   }
   @variant light {
     &:is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) {
-      --ink-muted: var(--ink-strong);
-      --text-muted: var(--ink-strong);
-      --ink-subtle: var(--ink-strong);
-      --selected-ink: var(--ink-strong);
+      --color-ink-muted: var(--color-ink-strong);
+      --color-text-muted: var(--color-ink-strong);
+      --color-ink-subtle: var(--color-ink-strong);
+      --color-selected-ink: var(--color-ink-strong);
     }
   }
 }
@@ -2245,13 +2280,13 @@
     to right,
     transparent,
     transparent calc(var(--fade-run-start) * 0.375),
-    var(--mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
-    var(--mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
-    var(--mask-opaque) calc(var(--fade-run-start) * 1.5),
-    var(--mask-opaque) calc(100% - var(--fade-run-end)),
-    var(--mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
-    var(--mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
-    var(--mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
+    var(--color-mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
+    var(--color-mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
+    var(--color-mask-opaque) calc(var(--fade-run-start) * 1.5),
+    var(--color-mask-opaque) calc(100% - var(--fade-run-end)),
+    var(--color-mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
+    var(--color-mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
+    var(--color-mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
     transparent
   );
 }
@@ -2315,14 +2350,17 @@
      level steps in from. */
   --line-root: calc(
     var(--tree-inset, var(--row-compact-gap)) +
-      var(--tree-glyph, var(--mark-size, var(--space-5))) / 2
+      var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2
   );
   /* A rail to the edge of the glyph one level in: a tree mark's step less
      half the mark, so a narrower glyph stands closer in. */
-  --line-arm: calc(var(--tree-step) - var(--mark-size, var(--space-5)) / 2);
+  --line-arm: calc(
+    var(--tree-step) - var(--mark-size, var(--spacing-space-5)) / 2
+  );
   /* Glyph centre to glyph centre, one level in. */
   --line-step: calc(
-    var(--line-arm) + var(--tree-glyph, var(--mark-size, var(--space-5))) / 2
+    var(--line-arm) +
+      var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2
   );
   position: relative;
   min-width: 0;
@@ -2332,7 +2370,9 @@
     --line-root-gap: 0px;
   }
   &[data-roots-tall] {
-    --line-root: calc(var(--space-3) + var(--mark-size, var(--space-5)) / 2);
+    --line-root: calc(
+      var(--spacing-space-3) + var(--mark-size, var(--spacing-space-5)) / 2
+    );
   }
 }
 @utility kit-tree-row {
@@ -2343,7 +2383,7 @@
   padding-inline-start: calc(
     var(--line-depth) * var(--line-step) + var(--line-root) -
       var(--tree-inset, var(--row-compact-gap)) -
-      var(--tree-glyph, var(--mark-size, var(--space-5))) / 2
+      var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2
   );
   &[data-line-depth="0"] {
     margin-block-start: var(--line-root-gap);
@@ -2358,7 +2398,7 @@
 @utility kit-tree-rail {
   --tree-y: calc(var(--row-compact-h) / 2);
   @variant coarse {
-    --tree-y: calc(var(--c-btn-h-lg) / 2);
+    --tree-y: calc(var(--spacing-c-btn-h-lg) / 2);
   }
 }
 /* A row the compact row's height under a finger too (an "N older" row,
@@ -2371,13 +2411,13 @@
    its two lines. A list whose roots are these rows (`data-roots-tall`)
    steps every level in from their column. */
 @utility kit-tree-tall {
-  --tree-inset: var(--space-3);
+  --tree-inset: var(--spacing-space-3);
   --tree-y: calc(var(--row-tall-h) / 2);
 }
 /* A plan's steps (PlanTree): each row's mark an icon wide and a label line
    tall, at the row's own start and top. */
 @utility kit-tree-plan {
-  --tree-glyph: var(--icon-md);
+  --tree-glyph: var(--spacing-icon-md);
   --tree-inset: 0px;
   --tree-y: calc(var(--text-label) * var(--leading-label) / 2);
   --tree-foot: var(--tree-y);
@@ -2385,13 +2425,13 @@
 /* A row whose mark stands at the top of a first line as tall as the mark
    (an away row on a narrow stop tray, its status on a second line). */
 @utility kit-tree-on-mark {
-  --tree-y: calc(var(--mark-size, var(--space-5)) / 2);
+  --tree-y: calc(var(--mark-size, var(--spacing-space-5)) / 2);
 }
 @utility kit-tree-line {
   --line-y: var(--tree-y, calc(var(--row-compact-h) / 2));
   --line-foot: var(
     --tree-foot,
-    calc(var(--tree-glyph, var(--mark-size, var(--space-5))) / 2)
+    calc(var(--tree-glyph, var(--mark-size, var(--spacing-space-5))) / 2)
   );
   /* The row's whole box, from its own start: right to left mirrors it. */
   position: absolute;
@@ -2414,7 +2454,7 @@
       ),
       var(--dpx, 1px)
     );
-    border-color: var(--nest-ink);
+    border-color: var(--color-nest-ink);
     border-style: solid;
     border-width: 0;
     border-inline-start-width: var(--tree-line);
@@ -2487,11 +2527,11 @@
    element under the root, rather than the root alone. */
 @layer base {
   [data-find-marks] ::highlight(find-place) {
-    background-color: var(--brand-wash);
+    background-color: var(--color-brand-wash);
   }
   [data-find-marks] ::highlight(find-current) {
-    background-color: var(--action-solid);
-    color: var(--on-action);
+    background-color: var(--color-action-solid);
+    color: var(--color-on-action);
   }
 }
 
@@ -2522,51 +2562,51 @@
      the label role, muted; a highlight strong ink, never coral (The Coral Is
      Where You Act Rule); weights never above 500 (The 500 Ceiling Rule). */
   [data-slot="diagram"] {
-    --pele-bg: var(--surface-raised);
-    --pele-fg: var(--ink-strong);
-    --pele-muted: var(--ink-muted);
-    --pele-line: var(--ink-muted);
-    --pele-surface: var(--surface-raised);
-    --pele-surface-alt: var(--surface-recess);
-    --pele-border: var(--border-control);
-    --pele-accent: var(--ink-strong);
-    --pele-critical: var(--status-fail-ink);
-    --pele-error: var(--status-fail-ink);
+    --pele-bg: var(--color-surface-raised);
+    --pele-fg: var(--color-ink-strong);
+    --pele-muted: var(--color-ink-muted);
+    --pele-line: var(--color-ink-muted);
+    --pele-surface: var(--color-surface-raised);
+    --pele-surface-alt: var(--color-surface-recess);
+    --pele-border: var(--color-border-control);
+    --pele-accent: var(--color-ink-strong);
+    --pele-critical: var(--color-status-fail-ink);
+    --pele-error: var(--color-status-fail-ink);
     --pele-font: var(--font-sans);
     --pele-font-mono: var(--font-mono);
-    --pele-title-weight: var(--weight-strong);
-    --pele-heading-weight: var(--weight-strong);
-    --pele-bold-weight: var(--weight-strong);
+    --pele-title-weight: var(--font-weight-medium);
+    --pele-heading-weight: var(--font-weight-medium);
+    --pele-bold-weight: var(--font-weight-medium);
     --pele-radius: var(--radius-sm);
-    --pele-series-1: var(--chart-1);
-    --pele-series-2: var(--chart-2);
-    --pele-series-3: var(--chart-3);
-    --pele-series-4: var(--chart-4);
-    --pele-series-5: var(--chart-5);
-    --pele-series-6: var(--chart-brand);
-    --pele-series-7: var(--ink-muted);
-    --pele-series-8: var(--border-contrast);
+    --pele-series-1: var(--color-chart-1);
+    --pele-series-2: var(--color-chart-2);
+    --pele-series-3: var(--color-chart-3);
+    --pele-series-4: var(--color-chart-4);
+    --pele-series-5: var(--color-chart-5);
+    --pele-series-6: var(--color-chart-brand);
+    --pele-series-7: var(--color-ink-muted);
+    --pele-series-8: var(--color-border-contrast);
 
     & > svg {
       display: block;
     }
     & .pele-node .pele-label {
-      font-weight: var(--weight-strong);
+      font-weight: var(--font-weight-medium);
     }
     & .pele-edge :is(path, line, polyline) {
       stroke-width: 1px;
     }
     & .pele-edge-label {
       font-size: var(--text-meta);
-      fill: var(--ink-muted);
+      fill: var(--color-ink-muted);
     }
     & .pele-cluster > :is(rect, path) {
-      stroke: var(--border-hairline);
+      stroke: var(--color-border-hairline);
     }
     & .pele-cluster-label {
       font-size: var(--text-label);
-      font-weight: var(--weight-strong);
-      fill: var(--ink-muted);
+      font-weight: var(--font-weight-medium);
+      fill: var(--color-ink-muted);
     }
   }
 }

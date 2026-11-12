@@ -75,8 +75,8 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--dur-morph"),
-      delay: dur("--dur-stagger"),
+      duration: dur("--duration-morph"),
+      delay: dur("--duration-stagger"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -175,7 +175,10 @@
                 {@attach shown?.rows
                   ? highlight({ rows: shown.rows })
                   : undefined}
-                {@attach morph({ ms: dur("--dur-pop"), followUnfolds: true })}
+                {@attach morph({
+                  ms: dur("--duration-pop"),
+                  followUnfolds: true,
+                })}
               >
                 <!-- The surface tweens to its content's next height (motion/
                      morph) as it glides to a sibling or its own list filters;

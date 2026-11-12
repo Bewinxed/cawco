@@ -4,8 +4,8 @@
    * bench's frame tokens): the same row in Needs you, and the tray as the
    * kit's bottom sheet (DESIGN.md, Drawer: full-bleed, flush on the foot,
    * the hairline, the grabber, up to 85% of the screen, its content
-   * scrolling inside). It rises over --dur-panel on the drawer curve and
-   * leaves over --dur-exit (motion.ts `sheetIn`, `sheetOut`); a drag down
+   * scrolling inside). It rises over --duration-panel on the drawer curve and
+   * leaves over --duration-exit (motion.ts `sheetIn`, `sheetOut`); a drag down
    * is its × (dragToDismiss), as a press on the scrim is.
    */
   import { untrack } from "svelte";
@@ -20,7 +20,7 @@
   let { flow }: { flow: AddressFlow } = $props();
 
   /** The sheet stands at most 85% of the screen. */
-  const SHEET_ROOM = "calc(var(--c-bench-phone-h) * 0.85)";
+  const SHEET_ROOM = "calc(var(--spacing-c-bench-phone-h) * 0.85)";
 
   let sheetEl = $state<HTMLElement | null>(null);
   let scrimEl = $state<HTMLElement | null>(null);

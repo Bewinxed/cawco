@@ -11,7 +11,7 @@
  */
 import { dur, easeDrawer, lifting, motionOk } from "./curves.svelte";
 
-type DurToken = `--dur-${string}`;
+type DurToken = `--duration-${string}`;
 
 interface End {
   opacity: number;
@@ -33,7 +33,7 @@ export interface Travel {
 const nudge = (x: number, y: number): Travel => ({
   leave: { x: -x, y: -y, opacity: 0 },
   enter: { x, y, opacity: 0 },
-  over: "--dur-control",
+  over: "--duration-control",
   leavingOnTop: false,
 });
 
@@ -63,12 +63,12 @@ export interface Plan {
  * - Between two sidebar spokes: vertical, ±8%, the way the sidebar runs.
  * - Configure on a phone is a stack: a deeper page pushes in from the inline
  *   end over the one it leaves, which falls back 30% and dims to 0.6
- *   (--dur-panel); back pops it off the same way, on the shorter --dur-pop.
+ *   (--duration-panel); back pops it off the same way, on the shorter --duration-pop.
  * - Between two Configure sections on a wide screen: the section rises or
- *   drops in 4% the way the rail runs (--dur-menu) while the rail holds
+ *   drops in 4% the way the rail runs (--duration-menu) while the rail holds
  *   still.
  * - Anything else deeper or shallower: a horizontal ±8% nudge
- *   (--dur-control).
+ *   (--duration-control).
  * Browser back and forward go by the history step, not the path.
  */
 export function plan({
@@ -106,7 +106,7 @@ function configTravel(
     return {
       leave: { x: -30 * side, y: 0, opacity: 0.6 },
       enter: { x: 100 * side, y: 0, opacity: 1 },
-      over: "--dur-panel",
+      over: "--duration-panel",
       leavingOnTop: false,
     };
   }
@@ -114,7 +114,7 @@ function configTravel(
     return {
       leave: { x: 100 * side, y: 0, opacity: 1 },
       enter: { x: -30 * side, y: 0, opacity: 0.6 },
-      over: "--dur-pop",
+      over: "--duration-pop",
       leavingOnTop: true,
     };
   }
@@ -125,7 +125,7 @@ function configTravel(
   return {
     leave: { x: 0, y: 0, opacity: 0 },
     enter: { x: 0, y: section(to) > section(from) ? 4 : -4, opacity: 0 },
-    over: "--dur-menu",
+    over: "--duration-menu",
     leavingOnTop: false,
   };
 }
@@ -149,9 +149,9 @@ export function leaving(from: URL): void {
   }
 }
 
-/** Reduced motion: a --dur-control cross-fade in place, nothing travels. */
+/** Reduced motion: a --duration-control cross-fade in place, nothing travels. */
 const STILL: End = { x: 0, y: 0, opacity: 0 };
-const STILL_OVER: DurToken = "--dur-control";
+const STILL_OVER: DurToken = "--duration-control";
 
 export function pageOut(node: HTMLElement) {
   const { over } = route.travel;

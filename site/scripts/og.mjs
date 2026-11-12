@@ -12,10 +12,12 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const at = (path) => new URL(path, import.meta.url);
-const tokens = JSON.parse(readFileSync(at('../../design/tokens/cawco.tokens.json'), 'utf8'));
-// DTCG colours: both are sRGB, written with their hex.
-const paper = tokens.color.paper.$value.hex;
-const ink = tokens.color['crow-ink'].$value.hex;
+const theme = readFileSync(at('../../apps/dashboard/src/lib/tokens/theme.css'), 'utf8');
+// The theme's colours: both are written with their hex.
+const hex = (name) => theme.match(new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`, 'iu'))?.[1];
+const paper = hex('paper');
+const ink = hex('crow-ink');
+if (!(paper && ink)) throw new Error('theme.css has no --color-paper or --color-crow-ink.');
 
 const clip = readFileSync(at('../src/assets/caw/ready-enter-distance.svg'), 'utf8');
 const last = clip

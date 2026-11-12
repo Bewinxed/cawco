@@ -166,15 +166,18 @@
       behavior: scrollMotion(motionOk.current),
     });
     row.setAttribute("data-linked", "");
-    setTimeout(() => row.removeAttribute("data-linked"), dur("--dur-fade") * 4);
+    setTimeout(
+      () => row.removeAttribute("data-linked"),
+      dur("--duration-fade") * 4
+    );
   });
   // Esc shuts it: from inside, the focus back on its ring; from the tray row or the composer under it, the focus staying where it was.
   shutOnEscape(() => section, { inside: shut, under: () => onclose() });
 </script>
 
 <!-- It comes in by the kit's `@starting-style` (opacity, rise and scale on
-     one transition, --dur-pop on the drawer curve, from the ring's corner)
-     and leaves by `popOut` back down into the row (--dur-exit), global: the
+     one transition, --duration-pop on the drawer curve, from the ring's corner)
+     and leaves by `popOut` back down into the row (--duration-exit), global: the
      pane's `{#if}` that shuts it is outside this component, a snippet
      render between. -->
 <section
@@ -186,7 +189,7 @@
   })}
   data-side="top"
   data-state="open"
-  style:--plan-foot="calc(100% + var(--space-2))"
+  style:--plan-foot="calc(100% + var(--spacing-space-2))"
   bind:this={section}
   {@attach room}
   out:popOut|global={{ side: "top" }}
@@ -197,7 +200,7 @@
        floats over the parts, which run to the card's top beneath it and
        blur and fade under it as they scroll (HeadFade), clearing it at
        rest by the body's top padding. -->
-  <HeadFade band="var(--c-top-bar-h)" tint="bg-surface-raised" />
+  <HeadFade band="var(--spacing-c-top-bar-h)" tint="bg-surface-raised" />
   <header
     data-slot="plan-head"
     class="absolute inset-x-0 top-0 z-2 flex h-c-top-bar-h items-center gap-space-2 pe-space-2 ps-space-4"
@@ -217,7 +220,7 @@
     data-slot="body"
     bind:this={body}
     class="kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y scroll-timeline-transcript-head pbs-(--body-top) pbe-space-4 px-space-4 flex flex-col gap-space-2"
-    style:--body-top="calc(var(--c-top-bar-h) + var(--space-3))"
+    style:--body-top="calc(var(--spacing-c-top-bar-h) + var(--spacing-space-3))"
     style:--more-px="0"
   >
     {#if todosOnly && plan?.taskId}

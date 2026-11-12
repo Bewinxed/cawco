@@ -11,7 +11,7 @@
 
 <div
   class="mx-auto flex w-full max-w-c-page-column-w min-w-0 flex-col gap-space-5 p-space-4"
-  style:--card-in="var(--space-5)"
+  style:--card-in="var(--spacing-space-5)"
 >
   {@render renderNode(props.children)}
 </div>

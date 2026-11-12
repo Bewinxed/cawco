@@ -8,13 +8,15 @@
  * Tailwind's property order has no slot for `font`; these take one through
  * `--tw-sort`, Tailwind's own marker, which a release could change. This
  * compiles app.css with the dashboard's Tailwind and answers each shorthand
- * placed after a longhand. `bun scripts/build-tokens.ts --check` runs it.
+ * placed after a longhand, from the keys and utilities in theme.css.
+ * `bun run check` runs it.
  */
 import { dirname, resolve } from "node:path";
 import { compile } from "@tailwindcss/node";
-import type { TailwindTheme } from "../../../packages/hub/src/design-tokens";
 
 const APP_CSS = "src/app.css";
+/** The tokens and the utilities over them. */
+const THEME = "src/lib/tokens/theme.css";
 /** The house's own `@utility` definitions, which app.css imports. */
 const DESIGN_CSS = "src/design.css";
 /** Tailwind's own family form, which no key or `@utility` names. */
@@ -41,20 +43,26 @@ const selector = (candidate: string) =>
   `.${candidate.replace(NOT_IDENT, (ch) => `\\${ch}`)} {`;
 
 /** Every `font` shorthand utility that the compiled CSS places after a font longhand utility. */
-export async function fontOrderDrift(theme: TailwindTheme): Promise<string[]> {
+async function fontOrderDrift(): Promise<string[]> {
+  const themeCss = await Bun.file(THEME).text();
+  const utilities = [...themeCss.matchAll(/^@utility ([\w-]+) \{/gmu)].map(
+    ([, name]) => name as string
+  );
+  const keys = (ns: string) =>
+    [...themeCss.matchAll(new RegExp(`^\\s*--${ns}-([\\w-]+):`, "gmu"))]
+      .map(([, key]) => key as string)
+      .filter((key) => ns !== "font" || !key.startsWith("weight-"));
   const appCss = await Bun.file(APP_CSS).text();
   const own = [...(await Bun.file(DESIGN_CSS).text()).matchAll(UTILITY)];
   const shorthands = [
-    ...theme.utilities.filter((u) => u.startsWith("type-")),
+    ...utilities.filter((u) => u.startsWith("type-")),
     ...own.filter(([, , body]) => SHORTHAND.test(body)).map(([, name]) => name),
   ];
   const longhands = [
     ...TAILWIND_FONT_UTILITIES,
-    ...theme.utilities.filter(
-      (u) => u.startsWith("text-size-") || u === "liga-none"
-    ),
+    ...utilities.filter((u) => u.startsWith("text-size-") || u === "liga-none"),
     ...Object.entries(FONT_NAMESPACES).flatMap(([ns, prefix]) =>
-      (theme.keys.get(ns) ?? []).map(({ key }) => `${prefix}${key}`)
+      keys(ns).map((key) => `${prefix}${key}`)
     ),
     ...own
       .filter(([, , body]) => !SHORTHAND.test(body) && LONGHAND.test(body))
@@ -78,3 +86,14 @@ export async function fontOrderDrift(theme: TailwindTheme): Promise<string[]> {
         `${short} sorts after ${longhands.filter((l) => at(l) < at(short)).join(", ")}`
     );
 }
+
+const drift = await fontOrderDrift();
+for (const wrong of drift) {
+  console.error(`role-order: ${THEME}: ${wrong}`);
+}
+console.log(
+  drift.length === 0
+    ? "role-order: every font shorthand utility sorts before every font longhand utility"
+    : `role-order: ${drift.length} font shorthand utilities sort after a longhand`
+);
+process.exit(drift.length === 0 ? 0 : 1);

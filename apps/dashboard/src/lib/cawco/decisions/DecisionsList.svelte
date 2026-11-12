@@ -70,8 +70,8 @@
   const SHOWN = 6;
   /** The list's four edges: mark, title, fact, age; in a narrow pane the fact goes under the title. */
   const COLS =
-    "var(--c-row-lead) minmax(0, 1fr) minmax(0, max-content) max-content";
-  const COLS_NARROW = "var(--c-row-lead) minmax(0, 1fr) max-content";
+    "var(--spacing-c-row-lead) minmax(0, 1fr) minmax(0, max-content) max-content";
+  const COLS_NARROW = "var(--spacing-c-row-lead) minmax(0, 1fr) max-content";
 
   let query = $state("");
   const q = $derived(query.trim().toLowerCase());
@@ -270,7 +270,7 @@
   <!-- mark-line: the row is a grid; its mark stands in the lead column, centred on the title's first line by its own cell -->
   <div
     data-slot="decision-row"
-    class="group/row relative isolate col-span-full grid min-h-c-row-h grid-cols-subgrid items-center gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-y-px before:inset-x-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--dur-ghost) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed [&+&]:border-t [&+&]:border-border-hairline @max-decisions-520px/decisions:items-start"
+    class="group/row relative isolate col-span-full grid min-h-c-row-h grid-cols-subgrid items-center gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-y-px before:inset-x-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-ghost) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed [&+&]:border-t [&+&]:border-border-hairline @max-decisions-520px/decisions:items-start"
     data-flip
     data-page={page.name}
     data-standing={page.state}
@@ -314,7 +314,7 @@
     >
       {#if page.updatedAt > 0}
         <span
-          class="type-meta num whitespace-nowrap text-ink-muted transition-opacity duration-(--dur-control) ease-out data-act:can-hover:group-hover/row:opacity-0 data-act:group-focus-within/row:opacity-0"
+          class="type-meta num whitespace-nowrap text-ink-muted transition-opacity duration-(--duration-control) ease-out data-act:can-hover:group-hover/row:opacity-0 data-act:group-focus-within/row:opacity-0"
           data-act={act || undefined}
           data-slot="age"
           title={words.lastChanged(formatTimestamp(new Date(page.updatedAt)))}
@@ -329,7 +329,7 @@
       {/if}
       {#if act || making === page.name}
         <span
-          class="relative z-1 invisible opacity-0 transition-opacity duration-(--dur-control) ease-out can-hover:group-hover/row:visible can-hover:group-hover/row:opacity-100 group-focus-within/row:visible group-focus-within/row:opacity-100 data-making:visible data-making:opacity-100 @max-decisions-520px/decisions:hidden"
+          class="relative z-1 invisible opacity-0 transition-opacity duration-(--duration-control) ease-out can-hover:group-hover/row:visible can-hover:group-hover/row:opacity-100 group-focus-within/row:visible group-focus-within/row:opacity-100 data-making:visible data-making:opacity-100 @max-decisions-520px/decisions:hidden"
           data-making={making === page.name || undefined}
         >
           <Button
@@ -523,7 +523,7 @@
           {#if rest > 0}
             <button
               aria-expanded="false"
-              class="mark-line col-span-3 col-start-2 -ms-space-2 mt-space-1 mb-space-2 inline-flex h-c-btn-h-xs items-center gap-space-1 justify-self-start rounded-xs px-space-2 type-label text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
+              class="mark-line col-span-3 col-start-2 -ms-space-2 mt-space-1 mb-space-2 inline-flex h-c-btn-h-xs items-center gap-space-1 justify-self-start rounded-xs px-space-2 type-label text-ink-muted transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:text-ink-strong focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
               data-more={group.key}
               onclick={() => {
                 unfolded = { ...unfolded, [group.key]: true };

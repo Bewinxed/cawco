@@ -15,7 +15,7 @@
    * shadow, no border), every card the tallest card's height with its words
    * centred, tinting under a press as wide controls do (The Press Rule). One
    * column in a narrow container; wider, as many columns of at least
-   * --c-starter-w as fit (3 + 1, then 4 across at --c-starters-w), and
+   * --spacing-c-starter-w as fit (3 + 1, then 4 across at --spacing-c-starters-w), and
    * never a column more than there are cards (`auto-fit`): fewer cards
    * than fit share the row between them, so the cards always span the
    * column and Caw, centred over it, stands over their middle.
@@ -49,14 +49,14 @@
     data-slot="cards"
     aria-label={rows ? "Things to ask Caw" : "Starters"}
     class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols) group-data-rows/starters:flex group-data-rows/starters:flex-col group-data-rows/starters:items-start"
-    style:--cards-cols={"repeat(auto-fit, minmax(min(100%, var(--c-starter-w)), 1fr))"}
+    style:--cards-cols={"repeat(auto-fit, minmax(min(100%, var(--spacing-c-starter-w)), 1fr))"}
     style:--cards-rows="1fr"
   >
     {#each starters as starter (starter.text)}
       <li class="group-data-rows/starters:max-w-full">
         <button
           data-slot="starter"
-          class="select-none mark-line press-tint type-label flex size-full min-h-c-starter-h items-box-start gap-space-2 rounded-lg bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-tile transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover group-data-rows/starters:h-auto group-data-rows/starters:min-h-c-btn-h group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-md group-data-rows/starters:border group-data-rows/starters:border-solid group-data-rows/starters:border-border-row-outline group-data-rows/starters:px-space-3 group-data-rows/starters:py-space-2 group-data-rows/starters:shadow-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+          class="select-none mark-line press-tint type-label flex size-full min-h-c-starter-h items-box-start gap-space-2 rounded-lg bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-tile transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover group-data-rows/starters:h-auto group-data-rows/starters:min-h-c-btn-h group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-md group-data-rows/starters:border group-data-rows/starters:border-solid group-data-rows/starters:border-border-row-outline group-data-rows/starters:px-space-3 group-data-rows/starters:py-space-2 group-data-rows/starters:shadow-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
           onclick={() => onpick(starter.text)}
           type="button"
         >

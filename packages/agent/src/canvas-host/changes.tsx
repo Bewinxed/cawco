@@ -5,15 +5,15 @@
  * `meta.changes` less the person's looks in its `seen` map, read from the doc
  * this page holds, so every screen of the canvas marks the same.
  *
- * Each changed element wears the ring the pages wear (`--c-change-ring`,
- * `--c-change-ring-width` heavy, `--c-change-ring-offset` outside its box,
+ * Each changed element wears the ring the pages wear (`--color-c-change-ring`,
+ * `--spacing-c-change-ring-width` heavy, `--spacing-c-change-ring-offset` outside its box,
  * so it never covers its strokes or words) on a layer of its own over the
  * scene, in the scene's coordinates: it pans and zooms with the drawing,
- * takes no press, and fades off over `--dur-fade` once seen. An ellipse is
+ * takes no press, and fades off over `--duration-fade` once seen. An ellipse is
  * ringed as an ellipse, a diamond as a diamond, a rounded box at its own
  * radius grown by as much. A ring pings once as it lands and again when a
- * step reaches it: its halo, the same shape, grows `--c-change-ping-spread`
- * outward as it fades over `--dur-loop`, its line kept as heavy
+ * step reaches it: its halo, the same shape, grows `--spacing-c-change-ping-spread`
+ * outward as it fades over `--duration-loop`, its line kept as heavy
  * (`vector-effect: non-scaling-stroke`); with less motion it stands still.
  *
  * The tag (the floating tag recipe, under the rail) reads "N changed since
@@ -141,9 +141,12 @@ const ringsOf = (
 const ringOut = (): number => {
   const root = getComputedStyle(document.documentElement);
   const offset =
-    Number.parseFloat(root.getPropertyValue("--c-change-ring-offset")) || 3;
+    Number.parseFloat(
+      root.getPropertyValue("--spacing-c-change-ring-offset")
+    ) || 3;
   const line =
-    Number.parseFloat(root.getPropertyValue("--c-change-ring-width")) || 2;
+    Number.parseFloat(root.getPropertyValue("--spacing-c-change-ring-width")) ||
+    2;
   return offset + line / 2;
 };
 
@@ -151,7 +154,7 @@ const ringOut = (): number => {
 const pingSpread = (): number =>
   Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue(
-      "--c-change-ping-spread"
+      "--spacing-c-change-ping-spread"
     )
   ) || 10;
 
@@ -323,7 +326,7 @@ export function Changes({
     });
   }, [anchors]);
   /**
-   * Rings looked at, fading off over --dur-fade before they go: each one
+   * Rings looked at, fading off over --duration-fade before they go: each one
    * the last rings held that these don't, kept until its fade has run
    * however often the view redraws meanwhile.
    */
@@ -345,7 +348,7 @@ export function Changes({
     const timer = setTimeout(() => {
       timers.current.delete(timer);
       setLeaving((was) => was.filter((ring) => !gone.includes(ring)));
-    }, tokenMs("--dur-fade"));
+    }, tokenMs("--duration-fade"));
     timers.current.add(timer);
   }, [rings]);
   useEffect(() => {

@@ -617,7 +617,7 @@
   function stepIn(_node: Element): TransitionConfig {
     const rise = motionOk.current ? 6 * toward : 0;
     return {
-      duration: dur("--dur-panel"),
+      duration: dur("--duration-panel"),
       easing: easeOut,
       css: (t) => `opacity: ${t}; transform: translateY(${(1 - t) * rise}px)`,
     };
@@ -632,7 +632,7 @@
       return { duration: 0 };
     }
     return lifting(node, pinned(node), {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     });
@@ -659,7 +659,7 @@
   <div data-slot="host" class="@container/setup min-w-0">
     <div
       class="grid grid-cols-(--setup-cols) items-box-start gap-space-7 @max-setup/setup:grid-cols-(--setup-cols-narrow) @max-setup/setup:gap-space-4"
-      style:--setup-cols="var(--c-setup-rail-w) minmax(0, 1fr)"
+      style:--setup-cols="var(--spacing-c-setup-rail-w) minmax(0, 1fr)"
       style:--setup-cols-narrow="minmax(0, 1fr)"
     >
       <ol
@@ -670,7 +670,7 @@
           <li
             data-account-setup-done={place < step || undefined}
             aria-current={place === step ? "step" : undefined}
-            class="group mark-line flex min-h-c-btn-h items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] duration-(--dur-fade) ease-out @max-setup/setup:px-space-2 data-account-setup-done:text-ink-row data-cur:bg-selected-bg data-cur:not-data-account-setup-done:text-selected-ink"
+            class="group mark-line flex min-h-c-btn-h items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] duration-(--duration-fade) ease-out @max-setup/setup:px-space-2 data-account-setup-done:text-ink-row data-cur:bg-selected-bg data-cur:not-data-account-setup-done:text-selected-ink"
             data-cur={place === step || undefined}
           >
             {#if place < step}
@@ -681,7 +681,7 @@
             {:else}
               <span
                 aria-hidden="true"
-                class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-neutral-8 after:transition-[background-color] after:duration-(--dur-fade) after:ease-out group-data-cur:after:bg-selected-icon"
+                class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-neutral-8 after:transition-[background-color] after:duration-(--duration-fade) after:ease-out group-data-cur:after:bg-selected-icon"
                 data-box
               ></span>
             {/if}
@@ -849,7 +849,7 @@
                 );
               }
             }}
-            style:--choice-cols="var(--c-mark) minmax(0, 1fr) var(--icon-md)"
+            style:--choice-cols={"var(--spacing-c-mark) minmax(0, 1fr) var(--spacing-icon-md)"}
             type="button"
           >
             <span
@@ -948,7 +948,7 @@
         class="m-0 flex list-none flex-col p-0"
         style:--mrow-areas={'"name controls st" ". problem problem"'}
         style:--mrow-areas-stack={'"name st" "controls controls" "problem problem"'}
-        style:--mrow-cols="var(--c-setup-machine-name-w) minmax(0, 1fr) auto"
+        style:--mrow-cols={"var(--spacing-c-setup-machine-name-w) minmax(0, 1fr) auto"}
         style:--mrow-cols-two="minmax(0, 1fr) auto"
       >
         {#each machines as machine (machine.machineId)}
@@ -1057,7 +1057,7 @@
                   class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
                   in:unfold
                   style:--area="controls"
-                  style:--code-flex="1 1 var(--c-setup-code-basis)"
+                  style:--code-flex="1 1 var(--spacing-c-setup-code-basis)"
                 >
                   {#if paste.url}
                     <Button

@@ -172,10 +172,10 @@
     const source = thumb(doc.share);
     let exit: Animation | undefined;
     if (source) {
-      exit = closeInto(sheet, source, dur("--dur-exit"));
+      exit = closeInto(sheet, source, dur("--duration-exit"));
     } else if (motionOk.current) {
       exit = sheet.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--dur-exit"),
+        duration: dur("--duration-exit"),
         easing: ease("--ease-out"),
         fill: "forwards",
       });
@@ -241,7 +241,7 @@
       {@attach land(() => doc.share, {
         mode: "grow",
         anchor: '[data-slot="doc-head"]',
-        ms: dur("--dur-panel"),
+        ms: dur("--duration-panel"),
       })}
     >
       <div

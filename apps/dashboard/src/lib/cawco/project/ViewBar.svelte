@@ -2,7 +2,7 @@
   /**
    * The project page's views on a phone (under 640px; the strip holds them
    * wider): one bar docked where a session docks its composer, full width
-   * less --space-3 a side, --space-4 and the safe area above the foot, with
+   * less --spacing-space-3 a side, --spacing-space-4 and the safe area above the foot, with
    * no ground of its own: its two groups are capsules of the composer's
    * glass. It arrives with the page and never moves. Left to right:
    *
@@ -12,7 +12,7 @@
    *   edge, the bar's width, 8px over it, every view in it, Caw's drafts
    *   with their badge and Decisions with the pages waiting on picks. A
    *   pick closes it, the word morphs to the new name (MorphText) and the
-   *   pill's width follows it over --dur-morph on --ease-out;
+   *   pill's width follows it over --duration-morph on --ease-out;
    * - `tools`, the page's: the tasks' filter as its glyph and count while
    *   one stands on a view of the tasks (TaskFilterPopover `compact`; the
    *   head's `⋯` opens it);
@@ -23,7 +23,7 @@
    *   Glass Rule, One prominent action): it opens Caw's panel on a new conversation, the caret in his
    *   composer (work in a project starts by telling Caw).
    *
-   * The pill and "+" press to --press-scale over --dur-toggle.
+   * The pill and "+" press to --press-scale over --duration-toggle.
    */
   import { type Snippet, untrack } from "svelte";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
@@ -100,7 +100,7 @@
   /**
    * The pill's width follows its word: read before the new name is drawn,
    * the pill runs from the width it stood at to the one the new name lays
-   * out at, on the morph's clock (--dur-morph, --ease-out), its word
+   * out at, on the morph's clock (--duration-morph, --ease-out), its word
    * clipped inside while the letters cross. The widths are read before the
    * new name is drawn; the run starts after, in the update that starts the
    * word's morph, on its start time. Less motion: the width lands at once.
@@ -126,7 +126,7 @@
     follow = null;
     const run = pill.animate(
       [{ inlineSize: `${from}px` }, { inlineSize: `${to}px` }],
-      { duration: dur("--dur-morph"), easing: ease("--ease-out") }
+      { duration: dur("--duration-morph"), easing: ease("--ease-out") }
     );
     // The morph's letters start now (torph pins theirs to the timeline's
     // time), not at the next frame as a fresh run would.
@@ -142,7 +142,7 @@
      Ask Caw trailing. Its list rises from the bar's whole width. -->
 <div
   class="absolute inset-x-space-3 bottom-(--off-bottom) z-(--layer-dock) phone:hidden"
-  style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
+  style:--off-bottom="calc(var(--spacing-space-4) + var(--safe-bottom))"
 >
   <div
     data-slot="view-bar"
@@ -184,7 +184,7 @@
           data-view-list
           align="start"
           class="max-w-(--list-max)"
-          style="--list-max: calc(100vw - 2 * var(--space-3))"
+          style="--list-max: calc(100vw - 2 * var(--spacing-space-3))"
           collisionPadding={8}
           customAnchor={shell}
           side="top"

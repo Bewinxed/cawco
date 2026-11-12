@@ -25,8 +25,8 @@
  * at the card's top edge, the anchor's foot, and the card slides down from
  * behind that cut by its own height, revealing what is in it as the foot
  * passes; nothing inside fades. A finger pulling a tab's menu out draws the
- * same thing (PaneTabs `drawPull`). Open over --dur-pop, close over
- * --dur-exit (The Fast Exit Rule), both on --ease-out: an entrance and an
+ * same thing (PaneTabs `drawPull`). Open over --duration-pop, close over
+ * --duration-exit (The Fast Exit Rule), both on --ease-out: an entrance and an
  * exit, so the strong ease-out (Emil Kowalski, "Entering or exiting →
  * ease-out"; transitions.dev's dropdown, 250ms open and 150ms close on
  * cubic-bezier(0.22, 1, 0.36, 1), the same family).
@@ -251,7 +251,7 @@ export function regrow(node: HTMLElement): void {
  * A tab's hang's open and close (`Hang.grow`): one run on the card
  * (`hang-grow`), its progress read every frame and drawn as the silhouette
  * that far out, so a seeked or slowed clock draws the shape where it
- * stands. Open over --dur-pop and close over --dur-exit on --ease-out (an
+ * stands. Open over --duration-pop and close over --duration-exit on --ease-out (an
  * entrance and an exit), each from where the last left it (interruptible),
  * over its share of the length. Shut, the card is drawn at 0: the tab alone.
  */
@@ -340,7 +340,7 @@ function growMotion(
       grown(node);
       return;
     }
-    const growth = play(1, dur("--dur-pop"));
+    const growth = play(1, dur("--duration-pop"));
     growth.finished
       .then(() => {
         if (run === growth) {
@@ -362,7 +362,7 @@ function growMotion(
       rest();
       return;
     }
-    const folding = play(0, dur("--dur-exit"));
+    const folding = play(0, dur("--duration-exit"));
     folding.finished
       .then(() => {
         if (run === folding) {
@@ -470,7 +470,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
       grown(node);
       return;
     }
-    const growth = play(drawn(shut()), OPEN, dur("--dur-pop"));
+    const growth = play(drawn(shut()), OPEN, dur("--duration-pop"));
     growth.finished
       .then(() => {
         if (run === growth) {
@@ -495,7 +495,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
       rest();
       return;
     }
-    const folding = play(drawn(OPEN), shut(), dur("--dur-exit"));
+    const folding = play(drawn(OPEN), shut(), dur("--duration-exit"));
     folding.finished
       .then(() => {
         if (run === folding) {

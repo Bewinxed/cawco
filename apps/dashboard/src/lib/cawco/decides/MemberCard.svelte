@@ -55,7 +55,7 @@
   ]}
   data-editing={editing || undefined}
   data-member={member.id}
-  style:--stand-in="calc(var(--c-roster-face) + var(--space-3))"
+  style:--stand-in="calc(var(--spacing-c-roster-face) + var(--spacing-space-3))"
 >
   <div class="flex items-start gap-x-space-3">
     <MemberFace {member} size={48} />

@@ -169,7 +169,7 @@
   /** Read when a fold plays, in the browser: the duration is a root token. */
   const PANEL = {
     get ms() {
-      return dur("--dur-panel");
+      return dur("--duration-panel");
     },
     easing: CURVE.inOut,
   };
@@ -183,7 +183,7 @@
     {@render source()}
   {:else}
     <SectionHeader
-      hue="var(--hue-amber-500)"
+      hue="var(--color-hue-amber-500)"
       icon={Folder}
       label={spawnWords.location.name}
       wrap
@@ -377,7 +377,7 @@
                 >
                   <Folder
                     class="size-icon-md flex-none"
-                    style={`color:${folder.name.startsWith(".") ? "var(--neutral-8)" : "var(--hue-amber-500)"}`}
+                    style={`color:${folder.name.startsWith(".") ? "var(--color-neutral-8)" : "var(--color-hue-amber-500)"}`}
                   />
                   <span data-slot="name" class="min-w-0 flex-1 truncate"
                     >{folder.name}</span
@@ -426,7 +426,7 @@
     <div class="min-h-0">
       <div
         data-slot="repo"
-        class="grid gap-space-2 transition-[opacity] duration-(--dur-panel) ease-out motion-safe:transition-panel-travel"
+        class="grid gap-space-2 transition-[opacity] duration-(--duration-panel) ease-out motion-safe:transition-panel-travel"
         style:transform={`translateY(${mode === "repo" ? "0px" : "calc(-1 * var(--pop-rise))"})`}
         style:opacity={mode === "repo" ? 1 : 0}
         style:pointer-events={mode === "repo" ? "auto" : "none"}

@@ -105,8 +105,8 @@
         data-slot="more"
         class="flex justify-end ps-(--text-column) pe-space-3 coarse:pb-space-1"
         data-flip
-        style:--hang={"calc(-1 * (1px + 1.5 * var(--spacing) + var(--icon-sm) * 4.25 / 24))"}
-        style:--text-column={"calc(var(--space-3) + var(--c-row-lead) + var(--space-3))"}
+        style:--hang={"calc(-1 * (1px + 1.5 * var(--spacing) + var(--spacing-icon-sm) * 4.25 / 24))"}
+        style:--text-column={"calc(var(--spacing-space-3) + var(--spacing-c-row-lead) + var(--spacing-space-3))"}
       >
         <!-- Open, it says so in its words and its flipped chevron, not in the
              kit ghost's expanded fill, which would stand hung past the
@@ -133,7 +133,7 @@
           <IconChevronDown
             data-chev
             aria-hidden="true"
-            class="*:vector-non-scaling transition-[scale] duration-(--dur-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
+            class="*:vector-non-scaling transition-[scale] duration-(--duration-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
             data-icon="inline-end"
           />
         </Button>
@@ -143,7 +143,7 @@
            opening; the chevron flips with it. -->
       <div
         data-slot="fold"
-        class="group grid grid-rows-shut data-open:grid-rows-open motion-safe:transition-[grid-template-rows] motion-safe:duration-(--dur-exit) motion-safe:ease-out motion-safe:data-open:duration-(--dur-panel)"
+        class="group grid grid-rows-shut data-open:grid-rows-open motion-safe:transition-[grid-template-rows] motion-safe:duration-(--duration-exit) motion-safe:ease-out motion-safe:data-open:duration-(--duration-panel)"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}
@@ -151,7 +151,7 @@
       >
         <div
           data-slot="fold-inner"
-          class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:duration-(--dur-panel)"
+          class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:duration-(--duration-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-fade) motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:duration-(--duration-panel)"
           style:--fold-clear="0"
         >
           <ul data-slot="list" class="m-0 flex list-none flex-col p-0">

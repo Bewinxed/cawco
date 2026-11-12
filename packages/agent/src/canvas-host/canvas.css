@@ -19,8 +19,8 @@ html {
 
 body {
   overflow: hidden;
-  background: var(--surface-raised);
-  color: var(--ink-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-ink-strong);
   font: var(--type-body);
 }
 
@@ -32,10 +32,10 @@ body {
   --grid-y: 0px;
   position: relative;
   height: 100%;
-  background-color: var(--surface-raised);
+  background-color: var(--color-surface-raised);
   background-image:
-    linear-gradient(to right, var(--code-bg) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--code-bg) 1px, transparent 1px);
+    linear-gradient(to right, var(--color-code-bg) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-code-bg) 1px, transparent 1px);
   background-position: var(--grid-x) var(--grid-y);
   background-size: var(--grid) var(--grid);
 
@@ -43,11 +43,11 @@ body {
      The tools' group as drawn, rows and all, is `--rail-tools-h` (rail.tsx
      measures it); until it is measured, one row. */
   --rail-box: 34px;
-  --rail-h: calc(var(--rail-box) + 2 * var(--space-2) + 2px);
+  --rail-h: calc(var(--rail-box) + 2 * var(--spacing-space-2) + 2px);
   --rail-tools-row: var(--rail-tools-h, var(--rail-h));
 
   @media (pointer: coarse) {
-    --rail-box: var(--c-btn-h-lg);
+    --rail-box: var(--spacing-c-btn-h-lg);
   }
 }
 
@@ -64,8 +64,8 @@ body {
   display: none !important;
 }
 
-/* ---- The rail: two floating groups, --space-3 in from the canvas's sides
-   and --space-2 under the host's chrome over its top: what the host says
+/* ---- The rail: two floating groups, --spacing-space-3 in from the canvas's sides
+   and --spacing-space-2 under the host's chrome over its top: what the host says
    its chrome takes, in its hello and as it places the canvas (host.tsx):
    over the composer its grab band (`--canvas-inset-top`) and its shape's
    shoulders, which stand in from the page's box (`--canvas-inset-side`);
@@ -78,34 +78,36 @@ body {
 .rail {
   position: absolute;
   z-index: 4;
-  top: calc(var(--canvas-inset-top) + var(--space-2));
+  top: calc(var(--canvas-inset-top) + var(--spacing-space-2));
   display: flex;
   /* Too narrow a page for a group's boxes in one row: they wrap, the group
-     never past the page's sides less --space-3 each. */
+     never past the page's sides less --spacing-space-3 each. */
   flex-wrap: wrap;
   box-sizing: border-box;
-  max-width: calc(100% - 2 * (var(--canvas-inset-side) + var(--space-3)));
-  gap: var(--space-1);
-  padding: var(--space-2);
-  border: 1px solid var(--border-control);
+  max-width: calc(
+    100% - 2 * (var(--canvas-inset-side) + var(--spacing-space-3))
+  );
+  gap: var(--spacing-space-1);
+  padding: var(--spacing-space-2);
+  border: 1px solid var(--color-border-control);
   border-radius: var(--radius-lg);
-  background: var(--material-panel);
+  background: var(--color-material-panel);
   backdrop-filter: blur(calc(var(--material-blur) * 1.4))
     saturate(var(--material-saturate));
   box-shadow: var(--shadow-tile);
 
   @media (prefers-reduced-transparency: reduce) {
-    background: var(--surface-raised);
+    background: var(--color-surface-raised);
     backdrop-filter: none;
   }
 }
 
 .rail-tools {
-  left: calc(var(--canvas-inset-side) + var(--space-3));
+  left: calc(var(--canvas-inset-side) + var(--spacing-space-3));
 }
 
 .rail-view {
-  right: calc(var(--canvas-inset-side) + var(--space-3));
+  right: calc(var(--canvas-inset-side) + var(--spacing-space-3));
 }
 
 /* Unseen until the host has said its inset (`data-canvas-inset`, set by the
@@ -123,8 +125,8 @@ body {
 @media (max-width: 559px), (max-width: 639px) and (pointer: coarse) {
   .rail-view {
     top: calc(
-      var(--canvas-inset-top) + var(--space-2) + var(--rail-tools-row) +
-        var(--space-2)
+      var(--canvas-inset-top) + var(--spacing-space-2) + var(--rail-tools-row) +
+        var(--spacing-space-2)
     );
   }
 }
@@ -136,14 +138,16 @@ body {
   .canvas-host:not([data-docked]) {
     .rail {
       top: auto;
-      bottom: var(--space-3);
+      bottom: var(--spacing-space-3);
     }
     .rail-view {
-      bottom: calc(var(--space-3) + var(--rail-tools-row) + var(--space-2));
+      bottom: calc(
+        var(--spacing-space-3) + var(--rail-tools-row) + var(--spacing-space-2)
+      );
     }
     .rail .rail-menu {
       top: auto;
-      bottom: calc(100% + var(--space-2) + 1px);
+      bottom: calc(100% + var(--spacing-space-2) + 1px);
       transform-origin: bottom left;
     }
     .rail-view .rail-menu {
@@ -164,24 +168,26 @@ body {
   padding: 0;
   place-items: center;
   border: 0;
-  border-radius: calc(var(--radius-lg) - var(--space-2) - var(--border-width));
+  border-radius: calc(
+    var(--radius-lg) - var(--spacing-space-2) - var(--border-width)
+  );
   background: transparent;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   cursor: pointer;
   transition:
-    background-color var(--dur-control) var(--ease-out),
-    color var(--dur-control) var(--ease-out),
-    scale var(--dur-control) var(--ease-out);
+    background-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out),
+    scale var(--duration-control) var(--ease-out);
 
   &[data-chosen] {
-    background: var(--surface-pressed);
-    color: var(--ink-strong);
+    background: var(--color-surface-pressed);
+    color: var(--color-ink-strong);
   }
   &:active {
     scale: 0.97;
   }
   &:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
     outline-offset: var(--focus-ring-offset);
   }
   &:focus:not(:focus-visible) {
@@ -190,8 +196,8 @@ body {
 
   @media (hover: hover) and (pointer: fine) {
     &:hover:not([data-chosen]) {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
+      background: var(--color-surface-hover);
+      color: var(--color-ink-strong);
     }
   }
 }
@@ -199,7 +205,7 @@ body {
 /* A box's glyph swapping (rail.tsx SwapGlyph), as the composer's Send and
    Stop do (Composer.svelte, icon-swap): the glyph going out and the one
    coming in share the box's one cell, trading places by opacity and scale
-   out of a 4px blur over --dur-control on ease-out. With reduced motion
+   out of a 4px blur over --duration-control on ease-out. With reduced motion
    they only cross-fade. */
 .rail-glyphs {
   display: grid;
@@ -212,10 +218,10 @@ body {
   place-items: center;
 
   &[data-swap="in"] {
-    animation: rail-glyph-in var(--dur-control) var(--ease-out) both;
+    animation: rail-glyph-in var(--duration-control) var(--ease-out) both;
   }
   &[data-swap="out"] {
-    animation: rail-glyph-out var(--dur-control) var(--ease-out) both;
+    animation: rail-glyph-out var(--duration-control) var(--ease-out) both;
   }
   @media (prefers-reduced-motion: reduce) {
     &[data-swap="in"] {
@@ -284,25 +290,25 @@ body {
 
 .rail-menu {
   position: absolute;
-  top: calc(100% + var(--space-2) + 1px);
-  left: calc(-1 * (var(--space-2) + 1px));
+  top: calc(100% + var(--spacing-space-2) + 1px);
+  left: calc(-1 * (var(--spacing-space-2) + 1px));
   display: grid;
   min-width: 180px;
   padding: 6px;
-  border: 1px solid var(--border-control);
+  border: 1px solid var(--color-border-control);
   border-radius: var(--radius-lg);
-  background: var(--surface-raised);
+  background: var(--color-surface-raised);
   box-shadow: var(--shadow-overlay);
-  color: var(--ink-strong);
+  color: var(--color-ink-strong);
   transform-origin: top left;
 
   @media (prefers-reduced-motion: no-preference) {
-    animation: rail-menu-in var(--dur-pop) var(--ease-drawer);
+    animation: rail-menu-in var(--duration-pop) var(--ease-drawer);
   }
 }
 
 .rail-view .rail-menu {
-  right: calc(-1 * (var(--space-2) + 1px));
+  right: calc(-1 * (var(--spacing-space-2) + 1px));
   left: auto;
   transform-origin: top right;
 }
@@ -322,22 +328,22 @@ body {
   display: flex;
   height: 32px;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--spacing-space-2);
   padding: 0 10px;
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--ink-strong);
+  color: var(--color-ink-strong);
   cursor: pointer;
   font: var(--type-label);
   text-align: start;
 
   & > svg {
     flex: none;
-    color: var(--ink-muted);
+    color: var(--color-ink-muted);
   }
   &:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
     outline-offset: var(--focus-ring-inset);
   }
   &:focus:not(:focus-visible) {
@@ -346,11 +352,11 @@ body {
 
   @media (hover: hover) and (pointer: fine) {
     &:hover {
-      background: var(--surface-hover);
+      background: var(--color-surface-hover);
     }
   }
   @media (pointer: coarse) {
-    height: var(--c-btn-h-lg);
+    height: var(--spacing-c-btn-h-lg);
   }
 }
 
@@ -359,19 +365,19 @@ body {
 }
 
 .rail-item-hint {
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   font: var(--type-meta);
 }
 
 /* A checked item's tick (DESIGN.md, Menu item): in the item's own ink, no
    fill; the hover is the only fill an item takes. It fades in over
-   --dur-control as the kit's menu tick does. */
+   --duration-control as the kit's menu tick does. */
 .rail-item-tick {
   display: grid;
   flex: none;
   place-items: center;
   opacity: 0;
-  transition: opacity var(--dur-control) var(--ease-out);
+  transition: opacity var(--duration-control) var(--ease-out);
 
   &[data-on="true"] {
     opacity: 1;
@@ -381,35 +387,35 @@ body {
 /* ---- A file the canvas wouldn't take (images.ts): one line in the error
    formula over the grid, under the rail (over it on a phone, whose rail
    stands at the foot), in the panel material's raised card. It fades in
-   over --dur-fade and stands until the person next acts on the canvas (a
+   over --duration-fade and stands until the person next acts on the canvas (a
    press, a key, a paste or a drop: images.ts marks it `data-leaving`), then
-   fades out over --dur-exit, by opacity alone, so reduced motion keeps it
+   fades out over --duration-exit, by opacity alone, so reduced motion keeps it
    as it is. No timer takes it away. It takes no press. */
 .canvas-refusal {
   --refusal-top: calc(
-    var(--canvas-inset-top) + var(--space-2) + var(--rail-tools-row) +
-      var(--space-2)
+    var(--canvas-inset-top) + var(--spacing-space-2) + var(--rail-tools-row) +
+      var(--spacing-space-2)
   );
   position: absolute;
   z-index: 5;
   top: var(--refusal-top);
   left: 50%;
   width: max-content;
-  max-width: min(60ch, calc(100% - 2 * var(--space-3)));
+  max-width: min(60ch, calc(100% - 2 * var(--spacing-space-3)));
   margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-control);
+  padding: var(--spacing-space-2) var(--spacing-space-3);
+  border: 1px solid var(--color-border-control);
   border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  background: var(--color-surface-raised);
   box-shadow: var(--shadow-tile);
-  color: var(--ink-strong);
+  color: var(--color-ink-strong);
   font: var(--type-body);
   pointer-events: none;
   translate: -50% 0;
-  animation: canvas-refusal-in var(--dur-fade) var(--ease-out);
+  animation: canvas-refusal-in var(--duration-fade) var(--ease-out);
 
   &[data-leaving] {
-    animation: canvas-refusal-out var(--dur-exit) var(--ease-out) forwards;
+    animation: canvas-refusal-out var(--duration-exit) var(--ease-out) forwards;
   }
 }
 
@@ -417,8 +423,8 @@ body {
 @media (max-width: 559px), (max-width: 639px) and (pointer: coarse) {
   .canvas-refusal {
     --refusal-top: calc(
-      var(--canvas-inset-top) + var(--space-2) + var(--rail-tools-row) +
-        var(--space-2) + var(--rail-h) + var(--space-2)
+      var(--canvas-inset-top) + var(--spacing-space-2) + var(--rail-tools-row) +
+        var(--spacing-space-2) + var(--rail-h) + var(--spacing-space-2)
     );
   }
 }
@@ -427,7 +433,7 @@ body {
    band stands at the top. */
 @media (max-width: 639px) and (pointer: coarse) {
   .canvas-host:not([data-docked]) .canvas-refusal {
-    --refusal-top: calc(var(--canvas-inset-top) + var(--space-3));
+    --refusal-top: calc(var(--canvas-inset-top) + var(--spacing-space-3));
   }
 }
 
@@ -446,14 +452,14 @@ body {
 /* ---- The canvas that can't reach the hub: one line in the error formula,
    centred over the grid, standing while it can't. The pen draws nothing
    under it (view mode); the rail still takes Done and Dock. Before the doc
-   first syncs the line waits out --dur-wait-grace (host.tsx), then fades in
-   over --dur-fade, by opacity alone, as the image refusal does. */
+   first syncs the line waits out --duration-wait-grace (host.tsx), then fades in
+   over --duration-fade, by opacity alone, as the image refusal does. */
 .canvas-unlinked {
   position: absolute;
   z-index: 3;
   inset: 0;
   display: grid;
-  padding: var(--space-6);
+  padding: var(--spacing-space-6);
   pointer-events: none;
   place-items: center;
 }
@@ -461,10 +467,10 @@ body {
 .canvas-unlinked-line {
   max-width: 60ch;
   margin: 0;
-  color: var(--status-fail-ink);
+  color: var(--color-status-fail-ink);
   font: var(--type-body);
   text-align: center;
-  animation: canvas-refusal-in var(--dur-fade) var(--ease-out);
+  animation: canvas-refusal-in var(--duration-fade) var(--ease-out);
 }
 
 /* ---- The empty canvas: the empty recipe, centred. Only its action takes
@@ -474,7 +480,7 @@ body {
   z-index: 3;
   inset: 0;
   display: grid;
-  padding-block: var(--space-6);
+  padding-block: var(--spacing-space-6);
   pointer-events: none;
   place-items: center;
 }
@@ -483,53 +489,53 @@ body {
   display: grid;
   max-width: 60ch;
   justify-items: center;
-  gap: var(--space-2);
+  gap: var(--spacing-space-2);
   text-align: center;
 }
 
 .canvas-empty-mark {
   display: grid;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
 }
 
 .canvas-empty-title {
   margin: 0;
-  color: var(--ink-strong);
+  color: var(--color-ink-strong);
   font: var(--type-title);
 }
 
 .canvas-empty-line {
   margin: 0;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   font: var(--type-body);
 }
 
 /* The kit's outline button at sm: 30px, 11px in, 10px radius. */
 .canvas-empty-action {
-  height: var(--c-btn-h-sm);
-  margin-top: var(--space-2);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-button-outline);
+  height: var(--spacing-c-btn-h-sm);
+  margin-top: var(--spacing-space-2);
+  padding: 0 var(--spacing-space-3);
+  border: 1px solid var(--color-border-button-outline);
   border-radius: var(--radius-md);
-  background: var(--surface-raised);
-  color: var(--ink-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-ink-strong);
   cursor: pointer;
   font: var(--type-button);
   pointer-events: auto;
   transition:
-    background-color var(--dur-control) var(--ease-out),
-    scale var(--dur-control) var(--ease-out);
+    background-color var(--duration-control) var(--ease-out),
+    scale var(--duration-control) var(--ease-out);
 
   &:active {
     scale: 0.97;
   }
   &:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline: var(--focus-ring-width) solid var(--color-focus-ring);
     outline-offset: var(--focus-ring-offset);
   }
   @media (hover: hover) and (pointer: fine) {
     &:hover {
-      background: var(--surface-hover);
+      background: var(--color-surface-hover);
     }
   }
   @media (pointer: coarse) {
@@ -537,7 +543,7 @@ body {
 
     &::after {
       position: absolute;
-      inset: calc((var(--c-btn-h-sm) - var(--c-btn-h-lg)) / 2);
+      inset: calc((var(--spacing-c-btn-h-sm) - var(--spacing-c-btn-h-lg)) / 2);
       content: "";
     }
   }
@@ -561,11 +567,11 @@ body {
 
 .canvas-change {
   fill: none;
-  stroke: var(--c-change-ring);
-  stroke-width: var(--c-change-ring-width);
+  stroke: var(--color-c-change-ring);
+  stroke-width: var(--spacing-c-change-ring-width);
 
   &[data-leaving] {
-    animation: canvas-change-out var(--dur-fade) var(--ease-out) forwards;
+    animation: canvas-change-out var(--duration-fade) var(--ease-out) forwards;
   }
 }
 
@@ -573,13 +579,13 @@ body {
    heavy as the ring's whatever its scale; none with less motion. */
 .canvas-change-ping {
   fill: none;
-  stroke: var(--c-change-ring);
-  stroke-width: var(--c-change-ring-width);
+  stroke: var(--color-c-change-ring);
+  stroke-width: var(--spacing-c-change-ring-width);
   vector-effect: non-scaling-stroke;
   transform-box: fill-box;
   transform-origin: center;
   opacity: 0;
-  animation: canvas-change-ping var(--dur-loop) var(--ease-out);
+  animation: canvas-change-ping var(--duration-loop) var(--ease-out);
 
   @media (prefers-reduced-motion: reduce) {
     display: none;
@@ -606,8 +612,8 @@ body {
 
 .canvas-changes-tag {
   --changes-top: calc(
-    var(--canvas-inset-top) + var(--space-2) + var(--rail-tools-row) +
-      var(--space-2)
+    var(--canvas-inset-top) + var(--spacing-space-2) + var(--rail-tools-row) +
+      var(--spacing-space-2)
   );
   position: absolute;
   z-index: 5;
@@ -615,22 +621,22 @@ body {
   left: 50%;
   display: flex;
   min-width: 0;
-  max-width: calc(100% - 2 * var(--space-3));
-  height: var(--c-btn-h-sm);
+  max-width: calc(100% - 2 * var(--spacing-space-3));
+  height: var(--spacing-c-btn-h-sm);
   margin: 0;
   padding: 0;
   align-items: stretch;
-  border: 1px solid var(--border-hairline);
+  border: 1px solid var(--color-border-hairline);
   border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  background: var(--color-surface-raised);
   box-shadow: var(--shadow-overlay);
-  color: var(--ink-strong);
+  color: var(--color-ink-strong);
   font: var(--type-label);
   translate: -50% 0;
-  animation: canvas-changes-in var(--dur-panel) var(--ease-out);
+  animation: canvas-changes-in var(--duration-panel) var(--ease-out);
 
   @media (pointer: coarse) {
-    height: var(--c-btn-h-lg);
+    height: var(--spacing-c-btn-h-lg);
   }
 }
 
@@ -638,8 +644,8 @@ body {
 @media (max-width: 559px), (max-width: 639px) and (pointer: coarse) {
   .canvas-changes-tag {
     --changes-top: calc(
-      var(--canvas-inset-top) + var(--space-2) + var(--rail-tools-row) +
-        var(--space-2) + var(--rail-h) + var(--space-2)
+      var(--canvas-inset-top) + var(--spacing-space-2) + var(--rail-tools-row) +
+        var(--spacing-space-2) + var(--rail-h) + var(--spacing-space-2)
     );
   }
 }
@@ -648,7 +654,7 @@ body {
    tag stands at the top. */
 @media (max-width: 639px) and (pointer: coarse) {
   .canvas-host:not([data-docked]) .canvas-changes-tag {
-    --changes-top: calc(var(--canvas-inset-top) + var(--space-3));
+    --changes-top: calc(var(--canvas-inset-top) + var(--spacing-space-3));
   }
 }
 
@@ -656,23 +662,23 @@ body {
 .canvas-changes-count {
   min-width: 0;
   margin: 0;
-  padding: 0 var(--space-2);
+  padding: 0 var(--spacing-space-2);
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   cursor: pointer;
-  transition: background-color var(--dur-control) var(--ease-out);
+  transition: background-color var(--duration-control) var(--ease-out);
 
   &:hover {
-    background: var(--surface-hover);
+    background: var(--color-surface-hover);
   }
 }
 
 .canvas-changes-step {
   display: grid;
   place-items: center;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
 
   &:first-child {
     border-start-start-radius: inherit;
@@ -686,7 +692,7 @@ body {
 }
 
 .canvas-changes-count {
-  padding: 0 var(--space-1);
+  padding: 0 var(--spacing-space-1);
   overflow: clip;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;

@@ -51,7 +51,7 @@
         data-slot="lead"
         class="inline-grid size-(--lead-size) flex-none place-items-center text-ink-muted"
         data-box
-        style:--lead-size="var(--mark-size, var(--space-5))"
+        style:--lead-size="var(--mark-size, var(--spacing-space-5))"
         ><OsMark class="size-icon-md" os={item.lead.os} /></span
       >
     {:else}
@@ -59,7 +59,7 @@
         data-slot="lead"
         class="inline-grid size-(--lead-size) flex-none place-items-center text-ink-muted"
         data-box
-        style:--lead-size="var(--mark-size, var(--space-5))"
+        style:--lead-size="var(--mark-size, var(--spacing-space-5))"
         ><item.lead.icon aria-hidden="true" class="size-icon-md" /></span
       >
     {/if}

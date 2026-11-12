@@ -27,11 +27,14 @@ interface Opening {
 
 /**
  * How long a box's height travels `delta` px on the morph curve
- * (--ease-drawer): --dur-panel, longer for a long way (2.5ms a pixel), never
+ * (--ease-drawer): --duration-panel, longer for a long way (2.5ms a pixel), never
  * past 480ms, so a big change still reads as one quick glide.
  */
 const tweenMs = (delta: number): number =>
-  Math.min(480, Math.max(dur("--dur-panel"), Math.ceil(Math.abs(delta) * 2.5)));
+  Math.min(
+    480,
+    Math.max(dur("--duration-panel"), Math.ceil(Math.abs(delta) * 2.5))
+  );
 
 /**
  * How far into an opening box's tween (0–1) its edge reaches `foot` px from

@@ -39,7 +39,7 @@
   class="group/step mark-line grid grid-cols-(--step-cols) items-box-start gap-x-space-2 gap-y-space-1 type-label"
   data-done={done || undefined}
   data-step={step}
-  style:--step-cols="var(--icon-md) minmax(0, 1fr)"
+  style:--step-cols="var(--spacing-icon-md) minmax(0, 1fr)"
 >
   <span class="mark-cell">
     <span

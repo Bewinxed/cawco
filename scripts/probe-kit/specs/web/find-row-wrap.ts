@@ -2,7 +2,7 @@
  * A finder row's title and its meta line never overlap, whatever the
  * title's length. On a phone the title wraps to three lines
  * (`group-data-phone/row:line-clamp-3`), and the row's grid gave its first
- * row only `--icon-lg`, so lines two and three drew over the meta line
+ * row only `--spacing-icon-lg`, so lines two and three drew over the meta line
  * (Jump's long session titles, a command for a name).
  *
  * The dashboard's own stage (decision-embeds.ts `startDecisionStage`, no

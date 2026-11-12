@@ -9,7 +9,7 @@
    * starters as rows. From the room's top, its inline padding the composer's
    * own column (centred, with half its desk nudge, c-composer-nudge), so its
    * glyph, the title, the line and the starters share the composer's start
-   * edge (--space-3 where the composer goes edge to edge,
+   * edge (--spacing-space-3 where the composer goes edge to edge,
    * under 900px): words over rows take the rows' edge (DESIGN.md, The
    * Alignment Rule). It clears the composer as a transcript does, and the
    * panel's bar where one floats over it; its scroll is the bar's scroll edge

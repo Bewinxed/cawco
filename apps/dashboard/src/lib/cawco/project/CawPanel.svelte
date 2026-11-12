@@ -50,7 +50,7 @@
       : "w-(--panel-w) pt-space-3 pr-space-4 pb-space-4 pl-space-4",
   ]}
   data-sheet={sheet || undefined}
-  style:--panel-w="min(var(--c-panel-w), calc(100vw - 2 * var(--space-5)))"
+  style:--panel-w={"min(var(--spacing-c-panel-w), calc(100vw - 2 * var(--spacing-space-5)))"}
 >
   <div
     data-slot="row"

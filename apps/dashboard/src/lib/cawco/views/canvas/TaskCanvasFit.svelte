@@ -7,7 +7,7 @@
    * corner, and the rest is a pan away: readable first, whole second.
    *
    * It frames on the first measure, again whenever the graph gains or loses
-   * a card (gliding over --dur-panel on --ease-in-out, movement on screen),
+   * a card (gliding over --duration-panel on --ease-in-out, movement on screen),
    * and in place when the canvas changes size while the view is still the
    * one a fit gave (`held` false). The Fit tool frames the same way.
    */
@@ -54,7 +54,7 @@
     }
     const options = glide
       ? {
-          duration: motionOk.current ? dur("--dur-panel") : 0,
+          duration: motionOk.current ? dur("--duration-panel") : 0,
           ease: easeInOut,
         }
       : {};
@@ -75,7 +75,7 @@
     // cards it starts with, which dagre centres on the graph's middle) is:
     // whole if it fits, else from its own start.
     const zoom = floor;
-    const inset = numberOf("--space-4");
+    const inset = numberOf("--spacing-space-4");
     const across = direction === "TB" ? "x" : "y";
     const along = direction === "TB" ? "y" : "x";
     const size = { x: width, y: height };

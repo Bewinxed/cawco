@@ -1,7 +1,7 @@
 import { dur } from "#lib/cawco/motion/curves.svelte.js";
 
 /** Use this hook to copy text to the clipboard and show a copied state. The
- * state holds for --dur-hold (app.css), then clears.
+ * state holds for --duration-hold (app.css), then clears.
  *
  * ## Usage
  * ```svelte
@@ -50,14 +50,14 @@ export class UseClipboard {
 
       this.timeout = setTimeout(() => {
         this.#copiedStatus = undefined;
-      }, dur("--dur-hold"));
+      }, dur("--duration-hold"));
     } catch {
       // an error can occur when not in the browser or if the user hasn't given clipboard access
       this.#copiedStatus = "failure";
 
       this.timeout = setTimeout(() => {
         this.#copiedStatus = undefined;
-      }, dur("--dur-hold"));
+      }, dur("--duration-hold"));
     }
 
     return this.#copiedStatus;

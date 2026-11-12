@@ -327,9 +327,9 @@
     class="inline-flex items-center gap-space-1 max-w-(--attach-max-w) min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
     href={hrefOf(one)}
     rel="noopener"
-    style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
-    style:--attach-my-coarse="calc((1lh - var(--c-btn-h-lg)) / 2)"
-    style:--attach-max-w="calc(100% + var(--space-1) * 2)"
+    style:--attach-my="calc((1lh - var(--spacing-c-btn-h-xs)) / 2)"
+    style:--attach-my-coarse="calc((1lh - var(--spacing-c-btn-h-lg)) / 2)"
+    style:--attach-max-w="calc(100% + var(--spacing-space-1) * 2)"
     target="_blank"
     title={titleOf(one)}
   >
@@ -362,7 +362,7 @@
   style:--review-areas-wide={'"result stage" "decide decide"'}
   style:--review-rows="auto minmax(0, 1fr) auto"
   style:--review-rows-wide="minmax(0, 1fr) auto"
-  style:--review-cols="var(--c-review-words) minmax(0, 1fr)"
+  style:--review-cols="var(--spacing-c-review-words) minmax(0, 1fr)"
 >
   <!-- Band 1: the session, its words, what it attached; with no result,
        what landed, what it waits on you to answer, its description. -->
@@ -554,7 +554,7 @@
         comment();
       }}
       style:--area="decide"
-      style:--decide-end="max(var(--space-3), env(safe-area-inset-bottom))"
+      style:--decide-end={"max(var(--spacing-space-3), env(safe-area-inset-bottom))"}
     >
       {#if deciding}
         <Textarea

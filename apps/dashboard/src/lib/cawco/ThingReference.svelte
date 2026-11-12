@@ -7,7 +7,7 @@
    * (reference-things.svelte.ts), else the written label, and its state.
    * Its whole name and state are its accessible name.
    *
-   * Resting a mouse on it peeks it under it after `--dur-peek`: its name,
+   * Resting a mouse on it peeks it under it after `--duration-peek`: its name,
    * its state and its facts (the floating tag recipe, as a pin's chip
    * peeks). Pressed, it opens where the thing lives: its page, its project
    * at the task or to-do, the session's plan at the step, the machines.
@@ -37,8 +37,8 @@
     () => chip,
     () => !!thing,
     (r) => {
-      const room = numberOf("--c-pin-card-w") || 280;
-      const inset = numberOf("--space-2") || 8;
+      const room = numberOf("--spacing-c-pin-card-w") || 280;
+      const inset = numberOf("--spacing-space-2") || 8;
       return {
         x: Math.max(inset, Math.min(r.left, innerWidth - room - inset)),
         y: r.bottom,

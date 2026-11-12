@@ -316,7 +316,7 @@ function Empty({ onDraw }: { onDraw: () => void }) {
 
 /**
  * A file the canvas wouldn't take, said over its grid in the error formula:
- * it fades in, stands for `--dur-hold`, and fades out (canvas.css); a new
+ * it fades in, stands for `--duration-hold`, and fades out (canvas.css); a new
  * refusal replaces it.
  */
 function Refusal({ refusal, gone }: { refusal: Said; gone: () => void }) {
@@ -368,7 +368,7 @@ const unlinkedBecause = (hold: CanvasHold | null): string =>
 /**
  * Whether the refusal line shows over the grid. The pen is off whenever the
  * canvas is refused; the line waits. Before the doc first syncs it shows
- * once the refusal has stood `--dur-wait-grace` (DESIGN.md, The Real Wait
+ * once the refusal has stood `--duration-wait-grace` (DESIGN.md, The Real Wait
  * Rule: no feedback is needed under 1 s), counted from the host mounting
  * or its doc being replaced, so a good link that syncs in tens of ms shows
  * nothing. A
@@ -388,7 +388,7 @@ function useUnlinkedShown(hold: CanvasHold | null): boolean {
     }
     const timer = setTimeout(
       () => setGraced(generation),
-      tokenMs("--dur-wait-grace")
+      tokenMs("--duration-wait-grace")
     );
     return () => clearTimeout(timer);
   }, [waiting, generation]);
@@ -413,8 +413,8 @@ function Host() {
   const surface = useRef<HTMLDivElement>(null);
   const ink = useMemo<CanvasInk>(
     () => ({
-      stroke: tokenHex("--ink-strong"),
-      ground: tokenHex("--surface-raised"),
+      stroke: tokenHex("--color-ink-strong"),
+      ground: tokenHex("--color-surface-raised"),
     }),
     []
   );

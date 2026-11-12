@@ -66,9 +66,9 @@ function graphOf(
   graph.setGraph({
     rankdir: "TB",
     // Between two groups: each one's pad, and the gap between them.
-    nodesep: numberOf("--space-6") + 2 * room.pad,
+    nodesep: numberOf("--spacing-space-6") + 2 * room.pad,
     // Between two ranks: room for a group's pad and head under the rank above.
-    ranksep: numberOf("--space-6") + 2 * room.pad + room.head,
+    ranksep: numberOf("--spacing-space-6") + 2 * room.pad + room.head,
     marginx: 0,
     marginy: 0,
   });

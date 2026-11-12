@@ -77,7 +77,7 @@
        QR departs as the name arrives (§4.9, a tick lands). -->
   <!-- The QR at §4.2's 160: proposed; the token moves to 160 if picked (proposed.ts). -->
   <div
-    style:--c-address-qr={PROPOSED_QR}
+    style:--spacing-c-address-qr={PROPOSED_QR}
     class="@container relative grid min-w-0"
     data-slot="phone-object"
   >

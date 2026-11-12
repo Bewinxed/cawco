@@ -8,7 +8,7 @@
    * with that sign-in's panel for that machine; an offline machine only says
    * so. Word and action share one trailing column, at one x on every row.
    * The popovers are one surface (NsPopoverGroup), gliding from row to row.
-   * Signed in, the check draws, holds for --dur-hold, and the popover puts
+   * Signed in, the check draws, holds for --duration-hold, and the popover puts
    * itself away.
    *
    * A sign-in outlives its popover (DESIGN.md, The Work Outlives Its
@@ -158,7 +158,7 @@
     const timer = setTimeout(() => {
       settleHarness(on, "claude");
       setOpen(on, false);
-    }, dur("--dur-hold"));
+    }, dur("--duration-hold"));
     return () => clearTimeout(timer);
   });
 
@@ -222,7 +222,7 @@
           {#if word !== "signed-in"}
             <span
               data-slot="machine-state"
-              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-ink-muted transition-[color] duration-(--dur-panel) ease-out state-mismatch:text-status-attn-ink"
+              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-ink-muted transition-[color] duration-(--duration-panel) ease-out state-mismatch:text-status-attn-ink"
               data-parked={parked ? "" : undefined}
               data-state={word}
             >
@@ -256,7 +256,7 @@
                   variant: "outline",
                   size: "sm",
                 })}
-                width="var(--c-signin-pop-w)"
+                width="var(--spacing-c-signin-pop-w)"
               >
                 {#snippet trigger()}
                   {parked ? resume : verb}

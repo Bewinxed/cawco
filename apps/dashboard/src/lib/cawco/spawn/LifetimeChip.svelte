@@ -25,14 +25,14 @@
       name: spawnWords.lifetime.persistent,
       desc: spawnWords.lifetime.persistentDesc,
       icon: Database,
-      hue: "var(--hue-blue-500)",
+      hue: "var(--color-hue-blue-500)",
     },
     {
       value: true,
       name: spawnWords.lifetime.ephemeral,
       desc: spawnWords.lifetime.ephemeralDesc,
       icon: Fire,
-      hue: "var(--hue-orange-500)",
+      hue: "var(--color-hue-orange-500)",
     },
   ];
 </script>

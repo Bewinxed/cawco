@@ -52,7 +52,6 @@ import {
 } from "../client.svelte";
 import { minimizedAsks } from "../minimized-asks.svelte";
 import { dur } from "../motion/curves.svelte";
-import { msOf } from "../motion/time";
 import type { TaskSummary } from "../project-tasks";
 import { QUESTION_KEYS } from "../question";
 import { store, stored } from "../storage";
@@ -75,11 +74,9 @@ export const openOnArrival = (projectId: string): void => {
   store("local", openKey(projectId), "1");
 };
 
-/** `--breath` in ms, read from the root. */
+/** `--duration-breath` in ms, read from the root. */
 function breathMs(): number {
-  return msOf(
-    getComputedStyle(document.documentElement).getPropertyValue("--breath")
-  );
+  return dur("--duration-breath");
 }
 
 /**
@@ -109,7 +106,7 @@ export class CawLead {
   /** The task that just landed, held for two breaths. */
   landed = $state<string | null>(null);
   /**
-   * The project's row has not come within --dur-wait-grace: only then does
+   * The project's row has not come within --duration-wait-grace: only then does
    * Caw stand in for the wait (The Real Wait Rule); a row that comes sooner
    * shows nothing of its own.
    */
@@ -139,7 +136,7 @@ export class CawLead {
   /**
    * The seats standing now, oldest first ({@link seat}). Two stand at once
    * while one comes and the other goes (the head's slides out over
-   * --dur-panel as the 80 over the board lands), and an outro the page
+   * --duration-panel as the 80 over the board lands), and an outro the page
    * calls back resumes its seat as it stood, without standing it again:
    * one slot that each seat wrote as it stood and cleared as it went was
    * left empty under the head's seat, its panel never drawn at a desk
@@ -212,7 +209,7 @@ export class CawLead {
       if (this.project === null) {
         this.waited = true;
       }
-    }, dur("--dur-wait-grace"));
+    }, dur("--duration-wait-grace"));
   }
 
   /**

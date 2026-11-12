@@ -47,19 +47,19 @@
       },
       size: {
         default:
-          "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:var(--c-btn-gap)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:var(--space-1)] [--btn-icon:var(--icon-sm)] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
+          "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:var(--spacing-c-btn-gap)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:var(--spacing-space-1)] [--btn-icon:var(--spacing-icon-sm)] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
         /* In a head control's compact form (side/head.ts, `data-form`), its
            words not drawn, it stands as its glyph: the icon size's square,
            the glyph centred inside its edge, and a count it still says kept
            that inset from the glyph and the edge. */
-        sm: "h-c-btn-h-sm glass-item:h-c-bar-item in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 text-label [--btn-gap:var(--space-2)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:var(--c-btn-gap)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        sm: "h-c-btn-h-sm glass-item:h-c-bar-item in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--spacing-c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 text-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:var(--spacing-c-btn-gap)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (the composer's surface brief, Composer:
            "34px Attach … and Send/Stop … each at the concentric 4px
            radius"): the default's recipe at the composer field's height. */
         composer:
-          "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:var(--c-btn-gap)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:var(--spacing-c-btn-gap)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm":
@@ -155,13 +155,13 @@
         "value-hover":
           "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-[:hover]/value:not-disabled:opacity-100 group-[:hover]/value:disabled:opacity-100",
         "row-hover":
-          "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--dur-control) can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
+          "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--duration-control) can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
         /* In reach whenever its row (`group/row`) is under the pointer or
            holds the focus anywhere in it, not only on the button itself
            (Files' Show in conversation, Files' surface brief, Files: "shown on the
            row's hover and focus and always under a finger"). */
         "row-reach":
-          "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--dur-control) can-hover:ease-out can-hover:group-focus-within/row:not-disabled:opacity-100 can-hover:group-hover/row:not-disabled:opacity-100",
+          "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--duration-control) can-hover:ease-out can-hover:group-focus-within/row:not-disabled:opacity-100 can-hover:group-hover/row:not-disabled:opacity-100",
       },
       /** Its words and mark along its width, once it is wider than they
           are: from the start, as a row of a list does (a directory's row,
@@ -199,11 +199,11 @@
       head: { count: "ms-auto tabular-nums" },
       /** While its page is open (`aria-current="page"`), the selected tint
           (filling under the edge) and ink, at rest and under the pointer,
-          crossing over --dur-control; its press scales at once, and the
+          crossing over --duration-control; its press scales at once, and the
           press tint still darkens it (The Press Rule). */
       current: {
         selected:
-          "[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)] aria-current-page:bg-selected-bg aria-current-page:bg-clip-border aria-current-page:text-selected-ink aria-current-page:hover:bg-selected-bg aria-current-page:hover:text-selected-ink",
+          "[transition:background-color_var(--duration-control)_var(--ease-out),color_var(--duration-control)_var(--ease-out)] aria-current-page:bg-selected-bg aria-current-page:bg-clip-border aria-current-page:text-selected-ink aria-current-page:hover:bg-selected-bg aria-current-page:hover:text-selected-ink",
       },
     },
     defaultVariants: {
@@ -243,7 +243,7 @@
        * The work this button started is running. The icon slot spins, the
        * label cross-fades to `pendingLabel` (the button is as wide as the
        * wider of the two from the start), and the button holds its place and its focus but takes no press. When it
-       * ends without `failed`, a check stands in the slot for --dur-hold.
+       * ends without `failed`, a check stands in the slot for --duration-hold.
        */
       pending?: boolean;
       /** What the label says while pending ("Saving…"); unchanged if unset. */

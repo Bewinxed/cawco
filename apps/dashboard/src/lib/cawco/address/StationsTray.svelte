@@ -45,7 +45,7 @@
    * the title saying what happened. Once live a last part says so, with
    * every address and Done; an optional station not done stays a line that
    * reopens it. The tray's height is its rows', carried by morph over
-   * --dur-pop on the drawer curve.
+   * --duration-pop on the drawer curve.
    */
   import Words from "./Words.svelte";
   import {
@@ -61,11 +61,13 @@
   const CAW = 64;
   /** Caw's box starts where the title does on a desk: the tray's padding and the body's. */
   const CAW_START =
-    "calc(var(--radius-modal) - var(--radius-lg) + var(--space-4))";
+    "calc(var(--radius-modal) - var(--radius-lg) + var(--spacing-space-4))";
   /** A station's line: its mark, its name, where it stands, its chevron. */
-  const STATION_COLS = "var(--icon-md) auto minmax(0, 1fr) var(--icon-md)";
+  const STATION_COLS =
+    "var(--spacing-icon-md) auto minmax(0, 1fr) var(--spacing-icon-md)";
   /** An open station's words start where its name does: past the mark and the line's padding. */
-  const STATION_INDENT = "calc(var(--icon-md) + var(--space-2) * 2)";
+  const STATION_INDENT =
+    "calc(var(--spacing-icon-md) + var(--spacing-space-2) * 2)";
   const ORDER: Station[] = ["join", "address", "secure", "keep", "phone"];
   const NAMES: Record<Station, string> = {
     join: "Join",
@@ -229,7 +231,7 @@
   data-form={form}
   data-step={tray.step}
   data-tray="stations"
-  {@attach (node) => morph({ ms: dur("--dur-pop") })(node)}
+  {@attach (node) => morph({ ms: dur("--duration-pop") })(node)}
 >
   <!-- Caw's room over the top edge, over the title's start: he stands
        behind the edge, leading the tray, and never moves. -->

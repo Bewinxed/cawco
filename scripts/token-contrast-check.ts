@@ -7,9 +7,9 @@
  * purpose is held to that ratio. Contrast is WCAG 2.2's (relative luminance,
  * (L1 + 0.05) / (L2 + 0.05)), unrounded.
  *
- * The values come from the token build itself: `buildTokens` over
- * design/tokens/cawco.resolver.json and the build's own evaluator
- * (packages/hub/src/design-css.ts, on colorjs.io), which resolves
+ * The values are the declarations of the dashboard's theme.css (its
+ * `@theme static` block, and the dark scheme's block where a value differs),
+ * read by the evaluator (packages/hub/src/design-css.ts, on colorjs.io), which resolves
  * `light-dark()`, `color-mix()` and relative `oklch(from …)` as the cascade
  * does. Over that this check only paints: a colour with alpha (a wash, a
  * glyph at its breath floor) is laid over what stands under it, source-over
@@ -24,13 +24,18 @@
  *   bun scripts/token-contrast-check.ts           failing pairs only
  *   bun scripts/token-contrast-check.ts --table   every pair, both themes
  */
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Color from "colorjs.io";
+import postcss from "postcss";
 import { ACCOUNT_HUES } from "../packages/core/src/accounts";
 import { STATUS_PAIRS } from "../packages/core/src/views";
-import { buildTokens, evaluatorOf } from "../packages/hub/src/design-tokens";
+import { CssEvaluator, type CssToken } from "../packages/hub/src/design-css";
 
-const DIR = join(import.meta.dir, "../design/tokens");
+const THEME = join(
+  import.meta.dir,
+  "../apps/dashboard/src/lib/tokens/theme.css"
+);
 const TEXT = 4.5;
 const UI = 3;
 
@@ -452,17 +457,47 @@ const PAIRS: Pair[] = [
   })),
 ];
 
-const built = await buildTokens(
-  "cawco.resolver.json",
-  (path) => Bun.file(join(DIR, path)).json(),
-  { header: "", layer: "theme", typesFrom: "" }
-);
-const ev = evaluatorOf(built.view);
-const [darkContext] = built.view.darkContexts;
-if (!darkContext) {
-  throw new Error("token-contrast: the resolver has no dark context");
-}
-const MODE: Record<Theme, string> = { light: "base", dark: darkContext };
+/** A value with each `var(--x)` written `{x}`, as the evaluator reads a reference. */
+const refs = (value: string) => value.replace(/var\(--([\w-]+)\)/gu, "{$1}");
+/** The theme's variables by name: the `@theme static` block's, and the dark scheme's own where it differs. */
+const themeLight = new Map<string, string>();
+const themeDark = new Map<string, string>();
+postcss.parse(readFileSync(THEME, "utf8")).walkDecls((decl) => {
+  const rule = decl.parent;
+  if (!decl.prop.startsWith("--")) {
+    return;
+  }
+  if (
+    rule?.type === "atrule" &&
+    rule.name === "theme" &&
+    rule.params === "static"
+  ) {
+    themeLight.set(decl.prop.slice(2), refs(decl.value));
+  } else if (
+    rule?.type === "rule" &&
+    rule.selectors.includes('[data-scheme="dark"]')
+  ) {
+    themeDark.set(decl.prop.slice(2), refs(decl.value));
+  }
+});
+/** A token path (`color.surface-page`) as the theme names it: its last segment, under `--color-` or as it stands. */
+const lookup = (path: string): CssToken | undefined => {
+  const leaf = path.split(".").at(-1) ?? path;
+  for (const name of [`color-${leaf}`, leaf]) {
+    const css = themeLight.get(name);
+    if (css !== undefined) {
+      const variant = themeDark.get(name);
+      return {
+        css,
+        name,
+        variants: variant === undefined ? {} : { dark: variant },
+      };
+    }
+  }
+  return undefined;
+};
+const ev = new CssEvaluator(lookup, new Set(["dark"]));
+const MODE: Record<Theme, string> = { light: "base", dark: "dark" };
 
 const isCss = (s: string) => s.includes("(") || s.startsWith("#");
 const tokenPath = (s: string) => (s.includes(".") ? s : `color.${s}`);

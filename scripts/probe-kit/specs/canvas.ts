@@ -38,7 +38,7 @@
  *     scribble, it stays ink; an ellipse, a triangle, a line and a hooked
  *     arrow read as theirs; the pencil's double-tap swaps the eraser's glyph
  *     into the pen's box and back, as Send and Stop swap; the swap's two
- *     opacities run on one clock of `--dur-fade`, the same with reduced
+ *     opacities run on one clock of `--duration-fade`, the same with reduced
  *     motion, as the agent's elements still fade up there.
  * 27. The screen holding the agent's write leaves before answering it (a
  *     claim written first under a number no page answers to, then that
@@ -472,7 +472,7 @@ const emptyChecks = async (on: OnCanvas) => {
     const box = (selector: string) =>
       document.querySelector(selector)?.getBoundingClientRect();
     const probe = document.createElement("span");
-    probe.style.background = "var(--surface-pressed)";
+    probe.style.background = "var(--color-surface-pressed)";
     document.body.append(probe);
     const fill = getComputedStyle(probe).backgroundColor;
     probe.remove();
@@ -508,7 +508,7 @@ const emptyChecks = async (on: OnCanvas) => {
     };
   });
   on.kit.check(
-    "rail: tools --space-3 (11px) in and --space-2 (7px) down in the panel (no host chrome over it), 34px boxes at the concentric 4px (the group's 12px less its 7px inset and 1px edge), the chosen one on surface-pressed, the two groups apart, Excalidraw's chrome hidden",
+    "rail: tools --spacing-space-3 (11px) in and --spacing-space-2 (7px) down in the panel (no host chrome over it), 34px boxes at the concentric 4px (the group's 12px less its 7px inset and 1px edge), the chosen one on surface-pressed, the two groups apart, Excalidraw's chrome hidden",
     rail.tools?.join() === "11,7" &&
       rail.boxes.every((size) => size === "34×34") &&
       rail.radius === "4px" &&
@@ -883,7 +883,7 @@ const imageChecks = async (on: OnCanvas) => {
         }
       : null;
   });
-  // A press on the grid takes it away: one fade on opacity over --dur-exit,
+  // A press on the grid takes it away: one fade on opacity over --duration-exit,
   // held still as it is read.
   await pressAt(
     frame,
@@ -897,7 +897,7 @@ const imageChecks = async (on: OnCanvas) => {
       run.pause();
     }
     const exit = getComputedStyle(document.documentElement)
-      .getPropertyValue("--dur-exit")
+      .getPropertyValue("--duration-exit")
       .trim();
     const read = runs.map((run) => {
       const effect = run.effect as KeyframeEffect;
@@ -942,7 +942,7 @@ const imageChecks = async (on: OnCanvas) => {
     3000
   ).catch(() => false);
   kit.check(
-    "26: the refusal stands with no timer (3 s on: opacity 1, nothing running), and a press on the grid fades it out on one --dur-exit run of opacity",
+    "26: the refusal stands with no timer (3 s on: opacity 1, nothing running), and a press on the grid fades it out on one --duration-exit run of opacity",
     !!standing &&
       standing.opacity === 1 &&
       standing.running === 0 &&
@@ -1645,7 +1645,7 @@ const railFills = async (frame: Frame, page: Page) => {
   const hovered = await frame
     .hover(other, { timeout: 10_000 })
     .then(async () => {
-      // Past the box's --dur-control fade.
+      // Past the box's --duration-control fade.
       await settle(page, 400);
       return fill(other);
     })
@@ -1654,8 +1654,8 @@ const railFills = async (frame: Frame, page: Page) => {
   return {
     chosen,
     hovered,
-    pressed: await token("var(--surface-pressed)"),
-    hover: await token("var(--surface-hover)"),
+    pressed: await token("var(--color-surface-pressed)"),
+    hover: await token("var(--color-surface-hover)"),
   };
 };
 
@@ -1700,7 +1700,7 @@ const themeChecks = async (on: OnCanvas, id: string) => {
     const read = await (frame as Frame).evaluate(() => {
       const value = (scheme: string) => {
         const probe = document.createElement("span");
-        probe.style.cssText = `color-scheme: ${scheme}; background: var(--surface-raised); display: block`;
+        probe.style.cssText = `color-scheme: ${scheme}; background: var(--color-surface-raised); display: block`;
         document.body.append(probe);
         const color = getComputedStyle(probe).backgroundColor;
         probe.remove();
@@ -1714,7 +1714,7 @@ const themeChecks = async (on: OnCanvas, id: string) => {
       // `ink-strong` by day as a hex, as scene.ts's tokenHex stores it.
       const ink = document.createElement("span");
       ink.style.cssText =
-        "color-scheme: light; color: var(--ink-strong); display: none";
+        "color-scheme: light; color: var(--color-ink-strong); display: none";
       document.body.append(ink);
       const paint = document.createElement("canvas").getContext("2d");
       let dayInk = "";
@@ -2252,7 +2252,7 @@ const staysInkChecks = async (
 const railNow = (frame: Frame) =>
   frame.evaluate(() => {
     const probe = document.createElement("span");
-    probe.style.background = "var(--surface-pressed)";
+    probe.style.background = "var(--color-surface-pressed)";
     document.body.append(probe);
     const fill = getComputedStyle(probe).backgroundColor;
     probe.remove();
@@ -2340,7 +2340,7 @@ const glyphRuns = (frame: Frame) =>
     () => (window as unknown as { __glyphRuns: GlyphRun[] }).__glyphRuns
   );
 
-/** Whether a swap's runs are one --dur-control clock on ease-out: the glyph going out and the eraser's or the pen's coming in, by opacity, transform and blur. */
+/** Whether a swap's runs are one --duration-control clock on ease-out: the glyph going out and the eraser's or the pen's coming in, by opacity, transform and blur. */
 const oneGlyphSwap = (
   runs: GlyphRun[],
   incoming: string,
@@ -2385,7 +2385,7 @@ const doubleTapCheck = async (on: OnCanvas, frame: Frame) => {
   const tokens = await frame.evaluate(() => {
     const root = getComputedStyle(document.documentElement);
     return {
-      control: Number.parseFloat(root.getPropertyValue("--dur-control")),
+      control: Number.parseFloat(root.getPropertyValue("--duration-control")),
       ease: root.getPropertyValue("--ease-out").trim(),
     };
   });
@@ -2407,7 +2407,7 @@ const doubleTapCheck = async (on: OnCanvas, frame: Frame) => {
   await pressIn(frame, '[data-action="tool:freedraw"]');
   await settle(on.page, 300);
   on.kit.check(
-    "23: cawco:pencil-double-tap swaps the eraser's glyph into the pen's box, still chosen on surface-pressed, the eraser's own box not chosen, as one --dur-control run pair on opacity/transform/blur; a second swaps the pen's back; the rail's eraser box picks the eraser in its own box",
+    "23: cawco:pencil-double-tap swaps the eraser's glyph into the pen's box, still chosen on surface-pressed, the eraser's own box not chosen, as one --duration-control run pair on opacity/transform/blur; a second swaps the pen's back; the rail's eraser box picks the eraser in its own box",
     before.tool === "freedraw" &&
       before.pen.glyph === "pen" &&
       erasing.tool === "eraser" &&
@@ -2549,9 +2549,9 @@ const motionTokens = (frame: Frame) =>
     const ms = (token: string) =>
       Number.parseFloat(root.getPropertyValue(token));
     return {
-      fade: ms("--dur-fade"),
-      menu: ms("--dur-menu"),
-      stagger: ms("--dur-stagger"),
+      fade: ms("--duration-fade"),
+      menu: ms("--duration-menu"),
+      stagger: ms("--duration-stagger"),
       ease: root.getPropertyValue("--ease-out").trim(),
     };
   });
@@ -2592,7 +2592,7 @@ const swapUnder = async (
   };
 };
 
-/** Whether one swap ran as the one clock: one run of --dur-fade on --ease-out, 100/0, then summing to 100, then 0/100, the shape's box still throughout, the first frame drawn already fading. */
+/** Whether one swap ran as the one clock: one run of --duration-fade on --ease-out, 100/0, then summing to 100, then 0/100, the shape's box still throughout, the first frame drawn already fading. */
 const swappedOnOneClock = (
   swap: Awaited<ReturnType<typeof swapUnder>>,
   tokens: Awaited<ReturnType<typeof motionTokens>>
@@ -2621,7 +2621,7 @@ const swappedOnOneClock = (
   );
 };
 
-/** Check 24: the swap's two opacities on one clock of `--dur-fade`, the same with reduced motion; nothing travels. */
+/** Check 24: the swap's two opacities on one clock of `--duration-fade`, the same with reduced motion; nothing travels. */
 const motionCheck = async (
   on: OnCanvas,
   frame: Frame,
@@ -2639,7 +2639,7 @@ const motionCheck = async (
   const said = (swap: typeof moving) =>
     `${swap.runs} run ${JSON.stringify(swap.run?.source)}, scrubbed ${JSON.stringify(swap.samples)}, first frame ${JSON.stringify(swap.first)}`;
   on.kit.check(
-    "24: the swap's ghost and shape opacities run on one clock (one run, --dur-fade on --ease-out: 100/0, then summing to 100, then 0/100), the shape's box still throughout, the first frame already fading; the same with reduced motion",
+    "24: the swap's ghost and shape opacities run on one clock (one run, --duration-fade on --ease-out: 100/0, then summing to 100, then 0/100), the shape's box still throughout, the first frame already fading; the same with reduced motion",
     swappedOnOneClock(moving, tokens) && swappedOnOneClock(reduced, tokens),
     `tokens ${JSON.stringify(tokens)}; motion: ${said(moving)}; reduced: ${said(reduced)}`
   );
@@ -2648,7 +2648,7 @@ const motionCheck = async (
 /**
  * Check 25: with reduced motion the agent's elements still fade up where
  * they stand (The agent's turn on the canvas): one `agent-arrival` run each
- * of --dur-menu on --ease-out, staggered across --dur-stagger, each
+ * of --duration-menu on --ease-out, staggered across --duration-stagger, each
  * element's opacity 0, then between, then 100 at its run's 0, ½ and 1, its
  * box still.
  */
@@ -2726,7 +2726,7 @@ const arrivalCheck = async (
         half?.[i]?.split(" at ")[1] === end?.[i]?.split(" at ")[1]
     );
   on.kit.check(
-    "25: with reduced motion the agent's two elements still fade up where they stand: one agent-arrival run each of --dur-menu on --ease-out, staggered across --dur-stagger, 0 → between → 100",
+    "25: with reduced motion the agent's two elements still fade up where they stand: one agent-arrival run each of --duration-menu on --ease-out, staggered across --duration-stagger, 0 → between → 100",
     pass,
     `tokens ${JSON.stringify(tokens)}; runs ${JSON.stringify(runs.map((run) => run.source))}; scrubbed ${JSON.stringify(samples)}`
   );

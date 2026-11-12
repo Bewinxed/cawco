@@ -103,7 +103,7 @@
       >
         <ColorPicker.TransparencyGrid
           class="absolute inset-0 rounded-pill"
-          size="var(--space-2)"
+          size="var(--spacing-space-2)"
         />
         <ColorPicker.ChannelSliderTrack
           class="relative h-space-3 w-full rounded-pill inset-ring inset-ring-border-hairline"

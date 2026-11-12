@@ -140,7 +140,7 @@
             disabled={going}
             onclick={() => pick(account.id)}
             role="option"
-            style:--option-cols="var(--icon-md) minmax(0, 1fr) var(--icon-md)"
+            style:--option-cols={"var(--spacing-icon-md) minmax(0, 1fr) var(--spacing-icon-md)"}
             type="button"
           >
             <span
@@ -160,7 +160,7 @@
               <AccountName {account} row />
             {/if}
             <IconCheck
-              class="size-icon-md text-selected-icon opacity-0 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+              class="size-icon-md text-selected-icon opacity-0 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
             />
           </button>
         {/each}

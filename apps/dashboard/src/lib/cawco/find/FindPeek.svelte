@@ -68,7 +68,7 @@
   class="group/peek grid grid-cols-(--peek-cols) gap-x-space-3 gap-y-space-row ms-(--peek-ms) mt-0 mb-space-2 py-space-1 pe-0 ps-space-3 border-s border-s-border-control type-meta leading-icon-lg data-phone:type-label data-phone:font-normal data-phone:leading-c-row-lead"
   data-phone={phone || undefined}
   style:--peek-cols="max-content minmax(0, 1fr)"
-  style:--peek-ms="calc(var(--space-3) + var(--icon-md) + var(--space-2))"
+  style:--peek-ms={"calc(var(--spacing-space-3) + var(--spacing-icon-md) + var(--spacing-space-2))"}
 >
   {#if conversation?.purpose}
     <span data-slot="find-peek-label" class="text-ink-subtle">purpose</span>
@@ -102,8 +102,8 @@
         <button
           id={idOf(key)}
           class="group/moment relative flex select-none items-center gap-space-2 w-(--moment-w) min-w-0 mx-(--moment-mx) px-space-1 border-none border-current rounded-xs bg-transparent text-start text-ink-row cursor-default active:bg-surface-fill group-data-phone/peek:min-h-c-btn-h-lg"
-          style:--moment-w="calc(100% + 2 * var(--space-1))"
-          style:--moment-mx="calc(-1 * var(--space-1))"
+          style:--moment-w="calc(100% + 2 * var(--spacing-space-1))"
+          style:--moment-mx="calc(-1 * var(--spacing-space-1))"
           aria-selected={activeKey === key}
           data-active={activeKey === key ? "" : undefined}
           data-find-row

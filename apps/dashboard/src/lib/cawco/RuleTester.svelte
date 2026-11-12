@@ -68,7 +68,7 @@
     <span class="type-label text-ink-strong">Try it</span>
     <span
       aria-live="polite"
-      class="type-meta transition-colors duration-(--dur-pop) ease-out {firing
+      class="type-meta transition-colors duration-(--duration-pop) ease-out {firing
         ? 'text-status-done-ink'
         : 'text-ink-muted'}"
       role="status"
@@ -89,7 +89,7 @@
   {#if sample.trim() && draft.pattern.trim()}
     <!-- The text, and over it the marks alone (their text transparent), in
          one cell: when the hits move, the new marks cross-fade over the old
-         over --dur-control while the words stay put. The hits take the
+         over --duration-control while the words stay put. The hits take the
          selection tint, as a search's matched words do. -->
     <div
       data-slot="grid"

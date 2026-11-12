@@ -1230,7 +1230,7 @@ async function walk(
     .getByRole("button", { name: connectWords.openOutput })
     .click();
   await page.waitForSelector(`${OUTPUT}[data-state=open]`);
-  // The window's park into its row (--dur-panel) has played by now.
+  // The window's park into its row (--duration-panel) has played by now.
   await page.waitForTimeout(600);
   const focusIn = await page.evaluate(
     (sel) =>

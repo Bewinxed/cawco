@@ -82,25 +82,25 @@ export interface Clip {
 
 /** The duration ladder a clip may name (DESIGN.md, Motion grammar). */
 const LADDER = [
-  "--dur-toggle",
-  "--dur-control",
-  "--dur-exit",
-  "--dur-menu",
-  "--dur-morph",
-  "--dur-fade",
-  "--dur-pop",
-  "--dur-panel",
-  "--dur-grow-exit",
-  "--dur-grow",
-  "--dur-lift",
-  "--dur-glide",
-  "--dur-settle",
+  "--duration-toggle",
+  "--duration-control",
+  "--duration-exit",
+  "--duration-menu",
+  "--duration-morph",
+  "--duration-fade",
+  "--duration-pop",
+  "--duration-panel",
+  "--duration-grow-exit",
+  "--duration-grow",
+  "--duration-lift",
+  "--duration-glide",
+  "--duration-settle",
 ] as const;
 
 /**
  * The design system's durations, shortest first, one per length: what the
  * Length setting offers. Tokens of one length stand as one choice under
- * both names (`--dur-toggle` and `--dur-exit` are both 160 ms; listed apart,
+ * both names (`--duration-toggle` and `--duration-exit` are both 160 ms; listed apart,
  * the list's two rows of one key threw and the page went to a 500).
  */
 export const durationTokens = (): { tokens: string[]; ms: number }[] => {

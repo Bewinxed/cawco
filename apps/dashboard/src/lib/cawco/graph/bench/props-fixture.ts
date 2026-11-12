@@ -84,14 +84,14 @@ export const DELEGATE_DIALS: GraphDial[] = [
     max: 64,
     step: 2,
     unit: "px",
-    target: { cssVar: "--c-row-h" },
+    target: { cssVar: "--spacing-c-row-h" },
   },
   {
     kind: "select",
     name: "glyph",
     label: "Glyph size",
     options: ["16px", "20px", "24px"],
-    target: { cssVar: "--icon-md" },
+    target: { cssVar: "--spacing-icon-md" },
   },
   {
     kind: "toggle",

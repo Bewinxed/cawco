@@ -114,7 +114,7 @@
           return;
         }
         fold(node, next, {
-          ms: dur(next ? "--dur-pop" : "--dur-exit"),
+          ms: dur(next ? "--duration-pop" : "--duration-exit"),
           easing: CURVE.out,
           fade: true,
           gap,
@@ -311,7 +311,7 @@
             type="button"
           >
             <IconChevronRight
-              class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+              class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
             />
             <span>{expanded ? "Hide" : "Details"}</span>
           </button>
@@ -407,7 +407,7 @@
               type="button"
             >
               <IconChevronRight
-                class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+                class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
               />
               <span>What it said</span>
             </button>

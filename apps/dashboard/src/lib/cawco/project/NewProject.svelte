@@ -187,8 +187,8 @@
    */
   const footBox = $derived(
     footHeight > 0
-      ? `calc(${footHeight}px + var(--space-4))`
-      : "calc(var(--c-composer-panel) + var(--space-4))"
+      ? `calc(${footHeight}px + var(--spacing-space-4))`
+      : "calc(var(--spacing-c-composer-panel) + var(--spacing-space-4))"
   );
 
   /** The prompt a start that did not go through carried, and its id: the same prompt again is the same project. */
@@ -224,7 +224,7 @@
 
 <main
   class="mx-auto flex w-full max-w-c-new-project-w flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
-  style:--pad-top="calc(var(--space-8) * 2)"
+  style:--pad-top="calc(var(--spacing-space-8) * 2)"
 >
   <!-- His slot goes with him when he peeks over a card, and comes back
        with him: the hero's height tweens (morph) rather than leaving a band. -->
@@ -232,7 +232,7 @@
        line and the chips stand on its composer's start edge (DESIGN.md, The
        Alignment Rule), each in a box as wide as the field, inset by
        --field-px to the composer's drawn edge: its column, centred, and
-       its desk nudge (c-composer-nudge) halved by the centring (--space-3
+       its desk nudge (c-composer-nudge) halved by the centring (--spacing-space-3
        where the composer goes edge to edge). -->
   <div
     data-slot="ask"

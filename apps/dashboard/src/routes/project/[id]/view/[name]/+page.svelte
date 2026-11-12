@@ -111,11 +111,11 @@
 <main
   class="min-h-dvh bg-surface-recess pt-space-6 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left) max-desk:pr-(--pad-right-narrow) max-desk:pl-(--pad-left-narrow)"
   data-view-alone={name}
-  style:--pad-bottom="max(var(--space-6), var(--safe-bottom))"
-  style:--pad-left="max(var(--space-7), env(safe-area-inset-left))"
-  style:--pad-left-narrow="max(var(--space-5), env(safe-area-inset-left))"
-  style:--pad-right="max(var(--space-6), env(safe-area-inset-right))"
-  style:--pad-right-narrow="max(var(--space-5), env(safe-area-inset-right))"
+  style:--pad-bottom="max(var(--spacing-space-6), var(--safe-bottom))"
+  style:--pad-left="max(var(--spacing-space-7), env(safe-area-inset-left))"
+  style:--pad-left-narrow={"max(var(--spacing-space-5), env(safe-area-inset-left))"}
+  style:--pad-right="max(var(--spacing-space-6), env(safe-area-inset-right))"
+  style:--pad-right-narrow={"max(var(--spacing-space-5), env(safe-area-inset-right))"}
 >
   {#if problem}
     <div in:reveal>

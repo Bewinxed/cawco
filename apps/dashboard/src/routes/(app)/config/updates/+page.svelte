@@ -69,7 +69,7 @@
       holding = true;
       setTimeout(() => {
         holding = false;
-      }, dur("--dur-hold"));
+      }, dur("--duration-hold"));
     }
   }
 
@@ -183,7 +183,7 @@
   {#if policy}
     <div data-slot="group" class="flex flex-col gap-space-2">
       <SectionHeader
-        hue="var(--hue-blue-500)"
+        hue="var(--color-hue-blue-500)"
         icon={IconDownload}
         label="Channel"
       >
@@ -217,12 +217,12 @@
               aria-live="polite"
               class="type-meta max-w-c-measure text-ink-muted"
               in:blur={{
-                duration: dur("--dur-panel"),
+                duration: dur("--duration-panel"),
                 easing: easeOut,
                 amount: 2,
               }}
               out:blur={{
-                duration: dur("--dur-exit"),
+                duration: dur("--duration-exit"),
                 easing: easeOut,
                 amount: 2,
               }}
@@ -244,7 +244,7 @@
           >
             <IconChevronRight
               data-chev
-              class="size-icon-sm transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded:rotate-90"
+              class="size-icon-sm transition-[rotate] duration-(--duration-control) ease-out group-aria-expanded:rotate-90"
             />
             <span>What's new in {displayVersion(release.version)}</span>
           </button>
@@ -262,7 +262,7 @@
       class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
     >
       <SectionHeader
-        hue="var(--hue-green-500)"
+        hue="var(--color-hue-green-500)"
         icon={IconMonitor}
         label="Machines"
       >

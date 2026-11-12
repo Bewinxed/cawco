@@ -231,8 +231,8 @@ export class ConversationBlocks {
         if (this.marked?.key === key && this.marked.state === "off") {
           this.marked = null;
         }
-      }, dur("--dur-panel"));
-    }, dur("--dur-hold"));
+      }, dur("--duration-panel"));
+    }, dur("--duration-hold"));
   }
 }
 

@@ -2,16 +2,16 @@
  * The address tray's motion, on the house's tokens and curves (DESIGN.md,
  * Motion grammar). The advisor proposed two new tray tokens (270ms on
  * [0.26, 1, 0.5, 1]); the brief takes the nearest house pair instead:
- * --dur-pop on the drawer curve for the height between states (morph), and
- * the One Object Rule's own --dur-panel flight for the open.
+ * --duration-pop on the drawer curve for the height between states (morph), and
+ * the One Object Rule's own --duration-panel flight for the open.
  *
  * - `arrive`: a state's content coming in: opacity, from --leave-scale,
- *   out of the skeleton reveal's 2px cross-blur, over --dur-pop on
- *   ease-out; with less motion a fade over --dur-morph.
+ *   out of the skeleton reveal's 2px cross-blur, over --duration-pop on
+ *   ease-out; with less motion a fade over --duration-morph.
  * - `depart`: the content it replaces: lifted out of the flow where it
- *   stands (so it never pushes what arrives) and faded over --dur-exit.
+ *   stands (so it never pushes what arrives) and faded over --duration-exit.
  * - `cawLeave`: Caw's leaving drawing (the mascot's Leaving contract): out
- *   of the flow where it stands, fading to --leave-scale over --dur-fade.
+ *   of the flow where it stands, fading to --leave-scale over --duration-fade.
  * - `openFrom` / `closeTo`: the source (the Needs you row, Settings' Set up)
  *   becoming the tray and the tray going back into it.
  */
@@ -29,7 +29,7 @@ import {
 export function arrive(_node: Element): TransitionConfig {
   if (!motionOk.current) {
     return {
-      duration: dur("--dur-morph"),
+      duration: dur("--duration-morph"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -37,7 +37,7 @@ export function arrive(_node: Element): TransitionConfig {
   const scale = numberOf("--leave-scale");
   const blur = numberOf("--skeleton-reveal-blur");
   return {
-    duration: dur("--dur-pop"),
+    duration: dur("--duration-pop"),
     easing: easeOut,
     css: (t) =>
       `opacity: ${t}; scale: ${scale + (1 - scale) * t}; filter: blur(${((1 - t) * blur).toFixed(2)}px)`,
@@ -49,7 +49,7 @@ export function depart(node: HTMLElement): TransitionConfig {
     return { duration: 0 };
   }
   return lifting(node, pinned(node), {
-    duration: dur("--dur-exit"),
+    duration: dur("--duration-exit"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   });
@@ -61,7 +61,7 @@ export function cawLeave(node: HTMLElement): TransitionConfig {
   }
   const scale = numberOf("--leave-scale");
   return lifting(node, pinned(node), {
-    duration: dur("--dur-fade"),
+    duration: dur("--duration-fade"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}; scale: ${scale + (1 - scale) * t}`,
   });
@@ -89,12 +89,12 @@ export function openFrom(tray: HTMLElement, source: Source | null): void {
   const content = [...tray.querySelectorAll<HTMLElement>(CONTENT)];
   if (!(source && motionOk.current)) {
     tray.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: dur("--dur-fade"),
+      duration: dur("--duration-fade"),
       easing: CURVE.out,
     });
     return;
   }
-  const flight = { duration: dur("--dur-panel"), easing: CURVE.drawer };
+  const flight = { duration: dur("--duration-panel"), easing: CURVE.drawer };
   const box = tray.getBoundingClientRect();
   if (source.kind === "row") {
     tray.animate(
@@ -129,8 +129,8 @@ export function openFrom(tray: HTMLElement, source: Source | null): void {
   }
   for (const one of content) {
     one.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: dur("--dur-fade"),
-      delay: dur("--dur-ghost"),
+      duration: dur("--duration-fade"),
+      delay: dur("--duration-ghost"),
       easing: CURVE.out,
       fill: "backwards",
     });
@@ -147,7 +147,7 @@ export function closeTo(
     done();
     return;
   }
-  const leave = { duration: dur("--dur-exit"), easing: CURVE.drawer };
+  const leave = { duration: dur("--duration-exit"), easing: CURVE.drawer };
   const box = tray.getBoundingClientRect();
   for (const one of tray.querySelectorAll<HTMLElement>(CONTENT)) {
     one.animate([{ opacity: 1 }, { opacity: 0 }], {
@@ -188,17 +188,17 @@ export function closeTo(
 export function sheetIn(sheet: HTMLElement, scrim: HTMLElement | null): void {
   if (!motionOk.current) {
     sheet.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: CURVE.out,
     });
     return;
   }
   sheet.animate([{ translate: "0 100%" }, { translate: "0 0" }], {
-    duration: dur("--dur-panel"),
+    duration: dur("--duration-panel"),
     easing: CURVE.drawer,
   });
   scrim?.animate([{ opacity: 0 }, { opacity: 1 }], {
-    duration: dur("--dur-panel"),
+    duration: dur("--duration-panel"),
     easing: CURVE.out,
   });
 }
@@ -209,7 +209,7 @@ export function sheetOut(
   scrim: HTMLElement | null,
   done: () => void
 ): void {
-  const leave = { duration: dur("--dur-exit"), easing: CURVE.drawer };
+  const leave = { duration: dur("--duration-exit"), easing: CURVE.drawer };
   scrim?.animate([{ opacity: 1 }, { opacity: 0 }], {
     ...leave,
     fill: "forwards",
@@ -220,7 +220,7 @@ export function sheetOut(
         fill: "forwards",
       })
     : sheet.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--dur-control"),
+        duration: dur("--duration-control"),
         fill: "forwards",
       });
   run.finished.then(done, done);

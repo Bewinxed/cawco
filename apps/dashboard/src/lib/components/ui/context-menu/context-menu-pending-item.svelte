@@ -41,7 +41,7 @@
 <Item
   aria-busy={select.pending || undefined}
   class={cn(
-    "[--btn-gap:--spacing(2.5)] [--btn-icon:var(--icon-md)]",
+    "[--btn-gap:--spacing(2.5)] [--btn-icon:var(--spacing-icon-md)]",
     className
   )}
   {disabled}

@@ -29,7 +29,8 @@ import { accountsWords as words } from "@cawco/core/words/accounts";
 import { cawco } from "../client.svelte";
 
 /** The colour token an account is drawn in. */
-export const hueVar = (hue: AccountHue): string => `var(--account-${hue})`;
+export const hueVar = (hue: AccountHue): string =>
+  `var(--color-account-${hue})`;
 
 /** The colours an account can take, in the order the swatches offer them. */
 const SWATCHES: readonly AccountHue[] = words.swatches.map(

@@ -19,7 +19,7 @@
    * are made for), its arrowhead at the state it reaches, and the act that
    * makes it (its label) where dagre left room for it, so no arrow crosses
    * a card's title and no label stands on a card. A press on the arrow
-   * (a band `--space-5` wide along it, the line itself being 1.5px) or on
+   * (a band `--spacing-space-5` wide along it, the line itself being 1.5px) or on
    * its act opens its move.
    */
   import { EdgeLabel, type EdgeProps } from "@xyflow/svelte";
@@ -59,13 +59,13 @@
 </script>
 
 <path
-  class="fill-none stroke-transparent stroke-(length:--space-5)"
+  class="fill-none stroke-transparent stroke-(length:--spacing-space-5)"
   d={path}
   data-slot="route-hit"
 />
 <path
   {id}
-  class="pointer-events-none fill-none stroke-border-contrast stroke-(length:--c-graph-edge)"
+  class="pointer-events-none fill-none stroke-border-contrast stroke-(length:--spacing-c-graph-edge)"
   d={path}
   data-played={route.played ? "played" : "named"}
   marker-end={markerEnd}

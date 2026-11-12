@@ -772,13 +772,13 @@
 
   /* ── Tabs arriving and leaving ────────────────────────────────────
      A tab that opens grows from nothing at its place in the strip while
-     the tabs after it slide over to make room (--dur-morph, --ease-out),
+     the tabs after it slide over to make room (--duration-morph, --ease-out),
      unless it flies in from the row that opened it (share.svelte.ts). A
      tab that closes is taken out of the flow where it stands and narrows
-     to nothing as it fades (--dur-exit), while the tabs after it slide
-     into the gap (--dur-fade, --ease-in-out). A tab dropped at another
+     to nothing as it fades (--duration-exit), while the tabs after it slide
+     into the gap (--duration-fade, --ease-in-out). A tab dropped at another
      place in its strip slides there with its neighbours on the flight's
-     own curve (--dur-panel, --ease-drawer). A tab whose id changes in
+     own curve (--duration-panel, --ease-drawer). A tab whose id changes in
      place — a stored session reached again by its instance — neither
      leaves nor arrives. The strip's first render is where it starts, and
      nothing in it moves. */
@@ -877,13 +877,13 @@
 
   /** Every tab that stood somewhere else before the change slides from there to where it lies. */
   function slide(from: Map<string, number>, removed: boolean, added: boolean) {
-    let duration = dur("--dur-panel");
+    let duration = dur("--duration-panel");
     let easing = ease("--ease-drawer");
     if (removed) {
-      duration = dur("--dur-fade");
+      duration = dur("--duration-fade");
       easing = ease("--ease-in-out");
     } else if (added) {
-      duration = dur("--dur-morph");
+      duration = dur("--duration-morph");
       easing = ease("--ease-out");
     }
     const tabsNow = leaf.tabs.flatMap((id) => {
@@ -950,7 +950,7 @@
                 { clipPath: `inset(${REACH} 100% ${REACH} ${REACH})` },
                 { clipPath: `inset(${REACH} ${REACH} ${REACH} ${REACH})` },
               ],
-              { duration: dur("--dur-morph"), easing: ease("--ease-out") }
+              { duration: dur("--duration-morph"), easing: ease("--ease-out") }
             );
           }
         });
@@ -1008,7 +1008,7 @@
       node,
       pinnedOut(node, () => ({ "z-index": "var(--z, 1)" })),
       {
-        duration: dur("--dur-exit"),
+        duration: dur("--duration-exit"),
         easing: easeOut,
         css: (t) =>
           narrow
@@ -1412,7 +1412,7 @@
         data-drop-after={(dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1) ||
           undefined}
-        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:duration-(--dur-panel) motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-row data-drop-before:before:-start-space-row data-drop-before:before:z-4 data-drop-before:before:w-space-row data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-row data-drop-after:after:-end-space-row data-drop-after:after:z-4 data-drop-after:after:w-space-row data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
+        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:duration-(--duration-panel) motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-row data-drop-before:before:-start-space-row data-drop-before:before:z-4 data-drop-before:before:w-space-row data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-row data-drop-after:after:-end-space-row data-drop-after:after:z-4 data-drop-after:after:w-space-row data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
         style:--drop-z="calc(var(--stack-top) + 1)"
         data-chosen={chosen ? "" : undefined}
         data-flush={hungFlush(cardHere, menuHere)}
@@ -1459,13 +1459,13 @@
         style:--rim-ink="var(--tone)"
         style:--rim-rest={RIM_STRENGTH[tab.tone].rest}
         style:--sheet={cardHere || menuHere
-          ? "var(--surface-recess)"
+          ? "var(--color-surface-recess)"
           : undefined}
         style:--tab-fill={cardHere || menuHere
-          ? "var(--surface-recess)"
+          ? "var(--color-surface-recess)"
           : undefined}
         style:--tab-hover={cardHere || menuHere
-          ? "var(--surface-recess)"
+          ? "var(--color-surface-recess)"
           : undefined}
         style:--tone={RIM_INK[tab.tone]}
         style:--z-rest={restZ}
@@ -1498,7 +1498,7 @@
           data-slot="shade"
           aria-hidden="true"
           class="pointer-events-none absolute inset-x-(--shade-x) inset-y-0 z-0 mask-(--shade-mask)"
-          style:--shade-mask={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
+          style:--shade-mask={"linear-gradient(to bottom, var(--color-mask-opaque) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
           style:--shade-x="calc(-1 * var(--flare))"
           style:--cast-start="calc(var(--flare) + var(--slope-start))"
           style:--cast-end="calc(var(--flare) + var(--slope-end))"
@@ -1673,7 +1673,7 @@
                   {@const project = cawco.project(tab.projectId)}
                   <TreeMark
                     faceAlways
-                    fill="var(--mark-{markHue(
+                    fill="var(--color-mark-{markHue(
                       project ? folderOf(project) : tab.projectId
                     )})"
                   >
@@ -1730,7 +1730,7 @@
                       variant="ghost"
                     >
                       <IconChevronDown
-                        class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+                        class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out"
                       />
                     </Button>
                   </span>
@@ -1788,7 +1788,7 @@
             side="bottom"
             sideOffset={0}
             class="min-w-(--menu-min)"
-            style="--menu-min: max(var(--c-tab-menu-min), {menuMin}px)"
+            style="--menu-min: max(var(--spacing-c-tab-menu-min), {menuMin}px)"
             surface="recess"
             tab
             bind:joined={
@@ -1908,7 +1908,7 @@
     >
       <div
         data-slot="details-morph"
-        class="max-h-inherit w-full overflow-hidden motion-safe:details-gliding:transition-[height] motion-safe:details-gliding:duration-(--dur-pop) motion-safe:details-gliding:ease-drawer"
+        class="max-h-inherit w-full overflow-hidden motion-safe:details-gliding:transition-[height] motion-safe:details-gliding:duration-(--duration-pop) motion-safe:details-gliding:ease-drawer"
         style:height={detailsHeight ? `${detailsHeight}px` : undefined}
       >
         <div

@@ -98,7 +98,7 @@
   </label>
 
   <!-- The verdict appears with the first sample and its two readings
-       cross-fade over --dur-control in one line box. -->
+       cross-fade over --duration-control in one line box. -->
   {#if sample.trim()}
     <p
       aria-live="polite"

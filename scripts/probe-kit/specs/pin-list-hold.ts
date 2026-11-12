@@ -19,7 +19,7 @@
  * 2. The pane's doc held back by a stand-in for its socket (`routeWebSocket`
  *    on `/ws/artifact/`, the hub's messages kept 2.5 s): from the socket's
  *    start until the doc lands no empty state, no row, no tab count and no
- *    head count element is drawn; nothing inside `--dur-wait-grace` from when
+ *    head count element is drawn; nothing inside `--duration-wait-grace` from when
  *    the pane's grace timer started (the timer itself, caught as it fires,
  *    never the socket's start, which an effect may follow), then
  *    skeleton rows at the common row's height (place and age, words), their fill apart from the list's
@@ -256,7 +256,7 @@ const listOpenFor = (page: Page, session: string) =>
  * and every state the list drew after it (`at` from the socket, `t` on the
  * page's clock); and every timer of 100 ms or more that fired until the list
  * first drew its reading rows, with when it was set and when it fired: the
- * pane's `--dur-wait-grace` timer (PreviewPane `readingLong`) among them,
+ * pane's `--duration-wait-grace` timer (PreviewPane `readingLong`) among them,
  * which starts in an effect before or after the socket's.
  */
 const recorder = () => {
@@ -687,7 +687,7 @@ const heldBack = async (at: At, leg: Leg) => {
   const grace = await page.evaluate(() =>
     Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue(
-        "--dur-wait-grace"
+        "--duration-wait-grace"
       )
     )
   );
@@ -755,7 +755,7 @@ const heldBack = async (at: At, leg: Leg) => {
     `${said}; at ${HOLD_MS} ms: ${JSON.stringify(during)}`
   );
   check(
-    `2: nothing inside --dur-wait-grace (${graceMs} ms) from when its timer started, then skeleton rows, their fill apart from the list's surface`,
+    `2: nothing inside --duration-wait-grace (${graceMs} ms) from when its timer started, then skeleton rows, their fill apart from the list's surface`,
     readingAfterGrace !== null &&
       readingAfterGrace >= graceMs - 50 &&
       during.reading &&

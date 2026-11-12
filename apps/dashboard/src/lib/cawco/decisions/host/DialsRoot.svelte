@@ -55,7 +55,7 @@
     ]}
   >
     <BitsConfig defaultPortalTo={layer}>
-      <!-- Undocked, a box over the page inset by --space-4 that takes no
+      <!-- Undocked, a box over the page inset by --spacing-space-4 that takes no
            pointer, the column at its bottom-right: the room's width at most,
            scrolling inside the box past the window's height. -->
       <div

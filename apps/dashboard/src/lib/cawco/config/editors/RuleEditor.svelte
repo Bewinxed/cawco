@@ -60,7 +60,7 @@
   let { rule, taken }: { rule: RuleRow | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--hue-green-500)";
+  const HUE = "var(--color-hue-green-500)";
 
   let draft = $state<RuleDraft>(
     untrack(() => (rule ? draftOf(rule) : blankRule()))
@@ -219,7 +219,7 @@
       on the drawer curve, read when the fold plays. */
   const FOLD = {
     get ms() {
-      return dur("--dur-panel");
+      return dur("--duration-panel");
     },
     get easing() {
       return ease("--ease-drawer");

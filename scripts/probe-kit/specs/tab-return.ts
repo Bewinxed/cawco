@@ -119,7 +119,7 @@ const ELSEWHERE_MS = 1000;
 const SETTLE_MS = 1000;
 /**
  * How long leg 3 watches the panes it put away for a run served there:
- * past the cover's wait (`--dur-wait-grace` 1000 ms, then `--dur-fade`
+ * past the cover's wait (`--duration-wait-grace` 1000 ms, then `--duration-fade`
  * 200 ms), which a preview let go as its pane went away starts again.
  */
 const OFFSCREEN_MS = 2500;

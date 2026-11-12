@@ -316,7 +316,7 @@
     <div
       class="relative m-space-2 flex w-c-panel-w flex-none flex-col overflow-clip rounded-lg bg-surface-raised shadow-tile max-desk:m-0 max-desk:w-full max-desk:rounded-none"
       data-caw-panel
-      style:--bar-room="var(--c-top-bar-h)"
+      style:--bar-room="var(--spacing-c-top-bar-h)"
     >
       <div class="absolute inset-x-0 top-0 z-2">
         <BarFloat tint="bg-surface-raised">

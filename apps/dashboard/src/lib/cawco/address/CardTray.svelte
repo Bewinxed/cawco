@@ -7,7 +7,7 @@
    * object, closed when the state has none), a meta line with the live dot,
    * one button, and Show details under it. The card never rearranges: only
    * its words (MorphText), its object and its button change, and only the
-   * slot changes height, which morph carries over --dur-pop on the drawer
+   * slot changes height, which morph carries over --duration-pop on the drawer
    * curve. A second way on (Skip, Open Setup Keys) is a text action in its
    * own place under the button, so the card keeps its one button and the
    * meta line only ever says what it waits on. Caw never moves; a failure
@@ -52,7 +52,7 @@
   data-form={form}
   data-step={tray.step}
   data-tray="card"
-  {@attach (node) => morph({ ms: dur("--dur-pop") })(node)}
+  {@attach (node) => morph({ ms: dur("--duration-pop") })(node)}
 >
   <TrayBody
     class="justify-items-center gap-space-4 text-center"

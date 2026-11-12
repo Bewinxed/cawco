@@ -585,7 +585,7 @@ async function openJump(page: Page, view: View) {
  * fill, hairline or shadow"): no fill, no border, no shadow, no image. Its
  * one hairline is the shelf's, on a wide bar that hosts a conversation's
  * tabs (Shell.svelte, `data-hosting:shelf-hairline`), drawn as a 1px
- * gradient in `--border-hairline` at the bar's foot over `--surface-shelf`
+ * gradient in `--color-border-hairline` at the bar's foot over `--color-surface-shelf`
  * (design.css `@utility shelf-hairline`), never a border. `hairline` and
  * `shelf` are that shelf's layers (image, position, size) and surface as
  * this page computes them, read through a probe in the bar drawn as the
@@ -601,7 +601,7 @@ const barGround = (page: Page) =>
     // over a layer of the shelf's surface, whose own image is none.
     const probe = document.createElement("i");
     probe.style.background =
-      "linear-gradient(var(--border-hairline), var(--border-hairline)) bottom / 100% 1px no-repeat, var(--surface-shelf)";
+      "linear-gradient(var(--color-border-hairline), var(--color-border-hairline)) bottom / 100% 1px no-repeat, var(--color-surface-shelf)";
     bar.append(probe);
     const tokens = getComputedStyle(probe);
     const hairline = `${tokens.backgroundImage} at ${tokens.backgroundPosition} sized ${tokens.backgroundSize}`;
@@ -717,7 +717,7 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
   );
   const seam = await barGround(page);
   kit.check(
-    `${name}, board 502: the bar draws no ground of its own, its only hairline the hosting shelf's --border-hairline`,
+    `${name}, board 502: the bar draws no ground of its own, its only hairline the hosting shelf's --color-border-hairline`,
     groundHolds(seam),
     JSON.stringify(seam)
   );
@@ -1145,7 +1145,7 @@ async function runLeg(
       socket.drop();
       return Promise.resolve();
     },
-    { duration: "--dur-panel", easing: "--ease-drawer" }
+    { duration: "--duration-panel", easing: "--ease-drawer" }
   );
   checkMotion(kit, name, "enter", entered, true);
   startsHidden(kit, name, entered);
@@ -1275,7 +1275,7 @@ async function runLeg(
     (await bandNow(page)).words
   );
   const left = await scrubBand(page, () => Promise.resolve(), {
-    duration: "--dur-exit",
+    duration: "--duration-exit",
     easing: "--ease-out",
   });
   checkMotion(kit, name, "leave", left, false);
@@ -1559,12 +1559,12 @@ async function conversationLeg(
   await searchOrder(kit, page, name, view);
   kit.note(`${name}: at rest ${JSON.stringify(rest)}`);
   // The bar over a conversation hosts its tabs: on a desk it draws the
-  // shelf, its one hairline in --border-hairline; on a phone it floats
+  // shelf, its one hairline in --color-border-hairline; on a phone it floats
   // over them and draws nothing.
   const seam = await barGround(page);
   kit.check(
     view === "desk"
-      ? `${name}: at rest the bar hosting the tabs draws the shelf, its one hairline --border-hairline, no border or shadow`
+      ? `${name}: at rest the bar hosting the tabs draws the shelf, its one hairline --color-border-hairline, no border or shadow`
       : `${name}: at rest the bar floating over the tabs draws no ground of its own`,
     groundHolds(seam, view === "desk"),
     JSON.stringify(seam)

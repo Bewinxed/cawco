@@ -203,7 +203,7 @@
     {/if}
 
     {#if machinesThere}
-      <!-- Anchored as New project's ask is (its page pads --space-7 on a
+      <!-- Anchored as New project's ask is (its page pads --spacing-space-7 on a
            phone): the groups' own top padding and this margin make that. -->
       <div data-slot="machines" class="mx-0 mt-space-5 mb-space-6" data-flip>
         <MachinesEmpty
@@ -268,8 +268,8 @@
       data-slot="dock"
       class="sticky bottom-0 mt-auto bg-(image:--dock-fade) px-space-5 pt-space-3 pb-(--dock-foot)"
       data-safe-bottom
-      style:--dock-fade={"linear-gradient(transparent, var(--surface-recess) var(--space-4))"}
-      style:--dock-foot="calc(var(--space-3) + var(--safe-bottom))"
+      style:--dock-fade={"linear-gradient(transparent, var(--color-surface-recess) var(--spacing-space-4))"}
+      style:--dock-foot="calc(var(--spacing-space-3) + var(--safe-bottom))"
     >
       <Button
         class="w-full"

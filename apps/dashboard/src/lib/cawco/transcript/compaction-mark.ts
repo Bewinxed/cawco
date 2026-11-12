@@ -24,7 +24,7 @@ export const COMPACTING_MARK = {
 
 /**
  * His picture on its way for a transcript that is waiting to show him: over
- * when it is drawn, or when `--dur-mark-hold` has passed, whichever is first.
+ * when it is drawn, or when `--duration-mark-hold` has passed, whichever is first.
  * Null when nothing is on its way.
  */
 let coming: Promise<void> | null = null;
@@ -59,7 +59,7 @@ export function warmCompactionMark(): void {
     // The hold's own bound: a transcript never hangs on the mascot. Past
     // it the list is shown and he is painted when he arrives.
     const cap = new Promise<void>((over) => {
-      setTimeout(over, dur("--dur-mark-hold"));
+      setTimeout(over, dur("--duration-mark-hold"));
     });
     const settled = Promise.race([picture, cap]).then(() => {
       if (coming === settled) {

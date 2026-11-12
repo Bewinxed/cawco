@@ -50,7 +50,7 @@
 <div
   class="grid min-w-0 grid-cols-(--qr-cols) items-center gap-x-space-4"
   data-slot="phone-qr"
-  style:--qr-cols="var(--c-address-qr) minmax(0, 1fr)"
+  style:--qr-cols="var(--spacing-c-address-qr) minmax(0, 1fr)"
 >
   <svg
     class="block size-c-address-qr flex-none rounded-well bg-surface-raised text-ink-strong shadow-xs"

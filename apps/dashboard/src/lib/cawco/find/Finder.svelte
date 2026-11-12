@@ -707,7 +707,7 @@
         {kindNoun(first, count)} match “{finder.asked}”</span
       >
       <ChevronRight
-        class="flex-none size-icon-md text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out data-open:rotate-90"
+        class="flex-none size-icon-md text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-in-out data-open:rotate-90"
         aria-hidden="true"
         data-box
         data-open={open || undefined}
@@ -785,8 +785,8 @@
       <RowFault
         again={() => finder.relist(item.machineId)}
         data-catalog-left-out={item.machineId}
-        end="var(--space-3)"
-        indent="var(--space-3)"
+        end="var(--spacing-space-3)"
+        indent="var(--spacing-space-3)"
         reason={item.words}
       />
     </div>
@@ -939,7 +939,7 @@
     className
   )}
   data-phone={phone || undefined}
-  style:--acts-ms="calc(var(--space-3) + var(--icon-md) + var(--space-2))"
+  style:--acts-ms={"calc(var(--spacing-space-3) + var(--spacing-icon-md) + var(--spacing-space-2))"}
 >
   {#if !phone}
     {@render field_()}

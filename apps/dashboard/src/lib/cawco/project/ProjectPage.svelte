@@ -395,7 +395,7 @@
 
   /**
    * The tab's first read of its tasks, opened in the browser with no server
-   * read: once the wait outlasts --dur-wait-grace the board stands as its
+   * read: once the wait outlasts --duration-wait-grace the board stands as its
    * skeleton and Caw reads it (design §2, Loading); a quick one shows
    * nothing of its own.
    */
@@ -408,7 +408,7 @@
     }
     const grace = setTimeout(() => {
       reading = true;
-    }, dur("--dur-wait-grace"));
+    }, dur("--duration-wait-grace"));
     return () => clearTimeout(grace);
   });
 
@@ -1294,7 +1294,7 @@
                   title: viewLabel(view.name),
                   glyph: IconArtifactSheet,
                   content: viewBody,
-                  measure: "--c-block-view",
+                  measure: "--spacing-c-block-view",
                   hideable: true,
                   body: "natural",
                   card: false,
@@ -1327,7 +1327,7 @@
         hideable: false,
         body: view === "board" ? "fill" : "natural",
         card: false,
-        measure: "--c-block-view",
+        measure: "--spacing-c-block-view",
       },
       ...viewItemsOf(view),
     };
@@ -2094,8 +2094,8 @@
           <RowFault
             again={fault?.again}
             data-view-refusal={view.name}
-            end="var(--space-3)"
-            indent="var(--space-3)"
+            end="var(--spacing-space-3)"
+            indent="var(--spacing-space-3)"
             reason={fault?.reason}
           />
         {:else}
@@ -2148,8 +2148,8 @@
           <RowFault
             again={fault?.again}
             data-view-refusal={view.name}
-            end="var(--space-1)"
-            indent="var(--space-1)"
+            end="var(--spacing-space-1)"
+            indent="var(--spacing-space-1)"
             reason={fault?.reason}
           />
         {/if}
@@ -2435,9 +2435,9 @@
               "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
               fadeOn === "page" && "kit-edge-fade-block",
             ]}
-            style:--reveal-foot={`max(${docked ? "var(--c-sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
-            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
-            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+            style:--reveal-foot={`max(${docked ? "var(--spacing-c-sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
+            style:--bar-reach={"calc(var(--spacing-c-composer-panel) + var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-space-3))"}
+            style:--bar-fade-inset={"calc(var(--bar-reach) - var(--spacing-space-3))"}
           >
             <ProjectHead
               {lead}
@@ -2625,12 +2625,14 @@
     ]}
     data-view={reading ? "board" : paneView}
     style:--draft-bleed-end={sheetQuery.current
-      ? "var(--space-5)"
-      : "var(--space-6)"}
+      ? "var(--spacing-space-5)"
+      : "var(--spacing-space-6)"}
     style:--draft-bleed-start={sheetQuery.current
-      ? "var(--space-5)"
-      : "var(--space-7)"}
-    style:--pane-min={docked ? "calc(50cqb + var(--c-sheet-max-h))" : "50cqb"}
+      ? "var(--spacing-space-5)"
+      : "var(--spacing-space-7)"}
+    style:--pane-min={docked
+      ? "calc(50cqb + var(--spacing-c-sheet-max-h))"
+      : "50cqb"}
   >
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the
@@ -2638,8 +2640,8 @@
       <div
         aria-hidden="true"
         class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
-        style:--skeleton-col={"minmax(var(--c-board-col-min), var(--c-board-col-max))"}
-        style:--skeleton-col-phone="calc(100% - var(--space-8))"
+        style:--skeleton-col={"minmax(var(--spacing-c-board-col-min), var(--spacing-c-board-col-max))"}
+        style:--skeleton-col-phone="calc(100% - var(--spacing-space-8))"
         out:revealOut
       >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
@@ -2701,11 +2703,11 @@
       class="w-(--ask-w)"
       customAnchor={askAnchor}
       side="bottom"
-      style="--ask-w: min(var(--c-panel-w), calc(100vw - 2 * var(--c-screen-margin)))"
+      style="--ask-w: min(var(--spacing-c-panel-w), calc(100vw - 2 * var(--spacing-c-screen-margin)))"
     >
       <div
         class="relative w-full"
-        style:block-size="calc({viewFoot}px + var(--space-4))"
+        style:block-size="calc({viewFoot}px + var(--spacing-space-4))"
       >
         <Composer
           fleet={composerFleet}

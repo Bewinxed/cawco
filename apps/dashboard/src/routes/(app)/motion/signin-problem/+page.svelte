@@ -4,7 +4,7 @@
    * daemon's sentence, then the CLI's last screen lines, as
    * packages/agent/src/login.ts words it, one of them 240 characters. It
    * stands on the popover's own surface (ui/glide-popover) at the
-   * sign-in popover's width token, `--c-signin-pop-w`, with AccountMachines'
+   * sign-in popover's width token, `--spacing-c-signin-pop-w`, with AccountMachines'
    * panel padding inside, so it is as wide as the real popover at every
    * screen width.
    */
@@ -36,7 +36,7 @@
 <div
   class={cn("ns-theme", glidePopoverVariants({ class: "mx-auto my-space-5" }))}
   data-bench
-  style="--ns-pop-width: var(--c-signin-pop-w)"
+  style="--ns-pop-width: var(--spacing-c-signin-pop-w)"
 >
   <div class="p-space-2">
     <SigninPanel expected={null} {flow} machine="bench" online />

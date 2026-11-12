@@ -6,7 +6,7 @@
       column of its own that may shrink below its content, moving its share
       (paneforge's `flex-grow`) only as its role says. `split`: a page and
       its side surface, whose share slides while the split opens or closes in
-      front of the reader (`data-sliding`, on --dur-panel and --ease-in-out;
+      front of the reader (`data-sliding`, on --duration-panel and --ease-in-out;
       opening, `data-opening`, decelerates on the drawer curve). `grid`: a
       group in the pane grid, clipped to its box, whose share tweens at the
       control tier to a step the keyboard takes on its divider (a drag
@@ -16,8 +16,8 @@
     variants: {
       look: {
         split:
-          "flex min-h-0 min-w-0 motion-safe:data-sliding:data-opening:ease-drawer motion-safe:data-sliding:transition-[flex-grow] motion-safe:data-sliding:duration-(--dur-panel) motion-safe:data-sliding:ease-in-out",
-        grid: "flex min-h-0 min-w-0 overflow-hidden motion-safe:pane-keyed:transition-[flex-grow] motion-safe:pane-keyed:duration-(--dur-control) motion-safe:pane-keyed:ease-out",
+          "flex min-h-0 min-w-0 motion-safe:data-sliding:data-opening:ease-drawer motion-safe:data-sliding:transition-[flex-grow] motion-safe:data-sliding:duration-(--duration-panel) motion-safe:data-sliding:ease-in-out",
+        grid: "flex min-h-0 min-w-0 overflow-hidden motion-safe:pane-keyed:transition-[flex-grow] motion-safe:pane-keyed:duration-(--duration-control) motion-safe:pane-keyed:ease-out",
       },
     },
   });

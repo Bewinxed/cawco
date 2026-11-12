@@ -20,7 +20,7 @@
  *    from the edge": "Caw's button now stands 12px in from the right edge,
  *    as the sidebar button does from the left", picked "Round on the left,
  *    flat on the right, always"; built by b2d5f5209): its box ends
- *    `--c-bar-phone-edge` in from the trailing edge, as the sidebar
+ *    `--spacing-c-bar-phone-edge` in from the trailing edge, as the sidebar
  *    toggle's glyph starts that far in from the leading one; round on its
  *    leading side and square on its trailing one; and, standing clear of
  *    the edge, it draws its hairline on both sides.
@@ -228,7 +228,7 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
   const toggle = await page.evaluate(() => {
     const probe = document.createElement("span");
     probe.style.cssText =
-      "position:absolute;display:block;inline-size:var(--c-bar-phone-edge)";
+      "position:absolute;display:block;inline-size:var(--spacing-c-bar-phone-edge)";
     document.body.append(probe);
     const edge = probe.getBoundingClientRect().width;
     probe.remove();
@@ -250,7 +250,9 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
     };
     // The tabs' centre line: they stand on the bar's floor.
     const line =
-      (bar?.top ?? 0) + sizeOf("--c-top-bar-h") - sizeOf("--c-tab-row-h") / 2;
+      (bar?.top ?? 0) +
+      sizeOf("--spacing-c-top-bar-h") -
+      sizeOf("--spacing-c-tab-row-h") / 2;
     return {
       edge,
       glyphLeft: glyph?.left ?? null,
@@ -268,7 +270,7 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
   });
   const { glass } = read;
   kit.check(
-    `${at}: Caw's glass is the inset shape the person picked (decisions/caw-phone-shape): its box ends --c-bar-phone-edge (${toggle.edge}px) in from the trailing edge, round on its leading side, square on its trailing one, its hairline on both`,
+    `${at}: Caw's glass is the inset shape the person picked (decisions/caw-phone-shape): its box ends --spacing-c-bar-phone-edge (${toggle.edge}px) in from the trailing edge, round on its leading side, square on its trailing one, its hairline on both`,
     !!glass &&
       Math.abs(read.innerWidth - toggle.edge - glass.right) < 0.5 &&
       px(glass.borderEnd) > 0 &&
@@ -280,7 +282,7 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
     JSON.stringify(glass)
   );
   kit.check(
-    `${at}: the sidebar toggle's glyph still stands --c-bar-phone-edge (${toggle.edge}px) in from the leading edge (${toggle.glyphLeft})`,
+    `${at}: the sidebar toggle's glyph still stands --spacing-c-bar-phone-edge (${toggle.edge}px) in from the leading edge (${toggle.glyphLeft})`,
     toggle.glyphLeft !== null && Math.abs(toggle.glyphLeft - toggle.edge) < 0.5
   );
   kit.check(

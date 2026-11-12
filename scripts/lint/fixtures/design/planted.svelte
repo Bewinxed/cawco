@@ -11,8 +11,8 @@
   let picked = $state("");
   const steady = "mt-space-2";
 
-  const wait = (node: HTMLElement): number =>
-    Number.parseFloat(getComputedStyle(node).getPropertyValue("--dur-settle"));
+  const wait = (n: HTMLElement): number =>
+    Number.parseFloat(getComputedStyle(n).getPropertyValue("--duration-hold"));
 </script>
 
 <div class="rounded-huge nodrag nopan rounded-md"></div>

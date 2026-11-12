@@ -91,7 +91,7 @@
 
   /**
    * Answering morphs the card where it stands: the state pill cross-fades to
-   * its new word (--dur-control) and the picked option takes its selected
+   * its new word (--duration-control) and the picked option takes its selected
    * look on the same beat. Only when the reader is watching; the card never
    * plays this on its first render.
    */
@@ -101,7 +101,7 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -110,10 +110,10 @@
    * SETTLING. Answered, the card becomes its summary: each option picked is
    * the one chip left, and the options not picked go. The picked chip travels
    * from where it stood among the options to its place in the summary
-   * (`share`, --dur-pop on the drawer curve); the others fade where they
-   * stood (--dur-control), out of the flow from the start, so nothing else
+   * (`share`, --duration-pop on the drawer curve); the others fade where they
+   * stood (--duration-control), out of the flow from the start, so nothing else
    * waits on them. Dismissed, every option fades and their row folds shut
-   * toward the question (--dur-exit). Only a card that settles while it is
+   * toward the question (--duration-exit). Only a card that settles while it is
    * drawn plays this; one that is drawn settled is simply its summary.
    */
   const settled = $derived(answered || dismissed);
@@ -185,7 +185,12 @@
     if (was === undefined || !motionOk.current) {
       return;
     }
-    fold(row, !dismissed, { ms: dur("--dur-exit"), easing: CURVE.out }, was);
+    fold(
+      row,
+      !dismissed,
+      { ms: dur("--duration-exit"), easing: CURVE.out },
+      was
+    );
   }
   /** An option not picked fades where it stood, out of the flow. */
   function leave(node: HTMLElement) {
@@ -204,7 +209,7 @@
           : {};
       },
       {
-        duration: dur("--dur-control"),
+        duration: dur("--duration-control"),
         easing: easeOut,
         css: (t: number) => `opacity: ${t}`,
       }
@@ -342,7 +347,7 @@
             class={chipVariants()}
             data-chosen
             {@attach land(() => shareKey(index, at), {
-              ms: dur("--dur-pop"),
+              ms: dur("--duration-pop"),
             })}
           >
             <Kbd data-box look="keycap">{at + 1}</Kbd><span>{opt.label}</span>

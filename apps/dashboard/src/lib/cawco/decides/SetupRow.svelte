@@ -43,8 +43,8 @@
   aria-labelledby="{uid}-label"
   class="min-w-0 border-b border-border-hairline py-space-3 last:border-b-0"
   data-row={id}
-  style:--row-open="var(--c-setup-label-w) minmax(0, 1fr)"
-  style:--row-folded="var(--c-setup-label-w) minmax(0, 1fr) auto"
+  style:--row-open="var(--spacing-c-setup-label-w) minmax(0, 1fr)"
+  style:--row-folded="var(--spacing-c-setup-label-w) minmax(0, 1fr) auto"
   style:--row-narrow="minmax(0, 1fr) auto"
 >
   {#if open || readOnly}

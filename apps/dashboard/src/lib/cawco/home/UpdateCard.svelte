@@ -36,7 +36,7 @@
    * The notes fold in the row with what it says machine by machine and its
    * closing line: transitions-dev's Accordion expand, a grid row going 0fr
    * to 1fr while the notes cross-blur in (`--fold-blur`), open over
-   * --dur-panel and shut over --dur-exit (exits faster than entrances), on
+   * --duration-panel and shut over --duration-exit (exits faster than entrances), on
    * --ease-out, the chevron flipping from ⌄ to ⌃. They stand open from the
    * start when the notice is all the panel holds (`alone`), until the reader
    * folds them; a fold the reader chose holds for that notice until it is
@@ -236,7 +236,7 @@
            motion nothing travels: the notes only fade. -->
       <div
         data-slot="fold"
-        class="group/fold -mt-space-row grid grid-rows-shut transition-[grid-template-rows,margin-top] duration-(--dur-exit) ease-out data-open:mt-0 data-open:grid-rows-open motion-safe:data-open:duration-(--dur-panel) motion-reduce:transition-off"
+        class="group/fold -mt-space-row grid grid-rows-shut transition-[grid-template-rows,margin-top] duration-(--duration-exit) ease-out data-open:mt-0 data-open:grid-rows-open motion-safe:data-open:duration-(--duration-panel) motion-reduce:transition-off"
         data-open={open || undefined}
         id="update-notes"
         inert={!open}
@@ -247,7 +247,7 @@
              panel. It interpolates with the shut blur as blur(0) would. -->
         <div
           data-slot="fold-inner"
-          class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:group-data-open/fold:duration-(--dur-panel)"
+          class="fold-item opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--duration-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--duration-fade) motion-reduce:group-data-open/fold:duration-(--duration-panel)"
         >
           <div class="flex flex-col gap-space-1 pt-space-1">
             <div class="type-body text-ink-row">
@@ -281,7 +281,7 @@
            trailing edge. -->
       <div
         data-slot="actions"
-        class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--dur-control) before:ease-out data-stuck:before:opacity-100"
+        class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--duration-control) before:ease-out data-stuck:before:opacity-100"
         {@attach held}
       >
         {#if showConfigure}
@@ -296,7 +296,7 @@
             label="Configure update behaviour"
             ring={notes === null ? "inset-last" : undefined}
             size="sm"
-            style="--settings-hang: calc(-1 * (1px + var(--space-3)));"
+            style="--settings-hang: calc(-1 * (1px + var(--spacing-space-3)));"
             variant="link"
             width="shrink"
           />
@@ -322,14 +322,14 @@
             expanded="unfilled"
             size="sm"
             toggle="last"
-            style="--end: calc(var(--space-3) - 1px - var(--icon-md) * 4.25 / 24); --toggle-start: calc(var(--space-3) + var(--space-2) - var(--end));"
+            style="--end: calc(var(--spacing-space-3) - 1px - var(--spacing-icon-md) * 4.25 / 24); --toggle-start: calc(var(--spacing-space-3) + var(--spacing-space-2) - var(--end));"
             variant="ghost"
           >
             <span>{open ? "Hide changes" : "Show changes"}</span>
             <IconChevronDown
               data-chev
               aria-hidden="true"
-              class="*:vector-non-scaling transition-[scale] duration-(--dur-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
+              class="*:vector-non-scaling transition-[scale] duration-(--duration-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
               data-icon="inline-end"
             />
           </Button>

@@ -309,13 +309,13 @@
     untrack(() => take(target));
   });
 
-  /** Plays the queue one row at a time: the first lift over --dur-morph, the rest back to back at --dur-control. */
+  /** Plays the queue one row at a time: the first lift over --duration-morph, the rest back to back at --duration-control. */
   function pump(): void {
     if (playing) {
       return;
     }
     playing = true;
-    detach(lift(dur("--dur-morph")), "lift");
+    detach(lift(dur("--duration-morph")), "lift");
   }
 
   /** One row into the bottom slot, then the next one queued, if any. */
@@ -332,11 +332,11 @@
       await column?.lastElementChild?.animate(
         [{ opacity: 0 }, { opacity: 1 }],
         {
-          duration: dur("--dur-control"),
+          duration: dur("--duration-control"),
           easing: CURVE.out,
         }
       ).finished;
-      return lift(dur("--dur-control"));
+      return lift(dur("--duration-control"));
     }
     shown = [...shown, key];
     await tick();
@@ -349,11 +349,14 @@
     column.lastElementChild?.animate([{ opacity: 0 }, { opacity: 1 }], timing);
     leaving?.animate([{ opacity: 1 }, { opacity: 0 }], timing);
     await column.animate(
-      [{ transform: "translateY(var(--c-tail-row))" }, { transform: "none" }],
+      [
+        { transform: "translateY(var(--spacing-c-tail-row))" },
+        { transform: "none" },
+      ],
       timing
     ).finished;
     shown = shown.slice(-SLOTS);
-    return lift(dur("--dur-control"));
+    return lift(dur("--duration-control"));
   }
 </script>
 
@@ -363,10 +366,10 @@
      the flow, so the widest row is the tail's width (the panel sizes to it). -->
 <div
   class="flex flex-col justify-end h-(--tail-h) overflow-hidden text-ink-strong data-full:mask-(--tail-fade)"
-  style:--row="var(--c-tail-row)"
+  style:--row="var(--spacing-c-tail-row)"
   style:--slots={slots}
   style:--tail-h="calc(var(--row) * var(--slots))"
-  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--row))"}
+  style:--tail-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--row))"}
   data-full={shown.length >= SLOTS || undefined}
 >
   {#if shown.length}

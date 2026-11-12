@@ -91,14 +91,14 @@ const OVERLAP = 1;
  *   a tap fires a synthetic mousemove and no mouseleave, so a ghost would
  *   park on the last tap as a second selection) there is none, unless the
  *   rows' own highlight drives it (`data-follow`). It fades in place over
- *   --dur-control; gliding (`GLIDES.ghost`), it moves 80ms on --ease-in-out.
+ *   --duration-control; gliding (`GLIDES.ghost`), it moves 80ms on --ease-in-out.
  *   Unseen (`data-unseen`), it still marks the row it is on (`data-ghosted`)
  *   and is not drawn: folder tabs draw their own hover.
  * - The pill is the selection, the apricot wash its row's selected ink
  *   stands on; gliding, it moves 120ms on --ease-drawer. The trail is the
  *   old selection fading where it was (`data-fade`), and never glides: its
  *   parts stay off the compositor. With less motion a selection that moves
- *   cross-fades (`data-swap`) over --dur-fade.
+ *   cross-fades (`data-swap`) over --duration-fade.
  * - `card` (the host's `data-highlight`): a grid of icon cards (updates/ChannelCards.svelte), whose pill is the channel card's selection frame, 1px
  *   brand-solid over the recess at the card's own radius, drawn over the
  *   card's border and fill and under its face (CardFace): its edges are
@@ -119,7 +119,7 @@ const LAYERS = `
 [data-slot="highlight-ghost"] {
   display: none;
   background-color: var(--ghost, var(--color-surface-hover));
-  transition: opacity var(--dur-control) var(--ease-out);
+  transition: opacity var(--duration-control) var(--ease-out);
 }
 @media (hover: hover) {
   [data-slot="highlight-ghost"] {
@@ -133,13 +133,13 @@ const LAYERS = `
   display: none;
 }
 [data-slot="highlight-pill"][data-swap] {
-  transition: opacity var(--dur-fade) var(--ease-out);
+  transition: opacity var(--duration-fade) var(--ease-out);
 }
 [data-slot="highlight-trail"][data-fade] {
-  transition: opacity var(--dur-control) var(--ease-out);
+  transition: opacity var(--duration-control) var(--ease-out);
 }
 [data-slot="highlight-trail"][data-fade][data-swap] {
-  transition: opacity var(--dur-fade) var(--ease-out);
+  transition: opacity var(--duration-fade) var(--ease-out);
 }
 [data-part] {
   position: absolute;
@@ -365,13 +365,13 @@ interface Run {
 }
 /** How a layer glides to its next box: the motion tokens' names. */
 interface Glide {
-  duration: `--dur-${string}`;
+  duration: `--duration-${string}`;
   easing: `--ease-${string}`;
 }
 /** The ghost's glide and the pill's (the sheet's head says which is which). */
 const GLIDES = {
-  ghost: { duration: "--dur-ghost", easing: "--ease-in-out" },
-  pill: { duration: "--dur-control", easing: "--ease-drawer" },
+  ghost: { duration: "--duration-ghost", easing: "--ease-in-out" },
+  pill: { duration: "--duration-control", easing: "--ease-drawer" },
 } as const satisfies Record<string, Glide>;
 
 const layerOf = (slot: string, card: boolean): Layer => {
@@ -1015,7 +1015,7 @@ export function highlight(options: HighlightOptions) {
       draw(trail, from, card);
       show(trail, true);
       requestAnimationFrame(() => {
-        // With less motion the fade is the whole move: --dur-fade (`swap`).
+        // With less motion the fade is the whole move: --duration-fade (`swap`).
         trail.el.toggleAttribute("data-fade", true);
         trail.el.toggleAttribute("data-swap", reduced.matches);
         show(trail, false);

@@ -191,7 +191,7 @@
       data-after-note={note || (actions ? "" : undefined)}
       data-shown={shown || undefined}
       data-part={(grouped && you) || undefined}
-      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 data-part:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-after-note:ms-0"
+      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 data-shown:opacity-100 data-part:opacity-100 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
   {/if}

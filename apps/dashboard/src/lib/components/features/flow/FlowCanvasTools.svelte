@@ -48,9 +48,9 @@
     canRedo?: boolean;
   } = $props();
   const { zoomIn, zoomOut, fitView } = useSvelteFlow();
-  /** Zoom and fit glide to the new view: movement on screen, --dur-panel. */
+  /** Zoom and fit glide to the new view: movement on screen, --duration-panel. */
   const glide = () => ({
-    duration: motionOk.current ? dur("--dur-panel") : 0,
+    duration: motionOk.current ? dur("--duration-panel") : 0,
     ease: easeInOut,
   });
   const fit = () => {

@@ -137,7 +137,7 @@ interface Layer {
  * A box's glyph, which swaps as the composer's Send and Stop do
  * (Composer.svelte, `icon-swap`): when the box is `swapped` the glyph going
  * out and the one coming in share the box's one cell, trading places by
- * opacity and scale over `--dur-control` (canvas.css, `rail-glyph-in` and
+ * opacity and scale over `--duration-control` (canvas.css, `rail-glyph-in` and
  * `rail-glyph-out`); any other change of glyph lands at once.
  */
 function SwapGlyph({ glyph, swapped }: { glyph: Glyph; swapped: boolean }) {

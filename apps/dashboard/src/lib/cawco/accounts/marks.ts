@@ -8,7 +8,7 @@
  * K cut out of Kimi's square, Groq's ring) becomes black, so it stays a
  * hole instead of filling in. A mark drawn in one dark or plain ink (OpenAI,
  * OpenRouter, Grok) has no colour of its own to keep, so its logo is that
- * silhouette in `--ink-strong`, and follows the theme.
+ * silhouette in `--color-ink-strong`, and follows the theme.
  *
  * A provider nobody draws a mark for here has none: its tile carries the
  * accounts glyph.

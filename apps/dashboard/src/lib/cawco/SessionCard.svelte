@@ -117,7 +117,7 @@
       data-session-hover-mark
       aria-hidden="true"
       class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
-      style:--mark-bg="var(--mark-{markHue(sessionPlace(id))})"
+      style:--mark-bg="var(--color-mark-{markHue(sessionPlace(id))})"
       data-box
     >
       {#if caw}

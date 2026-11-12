@@ -73,7 +73,7 @@
     <dl
       data-slot="grid"
       class="m-0 grid grid-cols-(--cols) gap-x-space-2 gap-y-space-1"
-      style:--cols="var(--c-task-key-w) minmax(0, 1fr)"
+      style:--cols="var(--spacing-c-task-key-w) minmax(0, 1fr)"
     >
       {#each Object.entries(fields) as [key, value] (key)}
         <dt class="type-code liga-none wrap-anywhere pt-space-1 text-ink-muted">

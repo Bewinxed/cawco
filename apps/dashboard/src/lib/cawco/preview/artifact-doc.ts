@@ -113,7 +113,7 @@ export type DocSync =
 
 /**
  * What the Comments list stands on: `quiet` while the first sync is inside
- * `--dur-wait-grace` (nothing said), `reading` past it, `ready` once held,
+ * `--duration-wait-grace` (nothing said), `reading` past it, `ready` once held,
  * or why it couldn't be read.
  */
 export type ListHold = "quiet" | "reading" | "ready" | { failed: string };

@@ -1,8 +1,8 @@
 <!--
   The transcript's head dissolving into the chosen tab: rows scrolled up past
   the transcript's top edge blur progressively toward it, up to
-  `--c-head-fade-blur` at the edge over `--c-head-fade`, and dissolve into the
-  chosen tab's sheet (`--tab-sheet`, the fill PaneTabs paints the tab in), so
+  `--spacing-c-head-fade-blur` at the edge over `--spacing-c-head-fade`, and dissolve into the
+  chosen tab's sheet (`--color-tab-sheet`, the fill PaneTabs paints the tab in), so
   at the edge they have become the tab's fill and the transcript and its tab
   read as one sheet (owner: "it should not just be a blur, but it should blur
   into the color of the highlighted tab"). A pane draws it beside FootFade, in
@@ -26,7 +26,7 @@
   changes the other in the same frame.
 
   Scrolled to the very top there is nothing under it and it is clear; it comes
-  in over the first `--c-head-fade` of scroll. The pane names the transcript's
+  in over the first `--spacing-c-head-fade` of scroll. The pane names the transcript's
   scroll timeline in scope (`timeline-scope: --transcript-head`); Transcript's
   scroller is that timeline. The fade-in is on each layer, never on the band:
   an ancestor below full opacity is a backdrop root, and the layers in it would
@@ -39,7 +39,7 @@
     band,
     tint = "bg-tab-sheet",
   }: {
-    /** The band's height, a CSS length: `--c-head-fade` under a tab strip, a bar's height under a floating bar. */
+    /** The band's height, a CSS length: `--spacing-c-head-fade` under a tab strip, a bar's height under a floating bar. */
     band?: string;
     /** The ground the rows dissolve into, a background class: the chosen tab's sheet by default. */
     tint?: string;
@@ -50,7 +50,7 @@
   data-slot="head-fade"
   aria-hidden="true"
   class="absolute inset-x-0 top-0 z-1 h-(--band) pointer-events-none"
-  style:--band={band ?? "var(--c-head-fade)"}
+  style:--band={band ?? "var(--spacing-c-head-fade)"}
 >
   <!-- Each layer clear while nothing is under it: at rest, and whenever the
        transcript does not scroll (its timeline is inactive). -->

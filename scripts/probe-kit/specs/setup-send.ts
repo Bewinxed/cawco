@@ -42,7 +42,7 @@
  *    reload), and never a session nothing has been said in (nightly 6688: "Nothing has been said here yet · Ask Claude Code
  *    about this folder"). Then his seat changes places, the head's going and coming
  *    back while the one over the board lands and leaves within the head's
- *    --dur-panel (Routines, then Board and Routines again 60ms apart): the
+ *    --duration-panel (Routines, then Board and Routines again 60ms apart): the
  *    head's seat still opens and closes his panel, drawn with it at every
  *    press. (Nightly 6688: the seat's `aria-expanded` changed and no panel
  *    drew at 1440, its one anchor cleared by the seat that left.)
@@ -905,7 +905,7 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
     undefined,
     { timeout: 10_000 }
   );
-  // Routines, then Board again inside the head's --dur-panel: the head's
+  // Routines, then Board again inside the head's --duration-panel: the head's
   // seat slides out and is called back as it went, the 80 lands and leaves.
   // The form stays open across the tabs (`adding`), so Board seats him in
   // the head whether or not the board would stand him (a setup page Caw
@@ -925,7 +925,7 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
     const board = tabOf("Board");
     // Read every frame from the press until the 80 and the head's seat both
     // stand, or 2 s went by: the 80 is drawn in the update that seats him
-    // no more, while the head's seat leaves over --dur-panel (ProjectHead
+    // no more, while the head's seat leaves over --duration-panel (ProjectHead
     // `transition:slot`, 280 ms). At the first frame both stand, Board
     // calls the seat back as it goes. Each frame is [ms, 80, seat, form].
     const frames: [number, number, number, number][] = [];

@@ -63,7 +63,7 @@
     ink?: StepInk;
     /**
      * This step is new — it appeared under a block already on screen — and
-     * fades in (--dur-menu). Read once, at mount: a step drawn with its block
+     * fades in (--duration-menu). Read once, at mount: a step drawn with its block
      * (history, a block opened, a remount) never replays.
      */
     enters?: boolean;
@@ -88,20 +88,20 @@
   const entering = untrack(() => enters);
 
   /**
-   * A step's glyph changing cross-fades in its cell (--dur-control), and the
+   * A step's glyph changing cross-fades in its cell (--duration-control), and the
    * connector a step gains when the next one starts draws down from it
-   * (--dur-toggle). Neither plays on a step's first render.
+   * (--duration-toggle). Neither plays on a step's first render.
    */
   function glyphFade(_node: Element) {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
   }
   function draw(_node: Element) {
     return {
-      duration: dur("--dur-toggle"),
+      duration: dur("--duration-toggle"),
       easing: easeOut,
       css: (t: number) => `transform-origin: top; scale: 1 ${t}`,
     };

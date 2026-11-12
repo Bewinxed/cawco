@@ -4,8 +4,8 @@
   /**
    * The scrim (DESIGN.md, Materials: "the page's own background at 72% with
    * a 2px blur, behind dialogs and sheets"), every kit dialog's, alert
-   * dialog's, sheet's and drawer's. It fades in over --dur-panel and out
-   * over --dur-exit with its surface. One that leaves before its dialog
+   * dialog's, sheet's and drawer's. It fades in over --duration-panel and out
+   * over --duration-exit with its surface. One that leaves before its dialog
    * says it is closed (the lightbox flying its picture home, `leaving`)
    * fades out then. One opened over another open scrim draws nothing of
    * its own (`data-stacked`, scrim-stack.ts): there is one scrim.

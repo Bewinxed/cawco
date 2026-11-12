@@ -122,7 +122,7 @@
   aria-label="Output of {titleOf(install)}"
   style:--output-head="{headHeight}px"
   class={[
-    "fixed z-(--layer-float) flex flex-col bg-surface-raised shadow-drawer timeline-scope-transcript-head transition-[translate,opacity] duration-(--dur-panel) ease-drawer",
+    "fixed z-(--layer-float) flex flex-col bg-surface-raised shadow-drawer timeline-scope-transcript-head transition-[translate,opacity] duration-(--duration-panel) ease-drawer",
     phone.current
       ? "inset-0 data-[state=closed]:translate-y-full"
       : "inset-y-0 end-0 w-c-connect-w border-s border-s-border-hairline data-[state=closed]:translate-x-full",
@@ -186,8 +186,8 @@
       asker={asks}
       at="stop-output"
       class="flex-none py-space-3"
-      end="var(--space-5)"
-      indent="var(--space-5)"
+      end="var(--spacing-space-5)"
+      indent="var(--spacing-space-5)"
     />
   </div>
   <div

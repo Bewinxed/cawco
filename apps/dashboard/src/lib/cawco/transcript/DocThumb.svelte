@@ -47,7 +47,7 @@
     !!file && file.progress !== undefined && !file.failed && !file.href
   );
   const BOX =
-    "inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--dur-control) motion-safe:ease-out";
+    "inline-flex items-center gap-space-2 h-(--tx-shot-thumb) max-w-c-doc-max py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:duration-(--duration-control) motion-safe:ease-out";
 </script>
 
 {#snippet face()}

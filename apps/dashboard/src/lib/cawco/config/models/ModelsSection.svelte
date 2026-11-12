@@ -425,7 +425,7 @@
     detach(readImage(), "readImage");
   });
   /** A status line's swap: each line blurs in over the panel tier and out over the exit's. */
-  const lineBlur = (tier: "--dur-panel" | "--dur-exit") => ({
+  const lineBlur = (tier: "--duration-panel" | "--duration-exit") => ({
     duration: dur(tier),
     easing: easeOut,
     amount: 2,
@@ -491,7 +491,7 @@
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
-      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--dur-morph) motion-safe:ease-drawer"
+      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
       style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
       <!-- A status line that swaps: the lines cross-fade over each other in one grid cell. -->
@@ -502,8 +502,8 @@
             aria-live="polite"
             class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-tone={phase === "connected" ? "ok" : "off"}
-            in:blur={lineBlur("--dur-panel")}
-            out:blur={lineBlur("--dur-exit")}
+            in:blur={lineBlur("--duration-panel")}
+            out:blur={lineBlur("--duration-exit")}
           >
             {#if phase === "exchanging"}
               <LiveDot data-pulse data-slot="dot" size="row" tone="muted" />
@@ -602,7 +602,7 @@
       />
     </Field>
     <div
-      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--dur-morph) motion-safe:ease-drawer"
+      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
       style:block-size={keyHeight ? `${keyHeight}px` : undefined}
     >
       <div data-slot="stack" class="grid" {@attach measureKey}>
@@ -613,8 +613,8 @@
             class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
-            in:blur={lineBlur("--dur-panel")}
-            out:blur={lineBlur("--dur-exit")}
+            in:blur={lineBlur("--duration-panel")}
+            out:blur={lineBlur("--duration-exit")}
           >
             {#if jev?.typesafe}
               {@render doneCheck()}

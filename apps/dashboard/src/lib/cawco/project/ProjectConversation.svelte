@@ -459,7 +459,7 @@
    * instead.
    */
   const reserved = $derived(
-    `calc(var(--space-4) + var(--safe-bottom) + ${composerFoot > 0 ? `${composerFoot}px` : "var(--c-composer-panel)"} + var(--space-2))`
+    `calc(var(--spacing-space-4) + var(--safe-bottom) + ${composerFoot > 0 ? `${composerFoot}px` : "var(--spacing-c-composer-panel)"} + var(--spacing-space-2))`
   );
 </script>
 
@@ -497,7 +497,7 @@
   class="relative flex h-full min-h-0 flex-auto flex-col timeline-scope-transcript-head"
   data-caw-panel
   data-caw-tab={onPreview ? "preview" : "assistant"}
-  style:--bar-room={shown || sheet ? "var(--c-top-bar-h)" : undefined}
+  style:--bar-room={shown || sheet ? "var(--spacing-c-top-bar-h)" : undefined}
 >
   {#if (shown || sheet) && !onPreview}
     <BarFloat tint="bg-surface-recess">
@@ -586,7 +586,10 @@
             browsing={null}
             browsingCwd=""
             browsingHarness={undefined}
-            docked={{ draft: lead.draft, headRoom: "var(--c-top-bar-h)" }}
+            docked={{
+              draft: lead.draft,
+              headRoom: "var(--spacing-c-top-bar-h)",
+            }}
             focused={!onPreview}
             afterRows={setup ? setupTail : atWorkTail}
             afterRowsAtWork={setup ? !handedOver(setup) : atWork}
@@ -628,7 +631,7 @@
         <div
           data-slot="pane"
           class="@container relative flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess pb-(--reserved)"
-          style:--composer-clearance="var(--space-4)"
+          style:--composer-clearance="var(--spacing-space-4)"
           style:--reserved={reserved}
         >
           <!-- The hero, on the composer's start edge (ConversationHero). -->
@@ -668,7 +671,7 @@
             <div
               class="absolute inset-x-0 bottom-(--off-bottom) z-(--layer-dock) mx-auto w-c-composer-w"
               data-safe-bottom
-              style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
+              style:--off-bottom={"calc(var(--spacing-space-4) + var(--safe-bottom))"}
               in:crossIn
             >
               <Alert layout="row" role="status" surface="card">
@@ -738,7 +741,7 @@
       height="room"
       overflow="clip"
       pad="none"
-      style="--lead-w: min(var(--c-lead-card-w), calc(100vw - var(--space-7))); --pop-max-h: min(var(--c-lead-card-max-h), var(--bits-popover-content-available-height, var(--c-sheet-max-h)))"
+      style="--lead-w: min(var(--spacing-c-lead-card-w), calc(100vw - var(--spacing-space-7))); --pop-max-h: min(var(--spacing-c-lead-card-max-h), var(--bits-popover-content-available-height, var(--spacing-c-sheet-max-h)))"
       collisionPadding={12}
       customAnchor={cardAnchor}
       onfocusin={() => {

@@ -77,7 +77,7 @@
   let { hook, taken }: { hook: FleetHook | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--hue-cyan-500)";
+  const HUE = "var(--color-hue-cyan-500)";
 
   let draft = $state<HookDraft>(
     untrack(() => (hook ? draftOf(hook) : blankHook()))
@@ -503,11 +503,11 @@
       options={HANDLERS}
       value={draft.handler.type}
     />
-    <!-- One handler's fields cross-fade into the next's (--dur-control) in
-         one box, whose height follows over --dur-pop on --ease-drawer. -->
+    <!-- One handler's fields cross-fade into the next's (--duration-control) in
+         one box, whose height follows over --duration-pop on --ease-drawer. -->
     <div
       class="relative flex flex-col"
-      {@attach morph({ ms: dur("--dur-pop") })}
+      {@attach morph({ ms: dur("--duration-pop") })}
     >
       {#if draft.handler.type === "command"}
         <div

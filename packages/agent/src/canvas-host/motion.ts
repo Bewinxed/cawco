@@ -12,7 +12,7 @@
 const tokenValue = (token: string): string =>
   getComputedStyle(document.documentElement).getPropertyValue(token).trim();
 
-/** A token's duration in ms (`--dur-fade` is 200ms). */
+/** A token's duration in ms (`--duration-fade` is 200ms). */
 export const tokenMs = (token: string): number =>
   Number.parseFloat(tokenValue(token)) || 0;
 

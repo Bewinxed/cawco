@@ -69,7 +69,7 @@
   <!-- The states share this cell: the one leaving is pinned in it (crossOut). -->
   <div
     data-slot="body"
-    class="relative w-full transition-[opacity] duration-(--dur-fade) ease-out group-data-leaving:opacity-0"
+    class="relative w-full transition-[opacity] duration-(--duration-fade) ease-out group-data-leaving:opacity-0"
   >
     {#key fleet}
       <!-- Over the cards, the words take the cards' left edge; with one

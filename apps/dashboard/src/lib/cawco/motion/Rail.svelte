@@ -21,7 +21,7 @@
    * across the home's Working/Finished switch.
    *
    * The thumb and the label are placed from the items' own boxes, so items
-   * of any size work; both glide over --dur-morph on --ease-in-out (with
+   * of any size work; both glide over --duration-morph on --ease-in-out (with
    * less motion they move at once and only the label's fade runs).
    */
   import { arrowStep } from "../roving";
@@ -216,7 +216,7 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="pointer-events-none absolute top-0 left-0 concentric-sm bg-surface-lift shadow-raised motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:duration-(--dur-morph) motion-safe:data-placed:ease-in-out"
+    class="pointer-events-none absolute top-0 left-0 concentric-sm bg-surface-lift shadow-raised motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:duration-(--duration-morph) motion-safe:data-placed:ease-in-out"
     data-placed={placed || undefined}
     style:height={thumbBox ? `${thumbBox.h}px` : undefined}
     style:opacity={thumbBox ? 1 : 0}
@@ -229,7 +229,7 @@
       aria-checked={entry.id === value}
       aria-label={entry.label}
       class={cn(
-        "press-tint relative select-none concentric-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong",
+        "press-tint relative select-none concentric-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--duration-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong",
         itemClass
       )}
       data-rail-item-class={itemClass}
@@ -255,8 +255,8 @@
     <span
       data-slot="tip"
       aria-hidden="true"
-      class="pointer-events-none absolute top-0 left-0 z-5 flex items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 shadow-raised transition-[opacity] duration-(--dur-control) ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-off) group-axis-y/rail:left-(--tip-off)"
-      style:--tip-off="calc(100% + var(--space-2))"
+      class="pointer-events-none absolute top-0 left-0 z-5 flex items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 shadow-raised transition-[opacity] duration-(--duration-control) ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-off) group-axis-y/rail:left-(--tip-off)"
+      style:--tip-off="calc(100% + var(--spacing-space-2))"
       style:height={tipBox ? `${tipBox.h}px` : undefined}
       style:opacity={tip >= 0 ? 1 : 0}
       style:transform={translate(tipBox, axis)}

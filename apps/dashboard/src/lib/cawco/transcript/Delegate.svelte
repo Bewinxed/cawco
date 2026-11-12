@@ -391,13 +391,13 @@
     }
   );
   /**
-   * A phase change cross-fades the line in one cell over --dur-control, the
+   * A phase change cross-fades the line in one cell over --duration-control, the
    * old one going as the new one comes. A line with nothing after it — the
    * report's headline as the card opens — goes at once, as it always has.
    */
   function lineSwap(_node: Element) {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -434,7 +434,7 @@
   data-slot="rail-row"
   data-tx-rail
   class="rail-row"
-  style:--well-at="calc(var(--x-hang) - var(--space-1))"
+  style:--well-at="calc(var(--x-hang) - var(--spacing-space-1))"
 >
   <Collapsible.Root onOpenChange={onToggle} {open}>
     <!-- The head row: the trigger takes the width, the jump link beside it
@@ -442,7 +442,7 @@
     <div
       data-slot="head"
       class="flex items-center gap-space-1"
-      style:--hit-gap-x="var(--space-1)"
+      style:--hit-gap-x="var(--spacing-space-1)"
     >
       <Collapsible.Trigger data-bhead class="group/bhead flex-auto" look="head">
         <!-- The mark the delegate tray's chip flies out of, the first time
@@ -453,18 +453,18 @@
           data-slot="mark"
           aria-hidden="true"
           class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
-          style:--mark-bg="var(--mark-{markHue(hueSeed)})"
+          style:--mark-bg="var(--color-mark-{markHue(hueSeed)})"
           {@attach trayCard(() => (elsewhere ? null : id))}
           ><Sprite class="size-space-3 block text-mark-glyph" /></span
         >
         <span
-          class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-brand-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--dur-control) ease-out"
+          class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-brand-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--duration-control) ease-out"
           >{label}</span
         >
         <span
           data-slot="chev"
           aria-hidden="true"
-          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
+          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
           data-box><IconChevronRight class="size-icon-sm block" /></span
         >
         <!-- Its words on their x-height in the box (.mark-text): the trim's
@@ -509,11 +509,11 @@
              past the trim's room given back, so the box keeps its height. A phase
              change carries its tone across with its words. -->
         <span
-          class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-status-idle-bg text-status-idle-ink whitespace-nowrap transition-[background-color,color] duration-(--dur-control) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
+          class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-status-idle-bg text-status-idle-ink whitespace-nowrap transition-[background-color,color] duration-(--duration-control) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
           data-tone={tone}
           data-delegate-tone={tone}
           data-box
-          style:--pill-py="calc(var(--space-row) + (1lh - 1ex) / 2)"
+          style:--pill-py="calc(var(--spacing-space-row) + (1lh - 1ex) / 2)"
         >
           <MorphText text={pillWords} />
           {#if elapsed}
@@ -541,7 +541,7 @@
       {#if id}
         <a
           aria-label="Open {label} in its own view"
-          class="touch-hit flex-none size-c-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+          class="touch-hit flex-none size-c-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
           href={conversationHref(id, cawco.instanceIndex)}
           title="Open {label} in its own view"
         >

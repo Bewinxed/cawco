@@ -104,8 +104,8 @@ const svelteShims = async (): Promise<string> =>
 
 const CANVAS = new URL("./canvas/runtime.ts", import.meta.url).pathname;
 const REPO = new URL("../../../../", import.meta.url).pathname;
-/** CawCo's tokens as the dashboard builds them (`bun run tokens`), for the canvas page's own style. */
-const TOKENS = join(REPO, "apps/dashboard/src/lib/tokens/tokens.css");
+/** CawCo's tokens as plain CSS (the decision-page kit's, the declarations of the dashboard's theme.css), for the canvas page's own style. */
+const TOKENS = join(REPO, "packages/hub/skills/decision-page/kit/tokens.css");
 
 /**
  * The house faces the canvas page's own style is set in (DESIGN.md's type), as every

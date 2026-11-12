@@ -17,7 +17,11 @@ const phone = new MediaQuery("(width < 640px)");
  * browser, where it opens.
  */
 export const screenInset = (): number =>
-  browser ? numberOf(phone.current ? "--c-screen-margin" : "--space-5") : 0;
+  browser
+    ? numberOf(
+        phone.current ? "--spacing-c-screen-margin" : "--spacing-space-5"
+      )
+    : 0;
 
 export interface PopoverMember {
   readonly align: "start" | "end" | "center";

@@ -116,7 +116,7 @@
             { height: `${from}px`, overflow: "hidden" },
             { height: `${to}px`, overflow: "hidden" },
           ],
-          { duration: dur("--dur-morph"), easing: CURVE.drawer }
+          { duration: dur("--duration-morph"), easing: CURVE.drawer }
         );
       }
     });

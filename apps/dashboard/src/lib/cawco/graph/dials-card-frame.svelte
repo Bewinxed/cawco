@@ -74,7 +74,7 @@
    * stands empty beside the undo glyphs.
    */
   const CARD_W =
-    "min(var(--c-measure), calc(var(--c-graph-move-name-w) + var(--c-graph-control-w) + var(--c-btn-h-xs) + 4 * var(--space-3) + 2px))";
+    "min(var(--spacing-c-measure), calc(var(--spacing-c-graph-move-name-w) + var(--spacing-c-graph-control-w) + var(--spacing-c-btn-h-xs) + 4 * var(--spacing-space-3) + 2px))";
 </script>
 
 <div

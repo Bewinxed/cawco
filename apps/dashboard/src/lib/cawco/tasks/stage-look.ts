@@ -69,10 +69,10 @@ export const STAGE_GLYPHS: Record<StageIcon, Component> = {
 
 /** Each colour's section hue token; a stage with none takes the muted ink. */
 export const STAGE_HUES: Record<StageColor, string> = {
-  cyan: "var(--hue-cyan-500)",
-  amber: "var(--hue-amber-500)",
-  orange: "var(--hue-orange-500)",
-  green: "var(--hue-green-500)",
+  cyan: "var(--color-hue-cyan-500)",
+  amber: "var(--color-hue-amber-500)",
+  orange: "var(--color-hue-orange-500)",
+  green: "var(--color-hue-green-500)",
 };
 
 /**
@@ -99,6 +99,8 @@ export function markOf(stage: {
   return {
     glyph: STAGE_GLYPHS[stage.icon ?? KIND_GLYPHS[stage.kind]],
     hue:
-      stage.color && stage.icon ? STAGE_HUES[stage.color] : "var(--ink-muted)",
+      stage.color && stage.icon
+        ? STAGE_HUES[stage.color]
+        : "var(--color-ink-muted)",
   };
 }

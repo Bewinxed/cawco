@@ -74,9 +74,9 @@
 <footer
   data-slot={slot}
   data-on-padding={onPadding || undefined}
-  class="sticky -bottom-space-2 z-1 mt-auto flex flex-none flex-col gap-space-3 bg-surface-raised pt-space-3 pb-(--foot-pb) data-on-padding:-mb-space-6 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-c-edge-fade-len before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--dur-control) before:ease-out data-stuck:before:opacity-100 max-phone:before:h-c-edge-fade-len-phone"
+  class="sticky -bottom-space-2 z-1 mt-auto flex flex-none flex-col gap-space-3 bg-surface-raised pt-space-3 pb-(--foot-pb) data-on-padding:-mb-space-6 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-c-edge-fade-len before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:duration-(--duration-control) before:ease-out data-stuck:before:opacity-100 max-phone:before:h-c-edge-fade-len-phone"
   data-safe-bottom
-  style:--foot-pb="calc(var(--space-6) + var(--safe-bottom))"
+  style:--foot-pb="calc(var(--spacing-space-6) + var(--safe-bottom))"
   {@attach aboveKeyboard()}
   {@attach stuck}
 >

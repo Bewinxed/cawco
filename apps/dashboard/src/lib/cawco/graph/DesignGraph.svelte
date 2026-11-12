@@ -409,7 +409,9 @@
   } as const;
   const risingName = $derived(rising ? RISING_NAMES[rising] : "");
   /** Where what rises stands: a step clear of the tools' top. */
-  const riseFoot = $derived(`calc(${toolsHeight}px + 2 * var(--space-3))`);
+  const riseFoot = $derived(
+    `calc(${toolsHeight}px + 2 * var(--spacing-space-3))`
+  );
   /** The kept state of each component, by its states file. */
   let keptOf = $state<Record<string, Pick>>({});
   /** The state he kept on the component in front, while its states file still has it; else where the component opens. */
@@ -1632,8 +1634,8 @@
           ]}
           data-slot="graph-rising"
           style:--rise-foot={riseFoot}
-          in:rise={"--dur-panel"}
-          out:rise={"--dur-exit"}
+          in:rise={"--duration-panel"}
+          out:rise={"--duration-exit"}
         >
           {@render risingBody()}
         </div>

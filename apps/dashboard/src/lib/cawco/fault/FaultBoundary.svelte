@@ -116,7 +116,7 @@
              its width and its narrow screen's edges (Composer `dock`). -->
         <div
           class="pointer-events-none absolute inset-x-0 bottom-(--dock-foot) flex justify-center"
-          style:--dock-foot="calc(var(--space-4) + var(--safe-bottom, 0px))"
+          style:--dock-foot={"calc(var(--spacing-space-4) + var(--safe-bottom, 0px))"}
         >
           <div
             class="pointer-events-auto w-c-composer-w min-w-0 rounded-lg border border-border-control bg-surface-raised px-space-3 shadow-tile max-desk:mx-space-3 max-desk:w-auto max-desk:flex-1"
@@ -135,7 +135,7 @@
         <div
           data-bar-over={barOver || undefined}
           class="relative z-1 flex min-h-c-tab-row-h min-w-0 flex-none items-center bg-surface-shelf px-space-3 max-desk:data-bar-over:pt-(--bar-room)"
-          style:--bar-room="calc(var(--c-top-bar-h) + var(--space-3))"
+          style:--bar-room={"calc(var(--spacing-c-top-bar-h) + var(--spacing-space-3))"}
         >
           <div class="min-w-0 flex-1">
             <LineFault

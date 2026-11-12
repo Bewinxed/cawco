@@ -106,8 +106,8 @@ export function layoutTasks(
   const graph = new dagre.graphlib.Graph();
   graph.setGraph({
     rankdir: flow,
-    nodesep: numberOf("--space-5"),
-    ranksep: numberOf("--space-8") * 2,
+    nodesep: numberOf("--spacing-space-5"),
+    ranksep: numberOf("--spacing-space-8") * 2,
     marginx: 0,
     marginy: 0,
   });

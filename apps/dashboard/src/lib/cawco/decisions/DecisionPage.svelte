@@ -141,7 +141,7 @@
   let dockRoom = $state(0);
   /**
    * What the live page keeps clear at its foot: the dock, and the foot
-   * fade's dissolve over it (FootFade, `--space-8` above what it holds
+   * fade's dissolve over it (FootFade, `--spacing-space-8` above what it holds
    * solid), so the page's own foot (its Send picks bar) stands above the
    * fade, never under its gradient.
    */
@@ -159,7 +159,7 @@
       dockRoom = Math.round(node.offsetHeight + below);
       pageInset =
         dockRoom +
-        (Number.parseFloat(style.getPropertyValue("--space-8")) || 0);
+        (Number.parseFloat(style.getPropertyValue("--spacing-space-8")) || 0);
     };
     // Read now, and a change in the next frame (frameObserver): the page
     // pads for it.
@@ -254,7 +254,7 @@
     data-live={!decided || undefined}
     data-slot="page-scroll"
     style:--dock-room="{dockRoom}px"
-    style:--scroll-pad="calc(var(--dock-room) + var(--space-4))"
+    style:--scroll-pad="calc(var(--dock-room) + var(--spacing-space-4))"
     bind:this={scroller}
   >
     <!-- The bar: one row, no ground; the back symbol and the title. -->
@@ -366,7 +366,7 @@
   <form
     data-slot="dock"
     class="absolute inset-x-0 bottom-(--dock-bottom) z-(--layer-dock) mx-auto flex w-c-composer-w max-w-full flex-col gap-space-2 max-desk:w-full"
-    style:--dock-bottom="calc(var(--space-4) + var(--safe-bottom))"
+    style:--dock-bottom="calc(var(--spacing-space-4) + var(--safe-bottom))"
     onsubmit={(event) => {
       event.preventDefault();
       sendNote();
@@ -422,7 +422,7 @@
         pending={sendingNote}
         shape="inset"
         size="icon-composer"
-        style="--btn-icon: var(--icon-md)"
+        style="--btn-icon: var(--spacing-icon-md)"
         type="submit"
         variant="outline"
       />

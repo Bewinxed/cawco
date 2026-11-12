@@ -652,7 +652,7 @@
       data-needs-card-mark
       aria-hidden="true"
       class="size-icon-md flex-none"
-      style="color: var(--mark-{project.hue})"
+      style="color: var(--color-mark-{project.hue})"
     />
     <span data-slot="project-name" class="type-label text-ink-strong"
       >{project.name}</span
@@ -792,8 +792,8 @@
         <span
           data-slot="end"
           class="absolute end-(--end-x) top-(--end-top) flex type-label"
-          style:--end-top="calc(var(--space-2) + (1lh - var(--c-btn-h-xs)) / 2)"
-          style:--end-x="calc(var(--space-3) - var(--peek-ink))"
+          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-c-btn-h-xs)) / 2)"}
+          style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
         >
           <Tip disabled={peekTipOff()} label="Peek">
             {#snippet children(tip)}
@@ -808,8 +808,8 @@
                 class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--peek-press) coarse:after:start-(--peek-hit-start) coarse:after:end-(--peek-hit-end)"
                 onclick={peekAsk}
                 {onkeydown}
-                style:--peek-hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"}
-                style:--peek-hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--peek-ink))"}
+                style:--peek-hit-end={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 + var(--peek-ink))"}
+                style:--peek-hit-start={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 - var(--peek-ink))"}
                 style:--peek-press="scale(var(--press-scale))"
                 type="button"
               >
@@ -826,8 +826,8 @@
         <span
           data-slot="end"
           class="absolute end-(--end-x) top-(--end-top) flex type-label"
-          style:--end-top="calc(var(--space-2) + (1lh - var(--c-btn-h-xs)) / 2)"
-          style:--end-x="calc(var(--space-3) - var(--peek-ink))"
+          style:--end-top={"calc(var(--spacing-space-2) + (1lh - var(--spacing-c-btn-h-xs)) / 2)"}
+          style:--end-x="calc(var(--spacing-space-3) - var(--peek-ink))"
         >
           <Tip disabled={peekTipOff()} label={artifactWords.notNow}>
             {#snippet children(tip)}
@@ -837,8 +837,8 @@
                 aria-label={artifactWords.notNowNamed(item.title)}
                 class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press hover:bg-surface-hover hover:text-ink-strong motion-safe:active:transform-(--x-press) coarse:after:start-(--x-hit-start) coarse:after:end-(--x-hit-end)"
                 onclick={notNow}
-                style:--x-hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--peek-ink))"}
-                style:--x-hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--peek-ink))"}
+                style:--x-hit-end={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 + var(--peek-ink))"}
+                style:--x-hit-start={"calc((var(--spacing-c-btn-h-xs) - var(--spacing-c-btn-h-lg)) / 2 - var(--peek-ink))"}
                 style:--x-press="scale(var(--press-scale))"
                 type="button"
               >
@@ -931,14 +931,14 @@
           <span
             data-slot="send"
             class="relative col-3 row-3 flex items-center self-center justify-self-end"
-            style:--send-hang={"calc(-1 * (1px + var(--space-2) + var(--figure-bearing)))"}
+            style:--send-hang={"calc(-1 * (1px + var(--spacing-space-2) + var(--figure-bearing)))"}
           >
             <Button
               data-needs-card-send
               class="me-(--send-hang)"
               ring="inset"
               pad="more"
-              style="--more-px: var(--space-2);"
+              style="--more-px: var(--spacing-space-2);"
               aria-label={artifactWords.sendNamed(item.unsent, item.title)}
               disabled={held}
               failed={sendRefused !== null}

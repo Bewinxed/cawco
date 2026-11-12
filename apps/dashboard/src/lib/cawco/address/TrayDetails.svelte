@@ -64,7 +64,7 @@
     >
       <IconChevronDown
         aria-hidden="true"
-        class="size-icon-md transition-transform duration-(--dur-control) group-aria-expanded/fold:rotate-180"
+        class="size-icon-md transition-transform duration-(--duration-control) group-aria-expanded/fold:rotate-180"
       />
       <span>Details</span>
     </button>

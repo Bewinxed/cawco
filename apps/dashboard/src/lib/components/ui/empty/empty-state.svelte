@@ -10,7 +10,7 @@
    * it while there is room and under it when there is not, so the sentence
    * keeps its line. `pad`, its callers' looks: standing in a pane, a pane's
    * own side pads; standing where a transcript's first row would, the
-   * transcript's start edge (--space-7, --space-5 under the desk line).
+   * transcript's start edge (--spacing-space-7, --spacing-space-5 under the desk line).
    */
   const emptyStateVariants = tv({
     base: "flex flex-col items-start gap-space-2 py-space-6 text-start",

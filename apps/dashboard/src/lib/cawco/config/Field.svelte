@@ -2,7 +2,7 @@
   /**
    * A labelled control: the label above, then one line under it that says
    * the hint, a caution, or the problem. The three share that line's box and
-   * cross-fade in it over --dur-control as they take turns, its height
+   * cross-fade in it over --duration-control as they take turns, its height
    * following the words; the line folds open and shut when there is
    * something, or nothing, to say.
    */

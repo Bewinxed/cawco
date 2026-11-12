@@ -2,8 +2,8 @@
   /**
    * One turn of a conversation, as the transcript draws it (MessageRow) and
    * a pin's thread does (PinCard): its place in the rhythm, a turn
-   * --space-4 under the one before, a later turn of the same speaker
-   * --space-2 under it, and the reader's later messages abutting their well
+   * --spacing-space-4 under the one before, a later turn of the same speaker
+   * --spacing-space-2 under it, and the reader's later messages abutting their well
    * (Well). What it holds is the caller's: the speaker line (Who), the
    * words, and for the reader the well around them. It imports nothing of
    * the transcript or the fleet, so an artifact's own tab can draw it.

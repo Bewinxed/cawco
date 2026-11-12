@@ -151,7 +151,7 @@
     data-box
     class={iconTileVariants({
       class: [
-        "transition-[border-color] duration-(--dur-control) ease-out",
+        "transition-[border-color] duration-(--duration-control) ease-out",
         install.returning === null &&
           install.state !== "joined" &&
           "border border-dashed border-border-control shadow-none",

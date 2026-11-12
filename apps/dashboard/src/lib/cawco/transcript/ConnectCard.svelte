@@ -138,7 +138,10 @@
     if (signIn.stage === "waiting") {
       untrack(() => connectSignIns.landed(id));
     }
-    const hold = setTimeout(() => connectSignIns.forget(id), dur("--dur-hold"));
+    const hold = setTimeout(
+      () => connectSignIns.forget(id),
+      dur("--duration-hold")
+    );
     return () => clearTimeout(hold);
   });
 

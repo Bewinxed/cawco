@@ -11,7 +11,7 @@
   const TOKEN_NAME = /^[a-z]+(?:-[a-z0-9]+)+$/u;
   /** A colour as CSS paints it: a design system name as its variable, any other as written. */
   export const paint = (colour: string): string =>
-    TOKEN_NAME.test(colour) ? `var(--${colour})` : colour;
+    TOKEN_NAME.test(colour) ? `var(--color-${colour})` : colour;
 
   /** An option said as a figure and its unit where it is one ("36px": "36 px"), else as written. */
   export const optionSaid = (option: string): string => {

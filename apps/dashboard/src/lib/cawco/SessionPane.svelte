@@ -772,7 +772,7 @@
   /**
    * The placeholder, as a function of what stands in the area: over the
    * history still on its way, and over a transcript not yet drawn. Its
-   * leaving fades over --dur-control on top of rows already in place, which
+   * leaving fades over --duration-control on top of rows already in place, which
    * is the cross-fade, and nothing under it moves.
    */
   const veiled = $derived(!(prestart || namedState) && (waiting || !shown));
@@ -1329,7 +1329,7 @@
    * The room this pane's transcript keeps clear at its foot for the
    * composer standing over it: the composer's one-line box, and the tray
    * row on it while something stands in that row (`trayStands`; app.css
-   * `--c-composer-panel`, `--c-tray-row`). An empty row's room kept was a
+   * `--spacing-c-composer-panel`, `--spacing-c-tray-row`). An empty row's room kept was a
    * blank band under the last row (42px in Caw's column), as the
    * suggestion row's was (59px). Everything else the composer holds — a
    * longer draft, attachments, the suggestion chips while one is typed, a
@@ -1349,7 +1349,7 @@
    */
   const composerRoom = $derived(
     writable
-      ? `var(--c-composer-panel)${trayStands ? " + var(--c-tray-row)" : ""}`
+      ? `var(--spacing-c-composer-panel)${trayStands ? " + var(--spacing-c-tray-row)" : ""}`
       : "0px"
   );
   /**
@@ -1361,7 +1361,7 @@
    */
   const reserved = $derived(
     docked && writable
-      ? `calc(var(--space-4) + var(--safe-bottom) + ${composerRoom} + var(--space-2))`
+      ? `calc(var(--spacing-space-4) + var(--safe-bottom) + ${composerRoom} + var(--spacing-space-2))`
       : null
   );
 
@@ -1612,8 +1612,8 @@
     data-slot="body"
     class="relative flex min-h-0 min-w-0 flex-auto flex-col pb-(--reserved)"
     style:--composer-clearance={reserved
-      ? "var(--space-4)"
-      : `calc(${composerRoom} + var(--space-4) + var(--space-4))`}
+      ? "var(--spacing-space-4)"
+      : `calc(${composerRoom} + var(--spacing-space-4) + var(--spacing-space-4))`}
     style:--reserved={reserved}
   >
     <!-- The transcript area. Movement between conversations is owned by the
@@ -1662,7 +1662,7 @@
               {firstScreen}
               {focused}
               headRoom={docked?.headRoom}
-              latestInset={reserved ? "var(--space-2)" : undefined}
+              latestInset={reserved ? "var(--spacing-space-2)" : undefined}
               onshown={(drawn) => {
                 shown = drawn;
               }}

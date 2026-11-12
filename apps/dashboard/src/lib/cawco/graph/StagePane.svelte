@@ -107,7 +107,7 @@
    * at 390 thirteen lines took the stage above the drawer.
    */
   const listShown = $derived(
-    listOpen ?? panel >= (browser ? numberOf("--c-graph-stage-min") : 0)
+    listOpen ?? panel >= (browser ? numberOf("--spacing-c-graph-stage-min") : 0)
   );
   const uid = $props.id();
   $effect(() => {
@@ -166,7 +166,7 @@
     <div
       class="pointer-events-none absolute inset-x-0 top-(--notices-top) z-2 flex min-w-0 flex-col items-start gap-space-2 px-space-3 *:pointer-events-auto"
       data-slot="stage-notices"
-      style:--notices-top="calc(var(--side-room, 0px) + var(--space-2))"
+      style:--notices-top="calc(var(--side-room, 0px) + var(--spacing-space-2))"
     >
       {#if stale}
         <BarGlass form="group" title={words.stale}>
@@ -263,7 +263,7 @@
             aria-hidden="true"
             data-box
             class={[
-              "inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring",
+              "inline-block size-space-3 flex-none rounded-xs border-(length:--spacing-c-change-ring-width) border-c-change-ring",
               line.kind === "went" && "border-dashed",
             ]}
           ></span>
@@ -298,7 +298,7 @@
   <span
     aria-hidden="true"
     data-box
-    class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring"
+    class="inline-block size-space-3 flex-none rounded-xs border-(length:--spacing-c-change-ring-width) border-c-change-ring"
   ></span>
   <span class="num"
     >{words.differenceCount(found.length, figureOf(found.length, lang))}</span
@@ -306,7 +306,7 @@
   <IconChevronDown
     aria-hidden="true"
     class={[
-      "size-icon-sm flex-none text-ink-muted transition-transform duration-(--dur-control) ease-out",
+      "size-icon-sm flex-none text-ink-muted transition-transform duration-(--duration-control) ease-out",
       listShown && "rotate-180",
     ]}
     data-box

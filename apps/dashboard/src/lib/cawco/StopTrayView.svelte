@@ -226,7 +226,7 @@
     if (phase === "list" && cut > 0) {
       // A double-click never carries through the arming morph into the stop.
       inert = true;
-      after(dur("--dur-panel"), () => {
+      after(dur("--duration-panel"), () => {
         inert = false;
       });
     }
@@ -241,7 +241,7 @@
   /**
    * The row's tile leaves for the button and the row folds shut behind it.
    * A session waits for its delegates' tiles to leave first; a tile leaving
-   * within a flight of the one before goes --dur-stagger after it.
+   * within a flight of the one before goes --duration-stagger after it.
    */
   export function fly(row: StopRow): void {
     if (row.departed || row.state !== "stopped" || !job.open) {
@@ -258,8 +258,8 @@
       return;
     }
     const at = performance.now();
-    const due = lastLeft + dur("--dur-stagger");
-    if (at - lastLeft < dur("--dur-panel") && due > at) {
+    const due = lastLeft + dur("--duration-stagger");
+    if (at - lastLeft < dur("--duration-panel") && due > at) {
       after(due - at, () => fly(row));
       return;
     }
@@ -274,7 +274,7 @@
       departBox(`${uid}-stop:${row.s.id}`, rowTile, false);
       arrivals.push({ id: row.s.id, fill: fillOf(row) });
       fold(node, false, {
-        ms: dur("--dur-panel"),
+        ms: dur("--duration-panel"),
         easing: CURVE.inOut,
       })?.finished.then(
         () => gone(row),
@@ -283,16 +283,16 @@
       node
         .querySelector(':scope > [data-slot="rin"]')
         ?.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: dur("--dur-exit"),
+          duration: dur("--duration-exit"),
           easing: CURVE.out,
           fill: "forwards",
         });
-      after(dur("--dur-panel"), () => arrive(row));
+      after(dur("--duration-panel"), () => arrive(row));
     } else {
       // Less motion: no flight; the row fades shut with its tile.
       if (node) {
         fold(node, false, {
-          ms: dur("--dur-exit"),
+          ms: dur("--duration-exit"),
           easing: CURVE.out,
           fade: true,
         })?.finished.then(
@@ -507,7 +507,7 @@
         data-slot="rin"
         class="col-span-full grid min-w-0 grid-cols-subgrid"
         style:--fault-end="var(--row-compact-pad-end)"
-        style:--fault-indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"}
+        style:--fault-indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--spacing-space-5)))"}
       >
         <!-- The row's three cells stand on the list's columns (subgrid): its
              mark and title, then its status as wide as the widest status
@@ -556,7 +556,7 @@
             class="mark-line inline-flex items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:group-data-away:col-span-full @max-stop-tray/stop-tray:group-data-away:row-start-2 @max-stop-tray/stop-tray:group-data-away:ps-(--stat-away-indent) @max-stop-tray/stop-tray:group-data-away:pb-space-1"
             data-stop-tray-tone={status.tone}
             data-box
-            style:--stat-away-indent={"calc(var(--mark-size, var(--space-5)) + var(--row-compact-gap))"}
+            style:--stat-away-indent={"calc(var(--mark-size, var(--spacing-space-5)) + var(--row-compact-gap))"}
           >
             <span
               data-slot="glyph"

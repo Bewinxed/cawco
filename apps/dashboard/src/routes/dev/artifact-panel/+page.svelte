@@ -200,11 +200,15 @@
   if (slow > 1) {
     // `drain` slows its close alone: the card it drains pours at speed.
     const slowed = [
-      "--dur-goo-exit",
-      "--dur-goo-content-exit",
+      "--duration-goo-exit",
+      "--duration-goo-content-exit",
       ...(asked === "drain"
         ? []
-        : ["--dur-goo", "--dur-goo-content", "--dur-goo-content-delay"]),
+        : [
+            "--duration-goo",
+            "--duration-goo-content",
+            "--duration-goo-content-delay",
+          ]),
     ];
     for (const name of slowed) {
       // Read off the root as it stands, never through dur(), which would
@@ -420,7 +424,7 @@
           () => {
             cardOpen = false;
           },
-          dur("--dur-goo") / 2
+          dur("--duration-goo") / 2
         );
       }
       if (asked === "drain") {
@@ -429,7 +433,7 @@
           () => {
             cardOpen = false;
           },
-          dur("--dur-goo") + FITTED
+          dur("--duration-goo") + FITTED
         );
       }
       if (asked === "remove") {
@@ -740,7 +744,7 @@
           <!-- The element's chosen line, drawn while it is chosen. -->
           <span
             aria-hidden="true"
-            class="pointer-events-none absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-(length:--c-target-stroke) outline-offset-(--c-target-stroke) outline-transparent outline-solid data-chosen:outline-brand-solid"
+            class="pointer-events-none absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-(length:--spacing-c-target-stroke) outline-offset-(--spacing-c-target-stroke) outline-transparent outline-solid data-chosen:outline-brand-solid"
             data-chosen={chosen === Number(key) || undefined}
             data-spot-box={key}
             style:--box-h="{h * 100}%"

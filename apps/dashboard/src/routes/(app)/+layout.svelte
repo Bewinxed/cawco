@@ -62,7 +62,7 @@
   const toastOffset = $derived(
     composerLift > 0
       ? {
-          bottom: `calc(var(--space-4) + var(--safe-bottom) + ${composerLift}px + var(--space-3))`,
+          bottom: `calc(var(--spacing-space-4) + var(--safe-bottom) + ${composerLift}px + var(--spacing-space-3))`,
         }
       : undefined
   );

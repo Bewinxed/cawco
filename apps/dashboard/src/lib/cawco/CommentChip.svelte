@@ -17,7 +17,7 @@
    * tool call's chip (the owner, 10-26: "just like any tool call I can click
    * the chip to view the comment thread and reply").
    *
-   * Pressing it, or resting a mouse on it for `--dur-peek`, opens the
+   * Pressing it, or resting a mouse on it for `--duration-peek`, opens the
    * thread: on a desk and a tablet the house hover panel (HoverPanel) under
    * the chip, over it where the room under it is short; on a phone the
    * thread's bottom sheet (ThreadSheet). It holds the page's name with Open
@@ -174,7 +174,7 @@
     }
     const box = chip.getBoundingClientRect();
     const inset = px("--hover-panel-inset");
-    const gap = px("--space-1");
+    const gap = px("--spacing-space-1");
     const span = innerWidth - 2 * inset;
     const widest = Math.min(px("--hover-panel-max"), span);
     const x = Math.round(
@@ -185,7 +185,7 @@
     // Under the chip; over it only where the room under it is short and the
     // room over it is more. Over it, the panel stands its own height (the
     // 100%, which the panel's translate reads) above the chip.
-    if (under >= px("--c-hover-panel-room") || under >= over) {
+    if (under >= px("--spacing-c-hover-panel-room") || under >= over) {
       place = {
         x,
         y: `${Math.round(box.bottom + gap)}px`,
@@ -332,7 +332,7 @@
     }
   }
 
-  /* Resting a mouse on the chip opens it after --dur-peek; a finger presses. */
+  /* Resting a mouse on the chip opens it after --duration-peek; a finger presses. */
   let restTimer: ReturnType<typeof setTimeout> | undefined;
   function rest(): void {
     clearTimeout(restTimer);
@@ -343,7 +343,7 @@
       stand();
       problem = null;
       show(true);
-    }, dur("--dur-peek"));
+    }, dur("--duration-peek"));
   }
   $effect(() => () => clearTimeout(restTimer));
 
@@ -530,9 +530,9 @@
         <div
           class="flex min-h-0 min-w-0 w-(--thread-w) max-h-(--thread-h) flex-col gap-space-2"
           data-slot="thread-panel"
-          style:--thread-h="calc(var(--room) - 2 * var(--space-3) - 2px)"
+          style:--thread-h="calc(var(--room) - 2 * var(--spacing-space-3) - 2px)"
           style:--thread-w="calc(min(var(--hover-panel-max), {place.span}px) - 2
-          * var(--space-3) - 2px)"
+          * var(--spacing-space-3) - 2px)"
         >
           {@render thread(pin)}
         </div>

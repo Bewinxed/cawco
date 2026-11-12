@@ -149,7 +149,7 @@
           {#if senderId}
             <a
               data-slot="name"
-              class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--dur-control) can-hover:motion-safe:ease-out"
+              class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--duration-control) can-hover:motion-safe:ease-out"
               href={conversationHref(senderId, cawco.instanceIndex)}
               >{row.name}</a
             >
@@ -183,7 +183,7 @@
           <span
             data-slot="chev"
             aria-hidden="true"
-            class="grid place-items-center group-state-open/toggle:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+            class="grid place-items-center group-state-open/toggle:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out"
             ><IconChevronRight class="size-icon-md block" /></span
           >
         </Collapsible.Trigger>

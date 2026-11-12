@@ -27,7 +27,7 @@
   } = $props();
 
   const hue = $derived(
-    stage.color ? STAGE_HUES[stage.color] : "var(--ink-muted)"
+    stage.color ? STAGE_HUES[stage.color] : "var(--color-ink-muted)"
   );
 </script>
 

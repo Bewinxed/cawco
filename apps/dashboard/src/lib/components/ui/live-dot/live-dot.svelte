@@ -42,7 +42,7 @@
   /**
    * Its breath on the one clock (core breath.ts): every live dot, here and
    * on a previewed page's pills, breathes in step, its loop begun on the
-   * wall clock's multiples of `--breath`. Set as the effect's delay, which
+   * wall clock's multiples of `--duration-breath`. Set as the effect's delay, which
    * leaves `animation-play-state` to CSS (CSS Animations 2, §2: only
    * `play()`, `pause()`, `reverse()` and setting `startTime` take it over),
    * so the rest rule still holds a dot nobody sees still: first from the

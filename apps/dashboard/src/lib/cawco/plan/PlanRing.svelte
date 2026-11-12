@@ -64,8 +64,8 @@
       class="inline-grid place-items-center data-dot:mask-(--hole-mask) rtl:data-dot:mask-(--hole-mask-rtl)"
       data-dot={unseen ? "" : undefined}
       style:--hole="calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
-      style:--hole-mask={"radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--c-tree-mark-hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--c-tree-mark-hole-edge)))"}
-      style:--hole-mask-rtl={"radial-gradient(circle at 0 0, transparent calc(var(--hole) - var(--c-tree-mark-hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--c-tree-mark-hole-edge)))"}
+      style:--hole-mask={"radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--spacing-c-tree-mark-hole-edge)), var(--color-mask-opaque) calc(var(--hole) + var(--spacing-c-tree-mark-hole-edge)))"}
+      style:--hole-mask-rtl={"radial-gradient(circle at 0 0, transparent calc(var(--hole) - var(--spacing-c-tree-mark-hole-edge)), var(--color-mask-opaque) calc(var(--hole) + var(--spacing-c-tree-mark-hole-edge)))"}
     >
       {#if total > 0}
         <TaskRing {done} size="md" {total} />

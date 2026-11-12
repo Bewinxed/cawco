@@ -36,7 +36,7 @@
 
 <span
   class="icon-swap flex-none"
-  style:--icon-swap-dur="var(--dur-control)"
+  style:--icon-swap-dur="var(--duration-control)"
   data-box
   data-mark={state}
 >

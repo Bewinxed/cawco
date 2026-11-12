@@ -40,7 +40,9 @@
     ]}
     style:--corner="{size * 0.28}px"
     style:--side="{size}px"
-    style:--face={member.hue === null ? undefined : `var(--mark-${member.hue})`}
+    style:--face={member.hue === null
+      ? undefined
+      : `var(--color-mark-${member.hue})`}
   >
     {@render inner()}
   </span>

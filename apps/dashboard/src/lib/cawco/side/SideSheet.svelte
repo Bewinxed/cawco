@@ -63,7 +63,7 @@
    * it, the lower one). Opened by its card's
    * Preview button in the transcript, it comes out of the card
    * (motion/share.svelte.ts, clipped open from the card's box over
-   * --dur-panel on --ease-drawer) standing still at that snap: vaul's own
+   * --duration-panel on --ease-drawer) standing still at that snap: vaul's own
    * rise is skipped for that one open, so the two never move the sheet at
    * once. Opened any other way (an agent showing a preview, or a preview
    * already open when the page loads), it rises from the bottom edge on
@@ -74,8 +74,8 @@
    * an ask's card grown out of it, the chips in the tray row, the
    * suggestions while the row holds any, the plan's ring, Caw perched on
    * the pill. Its rows are kept laid out whether they show anything or not
-   * (the tray row, the suggestion row: app.css `--c-tray-row`,
-   * `--c-suggest-room`), and a part steps aside for an ask by `visibility`;
+   * (the tray row, the suggestion row: app.css `--spacing-c-tray-row`,
+   * `--spacing-c-suggest-room`), and a part steps aside for an ask by `visibility`;
    * counted by their boxes, an empty suggestion row stood the sheet 59px
    * over the delegate chips on a phone. Drawn is what has a box and paints:
    * neither `visibility: hidden` nor faded to nothing.
@@ -631,7 +631,7 @@
     const measure = () => {
       const box = node.getBoundingClientRect();
       const offset = Number.parseFloat(
-        getComputedStyle(node).getPropertyValue("--space-4")
+        getComputedStyle(node).getPropertyValue("--spacing-space-4")
       );
       const composerTop = composer ? drawnTop(composer) : box.bottom - offset;
       asking = composer?.hasAttribute("data-asking") ?? false;

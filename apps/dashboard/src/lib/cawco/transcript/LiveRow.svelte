@@ -6,7 +6,7 @@
    *
    * A change of phase is a crossfade inside the row: the outgoing face fades
    * out on top while the incoming one fades in, and the row's height tweens
-   * from one to the other (--dur-pop, --ease-in-out: this is movement on
+   * from one to the other (--duration-pop, --ease-in-out: this is movement on
    * screen, not an entrance). Its heights are the ones frames laid out, read
    * in its size observers' deliveries: before the change, the row's last;
    * after it, the incoming face's first, where the tween starts from the
@@ -88,7 +88,10 @@
     const style = getComputedStyle(live);
     const gap = style.getPropertyValue("--rail-gap").trim();
     const head = style.getPropertyValue("--rail-head").trim();
-    return { gap: gap || "var(--space-4)", head: head || "var(--rail)" };
+    return {
+      gap: gap || "var(--spacing-space-4)",
+      head: head || "var(--rail)",
+    };
   }
   let box = $state<HTMLElement>();
   let tweening = $state(false);
@@ -199,7 +202,7 @@
     from = null;
     if (Math.abs(end - start) >= 0.5) {
       el.animate([{ blockSize: `${start}px` }, { blockSize: `${end}px` }], {
-        duration: dur("--dur-pop"),
+        duration: dur("--duration-pop"),
         easing,
       }).finished.then(
         () => {

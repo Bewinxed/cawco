@@ -101,7 +101,7 @@ export function rawClassValues(model) {
         findings.push({
           start: entry.start,
           end: entry.end,
-          message: `"${entry.name}" writes ${said}. A colour or a size is a token (design/tokens/cawco.tokens.json, then \`bun run tokens\`): use its utility or var(--…).`,
+          message: `"${entry.name}" writes ${said}. A colour or a size is a token (apps/dashboard/src/lib/tokens/theme.css): use its utility or var(--…).`,
         });
       }
     }

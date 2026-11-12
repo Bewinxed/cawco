@@ -786,7 +786,7 @@
     {@render head(false)}
     <div
       class="{UNDER_TITLE} gap-space-3"
-      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
+      style:--title-edge={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
     >
       {#if lead}
         <p
@@ -908,7 +908,7 @@
     {@render head(false)}
     <div
       class="{UNDER_TITLE} items-start gap-space-3"
-      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
+      style:--title-edge={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
     >
       <p class="text-body text-ink-strong text-pretty wrap-anywhere">
         {domain ? words.leadDomain(domain) : words.leadPlain}
@@ -934,7 +934,7 @@
     {@render head(true)}
     <div
       class="{UNDER_TITLE} items-start gap-space-2"
-      style:--title-edge="calc(var(--c-row-lead) + var(--space-3))"
+      style:--title-edge={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
     >
       <p class="text-body text-ink-strong text-pretty wrap-anywhere">
         {words.doneRow(summary.name ?? summary.machine.address)}

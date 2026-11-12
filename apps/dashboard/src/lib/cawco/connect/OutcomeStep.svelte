@@ -41,7 +41,7 @@
   function arrive(_node: Element) {
     const travel = motionOk.current;
     return {
-      duration: dur("--dur-toggle"),
+      duration: dur("--duration-toggle"),
       easing: easeOut,
       css: (t: number) =>
         travel

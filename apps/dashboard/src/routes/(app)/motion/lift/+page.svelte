@@ -30,7 +30,7 @@
   import { pageOut, route } from "#lib/cawco/motion/route.svelte.js";
 
   const fade = (): TransitionConfig => ({
-    duration: dur("--dur-control"),
+    duration: dur("--duration-control"),
     easing: easeOut,
     css: (t) => `opacity: ${t}`,
   });
@@ -80,7 +80,7 @@
           node,
           () => ({
             position: "absolute",
-            inset: "var(--space-3) var(--space-3) auto",
+            inset: "var(--spacing-space-3) var(--spacing-space-3) auto",
           }),
           fade()
         ),

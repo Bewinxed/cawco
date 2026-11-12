@@ -87,7 +87,7 @@
       <TreeMark
         count={open ? 0 : count}
         countIsStatus
-        fill={open ? undefined : `var(--mark-${markHue(path)})`}
+        fill={open ? undefined : `var(--color-mark-${markHue(path)})`}
         {open}
         rowToggles
       >

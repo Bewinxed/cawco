@@ -17,7 +17,7 @@
   (the owner, 2026-11-05; GitHub's Add single comment beside Start a review).
 
   Its pill stands in its host's flow (`flush`), as tall as it lays out,
-  the card's width (`--c-composer-w`). Its caret is its focus (The Caret
+  the card's width (`--spacing-c-composer-w`). Its caret is its focus (The Caret
   Rule): no ring is drawn round it, so the page's target keeps its line.
 -->
 <script lang="ts">

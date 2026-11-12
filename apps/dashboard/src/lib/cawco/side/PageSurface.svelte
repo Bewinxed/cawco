@@ -46,7 +46,7 @@
   {...rest}
   aria-label={label}
   class="relative flex min-h-0 flex-1 flex-col timeline-scope-transcript-head"
-  style:--side-room="var(--c-top-bar-h)"
+  style:--side-room="var(--spacing-c-top-bar-h)"
 >
   <HeadFade band="var(--side-room)" tint="bg-surface-recess" />
   <header

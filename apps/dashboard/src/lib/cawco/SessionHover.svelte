@@ -193,7 +193,7 @@
     onpointerenter={hold}
     onpointerleave={release}
     side="right"
-    style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: var(--c-session-hover-room)"
+    style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: var(--spacing-c-session-hover-room)"
     watch={openId}
   >
     {#snippet children(id)}

@@ -482,11 +482,11 @@
       <div
         class="flex min-h-0 flex-auto flex-col ps-space-7 pe-space-6 max-desk:px-space-5"
         style:--draft-bleed-end={desk.current
-          ? "var(--space-6)"
-          : "var(--space-5)"}
+          ? "var(--spacing-space-6)"
+          : "var(--spacing-space-5)"}
         style:--draft-bleed-start={desk.current
-          ? "var(--space-7)"
-          : "var(--space-5)"}
+          ? "var(--spacing-space-7)"
+          : "var(--spacing-space-5)"}
       >
         {#if at !== "set"}
           <div class="min-h-0 flex-auto">

@@ -9,10 +9,10 @@
    *
    * Opening another while one hangs never folds the card: it stays hung and
    * changes in place, as the session card glides from tab to tab. What it
-   * shows cross-fades, the outgoing out over --dur-exit on --ease-out (The
-   * Fast Exit Rule) and the incoming in over --dur-morph on --ease-drawer,
+   * shows cross-fades, the outgoing out over --duration-exit on --ease-out (The
+   * Fast Exit Rule) and the incoming in over --duration-morph on --ease-drawer,
    * the morph's own clock; and its box tweens from the size it is drawn at
-   * to the new one's (motion/morph, width and height, over --dur-morph on
+   * to the new one's (motion/morph, width and height, over --duration-morph on
    * --ease-drawer). The outgoing contents are lifted out of the flow where
    * they stand as they start to fade, so the card's natural size is the
    * incoming's alone. Right-aligned, the card's trailing edge, its top, the
@@ -199,7 +199,7 @@
       face.leaving = true;
     }
     const out = node.animate([{ opacity: from }, { opacity: 0 }], {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: ease("--ease-out"),
       fill: "forwards",
     });
@@ -233,7 +233,7 @@
       fades.set(
         node,
         node.animate([{ opacity: from }, { opacity: 1 }], {
-          duration: dur("--dur-morph"),
+          duration: dur("--duration-morph"),
           easing: ease("--ease-drawer"),
         })
       );
@@ -275,7 +275,7 @@
         fades.set(
           node,
           node.animate([{ opacity: 0 }, { opacity: 1 }], {
-            duration: dur("--dur-morph"),
+            duration: dur("--duration-morph"),
             easing: ease("--ease-drawer"),
           })
         );

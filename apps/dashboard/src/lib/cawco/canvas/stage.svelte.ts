@@ -384,7 +384,7 @@ export class Stage {
 
   /**
    * What of the page's edges our chrome takes, which its rail stands inside:
-   * over the composer the grab band over its top (`--c-btn-h-lg`: the top
+   * over the composer the grab band over its top (`--spacing-c-btn-h-lg`: the top
    * grab in its middle, the corner handles at its ends), and at its sides
    * the grown shape's shoulders, which stand in from the page's box by the
    * corner's inset; none in the panel, whose slot starts under its head
@@ -398,7 +398,7 @@ export class Stage {
       side: this.corner.inset,
       top: Number.parseFloat(
         getComputedStyle(document.documentElement).getPropertyValue(
-          "--c-btn-h-lg"
+          "--spacing-c-btn-h-lg"
         )
       ),
     };

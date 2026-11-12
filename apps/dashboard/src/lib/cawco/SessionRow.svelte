@@ -204,11 +204,11 @@
   /** Where a row's fault, note and question start: where its title does. */
   const faultIndent = $derived(
     compact
-      ? "calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"
-      : "calc(var(--space-3) + var(--space-5) + var(--space-2))"
+      ? "calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--spacing-space-5)))"
+      : "calc(var(--spacing-space-3) + var(--spacing-space-5) + var(--spacing-space-2))"
   );
   const faultEnd = $derived(
-    compact ? "var(--row-compact-pad-end)" : "var(--space-3)"
+    compact ? "var(--row-compact-pad-end)" : "var(--spacing-space-3)"
   );
 
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
@@ -356,8 +356,8 @@
   <span
     data-slot="words"
     class="mark-line flex flex-col min-w-0 flex-auto group-hover/session-row:group-data-archivable/session-row:me-(--words-room) group-hover/session-row:group-data-peek/session-row:me-(--words-room) can-hover:group-focus-within/session-row:group-data-archivable/session-row:me-(--words-room) can-hover:group-focus-within/session-row:group-data-peek/session-row:me-(--words-room) group-hover/session-row:group-data-archivable/session-row:group-data-peek/session-row:me-(--words-room-2) can-hover:group-focus-within/session-row:group-data-archivable/session-row:group-data-peek/session-row:me-(--words-room-2)"
-    style:--words-room="calc(var(--action-size) + var(--space-1))"
-    style:--words-room-2="calc(2 * (var(--action-size) + var(--space-1)))"
+    style:--words-room="calc(var(--action-size) + var(--spacing-space-1))"
+    style:--words-room-2={"calc(2 * (var(--action-size) + var(--spacing-space-1)))"}
   >
     {#if draft !== null}
       <!-- The title as a field, in the title's own type and place: no box of
@@ -387,7 +387,7 @@
           }
         }}
         readonly={renaming !== null}
-        style:--title-w="calc(100% + var(--space-1) * 2)"
+        style:--title-w="calc(100% + var(--spacing-space-1) * 2)"
         spellcheck="false"
         bind:value={draft}
         {@attach (node) => node.select()}
@@ -449,7 +449,7 @@
   <span
     data-slot="end"
     class="flex flex-col min-w-0 flex-none items-end ms-(--end-pull) group-data-compact/session-row:ms-0"
-    style:--end-pull="calc(var(--space-1) - var(--space-2))"
+    style:--end-pull="calc(var(--spacing-space-1) - var(--spacing-space-2))"
     {@attach trailWidth}
   >
     <span
@@ -504,8 +504,8 @@
     data-peek={showPeek || undefined}
     data-stale={stale || undefined}
     data-regroup={regroup}
-    style:--action-size="var(--c-btn-h-sm)"
-    style:--action-end={"calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1))"}
+    style:--action-size="var(--spacing-c-btn-h-sm)"
+    style:--action-end={"calc(var(--spacing-space-3) + var(--trail-w, 0px) + var(--spacing-space-1))"}
     style:--swipe-x="calc(var(--swipe, 0px) * -1)"
     {@attach onarchive ? swipeToArchive(onarchive) : undefined}
     {@attach regroup ? landRegroup(() => regroup ?? "") : undefined}
@@ -528,11 +528,11 @@
         class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-c-btn-h-lg py-space-1 pl-space-3 pr-space-3 text-inherit no-underline rounded-inherit group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) coarse:group-data-compact/session-row:min-h-c-btn-h-lg group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
         data-rail-row
         style:--mark-hit-max={compact
-          ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
-          : "calc((var(--c-btn-h-lg) - var(--c-row-mark)) / 2 + var(--tree-gap))"}
+          ? "calc((var(--row-compact-h) - var(--mark-size, var(--spacing-space-5))) / 2 + var(--tree-gap))"
+          : "calc((var(--spacing-c-btn-h-lg) - var(--spacing-c-row-mark)) / 2 + var(--tree-gap))"}
         style:--mark-hit-gap={compact
           ? "var(--row-compact-gap)"
-          : "var(--space-2)"}
+          : "var(--spacing-space-2)"}
         onsubmit={(event) => {
           event.preventDefault();
           commitTitle();
@@ -556,11 +556,11 @@
         data-share="session:{sessionId}"
         {href}
         style:--mark-hit-max={compact
-          ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
-          : "calc((var(--c-btn-h-lg) - var(--c-row-mark)) / 2 + var(--tree-gap))"}
+          ? "calc((var(--row-compact-h) - var(--mark-size, var(--spacing-space-5))) / 2 + var(--tree-gap))"
+          : "calc((var(--spacing-c-btn-h-lg) - var(--spacing-c-row-mark)) / 2 + var(--tree-gap))"}
         style:--mark-hit-gap={compact
           ? "var(--row-compact-gap)"
-          : "var(--space-2)"}
+          : "var(--spacing-space-2)"}
         use:dragSession={{
           sessionId,
           ctx: () =>
@@ -598,7 +598,7 @@
               "no-hover:hidden can-hover:group-data-peek/session-row:end-(--archive-end)"
             )}
             onclick={onarchive}
-            style:--archive-end={"calc(var(--action-end) + var(--action-size) + var(--space-1))"}
+            style:--archive-end={"calc(var(--action-end) + var(--action-size) + var(--spacing-space-1))"}
             type="button"
           >
             <IconArchive aria-hidden="true" class="size-icon-md" />

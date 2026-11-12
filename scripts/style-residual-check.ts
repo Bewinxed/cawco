@@ -29,8 +29,8 @@
  *
  * It also reads every class the markup and the recipes write (.svelte, .ts
  * and .js under apps/dashboard/src, the generated lib/tokens aside) for a
- * theme token written as an arbitrary value: `bg-[var(--surface-raised)]` or
- * `bg-(--surface-raised)`, where `--surface-raised` stands behind a theme key
+ * theme token written as an arbitrary value: `bg-[var(--color-surface-raised)]` or
+ * `bg-(--color-surface-raised)`, where `--color-surface-raised` stands behind a theme key
  * in a namespace that utility reads (`--color-surface-raised`), so the
  * theme's own utility says it (`bg-surface-raised`). The namespaces each
  * utility reads are Tailwind v4's (https://tailwindcss.com/docs/theme:

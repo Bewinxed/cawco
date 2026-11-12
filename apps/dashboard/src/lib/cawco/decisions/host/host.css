@@ -108,6 +108,6 @@
   /* The frame recesses and content stands raised on it (DESIGN.md, The
      Frame Recesses Rule). */
   body {
-    background-color: var(--surface-recess);
+    background-color: var(--color-surface-recess);
   }
 }

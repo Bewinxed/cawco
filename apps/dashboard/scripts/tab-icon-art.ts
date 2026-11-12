@@ -18,10 +18,10 @@
  *
  *   bun run tab-icon
  */
+/// <reference lib="dom" />
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
-import { cssOfNode } from "../../../packages/hub/src/design-tokens";
 import { NEEDS_YOU, type Shot, SLEEPING } from "./tab-icon-shots";
 import { type openTile, TAB_ICON } from "./tab-icon-tile";
 
@@ -43,33 +43,14 @@ interface Job {
   side: number;
 }
 
-/** A token's CSS (its base value), wherever its group is. */
+/** A token's CSS, from its declaration in theme.css: `--color-spark`, `--radius-tab-icon`. */
 function token(name: string): string {
-  const find = (node: unknown): string | undefined => {
-    if (!node || typeof node !== "object") {
-      return;
-    }
-    const group = node as Record<string, unknown>;
-    const hit = group[name] as Record<string, unknown> | undefined;
-    if (hit && "$value" in hit) {
-      return cssOfNode(String(hit.$type), hit, name);
-    }
-    for (const child of Object.values(group)) {
-      const found = find(child);
-      if (found) {
-        return found;
-      }
-    }
-  };
-  const value = find(
-    JSON.parse(
-      readFileSync(here("../../design/tokens/cawco.tokens.json"), "utf8")
-    )
-  );
+  const css = readFileSync(here("src/lib/tokens/theme.css"), "utf8");
+  const value = new RegExp(`^\\s*${name}:\\s*([^;]+);`, "mu").exec(css)?.[1];
   if (!value) {
     throw new Error(`No token named ${name}`);
   }
-  return value;
+  return value.replace(/\s+/gu, " ").trim();
 }
 
 const built = await Bun.build({
@@ -157,7 +138,7 @@ async function strip(job: Job): Promise<Buffer> {
   return Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
 }
 
-const radius = Number.parseFloat(token("tab-icon-r"));
+const radius = Number.parseFloat(token("--radius-tab-icon"));
 const wave = Array.from(
   { length: (NEEDS_YOU.to - NEEDS_YOU.from) / 2 },
   (_, beat) => NEEDS_YOU.from + beat * 2
@@ -195,7 +176,7 @@ async function plain(side: number): Promise<Buffer> {
 }
 
 // Every state stands on the same butter tile.
-const colour = token("spark");
+const colour = token("--color-spark");
 const art = states.flatMap(({ shot, moving }) => {
   const job = { shot, colour, radius };
   return [

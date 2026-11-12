@@ -12,7 +12,7 @@
    *   `setting` recipe, its press included.
    * - `state`: a state chip that opens what it reports (a rollout's): the
    *   recess, meta words in the muted ink, `data-fail` taking the fail pair,
-   *   its fill and ink settling over --dur-panel.
+   *   its fill and ink settling over --duration-panel.
    * - `count`: a count drawn on the kit's Badge (`badge`), a numeral at
    *   meta size (The Earned Count Rule) that opens what it counts.
    * - `strip`, `strip-home`: the usage strip, one control one height
@@ -39,14 +39,14 @@
         count:
           "pressable type-meta num h-icon-md min-w-icon-md overflow-visible px-space-1 text-ink-row leading-none",
         strip:
-          "press-tint flex h-c-btn-h-lg items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+          "press-tint flex h-c-btn-h-lg items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         "strip-home":
-          "press-tint flex h-c-usage-strip-home-h items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+          "press-tint flex h-c-usage-strip-home-h items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         mark: "pressable inline-flex rounded-xs",
         swatch:
           "pointer-hit grid place-items-center rounded-xs outline-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-1",
         meter:
-          "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-ink-muted text-label tabular-nums transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-error-9 data-warn:not-data-critical:not-data-compacting:text-warning-9",
+          "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-ink-muted text-label tabular-nums transition-[background-color,color] duration-(--duration-control) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-error-9 data-warn:not-data-critical:not-data-compacting:text-warning-9",
       },
     },
   });

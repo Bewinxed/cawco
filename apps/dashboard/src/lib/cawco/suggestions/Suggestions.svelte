@@ -154,7 +154,7 @@
             <button
               data-slot="suggestion"
               class={[
-                "group/item mark-line press-tint focus-inset grid w-full min-h-c-row-h content-center items-start gap-x-space-1 rounded-sm py-space-3 text-start type-body text-ink-strong select-none transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover",
+                "group/item mark-line press-tint focus-inset grid w-full min-h-c-row-h content-center items-start gap-x-space-1 rounded-sm py-space-3 text-start type-body text-ink-strong select-none transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover",
                 glyphed
                   ? "grid-cols-lead-fluid pe-space-3"
                   : "grid-cols-1 px-space-3",
@@ -167,7 +167,7 @@
                   >{#if Glyph}<Glyph
                       aria-hidden="true"
                       data-suggestion-glyph
-                      class="size-icon-md text-ink-muted transition-[color] duration-(--dur-control) ease-out group-hover/item:text-ink-strong"
+                      class="size-icon-md text-ink-muted transition-[color] duration-(--duration-control) ease-out group-hover/item:text-ink-strong"
                     />{/if}</span
                 >
               {/if}
@@ -237,7 +237,7 @@
             <button
               data-slot="suggestion"
               class={[
-                "mark-line press-tint grid w-full min-h-c-row-h-two content-center items-start gap-x-space-3 rounded-md bg-surface-raised px-space-4 py-space-3 text-start text-ink-strong shadow-tile select-none transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover",
+                "mark-line press-tint grid w-full min-h-c-row-h-two content-center items-start gap-x-space-3 rounded-md bg-surface-raised px-space-4 py-space-3 text-start text-ink-strong shadow-tile select-none transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover",
                 glyphed ? "grid-cols-mark-fluid" : "grid-cols-1",
               ]}
               onclick={() => onpick(suggestion)}

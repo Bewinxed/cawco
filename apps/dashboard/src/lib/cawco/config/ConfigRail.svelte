@@ -37,7 +37,7 @@
 
   /**
    * A section's fault badge pops in from the pop scale as it fades
-   * (--dur-menu) and leaves the same way on the exit tier; its figure ticks
+   * (--duration-menu) and leaves the same way on the exit tier; its figure ticks
    * over through MorphText. With reduced motion, a fade.
    */
   /**
@@ -63,7 +63,9 @@
   ) {
     const scale = popScale();
     return {
-      duration: dur(direction === "out" ? "--dur-exit" : "--dur-menu"),
+      duration: dur(
+        direction === "out" ? "--duration-exit" : "--duration-menu"
+      ),
       easing: easeOut,
       css: (t: number) =>
         motionOk.current
@@ -117,7 +119,7 @@
               >
               {#if unsavedIn(store, section.slug)}
                 <span
-                  class="flex-none size-space-2 rounded-pill bg-ink-strong motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-safe:starting:opacity-0"
+                  class="flex-none size-space-2 rounded-pill bg-ink-strong motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:starting:opacity-0"
                   title={words.unsaved}
                   ><span class="sr-only">{words.unsaved}</span></span
                 >

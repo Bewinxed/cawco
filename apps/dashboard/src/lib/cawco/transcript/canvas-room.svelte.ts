@@ -4,7 +4,7 @@
  * the pill as the recall wheel grows, the field below it writable.
  *
  * - **Open.** The grown shape (grown.ts) rises out of the pill's top edge
- *   over `--dur-grow` and keeps rising until the canvas stands over the
+ *   over `--duration-grow` and keeps rising until the canvas stands over the
  *   column above the field; the canvas (its stage, canvas/stage.svelte.ts)
  *   is clipped to the shape as it grows. Reopened from its chip, the canvas
  *   opens out of the chip's box on the same clock.
@@ -14,17 +14,17 @@
  *   from where it stands. A top corner's handle drags its size: the height
  *   as the top grab does, and the width by twice the pointer's sideways
  *   travel, both sides moving so the canvas stays centred on the pill, from
- *   the pill's width to the column's less `--space-3` each side; both
+ *   the pill's width to the column's less `--spacing-space-3` each side; both
  *   settle on one spring. The grown shape's shoulders step out from the
  *   pill's edges to it (grown.ts `wide`, the same each side). The height
  *   and the width chosen are kept across Done and reopen.
- * - **Done** folds it over `--dur-grow-exit` into its chip, its picture the
+ * - **Done** folds it over `--duration-grow-exit` into its chip, its picture the
  *   chip's thumbnail. The rail's **Remove** folds it back into the pill on
  *   the same clock, leaves no chip, and takes it out of the message as the
  *   chip's remove does; the panel still lists it.
  * - **Dock** flies the same iframe into the artifact panel (280ms on the
  *   drawer curve) while the shape gives the field's room back over the
- *   composer's clock (`--dur-control`, ease-out); Undock flies it back.
+ *   composer's clock (`--duration-control`, ease-out); Undock flies it back.
  * - **Send** carries its `.excalidraw` file, its outline and its picture,
  *   once the hub holds what the page shows: it waits up to 5 s for the
  *   page's doc to sync and the hub's export to count what the page counts,
@@ -32,7 +32,7 @@
  *
  * Every motion is a Web Animation, so each turns back from where it is
  * drawn and the probe scrubs it. With reduced motion each fades
- * (`--dur-fade`) and nothing travels.
+ * (`--duration-fade`) and nothing travels.
  */
 import { unhandled } from "@cawco/core/unhandled";
 import { tick } from "svelte";
@@ -137,7 +137,7 @@ interface Sizes {
   lift: number;
   max: number;
   min: number;
-  /** How far each side may reach past the pill, centred on it: to the column's nearer edge less `--space-3`. */
+  /** How far each side may reach past the pill, centred on it: to the column's nearer edge less `--spacing-space-3`. */
   reach: number;
   size: ReturnType<typeof measureShape>["size"];
   /** How far each side stands past the pill now. */
@@ -278,7 +278,7 @@ export class CanvasRoom {
       const columnTop = column.getBoundingClientRect().top;
       const room = dock.getBoundingClientRect();
       const gap = Number.parseFloat(
-        getComputedStyle(shell).getPropertyValue("--space-3")
+        getComputedStyle(shell).getPropertyValue("--spacing-space-3")
       );
       const lift = at.top - columnTop;
       const max = Math.max(0, columnTop - room.top - gap);
@@ -478,7 +478,7 @@ export class CanvasRoom {
 
   /**
    * The canvas stands up out of the pill (`from` null) or out of its chip's
-   * box: the shape grows over `--dur-grow` and the stage, already on its
+   * box: the shape grows over `--duration-grow` and the stage, already on its
    * box, is uncovered by the same outline.
    */
   async #grow(from: Box | null): Promise<void> {
@@ -506,7 +506,7 @@ export class CanvasRoom {
     stage.standAt("composer");
     this.#tellStage();
     const { halo } = shape.layers;
-    const ms = dur("--dur-grow");
+    const ms = dur("--duration-grow");
     const rest = shape.cutAt(1, sizes.stage);
     let runs: Animation[];
     if (motionOk.current) {
@@ -540,7 +540,7 @@ export class CanvasRoom {
             }),
       ];
     } else {
-      const fade = { duration: dur("--dur-fade"), easing: CURVE.out };
+      const fade = { duration: dur("--duration-fade"), easing: CURVE.out };
       runs = [
         halo.animate([{ opacity: 0 }, { opacity: 1 }], fade),
         stage.el.animate([{ opacity: 0 }, { opacity: 1 }], fade),
@@ -564,7 +564,7 @@ export class CanvasRoom {
     }
   }
 
-  /** Done: the canvas folds into its chip over `--dur-grow-exit`; its picture becomes the chip's. */
+  /** Done: the canvas folds into its chip over `--duration-grow-exit`; its picture becomes the chip's. */
   async fold(): Promise<void> {
     await this.#fold(true);
   }
@@ -581,7 +581,7 @@ export class CanvasRoom {
   }
 
   /**
-   * The canvas folds over `--dur-grow-exit`: into its chip's box (`intoChip`),
+   * The canvas folds over `--duration-grow-exit`: into its chip's box (`intoChip`),
    * or back into the pill along the grown shape's own fold. Whether it
    * landed folded.
    */
@@ -606,7 +606,7 @@ export class CanvasRoom {
       to = chip ? atRest(() => boxOf(chip)) : null;
     }
     const { halo } = shape.layers;
-    const ms = dur("--dur-grow-exit");
+    const ms = dur("--duration-grow-exit");
     let runs: Animation[];
     if (motionOk.current && (to || !intoChip)) {
       const into = to
@@ -638,7 +638,7 @@ export class CanvasRoom {
       ];
     } else {
       const fade = {
-        duration: dur("--dur-fade"),
+        duration: dur("--duration-fade"),
         easing: CURVE.out,
         fill: "forwards",
       } as const;
@@ -797,9 +797,9 @@ export class CanvasRoom {
       const to = atRest(() => boxOf(slot));
       const { halo } = shape.layers;
       const room = motionOk.current
-        ? this.#paintAlong(shape, dur("--dur-control"), CURVE.out, 1, 0)
+        ? this.#paintAlong(shape, dur("--duration-control"), CURVE.out, 1, 0)
         : halo.animate([{ opacity: 1 }, { opacity: 0 }], {
-            duration: dur("--dur-fade"),
+            duration: dur("--duration-fade"),
             easing: CURVE.out,
             fill: "forwards",
           });
@@ -899,9 +899,9 @@ export class CanvasRoom {
     const to = atRest(() => boxOf(slot));
     const { halo } = shape.layers;
     const room = motionOk.current
-      ? this.#paintAlong(shape, dur("--dur-control"), CURVE.out, 0, 1)
+      ? this.#paintAlong(shape, dur("--duration-control"), CURVE.out, 0, 1)
       : halo.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: dur("--dur-fade"),
+          duration: dur("--duration-fade"),
           easing: CURVE.out,
         });
     room.id = "canvas-room";
@@ -1330,14 +1330,14 @@ function fly(el: HTMLElement, from: Box, to: Box): Animation {
           },
           { transformOrigin: "0 0", transform: "none" },
         ],
-        { duration: dur("--dur-panel"), easing: CURVE.drawer }
+        { duration: dur("--duration-panel"), easing: CURVE.drawer }
       )
     : el.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-fade"),
+        duration: dur("--duration-fade"),
         easing: CURVE.out,
       });
   run.id = "canvas-flight";
-  watch(dur("--dur-panel"));
+  watch(dur("--duration-panel"));
   return run;
 }
 

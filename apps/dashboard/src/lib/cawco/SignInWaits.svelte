@@ -17,13 +17,13 @@
 {#each names as name (name)}
   <RowFault
     data-sign-in-wait={name}
-    end="var(--space-2)"
+    end="var(--spacing-space-2)"
     goTo={{
       href: `/config/mcp/${encodeURIComponent(name)}`,
       label: mcpWords.signIn,
       icon: IconKey,
     }}
-    indent="var(--space-2)"
+    indent="var(--spacing-space-2)"
     reason={mcpWords.needsSignIn(name)}
   />
 {/each}

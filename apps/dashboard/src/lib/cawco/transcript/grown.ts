@@ -12,7 +12,7 @@
  * to it, so it comes up out of the pill with the shape and folds back into
  * it. The wheel's rows stand inside its sides at their height (`inset`).
  *
- * Its edge is the pill's border (`--border-control`), and stays the border
+ * Its edge is the pill's border (`--color-border-control`), and stays the border
  * while the field has keyboard focus: the grown composer draws no ring.
  *
  * The room over its top row is where a wheel row rolling past it goes out of
@@ -177,7 +177,7 @@ export class GrownShape {
     // filter on the layer: WebKit applies a layer's filter again every frame
     // the layer moves (Playwright WebKit at 390, a fold's slow frames 3.75 a
     // round with it, 0.25 without), and draws no CSS filter on an SVG path.
-    const shadows = ["--shadow-drop", "--shadow-drop-near"]
+    const shadows = ["--drop-shadow-drop", "--drop-shadow-drop-near"]
       .map((token) => shadowOf(getComputedStyle(host).getPropertyValue(token)))
       .filter((s): s is Shadow => s !== null);
     const lay = shadows
@@ -210,14 +210,14 @@ export class GrownShape {
     // what stands in it. Only the top of the grown part fades.
     this.#halo.innerHTML = `<svg><defs>
       <linearGradient id="${fill}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" style="stop-color: var(--surface-raised); ${clear}"/>
-        <stop offset="0.2" style="stop-color: var(--surface-raised)"/>
-        <stop offset="1" style="stop-color: var(--surface-raised)"/>
+        <stop offset="0" style="stop-color: var(--color-surface-raised); ${clear}"/>
+        <stop offset="0.2" style="stop-color: var(--color-surface-raised)"/>
+        <stop offset="1" style="stop-color: var(--color-surface-raised)"/>
       </linearGradient>
       <linearGradient id="${edge}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="${fade ? 0.04 : 0}" style="stop-color: var(--border-control); ${clear}"/>
-        <stop offset="0.32" style="stop-color: var(--border-control)"/>
-        <stop offset="1" style="stop-color: var(--border-control)"/>
+        <stop offset="${fade ? 0.04 : 0}" style="stop-color: var(--color-border-control); ${clear}"/>
+        <stop offset="0.32" style="stop-color: var(--color-border-control)"/>
+        <stop offset="1" style="stop-color: var(--color-border-control)"/>
       </linearGradient>
     </defs><path fill="url(#${fill})" stroke="url(#${edge})" stroke-width="1"/></svg>`;
     host.append(this.#halo);
@@ -763,8 +763,10 @@ export function measureShape(
       w,
       base: pill.offsetHeight,
       r: Number.parseFloat(getComputedStyle(pill).borderTopLeftRadius) || 0,
-      headroom: Number.parseFloat(style.getPropertyValue("--space-2")),
-      row: Number.parseFloat(style.getPropertyValue("--c-composer-field")),
+      headroom: Number.parseFloat(style.getPropertyValue("--spacing-space-2")),
+      row: Number.parseFloat(
+        style.getPropertyValue("--spacing-c-composer-field")
+      ),
     },
     line: {
       left: (text.left - box.left) / scale,

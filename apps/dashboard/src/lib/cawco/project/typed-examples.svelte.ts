@@ -1,8 +1,8 @@
 /**
  * New project's placeholder typing its examples once, then resting
  * (decision page `onboarding-design`, card `describe-hint`, the person's
- * pick): each example types in a letter every `--dur-type`, holds for one
- * `--breath`, and erases at half the pace (exits run faster than
+ * pick): each example types in a letter every `--duration-type`, holds for one
+ * `--duration-breath`, and erases at half the pace (exits run faster than
  * entrances), then the next types in; after the last it types the resting
  * placeholder and lands there, and nothing moves after (DESIGN.md: "Nothing
  * moves after it has landed unless it is live work").
@@ -13,11 +13,9 @@
  * reader is the page's question, never these words (Composer `label`).
  */
 import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-import { msOf } from "#lib/cawco/motion/time.js";
 
-/** `--breath` in ms, read from the root. */
-const breathMs = (): number =>
-  msOf(getComputedStyle(document.documentElement).getPropertyValue("--breath"));
+/** `--duration-breath` in ms, read from the root. */
+const breathMs = (): number => dur("--duration-breath");
 
 export class TypedExamples {
   /** What the placeholder shows now. */
@@ -61,7 +59,7 @@ export class TypedExamples {
       this.text = this.#rest;
       return stop;
     }
-    const letter = dur("--dur-type");
+    const letter = dur("--duration-type");
     const hold = breathMs();
     const type = (words: string, then: () => void, at = 0) => {
       this.text = words.slice(0, at);

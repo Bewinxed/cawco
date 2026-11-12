@@ -2314,7 +2314,10 @@ async function buildCanvases(stage: Stage, files: string[]): Promise<Built> {
   mkdirSync(src, { recursive: true });
   rmSync(BUILT_OUT, { recursive: true, force: true });
   const runtime = join(ROOT, "packages/agent/src/stage-host/canvas/runtime.ts");
-  const tokens = readFileSync(join(APP, "src/lib/tokens/tokens.css"), "utf8");
+  const tokens = readFileSync(
+    join(ROOT, "packages/hub/skills/decision-page/kit/tokens.css"),
+    "utf8"
+  );
   const { houseFaceSheet } =
     await import("../../../packages/core/src/house-faces");
   const faces = await houseFaceSheet("faces/");

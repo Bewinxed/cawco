@@ -24,7 +24,7 @@
 {#snippet who()}
   <div
     data-slot="who"
-    style:--who-h="max(var(--space-5), 1lh)"
+    style:--who-h="max(var(--spacing-space-5), 1lh)"
     class="flex items-center gap-space-2 text-size-label h-(--who-h) mb-space-2"
   >
     <Skeleton
@@ -59,8 +59,8 @@
   data-slot="tx-columns"
   data-skeleton
   aria-busy="true"
-  style:--sk-foot="var(--composer-clearance, calc(var(--space-8) * 3))"
-  style:--sk-line-my="calc((1lh - var(--c-skeleton-x-height)) / 2)"
+  style:--sk-foot="var(--composer-clearance, calc(var(--spacing-space-8) * 3))"
+  style:--sk-line-my="calc((1lh - var(--spacing-c-skeleton-x-height)) / 2)"
   class="relative flex flex-col justify-end flex-auto min-h-0 overflow-hidden pb-(--sk-foot) ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
   role="status"
 >
@@ -80,7 +80,7 @@
     {@render who()}
     <div
       data-slot="well"
-      style:--well-pad-block="calc(var(--space-2) + 1px)"
+      style:--well-pad-block="calc(var(--spacing-space-2) + 1px)"
       class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-well-edge rounded-well bg-surface-recess-deep"
     >
       <div class="flex flex-col max-w-c-measure text-size-body leading-body">

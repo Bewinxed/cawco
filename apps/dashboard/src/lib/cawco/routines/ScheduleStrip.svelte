@@ -121,7 +121,7 @@
   /**
    * The marks whose label would stand on the one before it, by their time:
    * each label held where it draws (centred on its time, flush inside
-   * either edge), and kept only `--space-1` or more past the last label
+   * either edge), and kept only `--spacing-space-1` or more past the last label
    * kept. The twentieth of the strip a day keeps from "now" is a share:
    * at a phone's width "now" and "Wed" ran into each other inside it. Its
    * hairline stays; the label stands hidden.
@@ -165,7 +165,7 @@
     if (width <= 0) {
       return out;
     }
-    const gap = numberOf("--space-1");
+    const gap = numberOf("--spacing-space-1");
     let lastRight = Number.NEGATIVE_INFINITY;
     all.forEach((mark, i) => {
       const w = labels[i]?.offsetWidth ?? 0;
@@ -222,7 +222,7 @@
         bind:this={markRow}
         aria-hidden="true"
         class="@container relative block h-(--marks-h) type-meta num text-ink-subtle"
-        style:--marks-h={"calc(var(--space-1) + var(--text-meta) * var(--leading-meta))"}
+        style:--marks-h={"calc(var(--spacing-space-1) + var(--text-meta) * var(--leading-meta))"}
       >
         {#each marks as mark (mark.at)}
           <!-- mark-line: the hairline stands above its label, not beside it -->

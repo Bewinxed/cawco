@@ -192,7 +192,7 @@
   data-slot="limits-block-card"
   aria-labelledby="limits-title"
   class="flex flex-col gap-space-5 rounded-lg bg-surface-raised p-space-6 shadow-tile max-phone:p-space-4"
-  style:--ring-ground="var(--surface-raised)"
+  style:--ring-ground="var(--color-surface-raised)"
 >
   <h2 data-slot="title" class="type-label text-ink-muted" id="limits-title">
     Limits

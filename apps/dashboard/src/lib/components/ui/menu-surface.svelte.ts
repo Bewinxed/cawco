@@ -37,7 +37,7 @@ export function submenuSurface(content: () => HTMLElement | null): {
   readonly inset: number;
   readonly side: "right" | "bottom";
 } {
-  const inset = browser ? numberOf("--space-5") : 0;
+  const inset = browser ? numberOf("--spacing-space-5") : 0;
   let side = $state<"right" | "bottom">("right");
   $effect(() => {
     const el = content();

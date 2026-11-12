@@ -1,7 +1,7 @@
 /**
  * The person's comments on a page, as their pins (Projects spec §5.7,
  * §5.10; core comments.ts; the artifact panel's surface brief, A pin's pill). A pin is a pill with a
- * tail corner: `--c-pin` tall, as wide as its number needs, three corners
+ * tail corner: `--spacing-c-pin` tall, as wide as its number needs, three corners
  * round and the fourth, the tail, a 2px corner standing on the point the
  * person pressed; a point in the middle of a line of words stands at that
  * line's end instead, at its foot (before its first word where the line
@@ -20,10 +20,10 @@
  *
  * Pins are drawn in an `<svg>` in the page's own document like the ink, so
  * they scroll with the page; a pin on the page as a whole stands at the
- * viewport's top-right corner, `--space-2` in, in a layer fixed to the
+ * viewport's top-right corner, `--spacing-space-2` in, in a layer fixed to the
  * viewport. Pins whose pills meet stack: the newest in front, at most two
  * behind it, each a `--deck-step` ×2 further down-right; resting on the
- * stack fans them into a row `--space-1` apart.
+ * stack fans them into a row `--spacing-space-1` apart.
  *
  * A pin on an element inside a same-origin frame (frames.ts) is drawn here
  * too, in the top document, at the element's box mapped through its frames;
@@ -449,7 +449,7 @@ const lays = new WeakMap<SVGGElement, (fan: boolean) => void>();
  * One stack of pills that meet, in its `holder`: the newest in front, at
  * most {@link BEHIND} behind it a `--deck-step` ×2 further down-right each,
  * the rest left out until it fans; resting on it fans every pill into a row
- * `--space-1` apart, over `--dur-control` where motion is welcome. Drawn
+ * `--spacing-space-1` apart, over `--duration-control` where motion is welcome. Drawn
  * again while the pointer rests on it, it stays fanned.
  */
 function drawStack(
@@ -713,7 +713,7 @@ export function startPins(deps: PinsDeps): Pins {
    * the right, below where its top leaves none above (`flip`), held off the
    * page's edges (`shift`). Its tail is the corner standing on the point.
    * One on the page as a whole stands at the viewport's top-right corner,
-   * `--space-2` in, with no tail: no reference to place it against.
+   * `--spacing-space-2` in, with no tail: no reference to place it against.
    */
   const place = async (
     spot: Spot,
@@ -845,28 +845,28 @@ export function startPins(deps: PinsDeps): Pins {
   /** The tokens a pill is painted with, read once per draw in one style pass: a token is the page's style, read there and then. */
   const paintOf = () => {
     const read = chrome.tokens({
-      action: ["--action-solid"],
-      onAction: ["--on-action"],
-      raised: ["--surface-raised"],
-      recessed: ["--surface-fill-strong"],
-      strong: ["--ink-strong"],
-      focus: ["--focus-ring"],
-      shadow: ["--shadow-tint"],
-      dot: ["--status-live-glyph"],
-      attn: ["--status-attn-glyph"],
+      action: ["--color-action-solid"],
+      onAction: ["--color-on-action"],
+      raised: ["--color-surface-raised"],
+      recessed: ["--color-surface-fill-strong"],
+      strong: ["--color-ink-strong"],
+      focus: ["--color-focus-ring"],
+      shadow: ["--color-shadow-tint"],
+      dot: ["--color-status-live-glyph"],
+      attn: ["--color-status-attn-glyph"],
       font: ["--type-label", "font"],
-      height: ["--c-pin", "width"],
-      pad: ["--c-pin-pad", "width"],
+      height: ["--spacing-c-pin", "width"],
+      pad: ["--spacing-c-pin-pad", "width"],
       deck: ["--deck-step", "width"],
-      gap: ["--space-1", "width"],
-      inset: ["--space-2", "width"],
+      gap: ["--spacing-space-1", "width"],
+      inset: ["--spacing-space-2", "width"],
       dotSize: ["--status-dot-size", "width"],
       dotCut: ["--status-dot-cut", "width"],
-      loop: ["--dur-loop", "transition-duration"],
-      breath: ["--breath", "transition-duration"],
+      loop: ["--duration-loop", "transition-duration"],
+      breath: ["--duration-breath", "transition-duration"],
       breathFloor: ["--breath-floor", "opacity"],
       breathEase: ["--ease-in-out", "transition-timing-function"],
-      control: ["--dur-control", "transition-duration"],
+      control: ["--duration-control", "transition-duration"],
       ease: ["--ease-out", "transition-timing-function"],
     });
     return {
@@ -901,7 +901,7 @@ export function startPins(deps: PinsDeps): Pins {
   let measure: CanvasRenderingContext2D | null = null;
   /**
    * A pill's width for `label`, as PinMark lays it out: its figures with
-   * `--c-pin-pad` each side, never narrower than `--c-pin`, in every state
+   * `--spacing-c-pin-pad` each side, never narrower than `--spacing-c-pin`, in every state
    * (a hollow pill's edge is drawn inside its box).
    */
   const pillWidth = (label: string, paint: Paint) => {
@@ -1067,7 +1067,7 @@ export function startPins(deps: PinsDeps): Pins {
 
   /**
    * An unread answer's echo on its dot: a ring growing from it as it fades,
-   * once a `--dur-loop`, three loops from when the answer was first drawn
+   * once a `--duration-loop`, three loops from when the answer was first drawn
    * unread and then still, however often the pill is drawn again in them.
    */
   const echoOf = (

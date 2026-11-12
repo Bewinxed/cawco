@@ -26,7 +26,7 @@ export default {
   args: {
     ...tray({}),
     share: "stop-tray:story",
-    fillOf: (row: StopRow) => `var(--mark-${(row.s.id.length % 8) + 1})`,
+    fillOf: (row: StopRow) => `var(--color-mark-${(row.s.id.length % 8) + 1})`,
     trailOf: () => "",
     onconfirm: () => undefined,
     oncancel: () => undefined,

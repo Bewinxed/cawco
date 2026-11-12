@@ -5,7 +5,7 @@
    * holds nothing (DESIGN.md, The Open Page Rule): no scrim, the page live
    * under it, as tall as the diff up to the dialog's cap. Each layout is drawn
    * into its own layer, so switching cross-fades the new one in over the
-   * old over --dur-control instead of redrawing in place.
+   * old over --duration-control instead of redrawing in place.
    */
   import {
     type FileContents,

@@ -342,7 +342,7 @@
     if (!(chip && seen && motionOk.current)) {
       left.add(item.id);
       target.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-menu"),
+        duration: dur("--duration-menu"),
         easing: CURVE.out,
       });
       return;
@@ -382,12 +382,12 @@
       ],
       // A flight and a half: the chip travels further than a row moves.
       {
-        duration: dur("--dur-panel") * 1.5,
+        duration: dur("--duration-panel") * 1.5,
         easing: CURVE.inOut,
         fill: "forwards",
       }
     ).finished;
-    const landing = { duration: dur("--dur-menu"), easing: CURVE.out };
+    const landing = { duration: dur("--duration-menu"), easing: CURVE.out };
     target.style.removeProperty("opacity");
     target.animate([{ opacity: 0 }, { opacity: 1 }], landing);
     await copy.animate([{ opacity: 1 }, { opacity: 0 }], {
@@ -1127,14 +1127,14 @@
 
   /**
    * The row comes and goes in the room the composer lays out for it from
-   * its first render (app.css `--c-tray-row`): opacity only, so nothing
+   * its first render (app.css `--spacing-c-tray-row`): opacity only, so nothing
    * standing on it moves; the transcript clears that room while a chip
    * stands (SessionPane `trayStands`). Growing its height instead, a first chip
    * arriving after the switch lifted the suggestion row 35px.
    */
   function rowFade(_node: Element): TransitionConfig {
     return {
-      duration: quiet ? 0 : dur("--dur-control"),
+      duration: quiet ? 0 : dur("--duration-control"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -1142,7 +1142,7 @@
 
   /**
    * The check or the triangle taking the dot's place: it grows from 0.6 over
-   * --dur-pop (`slotIn`, on the glyph) as it is drawn in from its leading
+   * --duration-pop (`slotIn`, on the glyph) as it is drawn in from its leading
    * edge (`slotCut`, on the glyph's inside), two effects on one timing: one
    * effect that cuts and moves dies with its renderer once another move
    * displaces it (house/no-clip-with-move).
@@ -1150,13 +1150,13 @@
   function slotIn(_node: Element, ends: boolean): TransitionConfig {
     if (!(ends && motionOk.current)) {
       return {
-        duration: dur("--dur-control"),
+        duration: dur("--duration-control"),
         easing: easeOut,
         css: (t) => `opacity: ${t}`,
       };
     }
     return {
-      duration: dur("--dur-pop"),
+      duration: dur("--duration-pop"),
       easing: easeOut,
       css: (t) => `transform: scale(${(0.6 + 0.4 * t).toFixed(3)})`,
     };
@@ -1166,14 +1166,14 @@
       return { duration: 0 };
     }
     return {
-      duration: dur("--dur-pop"),
+      duration: dur("--duration-pop"),
       easing: easeOut,
       css: (_t, u) => `clip-path: inset(0 ${(u * 100).toFixed(1)}% 0 0)`,
     };
   }
   function slotOut(_node: Element): TransitionConfig {
     return {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -1215,7 +1215,7 @@
     aria-hidden="true"
     class="flex-none size-c-row-mark rounded-xs grid place-items-center bg-mark-overlay bg-(--mark-bg)"
     data-box
-    style:--mark-bg="var(--mark-{markHue(sessionPlace(item.instanceId))})"
+    style:--mark-bg="var(--color-mark-{markHue(sessionPlace(item.instanceId))})"
     {@attach land(() => (flies ? flightKey(item.instanceId) : undefined))}
     ><Sprite class="size-icon-sm block text-mark-glyph" /></span
   >
@@ -1234,7 +1234,7 @@
     <a
       data-box
       aria-label="Open {item.title} in its own view"
-      class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+      class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
       href={hrefOf(item)}
       title="Open {item.title} in its own view"
     >
@@ -1382,7 +1382,7 @@
     class="flex flex-col gap-space-1 py-space-3 px-space-4 not-first:border-t not-first:border-t-border-hairline"
     data-flip
     data-shelf-row={item.id}
-    style:--sacts-start="calc(var(--c-row-mark) + var(--space-2))"
+    style:--sacts-start={"calc(var(--spacing-c-row-mark) + var(--spacing-space-2))"}
   >
     <div class="mark-line flex items-center gap-space-2 min-w-0">
       {@render mark(item, false)}
@@ -1397,7 +1397,7 @@
       <a
         data-box
         aria-label="Open {item.title} in its own view"
-        class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
+        class="touch-hit flex-none size-c-row-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--duration-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
         href={hrefOf(item)}
         title="Open {item.title} in its own view"
       >
@@ -1412,7 +1412,7 @@
     {#if reason === undefined}
       <div
         class="flex flex-wrap items-center gap-space-2 mt-space-1 ps-(--sacts-start)"
-        style:--hit-gap-x="var(--space-2)"
+        style:--hit-gap-x="var(--spacing-space-2)"
       >
         <Button
           label="Retry"
@@ -1486,7 +1486,7 @@
           event.preventDefault();
           dismiss(item);
         }}
-        style:--hit-gap-x="var(--space-2)"
+        style:--hit-gap-x="var(--spacing-space-2)"
       >
         <Input
           aria-label="Why {item.title} is no longer owed"
@@ -1593,7 +1593,7 @@
         inert={held}
         {onkeydown}
         role={keys.length >= 3 ? "toolbar" : "group"}
-        style:--hit-gap-x="var(--space-2)"
+        style:--hit-gap-x="var(--spacing-space-2)"
         bind:this={row}
         {@attach reflow()}
       >
@@ -1676,9 +1676,9 @@
              flow: opening and closing it moves nothing, the row, the
              composer and the transcript under it included. It comes in by
              the kit's own `@starting-style` (opacity, translate and scale
-             on one transition, --dur-pop on the drawer curve, from its
+             on one transition, --duration-pop on the drawer curve, from its
              bottom edge) and leaves by `popOut` back down into the row
-             (--dur-exit, The Fast Exit Rule). What it holds changing size
+             (--duration-exit, The Fast Exit Rule). What it holds changing size
              (a reason field, a row leaving) tweens its height (`morph`),
              up from its foot. -->
         <!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the shelf is heard on the region, as it passes up from the row's field -->
@@ -1698,7 +1698,7 @@
           inert={held}
           onkeydown={onshelfkey}
           style:--shelf-end="calc(-1 * var(--ring-room, 0px))"
-          style:--shelf-foot="calc(100% + var(--space-2))"
+          style:--shelf-foot="calc(100% + var(--spacing-space-2))"
           style:--shelf-room="{shelfRoom}px"
           bind:this={shelfEl}
           {@attach morph({ rows: true })}
@@ -1772,7 +1772,7 @@
                     event.preventDefault();
                     detach(dismissAll(), "dismissAll");
                   }}
-                  style:--hit-gap-x="var(--space-2)"
+                  style:--hit-gap-x="var(--spacing-space-2)"
                 >
                   <Input
                     aria-label="Why all {failures.length} are no longer owed"

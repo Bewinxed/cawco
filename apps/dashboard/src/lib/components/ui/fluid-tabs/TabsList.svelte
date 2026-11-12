@@ -37,21 +37,21 @@
    *   a short run so a tab slides under the toggle and Caw.
    */
   const tabsListVariants = tv({
-    base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--space-row)] [--icon:var(--icon-md)] [--px:var(--c-tab-px)] [--text:var(--text-label)] coarse:[--item:var(--space-8)]",
+    base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--spacing-space-row)] [--icon:var(--spacing-icon-md)] [--px:var(--spacing-c-tab-px)] [--text:var(--text-label)] coarse:[--item:var(--spacing-space-8)]",
     variants: {
       size: {
         default: "",
         compact:
-          "[--px:var(--c-segment-pad-x)] coarse:[--item:var(--c-tab-item)]",
+          "[--px:var(--spacing-c-segment-pad-x)] coarse:[--item:var(--spacing-c-tab-item)]",
       },
       variant: {
         /* The kit's one segmented recipe (tabs/thumb.ts): its groove, pad,
            segment height and concentric corners, on a page's ground (in a
            bar's glass the switch is BarSegments); the chosen segment
            lifted in surface-lift. */
-        segmented: `${SEGMENTED_TRACK} [--sheet:var(--surface-lift)]`,
+        segmented: `${SEGMENTED_TRACK} [--sheet:var(--color-surface-lift)]`,
         folder:
-          "isolate gap-0 rounded-none bg-transparent [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--radius:var(--radius-sm)] [--sheet:var(--surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
+          "isolate gap-0 rounded-none bg-transparent [--item:var(--spacing-c-tab-item)] [--pad:var(--spacing-space-1)] [--radius:var(--radius-sm)] [--sheet:var(--color-surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--duration-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--spacing-c-tab-slope-end)] [--slope-start:var(--spacing-c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
       },
       fill: {
         true: "flex w-full min-w-0 [&>[data-slot=ff-tab]]:min-w-0 [&>[data-slot=ff-tab]]:flex-1 [&_[data-slot=hit]]:justify-center",
@@ -61,9 +61,9 @@
       },
       strip: {
         session:
-          "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)]",
+          "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--color-tab-sheet)] [--tab-hover:light-dark(var(--color-surface-recess),var(--color-surface-hover))] coarse:[--item:var(--strip-item)]",
         hosted:
-          "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--tab-sheet)] [--tab-hover:light-dark(var(--surface-recess),var(--surface-hover))] coarse:[--item:var(--strip-item)]",
+          "[--item:var(--strip-item)] [--px:var(--strip-px)] tab-rim-w [--sheet:var(--color-tab-sheet)] [--tab-hover:light-dark(var(--color-surface-recess),var(--color-surface-hover))] coarse:[--item:var(--strip-item)]",
       },
     },
     compoundVariants: [
@@ -71,13 +71,14 @@
       {
         variant: "segmented",
         size: "compact",
-        class: "[--item:var(--c-btn-h-xs)] [--pad:var(--space-row)]",
+        class:
+          "[--item:var(--spacing-c-btn-h-xs)] [--pad:var(--spacing-space-row)]",
       },
       {
         strip: "session",
         scrollable: true,
         class:
-          "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--c-top-bar-h)_-_var(--c-tab-row-h))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:not-glass-item:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
+          "max-desk:strip-edge-mask desk:coarse:-mt-(--strip-reach) coarse:-mb-(--strip-reach) desk:coarse:pt-[calc(var(--pad)_+_var(--strip-reach))] coarse:pb-(--strip-reach) max-desk:mt-0 max-desk:pt-[calc(var(--spacing-c-top-bar-h)_-_var(--spacing-c-tab-row-h))] max-desk:[--edge-room-start:calc(var(--fade-len)_*_1.5)] max-desk:[--fade-len:var(--strip-fade)] max-desk:[--overlap:var(--radius-sm)] max-desk:not-glass-item:[--pad:0px] max-desk:[--radius:var(--radius-lg)]",
       },
       {
         strip: "hosted",
@@ -1090,7 +1091,7 @@
    * A vertical wheel over the track moves it sideways on a spring: each
    * notch pushes the target along and the track glides after it, carrying
    * its speed into the next notch, instead of jumping 100px a click.
-   * Critically damped at --dur-glide's response, so it lands without
+   * Critically damped at --duration-glide's response, so it lands without
    * overshoot. A sideways trackpad swipe is the browser's own scroll and
    * is left alone.
    */
@@ -1152,7 +1153,7 @@
         return;
       }
       if (frame === null) {
-        const response = dur("--dur-glide") / 1000;
+        const response = dur("--duration-glide") / 1000;
         stiffness = ((2 * Math.PI) / response) ** 2;
         damping = (4 * Math.PI) / response;
         at = el.scrollLeft;
@@ -1273,7 +1274,7 @@
     <div
       data-slot="ring"
       aria-hidden="true"
-      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--dur-ghost) motion-safe:ease-out"
+      class="pointer-events-none absolute start-0 top-0 z-4 rounded-(--shape) border-(length:--focus-ring-width) border-focus-ring in-variant-folder:z-(--ring-z) in-variant-folder:rounded-(--ring-r) motion-safe:transition-[transform,width,height] motion-safe:duration-(--duration-ghost) motion-safe:ease-out"
       style:transform="translate({focusRect.left}px,{focusRect.top}px)"
       style:width="{focusRect.width}px"
       style:height="{focusRect.height}px"

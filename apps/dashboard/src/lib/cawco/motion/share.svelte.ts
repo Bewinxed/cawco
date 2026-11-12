@@ -273,7 +273,7 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
   const {
     mode = "scale",
     uniform = false,
-    ms = dur("--dur-panel"),
+    ms = dur("--duration-panel"),
     easing = CURVE.drawer,
     anchor,
   } = options;
@@ -413,7 +413,7 @@ export function land(key: () => string | undefined, options: LandOptions = {}) {
 export function closeInto(
   surface: HTMLElement,
   target: HTMLElement,
-  ms = dur("--dur-panel"),
+  ms = dur("--duration-panel"),
   easing: string = CURVE.drawer
 ): Animation | undefined {
   if (!motionOk.current) {
@@ -498,7 +498,7 @@ function flyMoves(): void {
   }));
   // The list's own travel (motion/rows `travel`): a regroup moves rows as
   // a reflow would.
-  const timing = { duration: dur("--dur-panel"), easing: CURVE.inOut };
+  const timing = { duration: dur("--duration-panel"), easing: CURVE.inOut };
   // Then every flight. One whose old and new places are both out of its
   // box's sight lands with no flight: nobody sees it travel.
   const flights: Promise<unknown>[] = [];
@@ -688,11 +688,11 @@ export function regroup(
     regroupingNow = false;
     const now = new Set<string>();
     const fadeIn = {
-      duration: dur("--dur-panel"),
+      duration: dur("--duration-panel"),
       easing: ease("--ease-out"),
     };
     const fadeOut = {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: ease("--ease-out"),
       fill: "forwards" as const,
     };

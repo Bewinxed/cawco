@@ -287,7 +287,7 @@
 
   /**
    * Each chunk's words fade in together — one short opacity fade per chunk
-   * (--dur-menu, --ease-out), no stagger inside it, no blur, nothing that
+   * (--duration-menu, --ease-out), no stagger inside it, no blur, nothing that
    * moves. A word the chunk only EXTENDS ("wor" → "world") is not new, and
    * keeps its place.
    *
@@ -313,7 +313,7 @@
         fresh.add(token);
       }
     }
-    const duration = dur("--dur-menu");
+    const duration = dur("--duration-menu");
     const easing = ease("--ease-out");
     for (const element of fresh) {
       element.animate([{ opacity: 0 }, { opacity: 1 }], { duration, easing });

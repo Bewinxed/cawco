@@ -40,7 +40,7 @@ export interface Sample {
  */
 export function integrate(x0: number, v0: number): Sample[] {
   /** The perceptual duration, in seconds. */
-  const settle = dur("--dur-settle") / 1000;
+  const settle = dur("--duration-settle") / 1000;
   const stiffness = ((2 * Math.PI) / settle) ** 2;
   const damping = (4 * Math.PI * (1 - BOUNCE)) / settle;
   const out: Sample[] = [{ t: 0, x: x0, v: v0 }];

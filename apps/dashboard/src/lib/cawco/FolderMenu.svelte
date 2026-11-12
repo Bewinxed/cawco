@@ -110,7 +110,7 @@
           {#if pickedHue !== undefined}
             <button
               class="select-none rounded-full px-2 py-0.5 text-label text-ink-muted
-                     transition-colors duration-(--dur-control) hover:bg-accent hover:text-ink-strong"
+                     transition-colors duration-(--duration-control) hover:bg-accent hover:text-ink-strong"
               onclick={() => folderPrefs.setHue(cwd, undefined)}
               type="button"
             >
@@ -128,7 +128,7 @@
             <button
               aria-pressed={on}
               class="select-none focus-inset flex size-space-8 items-center justify-center rounded-full transition-colors
-                     duration-(--dur-control)
+                     duration-(--duration-control)
                      aria-pressed:outline-solid aria-pressed:outline-(length:--focus-ring-width)
                      aria-pressed:outline-offset-(--focus-ring-inset) aria-pressed:outline-ink-strong
                      aria-pressed:focus-visible:outline-focus-ring"

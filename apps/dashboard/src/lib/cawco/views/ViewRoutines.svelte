@@ -32,7 +32,7 @@
    * count and the needs-you mark when something in it waits on you (a
    * failing routine or source, an action awaiting you). Side by side on a
    * wide screen, stacked on a phone; on a desk a block's rows scroll inside
-   * it past --c-block-body-max, so forty routines never push the other two
+   * it past --spacing-c-block-body-max, so forty routines never push the other two
    * out of view.
    *
    * Routines is a ledger, one shape for every row (Hex, Snowflake, Cursor):
@@ -753,7 +753,7 @@
       meta: routinesMeta,
       action: routinesAction,
       content: routinesBody,
-      measure: "--c-block-routines",
+      measure: "--spacing-c-block-routines",
       hideable: true,
       body: "capped",
       card: true,
@@ -764,7 +764,7 @@
       meta: sourcesMeta,
       action: sourcesAction,
       content: sourcesBody,
-      measure: "--c-block-ledger",
+      measure: "--spacing-c-block-ledger",
       hideable: true,
       body: "capped",
       card: true,
@@ -774,7 +774,7 @@
       glyph: IconShield,
       meta: actionsMeta,
       content: actionsBody,
-      measure: "--c-block-ledger",
+      measure: "--spacing-c-block-ledger",
       hideable: true,
       body: "capped",
       card: true,
@@ -888,7 +888,7 @@
   <div
     data-slot="ask-caw"
     class="relative h-(--ask-h) w-full flex-none"
-    style:--ask-h="calc({askFoot}px + var(--space-4))"
+    style:--ask-h="calc({askFoot}px + var(--spacing-space-4))"
   >
     {@render composer(false)}
   </div>
@@ -1054,8 +1054,8 @@
             <td class="p-0 group-state-open:bg-surface-well" colspan={span}>
               <RowFault
                 again={() => again(routine, refusal.act)}
-                end="var(--space-3)"
-                indent="var(--space-3)"
+                end="var(--spacing-space-3)"
+                indent="var(--spacing-space-3)"
                 reason={refusal.reason}
               />
             </td>
@@ -1183,8 +1183,8 @@
       <tr data-routine-refusal>
         <td class="p-0" colspan={span}>
           <RowFault
-            end="var(--space-3)"
-            indent="var(--space-3)"
+            end="var(--spacing-space-3)"
+            indent="var(--spacing-space-3)"
             reason={trimRefused}
           />
         </td>
@@ -1312,8 +1312,8 @@
     {/if}
     <div
       data-slot="ledger"
-      style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
-      style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
+      style:--col-state={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
+      style:--col-menu={"calc(var(--spacing-c-btn-h-sm) + var(--spacing-space-3) * 2)"}
       {@attach countColumns}
     >
       <Table.Root
@@ -1420,7 +1420,7 @@
   {:else}
     <div
       data-slot="ledger"
-      style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
+      style:--col-state={"calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"}
     >
       <Table.Root aria-label={words.sources} layout="ledger" stickyBand>
         <Table.Header>

@@ -61,9 +61,9 @@
   const uid = $props.id();
   /** The board's column width, wrapping into rows; one column where the room is narrower. */
   const COLS =
-    "repeat(auto-fill, minmax(min(100%, var(--c-board-col-min)), 1fr))";
+    "repeat(auto-fill, minmax(min(100%, var(--spacing-c-board-col-min)), 1fr))";
   /** Every row past a phone: one height, at least a whole stage's. */
-  const ROWS = "minmax(var(--c-draft-col-h), 1fr)";
+  const ROWS = "minmax(var(--spacing-c-draft-col-h), 1fr)";
   let grid = $state<HTMLElement>();
 
   /** A new stage stands before the first closed one (done, dropped): in view, its name taking the caret. */

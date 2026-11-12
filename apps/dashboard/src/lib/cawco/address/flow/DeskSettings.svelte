@@ -3,7 +3,7 @@
    * Configure › Devices with the Word address row beside Require paired
    * devices (SettingsRow): Set up before it starts, Open after. Its button
    * opens into the same tray, floating over it at the panel's width
-   * (--c-panel-w), no scrim, the page live (Open Page Rule), by a clip from
+   * (--spacing-c-panel-w), no scrim, the page live (Open Page Rule), by a clip from
    * the button's box (motion.ts `openFrom`); the page keeps room under it.
    * The only way in on a network that can't carry the word.
    */

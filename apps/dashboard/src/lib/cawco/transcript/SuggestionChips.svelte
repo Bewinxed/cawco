@@ -52,8 +52,8 @@
    */
   function arrive(_node: HTMLElement, { i }: { i: number }) {
     return {
-      delay: i * dur("--dur-stagger"),
-      duration: dur("--dur-panel"),
+      delay: i * dur("--duration-stagger"),
+      duration: dur("--duration-panel"),
       easing: easeOut,
       css: (t: number, u: number) =>
         motionOk.current
@@ -190,7 +190,7 @@
    */
   function leave(node: HTMLElement) {
     return lifting(node, pinnedAtBox(node), {
-      duration: dur("--dur-control"),
+      duration: dur("--duration-control"),
       easing: easeOut,
       css: (t: number) =>
         motionOk.current
@@ -201,7 +201,7 @@
 </script>
 
 <!-- Out of flow, standing on the composer's top edge, one line tall whatever
-     it holds (app.css `--c-suggest-room`, the row and the step under it): a
+     it holds (app.css `--spacing-c-suggest-room`, the row and the step under it): a
      layer over the transcript's foot, which keeps no room for it, so chips
      coming, going or changing never move the transcript (the composer's
      surface brief, The Composer Layer Rule). Past its width the line
@@ -214,8 +214,8 @@
 <div
   data-slot="suggest"
   data-filled={shown.length > 0 || slow || !!failure || undefined}
-  style:--suggest-bottom="calc(100% + var(--space-2))"
-  style:--suggest-lift={"linear-gradient(to top, var(--surface-recess) 55%, var(--surface-recess-clear))"}
+  style:--suggest-bottom="calc(100% + var(--spacing-space-2))"
+  style:--suggest-lift={"linear-gradient(to top, var(--color-surface-recess) 55%, var(--color-surface-recess-clear))"}
   class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-c-suggest-row pt-space-4 pointer-events-none data-filled:bg-(image:--suggest-lift)"
 >
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
@@ -223,10 +223,10 @@
   {#if shown.length > 0 || slow || failure}
     <fieldset
       data-slot="track"
-      style:--hit-gap-x="var(--space-2)"
-      style:--hit-gap-y="var(--space-2)"
+      style:--hit-gap-x="var(--spacing-space-2)"
+      style:--hit-gap-y="var(--spacing-space-2)"
       class="relative min-w-0 m-0 border-none border-current flex flex-nowrap items-center gap-space-2 p-space-1 overflow-x-auto overscroll-x-contain no-scrollbar"
-      out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
+      out:fade={{ duration: dur("--duration-control"), easing: easeOut }}
     >
       <legend class="sr-only flex-none pointer-events-auto"
         >Suggested skills, tools and MCP servers</legend
@@ -236,7 +236,7 @@
              (noul 0.6 → 1), and the accent's share of the fill runs 8% → 32%
              with it. The border takes the fill's share at 1.5×, mixed in
              sRGB so the accent reads as if laid over the surface; a
-             confidence that moves in place re-tints over --dur-panel. -->
+             confidence that moves in place re-tints over --duration-panel. -->
         <button
           data-slot="suggest-chip"
           class="select-none inline-flex items-center h-c-suggest-chip gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:scale-(--press-scale) hover:bg-suggest-tint-hover mark-line touch-hit"
@@ -249,7 +249,7 @@
           in:arrive={{ i }}
           out:leave
           animate:flip={{
-            duration: motionOk.current ? dur("--dur-panel") : 0,
+            duration: motionOk.current ? dur("--duration-panel") : 0,
             easing: easeDrawer,
           }}
         >
@@ -300,7 +300,7 @@
           aria-hidden="true"
           data-slot="suggest-shimmer"
           class="block w-c-suggest-shimmer-w flex-none pointer-events-auto"
-          in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
+          in:fade={{ duration: dur("--duration-panel"), easing: easeOut }}
           out:revealOut><Skeleton class="w-full" height="chip" /></span
         >
       {/if}
@@ -309,7 +309,7 @@
           data-slot="suggest-fail"
           class="m-0 text-ink-muted text-size-meta font-normal whitespace-nowrap flex-none pointer-events-auto"
           role="status"
-          in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
+          in:fade={{ duration: dur("--duration-panel"), easing: easeOut }}
         >
           Suggestions failed: {failure}
         </p>

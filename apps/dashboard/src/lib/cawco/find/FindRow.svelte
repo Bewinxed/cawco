@@ -97,8 +97,8 @@
     role="option"
     tabindex="-1"
     type="button"
-    style:--row-cols="var(--icon-md) minmax(0, 1fr) auto"
-    style:--row-rows="minmax(var(--icon-lg), auto) auto"
+    style:--row-cols="var(--spacing-icon-md) minmax(0, 1fr) auto"
+    style:--row-rows="minmax(var(--spacing-icon-lg), auto) auto"
   >
     <span
       data-slot="glyph"
@@ -176,7 +176,7 @@
       type="button"
     >
       <ChevronDown
-        class="size-icon-md motion-safe:transition-[rotate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
+        class="size-icon-md motion-safe:transition-[rotate] motion-safe:duration-(--duration-toggle) motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
       />
     </button>
   {/if}

@@ -37,9 +37,9 @@ interface Room {
   w: number;
 }
 
-/** Its width: the reading card's, never past the well less `--space-2` each side. */
+/** Its width: the reading card's, never past the well less `--spacing-space-2` each side. */
 export const FLOAT_W =
-  "min(var(--c-pin-card-reading-w), calc(100% - 2 * var(--space-2)))";
+  "min(var(--spacing-c-pin-card-reading-w), calc(100% - 2 * var(--spacing-space-2)))";
 
 /** Two boxes as one. */
 const union = (parts: Box[]): Box => {
@@ -238,12 +238,12 @@ export class FloatPlace {
   height = $state(0);
   /** Its height with nothing capping it ({@link FloatSize}). */
   natural = $state(0);
-  /** Its distance from the well's edges: `--space-2`. */
+  /** Its distance from the well's edges: `--spacing-space-2`. */
   // golar-ignore-next-line house/no-render-dom-read -- a pin's card opens only on a person's act (composing, opening or resting on a pin); a server render draws none
-  readonly gap = $derived(numberOf("--space-2") || 7);
+  readonly gap = $derived(numberOf("--spacing-space-2") || 7);
   readonly #over: () => Over;
   /**
-   * Its distance from the pill's box: `--space-2` from the pill as drawn,
+   * Its distance from the pill's box: `--spacing-space-2` from the pill as drawn,
    * past its focus ring (PinMark `data-focused`: a 2px outline 2px out), so
    * nothing of the pill ever stands on it.
    */
@@ -331,7 +331,7 @@ const drawnShift = (el: HTMLElement): [number, number] => {
 
 /**
  * It travels from `before` to where it now stands, `now`, over
- * `--dur-morph` on `--ease-drawer`, starting from where it is drawn, a
+ * `--duration-morph` on `--ease-drawer`, starting from where it is drawn, a
  * travel in flight counted (The Interruptible Rule). Returns the travel,
  * the one to cancel when the next starts.
  */
@@ -350,6 +350,6 @@ export const travelTo = (
       },
       { translate: "0px 0px" },
     ],
-    { duration: dur("--dur-morph"), easing: ease("--ease-drawer") }
+    { duration: dur("--duration-morph"), easing: ease("--ease-drawer") }
   );
 };

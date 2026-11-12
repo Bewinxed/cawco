@@ -75,7 +75,7 @@
   /** The glyph's box: the sheet's nav row's (space-5), or the glyph's own. */
   const glyphBox = $derived(rail ? "w-space-5" : "w-icon-md");
   const TILE_LEAD =
-    "calc(var(--c-row-inset) - (var(--c-mark) - var(--space-5)) / 2)";
+    "calc(var(--spacing-c-row-inset) - (var(--spacing-c-mark) - var(--spacing-space-5)) / 2)";
 
   /** Each machine the fleet lists that an install is bringing back: its row is that install's. */
   const returning = $derived(
@@ -350,8 +350,8 @@
       {@const back = returning.get(machine.machineId)}
       <li
         data-machine={machine.machineId}
-        style:--fault-end="var(--space-2)"
-        style:--fault-indent="calc(var(--space-2) * 2 + var(--icon-md))"
+        style:--fault-end="var(--spacing-space-2)"
+        style:--fault-indent={"calc(var(--spacing-space-2) * 2 + var(--spacing-icon-md))"}
       >
         {#if back}
           <!-- A machine coming back: its own row grows into its install's, its name kept. -->

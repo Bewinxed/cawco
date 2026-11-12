@@ -114,12 +114,12 @@
     field.animate(
       [
         { translate: "0 0" },
-        { translate: "calc(-1 * var(--space-1)) 0" },
-        { translate: "var(--space-1) 0" },
+        { translate: "calc(-1 * var(--spacing-space-1)) 0" },
+        { translate: "var(--spacing-space-1) 0" },
         { translate: "-2px 0" },
         { translate: "0 0" },
       ],
-      { duration: dur("--dur-panel"), easing: CURVE.out }
+      { duration: dur("--duration-panel"), easing: CURVE.out }
     );
   }
 
@@ -266,7 +266,10 @@
       await clipboard.copy(line);
       copied = true;
       departChecks();
-      await connect.start({ route: "command", address }, dur("--dur-hold"));
+      await connect.start(
+        { route: "command", address },
+        dur("--duration-hold")
+      );
     } catch (error) {
       copied = false;
       refused = (error as Error).message;
@@ -671,14 +674,14 @@
               <span class="grid" data-box>
                 <span
                   class={[
-                    "col-start-1 row-start-1 transition-opacity duration-(--dur-morph) ease-out",
+                    "col-start-1 row-start-1 transition-opacity duration-(--duration-morph) ease-out",
                     copied && "opacity-0",
                   ]}>{commonWords.copyCommand}</span
                 >
                 <span
                   aria-hidden="true"
                   class={[
-                    "col-start-1 row-start-1 transition-opacity duration-(--dur-morph) ease-out",
+                    "col-start-1 row-start-1 transition-opacity duration-(--duration-morph) ease-out",
                     !copied && "opacity-0",
                   ]}
                   >{connectWords.copiedListening}<span class="breathe loops"

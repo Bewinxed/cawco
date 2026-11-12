@@ -3,7 +3,7 @@
 
   /**
    * How far a file's upload has gone, as a ring that fills over
-   * --dur-control: in the sent turn's tile (DocThumb) and the composer's
+   * --duration-control: in the sent turn's tile (DocThumb) and the composer's
    * chip (AttachmentChips), in the glyph's place.
    */
   let {
@@ -30,7 +30,7 @@
   />
   <circle
     data-slot="arc"
-    class="fill-none stroke-current motion-safe:transition-[stroke-dashoffset] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+    class="fill-none stroke-current motion-safe:transition-[stroke-dashoffset] motion-safe:duration-(--duration-control) motion-safe:ease-out"
     cx="12"
     cy="12"
     r="9"

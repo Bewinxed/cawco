@@ -6,7 +6,7 @@
    * two and never covers a column of the board or the head.
    *
    * Wider than a phone it is docked: a column of its own beside the page,
-   * a conversation's width (--c-panel-w), where the page has the room for
+   * a conversation's width (--spacing-c-panel-w), where the page has the room for
    * both; a row of its own under the page, the column's width, where it has
    * not (the page's grid places it, `.caw-docked`). The page yields it that
    * room, so whatever Caw files lands on a board that stays in sight. It is
@@ -141,7 +141,7 @@
       data-caw-float-sheet
       data-caw-preview={lead.tab === "preview" || undefined}
       style={lead.tab === "preview"
-        ? "--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))"
+        ? "--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--spacing-space-7)))"
         : undefined}
       height="cap"
       modal={false}
@@ -177,7 +177,7 @@
 {:else if open}
   <!-- The card recipe, its content edge to edge and clipped by its radius; it
        fills the place the page's grid gives it. It comes in as a sheet does,
-       from its own side by --pop-rise as it fades, over --dur-panel on the
+       from its own side by --pop-rise as it fades, over --duration-panel on the
        drawer curve; with less motion it only fades (`appearOnMount`). Not
        by `@starting-style`: in iOS 27.2 Safari its starting-style rise ran
        no transition and the panel only faded (probe-kit ios-safari-motion,
@@ -188,8 +188,8 @@
     data-caw-dock
     {@attach dock}
     {@attach appearOnMount({
-      motion: { over: "--dur-panel", easing: "--ease-drawer", rise: "x" },
-      reduced: { over: "--dur-panel", easing: "--ease-drawer" },
+      motion: { over: "--duration-panel", easing: "--ease-drawer", rise: "x" },
+      reduced: { over: "--duration-panel", easing: "--ease-drawer" },
     })}
   >
     {#key projectId}

@@ -82,9 +82,9 @@
 
   /** The ledger's columns: mark, name, what it brings, when, the actions. */
   const COLUMNS =
-    "var(--c-row-lead) minmax(0, 1fr) var(--c-forgotten-brings-w) var(--c-forgotten-when-w) auto";
+    "var(--spacing-c-row-lead) minmax(0, 1fr) var(--spacing-c-forgotten-brings-w) var(--spacing-c-forgotten-when-w) auto";
   /** Under the container width: mark, then everything else under the name. */
-  const COLUMNS_NARROW = "var(--c-row-lead) minmax(0, 1fr)";
+  const COLUMNS_NARROW = "var(--spacing-c-row-lead) minmax(0, 1fr)";
   /** Three rows stand in while the list is read. */
   const SKELETON_ROWS = [0, 1, 2];
 
@@ -419,14 +419,14 @@
                   label: projectEndWords.openHolder(holder.name),
                 }
               : undefined}
-            indent="calc(var(--c-row-lead) + var(--space-3))"
+            indent="calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"
             reason={refusal?.reason ?? null}
           />
           <AskHere
             {asker}
             at={keyOf(one)}
             class="col-span-full pb-space-2"
-            indent="calc(var(--c-row-lead) + var(--space-3))"
+            indent="calc(var(--spacing-c-row-lead) + var(--spacing-space-3))"
           >
             <!-- The same choice as a live project's delete, said the same:
                  its checkouts by machine and path, its transcripts. -->

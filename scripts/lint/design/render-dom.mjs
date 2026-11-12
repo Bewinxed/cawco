@@ -4,7 +4,7 @@
 // document request (a reload, a shared link), and a function that reads the
 // page (the root's computed style, an element, `window`) throws there:
 // `ReferenceError: document is not defined`, and the page is a 500. The
-// project page's view swap read --dur-exit in its markup
+// project page's view swap read --duration-exit in its markup
 // (`ListSwap.leaveEnd()`, 1e4064081) and every reload of a project 500'd.
 //
 // A function that reads the page says so with `@browser` in its JSDoc

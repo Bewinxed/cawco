@@ -102,7 +102,9 @@
    */
   const insets = $derived({
     top: headRoom,
-    bottom: browser ? numberOf("--c-btn-h") + 2 * numberOf("--space-4") : 0,
+    bottom: browser
+      ? numberOf("--spacing-c-btn-h") + 2 * numberOf("--spacing-space-4")
+      : 0,
   });
 
   const nodeTypes = { state: StateNode, machine: MachineNode };
@@ -116,11 +118,11 @@
   const lengths = $derived(
     browser
       ? {
-          card: numberOf("--c-graph-node-w"),
-          head: numberOf("--space-7"),
-          pad: numberOf("--space-3"),
-          label: numberOf("--c-graph-label"),
-          labelLine: numberOf("--space-5"),
+          card: numberOf("--spacing-c-graph-node-w"),
+          head: numberOf("--spacing-space-7"),
+          pad: numberOf("--spacing-space-3"),
+          label: numberOf("--spacing-c-graph-label"),
+          labelLine: numberOf("--spacing-space-5"),
         }
       : { card: 0, head: 0, pad: 0, label: 0, labelLine: 0 }
   );
@@ -257,7 +259,7 @@
           ),
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: "var(--border-contrast)",
+            color: "var(--color-border-contrast)",
           },
           data: data as unknown as Record<string, unknown>,
         },
@@ -314,7 +316,7 @@
   });
   const translateExtent = $derived.by(
     (): [[number, number], [number, number]] => {
-      const gutter = browser ? numberOf("--space-8") : 0;
+      const gutter = browser ? numberOf("--spacing-space-8") : 0;
       if (!bounds) {
         return [
           [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY],
@@ -411,8 +413,8 @@
         }
       })}
     class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-raised"
-    style:--xy-edge-stroke="var(--border-contrast)"
-    style:--xy-edge-stroke-width="var(--c-graph-edge)"
+    style:--xy-edge-stroke="var(--color-border-contrast)"
+    style:--xy-edge-stroke-width="var(--spacing-c-graph-edge)"
   >
     <SvelteFlowProvider>
       <div

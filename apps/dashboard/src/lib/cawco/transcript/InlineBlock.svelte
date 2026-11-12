@@ -198,9 +198,9 @@
   data-marked={marked}
   data-acts={still ? undefined : ""}
   style:--mark-in={marked
-    ? "kit-fade-in var(--dur-panel) var(--ease-out)"
+    ? "kit-fade-in var(--duration-panel) var(--ease-out)"
     : undefined}
-  class="group/block relative my-space-4 data-acts:mt-c-block-act-room w-fit max-w-full min-w-0 has-data-[slot=ledger]:w-auto data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-space-2 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
+  class="group/block relative my-space-4 data-acts:mt-c-block-act-room w-fit max-w-full min-w-0 has-data-[slot=ledger]:w-auto data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-space-2 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--duration-panel) motion-safe:data-marked:before:ease-out"
 >
   {#if still}
     <!-- Replaced: its first rows as they were drawn, under the scrim, inert; the one act is the capsule standing on the veil. -->
@@ -267,7 +267,7 @@
          a finger. -->
     {#if actShown}
       <div
-        class="absolute end-0 bottom-full pb-space-2 opacity-0 transition-opacity duration-(--dur-fade) group-hover/block:opacity-100 focus-within:opacity-100 coarse:opacity-100"
+        class="absolute end-0 bottom-full pb-space-2 opacity-0 transition-opacity duration-(--duration-fade) group-hover/block:opacity-100 focus-within:opacity-100 coarse:opacity-100"
       >
         <BarGlass form="group">
           {#if mode === "promoted"}

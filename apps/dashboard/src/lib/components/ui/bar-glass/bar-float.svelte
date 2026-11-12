@@ -14,7 +14,7 @@
    * scroller's timeline in scope (`timeline-scope-transcript-head` on a box
    * holding both, `scroll-timeline-transcript-head` on the scroller); with
    * none in scope the edge stays clear. The content clears the row at rest
-   * by `--c-top-bar-h` (HIG, Toolbars: "use a ScrollEdgeEffectStyle when
+   * by `--spacing-c-top-bar-h` (HIG, Toolbars: "use a ScrollEdgeEffectStyle when
    * necessary to distinguish the toolbar area from the content area").
    *
    * The surface it heads is its positioning box (`relative`).
@@ -39,7 +39,7 @@
   } = $props();
 </script>
 
-<HeadFade band="var(--c-top-bar-h)" {tint} />
+<HeadFade band="var(--spacing-c-top-bar-h)" {tint} />
 <!-- With a centre, leading and trailing share the room either side of it
      so the centre stands centred; with none, leading takes all the room
      the trailing group leaves (a search field opened in the bar). The

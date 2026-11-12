@@ -68,14 +68,14 @@ export interface EmbedTeller {
 /**
  * How long an embed in view waits on its stories settling before it says
  * its height anyway: the house's longest motion that ends,
- * `--dur-goo-settle`. A story that starts one animation after another (a
+ * `--duration-goo-settle`. A story that starts one animation after another (a
  * ticker, a carousel) never settles, and its Preview would otherwise say it
  * didn't load: the height that held is said, and the canvas warns, naming
  * its stories.
  */
 function longMotionMs(): number {
   const value = getComputedStyle(document.documentElement)
-    .getPropertyValue("--dur-goo-settle")
+    .getPropertyValue("--duration-goo-settle")
     .trim();
   return value.endsWith("ms")
     ? Number.parseFloat(value)

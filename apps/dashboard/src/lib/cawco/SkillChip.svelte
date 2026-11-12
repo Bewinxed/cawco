@@ -88,7 +88,7 @@
       side="right"
       style="--x: {panel.place.x}px; --y: {panel.place.y}px; --origin: {panel
         .place
-        .origin}px; --room: var(--c-hover-panel-room); --span: calc(100vw - 2 * var(--hover-panel-inset))"
+        .origin}px; --room: var(--spacing-c-hover-panel-room); --span: calc(100vw - 2 * var(--hover-panel-inset))"
     >
       {#snippet children()}
         <div data-slot="skill-card" class="grid min-w-0 gap-space-2">

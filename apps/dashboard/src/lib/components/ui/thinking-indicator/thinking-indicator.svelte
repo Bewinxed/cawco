@@ -93,7 +93,7 @@
           stroke-linecap="round"
           stroke-linejoin="round"
           stroke-width="1.5"
-          style:--box={`var(--thinking-icon-size, var(${compact ? "--icon-md" : "--icon-lg"}))`}
+          style:--box={`var(--thinking-icon-size, var(${compact ? "--spacing-icon-md" : "--spacing-icon-lg"}))`}
           viewBox="0 0 24 24"
           width={compact ? 18 : 20}
         >
@@ -108,7 +108,7 @@
     class="inline-grid overflow-hidden text-size-label leading-body font-medium data-compact:text-size-meta data-compact:font-normal"
     data-compact={compact || undefined}
   >
-    <!-- Every beat here is the breath (--breath): each word stands for two
+    <!-- Every beat here is the breath (--duration-breath): each word stands for two
          of them in an eight-breath cycle, rising in and out, and the light
          crosses a word once a breath. Each word starts its rise a rise
          early (1.5% of its eight breaths, the keyframes'), so it stands
@@ -118,7 +118,7 @@
         class="loops col-start-1 row-start-1 whitespace-nowrap opacity-0 data-first:opacity-100 motion-safe:animate-thinking-word"
         data-first={index === 0 || undefined}
         data-slot="word"
-        style:--word-delay={`calc(var(--breath) * ${index * 2 - 0.12})`}
+        style:--word-delay={`calc(var(--duration-breath) * ${index * 2 - 0.12})`}
       >
         <!-- The light passing over the word: the word again in the strong
              ink, masked to a band three words wide (the band enters from the

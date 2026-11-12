@@ -128,7 +128,7 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] duration-(--dur-control) ease-out data-closed:opacity-50 data-over:bg-surface-hover inset-ring inset-ring-border-hairline"
+  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] duration-(--duration-control) ease-out data-closed:opacity-50 data-over:bg-surface-hover inset-ring inset-ring-border-hairline"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
@@ -216,7 +216,7 @@
               onpick(task.id, !on, event.shiftKey);
             }}
             reveal="card-pick"
-            style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - var(--icon-md)) / 2)"
+            style="--pick-top: calc(var(--spacing-space-2) + (var(--spacing-c-badge-h) - var(--spacing-icon-md)) / 2)"
           />
         {/if}
         {#if moving?.(task.id)}
@@ -229,8 +229,8 @@
         {/if}
         <RowFault
           again={fault?.again}
-          end="var(--space-2)"
-          indent="var(--space-2)"
+          end="var(--spacing-space-2)"
+          indent="var(--spacing-space-2)"
           reason={fault?.reason}
         />
       </li>

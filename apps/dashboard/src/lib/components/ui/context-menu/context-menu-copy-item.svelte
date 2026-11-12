@@ -2,7 +2,7 @@
   /**
    * A menu item that copies. The copy goes through cawco/copy.ts, whose
    * toast says what was copied; on success the item's icon cross-fades to a
-   * check over --dur-control and holds it for --dur-hold, and only then does
+   * check over --duration-control and holds it for --duration-hold, and only then does
    * the menu close, so the check shows on the item that did it. The first
    * select keeps the menu open (preventDefault); closing is a second select
    * of the same item, which bits-ui handles as any other: it closes the menu
@@ -59,7 +59,7 @@
     copied = await copyToClipboard(what, text);
     if (copied) {
       refusals.delete(at);
-      timer = setTimeout(close, dur("--dur-hold"));
+      timer = setTimeout(close, dur("--duration-hold"));
     } else {
       refusals.set(at, { reason: copyRefused(what) });
     }
@@ -67,7 +67,7 @@
 </script>
 
 <ContextMenuItem {disabled} onSelect={select} bind:ref>
-  <span class="icon-swap" style="--icon-swap-dur: var(--dur-control)">
+  <span class="icon-swap" style="--icon-swap-dur: var(--duration-control)">
     <span data-active={!copied}><IconCopy /></span>
     <span data-active={copied}><IconCheck /></span>
   </span>

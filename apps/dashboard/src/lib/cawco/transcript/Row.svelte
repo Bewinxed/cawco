@@ -107,25 +107,25 @@
    *
    * THE ARRIVAL: THE RAIL FIRST, THEN WHAT STANDS ON IT. Every row that
    * arrives opens its place first — from nothing, or from the height of the
-   * row it took over, to its own measured height over --dur-rail on
+   * row it took over, to its own measured height over --duration-rail on
    * --ease-out — and a rail row's rail, being its own background, draws down
    * with that opening as one stroke. Only once the place is open does the
-   * content fade up into it (--dur-menu, --pop-rise). A rail row's content is what
+   * content fade up into it (--duration-menu, --pop-rise). A rail row's content is what
    * stands on the rail — its children — so the rail is never faded with it;
    * any other row's content is the row. The rows above make room on that one
    * clock instead of jumping by the row's height in the frame it lands: the
    * transcript pins its bottom to the opening edge for as long as it runs.
-   * Without motion nothing opens: the content fades in over --dur-control.
+   * Without motion nothing opens: the content fades in over --duration-control.
    *
    * The reader's own message (`emerge`) opens on the composer's clock instead
-   * (--dur-control, --ease-out: the field's own collapse), because the room it
+   * (--duration-control, --ease-out: the field's own collapse), because the room it
    * takes is the room the composer gives back in the same moment. It opens
    * unclipped and plays no fade: its words are in flight from the composer
    * into it.
    *
    * A row leaving the list (the turn's indicator, a finished tool's glance, a
    * replaced send) folds shut where it stands instead of vanishing, over
-   * --dur-panel on --ease-out — unless another row takes its place in the
+   * --duration-panel on --ease-out — unless another row takes its place in the
    * update that draws it (`handoff`): then the taker starts at the height it
    * took over and tweens to its own, one height on one clock, and the row it
    * replaced stays on top of the place, out of the flow, fading as the taker
@@ -319,7 +319,7 @@
     /** The height the place opens from. */
     from: number;
     /** The duration token the place opens over. */
-    over: "--dur-rail" | "--dur-control";
+    over: "--duration-rail" | "--duration-control";
     /** The row's own height, as the frame laid it out (`onFirstLayout`). */
     own: number;
   }
@@ -398,7 +398,7 @@
     const after = place ? delay + opening : Math.max(delay, 0);
     for (const element of contentOf(row)) {
       last = element.animate(frames, {
-        duration: dur(moving ? "--dur-menu" : "--dur-control"),
+        duration: dur(moving ? "--duration-menu" : "--duration-control"),
         easing,
         delay: moving ? after : 0,
         fill: "backwards",
@@ -429,7 +429,7 @@
     };
     ghost
       .animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--dur-exit"),
+        duration: dur("--duration-exit"),
         easing,
         fill: "forwards",
       })
@@ -457,7 +457,7 @@
       delay: 0,
       content: arrives,
       clip: true,
-      over: "--dur-rail",
+      over: "--duration-rail",
     });
     if (!arrives) {
       return;
@@ -478,7 +478,7 @@
       delay: lead,
       content: !emerges,
       clip: !emerges,
-      over: emerges ? "--dur-control" : "--dur-rail",
+      over: emerges ? "--duration-control" : "--duration-rail",
     });
     if (played) {
       played.finished.then(spent, () => {
@@ -551,7 +551,7 @@
           { blockSize: "0px", opacity: 0 },
         ],
         {
-          duration: dur("--dur-panel"),
+          duration: dur("--duration-panel"),
           easing: ease("--ease-out"),
           fill: "forwards",
         }
@@ -599,13 +599,13 @@
 <div
   data-slot="row"
   data-continues={continues || undefined}
-  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
+  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--duration-panel) motion-safe:data-marked:before:ease-out"
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}
   {@attach measured}
   style:--mark-in={marked
-    ? "kit-fade-in var(--dur-panel) var(--ease-out)"
+    ? "kit-fade-in var(--duration-panel) var(--ease-out)"
     : undefined}
   style:--rail-head={continues ? "var(--rail-body)" : undefined}
   style:--rail-gap={continues ? "0" : undefined}

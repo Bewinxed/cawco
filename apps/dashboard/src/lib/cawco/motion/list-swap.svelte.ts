@@ -6,13 +6,13 @@
  * The timeline:
  * - The old rows (the first LEAVING) are copied into an inert `leaving`
  *   layer laid over the list's top and leave the other way (`ns-out-*`)
- *   together over --dur-exit (DESIGN.md, The Nothing Jumps Rule:
+ *   together over --duration-exit (DESIGN.md, The Nothing Jumps Rule:
  *   departures all start on the same frame); the layer is cleared once
  *   they are out.
  * - The new rows mount at once, keyed `${gen}:${id}` so even a row in both
  *   lists enters as new, and come in from the side the choice moved toward
- *   (`ns-in-*`, --pop-rise and a fade) over --dur-pop: the first once the old
- *   rows are out, each next --dur-stagger later, capped at STAGGER_CAP.
+ *   (`ns-in-*`, --pop-rise and a fade) over --duration-pop: the first once the old
+ *   rows are out, each next --duration-stagger later, capped at STAGGER_CAP.
  * A relay: each new row arrives no sooner than the old row in its place
  * has gone (`rowAnim`'s `notBefore`, which a caller that knows the places
  * passes), so a row and its replacement are never on screen in the same
@@ -25,11 +25,11 @@ import type { TransitionConfig } from "svelte/transition";
 import { dur, ease, motionOk } from "./curves.svelte";
 
 /** The leaving rows' beat. */
-const outMs = () => dur("--dur-exit");
+const outMs = () => dur("--duration-exit");
 /** An incoming row's beat. @browser */
-export const inMs = () => dur("--dur-pop");
+export const inMs = () => dur("--duration-pop");
 /** Between one incoming row and the next. */
-const inStagger = () => dur("--dur-stagger");
+const inStagger = () => dur("--duration-stagger");
 /** Rows past this all move together; a stagger that keeps growing down a
     forty-row list is a wait, not a rhythm. */
 const STAGGER_CAP = 9;
@@ -142,7 +142,7 @@ export class ListSwap<T> {
   /**
    * Rows a list grows by, with nothing leaving it (the update toast opening
    * to its whole notes): they come in as a swap's new rows do (`ns-in-r`),
-   * --dur-stagger apart and capped alike, with no lead, since no old row is
+   * --duration-stagger apart and capped alike, with no lead, since no old row is
    * there to wait for. With reduced motion they are simply there.
    *
    * @browser
@@ -189,7 +189,7 @@ export class ListSwap<T> {
     if (this.phase !== "in" || !motionOk.current) {
       return "none";
     }
-    return `${this.dir > 0 ? "ns-in-r" : "ns-in-l"} var(--dur-pop) var(--ease-out) both ${ListSwap.enterAt(i, notBefore)}ms`;
+    return `${this.dir > 0 ? "ns-in-r" : "ns-in-l"} var(--duration-pop) var(--ease-out) both ${ListSwap.enterAt(i, notBefore)}ms`;
   }
 
   /** The `animation` for a leaving row: every one leaves on the same frame. */
@@ -197,7 +197,7 @@ export class ListSwap<T> {
     if (!motionOk.current) {
       return "none";
     }
-    return `${this.dir > 0 ? "ns-out-l" : "ns-out-r"} var(--dur-exit) var(--ease-out) both`;
+    return `${this.dir > 0 ? "ns-out-l" : "ns-out-r"} var(--duration-exit) var(--ease-out) both`;
   }
 
   /**

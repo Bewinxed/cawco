@@ -53,7 +53,7 @@ class ThemeState {
   /**
    * A switch the reader makes cross-fades the whole page as one: a view
    * transition takes the old page, flips the theme, and fades the new page
-   * in as the old one fades out (app.css, --dur-fade on --ease-out). With
+   * in as the old one fades out (app.css, --duration-fade on --ease-out). With
    * reduced motion the theme flips at once, with no transition.
    */
   set(value: Theme) {

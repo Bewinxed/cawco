@@ -72,6 +72,6 @@
 - A phone or a finger: `mobile-native`.
 
 ## Where the rest is
-- Tokens: `design/tokens/`, built into `apps/dashboard/src/lib/tokens/tokens.css` by `bun run tokens`.
+- Tokens: `apps/dashboard/src/lib/tokens/theme.css`, Tailwind's `@theme`; a new value is added there.
 - Components: `apps/dashboard/src/lib/components/ui`.
 - Checks: `bun run check`.

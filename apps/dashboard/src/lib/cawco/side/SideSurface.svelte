@@ -431,7 +431,7 @@
     // they stand to be read.
     const glyph =
       Number.parseFloat(
-        getComputedStyle(head).getPropertyValue("--c-bar-item")
+        getComputedStyle(head).getPropertyValue("--spacing-c-bar-item")
       ) || 0;
     const moreGlyph = widths.get("more") ?? glyph;
     // More stands whatever the room while it holds what always goes in it.
@@ -598,9 +598,9 @@
   aria-label={label}
   class={cn(
     floatingSurface({ depth: "panel" }),
-    "group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-0 timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:border-0 data-side-surface-expanded:shadow-none in-data-cawco-headed:rounded-none in-data-cawco-headed:border-0 in-data-cawco-headed:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:rounded-none in-data-preview-sheet:border-0 in-data-preview-sheet:bg-transparent in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+    "group/card @container relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-0 timeline-scope-transcript-head data-side-surface-expanded:rounded-none data-side-surface-expanded:border-0 data-side-surface-expanded:shadow-none in-data-cawco-headed:rounded-none in-data-cawco-headed:border-0 in-data-cawco-headed:shadow-none in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:rounded-none in-data-preview-sheet:border-0 in-data-preview-sheet:bg-transparent in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[border-radius,box-shadow] motion-safe:in-data-split-sliding:duration-(--duration-panel) motion-safe:in-data-split-sliding:ease-drawer"
   )}
-  style:--side-room="var(--c-head-room)"
+  style:--side-room="var(--spacing-c-head-room)"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
 >
@@ -751,7 +751,7 @@
         data-side-well
         data-mode={mode && mode !== "interact" ? mode : undefined}
         data-ringed={mode ? "" : undefined}
-        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam"
+        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--duration-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam"
         bind:this={well}
       >
         {@render children()}

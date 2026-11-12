@@ -11,7 +11,7 @@
    *   one column still sets the desk's ("On wider screens"); Hide; and for a
    *   custom view, Show as a tab.
    * - **Body:** the block's content, as its card or bare (a view or a board
-   *   draws its own surfaces); a list stands at most --c-block-body-max tall
+   *   draws its own surfaces); a list stands at most --spacing-c-block-body-max tall
    *   on a desk and scrolls inside; the board fills the page's height.
    *
    * While a block is in the air its own box stays as a slot (surface-recess,
@@ -116,8 +116,8 @@
   data-flip
   data-span={span}
   style:grid-column="span {span}"
-  style:--fill-h-coarse={"calc(var(--block-fill) - var(--c-btn-h-lg) - var(--space-2))"}
-  style:--fill-h-fine={"calc(var(--block-fill) - var(--c-btn-h-sm) - var(--space-2))"}
+  style:--fill-h-coarse={"calc(var(--block-fill) - var(--spacing-c-btn-h-lg) - var(--spacing-space-2))"}
+  style:--fill-h-fine={"calc(var(--block-fill) - var(--spacing-c-btn-h-sm) - var(--spacing-space-2))"}
   {@attach dropOnBlock(drag, () => ({ block: id, columns, page }))}
   {@attach resizing &&
     morph({ width: true, on: ["data-wide", "data-narrow", "data-span"] })}
@@ -222,9 +222,9 @@
       aria-hidden="true"
       class="pointer-events-none absolute z-2 rounded-hair bg-brand-solid before:absolute before:size-c-block-drop-dot before:rounded-pill before:bg-brand-solid edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-c-block-drop-line edge-bottom:before:start-(--dot-out) edge-bottom:before:top-(--dot-mid) edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-c-block-drop-line edge-left:before:start-(--dot-mid) edge-left:before:top-(--dot-out) edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-c-block-drop-line edge-right:before:start-(--dot-mid) edge-right:before:top-(--dot-out) edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-c-block-drop-line edge-top:before:start-(--dot-out) edge-top:before:top-(--dot-mid)"
       data-edge={over}
-      style:--drop-off={"calc(var(--space-group) / -2 - var(--c-block-drop-line) / 2)"}
-      style:--dot-mid={"calc((var(--c-block-drop-line) - var(--c-block-drop-dot)) / 2)"}
-      style:--dot-out={"calc(var(--c-block-drop-dot) / -2)"}
+      style:--drop-off={"calc(var(--spacing-space-group) / -2 - var(--spacing-c-block-drop-line) / 2)"}
+      style:--dot-mid={"calc((var(--spacing-c-block-drop-line) - var(--spacing-c-block-drop-dot)) / 2)"}
+      style:--dot-out={"calc(var(--spacing-c-block-drop-dot) / -2)"}
     ></span>
   {/if}
 </section>

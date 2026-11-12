@@ -22,14 +22,14 @@
     <button
       aria-checked={value === swatch.hue}
       aria-label={swatch.name}
-      class="touch-hit select-none size-space-7 rounded-sm border-none border-current bg-(--c) transition-[box-shadow,scale] duration-(--dur-control) ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--space-1) aria-checked:shadow-(--swatch-on) motion-safe:active:scale-(--press-scale)"
+      class="touch-hit select-none size-space-7 rounded-sm border-none border-current bg-(--c) transition-[box-shadow,scale] duration-(--duration-control) ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--spacing-space-1) aria-checked:shadow-(--swatch-on) motion-safe:active:scale-(--press-scale)"
       onclick={() => {
         value = swatch.hue;
       }}
       role="radio"
       type="button"
       style:--c={hueVar(swatch.hue)}
-      style:--swatch-on={"0 0 0 var(--focus-ring-width) var(--swatch-ground, var(--surface-raised)), 0 0 0 var(--space-1) var(--c)"}
+      style:--swatch-on={"0 0 0 var(--focus-ring-width) var(--swatch-ground, var(--color-surface-raised)), 0 0 0 var(--spacing-space-1) var(--c)"}
     ></button>
   {/each}
 </div>

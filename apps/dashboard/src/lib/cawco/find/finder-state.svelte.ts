@@ -38,7 +38,7 @@ import { momentParts, rowOf, secretsIn } from "./find-rows";
 
 /** After the last keystroke, how long before every machine is asked (ms). The critique's call, under the 1 s wait grace. */
 const SETTLE_MS = 250;
-/** How long a wait goes unremarked before skeleton rows stand in (DESIGN.md --dur-wait-grace). */
+/** How long a wait goes unremarked before skeleton rows stand in (DESIGN.md --duration-wait-grace). */
 export const GRACE_MS = 1000;
 
 export type Who = "anyone" | FindBy;

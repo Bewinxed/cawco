@@ -89,8 +89,8 @@
    * His head's side, px: the compacted still fills it, drawn at that size.
    * The face's box takes it from the glass's form, which follows the shell
    * container (BarGlass `@max-desk/shell`), not the window: in the wide
-   * bar's group a symbol's (`--c-bar-symbol`), on the phone's glass his own
-   * glass less the same 4px margin (`--c-bar-caw-head-phone`). The script
+   * bar's group a symbol's (`--spacing-c-bar-symbol`), on the phone's glass his own
+   * glass less the same 4px margin (`--spacing-c-bar-caw-head-phone`). The script
    * reads the box back (`faceSide`), since a container query is the
    * stylesheet's alone. Before the box is read (the first paint, both
    * sides), the width cookie's guess (`narrow`; first-render.svelte.ts).
@@ -145,9 +145,9 @@
   const ARC = 30;
   const ARC_GAP = 8;
   const ARCS = 9;
-  /** The ring's box: his circle, in px (`--c-btn-h`). */
+  /** The ring's box: his circle, in px (`--spacing-c-btn-h`). */
   const RING_BOX = 36;
-  /** The arcs' stroke, px (`--c-caw-ring`). */
+  /** The arcs' stroke, px (`--spacing-c-caw-ring`). */
   const RIM_STROKE = 2;
   /** The glass's own edge, px: its hairline border (Shell `.tools::before`). */
   const GLASS_EDGE = 1;
@@ -199,7 +199,7 @@
   };
 
   /*
-   * The phone's glass (`--c-bar-caw-glass-phone`): a half circle at its
+   * The phone's glass (`--spacing-c-bar-caw-glass-phone`): a half circle at its
    * leading side and square at its trailing corners, centred in the rim's
    * box. The arcs' path is that outline drawn half the stroke in:
    * clockwise from 12 o'clock along the top edge, down the trailing edge,
@@ -208,7 +208,7 @@
    * as on the circle.
    */
   const MID = RING_BOX / 2;
-  /** The phone's glass, px (`--c-bar-caw-glass-phone`). */
+  /** The phone's glass, px (`--spacing-c-bar-caw-glass-phone`). */
   const STAND_BOX = 32;
   /** Where the glass's square starts inside the circle's box: its viewBox's origin. */
   const STAND_INSET = (RING_BOX - STAND_BOX) / 2;
@@ -294,7 +294,7 @@
    * way; with less motion, a fade. Each arc's path length is 1.
    */
   const drawn = (_node: Element) => ({
-    duration: dur("--dur-panel"),
+    duration: dur("--duration-panel"),
     easing: easeOut,
     css: (t: number) =>
       motionOk.current ? `stroke-dashoffset: ${1 - t}` : `opacity: ${t}`,
@@ -607,7 +607,7 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible @max-desk/shell:hidden data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--dur-pop)"
+    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible @max-desk/shell:hidden data-foot:transition-[opacity] data-foot:duration-(--duration-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--duration-pop)"
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
@@ -648,7 +648,7 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 hidden size-c-bar-caw-glass-phone -translate-1/2 overflow-visible @max-desk/shell:block data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--dur-pop)"
+    class="pointer-events-none absolute start-1/2 top-1/2 hidden size-c-bar-caw-glass-phone -translate-1/2 overflow-visible @max-desk/shell:block data-foot:transition-[opacity] data-foot:duration-(--duration-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:data-foot:duration-(--duration-pop)"
     data-count={count}
     viewBox="{STAND_INSET} {STAND_INSET} {STAND_BOX} {STAND_BOX}"
   >
@@ -707,7 +707,7 @@
            press's squash, it was work in the frame that press was waiting
            on. -->
   <span
-    class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:duration-(--dur-toggle) motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
+    class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:duration-(--duration-toggle) motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
     data-pressed={pressed || undefined}
     style:--mug-squash="scale(var(--press-scale))"
   >

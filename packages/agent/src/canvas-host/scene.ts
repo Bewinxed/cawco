@@ -80,7 +80,7 @@ const STAMP_MS = 250;
 const PICTURE_MS = 2000;
 /** The picture's margin, the brief's number. */
 const PICTURE_PADDING = 16;
-/** The room left between the drawing and Mermaid added under it. Our call: `--space-8` × 2. */
+/** The room left between the drawing and Mermaid added under it. Our call: `--spacing-space-8` × 2. */
 const BELOW_GAP = 64;
 /** Excalidraw's default ink, which ours replaces on what the agent draws. */
 const EXCALIDRAW_INK = "#1e1e1e";
@@ -367,13 +367,13 @@ export function bindScene(
   };
 
   // The agent's elements arrive as a transcript row does: each fades up
-  // where it stands over `--dur-menu`, the changed ones first, staggered
-  // across `--dur-stagger` (the artifact panel's surface brief, The agent's turn on the canvas). Each
+  // where it stands over `--duration-menu`, the changed ones first, staggered
+  // across `--duration-stagger` (the artifact panel's surface brief, The agent's turn on the canvas). Each
   // element's clock is an `agent-arrival` run (motion.ts); with reduced
   // motion they fade the same, since nothing travels.
   const fadeIn = (ids: string[]) => {
-    const fade = tokenMs("--dur-menu");
-    const step = tokenMs("--dur-stagger") / Math.max(1, ids.length);
+    const fade = tokenMs("--duration-menu");
+    const step = tokenMs("--duration-stagger") / Math.max(1, ids.length);
     const runs = new Map(
       ids.map((id, i) => [id, clock(ARRIVAL, fade, i * step)])
     );
@@ -639,7 +639,7 @@ export const fitScene = (api: ExcalidrawImperativeAPI): void => {
  * canvas, the elements whose boxes it crosses) and puts the stroke's icon
  * there; Erase in its menu comes back as `cawco:erase`, which deletes it.
  *
- * A stroke whose pen stayed within {@link HOLD_PX} for `--dur-press-hold`
+ * A stroke whose pen stayed within {@link HOLD_PX} for `--duration-press-hold`
  * before it lifted is offered to `held` first (snap.ts); one it replaced
  * with a shape is ink no longer, and tells nothing.
  */
@@ -676,7 +676,7 @@ const tellStrokeEnds = (
     }
     const still =
       Math.hypot(event.clientX - rest.x, event.clientY - rest.y) <= HOLD_PX &&
-      performance.now() - rest.at >= tokenMs("--dur-press-hold");
+      performance.now() - rest.at >= tokenMs("--duration-press-hold");
     // Excalidraw finishes the freedraw on this same pointerup: read it after.
     later(() => {
       const elements = api.getSceneElements();

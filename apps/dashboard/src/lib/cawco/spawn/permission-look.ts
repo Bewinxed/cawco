@@ -32,11 +32,11 @@ export interface PermissionLook {
  */
 const DRAWN: Partial<Record<PermissionMode, { icon: Component; hue: string }>> =
   {
-    default: { icon: Shield, hue: "var(--ink-muted)" },
-    plan: { icon: Notes, hue: "var(--ink-muted)" },
-    acceptEdits: { icon: Pen, hue: "var(--ink-muted)" },
-    bypassPermissions: { icon: Danger, hue: "var(--status-attn-ink)" },
-    fullSend: { icon: IconShield, hue: "var(--status-attn-ink)" },
+    default: { icon: Shield, hue: "var(--color-ink-muted)" },
+    plan: { icon: Notes, hue: "var(--color-ink-muted)" },
+    acceptEdits: { icon: Pen, hue: "var(--color-ink-muted)" },
+    bypassPermissions: { icon: Danger, hue: "var(--color-status-attn-ink)" },
+    fullSend: { icon: IconShield, hue: "var(--color-status-attn-ink)" },
   };
 
 export const permissionLook = (
@@ -45,5 +45,5 @@ export const permissionLook = (
 ): PermissionLook => ({
   name: permissionModeLabel(value),
   desc: permissionModeDescription(value, harness),
-  ...(DRAWN[value] ?? { icon: Shield, hue: "var(--ink-subtle)" }),
+  ...(DRAWN[value] ?? { icon: Shield, hue: "var(--color-ink-subtle)" }),
 });

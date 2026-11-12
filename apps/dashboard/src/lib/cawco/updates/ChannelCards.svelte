@@ -63,7 +63,7 @@
   const dark = $derived(theme.resolved === "dark");
   const index = $derived(chosen === "stable" ? 0 : 1);
   /** Half a card plus half the gap: where the other card starts and ends. */
-  const HALF = "calc(50% + var(--space-3) / 2)";
+  const HALF = "calc(50% + var(--spacing-space-3) / 2)";
 
   const release = (channel: Channel) => channels?.channels[channel];
 </script>
@@ -71,7 +71,7 @@
 <!-- Room above the cards for Caw's box, so nothing overlaps the header. -->
 <div
   class="pt-(--caw-peek-rise)"
-  style:--cards-w="min(100%, calc(var(--channel-card-max) * 2 + var(--space-3)))"
+  style:--cards-w={"min(100%, calc(var(--channel-card-max) * 2 + var(--spacing-space-3)))"}
   style:--cols="repeat(2, minmax(0, var(--channel-card-max)))"
 >
   <RadioGroup.Root
@@ -101,8 +101,11 @@
           class="pointer-events-none absolute inset-y-0 z-1 rounded-md border border-brand-solid bg-surface-recess"
           style:inset-inline-end={index === 0 ? HALF : "0"}
           style:inset-inline-start={index === 0 ? "0" : HALF}
-          in:fade={{ duration: dur("--dur-fade"), delay: dur("--dur-exit") }}
-          out:fade={{ duration: dur("--dur-exit") }}
+          in:fade={{
+            duration: dur("--duration-fade"),
+            delay: dur("--duration-exit"),
+          }}
+          out:fade={{ duration: dur("--duration-exit") }}
         ></span>
       {/key}
     {/if}
@@ -134,12 +137,12 @@
           <span
             class="mark-line relative z-2 mt-space-2 flex items-center gap-space-2 text-ink-strong"
             in:blur={{
-              duration: dur("--dur-panel"),
+              duration: dur("--duration-panel"),
               easing: easeOut,
               amount: 2,
             }}
             out:blur={{
-              duration: dur("--dur-exit"),
+              duration: dur("--duration-exit"),
               easing: easeOut,
               amount: 2,
             }}
@@ -176,12 +179,15 @@
       <span
         aria-hidden="true"
         class="pointer-events-none absolute top-(--caw-top) z-3 size-(--caw-peek)"
-        in:fade={{ duration: dur("--dur-fade"), delay: dur("--dur-exit") }}
-        out:fade={{ duration: dur("--dur-exit") }}
+        in:fade={{
+          duration: dur("--duration-fade"),
+          delay: dur("--duration-exit"),
+        }}
+        out:fade={{ duration: dur("--duration-exit") }}
         style:--caw-top="calc(var(--caw-peek-rise) * -1)"
         style:inset-inline-start={index === 0
-          ? "calc((100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"
-          : "calc(100% - (100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"}
+          ? "calc((100% - var(--spacing-space-3)) / 4 - var(--caw-peek) / 2)"
+          : "calc(100% - (100% - var(--spacing-space-3)) / 4 - var(--caw-peek) / 2)"}
       >
         <img
           alt=""

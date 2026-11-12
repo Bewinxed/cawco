@@ -147,7 +147,7 @@
         <div class="grid gap-space-1">
           {#if !tray.stopped}
             <!-- Open, the tray stands one group step (the list's gap and
-                 this margin, --space-3 in all) off the row under it, the
+                 this margin, --spacing-space-3 in all) off the row under it, the
                  same in every state; closed, the row is a row among rows. -->
             <div
               class="data-open:mb-space-2"

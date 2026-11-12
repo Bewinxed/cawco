@@ -65,7 +65,7 @@
       }
       const next = Math.max(
         0,
-        Math.round(card.bottom - glass.bottom - numberOf("--space-2"))
+        Math.round(card.bottom - glass.bottom - numberOf("--spacing-space-2"))
       );
       if (next !== height) {
         height = next;

@@ -98,7 +98,7 @@
   {:else if !ready}
     <div
       class="grid grid-cols-(--roster-cols) gap-space-3"
-      style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--c-roster-card-min)), calc((100% - 3 * var(--space-3)) / 4)), 1fr))"}
+      style:--roster-cols={"repeat(auto-fill, minmax(max(min(100%, var(--spacing-c-roster-card-min)), calc((100% - 3 * var(--spacing-space-3)) / 4)), 1fr))"}
     >
       {#each [0, 1, 2, 3] as at (at)}
         <Skeleton height="board" radius="card" />

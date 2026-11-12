@@ -87,7 +87,7 @@
     const { w, h } = shape;
     const limits = ["100%", `${w}px`];
     if (capped) {
-      limits.push(`calc(var(--c-task-output-video-h) * ${w} / ${h})`);
+      limits.push(`calc(var(--spacing-c-task-output-video-h) * ${w} / ${h})`);
     }
     return { ratio: `${w} / ${h}`, width: `min(${limits.join(", ")})` };
   });
@@ -168,7 +168,7 @@
     label={madeWords.position}
   >
     <media-slider-track
-      class="relative block h-c-scrub-h w-full overflow-clip rounded-pill bg-media-track transition-[height] duration-(--dur-control) ease-out group-data-interactive/scrub:h-c-scrub-h-active"
+      class="relative block h-c-scrub-h w-full overflow-clip rounded-pill bg-media-track transition-[height] duration-(--duration-control) ease-out group-data-interactive/scrub:h-c-scrub-h-active"
     >
       <media-slider-buffer
         class="absolute inset-y-0 start-0 block w-(--media-slider-buffer,0%) bg-media-buffered"
@@ -178,7 +178,7 @@
       ></media-slider-fill>
     </media-slider-track>
     <media-slider-thumb
-      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-c-scrub-thumb -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-media-fill opacity-0 transition-opacity duration-(--dur-control) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
+      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-c-scrub-thumb -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-media-fill opacity-0 transition-opacity duration-(--duration-control) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
     ></media-slider-thumb>
   </media-time-slider>
 {/snippet}
@@ -265,7 +265,7 @@
     <media-container
       class="flex h-c-btn-h w-full min-w-0 items-center gap-c-bar-group-pad rounded-pill bg-surface-raised p-c-bar-group-pad shadow-tile outline-1 -outline-offset-1 outline-border-hairline concentric-row r-inset-c-bar-group-pad r-join-xs hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5"
       data-glass
-      style:--r-outer="calc(var(--c-btn-h) / 2)"
+      style:--r-outer="calc(var(--spacing-c-btn-h) / 2)"
       {@attach placeItems}
       in:reveal
     >

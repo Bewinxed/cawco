@@ -91,7 +91,7 @@
     <!-- The tool row's tail: the server's name in the muted mono face, and
          the chevron; it opens the MCP page. -->
     <a
-      class="mark-line touch-hit flex-none ms-auto inline-flex items-center gap-space-1 rounded-xs font-(family-name:--font-mono) font-normal text-ink-muted no-underline transition-[color] duration-(--dur-control) ease-out hover:text-ink-strong"
+      class="mark-line touch-hit flex-none ms-auto inline-flex items-center gap-space-1 rounded-xs font-(family-name:--font-mono) font-normal text-ink-muted no-underline transition-[color] duration-(--duration-control) ease-out hover:text-ink-strong"
       data-box
       href={MCP}
       title={askWords.recordOnMcpPage(answer.server)}

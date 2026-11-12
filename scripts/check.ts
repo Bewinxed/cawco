@@ -592,7 +592,7 @@ const gated: Gated[] = [
     "bun.lock",
   ]),
   bun("apps/dashboard/scripts/spacing-ratchet.ts", DASH),
-  inDashboard("scripts/build-tokens.ts", "--check"),
+  inDashboard("scripts/role-order.ts"),
   inDashboard("scripts/build-variants.ts", "--check"),
   bun("packages/hub/scripts/skills-check.ts", ["packages/hub/"]),
   run("packages/core", "faces:check", [
@@ -612,7 +612,6 @@ const gated: Gated[] = [
     "packages/agent/src/canvas-host/",
     "packages/hub/skills/decision-page/kit/",
   ]),
-  bun("scripts/token-alias-check.ts", ["design/tokens/"]),
   bun("scripts/patched-dependencies-check.ts", [
     "package.json",
     "bun.lock",

@@ -77,7 +77,7 @@
           data-kind={row.kind}
           data-waiting-face
           onclick={() => onopen(row)}
-          style:--waiting-cols="var(--c-row-lead) minmax(0, 1fr)"
+          style:--waiting-cols="var(--spacing-c-row-lead) minmax(0, 1fr)"
           type="button"
         >
           <span
@@ -100,8 +100,8 @@
         </button>
         <RowFault
           again={() => onopen(row)}
-          end="var(--c-row-inset)"
-          indent="calc(var(--c-row-inset) * 2 + var(--c-row-lead))"
+          end="var(--spacing-c-row-inset)"
+          indent="calc(var(--spacing-c-row-inset) * 2 + var(--spacing-c-row-lead))"
           reason={faultOf(row)}
         />
       </li>

@@ -12,7 +12,6 @@
     "fmt": "bun ../../scripts/fmt.ts .",
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
-    "tokens": "bun scripts/build-tokens.ts",
     "variants": "bun scripts/build-variants.ts"
   },
   "overrides": {
@@ -76,7 +75,6 @@
     "playwright-core": "^1.65.0",
     "postcss": "^8.5.30",
     "postcss-selector-parser": "^7.1.6",
-    "style-dictionary": "^5.5.5",
     "svelte": "5.57.2",
     "svelte-sonner": "^1.2.3",
     "tailwindcss": "^4.3.3",

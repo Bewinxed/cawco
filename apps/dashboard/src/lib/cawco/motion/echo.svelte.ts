@@ -2,7 +2,7 @@
  * A list's working rows, beating in turn. Each working session's mark holds
  * an echo, a copy of its tile seen only outside the tile (TreeMark
  * `[data-echo]`). On its beat the copy grows from the tile and fades, over
- * one --dur-loop on --ease-out, transform and opacity only; the tile and its
+ * one --duration-loop on --ease-out, transform and opacity only; the tile and its
  * deck never move. A session that needs you holds the same echo on its status
  * dot (`.ping`), and takes its place in the same order.
  * The rows beat top to bottom, a third of a loop apart, and the list's cycle
@@ -179,7 +179,7 @@ export function echoBeat(): Attachment<HTMLElement> {
         }
         return;
       }
-      const loop = dur("--dur-loop");
+      const loop = dur("--duration-loop");
       const gap = loop / BEATS;
       const echoes = [
         ...container.querySelectorAll<HTMLElement>("[data-echo]"),
@@ -216,7 +216,7 @@ export function echoBeat(): Attachment<HTMLElement> {
      * that stops at a cycle's end never vanishes part grown.
      */
     const play = (echo: Element, place: number, now: number, cycle: number) => {
-      const loop = dur("--dur-loop");
+      const loop = dur("--duration-loop");
       const into = (now - origin - (place * loop) / BEATS) % cycle;
       const start = now - (into < 0 ? into + cycle : into);
       const end = endOf(echo);

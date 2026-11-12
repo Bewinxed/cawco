@@ -1,6 +1,6 @@
 /**
  * A progressive blur, the app's one: what lies under a band goes out of focus
- * toward the band's edge, from sharp at its foot to `--c-head-fade-blur` at
+ * toward the band's edge, from sharp at its foot to `--spacing-c-head-fade-blur` at
  * the edge. The transcript's head under the tab strip draws it (HeadFade).
  *
  * It is a stack of uniform blurs: each layer blurs the whole band and a linear
@@ -26,7 +26,7 @@
 
 /** One layer: its share of the edge's blur, and the slice of the band it keeps. */
 export interface BlurLayer {
-  /** Its blur, as a share of `--c-head-fade-blur`. */
+  /** Its blur, as a share of `--spacing-c-head-fade-blur`. */
   share: number;
   /** What the layer keeps, as `linear-gradient(to top, …)` stops. */
   slice: string;
@@ -50,7 +50,7 @@ export const PROGRESSIVE_BLUR: readonly BlurLayer[] = [
 
 /** A layer's backdrop blur, off the edge's token. */
 export const layerBlur = (layer: BlurLayer): string =>
-  `blur(calc(var(--c-head-fade-blur) * ${layer.share}))`;
+  `blur(calc(var(--spacing-c-head-fade-blur) * ${layer.share}))`;
 
 /** A layer's mask: its slice, the band's edge at its top. */
 export const layerMask = (layer: BlurLayer): string =>

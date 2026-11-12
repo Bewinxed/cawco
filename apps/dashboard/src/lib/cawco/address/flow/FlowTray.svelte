@@ -9,7 +9,7 @@
    * tray's one leading edge (text-align: start), at desk and phone alike:
    * only Caw, the illustration, is centred.
    *
-   * Motion (§4.9): the box's height tweens over --dur-pop on the drawer
+   * Motion (§4.9): the box's height tweens over --duration-pop on the drawer
    * curve (morph); the title, the live line and the buttons' words morph in
    * their held box (MorphText); the state's words and object arrive and the
    * old ones depart (motion.ts); a tick pops in (reflow, data-flip "pop").
@@ -83,7 +83,8 @@
   data-moment={flow.moment}
   data-step={flow.step}
   data-tray="address"
-  {@attach (node) => morph({ ms: dur("--dur-pop"), followUnfolds: true })(node)}
+  {@attach (node) =>
+    morph({ ms: dur("--duration-pop"), followUnfolds: true })(node)}
 >
   <TraySurface class="gap-space-4" deskPad="p-space-5" {form}>
     <div class="grid min-w-0 gap-space-3" data-tray-content>

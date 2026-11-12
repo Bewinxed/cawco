@@ -61,7 +61,7 @@
   }: WithoutChild<SelectPrimitive.TriggerProps> &
     SelectTriggerLooks & {
       /** Its trailing mark: the unfold mark, or a chevron that turns over
-        --dur-control while the list is open (a list that opens one way). */
+        --duration-control while the list is open (a list that opens one way). */
       mark?: "unfold" | "chevron";
     } = $props();
 </script>
@@ -105,7 +105,7 @@
   >
   {#if mark === "chevron"}
     <IconChevronDown
-      class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out in-data-[state=open]:rotate-180"
+      class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out in-data-[state=open]:rotate-180"
       data-mark="chevron"
     />
   {:else}

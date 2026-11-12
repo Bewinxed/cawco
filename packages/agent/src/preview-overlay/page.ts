@@ -226,11 +226,11 @@ sheet.textContent = `
   .layer.comment { pointer-events:auto; }
   .layer.comment.picking { cursor:default; }
   .layer.draw { pointer-events:auto; touch-action:none; }
-  .rect { position:fixed; pointer-events:none; outline:var(--c-target-stroke) solid var(--brand-solid); outline-offset:0; border-radius:var(--radius-xs); background:var(--c-target-tint); }
-  .rect[data-bare] { outline-offset:var(--c-target-gap); }
+  .rect { position:fixed; pointer-events:none; outline:var(--spacing-c-target-stroke) solid var(--color-brand-solid); outline-offset:0; border-radius:var(--radius-xs); background:var(--color-c-target-tint); }
+  .rect[data-bare] { outline-offset:var(--spacing-c-target-gap); }
   .rect[data-rest] { outline-style:none; }
-  .rect[data-root] { outline-style:dashed; outline-offset:calc(-1 * (var(--space-1) + var(--c-target-stroke))); background:none; }
-  .label { position:fixed; pointer-events:none; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--space-1) var(--space-2); border-radius:var(--radius-xs); background:var(--surface-raised); color:var(--ink-strong); font:var(--type-meta); border:1px solid var(--border-control); box-shadow:var(--shadow-tile); }
+  .rect[data-root] { outline-style:dashed; outline-offset:calc(-1 * (var(--spacing-space-1) + var(--spacing-c-target-stroke))); background:none; }
+  .label { position:fixed; pointer-events:none; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--spacing-space-1) var(--spacing-space-2); border-radius:var(--radius-xs); background:var(--color-surface-raised); color:var(--color-ink-strong); font:var(--type-meta); border:1px solid var(--color-border-control); box-shadow:var(--shadow-tile); }
 `;
 const layer = document.createElement("div");
 layer.className = "layer";
@@ -1052,8 +1052,8 @@ function takeTheme(said: unknown) {
     themed();
     // What the overlay paints with tokens read as it is drawn, the pills
     // (pins.ts paintOf: their inks and their breath's floor), the ink's
-    // strokes (ink.ts, `--brand-solid`) and the changes' rings (changes.ts,
-    // `--c-change-ring`), is drawn again in the new scheme.
+    // strokes (ink.ts, `--color-brand-solid`) and the changes' rings (changes.ts,
+    // `--color-c-change-ring`), is drawn again in the new scheme.
     if (said !== drawnIn) {
       drawnIn = said;
       pins.draw();
@@ -2699,13 +2699,13 @@ window.addEventListener(
 );
 
 let touchCaptured = false;
-/** When the press under way began (its pointerdown's time stamp): a touch held past `--dur-press-hold` pins. */
+/** When the press under way began (its pointerdown's time stamp): a touch held past `--duration-press-hold` pins. */
 let pressBegan = 0;
 
-/** How long a touch rests before it pins what it rests on rather than pressing it (`--dur-press-hold`). */
+/** How long a touch rests before it pins what it rests on rather than pressing it (`--duration-press-hold`). */
 const pressHold = (): number =>
   Number.parseFloat(
-    getComputedStyle(host).getPropertyValue("--dur-press-hold")
+    getComputedStyle(host).getPropertyValue("--duration-press-hold")
   ) || 0;
 
 /**

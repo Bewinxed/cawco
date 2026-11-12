@@ -161,7 +161,7 @@
       <Command.List class="relative">
         <!-- A typed id nothing covers and "no model goes by that" take
              turns at the top of the list: they cross-fade over
-             --dur-control while the popover's height follows (its morph). -->
+             --duration-control while the popover's height follows (its morph). -->
         {#if custom}
           <div in:crossIn out:crossOut>
             <Command.Group forceMount heading="Custom">

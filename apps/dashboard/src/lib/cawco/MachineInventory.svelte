@@ -106,7 +106,7 @@
   class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
 >
   <SectionHeader
-    hue="var(--hue-amber-500)"
+    hue="var(--color-hue-amber-500)"
     icon={IconLaptop}
     label={words.onEachMachine}
   />

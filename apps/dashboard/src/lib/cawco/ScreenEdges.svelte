@@ -102,7 +102,7 @@
   aria-hidden="true"
   class="fixed inset-x-0 -top-space-2 z-(--layer-screen-edge) h-(--edge-h) pointer-events-none edge-mask-top opacity-(--edge-shown) bg-(--edge-top-background) transition-[background-color,opacity] duration-(--edge-top-durs) ease-out"
   ontransitionend={read}
-  style:--edge-h="max(var(--icon-sm), env(safe-area-inset-top))"
+  style:--edge-h="max(var(--spacing-icon-sm), env(safe-area-inset-top))"
   style:--edge-top-durs="var(--edge-top-fade), var(--edge-show-fade)"
   bind:this={top}
 ></div>
@@ -110,6 +110,6 @@
   data-slot="edge-bottom"
   aria-hidden="true"
   class="fixed inset-x-0 -bottom-space-2 z-(--layer-screen-edge) h-(--edge-h) pointer-events-none opacity-(--edge-shown) bg-(--edge-bottom-background) transition-[background-color,opacity] duration-(--edge-bottom-durs) ease-out"
-  style:--edge-h="max(var(--icon-sm), env(safe-area-inset-bottom))"
+  style:--edge-h="max(var(--spacing-icon-sm), env(safe-area-inset-bottom))"
   style:--edge-bottom-durs="var(--edge-bottom-fade), var(--edge-show-fade)"
 ></div>

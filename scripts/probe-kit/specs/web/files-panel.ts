@@ -820,7 +820,7 @@ const desk = async (
   });
   const vermillion = await tokenColour(
     page,
-    "--brand-solid",
+    "--color-brand-solid",
     "[data-glass-card-frame='files-pop']"
   );
   kit.check(
@@ -1130,9 +1130,9 @@ const reviewLegs = async (
     { ms: 15_000 }
   );
   const arrival = lengths(arriving.runs);
-  const crossMs = await durationOf(slow, "--dur-skeleton-reveal");
+  const crossMs = await durationOf(slow, "--duration-skeleton-reveal");
   kit.check(
-    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read takes the skeleton's place in the skeleton's reveal over --dur-skeleton-reveal (reveal)",
+    "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read takes the skeleton's place in the skeleton's reveal over --duration-skeleton-reveal (reveal)",
     atOpen.waits === 0 &&
       atOpen.counts === 0 &&
       atOpen.none === 0 &&
@@ -1141,7 +1141,7 @@ const reviewLegs = async (
       pastGrace.attachmentsWait &&
       pastGrace.counts === 0 &&
       arrival.includes(crossMs),
-    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)}, read by ${arriving.by} (--dur-skeleton-reveal ${crossMs}): ${JSON.stringify(arriving.runs)}`
+    `at open ${JSON.stringify(atOpen)}; past the grace ${JSON.stringify(pastGrace)}; arrival animations ${JSON.stringify(arrival)}, read by ${arriving.by} (--duration-skeleton-reveal ${crossMs}): ${JSON.stringify(arriving.runs)}`
   );
   await slow.close();
 
@@ -1227,7 +1227,7 @@ const reviewLegs = async (
       "[data-glass-card-frame='files-pop'] [data-slot='finder-field']"
     );
     const swatch = document.createElement("span");
-    swatch.style.color = "var(--focus-ring)";
+    swatch.style.color = "var(--color-focus-ring)";
     document.body.append(swatch);
     const want = getComputedStyle(swatch).color;
     swatch.remove();
@@ -2038,7 +2038,7 @@ const roundThree = async (
     );
     const style = ringed ? getComputedStyle(ringed) : null;
     const swatch = document.createElement("span");
-    swatch.style.color = "var(--focus-ring)";
+    swatch.style.color = "var(--color-focus-ring)";
     document.body.append(swatch);
     const want = getComputedStyle(swatch).color;
     swatch.remove();
@@ -2171,11 +2171,11 @@ const roundThree = async (
     { ms: 15_000 }
   );
   const emptyIntro = lengths(emptying.runs);
-  const emptyCross = await durationOf(emptied, "--dur-skeleton-reveal");
+  const emptyCross = await durationOf(emptied, "--duration-skeleton-reveal");
   kit.check(
-    "31: the skeleton gives its place to the empty state in its reveal over --dur-skeleton-reveal",
+    "31: the skeleton gives its place to the empty state in its reveal over --duration-skeleton-reveal",
     emptyIntro.includes(emptyCross),
-    `intros ${JSON.stringify(emptyIntro)}, read by ${emptying.by} (--dur-skeleton-reveal ${emptyCross}): ${JSON.stringify(emptying.runs)}`
+    `intros ${JSON.stringify(emptyIntro)}, read by ${emptying.by} (--duration-skeleton-reveal ${emptyCross}): ${JSON.stringify(emptying.runs)}`
   );
   await emptied.close();
 };

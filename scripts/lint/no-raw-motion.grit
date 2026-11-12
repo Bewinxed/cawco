@@ -23,14 +23,14 @@ or {
     $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
     $hit <: r"(?i)^(?:\d+\.?\d*|\.\d+)m?s$",
     $hit <: not r"(?i)^0*\.?0*m?s$",
-    register_diagnostic(span=$hit, message="A duration is a motion token: write var(--dur-…), and add it to design/tokens/cawco.tokens.json first (then bun run tokens).")
+    register_diagnostic(span=$hit, message="A duration is a motion token: write var(--duration-…), and add it to apps/dashboard/src/lib/tokens/theme.css first.")
   },
   CssFunction() as $hit where {
     $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },
     $filename <: not includes "apps/dashboard/src/lib/tokens/",
     $filename <: not includes "packages/hub/skills/decision-page/kit/tokens.css",
     $hit <: r"(?is)^cubic-bezier\(.*",
-    register_diagnostic(span=$hit, message="A curve is a motion token: write var(--ease-…), and add it to design/tokens/cawco.tokens.json first (then bun run tokens).")
+    register_diagnostic(span=$hit, message="A curve is a motion token: write var(--ease-…), and add it to apps/dashboard/src/lib/tokens/theme.css first.")
   },
   CssIdentifier() as $hit where {
     $filename <: or { includes "apps/dashboard/src/", includes "packages/hub/skills/decision-page/kit/" },

@@ -58,7 +58,7 @@
       data-state="open"
       data-still-popover
       id="{uid}-panel"
-      style="--pop-w: min(var(--c-member-setup-max-w), 100%)"
+      style="--pop-w: min(var(--spacing-c-member-setup-max-w), 100%)"
       {@attach placeUnder(() => anchor, "start")}
     >
       <MemberSetup headId="{uid}-head" {project} setup={who.setup} {who} />
@@ -98,7 +98,7 @@
       overflow="clip"
       pad="none"
       side="bottom"
-      style="--pop-w: min(var(--c-member-setup-max-w), var(--bits-popover-content-available-width, 100vw)); --pop-max-h: var(--bits-popover-content-available-height)"
+      style="--pop-w: min(var(--spacing-c-member-setup-max-w), var(--bits-popover-content-available-width, 100vw)); --pop-max-h: var(--bits-popover-content-available-height)"
       width="room"
     >
       {#if who.setup && open}

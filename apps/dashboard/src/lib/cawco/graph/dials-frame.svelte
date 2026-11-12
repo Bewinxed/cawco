@@ -41,7 +41,7 @@
 <div class="bg-surface-page p-space-5">
   <div
     class="relative flex h-(--frame-h) w-(--frame-w) flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile timeline-scope-transcript-head"
-    style:--face-top="var(--c-head-room)"
+    style:--face-top="var(--spacing-c-head-room)"
     style:--frame-h={`${height}px`}
     style:--frame-w={`${width}px`}
   >

@@ -100,7 +100,7 @@
     aria-label={spawnWords.account.name}
     class="flex flex-col p-space-2"
     role="listbox"
-    style:--ring-ground="var(--surface-lift)"
+    style:--ring-ground="var(--color-surface-lift)"
   >
     <button
       data-slot="option"
@@ -109,7 +109,7 @@
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
-      style:--cols="var(--icon-md) minmax(0, 1fr) var(--icon-md)"
+      style:--cols="var(--spacing-icon-md) minmax(0, 1fr) var(--spacing-icon-md)"
       type="button"
     >
       <span aria-hidden="true"></span>
@@ -122,7 +122,7 @@
         {/if}
       </span>
       <Check
-        class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+        class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
       />
     </button>
     {#each tool.options as option (option.id)}
@@ -134,7 +134,7 @@
         disabled={option.disabled}
         onclick={() => pick(option.id)}
         role="option"
-        style:--cols="var(--icon-md) minmax(0, 1fr) var(--icon-md)"
+        style:--cols={"var(--spacing-icon-md) minmax(0, 1fr) var(--spacing-icon-md)"}
         type="button"
       >
         <span
@@ -163,7 +163,7 @@
           {/if}
         </span>
         <Check
-          class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+          class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--duration-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
         />
       </button>
     {/each}

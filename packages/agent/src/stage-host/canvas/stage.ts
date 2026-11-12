@@ -171,13 +171,13 @@ const READ_AGAIN_MS = 300;
 /** The gap between two stories' boxes in a section's read, px: their places in the report, one under another. */
 const ROW_GAP = 24;
 /** The page's gutter round the drawing (the panel's stage head's inset). */
-const GUTTER = "--space-4";
+const GUTTER = "--spacing-space-4";
 /** The gutter the page keeps beside the drawing now (page-style.ts): {@link GUTTER}'s, or less where the window lacks the room. */
 const STAGE_GUTTER_VAR = "--stage-gutter";
 /** The room the stage's floating head takes over the page's top (page-style.ts), px as the panel said it. */
 const STAGE_ROOM_VAR = "--stage-room";
 /** The gap between the kept drawing and the compared one where the two stand side by side. */
-const BESIDE_GAP = "--space-6";
+const BESIDE_GAP = "--spacing-space-6";
 /**
  * How long after Compare turns on (or turns to another state) each read of
  * the differences brings the first ring into view: the first read stands
@@ -1649,7 +1649,8 @@ export function bootStage(page: Page): Mode {
 
   /** How far a change ring stands outside the box it rings, px: its offset and its width. */
   const ringOut = () =>
-    tokenPx("--c-change-ring-offset") + tokenPx("--c-change-ring-width");
+    tokenPx("--spacing-c-change-ring-offset") +
+    tokenPx("--spacing-c-change-ring-width");
 
   /** How far to scroll to stand `start`–`end` whole in a view `size` long by the least it takes; from its start where it can't stand whole. */
   const leastTo = (start: number, end: number, size: number): number => {
@@ -1803,7 +1804,7 @@ export function bootStage(page: Page): Mode {
   /** Reduced motion's Play: the end state fades in where it stands (DESIGN.md, The Reduced Motion Rule). */
   function fadeIn(): void {
     drawing.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: page.style.duration("--dur-fade", 200),
+      duration: page.style.duration("--duration-fade", 200),
       easing: "linear",
     });
   }

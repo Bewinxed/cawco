@@ -42,7 +42,7 @@
     }
     timer = setTimeout(() => {
       copied = false;
-    }, dur("--dur-hold"));
+    }, dur("--duration-hold"));
   }
 </script>
 
@@ -64,7 +64,10 @@
 
       <Dialog.Footer>
         <Button onclick={copy} type="button" variant="outline">
-          <span class="icon-swap" style:--icon-swap-dur="var(--dur-control)">
+          <span
+            class="icon-swap"
+            style:--icon-swap-dur="var(--duration-control)"
+          >
             <span data-active={!copied}><IconCopy /></span>
             <span data-active={copied}><IconCheck /></span>
           </span>

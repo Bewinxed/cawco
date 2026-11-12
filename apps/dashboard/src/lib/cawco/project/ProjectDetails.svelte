@@ -766,14 +766,14 @@
   aria-label="Project details"
   class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pe-space-6 pb-space-3 ps-space-7 max-desk:max-w-none max-desk:pe-space-5 max-desk:ps-space-5"
   data-project-details={project.id}
-  style:--details-max={"calc(var(--c-project-details-measure) + var(--space-7) + var(--space-6))"}
+  style:--details-max={"calc(var(--spacing-c-project-details-measure) + var(--spacing-space-7) + var(--spacing-space-6))"}
   transition:unfold
   {@attach escapes}
 >
   <div
     data-slot="tile"
     class="grid gap-space-4 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-raised"
-    style:--row-cols="var(--c-project-details-label-w) minmax(0, 1fr)"
+    style:--row-cols="var(--spacing-c-project-details-label-w) minmax(0, 1fr)"
   >
     <!-- Place: where it lives, its places, and adding one. -->
     <div
@@ -810,7 +810,7 @@
         >
           <button
             aria-expanded={listOpen}
-            class="select-none group press-tint mark-line type-label -mx-space-1 inline-flex items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
+            class="select-none group press-tint mark-line type-label -mx-space-1 inline-flex items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover"
             data-places-toggle
             onclick={() => {
               listOpen = !listOpen;
@@ -822,7 +822,7 @@
             >
             <IconChevronDown
               data-chev
-              class="size-icon-sm text-ink-muted transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded:rotate-180"
+              class="size-icon-sm text-ink-muted transition-[rotate] duration-(--duration-control) ease-out group-aria-expanded:rotate-180"
             />
           </button>
           {#if !adding}
@@ -902,7 +902,7 @@
             data-slot="add"
             class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-add-place-form
-            style:--add-cols={"minmax(0, var(--c-project-details-select-w)) minmax(0, 1fr)"}
+            style:--add-cols={"minmax(0, var(--spacing-c-project-details-select-w)) minmax(0, 1fr)"}
             onsubmit={(event) => {
               event.preventDefault();
               add();
@@ -1023,7 +1023,7 @@
               data-slot="add"
               class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
               data-lfs-form
-              style:--add-cols={"minmax(0, var(--c-project-details-select-w)) minmax(0, 1fr)"}
+              style:--add-cols={"minmax(0, var(--spacing-c-project-details-select-w)) minmax(0, 1fr)"}
               onsubmit={(event) => {
                 event.preventDefault();
                 saveLfs({ url: lfsUrl.trim(), connection: lfsConnection });

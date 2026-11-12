@@ -299,7 +299,7 @@
     <li
       data-slot="change"
       class="grid grid-cols-(--cols) items-box-start gap-space-2 type-meta text-ink-muted"
-      style:--cols="var(--icon-sm) minmax(0, 1fr) auto"
+      style:--cols="var(--spacing-icon-sm) minmax(0, 1fr) auto"
     >
       <span class="mark-cell"
         ><IconHistory
@@ -358,7 +358,7 @@
                 <IconChevronRight
                   data-chev
                   aria-hidden="true"
-                  class="size-icon-sm flex-none transition-[transform] duration-(--dur-control) ease-out group-state-open:transform-(--chev-turn)"
+                  class="size-icon-sm flex-none transition-[transform] duration-(--duration-control) ease-out group-state-open:transform-(--chev-turn)"
                   style="--chev-turn: rotate(90deg)"
                 />
                 <span>{piece.lines.length} changes</span>
@@ -394,7 +394,7 @@
       data-slot="task-activity-field"
       class="relative w-full"
       data-safe-bottom
-      style:block-size="calc({commentFoot}px + var(--space-4) +
+      style:block-size="calc({commentFoot}px + var(--spacing-space-4) +
       var(--safe-bottom))"
     >
       <Composer

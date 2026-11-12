@@ -3,7 +3,7 @@
    * A provider's mark (marks.ts): its logo as it ships, or, `mono`, its
    * silhouette in `currentColor` (an account's tile tints it in the
    * account's hue). A logo drawn in one plain ink is the silhouette in
-   * `--ink-strong`. A provider with no mark draws the accounts glyph.
+   * `--color-ink-strong`. A provider with no mark draws the accounts glyph.
    */
   import { IconAccounts } from "#lib/icons.js";
   import { markOf } from "./marks";

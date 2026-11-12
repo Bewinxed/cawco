@@ -13,18 +13,18 @@
  */
 @utility ns-theme {
   :where(&) {
-    --ns-check-ms: var(--dur-fade);
-    --ns-fill-ms: var(--dur-toggle);
-    --ns-row-ms: var(--dur-fade);
+    --ns-check-ms: var(--duration-fade);
+    --ns-fill-ms: var(--duration-toggle);
+    --ns-row-ms: var(--duration-fade);
 
     font: var(--type-body);
-    color: var(--ink-strong);
+    color: var(--color-ink-strong);
   }
   /* E1: the drawer card (vaul's on a phone) keeps the body role and ink
      over the kit's own `text-foreground text-label`. */
   &[data-slot="drawer-content"] {
     font: var(--type-body);
-    color: var(--ink-strong);
+    color: var(--color-ink-strong);
   }
 }
 
@@ -35,7 +35,7 @@
      (NsPopoverGroup `data-ns-morph`). */
   [data-bits-floating-content-wrapper][data-ns-morph] {
     @variant motion-safe {
-      transition: transform var(--dur-pop) var(--ease-drawer);
+      transition: transform var(--duration-pop) var(--ease-drawer);
     }
   }
 }
@@ -45,14 +45,14 @@
 @utility fai-scroll {
   :where(.ns-theme &) {
     scrollbar-width: thin;
-    scrollbar-color: var(--neutral-5) transparent;
+    scrollbar-color: var(--color-neutral-5) transparent;
   }
   :where(.ns-theme &)::-webkit-scrollbar {
-    width: var(--c-scrollbar-thin);
-    height: var(--c-scrollbar-thin);
+    width: var(--spacing-c-scrollbar-thin);
+    height: var(--spacing-c-scrollbar-thin);
   }
   :where(.ns-theme &)::-webkit-scrollbar-thumb {
-    background: var(--neutral-5);
+    background: var(--color-neutral-5);
     border-radius: var(--radius-pill);
     border: 2px solid transparent;
     background-clip: content-box;

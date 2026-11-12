@@ -96,7 +96,7 @@
   class="flex h-dvh min-h-0 flex-col data-desk:w-(--card-w) data-desk:p-space-3"
   data-bench-page={of}
   data-desk={desk || undefined}
-  style:--card-w={"max(45vw, var(--c-side-surface-min))"}
+  style:--card-w={"max(45vw, var(--spacing-c-side-surface-min))"}
 >
   {#if of === "file"}
     <FolderFile

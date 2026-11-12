@@ -450,7 +450,9 @@
   <div
     class="@container/task-frame flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain pt-(--side-room) scroll-timeline-transcript-head"
     data-task-pane={taskId}
-    style:--pane-inline={page ? "var(--space-5)" : "var(--space-3)"}
+    style:--pane-inline={page
+      ? "var(--spacing-space-5)"
+      : "var(--spacing-space-3)"}
   >
     <header
       data-slot="head"
@@ -560,7 +562,7 @@
             onclick={() => {
               titleDraft = shown?.title ?? "";
             }}
-            style:--title-w="calc(100% + var(--space-1) * 2)"
+            style:--title-w="calc(100% + var(--spacing-space-1) * 2)"
             title="Edit the title"
             type="button"
           >

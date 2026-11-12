@@ -47,13 +47,13 @@
   <BaseEdge
     {id}
     path={route[0]}
-    style="stroke: var(--nest-ink); stroke-width: var(--tree-line)"
+    style="stroke: var(--color-nest-ink); stroke-width: var(--tree-line)"
   />
 {:else if edge.kind === "found_in"}
   <BaseEdge
     {id}
     path={route[0]}
-    style="stroke: var(--ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4"
+    style="stroke: var(--color-ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4"
   />
 {:else}
   <BaseEdge
@@ -61,7 +61,7 @@
     markerEnd={`url(#${edge.marker})`}
     path={route[0]}
     style={edge.landed
-      ? "stroke: var(--border-control); stroke-width: var(--c-graph-edge)"
-      : "stroke: var(--ink-muted); stroke-width: var(--c-graph-edge)"}
+      ? "stroke: var(--color-border-control); stroke-width: var(--spacing-c-graph-edge)"
+      : "stroke: var(--color-ink-muted); stroke-width: var(--spacing-c-graph-edge)"}
   />
 {/if}

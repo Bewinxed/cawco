@@ -479,7 +479,7 @@ async function deskLegs(
     const field = document.querySelector<HTMLIFrameElement>(frameAt);
     const least = Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue(
-        "--c-graph-stage-min"
+        "--spacing-c-graph-stage-min"
       )
     );
     return { frame: field?.clientWidth ?? 0, least };
@@ -564,7 +564,7 @@ async function drawerStops(kit: Kit, page: Page): Promise<void> {
         const pageBox = root?.querySelector('[data-slot="graph-page"]');
         const head = Number.parseFloat(
           getComputedStyle(document.documentElement).getPropertyValue(
-            "--c-graph-drawer-head"
+            "--spacing-c-graph-drawer-head"
           )
         );
         const box = (el: Element | null | undefined) =>

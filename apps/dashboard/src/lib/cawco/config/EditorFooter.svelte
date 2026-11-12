@@ -26,7 +26,7 @@
    */
   export const savedShown = (): Promise<void> =>
     new Promise((resolve) => {
-      setTimeout(resolve, dur("--dur-hold"));
+      setTimeout(resolve, dur("--duration-hold"));
     });
 </script>
 
@@ -37,7 +37,7 @@
    * reaches gives way first, on one line.
    *
    * Save shows its work where it was pressed: the kit Button spins while
-   * the save runs and draws a check for --dur-hold when it ends well, and
+   * the save runs and draws a check for --duration-hold when it ends well, and
    * for that same hold the label says "Saved".
    */
   import { configureWords } from "@cawco/core/words/configure";
@@ -95,7 +95,7 @@
       saved = true;
       savedTimer = setTimeout(() => {
         saved = false;
-      }, dur("--dur-hold"));
+      }, dur("--duration-hold"));
     }
     wasSaving = now;
   });

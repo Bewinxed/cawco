@@ -202,7 +202,7 @@ const shownThumb = (page: Page) =>
     // Main's `.artifact-thumb` drew on these two tokens: read beside the well's, in this scheme.
     const was = document.createElement("div");
     was.style.cssText =
-      "position:fixed;inline-size:0;block-size:0;border:1px solid var(--border-hairline);background:var(--surface-recess)";
+      "position:fixed;inline-size:0;block-size:0;border:1px solid var(--color-border-hairline);background:var(--color-surface-recess)";
     document.body.append(was);
     const main = {
       background: getComputedStyle(was).backgroundColor,

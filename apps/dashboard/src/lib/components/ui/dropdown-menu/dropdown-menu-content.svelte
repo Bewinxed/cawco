@@ -14,7 +14,8 @@
             line the screen less its margin each side (DESIGN.md,
             Breakpoints: "popovers widen to the viewport less 24px"), so a
             finger's tiles stand seven to a row and the menu fits the screen. */
-        tiles: "w-64 max-phone:w-[calc(100vw-2*var(--c-screen-margin))]",
+        tiles:
+          "w-64 max-phone:w-[calc(100vw-2*var(--spacing-c-screen-margin))]",
         /** A menu of titles an agent wrote (the artifacts menu): room for
             one of ordinary length in two lines beside its glyph and age,
             and on a phone as wide as a title standing after Close leaves. */
@@ -80,7 +81,11 @@
   const inset = $derived(
     collisionPadding ??
       (browser
-        ? numberOf(width === "tiles" ? "--c-screen-margin" : "--space-5")
+        ? numberOf(
+            width === "tiles"
+              ? "--spacing-c-screen-margin"
+              : "--spacing-space-5"
+          )
         : 0)
   );
 

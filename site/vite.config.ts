@@ -139,14 +139,15 @@ function pageMarkup(): Plugin {
  * token and stops if either has drifted.
  */
 const PAPER = (
-  require('../design/tokens/cawco.tokens.json') as {
-    color: { paper: { $value: { hex: string } } };
-  }
-).color.paper.$value.hex.toLowerCase();
+  readFileSync(
+    new URL('../apps/dashboard/src/lib/tokens/theme.css', import.meta.url),
+    'utf8',
+  ).match(/--color-paper:\s*(#[0-9a-f]{6})/iu)?.[1] ?? ''
+).toLowerCase();
 
 function mustBePaper(where: string, found: string | undefined): void {
   if (found?.toLowerCase() !== PAPER) {
-    throw new Error(`${where} is ${found ?? 'missing'}, but the token color.paper is ${PAPER}.`);
+    throw new Error(`${where} is ${found ?? 'missing'}, but the token --color-paper is ${PAPER}.`);
   }
 }
 

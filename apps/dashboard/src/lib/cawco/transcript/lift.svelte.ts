@@ -6,7 +6,7 @@
  * words, one set as the bubble sets them and one as the field does, fly
  * from one box to the other and crossfade (FLIP, transform and opacity
  * only, so the compositor moves them and nothing on the page is laid out
- * again), over --dur-lift on the drawer curve. Each copy shows only what its
+ * again), over --duration-lift on the drawer curve. Each copy shows only what its
  * end shows: the bubble as far as the transcript lets it be seen, the field
  * as far as it is scrolled. Meanwhile the bubble folds to its tag
  * (`liftedIds`) and the composer grows the row that says what is happening.
@@ -225,7 +225,7 @@ export function startFlight(words: Node, box: WordsBox) {
     const dx = to.left - box.left;
     const dy = to.top - box.top;
     const timing = {
-      duration: dur("--dur-lift"),
+      duration: dur("--duration-lift"),
       easing: CURVE.drawer,
       fill: "both",
     } as const;

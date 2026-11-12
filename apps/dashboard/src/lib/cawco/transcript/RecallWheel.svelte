@@ -526,7 +526,7 @@
     const ext = extFor();
     if (shape && ext !== shape.ext) {
       box.height = shape.base + ext - measured.line.bottom;
-      shape.morphTo(1, ext, dur("--dur-fade"));
+      shape.morphTo(1, ext, dur("--duration-fade"));
     }
   }
 
@@ -566,7 +566,7 @@
       // The ghost on the line becomes the field's own text.
       if (line && motionOk.current) {
         await line.animate([{ opacity: line.style.opacity }, { opacity: 1 }], {
-          duration: dur("--dur-control"),
+          duration: dur("--duration-control"),
           fill: "forwards",
         }).finished;
       }
@@ -579,7 +579,7 @@
       // longer pick's further lines, flattened onto the row) dissolves.
       if (line && motionOk.current) {
         const blur = getComputedStyle(shell).getPropertyValue(
-          "--c-recall-cross-blur"
+          "--spacing-c-recall-cross-blur"
         );
         line.animate(
           [
@@ -587,7 +587,7 @@
             { opacity: 0, filter: `blur(${blur})` },
           ],
           {
-            duration: dur("--dur-fade"),
+            duration: dur("--duration-fade"),
             easing: ease("--ease-out"),
             fill: "forwards",
           }
@@ -601,13 +601,13 @@
     // fading as they go, its foot on the pill as the field fits.
     if (ghosts && motionOk.current) {
       ghosts.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--dur-fade"),
+        duration: dur("--duration-fade"),
         fill: "forwards",
       });
     }
     if (shape) {
       await Promise.all([
-        shape.morphTo(0, shape.ext, dur("--dur-grow-exit"), base),
+        shape.morphTo(0, shape.ext, dur("--duration-grow-exit"), base),
         home,
       ]);
     }
@@ -818,7 +818,7 @@
       taperRows: depthRows,
     });
     haze = Number.parseFloat(
-      getComputedStyle(shell).getPropertyValue("--c-head-fade-blur")
+      getComputedStyle(shell).getPropertyValue("--spacing-c-head-fade-blur")
     );
     const first = ghosts?.firstElementChild;
     if (first) {
@@ -842,7 +842,7 @@
       felt("open");
     }
     ghosts?.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: dur("--dur-fade"),
+      duration: dur("--duration-fade"),
       easing: ease("--ease-out"),
     });
     // Its drop and its far edge's blur come in once the rows stand still too.
@@ -851,7 +851,7 @@
         rested = done;
       })
     );
-    shape.morphTo(1, shape.ext, dur("--dur-grow"));
+    shape.morphTo(1, shape.ext, dur("--duration-grow"));
     // The newest message rolls down into the field as it grows.
     spinTo(1);
     return () => {
@@ -919,7 +919,7 @@
     <div
       data-slot="ghost"
       aria-selected={k === pick}
-      class="group/ghost absolute bottom-0 h-c-composer-field py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-body text-(length:--ghost-size) leading-ui text-ink-strong origin-bottom invisible will-change-(--ghost-moves) transition-[color] duration-(--dur-control) ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-selected-ink"
+      class="group/ghost absolute bottom-0 h-c-composer-field py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-body text-(length:--ghost-size) leading-ui text-ink-strong origin-bottom invisible will-change-(--ghost-moves) transition-[color] duration-(--duration-control) ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-selected-ink"
       data-k={k}
       id="{id}-{k}"
       onclick={() => pickRow(k)}
@@ -928,7 +928,7 @@
       data-draft={entry.kind === "draft" || undefined}
       data-none={entry.kind === "none" || undefined}
       data-own={(entry.kind === "draft" && ownText) || undefined}
-      style:--ghost-pad="calc((var(--c-composer-field) - 1lh) / 2)"
+      style:--ghost-pad="calc((var(--spacing-c-composer-field) - 1lh) / 2)"
       style:--ghost-cols="minmax(0, 1fr) auto"
       style:--ghost-size="var(--text-field-floor)"
       style:--ghost-moves="translate, rotate, scale, opacity"
@@ -961,7 +961,7 @@
       <!-- specificity-trap: as the row's ink, `data-own` stands only on a draft. -->
       <span
         data-slot="num"
-        class="num text-size-meta font-normal text-ink-muted whitespace-nowrap transition-[color] duration-(--dur-control) ease-out group-data-own/ghost:text-transparent group-aria-selected/ghost:group-not-data-draft/ghost:text-selected-ink"
+        class="num text-size-meta font-normal text-ink-muted whitespace-nowrap transition-[color] duration-(--duration-control) ease-out group-data-own/ghost:text-transparent group-aria-selected/ghost:group-not-data-draft/ghost:text-selected-ink"
         >{meta(entry.entry)}</span
       >
     </div>

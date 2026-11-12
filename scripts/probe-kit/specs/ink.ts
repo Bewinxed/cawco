@@ -671,7 +671,7 @@ const iconChecks = async (
   const { rest, seen } = first;
   const arrived = seen.runs.find((one) => one.id === "ink-icon");
   on.kit.check(
-    "3: the icon arrives at the stroke's last point over --dur-panel (280 ms), rising, growing and fading in",
+    "3: the icon arrives at the stroke's last point over --duration-panel (280 ms), rising, growing and fading in",
     !!rest &&
       Math.abs(rest.x + outer.x - first.to.x) <= 2 &&
       Math.abs(rest.y + outer.y - first.to.y) <= 2 &&
@@ -741,7 +741,7 @@ const menuChecks = async (on: On, frame: Frame) => {
     );
     const swatch = document.createElement("span");
     root?.append(swatch);
-    swatch.style.color = "var(--surface-fill)";
+    swatch.style.color = "var(--color-surface-fill)";
     const fill = getComputedStyle(swatch).color;
     swatch.remove();
     const box = root?.querySelector<HTMLElement>(".ink-menu");

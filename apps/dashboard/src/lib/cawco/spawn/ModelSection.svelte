@@ -150,7 +150,7 @@
    * pair to glide from, they cross-fade in place.
    */
   const [send, receive] = crossfade({
-    duration: () => dur("--dur-toggle"),
+    duration: () => dur("--duration-toggle"),
     easing: easeInOut,
     fallback: (node) => crossIn(node),
   });
@@ -291,7 +291,7 @@
 
 <section data-slot="model" class="grid gap-space-2">
   {#if !runtime}
-    <SectionHeader hue="var(--hue-cyan-500)" icon={Cpu} {label}>
+    <SectionHeader hue="var(--color-hue-cyan-500)" icon={Cpu} {label}>
       {#snippet right()}
         {#if account}
           <span class="flex min-w-0 justify-end">
@@ -310,11 +310,11 @@
   {/if}
   <div
     data-slot="picker"
-    class="field-edge transition-control relative grid rounded-md border border-border-control bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--c-row-h) data-railed:grid-cols-(--cols)"
+    class="field-edge transition-control relative grid rounded-md border border-border-control bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--spacing-c-row-h) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
-    style:--rail-gap="calc(var(--rail-step) - var(--c-btn-h))"
-    style:--rail-step-fine="calc(var(--c-btn-h) + var(--space-1))"
+    style:--rail-gap="calc(var(--rail-step) - var(--spacing-c-btn-h))"
+    style:--rail-step-fine={"calc(var(--spacing-c-btn-h) + var(--spacing-space-1))"}
   >
     {#if !runtime}
       <Rail
@@ -423,8 +423,8 @@
         <span
           data-slot="fill"
           aria-hidden="true"
-          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-xs bg-selected-bg transition-[opacity] duration-(--dur-control) ease-out motion-safe:transition-panel-resize"
-          style:transform={`translateY(calc(${modelIdx} * (var(--c-row-h) + var(--space-row))))`}
+          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-xs bg-selected-bg transition-[opacity] duration-(--duration-control) ease-out motion-safe:transition-panel-resize"
+          style:transform={`translateY(calc(${modelIdx} * (var(--spacing-c-row-h) + var(--spacing-space-row))))`}
           style:height={`${chosenHeight}px`}
           style:opacity={hiOpacity}
         ></span>

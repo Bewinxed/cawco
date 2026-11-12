@@ -293,7 +293,7 @@
               <Popover.Content
                 align="start"
                 class="max-w-(--cap-max-w)"
-                style="--cap-max-w: calc(100vw - 2 * var(--space-5))"
+                style="--cap-max-w: calc(100vw - 2 * var(--spacing-space-5))"
                 width="wide"
               >
                 <form

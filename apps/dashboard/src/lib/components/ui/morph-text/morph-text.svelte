@@ -6,7 +6,7 @@
    * torph (patches/torph@0.1.3.patch) holds the text's box at the larger of
    * the old and new words at once and lets it take the new size once the
    * morph settles, so nothing beside it slides; runs every letter's move and
-   * fade on one clock, --dur-morph on --ease-out; reads no box outside a
+   * fade on one clock, --duration-morph on --ease-out; reads no box outside a
    * ResizeObserver delivery; and with less motion only fades, in the same box
    * (DESIGN.md, The Steady Swap Rule and The Reduced Motion Rule). The first
    * draw never morphs: the text is just the text.
@@ -27,7 +27,7 @@
 
   let morphMs = $state(0);
   $effect(() => {
-    morphMs = dur("--dur-morph");
+    morphMs = dur("--duration-morph");
   });
 </script>
 

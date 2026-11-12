@@ -25,10 +25,10 @@
 <div
   data-slot="sidebar-end"
   class="contents"
-  style:--ask-indent="var(--space-1)"
-  style:--ask-end="var(--space-1)"
-  style:--fault-indent="var(--space-2)"
-  style:--fault-end="var(--space-2)"
+  style:--ask-indent="var(--spacing-space-1)"
+  style:--ask-end="var(--spacing-space-1)"
+  style:--fault-indent="var(--spacing-space-2)"
+  style:--fault-end="var(--spacing-space-2)"
 >
   <ProjectEndTray {at} {opener} {parks} {projectId} />
 </div>

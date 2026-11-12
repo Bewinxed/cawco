@@ -60,8 +60,8 @@
   data-slot="behind"
   class="flex flex-wrap items-center justify-center gap-x-space-2 p-space-2 text-size-meta font-normal text-ink-muted text-center data-floating:w-max data-floating:max-w-full data-floating:px-space-3 data-floating:border data-floating:border-border-hairline data-floating:rounded-md data-floating:bg-surface-raised data-floating:shadow-overlay data-floating:pointer-events-auto"
   role="status"
-  in:rise={"--dur-panel"}
-  out:rise={"--dur-exit"}
+  in:rise={"--duration-panel"}
+  out:rise={"--duration-exit"}
 >
   {#if reconnectingNow(fault)}
     <p class="min-w-0 text-balance">

@@ -34,8 +34,8 @@
  *
  * Opening. The line leads. Its head glides at one steady speed (curves
  * `glide`: at speed from its first frame, easing out over its last px), so the
- * children are reached at even times: --dur-stagger apart, or closer
- * together in a tree too tall to open within --dur-cascade. The room opens
+ * children are reached at even times: --duration-stagger apart, or closer
+ * together in a tree too tall to open within --duration-cascade. The room opens
  * downward from the parent row's bottom edge at the same speed: the
  * parent's box (`data-flip="box"` in a `reflow`, motion/rows) is laid out at
  * its new size at once and its edge is uncovered, while everything under it
@@ -44,7 +44,7 @@
  * top, is never below its edge. On the rows' in-out curve, the room set the
  * pace and the head rode it: the children were reached 22ms, then 134ms
  * apart. The moment the head reaches a child's place, its glyph has landed
- * and its title wipes in left to right, on --ease-out over --dur-rail. No
+ * and its title wipes in left to right, on --ease-out over --duration-rail. No
  * row ever moves: each stands at its place inside the growing box, and only
  * its glyph is drawn on its way there. Every piece in view is built before
  * the opening starts, held at its first frame, and all are started together
@@ -54,7 +54,7 @@
  *
  * Folding. The group leaves as one piece, quicker than it opened and under
  * way in the next frame, from the click's own time (motion/rows `now`): it
- * is closed from its foot over --dur-exit, on the rows' curve, as the rows
+ * is closed from its foot over --duration-exit, on the rows' curve, as the rows
  * under it slide up with the room's edge (the batch's "close" pace). The
  * close is one edge: each of the group's rows is cut at it (a clip a row,
  * all on one clock and one curve), so the line shortens from its foot up
@@ -909,7 +909,7 @@ function planOpen(shape: Shape, now: State, speed: number): Plan {
   const line = glide(Math.max(0, shape.length - from), speed);
   const head = (t: number) => from + line.covered(t);
   const when = (s: number) => (s <= from ? 0 : line.reached(s - from));
-  const rail = dur("--dur-rail");
+  const rail = dur("--duration-rail");
   const titles = shape.items.map((item, i): Seg => {
     const v = Math.min(1, now.titles[i] ?? 0);
     return {
@@ -934,7 +934,7 @@ function planOpen(shape: Shape, now: State, speed: number): Plan {
 }
 
 /**
- * Folding from where `now` left it, over --dur-exit: the room closes on the
+ * Folding from where `now` left it, over --duration-exit: the room closes on the
  * rows' curve, and nothing in it moves. The line's head and every title
  * stand where `now` has them (as shares: the line is taken as 1 long), so an
  * opening that turns the fold back plans from the room alone.
@@ -1898,7 +1898,7 @@ function open(group: Group): void {
     flight.animations = items.map((el) =>
       heldToTravel(
         el.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration: dur("--dur-pop"),
+          duration: dur("--duration-pop"),
           easing: CURVE.out,
         })
       )
@@ -1912,9 +1912,9 @@ function open(group: Group): void {
   let laid: { plan: Plan; shape: Shape; speed: number } | null = null;
   let pieces: Piece[] = [];
   // Its pace is asked for from the room it takes and the glyphs in it
-  // (curves `glideSpeed`): --dur-stagger from one row's glyph to the next,
-  // --dur-cascade at most for the whole tree; a result with no glyph opens
-  // over --dur-panel. Returns the speed it asked for.
+  // (curves `glideSpeed`): --duration-stagger from one row's glyph to the next,
+  // --duration-cascade at most for the whole tree; a result with no glyph opens
+  // over --duration-panel. Returns the speed it asked for.
   const begin = (): number => {
     const pace = glideSpeed(
       frameOf(group.els).height,
@@ -2046,7 +2046,7 @@ function fold(group: Group): void {
   const { parent, options } = group;
   releaseWhenGone(group);
   const items = itemsOf(group);
-  const exit = dur("--dur-exit");
+  const exit = dur("--duration-exit");
   parent.removeAttribute(WAITS);
   if (!motionOk.current) {
     // Still: they fade where they stand, then the room closes at once.
@@ -2302,15 +2302,15 @@ export function branch(
       return { duration: 0 };
     }
     if (!motionOk.current) {
-      return { duration: out ? dur("--dur-exit") : dur("--dur-pop") };
+      return { duration: out ? dur("--duration-exit") : dur("--duration-pop") };
     }
     // Unmounted once the last piece has gone: a frame for the batch, and a
-    // frame to spare. A fold takes --dur-exit whatever it measures
+    // frame to spare. A fold takes --duration-exit whatever it measures
     // (`planFold`).
     return {
       duration: out
-        ? dur("--dur-exit") + FRAME + STEP * 2
-        : dur("--dur-cascade") + dur("--dur-rail"),
+        ? dur("--duration-exit") + FRAME + STEP * 2
+        : dur("--duration-cascade") + dur("--duration-rail"),
     };
   };
 }

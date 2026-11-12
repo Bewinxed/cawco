@@ -45,7 +45,7 @@
     $props();
 
   const store = configStore();
-  const HUE = "var(--hue-blue-500)";
+  const HUE = "var(--color-hue-blue-500)";
 
   const name = $derived(type?.name ?? null);
 

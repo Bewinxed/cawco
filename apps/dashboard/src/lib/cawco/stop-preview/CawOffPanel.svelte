@@ -6,7 +6,7 @@
    * for the owner's call on calls-1031-evening. It plays the flow without a
    * hub, as stop-work.svelte.ts times it: the confirm stops the checked rows
    * one machine at a time, an away machine's stop is recorded, he is off,
-   * the landing holds for --dur-hold and the section folds away. The switch
+   * the landing holds for --duration-hold and the section folds away. The switch
    * on and off again asks again.
    */
   import { conversationWords } from "@cawco/core/words/project-conversation";
@@ -95,11 +95,11 @@
         );
       });
     });
-    const off = BEAT * (landing.length + 1) + dur("--dur-morph");
+    const off = BEAT * (landing.length + 1) + dur("--duration-morph");
     after(off, () => {
       step = "off";
     });
-    after(off + dur("--dur-hold"), () => {
+    after(off + dur("--duration-hold"), () => {
       open = false;
     });
   }

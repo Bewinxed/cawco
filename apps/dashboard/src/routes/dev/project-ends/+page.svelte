@@ -413,7 +413,7 @@
       <!-- As the board's wrapper does (stop-tray-here): the focus on Cancel as it opens. -->
       <div
         class="contents"
-        style:--ask-end="var(--space-5)"
+        style:--ask-end="var(--spacing-space-5)"
         {@attach (node) => {
           const frame = requestAnimationFrame(() =>
             node.querySelector<HTMLElement>("[data-stop-cancel]")?.focus()
@@ -424,7 +424,7 @@
         <StopTrayView
           activityOf={(id) => ACTIVITY[id] ?? "idle"}
           class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
-          fillOf={(row) => `var(--mark-${(row.s.id.length % 8) + 1})`}
+          fillOf={(row) => `var(--color-mark-${(row.s.id.length % 8) + 1})`}
           job={tray.job}
           nameOf={(id) => MACHINES[id] ?? id}
           onarrive={(row) => {

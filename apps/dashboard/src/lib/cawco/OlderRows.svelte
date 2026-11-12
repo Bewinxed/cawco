@@ -98,7 +98,7 @@
   /** One row's height, for the row and the box that shows six of them. */
   const height = $derived(
     tall
-      ? "calc(2 * var(--space-5) + 2 * var(--space-1))"
+      ? "calc(2 * var(--spacing-space-5) + 2 * var(--spacing-space-1))"
       : "var(--row-compact-h)"
   );
 
@@ -227,7 +227,10 @@
                  icon swap, at a control's pace). Out of the button's name:
                  `aria-busy` says it, and a status in here was read into the
                  name at rest. -->
-          <span class="icon-swap" style:--icon-swap-dur="var(--dur-control)">
+          <span
+            class="icon-swap"
+            style:--icon-swap-dur="var(--duration-control)"
+          >
             <span data-active={!pending}
               ><IconHistory class="size-icon-md" /></span
             >
@@ -258,10 +261,10 @@
     data-slot="older-rows-box"
     class="kit-tree kit-tree-rail flex flex-col max-h-(--older-max) mt-(--tree-gap) overflow-y-auto overscroll-contain scrollbar-thin not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
     data-flip-anchor
-    style:--fade="var(--space-4)"
-    style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
-    style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
-    style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+    style:--fade="var(--spacing-space-4)"
+    style:--fade-above={"linear-gradient(transparent, var(--color-mask-opaque) var(--fade))"}
+    style:--fade-below={"linear-gradient(var(--color-mask-opaque) calc(100% - var(--fade)), transparent)"}
+    style:--fade-both={"linear-gradient(transparent, var(--color-mask-opaque) var(--fade), var(--color-mask-opaque) calc(100% - var(--fade)), transparent)"}
     style:--line-root-gap="calc(var(--tree-gap) / 2)"
     style:--older-max="calc(6 * {height} + 5 * var(--line-root-gap))"
     data-keep-scroll="{list}:{id}"

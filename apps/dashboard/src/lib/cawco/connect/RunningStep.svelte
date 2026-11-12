@@ -96,7 +96,7 @@
             aria-hidden="true"
             data-box
             class={[
-              "pointer-events-none absolute start-c-step-rail-x top-c-step-rail-top -bottom-c-step-rail-gap w-px -translate-x-1/2 origin-top bg-border-hairline transition-[scale] duration-(--dur-toggle) ease-out",
+              "pointer-events-none absolute start-c-step-rail-x top-c-step-rail-top -bottom-c-step-rail-gap w-px -translate-x-1/2 origin-top bg-border-hairline transition-[scale] duration-(--duration-toggle) ease-out",
               row.state === "done" ? "scale-y-100" : "scale-y-0",
             ]}
           ></span>

@@ -7,7 +7,6 @@
     "**/build/**",
     "**/dist/**",
     "**/fixtures/**",
-    "apps/dashboard/src/lib/tokens/tokens.ts",
     "packages/core/src/stored-shapes.ts",
     "packages/core/src/hub-routes.gen.ts",
     "packages/hub/src/db/stored-shapes.ts",

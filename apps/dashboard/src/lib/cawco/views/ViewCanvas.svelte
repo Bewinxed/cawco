@@ -10,7 +10,7 @@
    * and downward holds them larger. Nothing is placed by hand and nothing
    * drags. A change to the tasks (`tasks.changed` reaches the page, which
    * reads them again) lays it out again: the cards ease to their new places
-   * over --dur-panel on --ease-in-out, a new one fades in where it lands, and
+   * over --duration-panel on --ease-in-out, a new one fades in where it lands, and
    * the view refits when the count changes. The fit keeps the cards'
    * smallest text at 11px or more (TaskCanvasFit). A card opens its sheet.
    */

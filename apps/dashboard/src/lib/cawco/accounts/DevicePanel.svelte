@@ -51,18 +51,18 @@
   );
   const shown = $derived(phase === "waiting" || phase === "expired");
 
-  /** Its place opens (--dur-morph), then what it holds fades up --pop-rise (--dur-menu). */
+  /** Its place opens (--duration-morph), then what it holds fades up --pop-rise (--duration-menu). */
   function openPlace(node: HTMLElement): TransitionConfig {
     if (!motionOk.current) {
       return {
-        duration: dur("--dur-menu"),
+        duration: dur("--duration-menu"),
         easing: easeOut,
         css: (t) => `opacity: ${t}`,
       };
     }
     const height = node.offsetHeight;
-    const open = dur("--dur-morph");
-    const rise = dur("--dur-menu");
+    const open = dur("--duration-morph");
+    const rise = dur("--duration-menu");
     const total = open + rise;
     const split = open / total;
     return {
@@ -98,7 +98,7 @@
       <div
         data-slot="well"
         data-dim={phase === "expired" || undefined}
-        class="flex items-center rounded-sm bg-code-bg px-space-4 py-space-3 transition-[opacity] duration-(--dur-fade) ease-out data-dim:opacity-50"
+        class="flex items-center rounded-sm bg-code-bg px-space-4 py-space-3 transition-[opacity] duration-(--duration-fade) ease-out data-dim:opacity-50"
         in:openPlace
       >
         <span class="sr-only">{words.said(flow?.code ?? "")}</span>

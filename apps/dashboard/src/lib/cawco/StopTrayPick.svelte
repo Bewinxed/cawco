@@ -259,7 +259,7 @@
     )
   );
 
-  const fillOf = (row: PickRow) => `var(--mark-${markHue(row.cwd)})`;
+  const fillOf = (row: PickRow) => `var(--color-mark-${markHue(row.cwd)})`;
 
   function statusOf(row: PickRow) {
     if (row.stop === "stopping") {
@@ -421,7 +421,7 @@
       <RowFault
         again={onagain ? () => onagain(row.id) : undefined}
         end={"var(--row-compact-pad-end)"}
-        indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"}
+        indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--spacing-space-5)))"}
         reason={row.stop === "failed" ? row.error : null}
       />
     </li>
@@ -521,8 +521,8 @@
           data-slot="sessions"
           aria-label={words.list}
           class="kit-tree kit-edge-fade-block flex flex-col max-h-(--list-cap) overflow-x-clip overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
-          style:--list-cap={"calc(10.5 * (2lh + 2 * var(--space-1) + var(--tree-gap)))"}
-          style:--tree-y={"calc(var(--space-1) + var(--text-label) * var(--leading-label) / 2)"}
+          style:--list-cap={"calc(10.5 * (2lh + 2 * var(--spacing-space-1) + var(--tree-gap)))"}
+          style:--tree-y={"calc(var(--spacing-space-1) + var(--text-label) * var(--leading-label) / 2)"}
         >
           {@render branch()}
         </ul>

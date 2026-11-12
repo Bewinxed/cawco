@@ -4,8 +4,8 @@
    * Needs you (or Settings) behind, and the tray as the kit's bottom sheet
    * (DESIGN.md, Drawer: full-bleed, flush on the foot, 12px top corners,
    * the hairline, the grabber, up to 85% of the screen, its content
-   * scrolling inside). It rises over --dur-panel on the drawer curve and
-   * goes over --dur-exit; a finger drags it down to put it away
+   * scrolling inside). It rises over --duration-panel on the drawer curve and
+   * goes over --duration-exit; a finger drags it down to put it away
    * (dragToDismiss), as × and a press on the scrim do. The story's control
    * stands folded under the screen.
    */
@@ -28,7 +28,8 @@
   let entered = false;
 
   /** The sheet stands at most 85% of the screen, Caw's room over its edge included. */
-  const SHEET_ROOM = "calc(var(--c-address-phone-h) * 0.85 - var(--space-8))";
+  const SHEET_ROOM =
+    "calc(var(--spacing-c-address-phone-h) * 0.85 - var(--spacing-space-8))";
 
   let sheetEl = $state<HTMLElement | null>(null);
   let scrimEl = $state<HTMLElement | null>(null);

@@ -310,8 +310,8 @@
   data-files-view={view}
   {onkeydown}
   role="listbox"
-  style:--card-min="var(--c-artifact-card-min)"
-  style:--gutter={"calc((var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1))"}
+  style:--card-min="var(--spacing-c-artifact-card-min)"
+  style:--gutter={"calc((var(--spacing-c-row-inset) - (var(--spacing-c-row-lead) - var(--spacing-icon-md)) / 2) - var(--spacing-space-1))"}
   style:--lane-tracks="repeat({count}, minmax(0, 1fr))"
   {@attach highlight({
     rows: "[data-files-card]",
@@ -475,7 +475,7 @@
       ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
       : undefined}
     style:--hole-mask={waiting
-      ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--c-tree-mark-hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--c-tree-mark-hole-edge)))"
+      ? "radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--spacing-c-tree-mark-hole-edge)), var(--color-mask-opaque) calc(var(--hole) + var(--spacing-c-tree-mark-hole-edge)))"
       : undefined}
   >
     {#if artifact.thumbnail && pictured(artifact)}
@@ -498,7 +498,7 @@
          picture and under the hover and selected washes. -->
     <span
       class="contents"
-      style:--dot-at="calc(var(--space-1) - var(--status-dot-size) / 2)"
+      style:--dot-at="calc(var(--spacing-space-1) - var(--status-dot-size) / 2)"
       >{@render needsDot()}</span
     >
   {/if}
@@ -531,7 +531,7 @@
   <span
     class="relative grid size-c-row-lead flex-none place-items-center text-ink-muted"
     data-box
-    style:--dot-at={"calc((var(--c-row-lead) - var(--icon-md)) / 2 - var(--status-dot-size))"}
+    style:--dot-at={"calc((var(--spacing-c-row-lead) - var(--spacing-icon-md)) / 2 - var(--status-dot-size))"}
   >
     <Glyph aria-hidden="true" class="size-icon-md" />
     {#if artifact.pending}{@render needsDot()}{/if}

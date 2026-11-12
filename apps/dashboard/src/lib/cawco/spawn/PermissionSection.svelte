@@ -96,9 +96,9 @@
   <span
     data-slot="fill"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-row-h translate-y-(--fill-y) rounded-xs bg-selected-bg group-data-embedded:rounded-glide-row opacity-0 group-data-embedded:inset-x-0 group-data-embedded:top-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-row-h translate-y-(--fill-y) rounded-xs bg-selected-bg group-data-embedded:rounded-glide-row opacity-0 group-data-embedded:inset-x-0 group-data-embedded:top-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--duration-toggle) motion-safe:ease-in-out"
     data-shown={rows.some((row) => row.value === value) || undefined}
-    style:--fill-y={`calc(${index} * (var(--c-row-h) + var(--space-row)))`}
+    style:--fill-y={`calc(${index} * (var(--spacing-c-row-h) + var(--spacing-space-row)))`}
   ></span>
   {#each rows as row, i (row.value)}
     {@const Icon = row.icon}

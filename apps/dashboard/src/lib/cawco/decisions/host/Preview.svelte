@@ -141,7 +141,7 @@
    * its first paint: the shape an embed of these stories said, as any
    * browser's Preview heard it; else each story it names as the stage drew
    * it at the width named (any, where it names none), one under another with the embed's own gap (agent canvas chrome.ts
-   * `cawco-embed`: `--space-3`). Null where none has been drawn anywhere:
+   * `cawco-embed`: `--spacing-space-3`). Null where none has been drawn anywhere:
    * the kit's picture stands in.
    */
   const known = $derived.by(
@@ -385,8 +385,8 @@
    */
   const PING_MS = 1000;
   const START_MS = 30_000;
-  /** `--dur-wait-grace` in ms, in the unit host.css writes it (motion `dur`: its minifier writes `1000ms` as `1s`): a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
-  const grace = () => dur("--dur-wait-grace");
+  /** `--duration-wait-grace` in ms, in the unit host.css writes it (motion `dur`: its minifier writes `1000ms` as `1s`): a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
+  const grace = () => dur("--duration-wait-grace");
   /**
    * An embed's address once its origin serves it: its ping (core
    * `PREVIEW_PING_PATH`, open to any page) answers ok when the machine's
@@ -489,7 +489,7 @@
         return hop satisfies never;
     }
   };
-  /** Its draw's wait ({@link drawing}) has outlasted `--dur-wait-grace`: the failure may show. */
+  /** Its draw's wait ({@link drawing}) has outlasted `--duration-wait-grace`: the failure may show. */
   let slow = $state(false);
   /** Each Try again asks the origin again from the start. */
   let attempt = $state(0);
@@ -814,7 +814,7 @@
    * What its status says while it isn't drawn: an embed waiting for its turn
    * among the page's embeds (or for its card to come near the view), or
    * opening on its turn; a page opening from the moment it mounts; nothing
-   * once it stands drawn or failed. Its line arrives after `--dur-wait-grace`
+   * once it stands drawn or failed. Its line arrives after `--duration-wait-grace`
    * by CSS (`animate-wait-grace-in`), from the moment it mounts, so every
    * Preview not yet drawn says so, wherever it is in the queue.
    */
@@ -831,7 +831,7 @@
   /**
    * The box's least height where a fault stands in it: the picture's own as
    * its wait held it (its said height, else its stories' as the media knows
-   * them, `--space-3` between), so the card keeps its place and shape when
+   * them, `--spacing-space-3` between), so the card keeps its place and shape when
    * the picture fails, or a named width's screen height; null for a screen
    * naming no width, or a canvas never drawn anywhere, which hold the kit
    * picture's.
@@ -847,7 +847,7 @@
       return null;
     }
     const sum = known.parts.reduce((all, part) => all + part.h, 0);
-    return `calc(${sum}px + ${known.parts.length - 1} * var(--space-3))`;
+    return `calc(${sum}px + ${known.parts.length - 1} * var(--spacing-space-3))`;
   });
   /**
    * A component canvas's box holds its picture's shape from its first paint
@@ -870,7 +870,7 @@
 {/snippet}
 
 {#snippet wait()}
-  <!-- The well's wait (BrowserView.svelte's wait): one muted meta line at the well's top, `--space-5` in, after the live dot, arriving after the wait grace. The well stands it over its piece and holds it at the page's top while any of the piece is in view (Well.svelte `status`), so a frame taller than the view says it however far it is scrolled, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
+  <!-- The well's wait (BrowserView.svelte's wait): one muted meta line at the well's top, `--spacing-space-5` in, after the live dot, arriving after the wait grace. The well stands it over its piece and holds it at the page's top while any of the piece is in view (Well.svelte `status`), so a frame taller than the view says it however far it is scrolled, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
   <p
     class="m-0 p-space-5 text-ink-muted type-meta"
     data-slot="wait-row"
@@ -905,7 +905,7 @@
   status={framed && !fault ? wait : undefined}
 >
   {#if pageAddress !== null}
-    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. Until its frame has loaded it holds a screen's skeleton at the frame's own box, and past the grace the wait's line stands over it (`status`), as a screen's embed does: never a blank box. -->
+    <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--spacing-c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. Until its frame has loaded it holds a screen's skeleton at the frame's own box, and past the grace the wait's line stands over it (`status`), as a screen's embed does: never a blank box. -->
     <div
       class={["relative", picture === undefined ? "w-full" : "flex-none"]}
       data-cawco-embed-place={id}
@@ -915,7 +915,7 @@
       <iframe
         bind:this={frame}
         class={[
-          "block rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--dur-fade) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
+          "block rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--duration-fade) not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)",
           screenTall === null && "max-h-c-media-max-h",
           picture === undefined ? "w-full" : "flex-none",
           tall === null && screenTall === null && "aspect-16/10",
@@ -931,10 +931,10 @@
           sized();
         }}
         src={pageAddress}
-        style:--fade="var(--c-edge-fade-len)"
-        style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}
-        style:--fade-below={"linear-gradient(var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
-        style:--fade-both={"linear-gradient(transparent, var(--mask-opaque) var(--fade), var(--mask-opaque) calc(100% - var(--fade)), transparent)"}
+        style:--fade="var(--spacing-c-edge-fade-len)"
+        style:--fade-above={"linear-gradient(transparent, var(--color-mask-opaque) var(--fade))"}
+        style:--fade-below={"linear-gradient(var(--color-mask-opaque) calc(100% - var(--fade)), transparent)"}
+        style:--fade-both={"linear-gradient(transparent, var(--color-mask-opaque) var(--fade), var(--color-mask-opaque) calc(100% - var(--fade)), transparent)"}
         style:block-size={framedHeight}
         style:inline-size={picture === undefined ? undefined : `${picture}px`}
         title={named()}
@@ -1009,7 +1009,7 @@
           <iframe
             bind:this={frame}
             class={[
-              "block w-full rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--dur-fade)",
+              "block w-full rounded-xs border-0 bg-surface-page outline-1 -outline-offset-1 outline-image-outline transition-opacity duration-(--duration-fade)",
               tall === null &&
                 screenTall === null &&
                 (screen ? "aspect-16/10 max-h-c-media-max-h" : "h-0"),

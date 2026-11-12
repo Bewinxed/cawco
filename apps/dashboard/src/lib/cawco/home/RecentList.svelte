@@ -389,7 +389,9 @@
       <ul
         class="kit-tree kit-tree-rail flex flex-col"
         data-roots-tall={levels.length === 0 || undefined}
-        style:--line-root-gap={levels.length > 0 ? "var(--space-3)" : undefined}
+        style:--line-root-gap={levels.length > 0
+          ? "var(--spacing-space-3)"
+          : undefined}
       >
         {#each rows as item (item.key)}
           {@render treeRow(item)}

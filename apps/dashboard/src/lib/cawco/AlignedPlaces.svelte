@@ -42,7 +42,7 @@
 
   /** The panel's room under the hero for its composer (ProjectConversation `reserved`, before the composer has measured its foot). */
   const RESERVED =
-    "calc(var(--space-4) + var(--safe-bottom) + var(--c-composer-panel) + var(--space-2))";
+    "calc(var(--spacing-space-4) + var(--safe-bottom) + var(--spacing-c-composer-panel) + var(--spacing-space-2))";
 
   const draft = new ComposerDraft();
   /** A send that waits: the story never leaves the page. */
@@ -57,7 +57,7 @@
     <div
       data-slot="pane"
       class="@container relative flex min-h-0 min-w-0 flex-auto flex-col bg-surface-recess pb-(--reserved)"
-      style:--composer-clearance="var(--space-4)"
+      style:--composer-clearance="var(--spacing-space-4)"
       style:--reserved={RESERVED}
     >
       <ConversationHero
@@ -87,7 +87,7 @@
 {:else if place === "machines"}
   <div
     class="flex min-h-dvh items-start justify-center bg-surface-recess px-space-6 pt-(--pad-top) pb-space-8"
-    style:--pad-top="calc(var(--space-8) * 2)"
+    style:--pad-top="calc(var(--spacing-space-8) * 2)"
   >
     <MachinesEmpty fleet="none" />
   </div>

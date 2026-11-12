@@ -2,8 +2,8 @@
  * What the person hasn't looked at since an update changed it (PRD §5.7,
  * "Pointing and what changed"; core comments.ts `ArtifactChanges`), as the
  * host names it (`cawco:changes`): each changed element ringed where it
- * stands, a `--c-change-ring` line `--c-change-ring-width` heavy standing
- * `--c-change-ring-offset` outside its box at its own radius grown by as
+ * stands, a `--color-c-change-ring` line `--spacing-c-change-ring-width` heavy standing
+ * `--spacing-c-change-ring-offset` outside its box at its own radius grown by as
  * much, so it follows the element's shape and never covers what it says;
  * in the page's own document as the pins are, never taking a press.
  *
@@ -13,12 +13,12 @@
  * inside its first row (`page-scroll`), so neither its pictures loading nor
  * its scrolling ever moved the document, nor the rings. The ring hides while its element is scrolled out of its scroller
  * (`position-visibility: anchors-visible`). A ring the host stops naming
- * fades off over `--dur-fade`, on its element until it goes. Coral is the target's alone (the artifact panel's surface brief, The One Target
+ * fades off over `--duration-fade`, on its element until it goes. Coral is the target's alone (the artifact panel's surface brief, The One Target
  * Rule): a ring is never coral.
  *
  * A ring pings once as its change lands, and again when the person steps
- * to it: a halo of its own colour spreading `--c-change-ping-spread` out
- * from the line as it fades, one turn of `--dur-loop` on `--ease-out`, a
+ * to it: a halo of its own colour spreading `--spacing-c-change-ping-spread` out
+ * from the line as it fades, one turn of `--duration-loop` on `--ease-out`, a
  * Web Animation (`id` {@link PING}) on the ring's own halo, never on the
  * element. Asking for less motion, the ring stands without its ping.
  *
@@ -141,10 +141,10 @@ export function startChanges(deps: ChangesDeps): Changes {
 
   const look = () =>
     deps.chrome.tokens({
-      ring: ["--c-change-ring"],
-      width: ["--c-change-ring-width", "width"],
-      offset: ["--c-change-ring-offset", "width"],
-      spread: ["--c-change-ping-spread", "width"],
+      ring: ["--color-c-change-ring"],
+      width: ["--spacing-c-change-ring-width", "width"],
+      offset: ["--spacing-c-change-ring-offset", "width"],
+      spread: ["--spacing-c-change-ping-spread", "width"],
     });
 
   /** Ring `ring` pings once: its halo spreads out from the line and fades, unless the person asks for less motion. */
@@ -166,16 +166,16 @@ export function startChanges(deps: ChangesDeps): Changes {
         { boxShadow: `0 0 0 ${spread} ${colour}`, opacity: 0 },
       ],
       {
-        duration: deps.chrome.ms("--dur-loop"),
+        duration: deps.chrome.ms("--duration-loop"),
         easing: deps.chrome.token("--ease-out", "transition-timing-function"),
       }
     );
     run.id = PING;
   }
 
-  /** The rings the host no longer names fade off over --dur-fade, standing on their element until they go. */
+  /** The rings the host no longer names fade off over --duration-fade, standing on their element until they go. */
   function letGo(wanted: ReadonlySet<string>) {
-    const fade = deps.chrome.ms("--dur-fade");
+    const fade = deps.chrome.ms("--duration-fade");
     for (const [anchor, ring] of drawn) {
       if (wanted.has(anchor)) {
         continue;
@@ -363,7 +363,7 @@ export function startChanges(deps: ChangesDeps): Changes {
     if (flash) {
       flashTimer = setTimeout(
         () => deps.outline(null),
-        deps.chrome.ms("--dur-fade")
+        deps.chrome.ms("--duration-fade")
       );
     }
   }

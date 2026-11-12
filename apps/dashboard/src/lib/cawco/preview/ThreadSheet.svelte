@@ -89,7 +89,8 @@
   const LOW = [0.22, 1];
   const SHARES = $derived(short ? LOW : HALF);
   /** Its foot clears the home indicator. */
-  const FOOT = "calc(var(--space-3) + env(safe-area-inset-bottom, 0px))";
+  const FOOT =
+    "calc(var(--spacing-space-3) + env(safe-area-inset-bottom, 0px))";
 
   let host = $state<HTMLDivElement>();
   let room = $state(0);

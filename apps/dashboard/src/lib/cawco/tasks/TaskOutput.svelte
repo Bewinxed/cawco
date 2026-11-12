@@ -212,7 +212,7 @@
         <div
           data-slot="markdown"
           in:reveal
-          style:--markdown-fade={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--space-6)), transparent)"}
+          style:--markdown-fade={"linear-gradient(to bottom, var(--color-mask-opaque) calc(100% - var(--spacing-space-6)), transparent)"}
           class="group-data-compact:max-h-c-task-output-compact-h group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
         >
           <MessageBody source={content} />

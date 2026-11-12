@@ -8,6 +8,7 @@
  * It runs in the page tab-icon-art.ts opens, ahead of time: a tab shows only
  * the pictures made here.
  */
+/// <reference lib="dom" />
 import {
   ARTBOARD,
   BOX,

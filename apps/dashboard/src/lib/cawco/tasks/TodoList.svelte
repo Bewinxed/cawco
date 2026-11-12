@@ -68,7 +68,7 @@
         () => {
           marked = null;
         },
-        dur("--dur-fade") * 4
+        dur("--duration-fade") * 4
       );
     });
   });
@@ -162,9 +162,9 @@
     data-slot="todo"
     data-todo={ref}
     data-linked={marked === ref || undefined}
-    class="group flex items-center gap-space-2 min-h-c-btn-h ps-(--indent) rounded-sm transition-[background-color] duration-(--dur-fade) ease-out data-linked:bg-selected-bg"
+    class="group flex items-center gap-space-2 min-h-c-btn-h ps-(--indent) rounded-sm transition-[background-color] duration-(--duration-fade) ease-out data-linked:bg-selected-bg"
     style:--depth={todo.depth}
-    style:--indent="calc(var(--depth, 0) * var(--space-6))"
+    style:--indent="calc(var(--depth, 0) * var(--spacing-space-6))"
   >
     <Checkbox
       aria-label={todo.text}
@@ -241,7 +241,7 @@
     class="flex items-center gap-space-2 min-h-c-btn-h ps-(--indent)"
     onsubmit={add}
     style:--depth={depth}
-    style:--indent="calc(var(--depth, 0) * var(--space-6))"
+    style:--indent="calc(var(--depth, 0) * var(--spacing-space-6))"
     {@attach under ? focusOnMount : undefined}
   >
     <Input

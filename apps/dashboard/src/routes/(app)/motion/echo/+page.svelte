@@ -37,7 +37,7 @@
         data-renders={renders}
         data-row={row}
       >
-        <TreeMark fill="var(--mark-{row + 1})" {status}>
+        <TreeMark fill="var(--color-mark-{row + 1})" {status}>
           {#snippet face()}
             <span></span>
           {/snippet}
@@ -60,7 +60,7 @@
   <!-- A working mark in no beat: it never echoes, and stands still on its
        live dot. -->
   <p class="mark-line flex items-center gap-space-5" data-unbeaten>
-    <TreeMark fill="var(--mark-8)" status="live">
+    <TreeMark fill="var(--color-mark-8)" status="live">
       {#snippet face()}
         <span></span>
       {/snippet}

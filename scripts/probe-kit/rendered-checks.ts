@@ -304,10 +304,18 @@ const CORAL_TOKENS = [
   "selected-icon",
 ];
 
-/** tokens.css's own values, each `var()` written out, for a page whose stylesheet names none of them. */
+/** The kit's tokens.css values (the declarations of the dashboard's theme.css), each `var()` written out, for a page whose stylesheet names none of them. A name is a colour token's, read as `--color-<name>`. */
 const TOKEN_VALUES = (() => {
   const css = readFileSync(
-    join(ROOT, "apps", "dashboard", "src", "lib", "tokens", "tokens.css"),
+    join(
+      ROOT,
+      "packages",
+      "hub",
+      "skills",
+      "decision-page",
+      "kit",
+      "tokens.css"
+    ),
     "utf8"
   );
   const raw = new Map<string, string>();
@@ -325,7 +333,10 @@ const TOKEN_VALUES = (() => {
           return known ? out(known, depth + 1) : whole;
         });
   return (names: string[]) =>
-    names.map((name) => ({ name, value: out(raw.get(name) ?? "transparent") }));
+    names.map((name) => ({
+      name: `color-${name}`,
+      value: out(raw.get(`color-${name}`) ?? "transparent"),
+    }));
 })();
 
 /** The impeccable skill's launcher, by its path inside the skill. */

@@ -10,7 +10,7 @@
    * is simply done.
    *
    * Caw stands in for the wait under the Real Wait Rule: nothing for the
-   * first --dur-wait-grace, then his `loading`, the steps landing after his
+   * first --duration-wait-grace, then his `loading`, the steps landing after his
    * enter. An ask is not a wait: it shows at once, with no Caw. A failure
    * keeps him over the steps (the owner's pick), in `needs-you` until his
    * failed phase is drawn.
@@ -249,10 +249,10 @@
    * rate, is past two breaths says so after its bytes, read once a breath.
    */
   const RATE_WINDOW_MS = 10_000;
-  /** `--breath` as the browser resolves it, in ms. */
+  /** `--duration-breath` as the browser resolves it, in ms. */
   function breathMs(): number {
     const probe = document.createElement("div");
-    probe.style.transitionDuration = "var(--breath)";
+    probe.style.transitionDuration = "var(--duration-breath)";
     document.body.append(probe);
     const value = getComputedStyle(probe).transitionDuration;
     probe.remove();
@@ -315,7 +315,7 @@
     untrack(
       () =>
         browser &&
-        Date.now() - Date.parse(job.createdAt) >= dur("--dur-wait-grace")
+        Date.now() - Date.parse(job.createdAt) >= dur("--duration-wait-grace")
     )
   );
   $effect(() => {
@@ -324,7 +324,7 @@
     }
     const grace = setTimeout(() => {
       graceOver = true;
-    }, dur("--dur-wait-grace"));
+    }, dur("--duration-wait-grace"));
     return () => clearTimeout(grace);
   });
   const waiting = $derived(WORKING.has(job.stage) && !asking);
@@ -441,7 +441,7 @@
   class="group/wait flex flex-col items-center justify-center gap-space-5 flex-auto min-h-0 overflow-y-auto py-space-8 px-space-6 bg-surface-recess data-phone:justify-start data-phone:pbs-space-6 data-phone:px-space-4 data-phone:pbe-(--wait-pad-end)"
   data-move={job.id}
   data-phone={phone || undefined}
-  style:--wait-pad-end="calc(var(--space-4) + env(safe-area-inset-bottom))"
+  style:--wait-pad-end={"calc(var(--spacing-space-4) + env(safe-area-inset-bottom))"}
 >
   <!-- A stopped move has no Caw and no room for him: its column starts at
        the same top whatever stage it stopped at, as on the phone app. -->
@@ -518,7 +518,7 @@
                 {@const file = job.lfsFile}
                 <div
                   class="grid grid-cols-(--file-cols) items-center gap-space-2"
-                  style:--file-cols={"minmax(0, 1fr) var(--c-move-wait-file-bar-w) auto"}
+                  style:--file-cols={"minmax(0, 1fr) var(--spacing-c-move-wait-file-bar-w) auto"}
                   in:unfold
                   out:unfold
                 >
@@ -543,7 +543,7 @@
                 </div>
               {/if}
               {#if row.phase === "asking" && job.ask}
-                <!-- Under a finger its rows open to --space-5, so the Details
+                <!-- Under a finger its rows open to --spacing-space-5, so the Details
                      fold's 44px area and the answers' under it both stand
                      whole (DESIGN.md, The 44 Touch Rule: "clusters open their
                      gap on touch"). -->

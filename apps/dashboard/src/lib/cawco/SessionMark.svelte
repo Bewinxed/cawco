@@ -42,7 +42,7 @@
   {count}
   echoKey={id}
   faceAlways={caw !== null}
-  fill="var(--mark-{markHue(place)})"
+  fill="var(--color-mark-{markHue(place)})"
   {ontoggle}
   {open}
   {status}

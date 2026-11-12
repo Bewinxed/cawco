@@ -72,7 +72,9 @@
     if (handing) {
       return "bg-surface-raised inset-ring-2 inset-ring-brand-solid";
     }
-    return own ? "bg-(--wash,var(--surface-recess-deep))" : "bg-surface-recess";
+    return own
+      ? "bg-(--wash,var(--color-surface-recess-deep))"
+      : "bg-surface-recess";
   });
   const scopeTip = $derived.by(() => {
     if (project === null) {
@@ -98,7 +100,7 @@
     data-handing={handing || undefined}
     data-slot="kind-tile"
     style:--wash={own && !handing && holder.hue !== null
-      ? `color-mix(in oklab, var(--mark-${holder.hue}) 8%, var(--surface-recess))`
+      ? `color-mix(in oklab, var(--color-mark-${holder.hue}) 8%, var(--color-surface-recess))`
       : undefined}
   >
     <span

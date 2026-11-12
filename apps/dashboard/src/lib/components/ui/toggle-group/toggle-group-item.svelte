@@ -41,7 +41,7 @@
     segment(),
     "press-tint focus-inset touch-hit shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     fit &&
-      "grid shrink grid-cols-[minmax(0,var(--c-segment-pad-x))_max-content_minmax(0,var(--c-segment-pad-x))] gap-0 px-0",
+      "grid shrink grid-cols-[minmax(0,var(--spacing-c-segment-pad-x))_max-content_minmax(0,var(--spacing-c-segment-pad-x))] gap-0 px-0",
     className
   )}
   children={fit ? fitted : children}

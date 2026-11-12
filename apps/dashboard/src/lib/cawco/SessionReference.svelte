@@ -57,7 +57,7 @@
     data-slot="mark"
     aria-hidden="true"
     class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
-    style:--mark-bg="var(--mark-{markHue(sessionPlace(id))})"
+    style:--mark-bg="var(--color-mark-{markHue(sessionPlace(id))})"
     data-box
   >
     {#if caw}
@@ -77,7 +77,7 @@
     side="right"
     style="--x: {panel.place.x}px; --y: {panel.place.y}px; --origin: {panel
       .place
-      .origin}px; --room: var(--c-session-hover-room); --span: calc(100vw - 2 * var(--hover-panel-inset))"
+      .origin}px; --room: var(--spacing-c-session-hover-room); --span: calc(100vw - 2 * var(--hover-panel-inset))"
     watch={panel.open ? id : null}
   >
     {#snippet children(shown)}

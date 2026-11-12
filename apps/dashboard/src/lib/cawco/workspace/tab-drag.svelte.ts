@@ -22,7 +22,7 @@
  *
  * Motion: the tab follows the pointer with no easing, as a hand moves it.
  * Its neighbours, and the tab's settle on release, move on the strip's own
- * slide (`--dur-panel`, `--ease-drawer`, PaneTabs `slide`): a neighbour's
+ * slide (`--duration-panel`, `--ease-drawer`, PaneTabs `slide`): a neighbour's
  * as a transition of `translate` it can take over mid-way, the release as
  * the strip's FLIP of the order it writes, every moving tab on one clock.
  * With less motion nothing eases: the neighbours stand in their slots at

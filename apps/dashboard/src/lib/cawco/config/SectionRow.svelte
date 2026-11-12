@@ -86,9 +86,9 @@
     class="group/row relative flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-c-row-h-two has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:grid max-phone:@min-section-row/section-row:grid-cols-(--row-cols) max-phone:@min-section-row/section-row:grid-rows-(--row-rows) max-phone:gap-x-space-3 max-phone:gap-y-space-row max-phone:@max-section-row/section-row:grid-cols-(--row-cols-narrow) max-phone:@max-section-row/section-row:grid-rows-(--row-rows-narrow)"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
-    style:--row-cols="var(--c-mark) minmax(0, 1fr) auto"
+    style:--row-cols="var(--spacing-c-mark) minmax(0, 1fr) auto"
     style:--row-rows={meta === undefined ? "auto" : "auto auto"}
-    style:--row-cols-narrow="var(--c-mark) minmax(0, 1fr)"
+    style:--row-cols-narrow="var(--spacing-c-mark) minmax(0, 1fr)"
     style:--row-rows-narrow={meta === undefined
       ? "auto auto"
       : "auto auto auto"}
@@ -115,7 +115,7 @@
     >
       <span
         data-slot="name"
-        class="flex min-w-0 items-center gap-space-2 type-label text-ink-strong transition-opacity duration-(--dur-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:row-start-1"
+        class="flex min-w-0 items-center gap-space-2 type-label text-ink-strong transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:row-start-1"
         data-mono={mono || undefined}
       >
         {#if href}
@@ -142,7 +142,7 @@
       {#if meta !== undefined}
         <span
           data-slot="meta"
-          class="truncate type-meta text-ink-muted transition-opacity duration-(--dur-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:-col-end-1 max-phone:row-start-2"
+          class="truncate type-meta text-ink-muted transition-opacity duration-(--duration-panel) ease-out group-data-off/row:opacity-55 max-phone:col-start-2 max-phone:-col-end-1 max-phone:row-start-2"
           title={meta}>{meta}</span
         >
       {/if}
@@ -181,7 +181,7 @@
   {#if below || note}
     <div
       class="flex min-w-0 flex-col gap-space-2 pt-0 pe-space-2 pb-space-2 ps-(--below-ps) empty:hidden max-phone:ps-space-2"
-      style:--below-ps="calc(var(--space-2) + var(--c-mark) + var(--space-3))"
+      style:--below-ps={"calc(var(--spacing-space-2) + var(--spacing-c-mark) + var(--spacing-space-3))"}
     >
       {#if note}
         <p

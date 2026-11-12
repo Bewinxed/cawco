@@ -7,7 +7,7 @@
  *
  * 0. The shell's sidebar, in a browser with no width of its own, is drawn
  *    (getBoundingClientRect) at the `c-sidebar-w` token of
- *    design/tokens/cawco.tokens.json, as tokens.css carries it.
+ *    apps/dashboard/src/lib/tokens/theme.css.
  * 1. `artifact_create` of a page holding one `data-cawco-choice` answers an
  *    id, and the panel's menu lists it.
  * 2. A click on an option in the page (inside the panel's frame) is in
@@ -192,10 +192,12 @@ import { shaped } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
 /** The design tokens' one source (CLAUDE.md, Design Context). */
-const TOKENS = join(
+const THEME = join(
   import.meta.dir,
-  "../../../design/tokens/cawco.tokens.json"
+  "../../../apps/dashboard/src/lib/tokens/theme.css"
 );
+/** The sidebar's width, as theme.css declares it. */
+const SIDEBAR_WIDTH = /^\s*--spacing-c-sidebar-w:\s*([^;]+);/mu;
 const UPDATE = "mcp__cawco__artifact_update";
 const READ = "mcp__cawco__artifact_read";
 const PROMOTE = "mcp__cawco__artifact_promote";
@@ -529,15 +531,11 @@ const run = async (kit: Kit) => {
   await open(page, `${base}/session/${session}`, "[data-artifact-trigger]");
   // The shell's rail, in a browser with no width of its own, is drawn at the
   // `c-sidebar-w` token (DESIGN.md: "228px by default"), its one source.
-  const width = (
-    (await Bun.file(TOKENS).json()) as {
-      size: { "c-sidebar-w": { $value: { value: number; unit: string } } };
-    }
-  ).size["c-sidebar-w"].$value;
-  const token = `${width.value}${width.unit}`;
+  const token =
+    SIDEBAR_WIDTH.exec(await Bun.file(THEME).text())?.[1]?.trim() ?? "";
   const rail = await page.evaluate(() => ({
     css: getComputedStyle(document.documentElement)
-      .getPropertyValue("--c-sidebar-w")
+      .getPropertyValue("--spacing-c-sidebar-w")
       .trim(),
     drawn: document
       .querySelector(
@@ -572,7 +570,7 @@ const run = async (kit: Kit) => {
     .evaluate((node) => {
       const probe = document.createElement("span");
       probe.style.font = "var(--type-label)";
-      probe.style.color = "var(--ink-muted)";
+      probe.style.color = "var(--color-ink-muted)";
       document.body.append(probe);
       const label = getComputedStyle(probe);
       const name = node.querySelector('[data-slot="row-name"]');

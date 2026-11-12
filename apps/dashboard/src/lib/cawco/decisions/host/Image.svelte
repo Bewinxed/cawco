@@ -24,7 +24,7 @@
 
   In a Row its well grows by its picture's aspect ratio (`picture-row`,
   design.css), so pictures side by side stand at one height, the narrowest
-  never under `--c-picture-min`: it tells the Row its shape (Row.svelte). One the page
+  never under `--spacing-c-picture-min`: it tells the Row its shape (Row.svelte). One the page
   does not hold, or whose size no reader knew, says so in words where it would stand.
 -->
 <script lang="ts">

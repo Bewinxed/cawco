@@ -160,7 +160,7 @@
   <div
     data-slot="first-run"
     class="grid grid-cols-(--row-cols) gap-x-space-3 rounded-lg bg-surface-raised p-space-4 shadow-tile"
-    style:--row-cols="var(--c-mark) minmax(0, 1fr)"
+    style:--row-cols="var(--spacing-c-mark) minmax(0, 1fr)"
   >
     <span class="mark-cell row-span-2"
       ><IconFolder

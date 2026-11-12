@@ -44,7 +44,7 @@
    * out unseen.
    */
   const hangCardVariants = tv({
-    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--surface-raised)] before:pointer-events-none before:absolute before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
+    base: "relative border-0 bg-(--hang-surface) [--hang-neck:var(--hang-surface)] [--hang-surface:var(--color-surface-raised)] before:pointer-events-none before:absolute before:left-(--gap-from) before:z-2 before:h-px before:w-[calc(var(--gap-to)-var(--gap-from))] before:bg-(--hang-neck) after:pointer-events-none after:absolute after:inset-0 after:z-1 after:rounded-[inherit] after:border after:border-border-control data-[rehearsing]:invisible before:[--gap-from:calc(var(--neck-start)-var(--neck-flare-start,0px))] before:[--gap-to:calc(var(--neck-end)+var(--neck-flare-end,0px))] before:[clip-path:var(--neck-cut,none)] data-[flush=end]:before:[--gap-to:calc(var(--neck-end)-1px)] data-[flush=start]:before:[--gap-from:1px]",
     variants: {
       /**
        * Which edge meets the anchor: its top (it hangs) or its foot (it
@@ -55,8 +55,8 @@
        */
       rises: {
         false:
-          "[clip-path:inset(0_calc(-1*var(--c-hang-shadow-room))_calc(-1*var(--c-hang-shadow-room))_round_0_0_var(--radius-lg)_var(--radius-lg))] before:top-0 data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none",
-        true: "[clip-path:inset(calc(-1*var(--c-hang-shadow-room))_calc(-1*var(--c-hang-shadow-room))_0_round_var(--radius-lg)_var(--radius-lg)_0_0)] before:bottom-0 before:-scale-y-100 data-[flush=start]:rounded-es-none data-[flush=end]:rounded-ee-none",
+          "[clip-path:inset(0_calc(-1*var(--spacing-c-hang-shadow-room))_calc(-1*var(--spacing-c-hang-shadow-room))_round_0_0_var(--radius-lg)_var(--radius-lg))] before:top-0 data-[flush=start]:rounded-ss-none data-[flush=end]:rounded-se-none",
+        true: "[clip-path:inset(calc(-1*var(--spacing-c-hang-shadow-room))_calc(-1*var(--spacing-c-hang-shadow-room))_0_round_var(--radius-lg)_var(--radius-lg)_0_0)] before:bottom-0 before:-scale-y-100 data-[flush=start]:rounded-es-none data-[flush=end]:rounded-ee-none",
       },
       tab: {
         true: "translate-none shadow-none will-change-auto [clip-path:path('M_0_0_Z')] before:hidden after:hidden",
@@ -66,7 +66,7 @@
         true: "shadow-none",
       },
       /** The tab's menu hangs on the tab's own surface, as the session card's head is. */
-      surface: { recess: "[--hang-surface:var(--surface-recess)]" },
+      surface: { recess: "[--hang-surface:var(--color-surface-recess)]" },
     },
     /** Shut, it stands behind the cut past its own height and its shadow's reach (motion/hang). */
     compoundVariants: [
@@ -163,10 +163,10 @@
   type Frame = "caw" | "machines" | "jump" | "files" | "details" | "settings";
   /**
    * Each face's frame, read off what its custom properties hold (on the card,
-   * below): Caw's panel `c-panel-w` wide with its rows `--space-2` in; the
+   * below): Caw's panel `c-panel-w` wide with its rows `--spacing-space-2` in; the
    * machines `c-machines-w`; Jump `c-find-w` wide and its foot clear of the
    * screen's, a full sheet on a phone; Files as Caw's panel, its rows
-   * `--space-2` in, as tall as what it holds up to his panel's height or the
+   * `--spacing-space-2` in, as tall as what it holds up to his panel's height or the
    * room under the glass; a card of settings as wide as its rows hold,
    * padded by them, never past the screen less its edges. Each stands `c-pop-edge` in from the screen's edge
    * on either side (DESIGN.md, Breakpoints: popovers widen to the viewport
@@ -191,31 +191,31 @@
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
     settings: "w-max max-w-(--frame-w) gap-0 p-0",
     details:
-      "flex max-h-[min(var(--c-details-card-max-h),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--c-top-bar-h)-2*var(--c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))]",
+      "flex max-h-[min(var(--spacing-c-details-card-max-h),var(--bits-popover-content-available-height,var(--spacing-c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--spacing-c-top-bar-h)-2*var(--spacing-c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--spacing-c-sheet-max-h)))]",
   };
   /** The shell less a floating card's edge each side. */
-  const ROOM = "calc(100cqi - 2 * var(--c-screen-margin))";
+  const ROOM = "calc(100cqi - 2 * var(--spacing-c-screen-margin))";
   /** The shell less the phone bar's edge each side and the trailing safe area. */
   const ROOM_NARROW =
-    "calc(100cqi - 2 * var(--c-bar-phone-edge) - env(safe-area-inset-right, 0px))";
+    "calc(100cqi - 2 * var(--spacing-c-bar-phone-edge) - env(safe-area-inset-right, 0px))";
   /** The numbers each face's frame reads (`--frame-w`, `--frame-w-narrow`, `--frame-h`). */
   const FRAME_SIZES: Record<
     Frame,
     { w?: string; narrow?: string; h?: string }
   > = {
     caw: {
-      w: `min(var(--c-panel-w), ${ROOM})`,
-      narrow: `min(var(--c-panel-w), ${ROOM_NARROW})`,
+      w: `min(var(--spacing-c-panel-w), ${ROOM})`,
+      narrow: `min(var(--spacing-c-panel-w), ${ROOM_NARROW})`,
     },
-    machines: { w: `min(var(--c-machines-w), ${ROOM})` },
+    machines: { w: `min(var(--spacing-c-machines-w), ${ROOM})` },
     jump: {
-      w: `min(var(--c-find-w), ${ROOM})`,
+      w: `min(var(--spacing-c-find-w), ${ROOM})`,
       narrow: ROOM_NARROW,
-      h: "calc(100dvh - var(--c-top-bar-h) - var(--space-7))",
+      h: "calc(100dvh - var(--spacing-c-top-bar-h) - var(--spacing-space-7))",
     },
     files: {
-      w: `min(var(--c-panel-w), ${ROOM})`,
-      h: "min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
+      w: `min(var(--spacing-c-panel-w), ${ROOM})`,
+      h: "min(var(--spacing-c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
     },
     details: {},
     settings: { w: ROOM },

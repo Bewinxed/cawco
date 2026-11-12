@@ -692,7 +692,7 @@
             { opacity: 1, transform: "none" },
           ]
         : [{ opacity: 0 }, { opacity: 1 }],
-      { duration: dur("--dur-pop"), easing: CURVE.out }
+      { duration: dur("--duration-pop"), easing: CURVE.out }
     );
   }
 
@@ -997,7 +997,7 @@
     role="tooltip"
     style:left={`${tip.x}px`}
     style:top={`${tip.y}px`}
-    style:--tip-shift-y="calc(-100% - var(--space-2))"
+    style:--tip-shift-y="calc(-100% - var(--spacing-space-2))"
   >
     <span>{tip.text}</span>
     <span class="type-code opacity-80">{tip.handle}</span>

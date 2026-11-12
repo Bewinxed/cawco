@@ -77,7 +77,7 @@ function refused(text, { css = true, curveOnly = false, curves = false } = {}) {
     ? (text.match(TIME) ?? []).filter((t) => !ZERO.test(t))
     : [];
   if (times.length > 0) {
-    return `the time ${times.join(", ")}: write var(--dur-…), dur("--dur-…") in a script, or staggered(n) for a run of arrivals`;
+    return `the time ${times.join(", ")}: write var(--duration-…), dur("--duration-…") in a script, or staggered(n) for a run of arrivals`;
   }
   if (!curves && BEZIER.test(text)) {
     return 'a cubic-bezier(): write var(--ease-…), or ease("--ease-…") in a script';
@@ -336,7 +336,7 @@ export function rawMotion(model, { curves = false } = {}) {
     findings.push({
       start: node.start,
       end: node.end,
-      message: `This writes ${said}. A duration or a curve is a motion token (design/tokens/cawco.tokens.json, DESIGN.md Motion grammar).`,
+      message: `This writes ${said}. A duration or a curve is a motion token (apps/dashboard/src/lib/tokens/theme.css, DESIGN.md Motion grammar).`,
     });
   eachNode(model, (node) => {
     const found = READERS[node.type]?.(model, node, { curves });

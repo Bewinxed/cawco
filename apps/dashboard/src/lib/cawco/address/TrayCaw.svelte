@@ -16,7 +16,7 @@
    * stands.
    *
    * Between a status and a file (or one file and another) the one leaving
-   * holds its drawing and fades to --leave-scale over --dur-fade, out of
+   * holds its drawing and fades to --leave-scale over --duration-fade, out of
    * the flow, while the next comes in by its own enter (assets/mascot
    * README.md, Contract).
    */

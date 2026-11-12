@@ -108,7 +108,7 @@
   function slideOut(node: HTMLElement): TransitionConfig {
     const by = -32 * toward;
     return lifting(node, pinned(node), {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: easeOut,
       css: (t) =>
         motionOk.current
@@ -121,7 +121,9 @@
     const by = 32 * toward;
     return {
       delay: motionOk.current ? 40 : 0,
-      duration: dur(motionOk.current ? "--dur-panel" : "--dur-control"),
+      duration: dur(
+        motionOk.current ? "--duration-panel" : "--duration-control"
+      ),
       easing: easeDrawer,
       css: (t) =>
         motionOk.current

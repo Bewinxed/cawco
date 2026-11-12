@@ -214,7 +214,7 @@
 {#snippet chevron()}
   <span
     data-open={open || undefined}
-    class="inline-flex flex-none data-open:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+    class="inline-flex flex-none data-open:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--duration-control) motion-safe:ease-out"
     data-box><IconChevronRight class="size-icon-sm" /></span
   >
 {/snippet}
@@ -320,7 +320,7 @@
     </span>
     <pre
       data-slot="well"
-      style:--well-x="calc(var(--x-hang) - var(--space-3))"
+      style:--well-x="calc(var(--x-hang) - var(--spacing-space-3))"
       class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{message?.content}</pre>
   </div>
 {:else if isInterrupted}
@@ -367,7 +367,7 @@
         <button
           aria-busy={opening}
           data-slot="aname"
-          class="select-none pointer-hit touch-hit py-0 px-0 border-none border-current bg-transparent text-ink-strong underline decoration-current/35 underline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--dur-control) can-hover:motion-safe:ease-out"
+          class="select-none pointer-hit touch-hit py-0 px-0 border-none border-current bg-transparent text-ink-strong underline decoration-current/35 underline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--duration-control) can-hover:motion-safe:ease-out"
           onclick={openResponses}
           title="Open {responses.title}"
           type="button"
@@ -434,7 +434,7 @@
   <div
     data-tx-rail
     data-slot="note"
-    style:--rail-head={"linear-gradient(var(--status-fail-ink), var(--status-fail-ink))"}
+    style:--rail-head={"linear-gradient(var(--color-status-fail-ink), var(--color-status-fail-ink))"}
     class="text-size-label font-medium text-status-fail-ink rail-row"
   >
     <span
@@ -468,7 +468,7 @@
         {#if foldCommand}
           <pre
             data-slot="well"
-            style:--well-x="calc(var(--x-hang) - var(--space-3))"
+            style:--well-x="calc(var(--x-hang) - var(--spacing-space-3))"
             class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{foldCommand}</pre>
         {:else if foldBody}
           <div class="mt-space-3 rail-hang">

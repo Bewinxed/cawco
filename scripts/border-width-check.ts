@@ -9,12 +9,12 @@
  * stroke.
  *
  * Refused:
- *  - a token (tokens.css, from design/tokens) that is a border's width (its
+ *  - a token (theme.css) that is a border's width (its
  *    name ends `border-width`, `border-w`, `outline-width`) or a border
  *    shorthand (`1.5px solid …`) at a fractional px;
  *  - a class that sets a border's or an outline's width fractional: a
  *    literal (`border-[1.5px]`, `border-t-[length:0.5px]`, `border-1.5`) or a
- *    token that resolves fractional (`border-s-(length:--c-corner-grip-stroke)`,
+ *    token that resolves fractional (`border-s-(length:--spacing-c-corner-grip-stroke)`,
  *    `outline-[length:var(--x)]`);
  *  - a CSS declaration of the same (`border-width: 1.5px`, `border-top:
  *    var(--x) solid …`, `outline: 0.5px solid`), in a stylesheet, a `<style>`
@@ -24,7 +24,7 @@
 import { resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "..");
-const TOKENS = "apps/dashboard/src/lib/tokens/tokens.css";
+const TOKENS = "apps/dashboard/src/lib/tokens/theme.css";
 /** Where the house draws: the dashboard, the canvas page, the decision-page kit. */
 const PLACES = [
   "apps/dashboard/src",
@@ -56,7 +56,7 @@ const CSS_DECLARATION =
 
 const fractional = (px: number) => !Number.isInteger(px);
 
-/** Every token's value, by name, from tokens.css (each scheme's block alike). */
+/** Every token's value, by name, from theme.css (each scheme's block alike). */
 const tokenText = await Bun.file(resolve(ROOT, TOKENS)).text();
 const values = new Map<string, string>();
 for (const [, name, value] of tokenText.matchAll(DECLARATION)) {

@@ -4,7 +4,7 @@
 
   /**
    * The spinner (DESIGN.md, Spinner): a 16px ring at 25% with a 25% arc,
-   * turning once per `--dur-loop`; it keeps turning under reduced motion
+   * turning once per `--duration-loop`; it keeps turning under reduced motion
    * (The Reduced Motion Rule: an indeterminate spinner keeps turning).
    */
   const spinnerVariants = tv({
@@ -23,7 +23,7 @@
           fading in and out; held still while hidden. */
       reveal: {
         "glyph-busy":
-          "not-group-glyph-busy:animation-paused opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--dur-control) motion-safe:ease-out",
+          "not-group-glyph-busy:animation-paused opacity-0 group-glyph-busy:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--duration-control) motion-safe:ease-out",
       },
     },
   });

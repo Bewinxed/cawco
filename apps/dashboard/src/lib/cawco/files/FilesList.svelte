@@ -11,9 +11,9 @@
    * into view.
    *
    * Both lists are the hub's (files.svelte.ts): until one answers it claims
-   * nothing (no count, no "nothing" line); past `--dur-wait-grace` its
+   * nothing (no count, no "nothing" line); past `--duration-wait-grace` its
    * skeleton stands at the real layout's size, and the read arrives over one
-   * `--dur-fade` cross-fade. A read refused says so in its region's place
+   * `--duration-fade` cross-fade. A read refused says so in its region's place
    * (RowFault), with Try again and the hub's own words.
    *
    * The artifacts waiting on the person, the ones its needs-you mark is
@@ -191,7 +191,7 @@
   );
 
   /**
-   * The Claim Of Nothing Rule: inside `--dur-wait-grace` a list still read
+   * The Claim Of Nothing Rule: inside `--duration-wait-grace` a list still read
    * shows nothing of its own; past it, its skeleton stands, and what the
    * read brings (the list, or its "nothing" line) takes its place in one
    * reveal (motion/curves `reveal`, `revealOut`). Started again for each
@@ -205,7 +205,7 @@
     waited = false;
     const timer = setTimeout(() => {
       waited = true;
-    }, dur("--dur-wait-grace"));
+    }, dur("--duration-wait-grace"));
     return () => clearTimeout(timer);
   });
   const artifactsGhost = $derived(
@@ -469,8 +469,8 @@
      filling what its card or its drawer gives it. -->
 <div
   class="relative flex min-h-0 flex-1 flex-col"
-  style:--lead-pad={"calc(var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2)"}
-  style:--row-end="calc(var(--c-btn-h-xs) + var(--space-2))"
+  style:--lead-pad={"calc(var(--spacing-c-row-inset) - (var(--spacing-c-row-lead) - var(--spacing-icon-md)) / 2)"}
+  style:--row-end="calc(var(--spacing-c-btn-h-xs) + var(--spacing-space-2))"
 >
   {#if nothing}
     <!-- What the skeleton stood in for, in its reveal (reveal). -->
@@ -578,17 +578,17 @@
              alone, so both heads stay in sight and the rows scroll under
              them. A card's height: a landscape thumbnail and its two lines. -->
         <div
-          class="grid min-h-0 flex-1 grid-rows-(--region-rows) content-box-start short-window:artifacts-floor-cards:artifacts-min-(--c-section-head-h) short-window:artifacts-floor-one:artifacts-min-(--c-section-head-h) short-window:artifacts-floor-two:artifacts-min-(--c-section-head-h) short-window:attachments-floor-one:attachments-min-(--seam-head-floor) short-window:attachments-floor-two:attachments-min-(--seam-head-floor) tall-window:artifacts-floor-cards:artifacts-min-(--cards-floor) tall-window:artifacts-floor-one:artifacts-min-(--row-floor) tall-window:artifacts-floor-two:artifacts-min-(--rows-floor) tall-window:attachments-floor-one:attachments-min-(--one-floor) tall-window:attachments-floor-two:attachments-min-(--two-floor)"
+          class="grid min-h-0 flex-1 grid-rows-(--region-rows) content-box-start short-window:artifacts-floor-cards:artifacts-min-(--spacing-c-section-head-h) short-window:artifacts-floor-one:artifacts-min-(--spacing-c-section-head-h) short-window:artifacts-floor-two:artifacts-min-(--spacing-c-section-head-h) short-window:attachments-floor-one:attachments-min-(--seam-head-floor) short-window:attachments-floor-two:attachments-min-(--seam-head-floor) tall-window:artifacts-floor-cards:artifacts-min-(--cards-floor) tall-window:artifacts-floor-one:artifacts-min-(--row-floor) tall-window:artifacts-floor-two:artifacts-min-(--rows-floor) tall-window:attachments-floor-one:attachments-min-(--one-floor) tall-window:attachments-floor-two:attachments-min-(--two-floor)"
           data-artifacts-floor={artifactsFloor}
           data-attachments-floor={attachmentsFloor}
           style:--region-rows={"minmax(var(--artifacts-min, min-content), auto) minmax(var(--attachments-min, min-content), auto)"}
-          style:--region-seam="calc(1px + 2 * var(--space-2))"
-          style:--seam-head-floor={"calc(var(--c-section-head-h) + var(--region-seam))"}
-          style:--cards-floor={"calc(var(--c-section-head-h) + 4 * var(--c-artifact-row-h))"}
-          style:--rows-floor={"calc(var(--c-section-head-h) + 2 * var(--c-artifact-row-h))"}
-          style:--row-floor={"calc(var(--c-section-head-h) + var(--c-artifact-row-h))"}
-          style:--two-floor={"calc(var(--c-section-head-h) + 2 * var(--c-artifact-row-h) + var(--region-seam))"}
-          style:--one-floor={"calc(var(--c-section-head-h) + var(--c-artifact-row-h) + var(--region-seam))"}
+          style:--region-seam="calc(1px + 2 * var(--spacing-space-2))"
+          style:--seam-head-floor={"calc(var(--spacing-c-section-head-h) + var(--region-seam))"}
+          style:--cards-floor={"calc(var(--spacing-c-section-head-h) + 4 * var(--spacing-c-artifact-row-h))"}
+          style:--rows-floor={"calc(var(--spacing-c-section-head-h) + 2 * var(--spacing-c-artifact-row-h))"}
+          style:--row-floor={"calc(var(--spacing-c-section-head-h) + var(--spacing-c-artifact-row-h))"}
+          style:--two-floor={"calc(var(--spacing-c-section-head-h) + 2 * var(--spacing-c-artifact-row-h) + var(--region-seam))"}
+          style:--one-floor={"calc(var(--spacing-c-section-head-h) + var(--spacing-c-artifact-row-h) + var(--region-seam))"}
         >
           <section
             aria-labelledby="{uid}-artifacts"
@@ -784,7 +784,7 @@
         <!-- Each region's own scroll, with the house fade at its foot while
              more is below, at its full length on every width as Caw's panel
              has it. It pads its end into an equal negative margin (The 44
-             Touch Rule), by Files' card's own inset (`--space-2`, FilesFace),
+             Touch Rule), by Files' card's own inset (`--spacing-space-2`, FilesFace),
              so a row's Show in conversation keeps its touch area in the
              scroller's own box, the cards and rows still end on their head's
              trailing edge, and the scroller (and its scrollbar) ends on the

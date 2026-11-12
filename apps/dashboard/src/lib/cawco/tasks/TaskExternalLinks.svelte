@@ -229,7 +229,7 @@
   >
     <!-- mark-line: the glyph, age and link-out stand in cells one title line tall, on the title's first line, beside words that wrap -->
     <div
-      class="group/row relative isolate col-span-full grid grid-cols-subgrid items-start gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--dur-ghost) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed"
+      class="group/row relative isolate col-span-full grid grid-cols-subgrid items-start gap-y-space-1 px-space-2 py-space-2 before:absolute before:inset-0 before:-z-1 before:rounded-sm before:transition-[background-color] before:duration-(--duration-ghost) before:ease-in-out hover:not-active:before:bg-surface-hover active:before:bg-surface-pressed"
       data-slot="link-line"
     >
       <span class="mark-cell type-row" data-slot="glyph"

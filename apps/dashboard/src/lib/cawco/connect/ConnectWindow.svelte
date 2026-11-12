@@ -60,7 +60,7 @@
   /** The page arriving: it fades in where it lays out. */
   function pageIn(_node: Element) {
     return {
-      duration: dur("--dur-fade"),
+      duration: dur("--duration-fade"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
@@ -68,7 +68,7 @@
   /** The page leaving, pinned where it stood so the dialog is only ever the size of what arrives. */
   function pageOut(node: HTMLElement) {
     return lifting(node, pinned(node), {
-      duration: dur("--dur-exit"),
+      duration: dur("--duration-exit"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     });
@@ -104,7 +104,7 @@
    */
   const lifted = $derived(
     phone.current
-      ? `bottom: ${keyboard}px; max-height: calc(${room > 0 ? `${room}px` : "100dvh"} - max(env(safe-area-inset-top), var(--space-7)));`
+      ? `bottom: ${keyboard}px; max-height: calc(${room > 0 ? `${room}px` : "100dvh"} - max(env(safe-area-inset-top), var(--spacing-space-7)));`
       : undefined
   );
 
@@ -189,7 +189,7 @@
     const row = rowOf(parked);
     if (phone.current) {
       if (row) {
-        setTimeout(() => echo(row), dur("--dur-exit"));
+        setTimeout(() => echo(row), dur("--duration-exit"));
       }
       return;
     }
@@ -198,7 +198,12 @@
     if (!target) {
       return;
     }
-    const flight = closeInto(node, target, dur("--dur-panel"), CURVE.drawer);
+    const flight = closeInto(
+      node,
+      target,
+      dur("--duration-panel"),
+      CURVE.drawer
+    );
     if (row && flight) {
       row.style.visibility = "hidden";
       const landed = () => {
@@ -242,7 +247,7 @@
             opacity: 0,
           },
         ],
-        { duration: dur("--dur-loop"), easing: CURVE.out }
+        { duration: dur("--duration-loop"), easing: CURVE.out }
       )
       .finished.catch(() => undefined)
       .then(() => copy.remove());
@@ -270,7 +275,7 @@
           },
           { transformOrigin: "0 0", transform: "none", opacity: 1 },
         ],
-        { duration: dur("--dur-panel"), easing: CURVE.drawer }
+        { duration: dur("--duration-panel"), easing: CURVE.drawer }
       );
       flight.finished
         .catch(() => undefined)

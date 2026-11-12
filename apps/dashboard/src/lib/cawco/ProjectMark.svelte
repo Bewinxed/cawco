@@ -50,7 +50,7 @@
 <TreeMark
   {count}
   countIsStatus
-  fill="var(--mark-{hue})"
+  fill="var(--color-mark-{hue})"
   {ontoggle}
   {open}
   {rowToggles}

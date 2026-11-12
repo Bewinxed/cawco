@@ -1,5 +1,5 @@
 <!-- A sign-in landed: the tick draws itself along its stroke over
-     --dur-toggle as it arrives (Ticks and dots); with reduced motion it only
+     --duration-toggle as it arrives (Ticks and dots); with reduced motion it only
      fades in. -->
 <svg
   aria-hidden="true"

@@ -456,7 +456,7 @@
   let lastArray: unknown = null;
   /** Whether the ledger has seen a build: the first one is everything already there. */
   let seeded = false;
-  /** Rows that land together cascade --dur-stagger apart, and no more than five deep. */
+  /** Rows that land together cascade --duration-stagger apart, and no more than five deep. */
   const STAGGER_ROWS = 5;
 
   /** Whether the page is visible. Tracked, so the ledger and the rows can read it. */
@@ -999,8 +999,8 @@
     const after = movedAfter;
     const settled = settledFrom;
     const timing = foldMove
-      ? { duration: dur("--dur-panel"), easing: ease("--ease-out") }
-      : { duration: dur("--dur-panel"), easing: ease("--ease-in-out") };
+      ? { duration: dur("--duration-panel"), easing: ease("--ease-out") }
+      : { duration: dur("--duration-panel"), easing: ease("--ease-in-out") };
     beforeMove = null;
     movedAfter = new Set();
     settledFrom = new Map();
@@ -1335,7 +1335,8 @@
    * composer has its own place and the clearance is a thin edge. With no
    * pane naming one, the fixed reserve.
    */
-  const FOOT_ROOM = "var(--composer-clearance, calc(var(--space-8) * 3))";
+  const FOOT_ROOM =
+    "var(--composer-clearance, calc(var(--spacing-space-8) * 3))";
   /** What every list item carries: the name its drawn rule finds it by (the style's `[data-item]`). */
   const ITEM_ATTRS = { "data-item": "" };
   /**
@@ -3305,7 +3306,7 @@
       if (marked?.key === key && marked.state === "off") {
         marked = null;
       }
-    }, dur("--dur-panel"));
+    }, dur("--duration-panel"));
   }
 
   // A press or a key in the transcript is the reader's, as their scroll is
@@ -3797,7 +3798,7 @@
    * A PINNED TRANSCRIPT STAYS PINNED. While the reader is at the tail, the
    * tail is where the view is, every frame: what arrives there moves by its
    * own entrance (a row's reserve and cascade), not by the scroll. The
-   * follow used to ride to a new tail over --dur-panel, which left every
+   * follow used to ride to a new tail over --duration-panel, which left every
    * landing up to 24px short for a quarter of a second — on 450 streamed
    * frames, 16 of them more than a pixel off. It yields to the reader in
    * `onscroll`: any scroll that moves what is on screen lets go.
@@ -4595,7 +4596,7 @@
     }
     return {
       kind: "arrive",
-      lead: Math.min(slot, STAGGER_ROWS - 1) * dur("--dur-stagger"),
+      lead: Math.min(slot, STAGGER_ROWS - 1) * dur("--duration-stagger"),
       start: null,
     };
   }
@@ -5271,7 +5272,7 @@
 </p>
 
 <!-- Asymmetric content padding is the DESIGN.md ledger signature: inline
-     start --space-7 (25), inline end --space-6 (21). The foot's height
+     start --spacing-space-7 (25), inline end --spacing-space-6 (21). The foot's height
      (`.foot`), which what floats over it stands on, is --foot-room. What
      scrolls here is its own stacking context, so nothing in it (a row's
      raised mark, a card's z-index) rises over the pane's fades (FootFade,
@@ -5299,7 +5300,7 @@
       data-slot="transcript-empty"
       class="mark-line isolate flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
       style:padding-top={headRoom
-        ? `calc(var(--space-5) + ${headRoom})`
+        ? `calc(var(--spacing-space-5) + ${headRoom})`
         : undefined}
     >
       <LiveDot /><span>Loading transcript…</span>
@@ -5509,7 +5510,7 @@
     class="sticky z-2 bottom-(--dock-bottom) h-0 flex flex-col justify-box-end items-center gap-space-2 pointer-events-none"
     style:--latest-inset={latestInset}
     style:--parked-room="{parkedHeight}px"
-    style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--space-4) + var(--space-2) + var(--parked-room, 0px)))"}
+    style:--dock-bottom={"var(--latest-inset, calc(var(--foot-room) - var(--spacing-space-4) + var(--spacing-space-2) + var(--parked-room, 0px)))"}
   >
     <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
     {#if behind}
@@ -5527,8 +5528,8 @@
       <p
         class="max-w-full py-space-2 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-meta font-normal text-ink-muted text-center text-balance"
         data-open-at={unfound}
-        in:rise={"--dur-panel"}
-        out:rise={"--dur-exit"}
+        in:rise={"--duration-panel"}
+        out:rise={"--duration-exit"}
       >
         {unfoundWords}
       </p>

@@ -1,5 +1,5 @@
 /* A decision page's shell and card recipes, on CawCo's tokens (tokens.css,
-   generated from design/tokens/cawco.tokens.json). No literal colour or size:
+   the declarations of apps/dashboard/src/lib/tokens/theme.css). No literal colour or size:
    every one here is a token (scripts/lint/no-raw-css-values.grit). Coral means "you, act
    here"; status colours mean status. */
 :root {
@@ -10,8 +10,8 @@
 }
 body {
   margin: 0;
-  background: var(--surface-page);
-  color: var(--ink-strong);
+  background: var(--color-surface-page);
+  color: var(--color-ink-strong);
   font-family: var(--font-sans);
   font-size: var(--text-body);
   line-height: 1.55;
@@ -22,7 +22,7 @@ h2,
 h3 {
   margin: 0;
   line-height: 1.2;
-  font-weight: var(--weight-strong);
+  font-weight: var(--font-weight-medium);
   text-wrap: balance;
 }
 p {
@@ -30,10 +30,10 @@ p {
 }
 code {
   font-family: var(--font-mono);
-  font-size: var(--c-decision-code);
+  font-size: var(--spacing-c-decision-code);
 }
 a {
-  color: var(--link-ink);
+  color: var(--color-link-ink);
 }
 
 /* Caw, light and dark: always a pair, the page shows the right one. */
@@ -54,74 +54,74 @@ a {
 /* `--dp-real-w`: the widest real-size drawing's width (page.js), so the
    column grows to hold it whole where the screen is wide enough: the
    drawing plus the page's, card's, pane's and frame's insets. Under it the
-   column is the room up to `--c-decision-page-max`, so the cards grow with
+   column is the room up to `--spacing-c-decision-page-max`, so the cards grow with
    the window. */
 .dp {
   max-width: max(
-    var(--c-decision-page-max),
+    var(--spacing-c-decision-page-max),
     calc(
       var(--dp-real-w, 0px) + 2 *
         (
-          var(--space-4) + 1px + var(--space-5) + var(--space-4) +
-            var(--space-1)
+          var(--spacing-space-4) + 1px + var(--spacing-space-5) +
+            var(--spacing-space-4) + var(--spacing-space-1)
         )
     )
   );
   margin: 0 auto;
-  padding: var(--space-6) var(--space-4)
-    calc(var(--space-8) * 2 + var(--page-inset-bottom, 0px));
+  padding: var(--spacing-space-6) var(--spacing-space-4)
+    calc(var(--spacing-space-8) * 2 + var(--page-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--spacing-space-6);
 }
 
 /* The hero: Caw, what is being decided, and the progress. */
 .dp-hero {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--space-4);
+  gap: var(--spacing-space-4);
   align-items: center;
 }
 .dp-hero h1 {
   font-size: var(--text-title);
 }
 .dp-hero p {
-  color: var(--ink-muted);
-  max-width: var(--c-measure-short);
-  margin-top: var(--space-1);
+  color: var(--color-ink-muted);
+  max-width: var(--spacing-c-measure-short);
+  margin-top: var(--spacing-space-1);
 }
 .dp-meter {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: var(--space-1);
-  color: var(--ink-muted);
+  gap: var(--spacing-space-1);
+  color: var(--color-ink-muted);
   font-size: var(--text-label);
   font-variant-numeric: tabular-nums;
 }
 .dp-meter b {
-  color: var(--ink-strong);
+  color: var(--color-ink-strong);
   font-size: var(--text-title);
 }
 .dp-bar {
-  width: var(--c-decision-meter-w);
-  height: var(--c-decision-meter-h);
+  width: var(--spacing-c-decision-meter-w);
+  height: var(--spacing-c-decision-meter-h);
   border-radius: var(--radius-xs);
-  background: var(--surface-recess);
+  background: var(--color-surface-recess);
   overflow: hidden;
 }
 .dp-bar i {
   display: block;
   height: 100%;
   width: 0;
-  background: var(--brand-solid);
-  transition: width var(--dur-control) var(--ease-out);
+  background: var(--color-brand-solid);
+  transition: width var(--duration-control) var(--ease-out);
 }
 .dp-offline {
-  color: var(--status-attn-ink);
-  background: var(--status-attn-bg);
+  color: var(--color-status-attn-ink);
+  background: var(--color-status-attn-bg);
   border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--spacing-space-2) var(--spacing-space-3);
 }
 /* biome-ignore lint/plugin/no-raw-css-values: a plain stylesheet no Tailwind build reads, and a media query reads no custom property: the theme's --breakpoint-phone (640px). */
 @media (max-width: 640px) {
@@ -136,33 +136,33 @@ a {
 
 /* A decision card: the question, one line of why, how it would look, the options, a note. */
 .dp-card {
-  background: var(--surface-raised);
-  border: 1px solid var(--border-hairline);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-hairline);
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-raised);
-  padding: var(--space-5);
+  padding: var(--spacing-space-5);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--spacing-space-4);
   min-width: 0;
-  scroll-margin-top: var(--space-4);
+  scroll-margin-top: var(--spacing-space-4);
   /* What leaves its head as it opens stands where it was drawn, placed
      against the card (Decision.svelte `standAside`). */
   position: relative;
 }
 .dp-card > header {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--spacing-space-3);
   align-items: baseline;
   flex-wrap: wrap;
 }
 .dp-card h2 {
   font-size: var(--text-title);
-  flex: 1 1 var(--c-decision-title-min);
+  flex: 1 1 var(--spacing-c-decision-title-min);
 }
 .dp-state {
   font-size: var(--text-meta);
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   min-inline-size: 0;
   overflow-wrap: anywhere;
 }
@@ -176,16 +176,16 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  min-block-size: var(--c-btn-h);
-  padding: 0 var(--space-4);
+  gap: var(--spacing-space-2);
+  min-block-size: var(--spacing-c-btn-h);
+  padding: 0 var(--spacing-space-4);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background-color: var(--action-solid);
-  color: var(--on-action);
+  background-color: var(--color-action-solid);
+  color: var(--color-on-action);
   font: var(--type-button);
   cursor: pointer;
-  transition: background-color var(--dur-control) var(--ease-out);
+  transition: background-color var(--duration-control) var(--ease-out);
 }
 .dp-send::before {
   content: "";
@@ -197,14 +197,14 @@ a {
 }
 @media (hover: hover) and (pointer: fine) {
   .dp-send:not(:disabled):hover {
-    background-color: var(--action-hover);
+    background-color: var(--color-action-hover);
   }
   .dp-send:not(:disabled):hover::before {
     background-image: var(--action-surface-hover);
   }
 }
 .dp-send:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 .dp-send:disabled {
@@ -213,22 +213,22 @@ a {
 }
 @media (pointer: coarse) {
   .dp-send {
-    min-block-size: var(--c-btn-h-lg);
+    min-block-size: var(--spacing-c-btn-h-lg);
   }
 }
 @media (prefers-reduced-motion: no-preference) {
   .dp-send {
     transition:
-      background-color var(--dur-control) var(--ease-out),
-      transform var(--dur-control) var(--ease-out);
+      background-color var(--duration-control) var(--ease-out),
+      transform var(--duration-control) var(--ease-out);
   }
   .dp-send:active:not(:disabled) {
     transform: scale(var(--press-scale));
   }
 }
 .dp-why {
-  color: var(--ink-muted);
-  max-width: var(--c-measure);
+  color: var(--color-ink-muted);
+  max-width: var(--spacing-c-measure);
 }
 /* A card's media: two side by side on a wide page; one, or three and more,
    in one column at the card's full width (`solo`), so several ways compared
@@ -236,7 +236,7 @@ a {
 .dp-show {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: var(--space-3);
+  gap: var(--spacing-space-3);
   align-items: start;
 }
 .dp-show.solo {
@@ -253,18 +253,18 @@ a {
    it binds only inside the curve); a pane's mockups take any corners. */
 .dp-pane {
   margin: 0;
-  background: var(--surface-recess);
+  background: var(--color-surface-recess);
   border-radius: var(--radius-lg);
-  padding: var(--space-4);
+  padding: var(--spacing-space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--spacing-space-2);
   min-width: 0;
 }
 .dp-pane > figcaption {
   font-size: var(--text-meta);
-  color: var(--ink-muted);
-  font-weight: var(--weight-strong);
+  color: var(--color-ink-muted);
+  font-weight: var(--font-weight-medium);
 }
 
 /* Options: every [data-option] inside a [data-cawco-choice]. The bridge sets
@@ -277,9 +277,9 @@ a {
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, var(--c-decision-option-min)), 1fr)
+    minmax(min(100%, var(--spacing-c-decision-option-min)), 1fr)
   );
-  gap: var(--space-2);
+  gap: var(--spacing-space-2);
 }
 /* The chip is DESIGN.md's option chip (app.css .kit-chip): at least 30px,
    8px radius, label type on the raised surface behind a control's edge,
@@ -291,37 +291,37 @@ a {
   line-height: var(--leading-label);
   text-align: start;
   cursor: pointer;
-  background: var(--surface-raised);
-  color: var(--ink-strong);
-  border: 1px solid var(--border-control);
+  background: var(--color-surface-raised);
+  color: var(--color-ink-strong);
+  border: 1px solid var(--color-border-control);
   border-radius: var(--radius-sm);
   min-block-size: var(--tx-option);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--spacing-space-2) var(--spacing-space-3);
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-inline-size: 0;
   overflow-wrap: anywhere;
   transition:
-    border-color var(--dur-control) var(--ease-out),
-    background-color var(--dur-control) var(--ease-out);
+    border-color var(--duration-control) var(--ease-out),
+    background-color var(--duration-control) var(--ease-out);
 }
 @media (hover: hover) and (pointer: fine) {
   .dp-opt:not([data-cawco-picked]):hover {
-    background: var(--surface-hover);
+    background: var(--color-surface-hover);
   }
 }
 .dp-opt:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 /* An option's keycap and label run, in its chip and on the decided line. */
 .dp-opt b {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--spacing-space-2);
   min-inline-size: 0;
-  font-weight: var(--weight-strong);
+  font-weight: var(--font-weight-medium);
 }
 /* The Mark Line Rule (DESIGN.md; app.css .mark-line): the label's words
    are trimmed to their x-height band and given the trimmed room back as
@@ -336,27 +336,27 @@ a {
   display: inline-grid;
   place-items: center;
   flex: none;
-  min-width: var(--c-decision-keycap);
-  height: var(--c-decision-keycap);
-  padding: 0 var(--space-1);
+  min-width: var(--spacing-c-decision-keycap);
+  height: var(--spacing-c-decision-keycap);
+  padding: 0 var(--spacing-space-1);
   border-radius: var(--radius-xs);
-  background: var(--surface-recess);
-  color: var(--ink-strong);
+  background: var(--color-surface-recess);
+  color: var(--color-ink-strong);
   font-family: var(--font-mono);
   font-size: var(--text-meta);
-  font-weight: var(--weight-body);
+  font-weight: var(--font-weight-normal);
   line-height: 1;
   /* The chosen treatment arrives where the option stands, a colour change
-     over --dur-control on ease-out with the chip's edge and fill (and
+     over --duration-control on ease-out with the chip's edge and fill (and
      Recommended's fill): a colour fade, so it runs with reduced motion too
      (DESIGN.md, The Reduced Motion Rule). */
   transition:
-    background-color var(--dur-control) var(--ease-out),
-    color var(--dur-control) var(--ease-out);
+    background-color var(--duration-control) var(--ease-out),
+    color var(--duration-control) var(--ease-out);
 }
 .dp-opt > span {
   font-size: var(--text-label);
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
   line-height: 1.4;
 }
 /* What it costs and what it builds, under what it gets: the meta size. */
@@ -369,35 +369,35 @@ a {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  block-size: var(--c-badge-h);
-  padding-inline: var(--space-1);
-  margin-block-end: var(--space-1);
+  block-size: var(--spacing-c-badge-h);
+  padding-inline: var(--spacing-space-1);
+  margin-block-end: var(--spacing-space-1);
   border-radius: var(--radius-xs);
-  background: var(--surface-recess);
-  color: var(--ink-strong);
+  background: var(--color-surface-recess);
+  color: var(--color-ink-strong);
   font: var(--type-label);
   line-height: 1;
   white-space: nowrap;
-  transition: background-color var(--dur-control) var(--ease-out);
+  transition: background-color var(--duration-control) var(--ease-out);
 }
 .dp-opt[data-cawco-picked] .dp-tag {
-  background: var(--surface-raised);
+  background: var(--color-surface-raised);
 }
 /* A picked option (DESIGN.md, option chips): the coral edge, a recessed
    fill and the keycap filled vermilion with a white digit; its words keep
    their ink. */
 .dp-opt[data-cawco-picked] {
-  border-color: var(--brand-solid);
-  background: var(--surface-recess);
+  border-color: var(--color-brand-solid);
+  background: var(--color-surface-recess);
 }
 .dp-opt[data-cawco-picked] .dp-kc {
-  background: var(--chip-chosen-bg);
-  color: var(--chip-chosen-ink);
+  background: var(--color-chip-chosen-bg);
+  color: var(--color-chip-chosen-ink);
 }
 /* The Press Rule (DESIGN.md): an option chip stands taller than 44px, so a
    press tints it to surface-fill and moves nothing. */
 .dp-opt:active {
-  background: var(--surface-fill);
+  background: var(--color-surface-fill);
 }
 @media (prefers-reduced-motion: reduce) {
   .dp-bar i {
@@ -408,29 +408,29 @@ a {
 .dp-note {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  color: var(--ink-muted);
+  gap: var(--spacing-space-1);
+  color: var(--color-ink-muted);
   font-size: var(--text-label);
 }
 .dp-note textarea {
   font: inherit;
-  min-block-size: var(--c-btn-h);
-  color: var(--ink-strong);
-  background: var(--surface-page);
-  border: 1px solid var(--border-control);
+  min-block-size: var(--spacing-c-btn-h);
+  color: var(--color-ink-strong);
+  background: var(--color-surface-page);
+  border: 1px solid var(--color-border-control);
   border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--spacing-space-2) var(--spacing-space-3);
   resize: vertical;
 }
 .dp-note textarea::placeholder {
-  color: var(--ink-subtle);
+  color: var(--color-ink-subtle);
   opacity: 1;
 }
 /* The 44 Touch Rule: under a finger the note stands 44px tall. */
 @media (pointer: coarse) {
   .dp-note textarea {
     font-size: var(--text-field-floor);
-    min-block-size: var(--c-btn-h-lg);
+    min-block-size: var(--spacing-c-btn-h-lg);
   }
 }
 
@@ -442,7 +442,7 @@ a {
 .dp-reals {
   display: block flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--spacing-space-3);
   align-items: flex-start;
   min-inline-size: 0;
 }
@@ -455,16 +455,16 @@ a {
 .dp-real > figcaption {
   display: block flex;
   flex-wrap: wrap;
-  gap: 0 var(--space-2);
+  gap: 0 var(--spacing-space-2);
   inline-size: 0;
   min-inline-size: 100%;
 }
 .dp-real > figcaption b {
-  color: var(--ink-strong);
+  color: var(--color-ink-strong);
 }
 .dp-real-more {
   display: none;
-  font-weight: var(--weight-body);
+  font-weight: var(--font-weight-normal);
 }
 .dp-real[data-dp-more] .dp-real-more {
   display: inline;
@@ -474,7 +474,7 @@ a {
   overscroll-behavior-inline: contain;
   max-inline-size: 100%;
   /* Room for the drawing's own shadow inside the frame. */
-  padding: var(--space-1);
+  padding: var(--spacing-space-1);
 }
 /* On a phone the frame runs to the card's edges, so the drawing gets the
    card's inset back; its caption keeps the inset. */
@@ -482,14 +482,14 @@ a {
 @media (width <= 640px) {
   .dp-real {
     flex: none;
-    margin-inline: calc(-1 * var(--space-5));
+    margin-inline: calc(-1 * var(--spacing-space-5));
     max-inline-size: none;
-    inline-size: calc(100% + 2 * var(--space-5));
+    inline-size: calc(100% + 2 * var(--spacing-space-5));
     border-radius: 0;
     padding-inline: 0;
   }
   .dp-real > figcaption {
-    padding-inline: var(--space-5);
+    padding-inline: var(--spacing-space-5);
   }
   .dp-real-scroll {
     padding-inline: 0;
@@ -502,7 +502,7 @@ a {
 .dp-done {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-3);
+  gap: var(--spacing-space-3);
   align-items: center;
-  color: var(--ink-muted);
+  color: var(--color-ink-muted);
 }

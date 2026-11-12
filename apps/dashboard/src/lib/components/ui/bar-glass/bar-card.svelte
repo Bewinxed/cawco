@@ -67,7 +67,7 @@
   class={cn(
     bare && "w-max max-w-none max-h-none overflow-visible p-0",
     beside &&
-      "rounded-s-none [clip-path:inset(0_calc(-1*var(--c-hang-shadow-room))_calc(-1*var(--c-hang-shadow-room))_-100vw_round_0_0_var(--radius-lg)_0)]",
+      "rounded-s-none [clip-path:inset(0_calc(-1*var(--spacing-c-hang-shadow-room))_calc(-1*var(--spacing-c-hang-shadow-room))_-100vw_round_0_0_var(--radius-lg)_0)]",
     className
   )}
   customAnchor={glass.node}

@@ -207,19 +207,19 @@
   });
 
   /**
-   * His slot opens and closes over --dur-panel on --ease-in-out as he comes
+   * His slot opens and closes over --duration-panel on --ease-in-out as he comes
    * and goes; the capsule beside it slides with its width.
    */
   function slot(node: Element) {
     const width = (node as HTMLElement).offsetWidth;
     if (!motionOk.current) {
       return {
-        duration: dur("--dur-fade"),
+        duration: dur("--duration-fade"),
         css: (t: number) => `opacity:${t}`,
       };
     }
     return {
-      duration: dur("--dur-panel"),
+      duration: dur("--duration-panel"),
       easing: easeInOut,
       css: (t: number) => `inline-size:${t * width}px;opacity:${t}`,
     };
@@ -358,7 +358,7 @@
       {:else}
         <button
           data-slot="name"
-          class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-offset-(--focus-ring-inset)"
+          class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--duration-control) ease-out hover:bg-surface-hover focus-visible:outline-offset-(--focus-ring-inset)"
           onclick={editName}
           title="Rename {project.name}"
           type="button"
@@ -576,7 +576,7 @@
       aria-label="Caw, {project.name}"
       class="w-(--settings-w) max-desk:w-(--settings-w-narrow)"
       pad="inset"
-      style="--settings-w: min(var(--c-panel-w), calc(100vw - var(--space-7))); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - var(--space-3) - env(safe-area-inset-right, 0px)))"
+      style="--settings-w: min(var(--spacing-c-panel-w), calc(100vw - var(--spacing-space-7))); --settings-w-narrow: min(var(--spacing-c-panel-w), calc(100vw - var(--spacing-space-3) - env(safe-area-inset-right, 0px)))"
       collisionPadding={12}
       customAnchor={more}
       side="bottom"
@@ -600,7 +600,11 @@
 <!-- An end asked from More, under the head, from where its title starts. -->
 <!-- The tray on the page's gutters: 25px in at the start (18 under the desk
      line, DESIGN.md, Layout) and 18 at the end, so it never meets the screen. -->
-<div data-slot="project-end" class="contents" style:--ask-end="var(--space-5)">
+<div
+  data-slot="project-end"
+  class="contents"
+  style:--ask-end="var(--spacing-space-5)"
+>
   <ProjectEndTray
     at={endAt}
     opener={() => more}

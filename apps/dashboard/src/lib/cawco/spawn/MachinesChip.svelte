@@ -89,7 +89,7 @@
     <button
       data-slot="row"
       aria-pressed={on}
-      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--dur-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+      class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] duration-(--duration-toggle) ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
       data-machine-id={row.id}
       disabled={!row.online}
@@ -107,7 +107,7 @@
         presence={presenceOf(row)}
       />
       <Check
-        class="size-icon-md flex-none text-ink-strong in-aria-pressed:text-selected-icon transition-[opacity] duration-(--dur-toggle) ease-out motion-safe:transition-[opacity,transform]"
+        class="size-icon-md flex-none text-ink-strong in-aria-pressed:text-selected-icon transition-[opacity] duration-(--duration-toggle) ease-out motion-safe:transition-[opacity,transform]"
         style={`opacity:${on ? 1 : 0};transform:scale(${on ? 1 : 0.94})`}
       />
     </button>
@@ -126,7 +126,7 @@
   <button
     data-slot="row"
     data-add
-    class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--dur-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
+    class="select-none ns-in press-tint relative flex h-c-row-h w-full items-center gap-space-3 rounded-glide-row border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] duration-(--duration-toggle) ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-50 motion-safe:transition-[background-color,border-radius,transform]"
     data-fh="1"
     onclick={addMachine}
     style:--delay={staggered(machines.length + 1)}

@@ -89,7 +89,7 @@
     settlingNow = true;
     const over = setTimeout(() => {
       settlingNow = false;
-    }, dur("--dur-panel"));
+    }, dur("--duration-panel"));
     return () => clearTimeout(over);
   });
 
@@ -122,9 +122,9 @@
    */
   function markDelay(): number {
     if (watched) {
-      return dur("--dur-fade");
+      return dur("--duration-fade");
     }
-    return lead === null ? 0 : dur("--dur-rail") + lead;
+    return lead === null ? 0 : dur("--duration-rail") + lead;
   }
 
   const disclosed = $derived(disclosureAt(row.session, row.key));
@@ -173,12 +173,12 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="select-none group/divider divider-chevron flex items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink transition-[color] duration-(--dur-control) ease-out hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
+  class="select-none group/divider divider-chevron flex items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink transition-[color] duration-(--duration-control) ease-out hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
   style:--lead={lead === null ? undefined : `${lead}ms`}
-  style:--room="calc((var(--icon-sm) + var(--space-1)) / 2)"
+  style:--room="calc((var(--spacing-icon-sm) + var(--spacing-space-1)) / 2)"
   data-arriving={(lead !== null && !watched) || undefined}
   data-failed={failed || undefined}
   data-live={live || undefined}
@@ -195,7 +195,7 @@
   <!-- Mirrored, so both arms run outward from the word. -->
   <span
     style:--arm-clip="inset(0 calc(var(--chev) * var(--room)) 0 0)"
-    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--dur-fade) motion-reduce:group-data-settled/divider:ease-out"
+    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--duration-fade) motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg
       aria-hidden="true"
@@ -204,26 +204,26 @@
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="loops wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--dur-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
+        class="loops wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
       /></svg
     >
   </span>
   <!-- mark-line: a line of text; Caw and the chevron stand in it on
        vertical-align: middle, the x-height's middle. The centre: the word,
-       and the chevron's 12px mark a --space-1 gap after it. The chevron
+       and the chevron's 12px mark a --spacing-space-1 gap after it. The chevron
        takes no room in the layout, in or out: as it comes in the centre
        makes room by moving, never by resizing; pressed, the centre gives
        and the line holds; it moves on two clocks, the chevron's and the
        press's. -->
   <span
     style:--mid-x="calc(var(--chev) * var(--room) * -1)"
-    style:--mid-durs="var(--chev-dur), var(--dur-toggle)"
+    style:--mid-durs="var(--chev-dur), var(--duration-toggle)"
     style:--mid-eases="var(--chev-ease), var(--ease-out)"
     class="whitespace-nowrap translate-x-(--mid-x) group-data-failed/divider:hidden motion-safe:transition-[translate,scale] motion-safe:duration-(--mid-durs) motion-safe:ease-(--mid-eases) motion-safe:group-active/divider:group-enabled/divider:scale-(--press-scale)"
     ><!-- Caw's slot: his still's box, its middle on the word's x-height; as
           wide as Caw at work while it runs, closing to his mark's box as it
           ends, on the line's clock. --><span
-      class="relative inline-block align-middle w-(--tx-compact-caw) h-(--tx-compact-caw) me-c-pill-gap group-data-live/divider:w-(--tx-compacting-caw) motion-safe:transition-[inline-size,margin-inline-end] motion-safe:duration-(--dur-panel) motion-safe:ease-out"
+      class="relative inline-block align-middle w-(--tx-compact-caw) h-(--tx-compact-caw) me-c-pill-gap group-data-live/divider:w-(--tx-compacting-caw) motion-safe:transition-[inline-size,margin-inline-end] motion-safe:duration-(--duration-panel) motion-safe:ease-out"
       data-caw
       >{#if working}
         <span class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
@@ -241,7 +241,7 @@
       {#if !(live || failed)}
         <span
           class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
-          in:fade={{ duration: watched ? dur("--dur-fade") : 0 }}
+          in:fade={{ duration: watched ? dur("--duration-fade") : 0 }}
           ><CawMark
             arrival={watched || lead !== null
               ? `${row.session}:${row.key}`
@@ -253,7 +253,7 @@
         >
       {/if}</span
     ><span
-      style:--word-clip="inset(calc(var(--c-compaction-word-bleed) * -1) 0)"
+      style:--word-clip={"inset(calc(var(--spacing-c-compaction-word-bleed) * -1) 0)"}
       class="group-data-settling/divider:clip-path-(--word-clip)"
       >{#if failed}
         <!-- A compaction that failed never reads "Compacted", seen or not. -->
@@ -269,9 +269,9 @@
           turns on the spot (on-screen movement, not an entrance): the
           chevron's clock, and the turn's. --><span
       data-slot="chev"
-      style:--chev-x="calc(var(--chev) * var(--space-1))"
+      style:--chev-x="calc(var(--chev) * var(--spacing-space-1))"
       style:--chev-scale="calc(0.25 + 0.75 * var(--chev))"
-      style:--chev-blur="calc((1 - var(--chev)) * var(--space-1))"
+      style:--chev-blur="calc((1 - var(--chev)) * var(--spacing-space-1))"
       style:--chev-filter="blur(var(--chev-blur))"
       class="inline-block align-middle w-0 h-icon-sm opacity-(--chev) transition-[opacity] duration-(--chev-dur) ease-(--chev-ease)"
       ><IconChevron
@@ -282,14 +282,14 @@
   >
   <span
     style:--arm-clip="inset(0 0 0 calc(var(--chev) * var(--room)))"
-    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--dur-fade) motion-reduce:group-data-settled/divider:ease-out"
+    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--duration-fade) motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg aria-hidden="true" class="block w-full h-(--tx-compact-wave)"
       ><path
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="loops wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--dur-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
+        class="loops wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--duration-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
       /></svg
     >
   </span>
@@ -301,7 +301,7 @@
     <span
       style:--fail-pad="calc(var(--x-glyph) - var(--x-rail) - 2px)"
       class="block ms-(--x-rail) ps-(--fail-pad) border-s-2 border-status-fail-ink text-size-label font-medium leading-body"
-      in:fade={{ duration: dur("--dur-fade") }}
+      in:fade={{ duration: dur("--duration-fade") }}
     >
       <span class="rail-line"
         ><span data-slot="rail-cell" class="rail-cell"

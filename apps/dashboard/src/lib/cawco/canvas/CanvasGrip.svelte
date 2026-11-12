@@ -51,9 +51,9 @@
     handle === "top" &&
       "start-1/2 top-0 h-c-btn-h-lg w-c-canvas-grab-w -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
     handle === "top-left" &&
-      "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] duration-(--dur-grow) ease-out starting:opacity-0",
+      "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] duration-(--duration-grow) ease-out starting:opacity-0",
     handle === "top-right" &&
-      "top-0 size-c-btn-h-lg end-(--corner-in) cursor-nesw-resize justify-end transition-[opacity] duration-(--dur-grow) ease-out starting:opacity-0",
+      "top-0 size-c-btn-h-lg end-(--corner-in) cursor-nesw-resize justify-end transition-[opacity] duration-(--duration-grow) ease-out starting:opacity-0",
   ]}
   data-canvas-stages-grab={handle}
   onkeydown={(event) => onkey(handle, event)}
@@ -80,13 +80,13 @@
       handle === "top-left" && "rounded-ss-(--grip-r)",
       handle === "top-right" && "rounded-se-(--grip-r)",
     ]}
-    style:--grip-box="calc(2 * var(--c-corner-grip-leg))"
-    style:--grip-r={"max(0px, calc(var(--corner-r) - var(--c-corner-grip-inset)))"}
+    style:--grip-box="calc(2 * var(--spacing-c-corner-grip-leg))"
+    style:--grip-r={"max(0px, calc(var(--corner-r) - var(--spacing-c-corner-grip-inset)))"}
   >
     {#if handle !== "top"}
       <span
         class={[
-          "absolute top-0 size-(--grip-box) rounded-(--grip-r) inset-ring-(length:--c-corner-grip-stroke) inset-ring-border-control",
+          "absolute top-0 size-(--grip-box) rounded-(--grip-r) inset-ring-(length:--spacing-c-corner-grip-stroke) inset-ring-border-control",
           handle === "top-left" ? "start-0" : "end-0",
         ]}
       ></span>

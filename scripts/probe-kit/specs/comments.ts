@@ -226,7 +226,7 @@
  * - changed: a revision's changes in `meta.changes` (a page's elements, a
  *   decision page's cards and redrawn pictures), ringed in `c-change-ring`
  *   outside their own box, covering none of it; the tag steps through them,
- *   each step seen in the doc and its ring fading over `--dur-fade`; seen,
+ *   each step seen in the doc and its ring fading over `--duration-fade`; seen,
  *   a reload rings nothing.
  * - drafts (The Work Outlives Its Surface Rule): a half-written comment
  *   survives a reload with its composer open at its target; Esc and a press
@@ -499,8 +499,8 @@ const RAIL = '[data-slot="comment-rail"]';
 const COMPOSE = '[data-slot="pin-composer"]';
 /**
  * The width a composer or a thread beside its pill takes in `screen`'s
- * pane, px: `--c-pin-card-reading-w`, two fifths of the pin room held
- * between 280px and 480px, never past the room less `--space-2` each side
+ * pane, px: `--spacing-c-pin-card-reading-w`, two fifths of the pin room held
+ * between 280px and 480px, never past the room less `--spacing-space-2` each side
  * (PinFloat; the owner's pick "Beside the comment"). In the page.
  */
 const readingWidth = (screen: Page) =>
@@ -508,7 +508,9 @@ const readingWidth = (screen: Page) =>
     const room = document.querySelector<HTMLElement>('[data-slot="pin-room"]');
     const gap =
       Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--space-2")
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--spacing-space-2"
+        )
       ) || 7;
     const w = room?.clientWidth ?? 0;
     return Math.min(Math.max(280, Math.min(0.4 * w, 480)), w - 2 * gap);
@@ -530,7 +532,7 @@ const rowsOf = async (on: On) => {
     await button.click();
   }
   await list.waitFor({ timeout: 5000 }).catch(() => undefined);
-  // In from the well's end over --dur-panel: read once it stands.
+  // In from the well's end over --duration-panel: read once it stands.
   await settle(on.page, 350);
   return list;
 };
@@ -1013,7 +1015,7 @@ interface ScreenBox {
 }
 
 /**
- * Whether a thread's card stands where PinFloat puts it: `--space-2` (7px)
+ * Whether a thread's card stands where PinFloat puts it: `--spacing-space-2` (7px)
  * from what the comment is about as drawn (its `subject`: the pill, past its
  * 2px focus ring 2px out, and its element's box), at its end side, else its
  * start side, else below or over them; never over the element.
@@ -1062,7 +1064,7 @@ const commentChecks = async (on: On, frame: Frame) => {
         ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-side-well]'
       );
       const probe = document.createElement("span");
-      probe.style.color = "var(--seam)";
+      probe.style.color = "var(--color-seam)";
       document.body.append(probe);
       const seam = getComputedStyle(probe).color;
       probe.remove();
@@ -1081,7 +1083,7 @@ const commentChecks = async (on: On, frame: Frame) => {
     read.width === "1px" &&
     read.style === "solid" &&
     read.offset === "-1px";
-  // The edge comes in over --dur-control: read once it has.
+  // The edge comes in over --duration-control: read once it has.
   await on.page.keyboard.press("d");
   await settle(on.page, 300);
   const drawEdge = await readEdge();
@@ -1220,7 +1222,7 @@ const commentChecks = async (on: On, frame: Frame) => {
   const beside = cardBeside(cardBox, mark, para, side);
   const cardWanted = await readingWidth(on.page);
   on.kit.check(
-    "pick 2, where a thread opens: a press on pin 1's pill opens its thread as a card as wide as its composer (c-pin-card-reading-w) beside what it is about (the pill and its paragraph), --space-2 from them, never over the paragraph",
+    "pick 2, where a thread opens: a press on pin 1's pill opens its thread as a card as wide as its composer (c-pin-card-reading-w) beside what it is about (the pill and its paragraph), --spacing-space-2 from them, never over the paragraph",
     !!cardBox && Math.abs(cardBox.width - cardWanted) <= 1 && beside,
     `card ${JSON.stringify(cardBox)} on side ${side}, wanted ${cardWanted}px wide; pill ${JSON.stringify(mark)}; paragraph ${JSON.stringify(para)}`
   );
@@ -1522,14 +1524,14 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
 /**
  * 4b. One breath everywhere (the owner's pick): while the agent's turn runs
  * on a pin, the page's own pill (the overlay's live dot, in the frame) and
- * the rail row's live dot for the same pin each run one breath, `--breath`
+ * the rail row's live dot for the same pin each run one breath, `--duration-breath`
  * long on `--ease-in-out`, its opacity 1, the floor and 1 at 0, ½ and 1 of
  * a loop, by day and at night, both begun on the one clock (core breath.ts,
  * the wall clock's multiples of the breath: the two documents keep timelines
  * of their own); and nothing breathes under reduced motion. And what the
  * overlay paints with tokens read as it draws takes the night scheme the
- * moment the dashboard's theme turns: the pill's ring (`--surface-raised`)
- * and the ink's strokes (`--brand-solid`); the changes' rings are read the
+ * moment the dashboard's theme turns: the pill's ring (`--color-surface-raised`)
+ * and the ink's strokes (`--color-brand-solid`); the changes' rings are read the
  * same way in the changed leg.
  */
 const breathChecks = async (on: On, frame: Frame) => {
@@ -1538,7 +1540,7 @@ const breathChecks = async (on: On, frame: Frame) => {
   const tokensNow = () =>
     screen.evaluate(() => {
       const probe = document.createElement("i");
-      probe.style.animationDuration = "var(--breath)";
+      probe.style.animationDuration = "var(--duration-breath)";
       probe.style.animationTimingFunction = "var(--ease-in-out)";
       document.body.append(probe);
       const style = getComputedStyle(probe);
@@ -1608,7 +1610,7 @@ const breathChecks = async (on: On, frame: Frame) => {
   };
   await both("day");
   // What the overlay paints with tokens read as it draws: the pill's ring
-  // (`--surface-raised`) and the ink's strokes (`--brand-solid`), by day.
+  // (`--color-surface-raised`) and the ink's strokes (`--color-brand-solid`), by day.
   const paints = () =>
     frame.evaluate(
       (n) => ({
@@ -1627,8 +1629,8 @@ const breathChecks = async (on: On, frame: Frame) => {
     );
   const dayPaint = await paints();
   const dayTokens = [
-    await tokenColor(screen, "--surface-raised"),
-    await tokenColor(screen, "--brand-solid"),
+    await tokenColor(screen, "--color-surface-raised"),
+    await tokenColor(screen, "--color-brand-solid"),
   ];
   // Night: the dashboard's own switch, which tells the page its scheme.
   await switchTheme(screen, "dark");
@@ -1640,8 +1642,8 @@ const breathChecks = async (on: On, frame: Frame) => {
     5000
   ).catch(paints);
   const nightTokens = [
-    await tokenColor(screen, "--surface-raised"),
-    await tokenColor(screen, "--brand-solid"),
+    await tokenColor(screen, "--color-surface-raised"),
+    await tokenColor(screen, "--color-brand-solid"),
   ];
   const [
     dayRing,
@@ -1661,14 +1663,14 @@ const breathChecks = async (on: On, frame: Frame) => {
     ...nightTokens,
   ]);
   on.kit.check(
-    `4b (scheme): the dashboard's theme switched to night, the page's overlay draws again in it at once: pin ${number}'s pill ring takes --surface-raised's night value, as it had its day value`,
+    `4b (scheme): the dashboard's theme switched to night, the page's overlay draws again in it at once: pin ${number}'s pill ring takes --color-surface-raised's night value, as it had its day value`,
     sameRgb(dayRing, dayRaised) &&
       sameRgb(nightRing, nightRaised) &&
       !sameRgb(dayRaised, nightRaised),
     `day ${dayPaint.ring} ${JSON.stringify(dayRing)} (token ${JSON.stringify(dayRaised)}); night ${nightPaint.ring} ${JSON.stringify(nightRing)} (token ${JSON.stringify(nightRaised)})`
   );
   on.kit.check(
-    "4b (scheme): the ink's strokes on the page take --brand-solid's night value the moment the theme turns, as they had its day value",
+    "4b (scheme): the ink's strokes on the page take --color-brand-solid's night value the moment the theme turns, as they had its day value",
     sameRgb(dayInk, dayBrand) &&
       sameRgb(nightInk, nightBrand) &&
       !sameRgb(dayBrand, nightBrand, 1),
@@ -3968,7 +3970,7 @@ const dismissChecks = async (on: On) => {
     await openComposer();
     await openThread(on, frame, someone.number);
   }
-  // The composer goes over `--dur-control` (PinFloat's `out:fade`): it is
+  // The composer goes over `--duration-control` (PinFloat's `out:fade`): it is
   // counted once that fade has had its time, not in the frame the card came.
   const swapped = {
     composer: await until(
@@ -4560,7 +4562,7 @@ const movedBy = (one: SizingBox | null, two: SizingBox | null) =>
  * Comments open and 1920 with them shut. For each, its thread opened:
  * - with a mouse, a card beside its pill, never on it, two fifths of the
  *   well held between 280px and 480px, inside the well, as tall as what it
- *   holds up to the well's height less `--space-2` each side (the owner:
+ *   holds up to the well's height less `--spacing-space-2` each side (the owner:
  *   "it should show besides the comment but should have handling to grow
  *   taller when appropriate"), never stretched to the well's foot past
  *   what it holds; beside its pill, its top at the pill's or moved up only
@@ -5287,7 +5289,7 @@ const sizingPlace = async (
   }
   const wanted = await readingWidth(screen);
   const beside = read.side === "right" || read.side === "left";
-  // As tall as what it holds, up to the well less --space-2 each side: its
+  // As tall as what it holds, up to the well less --spacing-space-2 each side: its
   // thread's room scrolls only at that height; beside its pill, its top at
   // the pill's, or moved up only as far as it takes to stand whole.
   const cardH = read.card ? read.card.bottom - read.card.top : 0;
@@ -5554,7 +5556,7 @@ const targetOf = (frame: Frame) =>
     /** The overlay's tint, `c-target-tint` (the opaque brand-wash would hide the element's words). */
     const tinted = () => {
       const probe = document.createElement("span");
-      probe.style.color = "var(--c-target-tint)";
+      probe.style.color = "var(--color-c-target-tint)";
       shadow.append(probe);
       const { color } = getComputedStyle(probe);
       probe.remove();
@@ -5573,7 +5575,7 @@ const targetOf = (frame: Frame) =>
       background: drawn.backgroundColor,
       box: { x: r.x, y: r.y, w: r.width, h: r.height },
       label: label && !label.hidden ? label.textContent : null,
-      brand: token("--brand-solid"),
+      brand: token("--color-brand-solid"),
       tint: tinted(),
     };
   });
@@ -5710,7 +5712,7 @@ const textUnderTint = (frame: Frame, selector: string) =>
       const own = getComputedStyle(el);
       const probe = document.createElement("span");
       probe.style.colorScheme = scheme;
-      probe.style.color = "var(--c-target-tint)";
+      probe.style.color = "var(--color-c-target-tint)";
       shadow.append(probe);
       const { color: tint } = getComputedStyle(probe);
       probe.remove();
@@ -5772,9 +5774,9 @@ const lineContrast = (on: On) =>
         probe.remove();
         return rgba(color);
       };
-      const line = read("--brand-solid");
-      const field = read("--surface-page");
-      const raised = read("--surface-raised");
+      const line = read("--color-brand-solid");
+      const field = read("--color-surface-page");
+      const raised = read("--color-surface-raised");
       out[scheme === "light" ? "day" : "night"] = {
         field: ratio(lum(line), lum(field)),
         raised: ratio(lum(line), lum(raised)),
@@ -5919,7 +5921,7 @@ const targetChecks = async (on: On) => {
       .evaluate((el) => {
         const style = getComputedStyle(el);
         const probe = document.createElement("span");
-        probe.style.color = "var(--focus-ring)";
+        probe.style.color = "var(--color-focus-ring)";
         document.body.append(probe);
         const ring = getComputedStyle(probe).color;
         probe.remove();
@@ -6203,7 +6205,7 @@ const overlayThemeChecks = async (on: On, id: string) => {
           // Each scheme's brand-solid, read with the scheme said outright.
           const brandIn = (scheme: string) => {
             const probe = document.createElement("span");
-            probe.style.cssText = `color-scheme: ${scheme}; color: var(--brand-solid)`;
+            probe.style.cssText = `color-scheme: ${scheme}; color: var(--color-brand-solid)`;
             shadow.append(probe);
             const { color } = getComputedStyle(probe);
             probe.remove();
@@ -6211,7 +6213,7 @@ const overlayThemeChecks = async (on: On, id: string) => {
           };
           const drawn = getComputedStyle(rect);
           const tint = document.createElement("span");
-          tint.style.color = "var(--c-target-tint)";
+          tint.style.color = "var(--color-c-target-tint)";
           shadow.append(tint);
           const { color: tinted } = getComputedStyle(tint);
           tint.remove();
@@ -6496,12 +6498,12 @@ const svgPage = ({ arealess, figtree, parts = 0 }: SvgPage) => {
   ).join("");
   return `<!doctype html><html><head><style>
   ${figtree ? '@font-face { font-family: "Figtree"; src: url("/figtree.woff2") format("woff2"); font-weight: 300 900; }' : ""}
-  :root { --border-contrast: rgb(40, 110, 200); --ink-muted: rgb(90, 90, 90); --edge-head: rgb(${SVG_MARKER.join(", ")}); --font-sans: ${figtree ? '"Figtree"' : '"DejaVu Sans"'}; }
+  :root { --color-border-contrast: rgb(40, 110, 200); --color-ink-muted: rgb(90, 90, 90); --edge-head: rgb(${SVG_MARKER.join(", ")}); --font-sans: ${figtree ? '"Figtree"' : '"DejaVu Sans"'}; }
   body { margin: 0; background: rgb(${SVG_GROUND.join(", ")}); }
   .world { position: relative; width: 1400px; height: 900px; }
   .world svg { position: absolute; left: 40px; top: 40px; overflow: visible; }
-  .world svg polyline { fill: none; stroke: var(--border-contrast); stroke-width: 1.5; }
-  .world svg text { font: 500 11px var(--font-sans), system-ui, sans-serif; fill: var(--ink-muted); }
+  .world svg polyline { fill: none; stroke: var(--color-border-contrast); stroke-width: 1.5; }
+  .world svg text { font: 500 11px var(--font-sans), system-ui, sans-serif; fill: var(--color-ink-muted); }
   .world i { position: absolute; top: 46px; width: 4px; height: 4px; background: rgb(220, 220, 220); }
   #spot { position: absolute; left: 40px; top: 40px; width: 480px; height: 260px; z-index: 1; }
 </style></head><body><div class="world">${boxes}<svg id="graph" ${size}>
@@ -7086,7 +7088,7 @@ const keyOpenChecks = async (on: On) => {
         (el) => {
           const style = getComputedStyle(el);
           const probe = document.createElement("span");
-          probe.style.color = "var(--focus-ring)";
+          probe.style.color = "var(--color-focus-ring)";
           document.body.append(probe);
           const ring = getComputedStyle(probe).color;
           probe.remove();
@@ -7908,11 +7910,11 @@ const hierarchyChecks = async (
     .locator('[data-slot="num"]')
     .count();
   const ink = {
-    row: await inkOf(on.page, "--ink-row"),
-    strong: await inkOf(on.page, "--ink-strong"),
-    muted: await inkOf(on.page, "--ink-muted"),
-    subtle: await inkOf(on.page, "--ink-subtle"),
-    brand: await inkOf(on.page, "--brand-ink"),
+    row: await inkOf(on.page, "--color-ink-row"),
+    strong: await inkOf(on.page, "--color-ink-strong"),
+    muted: await inkOf(on.page, "--color-ink-muted"),
+    subtle: await inkOf(on.page, "--color-ink-subtle"),
+    brand: await inkOf(on.page, "--color-brand-ink"),
   };
   const dresses = {
     unread: await rowDress(on.page, onA),
@@ -8587,7 +8589,7 @@ const pointChecks = async (
     on.kit.check("pointing: the comments page is in front", false, "not shown");
     return;
   }
-  const attn = await tokenColor(on.page, "--status-attn-glyph");
+  const attn = await tokenColor(on.page, "--color-status-attn-glyph");
   // Pin 2's thread shut, so its answer arrives unread.
   await on.page
     .locator('[data-slot="pin-card"]')
@@ -9068,13 +9070,13 @@ const MORE_LINES = Array.from(
     `<p>Line ${i + 1} of the page, words that stand at its top as it scrolls.</p>`
 ).join("");
 
-/** How far a change's ring stands out from its element's box to its outer edge, px: `--c-change-ring-offset` and `--c-change-ring-width`, read in the page. */
+/** How far a change's ring stands out from its element's box to its outer edge, px: `--spacing-c-change-ring-offset` and `--spacing-c-change-ring-width`, read in the page. */
 const ringOut = (frame: Frame) =>
   frame.evaluate(() => {
     const probe = document.createElement("span");
     const shadow = document.querySelector("cawco-overlay")?.shadowRoot;
-    probe.style.width = "var(--c-change-ring-offset)";
-    probe.style.height = "var(--c-change-ring-width)";
+    probe.style.width = "var(--spacing-c-change-ring-offset)";
+    probe.style.height = "var(--spacing-c-change-ring-width)";
     probe.style.position = "fixed";
     (shadow ?? document.body).append(probe);
     const own = getComputedStyle(probe);
@@ -9141,7 +9143,7 @@ const changedRead = (frame: Frame) =>
  * changed element ringed where it stands after the person comes back (a
  * reload), the tag counting them; each step brings one out, marks it seen
  * in the doc once its ring has pinged and fades its ring off over
- * `--dur-fade`; every stop seen, the tag leaves, and a reload rings nothing.
+ * `--duration-fade`; every stop seen, the tag leaves, and a reload rings nothing.
  */
 /** The widths the bar is swept at: a phone, a narrow pane, a desk. */
 const SWEEP_WIDTHS = [390, 680, 1440] as const;
@@ -9381,8 +9383,8 @@ const changedChecks = async (on: On) => {
     15_000
   ).catch(() => null);
   const items = before?.changes?.items ?? [];
-  const done = await tokenColor(on.page, "--c-change-ring");
-  const coral = await tokenColor(on.page, "--brand-solid");
+  const done = await tokenColor(on.page, "--color-c-change-ring");
+  const coral = await tokenColor(on.page, "--color-brand-solid");
   const [washRgb, doneRgb, coralRgb] = await srgbOf(on.page, [
     before?.washes[0]?.fill ?? "",
     done,
@@ -9442,13 +9444,13 @@ const changedChecks = async (on: On) => {
       read.washes[0]?.fill !== before?.washes[0]?.fill,
     5000
   ).catch(() => changedRead(frame));
-  const nightDone = await tokenColor(on.page, "--c-change-ring");
+  const nightDone = await tokenColor(on.page, "--color-c-change-ring");
   const [nightWashRgb, nightDoneRgb] = await srgbOf(on.page, [
     night.washes[0]?.fill ?? "",
     nightDone,
   ]);
   on.kit.check(
-    "changed (scheme): the dashboard's theme switched to night, the page's rings take --c-change-ring's night value at once, as they had its day value",
+    "changed (scheme): the dashboard's theme switched to night, the page's rings take --color-c-change-ring's night value at once, as they had its day value",
     sameRgb(washRgb, doneRgb) &&
       sameRgb(nightWashRgb, nightDoneRgb) &&
       !sameRgb(doneRgb, nightDoneRgb),
@@ -9459,7 +9461,7 @@ const changedChecks = async (on: On) => {
   // The sweep lays the panel out at three widths and back: the steps read the frame as it stands after.
   const held = (await changesBarSweep(on, id)) ?? frame;
 
-  // A step: #b brought out and chosen, seen in the doc once its ring pinged, its ring fading off over --dur-fade.
+  // A step: #b brought out and chosen, seen in the doc once its ring pinged, its ring fading off over --duration-fade.
   await held.evaluate(() => {
     const leaving: string[] = [];
     (window as unknown as { probeLeaving: string[] }).probeLeaving = leaving;
@@ -9494,7 +9496,7 @@ const changedChecks = async (on: On) => {
   const b = await boxIn(held, "#b");
   const counted = (await tag.textContent().catch(() => null))?.trim();
   on.kit.check(
-    'changed: a step onto #b chooses it (the outline over it), marks it seen in the doc\'s `seen` once its ring has pinged, fades its ring off over --dur-fade (200ms), and the tag reads "Change 1 of 3"',
+    'changed: a step onto #b chooses it (the outline over it), marks it seen in the doc\'s `seen` once its ring has pinged, fades its ring off over --duration-fade (200ms), and the tag reads "Change 1 of 3"',
     !!stepped &&
       near(chosen, b, 6) &&
       leaving.includes("200ms") &&
@@ -11891,13 +11893,13 @@ const canvasChangesRead = (frame: Frame) =>
     };
   });
 
-/** The canvas's ring as its page computes it: its colour, and how far its line's middle stands outside the element (`--c-change-ring-offset` and half `--c-change-ring-width`). */
+/** The canvas's ring as its page computes it: its colour, and how far its line's middle stands outside the element (`--spacing-c-change-ring-offset` and half `--spacing-c-change-ring-width`). */
 const canvasRing = (frame: Frame) =>
   frame.evaluate(() => {
     const probe = document.createElement("span");
-    probe.style.color = "var(--c-change-ring)";
-    probe.style.width = "var(--c-change-ring-offset)";
-    probe.style.height = "var(--c-change-ring-width)";
+    probe.style.color = "var(--color-c-change-ring)";
+    probe.style.width = "var(--spacing-c-change-ring-offset)";
+    probe.style.height = "var(--spacing-c-change-ring-width)";
     probe.style.position = "fixed";
     document.body.append(probe);
     const own = getComputedStyle(probe);
@@ -11916,7 +11918,7 @@ const canvasRing = (frame: Frame) =>
  * Delta wear the ring outside their own boxes, with no fill, and it pans
  * and zooms with the scene; the tag counts three and steps through them,
  * each seen in the doc, a selection a look too, the ring fading over
- * `--dur-fade`; every stop seen, the tag leaves, and a reload rings nothing.
+ * `--duration-fade`; every stop seen, the tag leaves, and a reload rings nothing.
  */
 const canvasChangedChecks = async (on: On, pageId: string) => {
   const { origin } = new URL(on.page.url());
@@ -12043,7 +12045,7 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
     JSON.stringify(moved?.washes)
   );
 
-  // A step: Beta (the first in reading order) brought out, selected, seen, its wash fading over --dur-fade.
+  // A step: Beta (the first in reading order) brought out, selected, seen, its wash fading over --duration-fade.
   await frame.evaluate(() => {
     const leaving: string[] = [];
     (window as unknown as { probeLeaving: string[] }).probeLeaving = leaving;
@@ -12070,7 +12072,7 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
     () => (window as unknown as { probeLeaving: string[] }).probeLeaving
   );
   on.kit.check(
-    'canvas changed: a step onto Beta selects it, marks it seen in the doc\'s seen, fades its ring off over --dur-fade (0.2s), and the tag reads "Change 1 of 3"',
+    'canvas changed: a step onto Beta selects it, marks it seen in the doc\'s seen, fades its ring off over --duration-fade (0.2s), and the tag reads "Change 1 of 3"',
     !!stepped &&
       stepped.selected.includes("b") &&
       !stepped.washes.some((wash) => wash.anchor === "b") &&

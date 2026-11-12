@@ -148,7 +148,7 @@
           data-slot="reason"
           class="m-0 min-w-0 flex-initial type-meta text-(--reason-ink) wrap-anywhere"
           role={live ? "alert" : undefined}
-          style:--reason-ink="var(--fault-ink, var(--status-fail-ink))"
+          style:--reason-ink="var(--fault-ink, var(--color-status-fail-ink))"
         >
           {said}
         </p>

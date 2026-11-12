@@ -147,7 +147,7 @@
       ? `/config/${fix.slug}`
       : `/config/accounts/${encodeURIComponent(fix.accountId)}`;
 
-  const lineBlur = (tier: "--dur-panel" | "--dur-exit") => ({
+  const lineBlur = (tier: "--duration-panel" | "--duration-exit") => ({
     duration: dur(tier),
     easing: easeOut,
     amount: 2,
@@ -157,7 +157,7 @@
 <!-- The way to put something right: a link in the meta line it follows. -->
 {#snippet fixLink(fix: ImageFix)}
   <a
-    class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-row type-meta whitespace-nowrap text-link-ink no-underline transition-[opacity] duration-(--dur-control) ease-out hover:text-link-hover active:opacity-72"
+    class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-row type-meta whitespace-nowrap text-link-ink no-underline transition-[opacity] duration-(--duration-control) ease-out hover:text-link-hover active:opacity-72"
     href={fixHref(fix)}
   >
     <span>{fix.label}</span>
@@ -182,8 +182,8 @@
         {#key phase}
           <span
             class="mark-line col-start-1 row-start-1 flex items-center gap-space-2"
-            in:blur={lineBlur("--dur-panel")}
-            out:blur={lineBlur("--dur-exit")}
+            in:blur={lineBlur("--duration-panel")}
+            out:blur={lineBlur("--duration-exit")}
           >
             {#if phase === "saving"}
               <LiveDot data-pulse size="row" tone="muted" />

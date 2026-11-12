@@ -79,7 +79,7 @@ const glyphOf = (icon: string): Component => {
 export const SECTIONS: ConfigSection[] = CONFIG_SECTIONS.map((section) => ({
   ...section,
   icon: glyphOf(section.icon),
-  hue: `var(--${section.hue})`,
+  hue: `var(--color-${section.hue})`,
 }));
 
 export const sectionOf = (slug: SectionSlug): ConfigSection =>

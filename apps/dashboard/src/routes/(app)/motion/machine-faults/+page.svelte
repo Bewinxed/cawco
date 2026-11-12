@@ -8,7 +8,7 @@
    * a long unbroken path, one with none). Both report ElevenLabs waiting on
    * the fleet's sign-in, under every harness, as obelisk's report did: the
    * card says it once, at its head (SignInWaits). It stands on the floating surface at the machines card's width,
-   * `--c-machines-w`, and no wider than the page's column (a phone's), with
+   * `--spacing-c-machines-w`, and no wider than the page's column (a phone's), with
    * the list's own insets (MachinesList `--fault-indent`, `--fault-end`).
    */
   import type {
@@ -130,8 +130,8 @@
       ).length}
       <li
         data-machine={machine.name}
-        style:--fault-end="var(--space-2)"
-        style:--fault-indent="calc(var(--space-2) * 2 + var(--icon-md))"
+        style:--fault-end="var(--spacing-space-2)"
+        style:--fault-indent={"calc(var(--spacing-space-2) * 2 + var(--spacing-icon-md))"}
       >
         <div
           data-slot="row"

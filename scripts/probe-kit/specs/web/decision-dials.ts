@@ -12,7 +12,7 @@
  *    the page, and its pick lands.
  * 3. On a page with no kit tokens whose `html` sets `font-size: 20px`, the
  *    dials measure as on the kit page (their type, a row, the column), and
- *    the colour's picker opens over `--dur-pop` as their own root holds it,
+ *    the colour's picker opens over `--duration-pop` as their own root holds it,
  *    never 0 ms.
  * 4. A play's clip that runs twice with `direction: "alternate"` reads that
  *    direction and a move of both its runs, and Play replays it there and
@@ -279,7 +279,7 @@ async function rootlessPage(
       JSON.stringify(onKit) === JSON.stringify(onRootless),
     `kit page ${JSON.stringify(onKit)}; rootless ${JSON.stringify(onRootless)}`
   );
-  // The colour's picker opens over --dur-pop (the kit popover's own
+  // The colour's picker opens over --duration-pop (the kit popover's own
   // motion) as the dials' own root holds it.
   const swatch = rootless
     .locator(`${DIALS_HOST} [data-slot=popover-trigger]`)
@@ -308,7 +308,7 @@ async function rootlessPage(
     const tokens = card.closest(`[${root}]`);
     // A duration token as written, `260ms` or `.26s`, in ms.
     const said = tokens
-      ? getComputedStyle(tokens).getPropertyValue("--dur-pop").trim()
+      ? getComputedStyle(tokens).getPropertyValue("--duration-pop").trim()
       : "";
     const figure = Number.parseFloat(said);
     return {
@@ -318,7 +318,7 @@ async function rootlessPage(
     };
   }, DIALS_ROOT);
   kit.check(
-    "3: there, the colour's picker opens over --dur-pop as the dials' own root holds it",
+    "3: there, the colour's picker opens over --duration-pop as the dials' own root holds it",
     glide.token > 0 && Math.round(glide.ran) === Math.round(glide.token),
     JSON.stringify(glide)
   );

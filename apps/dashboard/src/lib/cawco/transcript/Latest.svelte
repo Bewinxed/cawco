@@ -27,8 +27,8 @@
   class="select-none mark-line pressable inline-flex items-center gap-space-2 h-c-btn-h-sm py-0 px-space-3 border border-border-hairline rounded-md bg-surface-raised shadow-overlay text-size-label font-medium text-ink-strong hover:bg-surface-hover"
   onclick={onjump}
   type="button"
-  in:rise={"--dur-panel"}
-  out:rise={"--dur-exit"}
+  in:rise={"--duration-panel"}
+  out:rise={"--duration-exit"}
 >
   <IconArrowDown class="size-icon-md" /><span
     >{back ? findInWords.back : "Jump to latest"}</span

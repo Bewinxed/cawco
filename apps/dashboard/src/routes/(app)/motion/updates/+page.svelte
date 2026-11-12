@@ -37,7 +37,7 @@
   const panel = floatingSurface({ class: "w-full max-w-c-panel-w" });
   /** The notice grids: panels at their width where it fits, the column's where not. */
   const NOTICE_COLS =
-    "repeat(auto-fill, minmax(min(100%, var(--c-panel-w)), 1fr))";
+    "repeat(auto-fill, minmax(min(100%, var(--spacing-c-panel-w)), 1fr))";
 
   /** Notes as every release writes them (docs/releases/README.md). */
   const NOTES = [

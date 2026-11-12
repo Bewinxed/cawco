@@ -2,7 +2,7 @@
   Row: media side by side, wrapping where they do not fit. Its pictures
   (Image.svelte) say their shapes here; the narrowest shape sets
   `--ratio-min`, by which each picture asks the width that stands the
-  narrowest at `--c-picture-min` with all of them at one height
+  narrowest at `--spacing-c-picture-min` with all of them at one height
   (`picture-row`, design.css). Where the Row can't give them that, its
   pictures wrap, one to a line, each fitting its width.
 -->

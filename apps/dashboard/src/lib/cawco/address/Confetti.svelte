@@ -12,11 +12,11 @@
   /** How many bits, and the inks they are cut from. */
   const COUNT = 28;
   const INKS = [
-    "var(--brand-solid)",
-    "var(--spark)",
-    "var(--mark-6)",
-    "var(--mark-4)",
-    "var(--mark-7)",
+    "var(--color-brand-solid)",
+    "var(--color-spark)",
+    "var(--color-mark-6)",
+    "var(--color-mark-4)",
+    "var(--color-mark-7)",
   ];
 
   function throwBits(layer: HTMLElement) {
@@ -51,8 +51,9 @@
             },
           ],
           {
-            duration: dur("--dur-hold") + Math.random() * dur("--dur-panel"),
-            delay: Math.random() * dur("--dur-control"),
+            duration:
+              dur("--duration-hold") + Math.random() * dur("--duration-panel"),
+            delay: Math.random() * dur("--duration-control"),
             easing: CURVE.out,
             fill: "both",
           }

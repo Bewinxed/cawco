@@ -121,7 +121,7 @@
   const tokenWidth = () =>
     Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue(
-        "--c-sidebar-w"
+        "--spacing-c-sidebar-w"
       )
     );
 
@@ -297,7 +297,7 @@
   /**
    * A key steps the width, and the step is a tween: the rail goes from the
    * width it is drawn at (a step still in flight included) to the new one
-   * over --dur-control, so held arrows glide instead of stuttering. The
+   * over --duration-control, so held arrows glide instead of stuttering. The
    * pointer drag above stays 1:1: it writes the width directly and nothing
    * tweens it.
    */
@@ -334,7 +334,7 @@
           { width: `${from}px`, flexBasis: `${from}px` },
           { width: `${to}px`, flexBasis: `${to}px` },
         ],
-        { duration: dur("--dur-control"), easing: ease("--ease-out") }
+        { duration: dur("--duration-control"), easing: ease("--ease-out") }
       );
     }
   }
@@ -360,8 +360,8 @@
    * and then only transforms move: the rail slides between
    * `translateX(-100%)` and its place (mirrored right to left) and the page
    * slides from where it was drawn to its own place, on one curve both
-   * ways, `--ease-drawer`: showing is an entrance, over `--dur-panel`;
-   * hiding is the rail's exit, over the shorter `--dur-panel-exit`
+   * ways, `--ease-drawer`: showing is an entrance, over `--duration-panel`;
+   * hiding is the rail's exit, over the shorter `--duration-panel-exit`
    * (DESIGN.md, The Fast Exit Rule). A press
    * mid-slide turns both back from where they are drawn, never from the
    * slide's start (The Interruptible Rule). The rail's width and the page's
@@ -417,7 +417,7 @@
       if (!hide) {
         railMoves = [
           rail.animate([{ opacity: 0 }, { opacity: 1 }], {
-            duration: dur("--dur-fade"),
+            duration: dur("--duration-fade"),
             easing: ease("--ease-out"),
           }),
         ];
@@ -460,8 +460,11 @@
    */
   const railClock = (hide: boolean) =>
     hide
-      ? { duration: dur("--dur-panel-exit"), easing: ease("--ease-drawer") }
-      : { duration: dur("--dur-panel"), easing: ease("--ease-drawer") };
+      ? {
+          duration: dur("--duration-panel-exit"),
+          easing: ease("--ease-drawer"),
+        }
+      : { duration: dur("--duration-panel"), easing: ease("--ease-drawer") };
 
   /**
    * The toggle's chevron turning and its glass fading (the corner's own CSS
@@ -698,7 +701,7 @@
    * The page the rail and the bar leave room for glides to where it stands
    * now, from where it stood: its box is read before the change is drawn
    * and after, and the page travels the difference on the drawer curve
-   * over --dur-panel (motion/route's page travel). It is one object on both
+   * over --duration-panel (motion/route's page travel). It is one object on both
    * sides (DESIGN.md, The One Object Rule); the rail and the bar fade as
    * they go and come. With less motion, the page only fades.
    */
@@ -719,7 +722,7 @@
     }
     const to = node.getBoundingClientRect();
     const timing = {
-      duration: dur("--dur-panel"),
+      duration: dur("--duration-panel"),
       easing: ease("--ease-drawer"),
     };
     if (!motionOk.current) {
@@ -750,11 +753,11 @@
    * with the page it leaves with, back in with the page it arrives with, on
    * the plan `onNavigate` wrote. Input leaves it at once; it is hidden only
    * once it has travelled out, and shown before it travels back. With less
-   * motion it only fades, over --dur-control.
+   * motion it only fades, over --duration-control.
    */
   function travelOf(showing: boolean) {
     if (!motionOk.current) {
-      return { end: { x: 0, y: 0, opacity: 0 }, ms: dur("--dur-control") };
+      return { end: { x: 0, y: 0, opacity: 0 }, ms: dur("--duration-control") };
     }
     const { enter, leave, over } = route.travel;
     return { end: showing ? enter : leave, ms: dur(over) };
@@ -987,7 +990,7 @@
   /* ── The bar's slot ──────────────────────────────────────────────────
      The hosted tabs, a page's strip, the crumb and Configure's back link
      take turns in one slot. The one leaving is lifted out of the row where
-     it stands and fades over --dur-control; the one arriving rises --pop-rise as
+     it stands and fades over --duration-control; the one arriving rises --pop-rise as
      it fades in over the same length, and a hosted strip comes down --pop-rise
      from the bar's edge instead. With less motion, only the fades run.
      The session's strip is the session surface's, so like the surface it
@@ -996,7 +999,7 @@
      A page's strip has a place kept the same way, which holds whatever
      the page in front hands it. */
   const riseIn = (_node: Element) => ({
-    duration: dur("--dur-control"),
+    duration: dur("--duration-control"),
     easing: easeOut,
     css: (t: number, u: number) =>
       motionOk.current
@@ -1135,7 +1138,7 @@
           fading?.cancel();
           node.inert = !next;
           const timing = {
-            duration: dur("--dur-control"),
+            duration: dur("--duration-control"),
             easing: ease("--ease-out"),
           };
           if (next) {
@@ -1407,7 +1410,7 @@
       data-leaving={railLeaving || undefined}
       class="hidden desk:flex data-full:hidden data-away:hidden relative data-leaving:absolute data-leaving:inset-y-0 data-leaving:start-0 data-leaving:z-10 w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
       style="--sidebar-width: var(--rail-w, {firstWidth === null
-        ? 'var(--c-sidebar-w)'
+        ? 'var(--spacing-c-sidebar-w)'
         : `${firstWidth}px`})"
       style:--rail-inset="env(safe-area-inset-left, 0px)"
       bind:this={railBox}
@@ -1490,7 +1493,7 @@
       data-under={under || undefined}
       bind:this={mainBox}
     >
-      <!-- The bar: the comp's height (`--c-top-bar-h`, so what floats under
+      <!-- The bar: the comp's height (`--spacing-c-top-bar-h`, so what floats under
            it lands under it); hosted folder tabs stand on its floor. The
            right inset is the content's right pad, so the cluster's edge
            stands over the page's; the left inset is the crumb's own, so the
@@ -1528,10 +1531,10 @@
         data-hosting={hosting || undefined}
         data-under={under || undefined}
         class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden data-under:relative data-under:-mbe-c-top-bar-h data-under:z-(--layer-bar) data-under:pointer-events-none items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
-        style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
+        style:--top-end={"calc(var(--spacing-space-6) + env(safe-area-inset-right, 0px))"}
         style:--shelf-end={"calc(var(--radius-sm) + env(safe-area-inset-right, 0px))"}
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
-        style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
+        style:--top-inset-end={"calc(var(--spacing-c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
         {@attach reflow()}
         bind:this={topBar}
       >
@@ -1549,11 +1552,11 @@
         <button
           data-slot="burger"
           aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
+          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--duration-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto group-data-under/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
-          style:--burger-drop={"calc(2 * (var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2))"}
+          style:--burger-drop={"calc(2 * (var(--spacing-c-top-bar-h) - var(--spacing-c-tab-row-h) / 2 - var(--spacing-c-btn-h-lg) / 2))"}
           type="button"
           bind:this={burger}
         >
@@ -1617,7 +1620,7 @@
                     workspace.focusedLeafId === leaf.id) ||
                     undefined}
                   data-seam={i > 0 || undefined}
-                  style:--seam-line="-1px 0 0 var(--border-hairline)"
+                  style:--seam-line="-1px 0 0 var(--color-border-hairline)"
                 >
                   <!-- The group the keyboard belongs to, as the group says
                        it: a hairline rail down the leading edge, where
@@ -1625,7 +1628,7 @@
                        stray line at the start of the shelf). -->
                   <span
                     aria-hidden="true"
-                    class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+                    class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--duration-control) motion-safe:ease-out"
                   ></span>
                   <RegionBoundary face="strip" part="tabs">
                     <PaneTabs hosted {leaf} />
@@ -1663,7 +1666,7 @@
                  border box stands (crossOut), and a margin would carry it
                  along. A long name (a session's, a project's) ends in an
                  ellipsis and keeps clear of the cluster beside it: the bar's
-                 own gap plus --space-3 of margin, outside the box its text
+                 own gap plus --spacing-space-3 of margin, outside the box its text
                  is clipped to, past the 16px a name needs from a control. -->
             <span
               data-slot="crumb"
@@ -1756,7 +1759,7 @@
         <!-- The scroll edge effect under the bar floating over the page:
              what scrolls beneath it blurs and fades into the shell's ground,
              from the first scroll (HeadFade, as BarFloat draws it). -->
-        <HeadFade band="var(--c-top-bar-h)" tint="bg-surface-recess" />
+        <HeadFade band="var(--spacing-c-top-bar-h)" tint="bg-surface-recess" />
       {/if}
       <HubBand />
 
@@ -1786,7 +1789,7 @@
         bind:this={content}
         style:--content-end="env(safe-area-inset-right, 0px)"
         style:--content-start="env(safe-area-inset-left, 0px)"
-        style:--shelf-band-size="100% var(--c-top-bar-h)"
+        style:--shelf-band-size="100% var(--spacing-c-top-bar-h)"
       >
         <!-- The page is keyed on its route, so a navigation swaps one page for
            the next through their own transitions (motion/route.svelte.ts):
@@ -1847,8 +1850,8 @@
         data-away={railHidden || undefined}
         class="absolute top-0 start-0 z-(--layer-bar) flex items-center h-c-top-bar-h ps-space-2 pointer-events-none *:pointer-events-auto *:data-[slot=tools]:before:transition-[opacity] *:data-[slot=tools]:before:duration-(--turn-dur) *:data-[slot=tools]:before:ease-drawer not-data-away:*:data-[slot=tools]:before:opacity-0"
         style:--turn-dur={railHidden
-          ? "var(--dur-panel-exit)"
-          : "var(--dur-panel)"}
+          ? "var(--duration-panel-exit)"
+          : "var(--duration-panel)"}
         bind:this={railCorner}
       >
         <BarGlass form="group">

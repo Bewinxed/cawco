@@ -76,11 +76,13 @@
   data-size={size}
   data-state={state}
   role="progressbar"
-  style:--bar-h={size === "compact" ? "var(--space-1)" : "var(--c-meter-bar-h)"}
+  style:--bar-h={size === "compact"
+    ? "var(--spacing-space-1)"
+    : "var(--spacing-c-meter-bar-h)"}
 >
   <span
     data-slot="fill"
-    class="absolute inset-y-0 start-0 w-(--fill-w) rounded-hair bg-meter-calm group-state-near/bar:bg-meter-near group-state-over/bar:bg-meter-over group-state-reached/bar:bg-meter-over group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:duration-(--dur-morph) motion-safe:ease-drawer"
+    class="absolute inset-y-0 start-0 w-(--fill-w) rounded-hair bg-meter-calm group-state-near/bar:bg-meter-near group-state-over/bar:bg-meter-over group-state-reached/bar:bg-meter-over group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
     style:--fill-w={shown > 0
       ? "max(calc(var(--share) * 100%), var(--bar-h))"
       : "0px"}
@@ -92,7 +94,7 @@
       class="absolute inset-y-0 start-(--tick-at) w-space-row -translate-x-1/2 bg-(color:--tick-paint)"
       style:--at={tick}
       style:--tick-at="calc(var(--at) * 100%)"
-      style:--tick-paint="var(--row-paint, var(--surface-raised))"
+      style:--tick-paint="var(--row-paint, var(--color-surface-raised))"
     ></span>
   {/if}
 </span>

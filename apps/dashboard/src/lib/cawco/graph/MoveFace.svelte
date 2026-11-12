@@ -51,7 +51,7 @@
    * ruler, every bar, the gridlines and the playhead are placed by one
    * rule, `t / scale` of the lane's width. The ruler's marks stand every
    * 100 ms, or every step of 1, 2 and 5 past it that keeps them
-   * `--space-2` apart; its figures thin to the lane's width.
+   * `--spacing-space-2` apart; its figures thin to the lane's width.
    *
    * Where the face is narrower than `--container-timeline` (the phone's
    * drawer, a room at its least), each row's name stands over a lane the
@@ -234,9 +234,9 @@
   /** How far the lanes are zoomed in (1: the whole move), and where the part shown begins, ms. */
   let zoom = $state(1);
   let viewStart = $state(0);
-  /** The step of a ruler `across` ms wide: 100 ms, else the least of 200, 500, 1000, 2000, 5000… whose marks stand `--space-2` apart on the lane. A mark every 100 ms drew 18,000 of them for a move of 30 minutes. */
+  /** The step of a ruler `across` ms wide: 100 ms, else the least of 200, 500, 1000, 2000, 5000… whose marks stand `--spacing-space-2` apart on the lane. A mark every 100 ms drew 18,000 of them for a move of 30 minutes. */
   const stepFor = (across: number) => {
-    const apart = browser ? numberOf("--space-2") : 1;
+    const apart = browser ? numberOf("--spacing-space-2") : 1;
     const most = Math.max(
       1,
       lane > 0 ? Math.floor(lane / apart) : MARKS_UNMEASURED
@@ -280,15 +280,15 @@
     )
   );
   /** The lane's inset, px (`px-space-2`): a figure centred on an end mark may reach into it, no further. */
-  const INSET = browser ? numberOf("--space-2") : 0;
-  /** `--space-3`: the least room between two figures. */
-  const FIGURE_GAP = browser ? numberOf("--space-3") : 0;
-  const FOUR_FIGURES = browser ? numberOf("--space-8") : 0;
+  const INSET = browser ? numberOf("--spacing-space-2") : 0;
+  /** `--spacing-space-3`: the least room between two figures. */
+  const FIGURE_GAP = browser ? numberOf("--spacing-space-3") : 0;
+  const FOUR_FIGURES = browser ? numberOf("--spacing-space-8") : 0;
   const figure = (n: number) => figureOf(n, lang);
   const widest = $derived(
     ruler ? inkWidth(figure(scale), ruler) : FOUR_FIGURES
   );
-  /** A figure on every mark, every second, every fourth… so each centred figure stands `--space-3` clear of the next. */
+  /** A figure on every mark, every second, every fourth… so each centred figure stands `--spacing-space-3` clear of the next. */
   const figureEvery = $derived.by(() => {
     const apart = lane > 0 ? (lane * step) / viewSpan : 0;
     return apart <= 0
@@ -1066,7 +1066,7 @@
         <div
           data-slot="timeline"
           class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-1"
-          style:--cols="minmax(var(--c-graph-move-name-w), 38%) minmax(0, 1fr)"
+          style:--cols={"minmax(var(--spacing-c-graph-move-name-w), 38%) minmax(0, 1fr)"}
           {@attach (node: HTMLElement) => {
             // Not passive: a pinch or a Ctrl-wheel zooms the lanes, never the page.
             node.addEventListener("wheel", wheel, { passive: false });
@@ -1194,7 +1194,7 @@
                     <IconChevronRight
                       aria-hidden="true"
                       class={[
-                        "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
+                        "size-icon-sm transition-transform duration-(--duration-control) ease-out rtl:-scale-x-100",
                         open && "rotate-90 rtl:-rotate-90",
                       ]}
                     />
@@ -1246,7 +1246,7 @@
                       <IconChevronRight
                         aria-hidden="true"
                         class={[
-                          "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
+                          "size-icon-sm transition-transform duration-(--duration-control) ease-out rtl:-scale-x-100",
                           open && "rotate-90 rtl:-rotate-90",
                           chosen ? "text-selected-ink" : "text-ink-muted",
                         ]}

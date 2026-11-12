@@ -198,11 +198,12 @@
    * the undo glyph stays beside what it marks.
    */
   const COLUMNS =
-    "fit-content(var(--c-graph-move-name-w)) minmax(0, 1fr) var(--c-btn-h-xs)";
+    "fit-content(var(--spacing-c-graph-move-name-w)) minmax(0, 1fr) var(--spacing-c-btn-h-xs)";
   /** Narrow: the name takes what it needs up to two fifths, its control the rest. */
-  const NARROW_COLUMNS = "fit-content(40%) minmax(0, 1fr) var(--c-btn-h-xs)";
+  const NARROW_COLUMNS =
+    "fit-content(40%) minmax(0, 1fr) var(--spacing-c-btn-h-xs)";
   const GRID_MAX =
-    "calc(var(--c-graph-move-name-w) + var(--c-graph-control-w) + var(--c-btn-h-xs) + 2 * var(--space-3))";
+    "calc(var(--spacing-c-graph-move-name-w) + var(--spacing-c-graph-control-w) + var(--spacing-c-btn-h-xs) + 2 * var(--spacing-space-3))";
   /** A layer's open and close, for the control named `key`. */
   const layerOf = (key: string) => (next: boolean) => {
     if (next) {

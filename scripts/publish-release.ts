@@ -72,7 +72,9 @@ async function request(
       "--method",
       method,
       ...(options.headers ?? []).flatMap((header) => ["-H", header]),
-      ...(options.body || options.file ? ["--input", options.file ?? "-"] : []),
+      ...(options.body || options.file
+        ? ["--color-input", options.file ?? "-"]
+        : []),
       path,
     ],
     {
