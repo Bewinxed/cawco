@@ -1642,6 +1642,16 @@
    */
   const railPlaced = $derived(sheet || phone.current || paneW > 0);
   /**
+   * The Comments list stands only in a pane on screen. A session pane kept
+   * mounted under another tab is hidden by its own `visibility`, but the
+   * list's card and sheet are portalled to the body and escaped it: left
+   * open in one session, the card floated over every other session's
+   * transcript, in every browser tab, its open state kept per session (the
+   * owner, 2026-11-12: "now it's stuck like this even across all tabs").
+   * Its open state is kept as it was; it stands again when the pane does.
+   */
+  const listShown = $derived(railPlaced && onScreen);
+  /**
    * What the sheet covers told again as it comes to rest (ThreadSheet
    * `onmoved`): measured as it mounts it stood below the well, covering
    * nothing, so no pin was lifted clear of it.
@@ -3708,11 +3718,11 @@
    * lit and brought into view as before.
    */
   const threadHung = $derived(
-    listOpen && railPlaced && !railSheet && !isCanvas && !floatSheet
+    listOpen && listShown && !railSheet && !isCanvas && !floatSheet
   );
   /** The rail's bottom sheet stands up (ThreadSheet `open`). */
   const railSheetOpen = $derived(
-    listOpen && railPlaced && !isCanvas && railSheet && !railAway
+    listOpen && listShown && !isCanvas && railSheet && !railAway
   );
   /** The rail's bottom sheet is drawn: from its open until it has slid down (ThreadSheet `onclosed`). */
   let railSheetDrawn = $state(false);
@@ -3724,7 +3734,7 @@
    * time"), never as a second sheet after the list's goes.
    */
   const threadPushed = $derived(
-    listOpen && railPlaced && !isCanvas && railSheet && openPin !== null
+    listOpen && listShown && !isCanvas && railSheet && openPin !== null
   );
   /** The thread standing joined to the Comments card: the open one, at once, its place on the page not waited for. */
   const hungPin = $derived(
@@ -4473,7 +4483,7 @@
     <CommentsCard
       label={commentWords.comments}
       onOpenChange={(open) => showList(open)}
-      open={listOpen && railPlaced}
+      open={listOpen && listShown}
       panel={section}
       thread={hungPin && kit && drafts ? hungThread : null}
       threadKey={hungPin?.id}
