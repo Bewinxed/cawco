@@ -117,7 +117,8 @@
     lead: CawLead;
     /** Caw sits here; off while he stands over the empty board. */
     seated: boolean;
-    onnewtask: () => void;
+    /** Add a task by hand, from the menu; null while the project has no stage to add one into (not set up). */
+    onnewtask: (() => void) | null;
     /** Ask Caw for a view, from the menu; null while Caw can't start. */
     onask: ((anchor: HTMLElement) => void) | null;
     /** Its setup, from the menu: finish it, or change how it runs; null while Caw can't start. */
@@ -471,10 +472,12 @@
                 <span>{projectWords.spinOff}</span>
               </DropdownMenu.Item>
             {/if}
-            <DropdownMenu.Item onSelect={onnewtask}>
-              <IconPlus />
-              <span>New task</span>
-            </DropdownMenu.Item>
+            {#if onnewtask}
+              <DropdownMenu.Item onSelect={onnewtask}>
+                <IconPlus />
+                <span>New task</span>
+              </DropdownMenu.Item>
+            {/if}
             <DropdownMenu.Item
               onSelect={() => {
                 if (more) {

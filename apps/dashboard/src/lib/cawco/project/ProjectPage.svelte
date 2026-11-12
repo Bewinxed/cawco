@@ -1603,7 +1603,12 @@
    * board: a board with tasks, and an empty one Caw's field stands over
    * (an empty board while Caw can't start holds the form itself).
    */
-  const strippedNewTask = $derived(list !== null && (!empty || canTalk));
+  // A task by hand lands in the first to-do stage (`newIn`): a project not
+  // set up has none, and its board no column to hold the form, so New task
+  // is offered only where one stands.
+  const strippedNewTask = $derived(
+    list !== null && newIn !== undefined && (!empty || canTalk)
+  );
   /** The view on screen is one of the tasks, which the filter narrows. */
   const filterHere = $derived(
     list !== null &&
@@ -2442,10 +2447,12 @@
                 filterAnchor = anchor;
                 filterOpen = true;
               }}
-              onnewtask={() => {
-                choose("board");
-                adding = true;
-              }}
+              onnewtask={newIn === undefined
+                ? null
+                : () => {
+                    choose("board");
+                    adding = true;
+                  }}
               setup={setupAct}
               {project}
               seated={!standing}

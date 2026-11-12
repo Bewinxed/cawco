@@ -875,15 +875,30 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
     JSON.stringify(onRoutines)
   );
   // The task form by hand seats him in the head (`standing`: not while a
-  // task is being added), and the 80 leaves.
+  // task is being added), and the 80 leaves. A task by hand lands in the
+  // first to-do stage, which a project not set up has none of, so it offers
+  // no New task (round 561 pressed one there: no column held its form). The
+  // project takes the code template's stages; its board, still empty,
+  // stands him at 80 over it.
+  await fleet.api(
+    hubRequest("POST /api/projects/:id/stages/template", {
+      path: { id: made.id },
+      body: { template: "code" },
+    })
+  );
+  await page.reload({ waitUntil: "domcontentloaded" });
   await tab("Board").click();
   await page
     .locator(`${STOOD} [data-slot="caw-seat"]`)
-    .waitFor({ timeout: 10_000 });
+    .waitFor({ timeout: 60_000 });
   const newTask = page.locator(
     '[data-slot="strip"] button[aria-label="New task"]'
   );
+  await newTask.waitFor({ timeout: 60_000 });
   await newTask.click();
+  await page
+    .locator('input[aria-label="Task title"]')
+    .waitFor({ timeout: 10_000 });
   await head.waitFor({ timeout: 10_000 });
   await page.waitForFunction(
     () => document.querySelector('[data-slot="caw-80"]') === null,
