@@ -75,17 +75,6 @@ export const openOnArrival = (projectId: string): void => {
   store("local", openKey(projectId), "1");
 };
 
-/** The statuses the head Caw changes between, fetched once he is on screen. */
-export const HEAD_NEXT: CawStatus[] = [
-  "working",
-  "needs-you",
-  "done",
-  "trying",
-  "idle",
-  "loading",
-  "reconnecting",
-];
-
 /** `--breath` in ms, read from the root. */
 function breathMs(): number {
   return msOf(

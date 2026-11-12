@@ -1,3 +1,18 @@
+<script lang="ts" module>
+  import type { CawStatus } from "@cawco/core/project-conversation";
+
+  /** The statuses the head Caw changes between, fetched once he is on screen. */
+  const HEAD_NEXT: CawStatus[] = [
+    "working",
+    "needs-you",
+    "done",
+    "trying",
+    "idle",
+    "loading",
+    "reconnecting",
+  ];
+</script>
+
 <script lang="ts">
   /**
    * Caw in the project's head: the page's one live Caw, at 48px, as a
@@ -16,7 +31,7 @@
   import Caw from "#lib/cawco/home/Caw.svelte";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import { IconFolder } from "#lib/icons.js";
-  import { type CawLead, HEAD_NEXT } from "./caw-lead.svelte";
+  import type { CawLead } from "./caw-lead.svelte";
 
   let {
     lead,
