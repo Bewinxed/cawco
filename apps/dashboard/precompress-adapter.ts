@@ -105,7 +105,7 @@ const compressed = async (
     return found;
   }
   const made = kind === "br" ? brotli(bytes) : gzip(bytes);
-  const temp = `${kept}.${process.pid}`;
+  const temp = `${kept}.${process.pid}.${crypto.randomUUID()}`;
   await writeFile(temp, made);
   await rename(temp, kept);
   return made;
