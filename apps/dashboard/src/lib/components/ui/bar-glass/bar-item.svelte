@@ -31,8 +31,12 @@
       /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */
       form: {
         symbol: "",
-        /* Its words at the label's inset, the chevron closer. */
-        title: "mark-line max-w-full gap-space-1 ps-space-2 pe-space-1",
+        /* Its words at the label's inset, the chevron closer; it gives up
+           width before its neighbours, its words cut at their end, where
+           its glass stands short of room (a design graph's folded tools at
+           390: the stepper's name, so the row holds to one line). */
+        title:
+          "mark-line min-w-0 max-w-full shrink gap-space-1 ps-space-2 pe-space-1",
         /* A word action (Cancel, a count said in words): its words at the
            label's size, an even inset either side, cut at their end. */
         words:

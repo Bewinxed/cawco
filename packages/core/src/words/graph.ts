@@ -323,8 +323,15 @@ export const graphWords = {
   actualSize: "Actual size",
   /** A phone twin's name (stage-graph.ts `shownName`): its state's, the width a qualifier after a comma, so "Hub didn't answer" stays whole. */
   onAPhone: (state: string) => `${state}, on a phone`,
-  /** Beside the state's name while the stage draws it scaled down to fit: how much. */
-  scaledTo: (percent: Figure) => `Scaled to ${percent}%`,
+  /** The scale as a figure among the view's tools while the stage draws the component scaled down to fit, itself the Actual size switch. */
+  scalePercent: (percent: Figure) => `${percent}%`,
+  /** The figure's name and tooltip, saying what a press does. */
+  scaleShowActual: (percent: Figure) =>
+    `Scaled to ${percent}%. Show at actual size`,
+  /** Actual size in View options, where the tools fold, the scale said in it. */
+  actualSizeFrom: (percent: Figure) => `Actual size (now ${percent}%)`,
+  /** The hub's link down, on its glass over the stage: short enough for one line at 390, the whole line (`stale`) in its tooltip. */
+  staleShort: "Not live: the last view the hub sent",
   mounting: (name: string) => `Loading ${name}…`,
   /** The component failed to mount: what happened, why, what to do, what next. */
   mountFailed: (name: string, state: string) =>
