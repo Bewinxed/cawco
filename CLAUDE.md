@@ -28,8 +28,7 @@ permissions and questions from the lock screen.
   hold; read it whole before UI work and follow each line, and the skill it names for a kind of
   work. Every visual value comes from a token in `design/tokens/` (DTCG 2025.10, built by
   `bun run tokens` in apps/dashboard into `src/lib/tokens/tokens.css`; add a token there before
-  using a new value), `.impeccable/design.json` carries its hex values, shadows, motion tokens and
-  breakpoints, and `bun run check` holds DESIGN.md to its word budget. DESIGN.md changes when the
+  using a new value). DESIGN.md changes when the
   owner picks a change to the system; a screen's own decisions live in its surface brief at
   `apps/dashboard/.impeccable/surfaces/` (`impeccable surface-brief read <file>`).
 - **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: the words the product shows live in `packages/core/src/words/**`, written to DESIGN.md's Words section.

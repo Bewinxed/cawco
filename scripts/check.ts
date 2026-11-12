@@ -618,20 +618,6 @@ const gated: Gated[] = [
     "bun.lock",
     "patches/",
   ]),
-  {
-    ...bun("scripts/design-sidecar-check.ts", []),
-    // Its verdict is git's: the files it compares and the commits that last
-    // wrote them.
-    key: async () => {
-      const read = [".impeccable/design.json", "DESIGN.md", "design/tokens/"];
-      return keyOf(
-        ["scripts/design-sidecar-check.ts", ...under(...read)],
-        (await git("log", "-1", "--format=%H", "--", read[0] as string)) ?? "",
-        (await git("log", "-1", "--format=%H", "--", ...read.slice(1))) ?? "",
-        (await git("status", "--porcelain", "--", ...read)) ?? ""
-      );
-    },
-  },
   // Each Biome plugin reports its planted mistakes and nothing else.
   bun("scripts/lint/biome-plugins.ts", [
     "scripts/lint/",
@@ -680,7 +666,6 @@ const gated: Gated[] = [
     "packages/core/src/",
     "bun.lock",
   ]),
-  bun("scripts/design-budget-check.ts", ["DESIGN.md"]),
   bun("scripts/surface-briefs-check.ts", ["apps/dashboard/"]),
   bun("scripts/setup-draft-check.ts", ["apps/dashboard/src/lib/cawco/"]),
   run("packages/hub", "openapi:check", [

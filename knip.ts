@@ -148,10 +148,6 @@ export default {
         "scripts/border-width-check.ts",
         // scripts/check.ts:570
         "scripts/patched-dependencies-check.ts",
-        // scripts/check.ts:571
-        "scripts/design-sidecar-check.ts",
-        // scripts/check.ts:621
-        "scripts/design-budget-check.ts",
         // scripts/check.ts:622
         "scripts/surface-briefs-check.ts",
         // scripts/check.ts:639
