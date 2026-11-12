@@ -2,11 +2,10 @@
   /**
    * A project's board before it is set up, with no setup under way: Caw off,
    * or a project made without him, or a setup left long ago. The house
-   * empty state (The Caw Stands On The Axis Rule): his live seat centred
-   * over the column, "Not set up yet", what fills the board and the one way
-   * to start (Set it up with Caw) on its left edge, as on the empty board
-   * (`axis="mark"`); where he can't start, the folder glyph, the title and
-   * the line centred as one block. Once he sets it up, his draft takes the board's place as the
+   * empty state on the board's axis (The Caw Stands On The Axis Rule): his
+   * live seat over "Not set up yet", what fills the board, and the one way
+   * to start (Set it up with Caw), or the folder glyph alone where he can't
+   * start. Once he sets it up, his draft takes the board's place as the
    * board it becomes (SetupDraft).
    */
   import { setupWords } from "@cawco/core/words/onboarding";
@@ -46,7 +45,7 @@
     {#if seat}
       <EmptyState
         actionWidth="fill"
-        axis="mark"
+        axis
         line={setupWords.notSetUpLine}
         mark={seated}
         title={setupWords.notSetUp}

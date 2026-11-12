@@ -2,13 +2,13 @@
   /**
    * The axis empty state (`EmptyState` with `axis`) as its callers draw it,
    * for its states file: `setup`, the board before it is set up as Caw
-   * offers it (the real SetupScene with his seat, `axis="mark"`, one
-   * outline button);
+   * offers it (the real SetupScene with his seat, the whole block on the
+   * axis, one outline button);
    * `starters`, the empty board as ProjectPage draws it (`axis="mark"`):
    * Caw at 80 centred over the column, the title, the line and the
    * starters on its left edge; `none`, the not-set-up board where Caw
    * can't start: the folder glyph, no action, the whole block on the axis.
-   * Caw stands in at rest (`lead`), with no head to sit down in.
+   * Caw stands in at rest, with no head to sit down in.
    */
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { RESTING_LEAD } from "#lib/cawco/project/caw-lead.fixture.js";

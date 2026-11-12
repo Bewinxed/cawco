@@ -4,12 +4,15 @@
  * at 80 centred over the column, the title, the line and his starters on
  * its left edge (EmptyState `axis="mark"`). Its reads arrive as props, so
  * the list stands in read and empty, and Caw stands in at rest, with no
- * head to sit down in.
+ * head to sit down in. It stands in the project page's pane inset
+ * (ProjectPaneFrame), as the tab does on the page.
  */
+
 import {
   RESTING_LEAD,
   sitDownNowhere,
 } from "#lib/cawco/project/caw-lead.fixture.js";
+import { inProjectPane } from "#lib/cawco/project/pane-frame.js";
 import type { ProjectStarter } from "#lib/cawco/project-tasks.js";
 import DecisionsView from "./DecisionsView.svelte";
 import type { ProjectDecisions } from "./decisions.svelte";
@@ -61,6 +64,7 @@ export default {
     starters: STARTERS,
     go: () => undefined,
   },
+  decorators: [inProjectPane],
   parameters: { viewport: 1440 },
 };
 

@@ -1,9 +1,11 @@
 /**
- * The board's empty states (The Caw Stands On The Axis Rule). Where Caw can
- * start, before setup and on an empty board, Caw alone centred over the
- * column, the title, the line and the action on its left edge; where he
- * can't, the folder glyph, title and line centred as one block.
+ * The board's empty states (The Caw Stands On The Axis Rule), in the
+ * project page's pane inset (ProjectPaneFrame). On an empty board, Caw
+ * alone centred over the column, the title, the line and the starters on
+ * its left edge; before setup, Caw (or the folder glyph where he can't
+ * start), the title, the line and the button centred as one block.
  */
+import { inProjectPane } from "#lib/cawco/project/pane-frame.js";
 import EmptyOnAxis from "./EmptyOnAxis.svelte";
 
 const starters = [
@@ -18,6 +20,7 @@ export default {
   component: EmptyOnAxis,
   args: { look: "setup", starters: [...starters] },
   // The board it stands in, at a desk's width; the canvas's widths draw it on a phone.
+  decorators: [inProjectPane],
   parameters: { viewport: 1440 },
 };
 

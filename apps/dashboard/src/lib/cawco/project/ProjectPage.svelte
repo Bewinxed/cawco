@@ -86,6 +86,7 @@
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
+  import { PANE_INSET } from "#lib/cawco/project/pane-inset.js";
   import SetUpBar from "#lib/cawco/project/SetUpBar.svelte";
   import SetupBoard from "#lib/cawco/project/SetupBoard.svelte";
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
@@ -2600,7 +2601,8 @@
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
     class={[
-      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
+      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
+      PANE_INSET,
       fadeOn === "pane" && "kit-edge-fade-block",
       paneFoot,
     ]}

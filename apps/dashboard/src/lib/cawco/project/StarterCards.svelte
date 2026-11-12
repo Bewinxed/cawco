@@ -15,7 +15,10 @@
    * shadow, no border), every card the tallest card's height with its words
    * centred, tinting under a press as wide controls do (The Press Rule). One
    * column in a narrow container; wider, as many columns of at least
-   * --c-starter-w as fit (3 + 1, then 4 across at --c-starters-w).
+   * --c-starter-w as fit (3 + 1, then 4 across at --c-starters-w), and
+   * never a column more than there are cards (`auto-fit`): fewer cards
+   * than fit share the row between them, so the cards always span the
+   * column and Caw, centred over it, stands over their middle.
    *
    * `rows`: in Caw's panel, the same tiles as suggestion rows, one under the
    * other, each as wide as its words and no wider (the owner's pin 22), its
@@ -46,7 +49,7 @@
     data-slot="cards"
     aria-label={rows ? "Things to ask Caw" : "Starters"}
     class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols) group-data-rows/starters:flex group-data-rows/starters:flex-col group-data-rows/starters:items-start"
-    style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
+    style:--cards-cols={"repeat(auto-fit, minmax(min(100%, var(--c-starter-w)), 1fr))"}
     style:--cards-rows="1fr"
   >
     {#each starters as starter (starter.text)}
