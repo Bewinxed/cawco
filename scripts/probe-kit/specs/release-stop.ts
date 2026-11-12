@@ -402,11 +402,7 @@ const runLeg = async (
   await mkdir(join(configHome, "cawco"), { recursive: true });
   await writeFile(
     join(configHome, "cawco", "release.env"),
-    [
-      "CAWCO_RELEASE_SIGNING_KEY",
-      "CAWCO_APPLE_DEVELOPER_ID",
-      "CAWCO_APP_STORE_CONNECT_KEY",
-    ]
+    ["CAWCO_RELEASE_SIGNING_KEY", "CAWCO_APPLE_DEVELOPER_ID"]
       .map((name) => `${name}=${junk}\n`)
       .join("")
   );

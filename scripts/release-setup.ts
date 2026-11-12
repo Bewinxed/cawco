@@ -21,8 +21,6 @@
  * - `release-signing-key.pem`: the PKCS8 PEM that signs release manifests;
  * - `developer-id.p12` and `developer-id.p12.password`: the Mac keychain's identities as `security export` writes
  *   them; the Developer ID Application identity of team FN5LJSPX2R is taken out of it;
- * - `appstoreconnect.env` and `AuthKey_<KEY_ID>.p8`: the App Store Connect key as the Mac kept it
- *   (`*KEY_ID=` and `*ISSUER_ID=` lines), encoded for rcodesign (`encode-app-store-connect-api-key`).
  */
 import { createPrivateKey } from "node:crypto";
 import {
@@ -216,19 +214,6 @@ const secretProblems = async (): Promise<string[]> => {
       await rm(scratch, { recursive: true, force: true });
     }
   }
-  const apiKey = decoded(SECRET_VARIABLES.appStoreConnectKey);
-  if (apiKey) {
-    try {
-      const key = JSON.parse(apiKey) as Record<string, unknown>;
-      if (!(key.issuer_id && key.key_id && key.private_key)) {
-        problems.push(
-          `${SECRET_VARIABLES.appStoreConnectKey}: not rcodesign's API key JSON (issuer_id, key_id, private_key)`
-        );
-      }
-    } catch {
-      problems.push(`${SECRET_VARIABLES.appStoreConnectKey}: not JSON`);
-    }
-  }
   return problems;
 };
 
@@ -314,7 +299,6 @@ interface Bag {
 const PEM_BLOCK = /-----BEGIN ([A-Z ]+)-----[\s\S]*?-----END \1-----/gu;
 const KEY_ID = /localKeyID:\s*([0-9A-F ]+)/iu;
 const FRIENDLY_NAME = /friendlyName: (.*)/u;
-const EXPORT = /^export /u;
 
 /** The team's Developer ID Application certificate and its key, out of `openssl pkcs12 -nodes`' text. */
 const developerIdentity = (text: string): string => {
@@ -347,34 +331,6 @@ const developerIdentity = (text: string): string => {
     );
   }
   return `${certificate.pem}\n${key.pem}\n`;
-};
-
-/** The App Store Connect key's ids from the Mac's env file, as sign-agent-bundle.sh read them. */
-const connectIds = (text: string): { issuer: string; keyId: string } => {
-  let keyId = "";
-  let issuer = "";
-  for (const raw of text.split("\n")) {
-    const line = raw.replace(EXPORT, "");
-    const at = line.indexOf("=");
-    if (at < 0) {
-      continue;
-    }
-    const name = line.slice(0, at);
-    const value = line
-      .slice(at + 1)
-      .replaceAll('"', "")
-      .replaceAll("'", "")
-      .trim();
-    if (name.endsWith("KEY_ID")) {
-      keyId = value;
-    } else if (name.endsWith("ISSUER_ID")) {
-      issuer = value;
-    }
-  }
-  if (!(keyId && issuer)) {
-    throw new Error("appstoreconnect.env names no *KEY_ID and *ISSUER_ID");
-  }
-  return { keyId, issuer };
 };
 
 /** The secrets from `place` written into the release env, each base64 on its line; other lines are kept. */
@@ -412,35 +368,10 @@ const importSecrets = async (place: string): Promise<void> => {
       );
     }
     const identity = developerIdentity(opened.text);
-    const { issuer, keyId } = connectIds(
-      new TextDecoder().decode(await read("appstoreconnect.env"))
-    );
-    await writeFile(
-      join(scratch, "key.p8"),
-      await read(`AuthKey_${keyId}.p8`),
-      { mode: 0o600 }
-    );
-    const encoded = said([
-      rcodesignPath(),
-      "encode-app-store-connect-api-key",
-      "-o",
-      join(scratch, "key.json"),
-      issuer,
-      keyId,
-      join(scratch, "key.p8"),
-    ]);
-    if (!encoded.ok) {
-      throw new Error(
-        `rcodesign could not encode the App Store Connect key: ${encoded.text.trim()}`
-      );
-    }
     const values: Record<string, string> = {
       [SECRET_VARIABLES.manifestKey]:
         Buffer.from(manifestKey).toString("base64"),
       [SECRET_VARIABLES.developerId]: Buffer.from(identity).toString("base64"),
-      [SECRET_VARIABLES.appStoreConnectKey]: Buffer.from(
-        await Bun.file(join(scratch, "key.json")).bytes()
-      ).toString("base64"),
     };
     const kept = (await readFile(releaseEnvPath(), "utf8").catch(() => ""))
       .split("\n")

@@ -1,5 +1,5 @@
 /**
- * A darwin build as its own signed, notarized CawCo Agent.app, and the
+ * A darwin build as its own signed CawCo Agent.app, and the
  * release archive of it, made on the release host with rcodesign
  * (release-tools.ts): no Mac in the path. packages/core/src/agent-bundle.ts
  * says why it is a bundle. release.ts runs each step through its own runner
@@ -7,28 +7,18 @@
  *
  * - {@link signBundle}: lays out DIR/CawCo Agent.app (Contents/Info.plist,
  *   Contents/MacOS/cawco) and signs it with the team's Developer ID, the
- *   hardened runtime and a secure timestamp, in Apple's notarization
- *   compatibility mode (`--for-notarization`: "The signing configuration is
- *   validated for notarization compatibility", gregoryszorc.com/docs/
- *   apple-codesign/stable/apple_codesign_rcodesign_notarizing.html). Then reads
+ *   hardened runtime and a secure timestamp (`--for-notarization` is rcodesign's
+ *   mode that insists on both). Then reads
  *   the signature back: the identifier dev.cawco.agent, the runtime flag, the
  *   JIT entitlement, a Developer ID Application certificate of team
  *   FN5LJSPX2R, and a designated requirement that names the identifier and
- *   the team and no cdhash.
- * - {@link notarizeBundle}: has Apple notarize the signed bundle through the
- *   Notary API (notary.ts: each request asked again when it got no answer,
- *   never when Apple refused it) and staples the ticket to it (`rcodesign
- *   staple`); a bundle's ticket is the file
- *   `Contents/CodeResources` (rcodesign stapling.rs: "Stapling a bundle (e.g.
- *   `MyApp.app`) is literally just writing a `Contents/CodeResources` file
- *   containing the raw ticket data"), which the archive then carries. Each
- *   submission is written to the ledger before it goes up
- *   (release-quota.ts). A status other than Accepted fails the release with
- *   the submission's log: no unnotarized bundle is published.
- * - {@link archiveBundle}: tars the bundle as signed and stapled, then unpacks
+ *   the team and no cdhash. The build is not sent to Apple for notarizing:
+ *   macOS checks that only on files marked as downloaded by a browser or
+ *   Finder, and the installer script and the updater set no such mark.
+ * - {@link archiveBundle}: tars the bundle as signed, then unpacks
  *   the archive the way the installer and the updater do, into a scratch
  *   binary root's versions/VERSION, and checks the unpacked bundle: the same
- *   executable, the ticket, a signature rcodesign verifies.
+ *   executable, a signature rcodesign verifies.
  *
  * The entitlements (agent.entitlements, beside this file), under the hardened runtime:
  * - JavaScriptCore's JIT: cs.allow-jit and cs.allow-unsigned-executable-memory
@@ -47,17 +37,14 @@
  * What only a Mac could check is no longer checked before publishing:
  * Gatekeeper's verdict (`spctl --assess`) and a run of the signed executable.
  */
-import { cp, mkdir, rename, rm, stat } from "node:fs/promises";
+import { cp, mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   AGENT_BUNDLE,
   AGENT_BUNDLE_EXECUTABLE,
   AGENT_BUNDLE_ID,
 } from "../../packages/core/src/agent-bundle";
-import { NoAnswer, persist } from "../lib/outside-call";
-import { recordNotarization } from "../release-quota";
 import { rcodesignPath } from "../release-tools";
-import { notarize } from "./notary";
 
 /** A command run as one of the release's steps: its stdout when `capture`. */
 export type Run = (
@@ -69,8 +56,6 @@ export type Run = (
 /** The team whose Developer ID signs every darwin build. */
 export const APPLE_TEAM_ID = "FN5LJSPX2R";
 const ENTITLEMENTS = join(import.meta.dir, "agent.entitlements");
-/** "98 percent of software within 15 minutes" (Apple, customizing-the-notarization-workflow); past this the release fails. */
-const NOTARY_WAIT_S = 30 * 60;
 /** The designated requirement as `rcodesign print-signature-info` prints it. */
 const DESIGNATED = /designated\(3\): \d+: (.*)$/mu;
 
@@ -157,80 +142,7 @@ export async function signBundle(
 }
 
 /**
- * Has Apple notarize `dir`/CawCo Agent.app (zipped, as the Notary API takes a
- * bundle) through notary.ts, with the App Store Connect key in `apiKey`
- * (rcodesign's `encode-app-store-connect-api-key` JSON), then staples the
- * ticket to it with rcodesign. Prints the wait on its own `[release] …s
- * notary-submit` line, Apple's log, NOTARIZED and STAPLED; keeps the log as
- * `dir`/notary-TARGET.log.
- */
-export async function notarizeBundle(
-  run: Run,
-  dir: string,
-  target: string,
-  version: string,
-  apiKey: string
-): Promise<void> {
-  const app = join(dir, AGENT_BUNDLE);
-  const zip = join(dir, `notary-${target}.zip`);
-  await rm(zip, { force: true });
-  // The bundle under its own name at the zip's root, symlinks kept (rcodesign bundle_to_zip lays it out the same).
-  await run(["zip", "-qry", zip, AGENT_BUNDLE], dir);
-  const sha256 = new Bun.CryptoHasher("sha256")
-    .update(await Bun.file(zip).bytes())
-    .digest("hex");
-  const started = performance.now();
-  const notarized = await notarize({
-    apiKeyFile: apiKey,
-    // Unique to this upload, so a submit that got no answer can be found by it.
-    name: `${AGENT_BUNDLE} ${target} ${version} ${sha256.slice(0, 16)}.zip`,
-    sha256,
-    zip,
-    waitS: NOTARY_WAIT_S,
-    record: () => recordNotarization({ target, version }),
-  }).finally(() => rm(zip, { force: true }));
-  await Bun.write(join(dir, `notary-${target}.log`), notarized.log);
-  for (const line of notarized.log.split("\n")) {
-    console.log(`notary log> ${line}`);
-  }
-  console.log(
-    `[release] ${((performance.now() - started) / 1000).toFixed(1)}s notary-submit ${target}: ${notarized.status} ${notarized.id}`
-  );
-  if (notarized.status !== "Accepted") {
-    const summary = notarized.log
-      ? (JSON.parse(notarized.log) as { statusSummary?: string }).statusSummary
-      : undefined;
-    fail(
-      `Apple's notarization of ${target} (${notarized.id}) ended ${notarized.status}${summary ? `: ${summary}` : ""}; the release does not publish`
-    );
-  }
-  console.log(`NOTARIZED ${target} ${notarized.id}`);
-  // Accepted: Apple holds the ticket, so a staple that fails is its lookup
-  // getting no answer or the ticket not yet served: both cured by asking again.
-  await persist(`staple ${target}`, () =>
-    run([rcodesignPath(), "staple", app], dir).catch((error: unknown) => {
-      throw new NoAnswer(
-        `rcodesign staple ${target}: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error }
-      );
-    })
-  );
-  await stapled(app);
-  console.log(`STAPLED ${app}`);
-}
-
-/** The bundle carries its ticket, a file of its own. */
-const stapled = async (app: string): Promise<void> => {
-  const ticket = await stat(join(app, "Contents", "CodeResources")).catch(
-    () => undefined
-  );
-  if (!ticket?.size) {
-    fail(`${app} carries no stapled ticket (Contents/CodeResources)`);
-  }
-};
-
-/**
- * Tars `dir`/CawCo Agent.app, as signed and stapled, into `dir`/`archive`
+ * Tars `dir`/CawCo Agent.app, as signed, into `dir`/`archive`
  * (gzip, as the installer and the updater read), then unpacks it as they lay
  * a build down, into a scratch root's versions/`version`, and checks it there.
  * Prints ARCHIVED and UNPACKED.
@@ -270,7 +182,6 @@ export async function archiveBundle(
       ["cmp", "-s", unpacked, join(dir, AGENT_BUNDLE_EXECUTABLE)],
       dir
     ).catch(() => fail("the archive's executable is not the one signed"));
-    await stapled(join(versions, AGENT_BUNDLE));
     await run([rcodesignPath(), "verify", unpacked], dir);
     console.log(`UNPACKED ${join(versions, AGENT_BUNDLE)}`);
   } finally {

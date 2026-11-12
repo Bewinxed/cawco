@@ -7,7 +7,7 @@
  * service manager). `{commit}` is the landed commit and `{notes}` a file of
  * the notes, both shell-quoted. The command answers at once (CawCo's own,
  * scripts/ship.sh, starts the release as a unit of its own and returns, or
- * refuses in its words, as at Apple's notarization limit), and what it said
+ * refuses in its words), and what it said
  * is the finish_item answer's last paragraph.
  */
 import { mkdir, rm, writeFile } from "node:fs/promises";

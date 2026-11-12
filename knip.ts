@@ -190,8 +190,6 @@ export default {
         "scripts/release.ts",
         // scripts/ship.sh:44
         "scripts/republish.ts",
-        // scripts/ship.sh:58
-        "scripts/release-quota.ts",
         // scripts/release-setup.sh:27
         "scripts/release-setup.ts",
         // scripts/release.ts:471

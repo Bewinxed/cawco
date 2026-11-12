@@ -3,8 +3,8 @@
 # (the hub runs it after a landing whose finish_item says `ship`, as gate.md's `Ship:` line declares it):
 #
 #   bash scripts/ship.sh --commit SHA --notes FILE [--channel nightly|stable] [--tag vX.Y.Z]
-#       Checks Apple's notarization limit has room for a release (release-quota.ts; refused in its words, exit 2),
-#       then starts the release as a user unit of its own, `cawco-ship-<sha12>-<time>`, which outlives whoever asked
+#       Checks the commit is on origin/main (refused, exit 2), then starts the release as a user unit of
+#       its own, `cawco-ship-<sha12>-<time>`, which outlives whoever asked
 #       (the release restarts the hub it is asked from), prints the unit's name and returns.
 #   bash scripts/ship.sh --run --commit SHA --notes FILE [--channel …] [--tag …]
 #       What that unit runs: a clean worktree of the commit, its frozen install, and from it
@@ -14,7 +14,7 @@
 #   bash scripts/ship.sh --republish VERSION
 #       Publishes a build whose publish failed, from the folder it left (~/.cache/cawco-release/out/VERSION), as a
 #       unit of its own, `cawco-republish-<version>-<time>`: `republish.ts` makes the draft, uploads every file,
-#       promotes it and tells the hub. Nothing is built or notarized, so no quota is checked; it refuses (exit 2) a
+#       promotes it and tells the hub. Nothing is built; it refuses (exit 2) a
 #       folder missing or incomplete and a version already published. `--run --republish VERSION` is what the unit runs.
 #
 # A fresh clone on a fresh machine runs this after `bash scripts/release-setup.sh` and its secrets import alone.
@@ -55,7 +55,6 @@ if [[ -n $republish ]]; then
 fi
 
 if ((run == 0)); then
-  said=$(bun "$here/release-quota.ts") || { echo "$said"; exit 2; }
   git -C "$repo" fetch --quiet origin
   sha=$(git -C "$repo" rev-parse --verify "$commit^{commit}")
   git -C "$repo" merge-base --is-ancestor "$sha" origin/main ||

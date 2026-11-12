@@ -22,13 +22,12 @@
  * `--dry-run` prints that graph, with each step's expected time, and runs
  * nothing. What waits on what, and why:
  * - the check (when it runs) and the live database's migration check gate
- *   promotion, and Apple's notarization: nothing is submitted to Apple
- *   before they pass.
- * - The proof build (the binary build-info is asked of, which gives the manifest its protocol) comes before the
+ *   promotion and each darwin archive.
+ * - The info build (the binary build-info is asked of, which gives the manifest its protocol) comes before the
  *   `run` check of each linux archive. The container tests are not a release step: `bun run test:binary`
  *   (scripts/binary-tests.ts) runs them for any commit.
  * - The four targets compile at once, from assets prepared once; each linux
- *   archive is made at once, each darwin bundle signed, notarized and stapled
+ *   archive is made at once, each darwin bundle signed
  *   on this host (rcodesign, sign-agent-bundle.ts) at once with the other.
  * - With --publish, a draft release is made once the version is known, and
  *   each archive goes up to it as soon as it is made, while the other targets build.
@@ -71,11 +70,7 @@ import {
   signalGroup,
   signal as signalPid,
 } from "../packages/core/src/signal";
-import {
-  archiveBundle,
-  notarizeBundle,
-  signBundle,
-} from "./binary/sign-agent-bundle";
+import { archiveBundle, signBundle } from "./binary/sign-agent-bundle";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { requireDiskRoom } from "./lib/disk-room";
 import { holdAwake } from "./lib/hold-awake";
@@ -90,7 +85,6 @@ import {
 import type { Runner } from "./release/binary-tests";
 import { ANNOUNCE_MS, announce } from "./release-announce";
 import { describeSteps, runSteps, type Step } from "./release-graph";
-import { quotaRefusal } from "./release-quota";
 import {
   missingSecrets,
   signingPem,
@@ -221,7 +215,7 @@ const gatePassed = async (commit: string): Promise<boolean> => {
 const stagingOf = (commit: string): string =>
   join(state, `staging-${commit.slice(0, 12)}`);
 
-/** Whether a target's builds are darwin's: a signed, notarized bundle. */
+/** Whether a target's builds are darwin's: a signed bundle. */
 const isDarwin = (target: string): boolean => target.startsWith("darwin");
 
 /**
@@ -229,8 +223,8 @@ const isDarwin = (target: string): boolean => target.startsWith("darwin");
  * goes, read by the steps after.
  */
 interface Learned {
-  /** Apple's secrets as the files rcodesign reads, once written. */
-  apple?: Promise<{ apiKey: string; identity: string }>;
+  /** The Developer ID identity as the file rcodesign reads, once written. */
+  apple?: Promise<{ identity: string }>;
   /**
    * The draft release this build makes, by its exact tag, from the moment it
    * is asked for: a build that fails or is stopped removes it (`created` has
@@ -380,7 +374,7 @@ const releaseSteps = (
       ];
     }
     // A darwin build ships as its own CawCo Agent.app, signed with the team's
-    // Developer ID, notarized by Apple and stapled, all on this host
+    // Developer ID, all on this host
     // (sign-agent-bundle.ts), with its Info.plist from this commit.
     return [
       compile,
@@ -394,17 +388,7 @@ const releaseSteps = (
           await signBundle(run, dir, (await learned.apple).identity);
         }
       ),
-      step(`notarize ${target}`, [`sign ${target}`, "gate"], 80, async () => {
-        learned.apple ??= writeAppleSecrets(join(staging, "apple"), secrets);
-        await notarizeBundle(
-          run,
-          dir,
-          target,
-          manifest().version,
-          (await learned.apple).apiKey
-        );
-      }),
-      step(`archive ${target}`, [`notarize ${target}`], 8, async () => {
+      step(`archive ${target}`, [`sign ${target}`, "gate"], 8, async () => {
         await archiveBundle(run, dir, manifest().version, archiveName(target));
         await rename(
           join(dir, archiveName(target)),
@@ -435,7 +419,7 @@ const releaseSteps = (
       })
     ),
     ...tree("build"),
-    // The check reads its own tree, beside the builds; it gates notarization
+    // The check reads its own tree, beside the builds; it gates the darwin archives
     // and promotion, never the builds. None when the merge checks passed it
     // on this tree.
     ...(gated
@@ -454,7 +438,7 @@ const releaseSteps = (
       gated ? ["live database"] : ["check", "live database"],
       0,
       async () => {
-        // Nothing to run: what notarization and promotion wait for.
+        // Nothing to run: what the darwin archives and promotion wait for.
       }
     ),
     step("version", ["install build"], 1, async () => {
@@ -464,7 +448,7 @@ const releaseSteps = (
     step("prepare", ["install build"], 36, () =>
       run([process.execPath, "scripts/build-binary.ts", "prepare"], trees.build)
     ),
-    step("proof build", ["prepare", "version"], 4.7, () =>
+    step("info build", ["prepare", "version"], 4.7, () =>
       run(
         [
           process.execPath,
@@ -480,9 +464,9 @@ const releaseSteps = (
       )
     ),
     // The hub ↔ agent contract this build speaks, as the build itself says: a joined machine installs it only when
-    // it overlaps its hub's. The proof build runs only under a scratch HOME and an isolated loopback hub
+    // it overlaps its hub's. The info build runs only under a scratch HOME and an isolated loopback hub
     // (scripts/binary/proof-entry.ts), and inherits no credentials, so build-info is asked under exactly those.
-    step("build-info", ["proof build"], 0.8, async () => {
+    step("build-info", ["info build"], 0.8, async () => {
       await mkdir(infoHome, { recursive: true });
       const { protocol } = JSON.parse(
         await run(
@@ -616,7 +600,7 @@ const manifestOf = async (
 /**
  * How long the live database's check may run: it passes in about 3 s, and
  * one whose hub never answered sat at 100% CPU for 24 minutes, holding
- * notarization and promotion (nightly 0e08f76f8, 2026-11-04). Our call: far
+ * the archives and promotion (nightly 0e08f76f8, 2026-11-04). Our call: far
  * past any real database's migrations, short enough that a hang fails the
  * release while its run is still watched.
  */
@@ -997,10 +981,6 @@ if (!rcodesignSays.includes(`apple-codesign ${RCODESIGN_VERSION}`)) {
   refuse(
     `rcodesign ${RCODESIGN_VERSION} is not at ${rcodesignPath()}: bash scripts/release-setup.sh installs it`
   );
-}
-const overQuota = await quotaRefusal();
-if (overQuota) {
-  refuse(overQuota);
 }
 
 /** A process named so a reused pid is never taken for it: pid and start time. */

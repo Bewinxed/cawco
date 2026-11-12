@@ -4,12 +4,12 @@
  *
  * release.ts's `promote` moves a proven build into `<output>/<version>`
  * (every archive and its `.sha256`, `SHA256SUMS`, `release.json` and
- * `release.json.sig`, signed and notarized) before it publishes, and a
+ * `release.json.sig`, signed) before it publishes, and a
  * publish that fails never reaches the prune, so the folder stays; a failed
  * build's draft is removed on the way out. This publishes that folder as
  * release.ts would have: a draft, every file uploaded, the draft promoted
  * (publish-release.ts) and the hub told (release-announce.ts). Nothing is
- * built, signed or sent to Apple. ship.sh `--republish` runs it as a unit of
+ * built or signed. ship.sh `--republish` runs it as a unit of
  * its own.
  *
  * It refuses, in its words and with exit 2, a folder that is missing or

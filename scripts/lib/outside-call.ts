@@ -127,7 +127,7 @@ export const sorted = (what: string, answer: Answer): Answer => {
  * {@link NoAnswer} when nothing (or "not now") came back. Not retried by
  * itself: {@link ask} is this under {@link persist}.
  */
-export async function exchange(
+async function exchange(
   what: string,
   url: string,
   init: RequestInit = {},

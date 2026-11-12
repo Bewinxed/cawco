@@ -10,15 +10,12 @@ import { releaseEnvPath } from "../packages/core/src/paths";
  * - `CAWCO_RELEASE_SIGNING_KEY`: the PKCS8 PEM that signs release manifests;
  * - `CAWCO_APPLE_DEVELOPER_ID`: a PEM of the team's Developer ID Application
  *   certificate and its private key, which signs the darwin bundles;
- * - `CAWCO_APP_STORE_CONNECT_KEY`: the App Store Connect API key as rcodesign's
- *   `encode-app-store-connect-api-key` writes it, which notarizes them.
  * `bash scripts/release-setup.sh --import-secrets` writes them from their one
  * source of truth (release-setup.ts).
  */
 export const SECRET_VARIABLES = {
   manifestKey: "CAWCO_RELEASE_SIGNING_KEY",
   developerId: "CAWCO_APPLE_DEVELOPER_ID",
-  appStoreConnectKey: "CAWCO_APP_STORE_CONNECT_KEY",
 } as const;
 
 export type ReleaseSecrets = Partial<
@@ -93,33 +90,24 @@ export function signingPem(value: string | undefined): string {
 }
 
 /**
- * The Apple secrets as the files rcodesign reads, in `dir` (made mode 0700,
- * each file 0600): the Developer ID identity PEM and the App Store Connect
- * key JSON. The caller removes `dir` when signing ends.
+ * The Developer ID identity as the file rcodesign reads, in `dir` (made mode
+ * 0700, the file 0600). The caller removes `dir` when signing ends.
  */
 export async function writeAppleSecrets(
   dir: string,
   secrets: ReleaseSecrets
-): Promise<{ apiKey: string; identity: string }> {
-  const { developerId, appStoreConnectKey } = secrets;
-  if (!(developerId && appStoreConnectKey)) {
+): Promise<{ identity: string }> {
+  const { developerId } = secrets;
+  if (!developerId) {
     throw new Error(
-      `No Apple signing secrets: ${missingSecrets(secrets)
-        .filter((name) => name !== SECRET_VARIABLES.manifestKey)
-        .join(
-          " and "
-        )} are read from ${releaseEnvPath()}; bash scripts/release-setup.sh --import-secrets writes them`
+      `No Apple signing secret: ${SECRET_VARIABLES.developerId} is read from ${releaseEnvPath()}; bash scripts/release-setup.sh --import-secrets writes it`
     );
   }
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await chmod(dir, 0o700);
   const identity = join(dir, "developer-id.pem");
-  const apiKey = join(dir, "app-store-connect-key.json");
   await writeFile(identity, Buffer.from(developerId, "base64"), {
     mode: 0o600,
   });
-  await writeFile(apiKey, Buffer.from(appStoreConnectKey, "base64"), {
-    mode: 0o600,
-  });
-  return { identity, apiKey };
+  return { identity };
 }

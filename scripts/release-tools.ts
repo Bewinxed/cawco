@@ -4,7 +4,7 @@
  * never by hand: a fresh clone on a freshly installed machine releases after
  * that one command and the secrets.
  *
- * rcodesign (apple-codesign) signs, notarizes and staples the darwin builds
+ * rcodesign (apple-codesign) signs the darwin builds
  * on the release host itself, no Mac in the path
  * (https://gregoryszorc.com/docs/apple-codesign/stable/apple_codesign.html:
  * "you can sign, notarize, and release Apple software from non-Apple operating
