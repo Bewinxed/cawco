@@ -30,7 +30,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { availableParallelism } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import { dashboardBuild } from "./dashboard-build-cache";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { agentReact } from "../packages/core/src/agent-react";
 import { bundled } from "../packages/core/src/bundled";
@@ -88,9 +90,9 @@ export function packageDir(
   throw new Error(`Cannot locate package ${name}`);
 }
 
-async function run(argv: string[]) {
+async function run(argv: string[], env: Record<string, string> = {}) {
   const child = Bun.spawn(argv, {
-    env: process.env,
+    env: { ...process.env, ...env },
     cwd: ROOT,
     stdout: "inherit",
     stderr: "inherit",
@@ -187,21 +189,28 @@ const writeWorkFiles = async (copies: [string, string][]): Promise<void> => {
     // bun inside the workspace's boundary, never by cawco (agent stage.ts).
     (async () =>
       writeFile(join(WORK, "stage-host.mjs"), await buildStageHost()))(),
-    // The dashboard's server (adapter-node's `build/handler.js`), one file
-    // with its dependencies, published beside its client tree and imported
-    // from there (apps/dashboard serve.js): adapter-node's `dir` is the
-    // directory of its own module, `dirname(fileURLToPath(import.meta.url))`,
-    // which a bundle keeps for run time, so it names the published
-    // `dashboard/` tree.
-    writeBundle("The dashboard's server", join(WORK, "dashboard-handler.js"), {
-      entrypoints: [join(ROOT, "apps/dashboard/build/handler.js")],
-      target: "bun",
-      format: "esm",
-      minify: true,
-      define: { "process.env.NODE_ENV": '"production"' },
-      plugins: [agentReact],
-    }),
   ]);
+};
+
+/**
+ * The dashboard's server bundle: the one asset that reads the dashboard's
+ * build, so it waits for it while the others are made.
+ */
+const writeDashboardHandler = async (): Promise<void> => {
+  // The dashboard's server (adapter-node's `build/handler.js`), one file
+  // with its dependencies, published beside its client tree and imported
+  // from there (apps/dashboard serve.js): adapter-node's `dir` is the
+  // directory of its own module, `dirname(fileURLToPath(import.meta.url))`,
+  // which a bundle keeps for run time, so it names the published
+  // `dashboard/` tree.
+  await writeBundle("The dashboard's server", join(WORK, "dashboard-handler.js"), {
+    entrypoints: [join(ROOT, "apps/dashboard/build/handler.js")],
+    target: "bun",
+    format: "esm",
+    minify: true,
+    define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [agentReact],
+  });
 };
 
 /**
@@ -214,15 +223,17 @@ export async function prepareAssets(options: {
 }): Promise<void> {
   pinnedBun();
   await mkdir(WORK, { recursive: true });
-  if (options.dashboard) {
-    await run([
-      process.execPath,
-      "run",
-      "--filter",
-      "@cawco/dashboard",
-      "build",
-    ]);
-  }
+  // The dashboard builds while the bundles that do not read its output are
+  // made; only the dashboard's server bundle waits for it.
+  const dashboard = options.dashboard
+    ? dashboardBuild(ROOT, () =>
+        run(
+          [process.execPath, "run", "--filter", "@cawco/dashboard", "build"],
+          // Node's default of 4 threads serialises the adapter's zlib work.
+          { UV_THREADPOOL_SIZE: String(availableParallelism()) }
+        )
+      )
+    : Promise.resolve();
   const { pi, photon } = piPackages();
   const copies: [string, string][] = [
     // Embedded from a copy: log-relay.ts imports
@@ -241,6 +252,7 @@ export async function prepareAssets(options: {
     // The file viewer's script and sheet, and PDF.js as published (core file-viewer.ts).
     fileViewerAssets(join(WORK, "file"), filesUnder),
     writeWorkFiles(copies),
+    dashboard.then(writeDashboardHandler),
   ]);
   const playwright = packageDir("playwright-core", requireAgent);
   const shared: [string, string][] = [

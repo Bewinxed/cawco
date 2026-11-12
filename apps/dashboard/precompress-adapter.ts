@@ -11,18 +11,29 @@
  * So `compress` is widened here, and the files it adds go into the list the
  * adapter measures.
  *
- * The rule is by format: every file kit skipped is compressed unless its
- * format is {@link COMPRESSED} already. mime-db's `compressible` flag cannot
+ * The rule is by format: every file whose format is not
+ * {@link COMPRESSED} already is compressed, kit's text
+ * kinds and the rest alike. mime-db's `compressible` flag cannot
  * decide it, as .riv has no media type there.
  *
- * Each sibling is kept by its file's content hash in the user's cache
- * (`$XDG_CACHE_HOME/cawco-dashboard/precompressed`, else ~/.cache), so a
- * build compresses only a file no build compressed before: brotli at quality
- * 11 took 13 s of every build for the 21 .riv files, the same nearly every
- * time.
+ * Every sibling but a `.map`'s is kept by its file's content hash in the
+ * user's cache (`$XDG_CACHE_HOME/cawco/precompress`, else ~/.cache/cawco/precompress),
+ * outside the worktree so a release's fresh clone finds it. Kit's own
+ * `compress` is not called: it would compress every file again. The levels are
+ * kit's (brotli 11, gzip 9), so the bytes are the same. A kept file not read
+ * for {@link MAX_AGE_DAYS} days is deleted.
  */
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, relative } from "node:path";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
@@ -52,11 +63,33 @@ const COMPRESSED = new Set([
   ".zst",
 ]);
 
+const MAX_AGE_DAYS = 30;
+
 const cache = join(
   process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
-  "cawco-dashboard",
-  "precompressed"
+  "cawco",
+  "precompress"
 );
+
+const brotli = (bytes: Buffer): Buffer =>
+  brotliCompressSync(bytes, {
+    params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
+  });
+const gzip = (bytes: Buffer): Buffer => gzipSync(bytes, { level: 9 });
+
+/** Deletes kept files not read (modified: a read touches it) for {@link MAX_AGE_DAYS} days. */
+const prune = async (): Promise<void> => {
+  const oldest = Date.now() - MAX_AGE_DAYS * 86_400_000;
+  await Promise.all(
+    (await readdir(cache)).map(async (name) => {
+      const path = join(cache, name);
+      const info = await stat(path).catch(() => undefined);
+      if (info?.isFile() && info.mtimeMs < oldest) {
+        await rm(path, { force: true });
+      }
+    })
+  );
+};
 
 /** `bytes` compressed as `kind`: the kept copy for its content hash, else made and kept, whole, by rename. */
 const compressed = async (
@@ -67,14 +100,11 @@ const compressed = async (
   const kept = join(cache, `${hash}.${kind}`);
   const found = await readFile(kept).catch(() => undefined);
   if (found) {
+    const now = new Date();
+    await utimes(kept, now, now).catch(() => undefined);
     return found;
   }
-  const made =
-    kind === "br"
-      ? brotliCompressSync(bytes, {
-          params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
-        })
-      : gzipSync(bytes, { level: 9 });
+  const made = kind === "br" ? brotli(bytes) : gzip(bytes);
   const temp = `${kept}.${process.pid}`;
   await writeFile(temp, made);
   await rename(temp, kept);
@@ -92,21 +122,25 @@ const filesUnder = async (directory: string): Promise<string[]> =>
       )
     );
 
-/** Writes `.br` and `.gz` beside each file under `directory` that `done` leaves out and is not {@link COMPRESSED}; returns those files. */
-const compressRest = async (
-  directory: string,
-  done: string[]
-): Promise<string[]> => {
-  const skip = new Set(done);
+/** Writes `.br` and `.gz` beside each file under `directory` that is not {@link COMPRESSED}; returns those files. A `.map`'s are made, not kept. */
+const compressAll = async (directory: string): Promise<string[]> => {
   const listed = await filesUnder(directory).catch(() => []);
   const files = listed.filter(
-    (file) => !(skip.has(file) || COMPRESSED.has(extname(file).toLowerCase()))
+    (file) => !COMPRESSED.has(extname(file).toLowerCase())
   );
   await mkdir(cache, { recursive: true });
+  await prune();
   await Promise.all(
     files.map(async (file) => {
       const path = join(directory, file);
       const bytes = await readFile(path);
+      if (extname(file) === ".map") {
+        await Promise.all([
+          writeFile(`${path}.br`, brotli(bytes)),
+          writeFile(`${path}.gz`, gzip(bytes)),
+        ]);
+        return;
+      }
       const hash = createHash("sha256").update(bytes).digest("hex");
       await Promise.all(
         (["br", "gz"] as const).map(async (kind) =>
@@ -123,10 +157,7 @@ export const precompressAll = (inner: Adapter): Adapter => ({
   ...inner,
   adapt: (builder) => {
     const widened: Builder = Object.create(builder);
-    widened.compress = async (directory) => {
-      const done = await builder.compress(directory);
-      return [...done, ...(await compressRest(directory, done))];
-    };
+    widened.compress = compressAll;
     return inner.adapt(widened);
   },
 });

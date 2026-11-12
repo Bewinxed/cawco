@@ -12,13 +12,19 @@
  * The precompressed siblings are written inside the build, where adapter-node
  * records them (precompress-adapter.ts), never here.
  */
-import { rename, rm } from "node:fs/promises";
+import { rename, rm, stat } from "node:fs/promises";
 
 const root = new URL("..", import.meta.url);
 const build = new URL("build", root);
 const next = new URL(".build-next", root);
 const old = new URL(".build-old", root);
 
+if (!(await stat(next).catch(() => undefined))?.isDirectory()) {
+  console.error(
+    `No build to publish: ${next.pathname} does not exist. Run \`vite build\` first; build/ is untouched.`
+  );
+  process.exit(1);
+}
 await rm(old, { recursive: true, force: true });
 await rename(build, old).catch((error) => {
   if (error.code !== "ENOENT") {
