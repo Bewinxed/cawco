@@ -31,6 +31,7 @@ import {
   staticClasses,
   unknownClasses,
 } from "./shadcn.mjs";
+import { styleSpaces } from "./style-spaces.mjs";
 import { tooltipProviderAtRoot } from "./tooltip-provider.mjs";
 import { variantOrder } from "./variant-order.mjs";
 
@@ -335,6 +336,7 @@ const FIND = {
   "house/no-detached-bar-menu": detachedBarMenus,
   "house/tooltip-provider-at-root": tooltipProviderAtRoot,
   "house/no-not-hover": notHover,
+  "house/no-style-underscore-spaces": styleSpaces,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

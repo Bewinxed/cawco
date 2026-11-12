@@ -79,8 +79,8 @@
       handle === "top-left" && "rounded-ss-(--grip-r)",
       handle === "top-right" && "rounded-se-(--grip-r)",
     ]}
-    style:--grip-box="calc(2 * calc(var(--spacing)_*_3))"
-    style:--grip-r={"max(0px, calc(var(--corner-r) - calc(var(--spacing)_*_1.5)))"}
+    style:--grip-box="calc(2 * calc(var(--spacing) * 3))"
+    style:--grip-r={"max(0px, calc(var(--corner-r) - calc(var(--spacing) * 1.5)))"}
   >
     {#if handle !== "top"}
       <span

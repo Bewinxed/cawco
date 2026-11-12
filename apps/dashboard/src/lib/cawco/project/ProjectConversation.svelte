@@ -741,7 +741,7 @@
       height="room"
       overflow="clip"
       pad="none"
-      style="--lead-w: min(var(--spacing-c-lead-card-w), calc(100vw - var(--spacing-space-7))); --pop-max-h: min(calc(var(--spacing)_*_190), var(--bits-popover-content-available-height, var(--spacing-c-sheet-max-h)))"
+      style="--lead-w: min(var(--spacing-c-lead-card-w), calc(100vw - var(--spacing-space-7))); --pop-max-h: min(calc(var(--spacing) * 190), var(--bits-popover-content-available-height, var(--spacing-c-sheet-max-h)))"
       collisionPadding={12}
       customAnchor={cardAnchor}
       onfocusin={() => {

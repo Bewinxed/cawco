@@ -766,14 +766,14 @@
   aria-label="Project details"
   class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pe-space-6 pb-space-3 ps-space-7 max-desk:max-w-none max-desk:pe-space-5 max-desk:ps-space-5"
   data-project-details={project.id}
-  style:--details-max={"calc(calc(var(--spacing)_*_128) + var(--spacing-space-7) + var(--spacing-space-6))"}
+  style:--details-max={"calc(calc(var(--spacing) * 128) + var(--spacing-space-7) + var(--spacing-space-6))"}
   transition:unfold
   {@attach escapes}
 >
   <div
     data-slot="tile"
     class="grid gap-space-4 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-raised"
-    style:--row-cols="calc(var(--spacing)_*_26) minmax(0, 1fr)"
+    style:--row-cols="calc(var(--spacing) * 26) minmax(0, 1fr)"
   >
     <!-- Place: where it lives, its places, and adding one. -->
     <div
@@ -902,7 +902,7 @@
             data-slot="add"
             class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-add-place-form
-            style:--add-cols={"minmax(0, calc(var(--spacing)_*_40)) minmax(0, 1fr)"}
+            style:--add-cols={"minmax(0, calc(var(--spacing) * 40)) minmax(0, 1fr)"}
             onsubmit={(event) => {
               event.preventDefault();
               add();
@@ -1023,7 +1023,7 @@
               data-slot="add"
               class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
               data-lfs-form
-              style:--add-cols={"minmax(0, calc(var(--spacing)_*_40)) minmax(0, 1fr)"}
+              style:--add-cols={"minmax(0, calc(var(--spacing) * 40)) minmax(0, 1fr)"}
               onsubmit={(event) => {
                 event.preventDefault();
                 saveLfs({ url: lfsUrl.trim(), connection: lfsConnection });

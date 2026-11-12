@@ -362,7 +362,7 @@
   style:--review-areas-wide={'"result stage" "decide decide"'}
   style:--review-rows="auto minmax(0, 1fr) auto"
   style:--review-rows-wide="minmax(0, 1fr) auto"
-  style:--review-cols="calc(var(--spacing)_*_80) minmax(0, 1fr)"
+  style:--review-cols="calc(var(--spacing) * 80) minmax(0, 1fr)"
 >
   <!-- Band 1: the session, its words, what it attached; with no result,
        what landed, what it waits on you to answer, its description. -->

@@ -18,7 +18,7 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 .cawco-waiting { animation: cawco-wait 1ms var(--duration-wait-grace) both; }
 /* The skeleton recipe: a surface-fill block, pulsing down to --skeleton-pulse-floor and back once a --duration-skeleton-pulse on
    ease-in-out (transitions.dev Skeleton loader and reveal), still without motion. */
-.cawco-stand-in-body { inline-size: var(--spacing-c-canvas-skeleton-w); max-inline-size: 100vw; block-size: calc(var(--spacing)_*_24);
+.cawco-stand-in-body { inline-size: var(--spacing-c-canvas-skeleton-w); max-inline-size: 100vw; block-size: calc(var(--spacing) * 24);
   border-radius: var(--radius-sm); background: var(--color-surface-fill); }
 @media (prefers-reduced-motion: no-preference) {
   .cawco-waiting { animation-duration: var(--duration-fade); animation-timing-function: var(--ease-out); }

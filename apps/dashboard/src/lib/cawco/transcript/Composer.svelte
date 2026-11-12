@@ -3988,7 +3988,7 @@
           style:--cue-top-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run))"}
           style:--cue-bottom-fade={"linear-gradient(to top, transparent, var(--color-mask-opaque) var(--cue-run))"}
           style:--cue-both-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--cue-run), var(--color-mask-opaque) calc(100% - var(--cue-run)), transparent)"}
-          style:--fold-fade={"linear-gradient(to right, var(--color-mask-opaque) calc(100% - calc(var(--spacing)_*_18) - var(--spacing-space-8)), transparent calc(100% - calc(var(--spacing)_*_18)))"}
+          style:--fold-fade={"linear-gradient(to right, var(--color-mask-opaque) calc(100% - calc(var(--spacing) * 18) - var(--spacing-space-8)), transparent calc(100% - calc(var(--spacing) * 18)))"}
           style:--field-pad="calc((var(--cin-ctl) - 1lh) / 2)"
           style:--cue-run="1lh"
           onclick={(event) => {

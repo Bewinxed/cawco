@@ -518,7 +518,7 @@
                 {@const file = job.lfsFile}
                 <div
                   class="grid grid-cols-(--file-cols) items-center gap-space-2"
-                  style:--file-cols={"minmax(0, 1fr) calc(var(--spacing)_*_24) auto"}
+                  style:--file-cols={"minmax(0, 1fr) calc(var(--spacing) * 24) auto"}
                   in:unfold
                   out:unfold
                 >

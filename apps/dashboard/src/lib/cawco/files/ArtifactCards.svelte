@@ -310,7 +310,7 @@
   data-files-view={view}
   {onkeydown}
   role="listbox"
-  style:--card-min="calc(var(--spacing)_*_37)"
+  style:--card-min="calc(var(--spacing) * 37)"
   style:--gutter={"calc((var(--spacing-c-row-inset) - (var(--spacing-c-row-lead) - var(--spacing-icon-md)) / 2) - var(--spacing-space-1))"}
   style:--lane-tracks="repeat({count}, minmax(0, 1fr))"
   {@attach highlight({

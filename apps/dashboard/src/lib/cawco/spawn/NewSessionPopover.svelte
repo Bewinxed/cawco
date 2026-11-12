@@ -145,7 +145,7 @@
         form?.focusPrompt();
       }}
       side="bottom"
-      style={`--pop-w: min(calc(var(--spacing)_*_142.25), 100vw - var(--spacing-space-8) * 1.5); --pop-max-h: calc(${room ?? "var(--bits-popover-content-available-height)"} - 2px)`}
+      style={`--pop-w: min(calc(var(--spacing) * 142.25), 100vw - var(--spacing-space-8) * 1.5); --pop-max-h: calc(${room ?? "var(--bits-popover-content-available-height)"} - 2px)`}
       width="room"
       bind:ref={card}
     >

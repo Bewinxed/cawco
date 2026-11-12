@@ -87,7 +87,7 @@
     const { w, h } = shape;
     const limits = ["100%", `${w}px`];
     if (capped) {
-      limits.push(`calc(calc(var(--spacing)_*_96) * ${w} / ${h})`);
+      limits.push(`calc(calc(var(--spacing) * 96) * ${w} / ${h})`);
     }
     return { ratio: `${w} / ${h}`, width: `min(${limits.join(", ")})` };
   });

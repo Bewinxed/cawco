@@ -756,11 +756,17 @@ for (const [path, rewrites] of classRewrites) {
         break;
       }
     }
-    // A read in a bracket is a class's: its spaces are `_`.
+    // A read inside a class's `[…]` writes its spaces `_`; a read anywhere
+    // else in the candidate (a `style:` value, a CSS string) is plain CSS,
+    // and the browser drops a value written with underscores.
     for (const [token, replacement] of tokens) {
       out = out.replace(
         new RegExp(`var\\(\\s*${token}\\s*\\)`, "gu"),
-        replacement.replaceAll(" ", "_")
+        (_read, at: number, whole: string) => {
+          const head = whole.slice(0, at);
+          const inBracket = head.split("[").length > head.split("]").length;
+          return inBracket ? replacement.replaceAll(" ", "_") : replacement;
+        }
       );
     }
     return out;

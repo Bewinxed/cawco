@@ -350,7 +350,7 @@
     leaving?.animate([{ opacity: 1 }, { opacity: 0 }], timing);
     await column.animate(
       [
-        { transform: "translateY(calc(var(--spacing)_*_6))" },
+        { transform: "translateY(calc(var(--spacing) * 6))" },
         { transform: "none" },
       ],
       timing
@@ -366,7 +366,7 @@
      the flow, so the widest row is the tail's width (the panel sizes to it). -->
 <div
   class="flex flex-col justify-end h-(--tail-h) overflow-hidden text-ink-strong data-full:mask-(--tail-fade)"
-  style:--row="calc(var(--spacing)_*_6)"
+  style:--row="calc(var(--spacing) * 6)"
   style:--slots={slots}
   style:--tail-h="calc(var(--row) * var(--slots))"
   style:--tail-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--row))"}

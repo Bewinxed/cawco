@@ -56,7 +56,7 @@
   );
   /** The head's height: the first group 96px under the bar (DESIGN.md, Layout). */
   const HEAD_ROOM =
-    "calc(calc(var(--spacing)_*_24) - var(--spacing-space-6) - var(--spacing-space-group))";
+    "calc(calc(var(--spacing) * 24) - var(--spacing-space-6) - var(--spacing-space-group))";
 
   /** Whether the filtered project's Caw is on, once read. */
   let leadOn = $state<boolean | null>(null);

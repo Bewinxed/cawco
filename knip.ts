@@ -123,6 +123,7 @@ export default {
         "scripts/codemods/theme-unify.ts",
         "scripts/codemods/theme-audit.ts",
         "scripts/codemods/type-roles.ts",
+        "scripts/codemods/style-spaces.ts",
         // scripts/check.ts
         "scripts/shell-bodies-check.ts",
         // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the tool door's proof (scripts/lib/tool-call.ts).
