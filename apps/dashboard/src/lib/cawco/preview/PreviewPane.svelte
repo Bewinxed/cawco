@@ -72,7 +72,7 @@
   import { sheetWords } from "@cawco/core/words/sheet";
   import { shellWords } from "@cawco/core/words/shell";
   import { Portal } from "bits-ui";
-  import { type Snippet, untrack } from "svelte";
+  import { type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { z } from "zod";
   import {
@@ -2685,6 +2685,27 @@
    * again with them; its words and chips stay as the next comment's draft,
    * an upload in flight going on. Empty, its pill goes.
    */
+  /**
+   * A comment written or let go, or a thread closed: the card that held the
+   * focus is gone, and the browser drops the focus on the body, outside the
+   * pane, where none of its keys reach (V, C and D, J and K): after a
+   * comment, V did nothing until he pressed into the page again (the
+   * owner, 2026-11-12). The page's frame takes the focus back, where he
+   * was working; a focus he moved elsewhere himself stays where it is.
+   */
+  let carded = false;
+  $effect(() => {
+    const now = !!composing || !!openPin;
+    if (carded && !now) {
+      tick().then(() => {
+        const at = document.activeElement;
+        if (!at || at === document.body) {
+          iframe?.focus({ preventScroll: true });
+        }
+      });
+    }
+    carded = now;
+  });
   function cancelComposer() {
     if (!composing) {
       return;
