@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import type { FleetSkillPayload, SkillFile, StagesTemplate } from "@cawco/core";
 import { hashFiles } from "@cawco/core/file-hash";
 import { runtimeTree, standalone } from "@cawco/core/runtime";
+import { themeVariablesCss } from "@cawco/core/theme-css";
 
 export const BUNDLED_SKILLS = [
   "show",
@@ -92,6 +93,23 @@ const filesUnder = (root: string, dir = root): SkillFile[] =>
         : [];
     });
 
+/**
+ * Files a skill carries that are written when it is read, not kept in git:
+ * the decision-page kit's tokens, generated from the dashboard's theme.css
+ * (the one file the token values are written in). Its `mockup.mjs` reads
+ * `kit/tokens.css` beside it on every machine the skill is synced to.
+ */
+const generatedFiles = (name: string): SkillFile[] =>
+  name === "decision-page"
+    ? [
+        {
+          path: "kit/tokens.css",
+          contentBase64: Buffer.from(themeVariablesCss()).toString("base64"),
+          executable: false,
+        },
+      ]
+    : [];
+
 /** Read once per process: the files change only with a new CawCo. */
 const loaded = new Map<string, FleetSkillPayload>();
 
@@ -101,7 +119,7 @@ const skillNamed = (name: string): FleetSkillPayload => {
     const root = standalone
       ? runtimeTree(`skills/${name}`)
       : fileURLToPath(new URL(`../skills/${name}`, import.meta.url));
-    const files = filesUnder(root);
+    const files = [...filesUnder(root), ...generatedFiles(name)];
     skill = { name, hash: hashFiles(files), files };
     loaded.set(name, skill);
   }

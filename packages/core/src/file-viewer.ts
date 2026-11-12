@@ -41,6 +41,7 @@ import {
   SPOT_LINE_ATTR,
 } from "./file-spot-marks";
 import { embeddedFile, standalone } from "./runtime";
+import { themeVariablesCss } from "./theme-css";
 import { fileViewerWords as words } from "./words/file-viewer";
 
 /** Where the viewer's files stand on every preview origin. */
@@ -268,11 +269,6 @@ export function fileViewerPage(file: {
 /** The agent's viewer sources: its script and its sheet. */
 const VIEWER_DIR = new URL("../../agent/src/file-viewer/", import.meta.url)
   .pathname;
-/** The house tokens every page CawCo serves shares (the decision-page kit's). */
-const TOKENS = new URL(
-  "../../hub/skills/decision-page/kit/tokens.css",
-  import.meta.url
-).pathname;
 
 /** PDF.js's published package, where a source checkout has it installed. */
 const pdfjsRoot = (): string =>
@@ -302,11 +298,8 @@ async function buildViewerScript(): Promise<string> {
 
 /** The viewer's sheet: the house tokens, then its own rules. */
 async function buildViewerSheet(): Promise<string> {
-  const [tokens, own] = await Promise.all([
-    readFile(TOKENS, "utf8"),
-    readFile(join(VIEWER_DIR, "viewer.css"), "utf8"),
-  ]);
-  return `${tokens}\n${own}`;
+  const own = await readFile(join(VIEWER_DIR, "viewer.css"), "utf8");
+  return `${themeVariablesCss()}\n${own}`;
 }
 
 /** The viewer's script and sheet, built once per process: a failure clears it, so the next request builds again. */

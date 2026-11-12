@@ -5,12 +5,10 @@
  * `theme` layer. Tailwind's `@theme` is no CSS a browser reads, so a build
  * or a check that wants the values as a stylesheet takes them from here.
  */
-import { readFileSync } from "node:fs";
+// A text import: the bundler embeds theme.css, so this works where the
+// repository is not on disk (the compiled binary) and in a browser bundle.
+import theme from "../../../apps/dashboard/src/lib/tokens/theme.css" with { type: "text" };
 
-const THEME = new URL(
-  "../../../apps/dashboard/src/lib/tokens/theme.css",
-  import.meta.url
-);
 const STATIC = "@theme static {";
 const OVERRIDES = "@layer theme {";
 const RESET = /^\s*--\*:\s*initial;\s*$/gmu;
@@ -32,7 +30,7 @@ function bodyAt(css: string, open: number): string {
 }
 
 export function themeVariablesCss(): string {
-  const css = readFileSync(THEME, "utf8");
+  const css = theme;
   const tokens = css.indexOf(STATIC);
   const overrides = css.indexOf(OVERRIDES);
   if (tokens < 0 || overrides < 0) {

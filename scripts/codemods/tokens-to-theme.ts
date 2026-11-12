@@ -13,8 +13,7 @@
  *      later ones stay as aliases; a token the theme already names by its own
  *      name (the `@theme inline reference` block) keeps it) and writes it to
  *      `tokens-to-theme.map.json`;
- *   B. writes the new theme.css, and the decision-page kit's tokens.css from
- *      the same declarations;
+ *   B. writes the new theme.css;
  *   C. renames every use of a mapped name in the dashboard's source and
  *      scripts, the packages and the repository's scripts, then applies the
  *      explicit EDITS below (the places a name is built from parts, and the
@@ -39,7 +38,6 @@ import { ROOT, repoFiles } from "../lib/repo-files";
 const TOKENS_DIR = "apps/dashboard/src/lib/tokens";
 const OLD_TOKENS = `${TOKENS_DIR}/tokens.css`;
 const THEME = `${TOKENS_DIR}/theme.css`;
-const KIT = "packages/hub/skills/decision-page/kit/tokens.css";
 const MAP = "scripts/codemods/tokens-to-theme.map.json";
 
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
@@ -65,7 +63,6 @@ const varOf = (value: string) => VAR_ONLY.exec(value.trim())?.[1];
 // ---- A and B ---------------------------------------------------------------
 
 interface Built {
-  kit: string;
   map: RenameMap;
   theme: string;
 }
@@ -219,18 +216,7 @@ function build(): Built {
     `@layer theme {\n${indent(overrideText)}\n}`,
   ].join("\n\n");
 
-  // The decision-page kit's tokens.css: the same declarations as plain CSS.
-  const plain = [
-    ...literalLines.filter((l) => !l.startsWith("--*")),
-    ...tokenLines,
-  ];
-  const kit = [
-    `/* The decision page kit's tokens: the declarations of ${THEME}'s
-   @theme static block, as plain CSS, last taken from it on 2026-11-12. */`,
-    `@layer theme {\n  :root {\n${indent(plain.join("\n"), 4)}\n  }\n\n${indent(overrideText)}\n}`,
-  ].join("\n");
-
-  return { kit, map, theme };
+  return { map, theme };
 }
 
 // ---- C ---------------------------------------------------------------------
@@ -716,15 +702,13 @@ const map = built?.map ?? (JSON.parse(read(MAP)) as RenameMap);
 if (built) {
   write(MAP, `${JSON.stringify(map, null, 2)}\n`);
   write(THEME, await formatText(THEME, built.theme));
-  write(KIT, await formatText(KIT, built.kit));
   changed.add(THEME);
-  changed.add(KIT);
 }
 
 const renameAll = renamer(map.renames);
 let renamed = 0;
 for (const path of repoFiles(ROOTS)) {
-  if (!eligible(path) || path === KIT) {
+  if (!eligible(path)) {
     continue;
   }
   const text = read(path);

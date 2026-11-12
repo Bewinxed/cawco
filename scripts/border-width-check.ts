@@ -32,11 +32,7 @@ const PLACES = [
   "packages/hub/skills/decision-page/kit",
 ];
 /** Generated from the tokens, which are read once, as tokens. */
-const GENERATED = new Set([
-  TOKENS,
-  "apps/dashboard/src/lib/tokens/theme.css",
-  "packages/hub/skills/decision-page/kit/tokens.css",
-]);
+const GENERATED = new Set([TOKENS, "apps/dashboard/src/lib/tokens/theme.css"]);
 const SOURCE = /\.(svelte|ts|tsx|css|html|js)$/u;
 
 const DECLARATION = /--([\w-]+)\s*:\s*([^;]*);/gu;
