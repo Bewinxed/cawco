@@ -316,6 +316,8 @@
   const openFile = $derived(here.searchParams.get("file"));
   let needsOnly = $state(false);
   let adding = $state(false);
+  /** Caw stands as the empty Routines page's mark (ViewRoutines `standing`). */
+  let routinesStand = $state(false);
   /** Moves the hub has not answered yet: the card already stands in its new column. */
   let moving = $state<Record<string, string>>({});
 
@@ -1783,19 +1785,27 @@
    * is drawn — its columns and the new task's form — once a task is being
    * added by hand. His draft in the board's place draws no seat of its
    * own, so he sits in the head over it: the page always shows the one
-   * seat that opens his panel.
+   * seat that opens his panel. The empty Routines page stands him as its
+   * mark (22d8c78d0); it says so, and the head draws no seat over it.
    */
-  const standing = $derived(
-    current === "decisions"
-      ? canTalk && !decisionPage && decisions.list?.pages.length === 0
-      : empty &&
-          canTalk &&
-          !adding &&
-          !(notSetUp && drafting) &&
-          !(setUpFresh && current === "board") &&
-          !current.startsWith("view:") &&
-          current !== "routines"
-  );
+  const standing = $derived.by(() => {
+    if (current === "decisions") {
+      return canTalk && !decisionPage && decisions.list?.pages.length === 0;
+    }
+    // Routines stands him as its empty page's mark (ViewRoutines), which
+    // only that page knows: its routines are its own read.
+    if (current === "routines") {
+      return routinesStand;
+    }
+    return (
+      empty &&
+      canTalk &&
+      !adding &&
+      !(notSetUp && drafting) &&
+      !(setUpFresh && current === "board") &&
+      !current.startsWith("view:")
+    );
+  });
   /** What the pane holds, as its layout reads it: a decision page fills it. */
   const paneView = $derived.by(() => {
     if (current !== "decisions") {
@@ -2168,6 +2178,7 @@
       {sitDown}
       starters={routineStarters}
       viewItems={viewItemsOf("routines")}
+      bind:standing={routinesStand}
     />
   {:else if value === "decisions"}
     <DecisionsView

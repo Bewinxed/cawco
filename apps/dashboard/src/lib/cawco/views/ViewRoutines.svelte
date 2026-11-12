@@ -149,11 +149,17 @@
     onform,
     lead,
     sitDown,
+    standing = $bindable(false),
   }: {
     /** The project's Caw: he stands as the empty page's mark (CawSeat at 80). */
     lead: CawLead;
     /** His seat's outro as he leaves the empty page for the head's (ProjectPage). */
     sitDown: (node: HTMLElement) => TransitionConfig;
+    /**
+     * Caw stands as the empty page's mark (CawSeat at 80): the page that
+     * holds this sits no seat of his in its head, so one seat is drawn.
+     */
+    standing?: boolean;
     /** The routine form opened: the page clears what would stand over it (a phone's Caw sheet). */
     onform?: () => void;
     /** The project: its id and its name. */
@@ -697,6 +703,14 @@
   let asking = $state(false);
   /** Create routine: the routine form over the ledger, or in the empty state's place. */
   let making = $state(false);
+  // The empty page's mark is his seat while nothing is being made by hand
+  // and he can start (routinesBody): the page holding it hears so.
+  $effect.pre(() => {
+    standing = empty && !making && canTalk;
+    return () => {
+      standing = false;
+    };
+  });
   function openForm() {
     making = true;
     asking = false;

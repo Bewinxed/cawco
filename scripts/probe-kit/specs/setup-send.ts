@@ -830,8 +830,10 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
     JSON.stringify({ live, reread })
   );
 
-  // His start over (his turn ended), the board stands him at 80; Routines
-  // seats him in the head.
+  // His start over (his turn ended), the board stands him at 80. The empty
+  // Routines page stands him at 80 too, as its mark (22d8c78d0), so its
+  // head draws no seat of his: one seat on the page (ProjectPage
+  // `standing`). Round 559 found both there, the head's and the 80.
   await page
     .locator('[data-slot="caw-80"] [data-slot="caw-seat"]')
     .waitFor({ timeout: 120_000 });
@@ -840,34 +842,67 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
       .locator('[data-slot="strip"]')
       .getByRole("tab", { name, exact: true })
       .first();
-  await tab("Routines").click();
   const head = page.locator('[data-slot="seat"] [data-slot="caw-seat"]');
-  await head.waitFor({ timeout: 10_000 });
+  /** His seats on the page, past any that is on its way out (Svelte makes a leaving node inert until its outro ends). */
+  const seats = () =>
+    page.evaluate(() => ({
+      stood: document.querySelectorAll('[data-slot="caw-80"]:not([inert])')
+        .length,
+      head: document.querySelectorAll(
+        '[data-slot="seat"] [data-slot="caw-seat"]'
+      ).length,
+    }));
+  await tab("Routines").click();
   await page
-    .locator('[data-slot="caw-80"]')
-    .waitFor({ state: "detached", timeout: 10_000 });
-  // Board, then Routines again inside the head's --dur-panel: the head's
-  // seat slides out and is called back as it went, the 80 lands and leaves.
+    .locator('[data-slot="caw-empty"] [data-slot="caw-80"]')
+    .waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(1000);
+  const onRoutines = await seats();
+  kit.check(
+    "7: the empty Routines page stands him at 80 as its mark, and its head draws no seat of his",
+    onRoutines.stood === 1 && onRoutines.head === 0,
+    JSON.stringify(onRoutines)
+  );
+  // The task form by hand seats him in the head (`standing`: not while a
+  // task is being added), and the 80 leaves.
+  await tab("Board").click();
+  await page
+    .locator('[data-slot="caw-80"] [data-slot="caw-seat"]')
+    .waitFor({ timeout: 10_000 });
+  const newTask = page.locator(
+    '[data-slot="strip"] button[aria-label="New task"]'
+  );
+  await newTask.click();
+  await head.waitFor({ timeout: 10_000 });
+  await page.waitForFunction(
+    () => document.querySelector('[data-slot="caw-80"]') === null,
+    undefined,
+    { timeout: 10_000 }
+  );
+  // The form shut, then opened again inside the head's --dur-panel: the
+  // head's seat slides out and is called back as it went, the 80 lands and
+  // leaves.
   const raced = await page.evaluate(async () => {
-    // The strip's tabs on screen, not the inert copies it measures with.
-    const tabOf = (name: string) =>
-      [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(
-        (one) =>
-          one.checkVisibility() &&
-          !one.closest('[inert], [aria-hidden="true"]') &&
-          one.querySelector('[data-slot="text"]')?.textContent?.trim() === name
-      );
-    const board = tabOf("Board");
-    const routines = tabOf("Routines");
-    board?.click();
+    // The new task form's Cancel: the form that holds its title field.
+    const cancel = [
+      ...(document
+        .querySelector('input[aria-label="Task title"]')
+        ?.closest("form")
+        ?.querySelectorAll<HTMLButtonElement>('[data-slot="actions"] button') ??
+        []),
+    ].find((one) => one.textContent?.trim() === "Cancel");
+    const again = document.querySelector<HTMLButtonElement>(
+      '[data-slot="strip"] button[aria-label="New task"]'
+    );
+    cancel?.click();
     await new Promise((done) => setTimeout(done, 60));
     // The 80 stood, and the head's seat was still on its way out.
     const crossed =
       document.querySelector('[data-slot="caw-80"]') !== null &&
       document.querySelector('[data-slot="seat"]') !== null;
-    routines?.click();
+    again?.click();
     await new Promise((done) => setTimeout(done, 1000));
-    return { tabs: Boolean(board && routines), crossed };
+    return { controls: Boolean(cancel && again), crossed };
   });
   /** The seat's `aria-expanded`, and whether his docked panel is drawn. */
   const state = async () => ({
@@ -882,7 +917,7 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
   }
   kit.check(
     "7: after his seat changed places, the head's seat at 1440 opens and closes his panel, drawn with it at every press",
-    raced.tabs &&
+    raced.controls &&
       raced.crossed &&
       new Set(presses.map((one) => one.expanded)).size === 2 &&
       presses.every((one) => one.drawn === (one.expanded === "true")),
