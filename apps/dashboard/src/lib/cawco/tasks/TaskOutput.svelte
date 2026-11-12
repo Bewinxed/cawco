@@ -234,12 +234,7 @@
           />
         </button>
       {:else if kind === "video" || kind === "audio"}
-        <MediaPlayer
-          class="group-data-[kind=video]:max-h-c-task-output-video-h"
-          {kind}
-          {name}
-          {src}
-        />
+        <MediaPlayer capped {kind} {name} {src} />
       {/if}
     </div>
   {/if}

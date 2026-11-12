@@ -46,7 +46,7 @@ export const LongConversation = {
   },
 };
 
-/** The newest version kept as an artifact: its place folds, its capsule opens the artifact. */
+/** The newest version kept as an artifact: it stays whole in the reply, its corner opening the artifact. */
 export const Kept = {
   args: {
     replies: [

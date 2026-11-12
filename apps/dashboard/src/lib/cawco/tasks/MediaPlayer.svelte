@@ -16,10 +16,16 @@
    * - A sound is that row alone, a raised capsule the reply's measure
    *   wide (content sits raised on the frame); replaced, its block stands
    *   as a still row in the recess (BlockAudio).
-   * - A clip's row is the panel's glass (BarGlass) floating over its
-   *   picture's foot, with Full screen last; it stands while the clip is
-   *   paused or the pointer moves over it, and fades while it plays. A
-   *   press on the picture plays or pauses it.
+   * - A clip stands in a frame that hugs it: the clip's own shape, as wide
+   *   as the clip is, never wider than its room (the block's size, the
+   *   screen), and with `capped` no taller than a task output's clip
+   *   (`c-task-output-video-h`): no bars beside or above it, no crop. Until
+   *   its metadata says its shape the frame stands 16:9 at its room's width.
+   *   The frame's edge is the house hairline at the frame's radius, drawn
+   *   over the picture at every width. Its row is the panel's glass
+   *   (BarGlass) floating inside the frame's foot, with Full screen last;
+   *   it stands while the clip is paused or the pointer moves over it, and
+   *   fades while it plays. A press on the picture plays or pauses it.
    *
    * One that can't play says why in the hub's words (media-problem.ts).
    */
@@ -38,7 +44,6 @@
     IconSoundLinear,
     IconSoundOffLinear,
   } from "#lib/icons.js";
-  import { cn } from "#lib/utils.js";
   import MediaButton from "./MediaButton.svelte";
   import "./media-elements";
   import type { PlayerElement } from "./media-elements";
@@ -48,15 +53,44 @@
     src,
     name,
     kind,
-    class: className,
+    capped = false,
   }: {
     src: string;
     /** What it is called where it fails: its file's name. */
     name: string;
     kind: "video" | "audio";
-    /** The picture's own sizing and edge (a clip's height cap, its outline). */
-    class?: string;
+    /** A clip no taller than a task output's (`c-task-output-video-h`), its width following. */
+    capped?: boolean;
   } = $props();
+
+  /** The clip's own size, once its metadata says it. */
+  let shape = $state<{ w: number; h: number } | null>(null);
+  $effect(() => {
+    track(src);
+    shape = null;
+  });
+  /** Reads the clip's own size off its metadata. */
+  const readsShape: Attachment<HTMLVideoElement> = (clip) =>
+    on(clip, "loadedmetadata", () => {
+      const { videoWidth: w, videoHeight: h } = clip;
+      shape = w > 0 && h > 0 ? { w, h } : null;
+    });
+  /**
+   * The frame's box: the clip's shape, as wide as the clip, its room or (capped)
+   * the cap's height at that shape allow, whichever is least; 16:9 at its
+   * room's width before the metadata comes.
+   */
+  const frame = $derived.by(() => {
+    if (!shape) {
+      return { ratio: "16 / 9", width: "100%" };
+    }
+    const { w, h } = shape;
+    const limits = ["100%", `${w}px`];
+    if (capped) {
+      limits.push(`calc(var(--c-task-output-video-h) * ${w} / ${h})`);
+    }
+    return { ratio: `${w} / ${h}`, width: `min(${limits.join(", ")})` };
+  });
 
   let problem = $state<string | null>(null);
   $effect(() => {
@@ -182,18 +216,23 @@
   <p class="m-0 type-meta text-status-fail-ink wrap-anywhere">{problem}</p>
 {:else if kind === "video"}
   <video-player class="contents" {@attach follows}>
+    <!-- The frame: the clip's shape and width (`frame`), its hairline an
+         edge drawn over the picture on the frame's own radius. -->
     <media-container
-      class="group/clip relative block overflow-clip rounded-sm bg-surface-recess"
+      class="group/clip relative block aspect-(--clip-ratio) w-(--clip-w) max-w-full overflow-clip rounded-sm bg-surface-recess after:pointer-events-none after:absolute after:inset-0 after:rounded-inherit after:border after:border-border-hairline"
+      style:--clip-ratio={frame.ratio}
+      style:--clip-w={frame.width}
       in:reveal
     >
       <!-- svelte-ignore a11y_media_has_caption: a file carries no caption track; the file is what there is -->
       <!-- biome-ignore lint/a11y/useMediaCaption: a file carries no caption track; the file is what there is -->
       <video
-        class={cn("block w-full", className)}
+        class="block size-full object-cover"
         playsinline
         preload="metadata"
         {src}
         {@attach whenFailed}
+        {@attach readsShape}
       ></video>
       <!-- A press on the picture plays or pauses it; a finger's tap shows the controls instead (the library's). -->
       <media-gesture type="tap" action="togglePaused" pointer="mouse"
@@ -224,10 +263,7 @@
          glass's do (design.css `concentric-row`), each marked by where it
          stands (placeItems). -->
     <media-container
-      class={cn(
-        "flex h-c-btn-h w-full min-w-0 items-center gap-c-bar-group-pad rounded-pill bg-surface-raised p-c-bar-group-pad shadow-tile outline-1 -outline-offset-1 outline-border-hairline concentric-row r-inset-c-bar-group-pad r-join-xs hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5",
-        className
-      )}
+      class="flex h-c-btn-h w-full min-w-0 items-center gap-c-bar-group-pad rounded-pill bg-surface-raised p-c-bar-group-pad shadow-tile outline-1 -outline-offset-1 outline-border-hairline concentric-row r-inset-c-bar-group-pad r-join-xs hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5"
       data-glass
       style:--r-outer="calc(var(--c-btn-h) / 2)"
       {@attach placeItems}

@@ -21,8 +21,12 @@
    *   fill: the page's background at --scrim-mix, no blur, so a long
    *   transcript of replaced blocks scrolls with no filter to redraw), and
    *   one capsule of glass on the veil says so and jumps to the newest.
-   * - `promoted`: the block moved into an artifact. The same fold and veil,
-   *   the capsule naming the artifact and opening it in the panel.
+   * - `promoted`: the block was kept as an artifact. It stays whole and live
+   *   as the newest draws (the owner's pin on MovedToArtifact: "moving a
+   *   panel to an artifact doesn't justify that it gets removed from the
+   *   block"); only its act changes, Keep as artifact giving way to Open
+   *   and the artifact's title, which opens the kept page in the panel. A
+   *   kept block a later version replaces folds as any replaced one does.
    *
    * It is as wide as what it shows, never wider (a Diagram hugs its
    * drawing), save a Table, which stands its room (its ledger asks no width
@@ -89,7 +93,7 @@
     onfreeze?: (drawn: Element) => void;
   } = $props();
 
-  const still = $derived(mode !== "latest");
+  const still = $derived(mode === "fossil");
 
   const sources = blockSourcesHere();
   provideBlockMedia({
@@ -103,8 +107,8 @@
 
   /** It doesn't parse into anything it can draw: it stands as the code it is. */
   let unparsed = $state(false);
-  /** Keep as artifact stands: a latest block, written whole and read. */
-  const keepShown = $derived(!(still || streaming || unparsed));
+  /** Its act stands (Keep as artifact, or Open once kept): a block not replaced, written whole and read. */
+  const actShown = $derived(!(still || streaming || unparsed));
   function parsed(result: ParseResult | null) {
     unparsed = !result?.root;
   }
@@ -225,25 +229,14 @@
       ></div>
       <div class="absolute inset-0 grid place-items-center">
         <BarGlass form="group">
-          {#if mode === "fossil"}
-            <BarItem
-              form="words"
-              label={transcriptWords.jumpToLatestVersion}
-              onclick={onjump}
-              tip={false}
-            >
-              {transcriptWords.jumpToLatestVersion}
-            </BarItem>
-          {:else}
-            <BarItem
-              form="words"
-              label={transcriptWords.openArtifact(artifact?.title ?? name)}
-              onclick={onopen}
-              tip={false}
-            >
-              {transcriptWords.openArtifact(artifact?.title ?? name)}
-            </BarItem>
-          {/if}
+          <BarItem
+            form="words"
+            label={transcriptWords.jumpToLatestVersion}
+            onclick={onjump}
+            tip={false}
+          >
+            {transcriptWords.jumpToLatestVersion}
+          </BarItem>
         </BarGlass>
       </div>
     </div>
@@ -272,17 +265,28 @@
          its pad bridges the step to the block, so the hover holds on the
          way up to it. There under a hover or focus on a desk, always under
          a finger. -->
-    {#if keepShown}
+    {#if actShown}
       <div
         class="absolute end-0 bottom-full pb-space-2 opacity-0 transition-opacity duration-(--dur-fade) group-hover/block:opacity-100 focus-within:opacity-100 coarse:opacity-100"
       >
         <BarGlass form="group">
-          <BarItem
-            aria-busy={keeping || undefined}
-            icon={IconArtifactPageLinear}
-            label={transcriptWords.keepAsArtifact}
-            onclick={onkeep}
-          />
+          {#if mode === "promoted"}
+            <BarItem
+              form="words"
+              label={transcriptWords.openArtifact(artifact?.title ?? name)}
+              onclick={onopen}
+              tip={false}
+            >
+              {transcriptWords.openArtifact(artifact?.title ?? name)}
+            </BarItem>
+          {:else}
+            <BarItem
+              aria-busy={keeping || undefined}
+              icon={IconArtifactPageLinear}
+              label={transcriptWords.keepAsArtifact}
+              onclick={onkeep}
+            />
+          {/if}
         </BarGlass>
       </div>
     {/if}

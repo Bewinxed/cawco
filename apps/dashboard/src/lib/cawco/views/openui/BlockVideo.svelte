@@ -86,7 +86,7 @@
     {#if still}
       <img
         alt={caption || name}
-        class="block h-auto w-full rounded-sm outline-1 -outline-offset-1 outline-image-outline"
+        class="block h-auto max-w-full rounded-sm outline-1 -outline-offset-1 outline-image-outline"
         data-slot="clip-still"
         src={still}
       />
@@ -102,12 +102,7 @@
     {/if}
   {:else}
     <div {@attach keepsStills}>
-      <MediaPlayer
-        class="max-h-c-task-output-video-h outline-1 -outline-offset-1 outline-image-outline"
-        kind="video"
-        {name}
-        {src}
-      />
+      <MediaPlayer kind="video" {name} {src} />
     </div>
   {/if}
   {#if caption}

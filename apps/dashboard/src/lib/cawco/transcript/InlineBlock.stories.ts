@@ -8,7 +8,8 @@
  * The media stories name their files as an agent does, a path in the
  * project's folder or on its machine, each served here from beside this
  * file (block-fixtures/): canvas captures of this block, the phone app's
- * paywall story, and a narration made with ElevenLabs for this story.
+ * paywall story, a narration made with ElevenLabs for this story, and the
+ * written reply's capture scrolled top to bottom as a wide clip.
  */
 
 import { madeWords } from "@cawco/core/words/made";
@@ -16,6 +17,7 @@ import cawTap from "./block-fixtures/caw-tap.webp?url";
 import mergeChecksPage from "./block-fixtures/merge-checks.html?raw";
 import paywallStory from "./block-fixtures/paywall-story.mp4?url";
 import releaseNarration from "./block-fixtures/release-narration.mp3?url";
+import replyScroll from "./block-fixtures/reply-scroll.mp4?url";
 import replyWriting from "./block-fixtures/reply-writing.png?url";
 import replyWritten from "./block-fixtures/reply-written.png?url";
 import InlineBlockReply from "./InlineBlockReply.svelte";
@@ -124,7 +126,7 @@ export const Updated = {
   },
 };
 
-/** The comparison moved into an artifact, which the agent keeps editing in the panel. */
+/** The comparison kept as an artifact: it stays in the reply, and its corner opens the page in the panel. */
 export const MovedToArtifact = {
   args: {
     mode: "promoted",
@@ -221,6 +223,7 @@ const FILES = {
   "/home/ana/.cawco/shots/caw-tap.webp": cawTap,
   [`${ASSETS}/paywall-story.mp4`]: paywallStory,
   [`${ASSETS}/release-narration.mp3`]: releaseNarration,
+  [`${ASSETS}/reply-scroll.mp4`]: replyScroll,
 };
 
 /** Two screenshots side by side: the reply while the agent wrote it, and once it was written. */
@@ -263,6 +266,21 @@ export const Video = {
     files: FILES,
     source: `root = Column([clip])
 clip = Video("${ASSETS}/paywall-story.mp4", "Paywall story, 10.8 seconds, no sound", "small")`,
+  },
+};
+
+/** A tall clip and a wide one in one reply: each frame takes its own clip's shape. */
+export const TallAndWideClips = {
+  args: {
+    name: "Two clips",
+    asked: "send the paywall story and the reply scrolling",
+    before: "The paywall story, and the finished reply scrolled top to bottom:",
+    after: "The story is the phone's shape; the scroll is a desk window's.",
+    files: FILES,
+    source: `root = Column([pair])
+pair = Row([story, scroll])
+story = Video("${ASSETS}/paywall-story.mp4", "Paywall story, 10.8 seconds", "small")
+scroll = Video("${ASSETS}/reply-scroll.mp4", "The reply scrolled, 8 seconds", "small")`,
   },
 };
 
