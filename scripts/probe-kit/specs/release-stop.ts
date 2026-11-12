@@ -55,9 +55,9 @@ const ROOT = resolve(import.meta.dir, "..", "..", "..");
 const POINT_MS = 240_000;
 /** How long a stopped release has to end: its groups' grace (release.ts STOP_GRACE_MS) and its clearing. */
 const STOP_MS = 300_000;
-/** The stand-in's record of a draft's create: `api --include --method POST --color-input - repos/<owner>/<repo>/releases`. */
+/** The stand-in's record of a draft's create: `api --include --method POST --input - repos/<owner>/<repo>/releases`. */
 const CREATE_CALL =
-  /--method POST --color-input - repos\/[^/\s]+\/[^/\s]+\/releases$/mu;
+  /--method POST --input - repos\/[^/\s]+\/[^/\s]+\/releases$/mu;
 
 /**
  * The gh stand-in: `gh api --include` as publish-release.ts asks GitHub's
@@ -86,7 +86,7 @@ for (let i = 1; i < argv.length; i++) {
   if (arg === "--include") continue;
   if (arg === "--method") { method = argv[++i]; continue; }
   if (arg === "-H") { i++; continue; }
-  if (arg === "--color-input") { input = argv[++i]; continue; }
+  if (arg === "--input") { input = argv[++i]; continue; }
   route = arg;
 }
 const answer = (status, text, body) => {
