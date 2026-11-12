@@ -172,7 +172,9 @@
    * The design's own width, px: the program's `width`, or the canvas's
    * widest story (as it says it, else as the page's media knows it) where
    * that is wider. Its frame stands at it, 1 CSS px per px; none, it takes the
-   * well's width.
+   * well's width. Only a frame stands at it: a line saying the piece can't be
+   * opened or is gone takes the card's width, never a picture's it no longer
+   * shows.
    */
   const picture = $derived.by(() => {
     const widths = [
@@ -180,7 +182,7 @@
       saidWidth ?? known?.w ?? 0,
     ];
     const widest = Math.max(...widths);
-    return widest > 0 ? widest : undefined;
+    return framed && widest > 0 ? widest : undefined;
   });
   /** A page taller than its frame: more is above or below what it shows (the edge fade's cue). */
   let more = $state({ above: false, below: false });

@@ -21,6 +21,10 @@
    * 2nd popover, connected"). The two meet square, and the card's clip
    * (HangCard's: nothing above the glass's foot, its shadow's room each
    * other side) opens on the leading side to hold it.
+   *
+   * Both wear the panel's drop (HangCard `depth`): the glass is narrower
+   * than the card, so past its sides the clip at the card's top stands in
+   * open air, and the overlay's 48px drop ended there in a hard line.
    */
   import type { ComponentProps, Snippet } from "svelte";
   import { popOut } from "#lib/cawco/motion/pop.svelte.js";
@@ -67,6 +71,7 @@
     className
   )}
   customAnchor={glass.node}
+  depth="panel"
   side="bottom"
   sideOffset={0}
   bind:joined={card.joined}
@@ -85,7 +90,7 @@
     <div
       aria-label={besideLabel}
       class={cn(
-        floatingSurface({ motion: "pop" }),
+        floatingSurface({ motion: "pop", depth: "panel" }),
         "absolute end-full top-0 flex max-h-full min-h-0 flex-col overflow-hidden rounded-e-none p-0"
       )}
       data-side="left"

@@ -238,6 +238,14 @@
     /** It hangs from the top bar's glass. */
     glass?: boolean;
     /**
+     * Its drop (floatingSurface's `depth`): the overlay's, or `panel`, the
+     * ladder's md, for a card hung from an anchor narrower than itself (a
+     * bar's glass, BarCard), where the clip at its top would cut the
+     * overlay's 48px drop into a hard line past the anchor's sides; md's
+     * rises 7px at most above the card, faint where the clip ends it.
+     */
+    depth?: "overlay" | "panel";
+    /**
      * The face it frames: the glass card's (GlassCard: Caw's panel, the
      * machines, Jump or Files, each its own width, padding and height), or
      * the session card's (`details`).
@@ -277,6 +285,7 @@
     as: Content = PopoverContent,
     flared = true,
     glass = false,
+    depth = "overlay",
     frame,
     surface,
     tab = false,
@@ -591,7 +600,7 @@
   {...menuLook}
   {...rest}
   class={cn(
-    floatingSurface({ motion: "hang", edge: "drawn" }),
+    floatingSurface({ motion: "hang", edge: "drawn", depth }),
     hangCardVariants({ tab, rises, glass, surface }),
     frame && FRAMES[frame],
     className
