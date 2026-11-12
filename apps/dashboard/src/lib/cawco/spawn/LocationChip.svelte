@@ -75,9 +75,9 @@
 >
   {#snippet trigger()}
     {#if mode === "repo"}
-      <FolderGit class="text-hue-amber-500" />
+      <FolderGit class="text-mark-3" />
     {:else}
-      <FolderOpen class="text-hue-amber-500" />
+      <FolderOpen class="text-mark-3" />
     {/if}
     <span
       data-slot="chip-label"

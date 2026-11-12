@@ -43,8 +43,7 @@
     "data-[size=default]:h-[calc(var(--spacing-icon-md)+2px)] data-[size=sm]:h-[calc(var(--spacing-icon-sm)+2px)]",
     "data-[size=default]:w-[calc(2*var(--spacing-icon-md))] data-[size=sm]:w-[calc(2*var(--spacing-icon-sm))]",
     "data-disabled:cursor-not-allowed data-checked:bg-action-solid",
-    "data-unchecked:bg-input data-disabled:opacity-50",
-    "dark:data-unchecked:bg-input/80",
+    "data-unchecked:bg-border-row-outline data-disabled:opacity-50",
     "dark:aria-invalid:border-error-9/50",
     switchVariants({ align }),
     className

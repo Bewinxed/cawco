@@ -62,19 +62,6 @@ interface Pair {
   source: string;
 }
 
-const TOOLS = [
-  "run",
-  "mcp",
-  "search",
-  "ask",
-  "web",
-  "read",
-  "agent",
-  "edit",
-  "write",
-  "skill",
-  "plan",
-] as const;
 const IDENTITY_HUES = [55, 85, 115, 145, 175, 205, 235, 265, 295, 330];
 const CODE_INKS = [
   "code-ink",
@@ -98,7 +85,7 @@ const S = {
   action: "DESIGN.md, Coral Action",
   brandInk: "DESIGN.md, Brand ink and wash",
   selected: "DESIGN.md, Selected",
-  chosen: "DESIGN.md, Chosen option; token chip-chosen-bg",
+  chosen: "DESIGN.md, Chosen option; tokens chip-chosen-ink, action-solid",
   inkSolid: "DESIGN.md, Ink-solid",
   chips: "DESIGN.md, Tertiary: status (each chip 4.5:1)",
   syntax: "DESIGN.md, Syntax; token code-ink",
@@ -106,7 +93,8 @@ const S = {
   inks: "DESIGN.md, Inks",
   subtle: "DESIGN.md, Inks; token ink-subtle",
   identity: "DESIGN.md, Project identity; token identity-ink",
-  rowOutline: "DESIGN.md, Borders are graded; token border-row-outline",
+  rowOutline:
+    "DESIGN.md, Borders are graded; token border-row-outline, a form field's edge (non-text 3:1, WCAG 2.2 SC 1.4.11)",
   rim: "session tabs' surface brief (PaneTabs), Status rim; token tab-rim-mix-chosen/-idle",
   recall: "the recall wheel's rows (Composer), text 4.5:1 (WCAG 2.2 SC 1.4.3)",
   hairline:
@@ -190,9 +178,9 @@ const PAIRS: Pair[] = [
     source: S.action,
   })),
   {
-    label: "chip-chosen-ink on chip-chosen-bg",
+    label: "chip-chosen-ink on action-solid",
     fg: "chip-chosen-ink",
-    bg: ["chip-chosen-bg"],
+    bg: ["action-solid"],
     floor: TEXT,
     source: S.chosen,
   },
@@ -278,7 +266,7 @@ const PAIRS: Pair[] = [
     floor: { light: 1.36, dark: 1.43 },
     source: "DESIGN.md, Borders are graded; token border-control",
   },
-  ...["surface-raised", "surface-recess"].map((bg) => ({
+  ...["surface-page", "surface-raised", "surface-recess"].map((bg) => ({
     label: `border-row-outline on ${bg}`,
     fg: "border-row-outline",
     bg: [bg],
@@ -328,7 +316,7 @@ const PAIRS: Pair[] = [
   ...[
     "status-live-glyph",
     "ink-muted",
-    ...TOOLS.map((t) => `tool-${t}`),
+    ...["mark-2", "mark-5", "mark-6", "mark-7", "mark-8"],
   ].flatMap((ink) =>
     [
       "surface-page",

@@ -291,7 +291,7 @@
 
 <section data-slot="model" class="grid gap-space-2">
   {#if !runtime}
-    <SectionHeader hue="var(--color-hue-cyan-500)" icon={Cpu} {label}>
+    <SectionHeader hue="var(--color-mark-6)" icon={Cpu} {label}>
       {#snippet right()}
         {#if account}
           <span class="flex min-w-0 justify-end">

@@ -183,7 +183,7 @@
   {#if policy}
     <div data-slot="group" class="flex flex-col gap-space-2">
       <SectionHeader
-        hue="var(--color-hue-blue-500)"
+        hue="var(--color-mark-6)"
         icon={IconDownload}
         label="Channel"
       >
@@ -262,7 +262,7 @@
       class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
     >
       <SectionHeader
-        hue="var(--color-hue-green-500)"
+        hue="var(--color-mark-4)"
         icon={IconMonitor}
         label="Machines"
       >

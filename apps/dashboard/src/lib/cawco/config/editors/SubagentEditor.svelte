@@ -35,7 +35,7 @@
   let { agent }: { agent: FleetAgent | null } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-hue-orange-500)";
+  const HUE = "var(--color-mark-2)";
 
   /** The docs' own shape: two required fields, then a role line and its rules. */
   const TEMPLATE = `---

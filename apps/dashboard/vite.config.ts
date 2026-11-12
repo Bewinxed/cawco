@@ -72,9 +72,7 @@ const HUB_SOCKET = /^\/ws(?:[/?]|$)/u;
  * the phone board re-wrapped and moved 20px (0.027 CLS), and no fallback
  * face matches the UI face's widths. app.html starts their decode before
  * the body is parsed. No other font is inlined, whatever its size: the
- * other pieces, Fredoka and KaTeX's load by URL when a page draws them
- * (under Vite's 4 KB default, Fredoka's 2.7 KB rode in every page's
- * stylesheet). Every other asset keeps Vite's limit.
+ * other pieces, KaTeX's load by URL when a page draws them. Every other asset keeps Vite's limit.
  */
 const firstPaint = new Set<string>();
 const FONT_FILE = /\.(?:woff2?|ttf|otf)$/u;
@@ -99,8 +97,8 @@ const houseFaces = (): Plugin => ({
  * a stylesheet's `url()` is not an import. In a CawCo workspace bun links every
  * package from one shared store (`…/links/<pkg>@<version>-<hash>/node_modules/
  * <pkg>`), outside the clone, so the faces app.css names answered 403 and the
- * page drew in the fallback face. The store is read off where the dashboard's
- * own face package (Fredoka's) resolves; in a normal checkout that is `node_modules/.bun`
+ * page drew in the fallback face. The store is read off where a dashboard
+ * dependency (@xyflow/svelte) resolves; in a normal checkout that is `node_modules/.bun`
  * under the workspace root, already allowed, and nothing is added. A Linux
  * workspace's root `node_modules` is itself a link into that cache (agent
  * workspace-modules.ts), holding the packages the store cannot: where it
@@ -109,7 +107,7 @@ const houseFaces = (): Plugin => ({
 const SERVED_DIRS = (() => {
   const workspaceRoot = searchForWorkspaceRoot(process.cwd());
   const face = realpathSync(
-    join(import.meta.dirname, "node_modules/@fontsource/fredoka")
+    join(import.meta.dirname, "node_modules/@xyflow/svelte")
   );
   const linkDir = face.slice(0, face.lastIndexOf("/node_modules/"));
   const store = dirname(linkDir);
@@ -645,7 +643,6 @@ export default defineConfig(({ command }) => {
       // refuses a directory import (ERR_UNSUPPORTED_DIR_IMPORT) where vite's
       // resolver follows it. Bundled, the server never resolves them at all.
       noExternal: [
-        "@fontsource/fredoka",
         "@xyflow/svelte",
         "virtua",
         "@hugeicons/svelte",

@@ -37,14 +37,14 @@
       id: "cockpit",
       name: "cockpit",
       path: "~/code/cockpit",
-      hue: "var(--color-hue-amber-500)",
+      hue: "var(--color-mark-3)",
       machineId: "studio",
     },
     {
       id: "site",
       name: "site",
       path: "~/code/site",
-      hue: "var(--color-hue-cyan-500)",
+      hue: "var(--color-mark-6)",
       machineId: "studio",
     },
   ];
@@ -98,7 +98,7 @@
           type="button"
         >
           <MachineRow
-            hue="var(--color-hue-cyan-500)"
+            hue="var(--color-mark-6)"
             icon={Server}
             ink={row.on}
             meta={row.meta}

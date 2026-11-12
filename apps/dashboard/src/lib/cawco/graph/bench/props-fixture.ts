@@ -161,7 +161,7 @@ export const TASK_CARD: PropMeta[] = [
     options: ["radius-sm", "radius-md", "radius-lg"],
   }),
   prop("titleFont", "token-font", "TokenFont", {
-    options: ["font-sans", "font-display", "font-mono"],
+    options: ["font-sans", "font-wordmark", "font-mono"],
   }),
   prop("onmove", "function", "(column: Column) => void"),
   prop("badge", "slot", "Snippet<[]>"),

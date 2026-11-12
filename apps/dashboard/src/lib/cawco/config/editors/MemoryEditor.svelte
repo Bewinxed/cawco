@@ -71,7 +71,7 @@
   let { path }: { path: string } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-hue-blue-600)";
+  const HUE = "var(--color-mark-6)";
   const LATEST = 5;
   const main = untrack(() => path === MAIN);
 

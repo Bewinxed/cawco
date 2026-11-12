@@ -46,7 +46,7 @@
   class={cn(
     "group/native-select relative isolate w-fit rounded-md has-[select:disabled]:opacity-50",
     "has-[select:focus-visible]:outline-(length:--focus-ring-width) has-[select:focus-visible]:outline-focus-ring has-[select:focus-visible]:outline-solid has-[select:focus-visible]:outline-offset-(--focus-ring-inset)",
-    "before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-control before:bg-surface-raised before:shadow-xs before:transition-control",
+    "before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-row-outline before:bg-surface-raised before:shadow-xs before:transition-control",
     "has-[select[aria-invalid=true]]:before:border-error-9 dark:has-[select[aria-invalid=true]]:before:border-error-9/50",
     nativeSelectVariants({ measure }),
     className

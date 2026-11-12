@@ -27,14 +27,14 @@
       name: spawnWords.context.full,
       desc: spawnWords.context.fullDesc,
       icon: Layers,
-      hue: "var(--color-hue-blue-500)",
+      hue: "var(--color-mark-6)",
     },
     {
       value: true,
       name: spawnWords.context.clean,
       desc: spawnWords.context.cleanDesc,
       icon: Leaf,
-      hue: "var(--color-hue-green-500)",
+      hue: "var(--color-mark-4)",
     },
   ];
 </script>

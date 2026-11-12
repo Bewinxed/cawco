@@ -3,13 +3,9 @@
  * `bun scripts/codemods/theme-unify.ts`: one token for each job in the
  * dashboard's theme.css. Safe to run twice (the second run changes nothing).
  *
- *   1. Merges: every use of the left token becomes the right one, then the
- *      left is deleted. A use is the name as `--name` (every scan root of
- *      theme-prune.ts, and theme.css's own reads), a class Tailwind compiles
- *      to a rule that reads the token (its suffix becomes the right token's:
- *      `shadow-xl` is `shadow-overlay`), and the name written bare inside
- *      quotes (a list of token names). A merge whose left token is built from
- *      parts by the code (`--color-${section.hue}`) is not made but listed.
+ *   1. Merges (lib/token-merge.ts): every use of the left token becomes the
+ *      right one, then the left is deleted. A merge whose left token is built
+ *      from parts by the code (`--color-${section.hue}`) is not made but listed.
  *   2. Values: the status glyphs, the keyword colour, the code ring, the
  *      `--type-*` shorthands' line-heights, the caps size and two trackings.
  *   3. Colours nothing reads: the listed tokens that no `--name`, class,
@@ -19,52 +15,35 @@
  * whole-name rename (a custom property's name whole, never part of a longer
  * one); the class reading is scripts/codemods/lib/tailwind-reads.ts.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import Color from "colorjs.io";
-import postcss, {
-  type ChildNode,
-  type Container,
-  type Declaration,
-} from "postcss";
-import { CssEvaluator, type CssToken } from "../../packages/hub/src/design-css";
-import { ROOT, repoFiles } from "../lib/repo-files";
-import { CANDIDATE, classReads, formsOf } from "./lib/tailwind-reads";
+import postcss from "postcss";
+import { ROOT } from "../lib/repo-files";
+import { classReads } from "./lib/tailwind-reads";
+import { contrastBetween, evaluatorOver } from "./lib/theme-measure";
+import {
+  CONTRAST,
+  format,
+  loadTexts,
+  read,
+  THEME,
+  write,
+} from "./lib/theme-tree";
+import {
+  applyMerges,
+  declsOf,
+  deleteDeclsIn,
+  flat,
+  type Merge,
+  m,
+  NAME,
+  planMerges,
+  setValueIn,
+  themeNamesIn,
+  valueIn,
+} from "./lib/token-merge";
 
-const THEME = "apps/dashboard/src/lib/tokens/theme.css";
-const CONTRAST = "scripts/token-contrast-check.ts";
-const SCAN = [
-  "apps/dashboard/src",
-  "apps/dashboard/scripts",
-  ...readdirSync(join(ROOT, "packages"))
-    .map((member) => `packages/${member}/src`)
-    .filter((dir) => existsSync(join(ROOT, dir))),
-  "packages/hub/skills",
-  "site",
-  "scripts",
-];
-/** Never renamed: this migration's own files, other projects' tokens, vendored files. */
-const SKIP = (path: string) =>
-  path === THEME ||
-  path.startsWith("scripts/codemods/") ||
-  path === "packages/hub/src/design-tokens.ts" ||
-  /(^|\/)dtcg-[^/]*$/u.test(path) ||
-  /(^|\/)node_modules\//u.test(path);
-
-const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
-const write = (path: string, text: string) =>
-  writeFileSync(join(ROOT, path), text);
-
-const texts = new Map<string, string>();
-for (const path of repoFiles(SCAN)) {
-  if (SKIP(path)) {
-    continue;
-  }
-  const text = read(path);
-  if (!text.includes("\0")) {
-    texts.set(path, text);
-  }
-}
+const texts = loadTexts();
 const changed = new Set<string>();
 const report: string[] = [];
 const say = (line: string) => {
@@ -72,8 +51,6 @@ const say = (line: string) => {
   console.log(line);
 };
 
-/** A custom property's name, whole: not part of a longer one (tokens-to-theme.ts). */
-const NAME = /(?<![\w-])--[\w-]+/gu;
 const READ = /var\(\s*(--[\w-]*[\w])(?![\w-])/gu;
 /** `--x` written where it is declared. */
 const DECLARED = /(?<![\w-])(--[\w-]+)(?:\s*[:=]|["'`]\s*,)/gu;
@@ -82,27 +59,7 @@ const DECLARED = /(?<![\w-])(--[\w-]+)(?:\s*[:=]|["'`]\s*,)/gu;
 
 let themeText = read(THEME);
 const themeRoot = () => postcss.parse(themeText);
-const declsOf = (root: postcss.Root) => {
-  const out: Declaration[] = [];
-  root.walkDecls((d) => {
-    if (d.prop.startsWith("--")) {
-      out.push(d);
-    }
-  });
-  return out;
-};
-/** The variables of the `@theme` blocks, by name. */
-const themeNames = (text: string) => {
-  const names = new Set<string>();
-  postcss.parse(text).walkAtRules("theme", (theme) => {
-    for (const n of theme.nodes ?? []) {
-      if (n.type === "decl" && n.prop.startsWith("--")) {
-        names.add(n.prop);
-      }
-    }
-  });
-  return names;
-};
+const themeNames = themeNamesIn;
 /** The `var(--x)` reads of a name nothing declares, counted as tokens-to-theme.proof.ts counts them (its `dangling`, over the sources it reads), over the tree as it stands. */
 const countable = (path: string) =>
   [
@@ -138,94 +95,15 @@ const dangling = () => {
   };
 };
 const danglingBefore = dangling();
-/** A value on one line, as the formatter may have wrapped it. */
-const flat = (value: string) =>
-  value.replace(/\s+/gu, " ").replace(/\( /gu, "(").replace(/ \)/gu, ")");
 const variablesBefore = themeNames(themeText).size;
-const valueFor = (name: string) =>
-  declsOf(themeRoot()).find((d) => d.prop === name)?.value;
-const commentsAbove = (node: ChildNode): ChildNode[] => {
-  const out: ChildNode[] = [];
-  for (let at = node.prev(); at?.type === "comment"; at = at.prev()) {
-    out.push(at);
-  }
-  return out;
-};
-const prune = (container: Container) => {
-  if (container.nodes?.length === 0 && container.parent) {
-    const { parent } = container;
-    container.remove();
-    prune(parent as Container);
-  }
-};
+const valueFor = (name: string) => valueIn(themeText, name);
 /** Deletes every declaration of the names (and the comments above each) from the theme text. */
 const deleteDecls = (names: Set<string>) => {
-  const root = themeRoot();
-  for (const d of declsOf(root)) {
-    if (names.has(d.prop)) {
-      const parent = d.parent as Container;
-      for (const c of commentsAbove(d)) {
-        c.remove();
-      }
-      d.remove();
-      prune(parent);
-    }
-  }
-  themeText = root.toString();
+  themeText = deleteDeclsIn(themeText, names);
 };
 /** Sets a declaration's value everywhere it is declared (the base and any override). */
 const setValue = (name: string, value: string) => {
-  const root = themeRoot();
-  for (const d of declsOf(root)) {
-    if (d.prop === name) {
-      d.value = value;
-    }
-  }
-  themeText = root.toString();
-};
-
-/**
- * A list entry (`"--duration-panel",` or `"--duration-panel": "Grow",`) the
- * rename made a second copy of its neighbour: it is dropped, the first stays.
- */
-const ENTRY = /^\s*(?:"([^"]+)"|'([^']+)'|`([^`]+)`)(?:\s*:.*)?,?\s*$/u;
-const entryKey = (line: string) => {
-  const hit = ENTRY.exec(line);
-  return hit ? (hit[1] ?? hit[2] ?? hit[3]) : undefined;
-};
-const dedupeEntries = (was: string, now: string) => {
-  const a = was.split("\n");
-  const b = now.split("\n");
-  if (a.length !== b.length) {
-    return now;
-  }
-  const drop = new Set<number>();
-  b.forEach((line, i) => {
-    const key = a[i] === line ? undefined : entryKey(line);
-    if (key === undefined) {
-      return;
-    }
-    // The run of entries this line stands in.
-    let from = i;
-    while (from > 0 && entryKey(b[from - 1] as string) !== undefined) {
-      from -= 1;
-    }
-    let to = i;
-    while (to < b.length - 1 && entryKey(b[to + 1] as string) !== undefined) {
-      to += 1;
-    }
-    for (let j = from; j <= to; j += 1) {
-      if (
-        j !== i &&
-        entryKey(b[j] as string) === key &&
-        (j < i || a[j] === b[j])
-      ) {
-        drop.add(i);
-        return;
-      }
-    }
-  });
-  return b.filter((_, i) => !drop.has(i)).join("\n");
+  themeText = setValueIn(themeText, name, value);
 };
 
 /** Places a token is named that the rename cannot reach (a label, a list): in `file`, `find` becomes `replace`, where it is still there. */
@@ -292,19 +170,6 @@ const EDITS: Edit[] = [
 
 // ---- 1. merges --------------------------------------------------------------
 
-/** Left merged into right. `swap`: the right is deleted and the left takes its name. */
-interface Merge {
-  /** Only when both are declared with one value. */
-  ifEqual?: boolean;
-  left: string;
-  right: string;
-  swap?: boolean;
-}
-const m = (left: string, right: string, rest: Partial<Merge> = {}): Merge => ({
-  left,
-  right,
-  ...rest,
-});
 const MERGES: Merge[] = [
   m("--duration-rail", "--duration-morph"),
   m("--duration-mark-hold", "--duration-fade"),
@@ -340,207 +205,12 @@ const MERGES: Merge[] = [
   m("--color-meter-over", "--color-error-9"),
 ];
 
-/** The eight Tailwind-palette colours, each with the mark step nearest in OKLCH hue. */
-const HUE = /oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)/u;
-const hueOf = (css: string, half: 0 | 1 = 0) =>
-  Number([...css.matchAll(new RegExp(HUE, "gu"))][half]?.[3]);
-const circular = (a: number, b: number) => {
-  const d = Math.abs(a - b) % 360;
-  return Math.min(d, 360 - d);
-};
-const hueMap = (() => {
-  const marks = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({
-    name: `--color-mark-${n}`,
-    hue: hueOf(valueFor(`--color-mark-${n}`) ?? ""),
-  }));
-  const out: { hue: string; angle: number; mark: string }[] = [];
-  for (const d of declsOf(themeRoot())) {
-    if (
-      d.prop.startsWith("--color-hue-") &&
-      !out.some((o) => o.hue === d.prop)
-    ) {
-      const angle = hueOf(d.value);
-      const nearest = marks.reduce((a, b) =>
-        circular(b.hue, angle) < circular(a.hue, angle) ? b : a
-      );
-      out.push({ angle, hue: d.prop, mark: nearest.name });
-    }
-  }
-  return out;
-})();
-
-const merges: Merge[] = [];
-{
-  const root = themeRoot();
-  const declared = new Set(declsOf(root).map((d) => d.prop));
-  for (const merge of MERGES) {
-    if (!declared.has(merge.left)) {
-      say(`merge ${merge.left} -> ${merge.right}: already gone, skipped`);
-      continue;
-    }
-    if (!(merge.swap || declared.has(merge.right))) {
-      throw new Error(
-        `${merge.right}: not declared (the target of ${merge.left})`
-      );
-    }
-    if (merge.ifEqual) {
-      const same = (name: string) =>
-        declsOf(root)
-          .filter((d) => d.prop === name)
-          .map((d) => flat(d.value))
-          .join("|");
-      if (same(merge.left) !== same(merge.right)) {
-        say(
-          `merge ${merge.left} -> ${merge.right}: left as it is, the values differ (${same(merge.left)} against ${same(merge.right)})`
-        );
-        continue;
-      }
-    }
-    merges.push(merge);
-  }
-}
-const hueTokens = hueMap.filter((h) => themeNames(themeText).has(h.hue));
-for (const h of hueTokens) {
-  say(
-    `hue ${h.hue} (${h.angle.toFixed(1)}deg) -> ${h.mark}: NOT merged, see the report`
-  );
-}
-
-if (merges.length > 0) {
-  // The classes that read a left token, with the class that reads its right.
-  const { keysOf, readsOf } = await classReads(texts);
-  const nsOf = (key: string) => key.slice(2).split("-")[0] as string;
-  const suffixOf = (key: string) => key.slice(`--${nsOf(key)}-`.length);
-  const byLeft = new Map(merges.map((x) => [x.left, x]));
-  const houseUtilities = new Set(
-    [themeText, ...texts.values()].flatMap((css) =>
-      [...css.matchAll(/@utility\s+([\w-]+)/gu)].map((u) => u[1] as string)
-    )
-  );
-  const classMap = new Map<string, { to: string; left: string }>();
-  const unhandled: string[] = [];
-  for (const [candidate, keys] of readsOf) {
-    const lefts = [...keys].filter((k) => byLeft.has(k));
-    if (lefts.length === 0) {
-      continue;
-    }
-    if (lefts.length > 1) {
-      unhandled.push(`${candidate} reads ${lefts.join(" and ")}`);
-      continue;
-    }
-    const left = lefts[0] as string;
-    const { right } = byLeft.get(left) as Merge;
-    // A class that holds the name itself (`bg-(--color-x)`, `[--x:var(--color-y)]`) is the whole-name rename's.
-    if ([...candidate.matchAll(NAME)].some((n) => n[0] === left)) {
-      continue;
-    }
-    const sl = suffixOf(left);
-    const at = new RegExp(
-      `-${sl.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?=[/!]|$)`,
-      "u"
-    );
-    const found = [...candidate.matchAll(new RegExp(at, "gu"))].at(-1);
-    if (!found || found.index === undefined) {
-      // A house utility (`@utility field-edge`) reads the token through a var(): the theme's own rename moves it.
-      if (houseUtilities.has(candidate)) {
-        continue;
-      }
-      unhandled.push(`${candidate} reads ${left}, but ${sl} is not its suffix`);
-      continue;
-    }
-    const to =
-      candidate.slice(0, found.index) +
-      `-${suffixOf(right)}` +
-      candidate.slice(found.index + found[0].length);
-    // A class compiled once is cached and asks the theme nothing the second time.
-    const now = readsOf.get(to) ?? keysOf(to);
-    if (!now.has(right) || now.has(left)) {
-      unhandled.push(`${candidate} -> ${to} does not read ${right} alone`);
-      continue;
-    }
-    classMap.set(candidate, { left, to });
-  }
-  if (unhandled.length > 0) {
-    throw new Error(
-      `classes the rewrite cannot move:\n  ${unhandled.join("\n  ")}`
-    );
-  }
-
-  const renames: Record<string, string> = Object.fromEntries(
-    merges.map((x) => [x.left, x.right])
-  );
-  const moved = new Map<
-    string,
-    { names: number; classes: number; bare: number }
-  >(merges.map((x) => [x.left, { bare: 0, classes: 0, names: 0 }]));
-  const tally = (left: string) =>
-    moved.get(left) as { names: number; classes: number; bare: number };
-  /** A color token written bare inside quotes (a list of token names): `"ink-stat"`. */
-  const bare = new Map<string, string>();
-  for (const x of merges) {
-    if (nsOf(x.left) === "color") {
-      bare.set(suffixOf(x.left), x.left);
-    }
-  }
-  const BARE = /(?<=["'`]|color\.)([a-z][a-z0-9-]*)(?=["'`])/gu;
-
-  for (const [path, text] of texts) {
-    let next = text.replace(CANDIDATE, (raw) => {
-      for (const form of formsOf(raw)) {
-        const hit = classMap.get(form);
-        if (hit) {
-          tally(hit.left).classes += 1;
-          return raw.replace(form, hit.to);
-        }
-      }
-      return raw;
-    });
-    next = next.replace(NAME, (name) => {
-      const to = renames[name];
-      if (to) {
-        tally(name).names += 1;
-      }
-      return to ?? name;
-    });
-    next = next.replace(BARE, (word) => {
-      const left = bare.get(word);
-      if (!left) {
-        return word;
-      }
-      tally(left).bare += 1;
-      return suffixOf((byLeft.get(left) as Merge).right);
-    });
-    next = dedupeEntries(text, next);
-    if (next !== text) {
-      texts.set(path, next);
-      write(path, next);
-      changed.add(path);
-    }
-  }
-
-  // The theme: the left tokens go (the right of a swap too, its name taken by
-  // the left), then every read of a left, in values and comments, is the right.
-  const swapped = new Set(merges.filter((x) => x.swap).map((x) => x.left));
-  const gone = new Set(merges.flatMap((x) => (x.swap ? [x.right] : [x.left])));
-  deleteDecls(gone);
-  // Reads of a left inside the theme (its own declaration aside), counted before the rename.
-  const themeReads = new Map<string, number>();
-  for (const n of themeText.matchAll(NAME)) {
-    if (renames[n[0]]) {
-      themeReads.set(n[0], (themeReads.get(n[0]) ?? 0) + 1);
-    }
-  }
-  themeText = themeText.replace(NAME, (name) => renames[name] ?? name);
-
-  for (const x of merges) {
-    const t = tally(x.left);
-    const inTheme =
-      (themeReads.get(x.left) ?? 0) - (swapped.has(x.left) ? 1 : 0);
-    say(
-      `merge ${x.left} -> ${x.right}${x.swap ? " (stat's value under hairline's name)" : ""}: ${t.names + inTheme} uses moved (${t.names} as a name in the sources, ${inTheme} as a read in theme.css), ${t.classes} classes, ${t.bare} bare names`
-    );
-  }
-}
+const merges = planMerges(themeText, MERGES, say);
+themeText = await applyMerges(
+  { changed, say, texts, write },
+  themeText,
+  merges
+);
 
 // ---- 2. values --------------------------------------------------------------
 
@@ -578,66 +248,13 @@ const oklch = (h: { l: string; c: string; h: string }) =>
 }
 
 // The measure the contrast check makes, over the theme as it stands.
-const refs = (value: string) => value.replace(/var\(--([\w-]+)\)/gu, "{$1}");
-const evaluatorOver = (overrides: Record<string, string>) => {
-  const light = new Map<string, string>();
-  const dark = new Map<string, string>();
-  postcss.parse(themeText).walkDecls((decl) => {
-    const rule = decl.parent;
-    if (!decl.prop.startsWith("--")) {
-      return;
-    }
-    if (
-      rule?.type === "atrule" &&
-      rule.name === "theme" &&
-      rule.params === "static"
-    ) {
-      light.set(decl.prop.slice(2), refs(decl.value));
-    } else if (
-      rule?.type === "rule" &&
-      rule.selectors.includes('[data-scheme="dark"]')
-    ) {
-      dark.set(decl.prop.slice(2), refs(decl.value));
-    }
-  });
-  for (const [k, v] of Object.entries(overrides)) {
-    light.set(k, v);
-    dark.delete(k);
-  }
-  const lookup = (path: string): CssToken | undefined => {
-    const leaf = path.split(".").at(-1) ?? path;
-    for (const name of [`color-${leaf}`, leaf]) {
-      const css = light.get(name);
-      if (css !== undefined) {
-        const variant = dark.get(name);
-        return {
-          css,
-          name,
-          variants: variant === undefined ? {} : { dark: variant },
-        };
-      }
-    }
-  };
-  return new CssEvaluator(lookup, new Set(["dark"]));
-};
-const clip = (c: Color) =>
-  new Color(
-    "srgb",
-    c
-      .to("srgb")
-      .coords.map((v) => Math.min(1, Math.max(0, Number(v ?? 0)))) as [
-      number,
-      number,
-      number,
-    ]
+const contrastOf = (glyph: string, mode: "base" | "dark") =>
+  contrastBetween(
+    evaluatorOver(themeText, { "color-status-done-glyph": glyph }),
+    "status-done-glyph",
+    "status-done-bg",
+    mode
   );
-const contrastOf = (glyph: string, mode: "base" | "dark") => {
-  const ev = evaluatorOver({ "color-status-done-glyph": glyph });
-  return Color.contrastWCAG21(
-    clip(ev.colourOf("color.status-done-glyph", mode, "glyph")),
-    clip(ev.colourOf("color.status-done-bg", mode, "bg"))
-  );
-};
 
 // --color-status-done-glyph: darker until it holds 3:1 on status-done-bg in both schemes.
 {
@@ -909,19 +526,8 @@ if (themeText !== read(THEME)) {
 }
 
 const files = [...changed].filter((p) => existsSync(join(ROOT, p)));
-const format = () => {
-  const run = Bun.spawnSync(["bun", "scripts/fmt.ts", ...files], {
-    cwd: ROOT,
-    env: process.env,
-    stderr: "inherit",
-    stdout: "inherit",
-  });
-  if (run.exitCode !== 0) {
-    process.exit(run.exitCode);
-  }
-};
 if (files.length > 0) {
-  format();
+  format(files);
   // A longer value can push a `style:--x="…"` past the formatter's width, and
   // it wraps the string over two lines, which a Svelte directive value
   // cannot hold: it is written as an expression instead.
@@ -940,7 +546,7 @@ if (files.length > 0) {
     }
   }
   if (wrapped > 0) {
-    format();
+    format(files);
   }
 }
 const danglingAfter = dangling();

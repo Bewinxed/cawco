@@ -23,7 +23,8 @@
         "in-bar":
           "group-data-bar:min-w-0 group-data-bar:overflow-clip group-data-bar:concentric-xs",
         /** A plain field: the small corner, the control's edge, field pads. */
-        field: "rounded-sm border border-border-control px-space-3 py-space-2",
+        field:
+          "rounded-sm border border-border-row-outline px-space-3 py-space-2",
       },
       /** `end`: its value at its end, before its mark, as a number field
           writes its figure (the design graph's Controls: a select whose
@@ -73,7 +74,7 @@
     "press-tint [transition:var(--transition-control)]",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
-    "border border-border-control [--hit-edge:1px]",
+    "border border-border-row-outline [--hit-edge:1px]",
     "bg-surface-raised px-3 text-ink-strong",
     "text-body disabled:cursor-not-allowed",
     "disabled:opacity-50 aria-invalid:border-error-9",

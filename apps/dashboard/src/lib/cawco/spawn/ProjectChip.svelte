@@ -99,7 +99,7 @@
   })}
 >
   {#snippet trigger()}
-    <Files class="text-hue-amber-500" />
+    <Files class="text-mark-3" />
     {#key project?.id}
       <span data-slot="chip-label" class="ns-in"
         >{project?.name ?? spawnWords.project.none}</span

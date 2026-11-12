@@ -33,37 +33,37 @@ export interface TemplateCard {
 const CARDS: Record<TemplateName, Omit<TemplateCard, "template">> = {
   code: {
     icon: IconFileCode,
-    hue: "var(--color-hue-cyan-500)",
+    hue: "var(--color-mark-6)",
     name: "Code",
     meta: "Tasks worked on, reviewed by you, then landed",
   },
   launch: {
     icon: IconRocket,
-    hue: "var(--color-hue-orange-500)",
+    hue: "var(--color-mark-2)",
     name: "Launch campaign",
     meta: "Pieces planned, made, reviewed and sent live",
   },
   seo: {
     icon: IconSearch,
-    hue: "var(--color-hue-green-500)",
+    hue: "var(--color-mark-4)",
     name: "SEO program",
     meta: "Topics briefed, drafted, published and measured",
   },
   brand: {
     icon: IconPalette,
-    hue: "var(--color-hue-amber-500)",
+    hue: "var(--color-mark-3)",
     name: "Brand kit",
     meta: "Voice, colour and type drawn from a source",
   },
   design: {
     icon: IconPenLine,
-    hue: "var(--color-hue-cyan-400)",
+    hue: "var(--color-mark-6)",
     name: "Design",
     meta: "Variants explored, one picked and built",
   },
   social: {
     icon: IconChat,
-    hue: "var(--color-hue-green-600)",
+    hue: "var(--color-mark-4)",
     name: "Social",
     meta: "Posts drafted, reviewed, scheduled and measured",
   },

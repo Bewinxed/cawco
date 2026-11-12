@@ -121,6 +121,7 @@ export default {
         "scripts/codemods/tokens-to-theme.proof.ts",
         "scripts/codemods/theme-prune.ts",
         "scripts/codemods/theme-unify.ts",
+        "scripts/codemods/theme-audit.ts",
         // scripts/check.ts
         "scripts/shell-bodies-check.ts",
         // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the tool door's proof (scripts/lib/tool-call.ts).

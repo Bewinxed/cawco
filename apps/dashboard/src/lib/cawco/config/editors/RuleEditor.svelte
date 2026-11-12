@@ -60,7 +60,7 @@
   let { rule, taken }: { rule: RuleRow | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-hue-green-500)";
+  const HUE = "var(--color-mark-4)";
 
   let draft = $state<RuleDraft>(
     untrack(() => (rule ? draftOf(rule) : blankRule()))

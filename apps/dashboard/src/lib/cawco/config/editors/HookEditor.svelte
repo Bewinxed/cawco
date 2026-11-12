@@ -77,7 +77,7 @@
   let { hook, taken }: { hook: FleetHook | null; taken: string[] } = $props();
 
   const store = configStore();
-  const HUE = "var(--color-hue-cyan-500)";
+  const HUE = "var(--color-mark-6)";
 
   let draft = $state<HookDraft>(
     untrack(() => (hook ? draftOf(hook) : blankHook()))

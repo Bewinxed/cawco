@@ -391,7 +391,7 @@ a {
   background: var(--color-surface-recess);
 }
 .dp-opt[data-cawco-picked] .dp-kc {
-  background: var(--color-chip-chosen-bg);
+  background: var(--color-action-solid);
   color: var(--color-chip-chosen-ink);
 }
 /* The Press Rule (DESIGN.md): an option chip stands taller than 44px, so a

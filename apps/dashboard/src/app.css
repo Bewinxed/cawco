@@ -16,7 +16,6 @@
    surface serves them: woff2 pieces cut from the repository's own files (core
    house-faces.ts), written here by vite.config.ts's `houseFaces`. */
 @import "./house-faces/faces.css";
-@import "@fontsource/fredoka/600.css";
 /* The house design layer (tokens, theme, variants, element defaults,
    behaviours and utilities), one source with the decision host's sheet
    (lib/cawco/decisions/host/host.css). */

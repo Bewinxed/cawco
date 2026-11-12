@@ -300,7 +300,6 @@ const CORAL_TOKENS = [
   "link-ink",
   "action-solid",
   "action-hover",
-  "chip-chosen-bg",
   "selected-bg",
   "selected-ink",
   "selected-icon",

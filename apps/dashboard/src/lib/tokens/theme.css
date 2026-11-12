@@ -144,51 +144,6 @@
   --color-mark-deck-shade: oklch(14% 0.01 60);
   /* The shadow the card in front casts on the band of the next deck card that shows. */
   --color-mark-deck-cast: oklch(0 0 0 / 0.16);
-  /* Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness. */
-  --color-hue-cyan-400: light-dark(
-    oklch(75.35% 0.139 232.66),
-    oklch(80% 0.139 232.66)
-  );
-  --color-hue-cyan-500: light-dark(
-    oklch(70.66% 0.1331 226.72),
-    oklch(78% 0.1331 226.72)
-  );
-  --color-hue-amber-500: light-dark(
-    oklch(79.08% 0.1577 79.28),
-    oklch(82% 0.1577 79.28)
-  );
-  --color-hue-orange-500: light-dark(
-    oklch(70.49% 0.1867 47.6),
-    oklch(76% 0.1867 47.6)
-  );
-  --color-hue-green-500: light-dark(
-    oklch(72.27% 0.192 149.58),
-    oklch(76% 0.192 149.58)
-  );
-  --color-hue-green-600: light-dark(
-    oklch(62.71% 0.1699 149.21),
-    oklch(74% 0.1699 149.21)
-  );
-  --color-hue-blue-500: light-dark(
-    oklch(61.52% 0.2076 262.53),
-    oklch(74% 0.2076 262.53)
-  );
-  --color-hue-blue-600: light-dark(
-    oklch(53.18% 0.2148 265.52),
-    oklch(72% 0.2148 265.52)
-  );
-  /* Tool ink: one hue per tool family, one lightness per scheme. */
-  --color-tool-run: light-dark(oklch(50% 0.12 52), oklch(74% 0.11 52));
-  --color-tool-mcp: light-dark(oklch(50% 0.12 176), oklch(74% 0.11 176));
-  --color-tool-search: light-dark(oklch(50% 0.12 195), oklch(74% 0.11 195));
-  --color-tool-ask: light-dark(oklch(50% 0.12 214), oklch(74% 0.11 214));
-  --color-tool-web: light-dark(oklch(50% 0.12 234), oklch(74% 0.11 234));
-  --color-tool-read: light-dark(oklch(50% 0.12 253), oklch(74% 0.11 253));
-  --color-tool-agent: light-dark(oklch(50% 0.12 272), oklch(74% 0.11 272));
-  --color-tool-edit: light-dark(oklch(50% 0.12 292), oklch(74% 0.11 292));
-  --color-tool-write: light-dark(oklch(50% 0.12 311), oklch(74% 0.11 311));
-  --color-tool-skill: light-dark(oklch(50% 0.12 330), oklch(74% 0.11 330));
-  --color-tool-plan: light-dark(oklch(50% 0.12 350), oklch(74% 0.11 350));
   --background: light-dark(var(--color-neutral-2), var(--color-neutral-1));
   --foreground: var(--color-neutral-12);
   /* shadcn bridge: the kit's own names, resolved to the ramps. */
@@ -295,7 +250,7 @@
     var(--color-neutral-5),
     var(--color-neutral-6)
   );
-  /* The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar's shelf (surface-shelf) and against the raised surface it encloses (surface-raised): 4.0:1 and 5.4:1 by day, 4.6:1 and 3.8:1 at night. Figures from bun scripts/token-contrast-check.ts --table. */
+  /* A form field's edge while it has the caret (design.css `field-edge`; at rest it is border-row-outline), and the top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar's shelf (surface-shelf) and against the raised surface it encloses (surface-raised): 4.0:1 and 5.4:1 by day, 4.6:1 and 3.8:1 at night. Figures from bun scripts/token-contrast-check.ts --table. */
   --color-border-contrast: light-dark(
     var(--color-neutral-9),
     color-mix(in oklab, var(--color-neutral-9), var(--color-neutral-11) 25%)
@@ -420,8 +375,6 @@
   --color-selected-bg: light-dark(oklch(90.5% 0.062 48), oklch(34% 0.075 40));
   --color-selected-ink: light-dark(var(--color-coral-11), oklch(83% 0.085 34));
   --color-selected-icon: light-dark(var(--color-coral-10), oklch(74% 0.13 34));
-  /* Chosen option chip (1/2/3 keys in agent questions): solid vermillion, no ring. Dark sits at the dark action's lightness so the white digit holds 4.5:1 (the direction's 66% measured 3.33:1). */
-  --color-chip-chosen-bg: light-dark(oklch(55% 0.17 33), oklch(54% 0.165 33));
   --color-chip-chosen-ink: oklch(100% 0 0);
   --color-on-ink: var(--color-neutral-1);
   /* Focus: one 2px coral ring, keyboard focus only. */
@@ -663,7 +616,9 @@
   /* A hanging surface whose top shows its own surface across the cut into its anchor (Caw's panel, kit-hang): the overlay's drop without the night ring, which would draw across the cut as a seam. */
   --shadow-overlay-hung:
     0 18px 48px var(--color-shadow-tint-3), 0 2px 6px var(--color-shadow-tint);
-  --shadow-drawer: 0 12px 40px var(--color-shadow-tint-3);
+  --shadow-drawer:
+    0 12px 40px var(--color-shadow-tint-3), 0 2px 6px var(--color-shadow-tint),
+    inset 0 0 0 1px var(--color-night-ring);
   /* A drawn shape's drop (the grown composer), drawn as the SVG's own feDropShadow filters so it follows the shape, not a box, and is painted once rather than reapplied as the shape moves (grown.ts): this far layer, then shadow-drop-near. */
   --drop-shadow-drop: 0 14px 28px var(--color-shadow-tint-2);
   --drop-shadow-drop-near: 0 2px 4px var(--color-shadow-tint);
@@ -692,9 +647,6 @@
   --font-mono:
     "JetBrains Mono Variable", "JetBrains Mono Variable Fallback", ui-monospace,
     "SF Mono", monospace;
-  /* Fredoka 600: brand display only. */
-  --font-display:
-    "Fredoka", "Figtree Variable", ui-rounded, system-ui, sans-serif;
   /* Figtree's cap height (0.703em). JetBrains Mono figures set beside Figtree words take it as `font-size-adjust: cap-height`, so their digits stand as tall as Figtree's at the same size step (unadjusted, Mono's stand 4% taller). */
   --mono-figure-cap: 0.703;
   /* The landing wordmark's variable-font weight. Brand only. */
@@ -713,10 +665,10 @@
   --text-kpi: clamp(1.25rem, 1.0962rem + 0.6309vi, 1.5rem);
   /* Brand and marketing only. */
   --text-display: 2.5rem;
-  --leading-meta: 1.35;
-  --leading-label: 1.3;
+  --leading-meta: 1.4;
+  --leading-label: 1.4;
   --leading-ui: 1.25;
-  --leading-body: 1.45;
+  --leading-body: 1.5;
   --leading-prose: 1.55;
   --leading-code: 1.6;
   --leading-kpi: 1;
@@ -1421,8 +1373,8 @@
   --echo-scale: 1.45;
   /* A working session's echo as it leaves the tile. */
   --echo-opacity: 0.45;
-  /* The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1). */
-  --breath-floor: 0.8;
+  /* The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.77 (mark-5 on recess-deep the floor, 3.02:1); at night 0.63 (mark-8 on raised the floor, 3.00:1). */
+  --breath-floor: 0.77;
   /* How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track. */
   --account-week-mix: 0.32;
   /* An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 against the border-control track it lies on, in both schemes (by day cyan and green set the floor at 0.82, at night rose at 0.80); on the raised surface they hold more. */
@@ -2194,14 +2146,14 @@
   [data-scheme="dark"] {
     --tab-rim-mix-chosen: 0.78;
     --tab-rim-mix-idle: 0.54;
-    --breath-floor: 0.58;
+    --breath-floor: 0.63;
     --account-week-mix: 0.63;
   }
 
   [data-scheme="light"] {
     --tab-rim-mix-chosen: 0.97;
     --tab-rim-mix-idle: 0.86;
-    --breath-floor: 0.8;
+    --breath-floor: 0.77;
     --account-week-mix: 0.32;
   }
 

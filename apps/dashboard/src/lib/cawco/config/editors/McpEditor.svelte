@@ -46,7 +46,7 @@
     $props();
 
   const store = configStore();
-  const HUE = "var(--color-hue-cyan-400)";
+  const HUE = "var(--color-mark-6)";
 
   type Mode = "bunx" | "command" | "remote";
   const HOW: Record<Mode, string> = {

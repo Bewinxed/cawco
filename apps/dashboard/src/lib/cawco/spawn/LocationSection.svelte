@@ -183,7 +183,7 @@
     {@render source()}
   {:else}
     <SectionHeader
-      hue="var(--color-hue-amber-500)"
+      hue="var(--color-mark-3)"
       icon={Folder}
       label={spawnWords.location.name}
       wrap
@@ -206,7 +206,7 @@
       value={mode}
     >
       <ToggleGroup.Item value="dir">
-        <Folder class="text-hue-amber-500" />{spawnWords.location.existingFiles}
+        <Folder class="text-mark-3" />{spawnWords.location.existingFiles}
       </ToggleGroup.Item>
       <ToggleGroup.Item value="repo">
         <FolderGit
@@ -231,7 +231,7 @@
     >
       <FolderOpen
         data-location-section-lead
-        class="size-icon-md flex-none text-hue-amber-500"
+        class="size-icon-md flex-none text-mark-3"
       />
       <input
         aria-invalid={reading && !informational ? true : undefined}
@@ -295,7 +295,7 @@
               class="mark-line inline-flex h-c-pill-h flex-none items-center gap-space-2 rounded-sm bg-surface-lift px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-strong"
               ><span
                 data-slot="dot"
-                class="size-space-2 rounded-pill bg-hue-green-500"
+                class="size-space-2 rounded-pill bg-mark-4"
                 data-box
               ></span><span>{machineName}</span></span
             >
@@ -377,7 +377,7 @@
                 >
                   <Folder
                     class="size-icon-md flex-none"
-                    style={`color:${folder.name.startsWith(".") ? "var(--color-neutral-8)" : "var(--color-hue-amber-500)"}`}
+                    style={`color:${folder.name.startsWith(".") ? "var(--color-neutral-8)" : "var(--color-mark-3)"}`}
                   />
                   <span data-slot="name" class="min-w-0 flex-1 truncate"
                     >{folder.name}</span
@@ -439,7 +439,7 @@
             data-slot="row"
             class="flex h-c-row-h items-center gap-space-2 px-space-3"
           >
-            <FolderGit class="size-icon-md flex-none text-hue-amber-500" />
+            <FolderGit class="size-icon-md flex-none text-mark-3" />
             <input
               aria-label={spawnWords.location.repository}
               autocapitalize="off"
@@ -458,7 +458,7 @@
           data-slot="note"
           class="flex items-start gap-space-2 rounded-md border border-border-hairline bg-surface-recess p-space-3"
         >
-          <Refresh class="size-icon-md flex-none text-hue-blue-500" />
+          <Refresh class="size-icon-md flex-none text-mark-6" />
           <span class="type-meta min-w-0 text-pretty text-ink-muted"
             >{spawnWords.location.clonedInto}
             <span

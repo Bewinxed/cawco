@@ -88,7 +88,7 @@
     class={cn(
       "rounded-md shadow-xs transition-control motion-safe:transition-control-grow",
       "flex min-h-16 w-full resize-none py-2",
-      "border border-border-control",
+      "border border-border-row-outline",
       // Typed in, its edge steps up: the caret is its focus. A note has no
       // edge of its own (the composer's pill is its field).
       look !== "note" && "field-edge",

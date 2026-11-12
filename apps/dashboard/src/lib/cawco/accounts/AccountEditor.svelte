@@ -179,7 +179,7 @@
   {/snippet}
 
   <EditorSection
-    hue="var(--color-hue-cyan-500)"
+    hue="var(--color-mark-6)"
     icon={IconServer}
     label={words.editor.machines}
   >
@@ -196,7 +196,7 @@
 
   {#if limits}
     <EditorSection
-      hue="var(--color-hue-amber-500)"
+      hue="var(--color-mark-3)"
       icon={IconUsage}
       label={words.editor.limits}
     >

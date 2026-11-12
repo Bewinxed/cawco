@@ -1703,7 +1703,7 @@
       :focus-visible,
       :has(:is(input, textarea, [contenteditable]):focus-visible)
     ):not([aria-invalid="true"], :has([aria-invalid="true"])) {
-    border-color: var(--color-border-row-outline);
+    border-color: var(--color-border-contrast);
   }
 }
 

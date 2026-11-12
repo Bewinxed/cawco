@@ -867,11 +867,10 @@
       : undefined
   );
   const HUES = [
-    "var(--color-hue-amber-500)",
-    "var(--color-hue-green-500)",
-    "var(--color-hue-cyan-400)",
-    "var(--color-hue-blue-500)",
-    "var(--color-hue-orange-500)",
+    "var(--color-mark-3)",
+    "var(--color-mark-4)",
+    "var(--color-mark-6)",
+    "var(--color-mark-2)",
   ];
   const loadLabel = (online: boolean, running: number) => {
     if (!online) {
@@ -2341,7 +2340,7 @@
     >
       <div class="group-data-stepped:hidden">
         <SectionHeader
-          hue="var(--color-hue-blue-500)"
+          hue="var(--color-mark-6)"
           icon={Chat}
           label={continueFrom ? spawnWords.nextStep : spawnWords.firstPrompt}
         />
@@ -2384,7 +2383,7 @@
               class={chipVariants({ variant: "setting" })}
               title={spawnWords.form.startsInWhy(sourceProject.name)}
             >
-              <Files class="text-hue-amber-500" />
+              <Files class="text-mark-3" />
               <span data-slot="chip-label"
                 >{spawnWords.form.startsIn(sourceProject.name)}</span
               >

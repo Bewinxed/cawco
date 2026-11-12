@@ -39,17 +39,11 @@
   } as const satisfies Record<(typeof SURFACES)[number], string>;
   /** The transcript's tool inks (tool-cards/descriptors.ts INKS), written out whole. */
   const INKS = [
-    "text-tool-run",
-    "text-tool-read",
-    "text-tool-edit",
-    "text-tool-write",
-    "text-tool-search",
-    "text-tool-web",
-    "text-tool-skill",
-    "text-tool-agent",
-    "text-tool-mcp",
-    "text-tool-plan",
-    "text-tool-ask",
+    "text-mark-2",
+    "text-mark-6",
+    "text-mark-7",
+    "text-mark-5",
+    "text-mark-8",
     "text-muted-foreground",
   ] as const;
 

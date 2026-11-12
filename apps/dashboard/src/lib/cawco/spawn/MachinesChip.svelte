@@ -80,7 +80,7 @@
   })}
 >
   {#snippet trigger()}
-    <Server class="text-hue-cyan-500" />
+    <Server class="text-mark-6" />
     <span data-slot="chip-label">{label}</span>
     <Down data-slot="chevron" />
   {/snippet}

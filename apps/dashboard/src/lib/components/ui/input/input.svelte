@@ -113,7 +113,7 @@
       Typed in, its edge steps up (`field-edge`): the caret is its focus. */
   const own = [
     "field-edge rounded-md shadow-xs transition-control",
-    "h-c-input-h w-full min-w-0 border border-border-control",
+    "h-c-input-h w-full min-w-0 border border-border-row-outline",
     "bg-surface-raised px-3 text-ink-strong",
     "text-body file:inline-flex file:h-7",
     "file:border-0 file:bg-transparent file:font-medium",
