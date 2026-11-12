@@ -22,8 +22,10 @@
    * neighbour's, so a counted item is its neighbours' size and shape. Where
    * the glass says less room above it (`--bar-room`: the top bar's, 4px
    * under the window's top) the lift stops at that edge, the badge whole.
+   * A control another library renders as its own element (a player's
+   * buttons, MediaPlayer) takes this recipe on that element.
    */
-  const barItemVariants = tv({
+  export const barItemVariants = tv({
     base: "group/bar-item relative inline-flex group-data-joined/tools:data-open:after:absolute group-data-joined/tools:data-open:after:inset-x-0 group-data-joined/tools:data-open:after:top-full group-data-joined/tools:data-open:after:h-c-bar-group-pad group-data-joined/tools:data-open:after:bg-inherit group-data-joined/tools:data-open:after:pointer-events-none h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:not-hover:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
     variants: {
       /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */

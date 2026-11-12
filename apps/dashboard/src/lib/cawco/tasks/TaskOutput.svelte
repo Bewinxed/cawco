@@ -8,7 +8,7 @@
    * - a post (`*.post.json`): the post card (PostCard);
    * - markdown: the file drawn as a turn's words are (MessageBody);
    * - an image: the image, which opens in the house Lightbox;
-   * - video or audio: the platform's own player (MediaPlayer);
+   * - video or audio: CawCo's one player (MediaPlayer);
    * - anything else: its file row, and Open shows the file itself (the
    *   output's own route, in a tab of its own).
    * Its file row heads it, so every output is one press from the task. A

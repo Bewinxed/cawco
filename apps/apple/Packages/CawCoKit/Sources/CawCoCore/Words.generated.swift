@@ -3443,6 +3443,24 @@ public enum Words {
         public static let media = "Media"
 
         public static let mediaPlan = "Media plan"
+
+        /// A clip's or a sound's player (MediaPlayer): each control's name, read out and in its tooltip.
+        public static let play = "Play"
+
+        public static let pause = "Pause"
+
+        public static let playAgain = "Play again"
+
+        public static let mute = "Mute"
+
+        public static let unmute = "Unmute"
+
+        public static let fullScreen = "Full screen"
+
+        public static let exitFullScreen = "Exit full screen"
+
+        /// The scrubber: where in the clip or sound it plays from.
+        public static let position = "Position"
     }
 
     public enum Blocks {

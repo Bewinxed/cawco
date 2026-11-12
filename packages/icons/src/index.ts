@@ -198,8 +198,11 @@ export { default as IconFolderGit } from "~icons/solar/folder-git-bold-duotone";
 export { default as IconFolderLinear } from "~icons/solar/folder-linear";
 export { default as IconFolderOpen } from "~icons/solar/folder-open-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
-/** Adapt: the stage drawn at the room it has, its corners marked (a bare glass symbol, linear). */
-export { default as IconAdaptLinear } from "~icons/solar/full-screen-linear";
+/** Adapt: the stage drawn at the room it has, its corners marked (a bare glass symbol, linear); a clip's player going full screen (MediaPlayer). */
+export {
+  default as IconAdaptLinear,
+  default as IconFullScreenLinear,
+} from "~icons/solar/full-screen-linear";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
 /** Files' artifacts as their thumbnails' masonry (FilesList's Thumbnails | List). */
 export { default as IconThumbnails } from "~icons/solar/gallery-wide-bold-duotone";
@@ -292,6 +295,8 @@ export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
 export { default as IconPaperclip } from "~icons/solar/paperclip-bold-duotone";
 /** Caw holds still while his lead works (the sidebar's motion switch); a paused routine; Idle and Stopped (DESIGN.md, Session status). */
 export { default as IconPause } from "~icons/solar/pause-bold-duotone";
+/** A clip's or a sound's player, playing: Pause (MediaPlayer). */
+export { default as IconPauseLinear } from "~icons/solar/pause-linear";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
 /**
  * A pen: a draft starter's glyph; a result in words alone (what the session
@@ -325,6 +330,8 @@ export {
 } from "~icons/solar/question-mark-bold-duotone";
 /** The agent's own question waiting on the person, a tile beside the decision's and the pin's (waiting/WaitingList). */
 export { default as IconQuestion } from "~icons/solar/question-square-bold-duotone";
+/** A clip's player leaving full screen (MediaPlayer). */
+export { default as IconExitFullScreenLinear } from "~icons/solar/quit-full-screen-linear";
 /** Working: the session status glyph (DESIGN.md, Session status); and a starter that refreshes something (StarterCards). */
 export {
   default as IconRefresh,
@@ -443,7 +450,10 @@ export {
 } from "~icons/solar/users-group-rounded-bold-duotone";
 export { default as IconVideo } from "~icons/solar/video-library-bold-duotone";
 export { default as IconSoundOff } from "~icons/solar/volume-cross-bold-duotone";
+/** A player's Mute and Unmute (MediaPlayer). */
+export { default as IconSoundOffLinear } from "~icons/solar/volume-cross-linear";
 export { default as IconSound } from "~icons/solar/volume-loud-bold-duotone";
+export { default as IconSoundLinear } from "~icons/solar/volume-loud-linear";
 export { default as IconColumns } from "~icons/solar/widget-2-bold-duotone";
 /** A sheet: a component's states, side by side, each a tile. */
 export { default as IconArtifactSheet } from "~icons/solar/widget-4-bold-duotone";

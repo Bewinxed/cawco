@@ -38,4 +38,14 @@ export const madeWords = {
   community: "Community",
   media: "Media",
   mediaPlan: "Media plan",
+  /** A clip's or a sound's player (MediaPlayer): each control's name, read out and in its tooltip. */
+  play: "Play",
+  pause: "Pause",
+  playAgain: "Play again",
+  mute: "Mute",
+  unmute: "Unmute",
+  fullScreen: "Full screen",
+  exitFullScreen: "Exit full screen",
+  /** The scrubber: where in the clip or sound it plays from. */
+  position: "Position",
 };

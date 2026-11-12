@@ -1,6 +1,6 @@
 <!--
   A block's clip (tsk-330): a file the agent names, read where the block is
-  drawn (block-media.ts), in the platform's player (MediaPlayer), its
+  drawn (block-media.ts), in CawCo's player (MediaPlayer), its
   metadata alone loaded until it is played. Sized by its agent it takes
   that room, unsized the reply's measure (block-size.ts).
 

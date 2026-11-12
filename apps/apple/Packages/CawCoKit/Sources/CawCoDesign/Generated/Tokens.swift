@@ -290,6 +290,12 @@ public enum Palette {
     public static let presenceOff = Palette.named("presence-off")
     /// Every scrollbar's thumb, inherited from the root.
     public static let scrollbarThumb = Palette.named("scrollbar-thumb")
+    /// A player's scrubber track (MediaPlayer): the paper ramp, the length still to play.
+    public static let mediaTrack = Palette.named("media-track")
+    /// How much of a clip or sound has loaded, over the scrubber's track: a step deeper on the paper ramp.
+    public static let mediaBuffered = Palette.named("media-buffered")
+    /// How much has played, on the scrubber's track, and its thumb: ink, never coral, which is the action (DESIGN.md, The Coral Is Where You Act Rule).
+    public static let mediaFill = Palette.named("media-fill")
     /// The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse).
     public static let skeletonSheen = Palette.named("skeleton-sheen")
     /// List bullets in rendered markdown.
@@ -1248,6 +1254,12 @@ public enum Size {
     public static let cUsageFigureW: Double = 88
     /// A meter's height on a page: a Where-it-goes row's and a limit bar's at its regular size (DESIGN.md Limit bar: "8px on a page").
     public static let cMeterBarH: Double = 8
+    /// A player's scrubber track at rest (MediaPlayer): a hairline meter that reads at a glance in a reply.
+    public static let cScrubH: Double = 4
+    /// The scrubber's track under the pointer, focus or a drag: it thickens to show it can be taken.
+    public static let cScrubHActive: Double = 6
+    /// The scrubber's thumb (MediaPlayer), shown while the scrubber is pointed at, focused or dragged, and always under a finger.
+    public static let cScrubThumb: Double = 12
     /// A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none).
     public static let cDialogMaxH: Double = 717.4
     /// What a dialog's header keeps clear at its trailing edge for the kit's Close, 30px and 12px from the corner.

@@ -1578,6 +1578,21 @@
         }
       }
     },
+    "media-track": {
+      "$type": "color",
+      "$value": "{color.neutral-6}",
+      "$description": "A player's scrubber track (MediaPlayer): the paper ramp, the length still to play."
+    },
+    "media-buffered": {
+      "$type": "color",
+      "$value": "{color.neutral-8}",
+      "$description": "How much of a clip or sound has loaded, over the scrubber's track: a step deeper on the paper ramp."
+    },
+    "media-fill": {
+      "$type": "color",
+      "$value": "{color.ink-strong}",
+      "$description": "How much has played, on the scrubber's track, and its thumb: ink, never coral, which is the action (DESIGN.md, The Coral Is Where You Act Rule)."
+    },
     "skeleton-sheen": {
       "$type": "color",
       "$value": {
@@ -6813,6 +6828,30 @@
         "unit": "px"
       },
       "$description": "A meter's height on a page: a Where-it-goes row's and a limit bar's at its regular size (DESIGN.md Limit bar: \"8px on a page\")."
+    },
+    "c-scrub-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "A player's scrubber track at rest (MediaPlayer): a hairline meter that reads at a glance in a reply."
+    },
+    "c-scrub-h-active": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "The scrubber's track under the pointer, focus or a drag: it thickens to show it can be taken."
+    },
+    "c-scrub-thumb": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
+      "$description": "The scrubber's thumb (MediaPlayer), shown while the scrubber is pointed at, focused or dragged, and always under a finger."
     },
     "c-dialog-max-h": {
       "$type": "dimension",

@@ -1,7 +1,7 @@
 <!--
   A block's sound (tsk-330): a file the agent names (narration a
   text-to-speech tool made, a recording), read where the block is drawn
-  (block-media.ts), in the platform's player (MediaPlayer), its metadata
+  (block-media.ts), in CawCo's player (MediaPlayer), its metadata
   alone loaded until it is played; the reply's measure wide, its caption
   under it. Replaced, its block holds no player: it stands as one still
   row, the sound's mark and its caption (its file's name where it has

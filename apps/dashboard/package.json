@@ -32,6 +32,7 @@
     "@pierre/diffs": "1.5.1",
     "@rive-app/canvas": "2.44.0",
     "@tanstack/svelte-table": "9.2.6",
+    "@videojs/html": "10.3.0",
     "@xyflow/svelte": "^1.7.0",
     "bits-ui": "^2.20.6",
     "clipper2-ts": "2.0.1-18",

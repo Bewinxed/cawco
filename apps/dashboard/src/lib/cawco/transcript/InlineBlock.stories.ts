@@ -10,6 +10,8 @@
  * file (block-fixtures/): canvas captures of this block, the phone app's
  * paywall story, and a narration made with ElevenLabs for this story.
  */
+
+import { madeWords } from "@cawco/core/words/made";
 import cawTap from "./block-fixtures/caw-tap.webp?url";
 import mergeChecksPage from "./block-fixtures/merge-checks.html?raw";
 import paywallStory from "./block-fixtures/paywall-story.mp4?url";
@@ -250,7 +252,7 @@ tap = Image("/home/ana/.cawco/shots/caw-tap.webp", "Caw walking up to a phone on
   },
 };
 
-/** A clip in the platform's player, its frames loaded only once it plays. */
+/** A clip ready to play, its frames loaded only once it plays. */
 export const Video = {
   args: {
     name: "Paywall story",
@@ -264,7 +266,7 @@ clip = Video("${ASSETS}/paywall-story.mp4", "Paywall story, 10.8 seconds, no sou
   },
 };
 
-/** Narration from a text-to-speech tool, in the platform's player with its caption. */
+/** Narration from a text-to-speech tool, ready to play over its caption. */
 export const Narration = {
   args: {
     name: "Release narration",
@@ -274,6 +276,68 @@ export const Narration = {
     files: FILES,
     source: `root = Column([voice])
 voice = Audio("${ASSETS}/release-narration.mp3", "This week in CawCo, 11.8 seconds, Alice voice")`,
+  },
+};
+
+/** What a story's play is handed: its frame's queries and real events. */
+interface Play {
+  canvas: { getByRole: (role: string, options: { name: string }) => Element };
+  userEvent: {
+    click: (el: Element) => Promise<void>;
+    wait: (ms: number) => Promise<void>;
+  };
+}
+
+/**
+ * Presses the player's Play as a person does. A browser that holds a
+ * sound back until a person's own press (its autoplay rule) still plays it
+ * muted, so the frame shows it playing either way.
+ */
+const pressPlay = async ({ canvas, userEvent }: Play) => {
+  const play = canvas.getByRole("button", { name: madeWords.play });
+  await userEvent.click(play);
+  await userEvent.wait(600);
+  const media = play
+    .closest("media-container")
+    ?.querySelector<HTMLMediaElement>("audio, video");
+  if (media?.paused) {
+    media.muted = true;
+    await media.play().catch(() => undefined);
+    await userEvent.wait(600);
+  }
+};
+
+/** The narration a few seconds in, its scrubber filling in ink. */
+export const NarrationPlaying = {
+  args: Narration.args,
+  play: pressPlay,
+};
+
+/** A file whose bytes no browser can play, as a broken export leaves one. */
+const unplayable = (type: string): string =>
+  URL.createObjectURL(new Blob(["not a recording"], { type }));
+
+/** The narration's file is there but won't play: the reply says so where the player stood. */
+export const NarrationUnplayable = {
+  args: {
+    ...Narration.args,
+    files: {
+      [`${ASSETS}/release-narration.mp3`]: unplayable("audio/mpeg"),
+    },
+  },
+};
+
+/** The clip playing, its controls over the picture until the pointer rests. */
+export const VideoPlaying = {
+  args: Video.args,
+  play: pressPlay,
+};
+
+/** The clip's file is there but won't play: the reply says so where the clip stood. */
+export const VideoUnplayable = {
+  args: {
+    ...Video.args,
+    files: { [`${ASSETS}/paywall-story.mp4`]: unplayable("video/mp4") },
   },
 };
 
