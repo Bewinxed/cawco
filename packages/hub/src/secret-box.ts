@@ -78,7 +78,7 @@ const loadKey = (path: string): Buffer => {
 /** Whether a stored value is one the hub sealed (it may still not open, under another key). */
 export const isSealed = (value: string): boolean => value.startsWith(PREFIX);
 
-export const makeSecretBox = (
+const makeSecretBox = (
   path = join(dirname(DB_PATH), "secrets.key")
 ): SecretBox => {
   // The key's first name, from when it sealed connections only.

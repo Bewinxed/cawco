@@ -69,7 +69,7 @@ const responseFormat = () => z.enum(RESPONSE_FORMATS).optional();
  * `if (!declared && schema.additionalProperties === false && !patterned &&
  * !composed)`), and the refusal is said at the call, by the hub, either way.
  */
-export const STAMPED_KEY = "__cawco";
+const STAMPED_KEY = "__cawco";
 
 export interface McpTool {
   annotations?: ToolAnnotations;

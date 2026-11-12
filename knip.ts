@@ -121,14 +121,8 @@ export default {
         "scripts/codemods/tokens-to-theme.proof.ts",
         "scripts/codemods/theme-prune.ts",
         "scripts/codemods/theme-unify.ts",
-        // scripts/check.ts, beside compress-answer-check.ts
+        // scripts/check.ts
         "scripts/shell-bodies-check.ts",
-        // scripts/check.ts, beside compress-answer-check.ts
-        "scripts/type-roles-check.ts",
-        // scripts/check.ts, beside type-roles-check.ts
-        "scripts/type-starting-set-check.ts",
-        // scripts/check.ts, beside type-roles-check.ts
-        "scripts/routine-report-check.ts",
         // Never imported: `golar tsc -b` type-checks its `@ts-expect-error` lines, the tool door's proof (scripts/lib/tool-call.ts).
         "scripts/lib/tool-call.fixtures.ts",
         // scripts/check.ts:538
@@ -169,23 +163,10 @@ export default {
         "scripts/probe-groups-check.ts",
         "scripts/probe-creates-check.ts",
         "scripts/probe-reads-check.ts",
-        "scripts/probe-programs-check.ts",
-        // scripts/check.ts, beside probe-programs-check.ts
-        "scripts/decision-dials-check.ts",
         // scripts/check.ts:632
         "scripts/resolution-check.ts",
-        // scripts/check.ts:634
-        "scripts/call-cuts-check.ts",
-        // scripts/check.ts, beside call-cuts-check.ts
-        "scripts/tool-input-check.ts",
         // scripts/check.ts:655
         "scripts/git-door-words-check.ts",
-        // scripts/check.ts:635
-        "scripts/logs-trailer-check.ts",
-        // scripts/check.ts:670
-        "scripts/compress-answer-check.ts",
-        // scripts/check.ts:639
-        "scripts/open-at-check.ts",
         // scripts/ship.sh:108
         "scripts/release.ts",
         // scripts/ship.sh:44
@@ -223,8 +204,6 @@ export default {
         "scripts/stand-ins/{hub-upstreams,canvas-host-plugins}.ts",
         // Loaded by path in place of agent canvas-host/bound.ts: scripts/stand-ins/canvas-host-plugins.ts:16.
         "scripts/stand-ins/canvas-bound.ts",
-        // The stored-shape check over a whole hub database, as packages/core/src/stored-json.ts:108 and packages/hub/scripts/stored-rows.ts:5 name it.
-        "scripts/stored-json-check.ts",
         // Spawned by the spec that proves the hub's one writer: scripts/probe-kit/specs/hub-one-writer.ts:34.
         "scripts/repair-account-history.ts",
         // The probe kit's runner: scripts/probe-kit/README.md:10.

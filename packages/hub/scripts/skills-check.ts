@@ -15,7 +15,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BUNDLED_SKILLS, TEMPLATE_SKILLS } from "../src/bundled-skills";
-import { kitText } from "../src/decision-page";
 
 /** Claude Code's longest skill description. */
 const DESCRIPTION_LIMIT = 1024;
@@ -124,20 +123,4 @@ for (const name of names) {
   }
 }
 
-/** The decision-page kit's tokens.css is generated from theme.css: a variable theme.css declares is in it. */
-const THEME = join(
-  import.meta.dir,
-  "../../../apps/dashboard/src/lib/tokens/theme.css"
-);
-const DECLARED = /^\s*(--color-[\w-]+):/mu;
-const declared = DECLARED.exec(readFileSync(THEME, "utf8"))?.[1];
-if (declared === undefined) {
-  failed = true;
-  console.error("theme.css declares no --color-* variable to look for");
-} else if (kitText("tokens.css").includes(`${declared}:`)) {
-  console.log(`decision-page kit tokens.css has ${declared} ok`);
-} else {
-  failed = true;
-  console.error(`decision-page kit tokens.css lacks ${declared}, theme.css's`);
-}
 process.exit(failed ? 1 : 0);

@@ -84,7 +84,7 @@ const kit = (): Map<string, Buffer> => {
   return kitFiles;
 };
 
-export const kitText = (path: string): string => {
+const kitText = (path: string): string => {
   const file = kit().get(path);
   if (!file) {
     throw new Error(`The decision-page kit has no ${path}.`);

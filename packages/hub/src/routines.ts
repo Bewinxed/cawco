@@ -656,7 +656,7 @@ export interface SurfaceDeps {
  * pushes its result to you. A first failure is retried at once; a second one
  * is raised to you. Answers whether it needs you.
  */
-export const surfaceRun = (
+const surfaceRun = (
   { caw, note, push, reportOf, retry }: SurfaceDeps,
   routine: RoutineRow,
   run: RoutineRunRow,

@@ -244,7 +244,7 @@ export interface StandInCalls {
  * check may set who a credential names and the person's ask, and call it;
  * `close` ends its sweeps.
  */
-export const standIn = (
+const standIn = (
   calls: StandInCalls = {}
 ): {
   close: () => void;

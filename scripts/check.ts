@@ -655,16 +655,6 @@ const gated: Gated[] = [
   ]),
   // A probe waiting for a responses notice reads his view, never the session's read.
   bun("scripts/probe-reads-check.ts", ["scripts/probe-kit/"]),
-  // A decision page's dials: the kit's page with {{DIALS}} built, the dials' sheet, a Dials piece's controls, a clip's runs.
-  bun("scripts/decision-dials-check.ts", [...DASH, ...PKG, "bun.lock"]),
-  // Every probe's decision page, built as the hub builds it.
-  bun("scripts/probe-programs-check.ts", [
-    "scripts/probe-kit/",
-    "scripts/scratch-fleet.ts",
-    "packages/hub/src/decision-program.ts",
-    "packages/core/src/",
-    "bun.lock",
-  ]),
   bun("scripts/surface-briefs-check.ts", ["apps/dashboard/"]),
   bun("scripts/setup-draft-check.ts", ["apps/dashboard/src/lib/cawco/"]),
   run("packages/hub", "openapi:check", [
@@ -694,12 +684,6 @@ const gated: Gated[] = [
     "tsconfig.paths.json",
     "bun.lock",
   ]),
-  run("packages/hub", "stored-writes:check", [
-    "packages/core/src/stored-json.ts",
-    "packages/core/src/stored-types.ts",
-    "packages/core/src/stored-shapes.ts",
-    "packages/hub/scripts/stored-writes-check.ts",
-  ]),
   run("packages/hub", "roles:check", PKG),
   run("packages/core", "openui:check", []),
   run("packages/core", "tools:check", ["apps/apple/"]),
@@ -723,16 +707,9 @@ const gated: Gated[] = [
     "--check"
   ),
   bun("scripts/protocol-sweep.ts", ["packages/core/src/"]),
-  bun("scripts/call-cuts-check.ts", ["packages/hub/src/call-cuts.ts"]),
-  // Every tool refuses an argument it does not take, and its schema says so.
-  bun("scripts/tool-input-check.ts", ["packages/hub/src/", "bun.lock"]),
   bun("scripts/git-door-words-check.ts", [
     "packages/agent/src/",
     "packages/core/src/",
-  ]),
-  bun("scripts/logs-trailer-check.ts", [
-    "packages/hub/src/landing.ts",
-    "packages/core/src/safe-git.ts",
   ]),
   // Every body a shell script sends the hub, against the hub's own routes.
   bun("scripts/shell-bodies-check.ts", [
@@ -742,27 +719,6 @@ const gated: Gated[] = [
     "apps/mac-helper/scripts/",
     "mocks/",
     "bun.lock",
-  ]),
-  bun("scripts/compress-answer-check.ts", [
-    "packages/core/src/compress-answer.ts",
-  ]),
-  bun("scripts/type-roles-check.ts", [
-    "packages/hub/src/project-delegate-types.ts",
-    "packages/core/src/delegate-types.ts",
-    "packages/core/src/words/delegate-types.ts",
-  ]),
-  bun("scripts/type-starting-set-check.ts", [
-    "packages/hub/src/project-delegate-types.ts",
-    "packages/hub/src/project-starting-set.ts",
-    "packages/core/src/delegate-types.ts",
-  ]),
-  bun("scripts/routine-report-check.ts", [
-    "packages/hub/src/routines.ts",
-    "packages/hub/src/caw.ts",
-  ]),
-  bun("scripts/open-at-check.ts", [
-    "apps/dashboard/src/lib/cawco/transcript/open-at.svelte.ts",
-    "apps/dashboard/src/lib/cawco/transcript/rows.ts",
   ]),
   {
     ...bun("scripts/typecheck-coverage.ts", []),

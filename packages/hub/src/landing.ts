@@ -429,7 +429,7 @@ export const statusCommand = (skip: string[] = []): string =>
     : `git status --porcelain -- . ${skip.map((path) => quote(`:(exclude,literal)${path}`)).join(" ")}`;
 
 /** The trailer that links a landed commit to the session that made it. */
-export const LOGS_TRAILER = "Agent-Logs-Url";
+const LOGS_TRAILER = "Agent-Logs-Url";
 
 /**
  * The shell `git rebase --exec` runs after each commit it makes: HEAD's
@@ -581,7 +581,7 @@ export type Rebased =
  * host when it writes a path the boundary keeps from every command (agent
  * hub-command.ts `movedCommand`), as it did the rebase in the worktree.
  */
-export async function landedRebase(
+async function landedRebase(
   run: LandingDeps<unknown>["run"],
   upstream: string,
   url: string,
