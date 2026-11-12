@@ -5,8 +5,8 @@
  *
  * A release names its commit, and is built from exactly that commit: a
  * worktree of it under ~/.worktrees/release-<sha>, on real disk, made here
- * and removed when the build ends, whichever way, that builds, signs and
- * proves. The repository's check (`bun run check --all`) runs only when the
+ * and removed when the build ends, whichever way, that builds and
+ * signs. The repository's check (`bun run check --all`) runs only when the
  * hub's merge checks did not pass it on the commit's tree (`GET
  * /api/landing-gate`, hub work-items.ts `gatePassesOn`): then in a second
  * worktree, beside the builds, so it reads no file a build rewrites
@@ -24,14 +24,16 @@
  * - the check (when it runs) and the live database's migration check gate
  *   promotion, and Apple's notarization: nothing is submitted to Apple
  *   before they pass.
- * - The proof build and stage 2's builds come before the proofs that run them.
+ * - The proof build (the binary build-info is asked of, which gives the manifest its protocol) comes before the
+ *   `run` check of each linux archive. The container tests are not a release step: `bun run test:binary`
+ *   (scripts/binary-tests.ts) runs them for any commit.
  * - The four targets compile at once, from assets prepared once; each linux
  *   archive is made at once, each darwin bundle signed, notarized and stapled
  *   on this host (rcodesign, sign-agent-bundle.ts) at once with the other.
  * - With --publish, a draft release is made once the version is known, and
- *   each archive goes up to it as soon as it is made, while the proofs run.
+ *   each archive goes up to it as soon as it is made, while the other targets build.
  * - Promotion (the manifest signed and uploaded, the draft published) waits
- *   for every target and every proof; then the hub is told to look.
+ *   for every target; then the hub is told to look.
  * Only the run itself is one at a time: the lock below (no two release runs
  * at once) and its queue of one.
  */
@@ -70,7 +72,6 @@ import {
   signalGroup,
   signal as signalPid,
 } from "../packages/core/src/signal";
-import { proofInputsKey } from "./binary/proof-inputs";
 import {
   archiveBundle,
   notarizeBundle,
@@ -87,6 +88,7 @@ import {
   promoteRelease,
   uploadAssets,
 } from "./publish-release";
+import type { Runner } from "./release/binary-tests";
 import { ANNOUNCE_MS, announce } from "./release-announce";
 import { describeSteps, runSteps, type Step } from "./release-graph";
 import { quotaRefusal } from "./release-quota";
@@ -159,14 +161,6 @@ const KEPT_FAILURES = 5;
  * machine's disk on 2026-10-26.
  */
 const KEPT_OUTPUTS = 2;
-/** Each proven verdict, by the inputs it stands on: `<inputs>/stage1`, and `<inputs>/stage2/<rig>` per stage 2 rig. */
-const proofVerdicts = join(
-  homedir(),
-  ".cache",
-  "cawco-release",
-  "proof-verdicts"
-);
-
 /** The trees a build of `commit` runs in: one builds, one checks (when it must). */
 const treesOf = (commit: string) => {
   const base = join(homedir(), ".worktrees", `release-${commit.slice(0, 12)}`);
@@ -245,22 +239,8 @@ interface Learned {
    * settled first, so a draft still being made is removed too).
    */
   draft?: { created: Promise<unknown>; tag: string };
-  /** The proof inputs' key at the commit (proof-inputs.ts). */
-  inputs?: string;
   manifest?: ReleaseManifest;
-  /** Stage 2's rigs not yet passed on these inputs, with each's check count. */
-  stage2?: { counts: Map<string, number>; todo: string[] };
 }
-
-/** A command as a step runs it: `run` below in a real build. */
-type Runner = (
-  command: string[],
-  cwd?: string,
-  capture?: boolean,
-  env?: Record<string, string>,
-  /** How long it may run: past it, its whole process group is ended and the step fails, saying so. */
-  limit?: { seconds: number; why: string }
-) => Promise<string>;
 
 /**
  * Every step of one build of `current`, and what each waits for: the graph
@@ -437,9 +417,7 @@ const releaseSteps = (
       ...upload,
     ];
   };
-  const proving = [
-    "stage 1",
-    "stage 2",
+  const promotion = [
     "gate",
     ...TARGETS.flatMap((target) => [
       `archive ${target}`,
@@ -483,7 +461,6 @@ const releaseSteps = (
     ),
     step("version", ["install build"], 1, async () => {
       learned.manifest = await manifestOf(run, current, trees.build);
-      learned.inputs = await proofInputsKey(trees.build, current.commit);
     }),
     // The dashboard and every target-independent asset, once, for all seven compiles.
     step("prepare", ["install build"], 36, () =>
@@ -528,22 +505,6 @@ const releaseSteps = (
       ) as Pick<ReleaseManifest, "protocol">;
       manifest().protocol = protocol;
     }),
-    step("stage 1", ["build-info"], 40.2, () =>
-      proveStage1(
-        run,
-        trees.build,
-        staging,
-        proofBinary,
-        learned,
-        current.commit
-      )
-    ),
-    step("stage 2 builds", ["prepare", "version"], 4.7, async () => {
-      learned.stage2 = await stage2Builds(run, trees.build, staging, learned);
-    }),
-    step("stage 2", ["stage 2 builds"], 305.8, () =>
-      proveStage2(run, trees.build, staging, learned, current.commit)
-    ),
     step("bundle files", ["install build"], 0.3, async () => {
       await mkdir(bundleFiles, { recursive: true });
       await run(
@@ -574,26 +535,11 @@ const releaseSteps = (
         ]
       : []),
     ...TARGETS.flatMap(targetSteps),
-    step("promote", proving, 5, () =>
+    step("promote", promotion, 5, () =>
       promote(current, publish, staging, manifest(), secrets, notStopped)
     ),
     ...(publish
-      ? [
-          step("announce", ["promote"], 1, () => announce(manifest())),
-          // Published: the proof cache keeps this commit's stage 2 builds alone, and
-          // its image store sheds its dangling images (proof-cache-prune.sh).
-          step("prune proof cache", ["promote"], 2, () =>
-            run(
-              [
-                "bash",
-                "scripts/binary/proof-cache-prune.sh",
-                learned.inputs ??
-                  fail("the proof inputs are read by the version step"),
-              ],
-              trees.build
-            )
-          ),
-        ]
+      ? [step("announce", ["promote"], 1, () => announce(manifest()))]
       : []),
   ];
 };
@@ -820,187 +766,10 @@ const runPublished = async (
   console.log(`published ${target} binary ran: ${version}, build-info matches`);
 };
 
-const proven = (path: string): Promise<boolean> => Bun.file(path).exists();
-const recordProven = async (path: string, commitId: string): Promise<void> => {
-  await mkdir(resolve(path, ".."), { recursive: true });
-  await writeFile(path, `${commitId}\n`);
-};
-const inputsOf = (learned: Learned): string =>
-  learned.inputs ?? fail("the proof inputs are read by the version step");
-
 /**
- * Stage 1 (prove-stage1.sh) on the proof build, unless it passed on these
- * inputs; then the frames its hub sent (kept with the verdict) read with every
- * TestFlight build installable now, on every release, since the builds in
- * testers' hands change when the hub does not.
- */
-async function proveStage1(
-  run: Runner,
-  checkout: string,
-  staging: string,
-  proofBinary: string,
-  learned: Learned,
-  commitId: string
-): Promise<void> {
-  const inputs = inputsOf(learned);
-  const verdict = join(proofVerdicts, inputs, "stage1");
-  const frames = join(proofVerdicts, inputs, "frames.jsonl");
-  if ((await proven(verdict)) && (await proven(frames))) {
-    console.log(
-      `Stage 1 passed on these inputs (${inputs}) before: not run again`
-    );
-  } else {
-    await run(
-      [
-        "bash",
-        "scripts/binary/prove-stage1.sh",
-        join(staging, "container-proof"),
-        proofBinary,
-      ],
-      checkout
-    );
-    await mkdir(join(proofVerdicts, inputs), { recursive: true });
-    await cp(
-      join(staging, "container-proof", "clean-binary", "frames.jsonl"),
-      frames
-    );
-    await recordProven(verdict, commitId);
-  }
-  await run(
-    [process.execPath, "packages/hub/scripts/wire-frames.ts", frames],
-    checkout
-  );
-}
-
-const RIG_LINE = /^rig (\S+):$/u;
-
-/**
- * Stage 2's builds (build-stage2.ts) for the rigs that have not passed on
- * these inputs: none when every one has. Answers each rig's check count, as
- * the script lists them (`PROOF_LIST`), and the rigs to run.
- */
-async function stage2Builds(
-  run: Runner,
-  checkout: string,
-  staging: string,
-  learned: Learned
-): Promise<{ counts: Map<string, number>; todo: string[] }> {
-  const inputs = inputsOf(learned);
-  const out = join(staging, "stage2");
-  const bins = join(staging, "stage2-bins");
-  const listed = await run(
-    ["bash", "scripts/binary/prove-stage2.sh", out, bins],
-    checkout,
-    true,
-    { PROOF_LIST: "1" }
-  );
-  const counts = new Map<string, number>();
-  let rig: string | undefined;
-  for (const line of listed.split("\n")) {
-    const [, named] = RIG_LINE.exec(line) ?? [];
-    if (named) {
-      rig = named;
-      counts.set(rig, 0);
-    } else if (rig && line.startsWith("  ")) {
-      counts.set(rig, (counts.get(rig) ?? 0) + 1);
-    }
-  }
-  if (counts.size === 0) {
-    throw new Error(`prove-stage2.sh listed no rig: ${listed}`);
-  }
-  const passed = join(proofVerdicts, inputs, "stage2");
-  const done = await Promise.all(
-    [...counts.keys()].map((name) => proven(join(passed, name)))
-  );
-  const todo = [...counts.keys()].filter((_, at) => !done[at]);
-  if (todo.length === 0) {
-    console.log(
-      `Stage 2 passed on these inputs (${inputs}) before, every rig: not run again`
-    );
-    return { counts, todo };
-  }
-  if (todo.length < counts.size) {
-    console.log(
-      `Stage 2 runs the rigs that have not passed on these inputs (${inputs}): ${todo.join(", ")}`
-    );
-  }
-  await run(
-    // The prepare step prepared this checkout's assets: stage 2's builds reuse them.
-    [
-      process.execPath,
-      "scripts/binary/build-stage2.ts",
-      bins,
-      "--skip-prepare",
-    ],
-    checkout
-  );
-  return { counts, todo };
-}
-
-/**
- * Stage 2 on its builds: a rig passes when every one of its checks says PASS;
- * each one that does is recorded, so a stage 2 that failed runs only its
- * failed rigs again.
- */
-async function proveStage2(
-  run: Runner,
-  checkout: string,
-  staging: string,
-  learned: Learned,
-  commitId: string
-): Promise<void> {
-  const { counts, todo } =
-    learned.stage2 ?? fail("stage 2's rigs are read by its builds' step");
-  if (todo.length === 0) {
-    return;
-  }
-  const out = join(staging, "stage2");
-  const bins = join(staging, "stage2-bins");
-  const passed = join(proofVerdicts, inputsOf(learned), "stage2");
-  let failure: unknown;
-  await run(
-    ["bash", "scripts/binary/prove-stage2.sh", out, bins],
-    checkout,
-    false,
-    {
-      PROOF_ONLY: `^(${todo.join("|")})$`,
-    }
-  ).catch((error: unknown) => {
-    failure = error;
-  });
-  await Promise.all(
-    todo.map(async (rig) => {
-      const lines = (
-        await readFile(join(out, "rigs", rig, "verdicts.tsv"), "utf8").catch(
-          () => ""
-        )
-      )
-        .split("\n")
-        .filter(Boolean);
-      if (
-        lines.length === counts.get(rig) &&
-        lines.every((line) => line.split("\t")[1]?.startsWith("PASS"))
-      ) {
-        await recordProven(join(passed, rig), commitId);
-      }
-    })
-  );
-  // Not a release's: the proof builds and the proof key's copy, and the proof's own scratch.
-  await Promise.all(
-    [
-      bins,
-      ...["feeds", "images", "shared", "tmp"].map((name) => join(out, name)),
-    ].map((path) => rm(path, { recursive: true, force: true }))
-  );
-  if (failure) {
-    throw failure;
-  }
-}
-
-/**
- * Every target built and every proof passed: the manifest signed, the
+ * Every target built: the manifest signed, the
  * build moved into `--output`, and with `--publish` the draft promoted. A
- * proven build is promoted even when a newer commit was queued while it was
+ * finished build is promoted even when a newer commit was queued while it was
  * built: that one is built next (the loop at the end of this file).
  */
 const promote = async (
@@ -1229,12 +998,6 @@ const rcodesignSays = (await Bun.file(rcodesignPath()).exists())
 if (!rcodesignSays.includes(`apple-codesign ${RCODESIGN_VERSION}`)) {
   refuse(
     `rcodesign ${RCODESIGN_VERSION} is not at ${rcodesignPath()}: bash scripts/release-setup.sh installs it`
-  );
-}
-// No build is released unproven: without podman the container proofs cannot run.
-if (!Bun.which("podman")) {
-  refuse(
-    "podman is not on this machine, so the container proofs cannot run and nothing is released without them: bash scripts/release-setup.sh installs it"
   );
 }
 const overQuota = await quotaRefusal();
