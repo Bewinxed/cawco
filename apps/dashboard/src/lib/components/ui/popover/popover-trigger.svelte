@@ -20,7 +20,7 @@
    *   (`ring-ground-*`, the dials' reserve notch); `strip-home` on the phone
    *   home's raised card.
    * - `meter`: the composer's context meter, a glyph and its figure;
-   *   `data-warn`, `data-critical` and `data-compacting` take their inks.
+   *   `warning-9`, `data-critical` and `data-compacting` take their inks.
    * - `mark`: a status mark or badge that opens what it reports
    *   (Configure → CLI tools: Not updated, Failed, Unsupported): the mark
    *   drawn inside it is its whole look, no fill of its own ("Needs you is

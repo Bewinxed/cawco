@@ -123,7 +123,7 @@
         <span aria-hidden="true" class="mark-cell"
           ><span
             data-slot="mark"
-            class="flex size-(--row-mark) flex-none items-center justify-center rounded-row-mark bg-action-surface leading-0 text-on-action"
+            class="flex size-(--row-mark) flex-none items-center justify-center rounded-xs bg-action-surface leading-0 text-on-action"
             data-box><IconUser class="size-(--row-mark-glyph)" /></span
           ></span
         >

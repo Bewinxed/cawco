@@ -333,7 +333,7 @@
         handOn = false;
         next.focus();
       }
-    }, dur("--duration-grow-exit"));
+    }, dur("--duration-panel-exit"));
   });
 
   /**

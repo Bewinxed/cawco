@@ -120,6 +120,7 @@ export default {
         "scripts/codemods/tokens-to-theme.ts",
         "scripts/codemods/tokens-to-theme.proof.ts",
         "scripts/codemods/theme-prune.ts",
+        "scripts/codemods/theme-unify.ts",
         // scripts/check.ts, beside compress-answer-check.ts
         "scripts/shell-bodies-check.ts",
         // scripts/check.ts, beside compress-answer-check.ts

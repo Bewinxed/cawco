@@ -248,7 +248,7 @@
       />
       {#if locked}
         <span
-          class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-body text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
+          class="ns-in mark-line inline-flex h-c-pill-h items-center gap-space-1 rounded-sm bg-status-live-bg px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-status-live-ink"
           ><span>{spawnWords.location.fromProject}</span></span
         >
         <span class="ns-in flex flex-none" style:--delay={staggered(1)}>
@@ -292,7 +292,7 @@
           >
             <span
               data-slot="machine"
-              class="mark-line inline-flex h-c-pill-h flex-none items-center gap-space-2 rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong"
+              class="mark-line inline-flex h-c-pill-h flex-none items-center gap-space-2 rounded-sm bg-surface-lift px-space-2 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-strong"
               ><span
                 data-slot="dot"
                 class="size-space-2 rounded-pill bg-hue-green-500"

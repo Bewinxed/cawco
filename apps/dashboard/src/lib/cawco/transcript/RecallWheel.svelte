@@ -607,7 +607,7 @@
     }
     if (shape) {
       await Promise.all([
-        shape.morphTo(0, shape.ext, dur("--duration-grow-exit"), base),
+        shape.morphTo(0, shape.ext, dur("--duration-panel-exit"), base),
         home,
       ]);
     }
@@ -851,7 +851,7 @@
         rested = done;
       })
     );
-    shape.morphTo(1, shape.ext, dur("--duration-grow"));
+    shape.morphTo(1, shape.ext, dur("--duration-panel"));
     // The newest message rolls down into the field as it grows.
     spinTo(1);
     return () => {
@@ -919,7 +919,7 @@
     <div
       data-slot="ghost"
       aria-selected={k === pick}
-      class="group/ghost absolute bottom-0 h-c-composer-field py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-body text-(length:--ghost-size) leading-ui text-ink-strong origin-bottom invisible will-change-(--ghost-moves) transition-[color] duration-(--duration-control) ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-selected-ink"
+      class="group/ghost absolute bottom-0 h-c-composer-field py-(--ghost-pad) grid grid-cols-(--ghost-cols) gap-x-space-3 items-baseline font-sans text-(length:--ghost-size) leading-ui text-ink-strong origin-bottom invisible will-change-(--ghost-moves) transition-[color] duration-(--duration-control) ease-out data-own:text-transparent aria-selected:not-data-draft:not-data-none:text-selected-ink"
       data-k={k}
       id="{id}-{k}"
       onclick={() => pickRow(k)}

@@ -44,7 +44,7 @@
  * top, is never below its edge. On the rows' in-out curve, the room set the
  * pace and the head rode it: the children were reached 22ms, then 134ms
  * apart. The moment the head reaches a child's place, its glyph has landed
- * and its title wipes in left to right, on --ease-out over --duration-rail. No
+ * and its title wipes in left to right, on --ease-out over --duration-morph. No
  * row ever moves: each stands at its place inside the growing box, and only
  * its glyph is drawn on its way there. Every piece in view is built before
  * the opening starts, held at its first frame, and all are started together
@@ -909,7 +909,7 @@ function planOpen(shape: Shape, now: State, speed: number): Plan {
   const line = glide(Math.max(0, shape.length - from), speed);
   const head = (t: number) => from + line.covered(t);
   const when = (s: number) => (s <= from ? 0 : line.reached(s - from));
-  const rail = dur("--duration-rail");
+  const rail = dur("--duration-morph");
   const titles = shape.items.map((item, i): Seg => {
     const v = Math.min(1, now.titles[i] ?? 0);
     return {
@@ -2310,7 +2310,7 @@ export function branch(
     return {
       duration: out
         ? dur("--duration-exit") + FRAME + STEP * 2
-        : dur("--duration-cascade") + dur("--duration-rail"),
+        : dur("--duration-cascade") + dur("--duration-morph"),
     };
   };
 }

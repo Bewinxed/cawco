@@ -43,7 +43,7 @@ interface Job {
   side: number;
 }
 
-/** A token's CSS, from its declaration in theme.css: `--color-spark`, `--radius-tab-icon`. */
+/** A token's CSS, from its declaration in theme.css: `--color-spark`, `--radius-xs`. */
 function token(name: string): string {
   const css = readFileSync(here("src/lib/tokens/theme.css"), "utf8");
   const value = new RegExp(`^\\s*${name}:\\s*([^;]+);`, "mu").exec(css)?.[1];
@@ -138,7 +138,7 @@ async function strip(job: Job): Promise<Buffer> {
   return Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
 }
 
-const radius = Number.parseFloat(token("--radius-tab-icon"));
+const radius = Number.parseFloat(token("--radius-xs"));
 const wave = Array.from(
   { length: (NEEDS_YOU.to - NEEDS_YOU.from) / 2 },
   (_, beat) => NEEDS_YOU.from + beat * 2

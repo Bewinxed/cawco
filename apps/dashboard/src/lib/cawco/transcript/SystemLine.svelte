@@ -191,7 +191,7 @@
   {#if note.status}
     <span
       data-slot="hstatus"
-      class="flex-none text-ink-muted data-bad:text-data-bad"
+      class="flex-none text-ink-muted data-bad:text-error-9"
       data-bad={note.status === "failed" || undefined}>{note.status}</span
     >
   {/if}
@@ -287,7 +287,7 @@
         ><IconInfo class="size-icon-sm" /></span
       >
       <span
-        class="flex-none text-ink-strong data-bad:text-data-bad"
+        class="flex-none text-ink-strong data-bad:text-error-9"
         data-bad={message?.content === "task failed" || undefined}
         >{message?.content}</span
       >
@@ -377,7 +377,7 @@
       >
       <span
         data-slot="hstatus"
-        class="flex-none text-ink-muted font-normal data-bad:text-data-bad"
+        class="flex-none text-ink-muted font-normal data-bad:text-error-9"
         data-bad={message?.state === "failed" || undefined}
         >{responsesState}</span
       >

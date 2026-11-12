@@ -515,7 +515,7 @@ body {
   height: var(--spacing-c-btn-h-sm);
   margin-top: var(--spacing-space-2);
   padding: 0 var(--spacing-space-3);
-  border: 1px solid var(--color-border-button-outline);
+  border: 1px solid var(--color-border-row-outline);
   border-radius: var(--radius-md);
   background: var(--color-surface-raised);
   color: var(--color-ink-strong);

@@ -32,9 +32,9 @@ const INK_NAMES = [
   "ink-row",
   "ink-muted",
   "selected-ink",
-  "data-ok",
-  "data-warn",
-  "data-bad",
+  "success-9",
+  "warning-9",
+  "error-9",
 ];
 
 /** A delegate's row in the session list. */

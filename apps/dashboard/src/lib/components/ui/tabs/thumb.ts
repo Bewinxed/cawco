@@ -42,7 +42,7 @@ export const segmentedVariants = tv({
     thumb:
       "pointer-events-none absolute start-0 top-0 origin-top-left rounded-(--shape) bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
     segment:
-      "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line hover:not-data-[state=active]:not-data-[state=on]:bg-groove-hover data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
+      "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-c-segment-pad-x py-0 font-sans text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line hover:not-data-[state=active]:not-data-[state=on]:bg-groove-hover data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },
 });
 

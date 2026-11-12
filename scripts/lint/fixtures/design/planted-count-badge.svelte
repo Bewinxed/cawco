@@ -11,7 +11,7 @@
 </script>
 
 <span
-  class="absolute start-0 top-0 h-icon-sm min-w-icon-sm rounded-pill bg-ink-solid text-on-ink num"
+  class="absolute start-0 top-0 h-icon-sm min-w-icon-sm rounded-pill bg-ink-strong text-on-ink num"
   >{count}</span
 >
 <span

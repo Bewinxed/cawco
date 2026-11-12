@@ -549,7 +549,7 @@
                      gap on touch"). -->
                 <div
                   data-slot="move-wait-card"
-                  class="grid gap-space-3 coarse:gap-space-5 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-stat"
+                  class="grid gap-space-3 coarse:gap-space-5 mbs-space-1 p-space-3 border border-border-control rounded-lg bg-surface-raised shadow-hairline"
                   in:unfold
                   out:unfold
                 >

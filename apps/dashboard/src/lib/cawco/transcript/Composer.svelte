@@ -584,7 +584,7 @@
   }
   /**
    * A minimized question's bar comes into the tray row once the card's
-   * fold (--duration-grow-exit) has landed, so the two never stand in one place
+   * fold (--duration-panel-exit) has landed, so the two never stand in one place
    * at once: the fold speeds up as it goes and only crosses the tray row in
    * its last frames (measured at 390: 210 of its 220ms). It comes up --pop-rise
    * out of a --part-blur blur over --duration-control, as the card's own parts come up
@@ -593,7 +593,7 @@
   function askedIn(_node: Element): TransitionConfig {
     const still = !motionOk.current;
     return {
-      delay: still ? 0 : dur("--duration-grow-exit"),
+      delay: still ? 0 : dur("--duration-panel-exit"),
       duration: dur("--duration-control"),
       easing: easeOut,
       css: (t, u) =>
@@ -1985,13 +1985,13 @@
 
   /**
    * The buttons slide together into the deck on the wheel's own growth:
-   * its --duration-grow on the drawer curve. Transform and opacity only, by the
+   * its --duration-panel on the drawer curve. Transform and opacity only, by the
    * Web Animations API, so the buttons' own transitions stay theirs.
    */
   function deckIn(places: DeckPlace[], from: number, to: number): void {
     deckOut(0);
     const timing = {
-      duration: dur("--duration-grow"),
+      duration: dur("--duration-panel"),
       easing: CURVE.drawer,
       fill: "forwards",
     } as const;
@@ -2031,10 +2031,10 @@
 
   /**
    * They fan back out to their places from wherever they are, on the
-   * wheel's fold: its --duration-grow-exit on the drawer curve (`ms`: 0 puts
+   * wheel's fold: its --duration-panel-exit on the drawer curve (`ms`: 0 puts
    * them back at once).
    */
-  function deckOut(ms = dur("--duration-grow-exit")): void {
+  function deckOut(ms = dur("--duration-panel-exit")): void {
     const was = decked;
     decked = null;
     if (!was) {
@@ -2590,7 +2590,7 @@
     const trip = startFlight(asField(field, leaving), from);
     // What the field holds again shows once the words leaving it are gone.
     if (motionOk.current) {
-      landAfter(dur("--duration-lift") * LEFT_BY);
+      landAfter(dur("--duration-panel") * LEFT_BY);
     }
     if (replaced !== undefined) {
       replacing.set(lift.id, replaced);
@@ -2731,7 +2731,7 @@
       return;
     }
     if (editShape) {
-      editShape.morphTo(1, editShape.ext, dur("--duration-grow"));
+      editShape.morphTo(1, editShape.ext, dur("--duration-panel"));
       if (edit) {
         edit.shown = true;
       }
@@ -2763,7 +2763,7 @@
    * parts spend that wait, so both are seen coming up once frames come.
    */
   function growRow(shape: GrownShape, row: number): void {
-    shape.morphTo(1, row, dur("--duration-grow"), shape.base, {
+    shape.morphTo(1, row, dur("--duration-panel"), shape.base, {
       ms: motionOk.current ? dur("--duration-control") : 0,
       run: () => {
         if (edit && editShape === shape) {
@@ -2781,7 +2781,7 @@
     if (edit) {
       edit.shown = false;
     }
-    await shape.morphTo(0, shape.ext, dur("--duration-grow-exit"));
+    await shape.morphTo(0, shape.ext, dur("--duration-panel-exit"));
     // Grown again while it folded: it stays.
     if (editShape === shape && !draft.lifted) {
       shape.remove();
@@ -3019,7 +3019,7 @@
       bottom: 0,
       height: (askBox?.base ?? 0) + (askBox?.ext ?? 0),
     }));
-    shape.morphTo(1, ext, dur("--duration-grow"));
+    shape.morphTo(1, ext, dur("--duration-panel"));
     // Partway up, once there is room for it.
     setTimeout(
       () => {
@@ -3071,7 +3071,7 @@
         shape.ext += shape.base - base;
         shape.base = base;
       }
-      await shape.morphTo(0, shape.ext, dur("--duration-grow-exit"));
+      await shape.morphTo(0, shape.ext, dur("--duration-panel-exit"));
     }
     if (turn !== askTurn) {
       return;
@@ -4015,7 +4015,7 @@
             aria-describedby={recallOf ? `${recallId}-way` : undefined}
             aria-expanded={menuOpen || !!recall}
             aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
-            class="relative z-1 flex-auto border-none border-current bg-transparent font-body font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:data-folding:duration-(--duration-morph) motion-safe:group-data-settling/cin:duration-(--duration-grow-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--duration-grow-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
+            class="relative z-1 flex-auto border-none border-current bg-transparent font-sans font-normal leading-ui text-ink-strong overflow-y-auto h-(--cin-ctl) min-h-(--cin-ctl) text-(length:--text-field-floor) py-(--field-pad) px-0 min-w-0 no-scrollbar opacity-(--roll-o) translate-raw-(--roll-move) clip-path-(--roll-clip) group-data-folded/field:clip-path-(--fold-clip) group-not-data-folded/field:data-cue-top:mask-(--cue-top-fade) group-not-data-folded/field:data-cue-bottom:mask-(--cue-bottom-fade) group-not-data-folded/field:data-cue-top:data-cue-bottom:mask-(--cue-both-fade) group-data-folded/field:mask-(--fold-fade) motion-safe:transition-[height] motion-safe:duration-(--duration-control) motion-safe:ease-out motion-safe:data-folding:duration-(--duration-morph) motion-safe:group-data-settling/cin:duration-(--duration-panel-exit) motion-safe:group-data-settling/cin:data-folding:duration-(--duration-panel-exit) motion-safe:group-data-settling/cin:ease-drawer data-flying:text-transparent data-flying:caret-transparent group-data-asking/dock:text-transparent group-data-asking/dock:caret-transparent group-data-asking/cin:text-transparent group-data-asking/cin:caret-transparent group-data-wheeling/cin:caret-transparent group-data-folded/field:overflow-hidden data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-muted data-mention-field-empty:before:tracking-title data-mention-field-empty:before:whitespace-nowrap data-flying:data-mention-field-empty:before:text-transparent group-data-asking/dock:data-mention-field-empty:before:text-transparent group-data-asking/cin:data-mention-field-empty:before:text-transparent group-data-recalling/cin:data-mention-field-empty:before:text-transparent group-data-hint-back/cin:data-mention-field-empty:before:transition-[color] group-data-hint-back/cin:data-mention-field-empty:before:duration-(--duration-fade) group-data-hint-back/cin:data-mention-field-empty:before:ease-out"
             data-cue-bottom={(cueBottom && !folded) || undefined}
             data-cue-top={(cueTop && !folded) || undefined}
             data-flying={flight !== null || !wordsLanded || undefined}
@@ -4075,7 +4075,7 @@
             <span
               data-slot="flight"
               aria-hidden="true"
-              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-body text-(length:--text-field-floor) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
+              class="absolute inset-0 z-2 grid grid-cols-1 content-unsafe-end items-unsafe-end py-(--field-pad) px-0 font-sans text-(length:--text-field-floor) leading-ui text-ink-strong whitespace-pre-wrap wrap-break-word pointer-events-none clip-path-(--flight-clip) group-data-folded/field:mask-(--fold-fade)"
               style:--flight-clip={"inset(0 calc(-1 * var(--spacing-space-2)) 0 calc(-1 * var(--spacing-space-3)))"}
             >
               <span

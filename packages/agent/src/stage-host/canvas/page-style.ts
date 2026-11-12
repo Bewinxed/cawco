@@ -137,7 +137,7 @@ html.cawco-map .cawco-column { position: absolute; inset-block-start: 0; inset-i
 .cawco-stage-failed-message { margin: 0; max-inline-size: var(--spacing-c-measure); font: var(--type-body); color: var(--color-ink-row); overflow-wrap: anywhere; }
 /* Try again: the kit's sm outline button. */
 .cawco-stage-failed button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; block-size: var(--spacing-c-btn-h-sm);
-  padding-inline: var(--spacing-space-3); border: 1px solid var(--color-border-button-outline); border-radius: var(--radius-md); background: var(--color-surface-raised);
+  padding-inline: var(--spacing-space-3); border: 1px solid var(--color-border-row-outline); border-radius: var(--radius-md); background: var(--color-surface-raised);
   box-shadow: var(--shadow-xs); font: var(--type-label); color: var(--color-ink-strong); cursor: pointer; }
 @media (hover: hover) { .cawco-stage-failed button:hover { background: var(--color-surface-hover); } }
 .cawco-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

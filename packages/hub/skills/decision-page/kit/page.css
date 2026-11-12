@@ -138,7 +138,7 @@ a {
 .dp-card {
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-hairline);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-modal);
   box-shadow: var(--shadow-raised);
   padding: var(--spacing-space-5);
   display: flex;

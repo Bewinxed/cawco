@@ -73,12 +73,10 @@
   --color-error-3: light-dark(oklch(90% 0.05 12), oklch(30% 0.08 12));
   --color-error-9: light-dark(oklch(50% 0.17 15), oklch(58% 0.17 15));
   --color-error-11: light-dark(oklch(36% 0.11 15), oklch(86% 0.07 12));
-  --color-warning-3: light-dark(oklch(91.4% 0.087 93.2), oklch(37% 0.074 88.4));
   --color-warning-9: light-dark(
     oklch(63.3% 0.129 85.8),
     oklch(68.3% 0.138 86.8)
   );
-  --color-warning-11: light-dark(oklch(37% 0.074 88.4), oklch(85% 0.131 92.3));
   --color-success-3: light-dark(
     oklch(81% 0.098 115.5),
     oklch(33.8% 0.076 121.9)
@@ -227,11 +225,6 @@
   --color-mask-opaque-a60: rgb(0 0 0 / 0.6);
   /* An alpha mask's stop at 90% (the phone tab strip's end fade). */
   --color-mask-opaque-a90: rgb(0 0 0 / 0.9);
-  /* A table's header band, one step under the field. */
-  --color-surface-band: light-dark(
-    oklch(95.7% 0.009 84),
-    oklch(21.4% 0.006 70)
-  );
   --color-surface-recess-deep: light-dark(
     var(--color-neutral-4),
     var(--color-neutral-1)
@@ -250,26 +243,9 @@
   --color-tab-sheet: var(--color-surface-recess);
   /* An unchosen folder tab on the phone's row, one tab from the chosen one. Each tab further recedes a step toward the shelf, to three. */
   --color-tab-recede-1: var(--color-surface-recess-deep);
-  /* An unchosen folder tab on the phone's row, two tabs from the chosen one. */
-  --color-tab-recede-2: color-mix(
-    in oklab,
-    var(--color-surface-recess-deep) 50%,
-    var(--color-surface-shelf)
-  );
-  /* An unchosen folder tab on the phone's row, three or more tabs from the chosen one. */
-  --color-tab-recede-3: color-mix(
-    in oklab,
-    var(--color-surface-recess-deep) 30%,
-    var(--color-surface-shelf)
-  );
   --color-surface-lift: light-dark(
     var(--color-neutral-1),
     var(--color-neutral-6)
-  );
-  /* An icon tile's ground (DESIGN.md: the duotone glyph on a raised 26px tile): the raised surface by day; at night two steps past it, raised meeting the recess it stands on. */
-  --color-surface-tile: light-dark(
-    var(--color-neutral-1),
-    var(--color-neutral-5)
   );
   --color-surface-fill: light-dark(
     var(--color-neutral-4),
@@ -279,11 +255,6 @@
   --color-surface-fill-strong: light-dark(
     var(--color-neutral-6),
     var(--color-neutral-7)
-  );
-  /* A segment held down (a fluid tab, its trailing controls included): by day the step past the hover ghost, at night surface-fill. */
-  --color-press-fill: light-dark(
-    var(--color-surface-fill-strong),
-    var(--color-surface-fill)
   );
   /* The kit Toggle's on step, where a pressed or chosen control stands (a chosen canvas tool, a pressed head button, a held tab): by day the surface-fill-strong step, a step past the hover; at night the surface-fill step, so it never reads as hovered. */
   --color-surface-pressed: light-dark(
@@ -299,11 +270,6 @@
   --color-surface-hover: light-dark(
     var(--color-neutral-4),
     var(--color-neutral-4)
-  );
-  /* The reader's well edge: darker than the well by day, the ink at 8% at night. */
-  --color-well-edge: light-dark(
-    var(--color-neutral-5),
-    oklch(from var(--color-neutral-12) l c h / 0.08)
   );
   /* Every divider: the transcript's user-message seam, section rules, the seams between machines and lists. The coral ramp at a subtle strength. */
   --color-seam: light-dark(
@@ -334,23 +300,11 @@
     var(--color-neutral-9),
     color-mix(in oklab, var(--color-neutral-9), var(--color-neutral-11) 25%)
   );
-  /* An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess. */
-  --color-border-card: light-dark(
-    var(--color-neutral-5),
-    var(--color-neutral-7)
-  );
-  /* The outline button's edge, 3:1 against the raised surface it stands on (surface-raised), where the control edge measures 1.36:1 by day and 1.43:1 at night on that surface (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night. Figures from bun scripts/token-contrast-check.ts --table. */
-  --color-border-button-outline: light-dark(
-    color-mix(in oklab, var(--color-neutral-8), var(--color-neutral-9) 40%),
-    color-mix(in oklab, var(--color-neutral-9), var(--color-neutral-11) 10%)
-  );
   /* A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess (surface-recess, #F7F4EE) and 3.47:1 on raised (surface-raised, #FEFDFA) by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.49:1 on the recess (#1D1B18) and 3.26:1 on raised (#23211E). Figures from bun scripts/token-contrast-check.ts --table. */
   --color-border-row-outline: light-dark(
     color-mix(in oklab, var(--color-neutral-8), var(--color-neutral-9) 50%),
     color-mix(in oklab, var(--color-neutral-9), var(--color-neutral-11) 10%)
   );
-  /* The strong control edge: a framed text field's own border while its text has focus (DESIGN.md, The Caret Rule). The row outline's value, 3:1 against the raised fill it frames and the recess or raised ground round it, by day and at night (WCAG 1.4.11), where the control edge it steps up from holds 1.36:1. */
-  --color-border-control-strong: var(--color-border-row-outline);
   --color-input: light-dark(
     var(--color-neutral-7),
     oklch(from var(--color-neutral-12) l c h / 0.14)
@@ -361,11 +315,6 @@
   --color-ink-row: light-dark(
     color-mix(in oklab, var(--color-neutral-12) 68%, var(--color-neutral-11)),
     color-mix(in oklab, var(--color-neutral-12) 88%, var(--color-neutral-11))
-  );
-  /* A stat tile's figure, a step lighter than the strongest ink. */
-  --color-ink-stat: light-dark(
-    color-mix(in oklab, var(--color-neutral-12) 60%, var(--color-neutral-11)),
-    color-mix(in oklab, var(--color-neutral-12) 72%, var(--color-neutral-11))
   );
   --color-ink-muted: var(--color-neutral-11);
   /* Placeholders and tertiary text: the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on fill, hover and raised (by day 4.55 / 4.55 / 5.66:1 at 6%, hover being the fill's own step; the cool ramp's 8.3% measured 4.47 on the warm fill). */
@@ -442,7 +391,6 @@
   --color-action-solid: light-dark(oklch(55.5% 0.17 33), oklch(54% 0.165 33));
   --color-action-hover: light-dark(oklch(51% 0.165 33), oklch(49.5% 0.16 34));
   --color-on-action: oklch(100% 0 0);
-  --color-on-brand: var(--color-on-action);
   /* action-surface's top stop: action-solid lifted 0.03 L, the one place the lift is written. A stop is a colour, so a control changing to or from the action (the kit Button's variant, its hover) eases its highlight on the fill's own clock. Web only: the Apple apps draw action-surface's stops inlined. */
   --color-action-top: oklch(from var(--color-action-solid) calc(l + 0.03) c h);
   /* action-surface's bottom stop: action-solid sunk 0.03 L. */
@@ -475,8 +423,6 @@
   /* Chosen option chip (1/2/3 keys in agent questions): solid vermillion, no ring. Dark sits at the dark action's lightness so the white digit holds 4.5:1 (the direction's 66% measured 3.33:1). */
   --color-chip-chosen-bg: light-dark(oklch(55% 0.17 33), oklch(54% 0.165 33));
   --color-chip-chosen-ink: oklch(100% 0 0);
-  /* Ink-solid: tooltips and inverted tiles stay ink, never coral. */
-  --color-ink-solid: var(--color-neutral-12);
   --color-on-ink: var(--color-neutral-1);
   /* Focus: one 2px coral ring, keyboard focus only. */
   --color-focus-ring: light-dark(oklch(55% 0.165 33), oklch(76% 0.12 34));
@@ -543,10 +489,10 @@
   /* A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim mixed from it cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own. */
   --color-tab-rim-attn: light-dark(oklch(48% 0.125 78), oklch(87% 0.14 92));
   --color-status-done-glyph: light-dark(
-    oklch(52% 0.14 140),
+    oklch(46.5% 0.14 140),
     oklch(76% 0.15 135)
   );
-  --color-status-fail-glyph: light-dark(oklch(53% 0.19 22), oklch(71% 0.16 20));
+  --color-status-fail-glyph: light-dark(oklch(53% 0.19 15), oklch(71% 0.16 15));
   --color-status-idle-glyph: var(--color-neutral-11);
   /* The nesting lines' ink (.kit-tree-line, every tree's nesting lines): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one. */
   --color-nest-ink: light-dark(
@@ -557,12 +503,10 @@
   --color-meter-calm: var(--color-neutral-11);
   /* The calm meter's groove: the ring's empty track (border-control). */
   --color-meter-calm-track: var(--color-border-control);
-  --color-meter-near: light-dark(oklch(62% 0.135 88), oklch(86% 0.14 95));
   --color-meter-near-track: light-dark(
     oklch(69.5% 0.095 90),
     oklch(53% 0.08 92)
   );
-  --color-meter-over: light-dark(oklch(50% 0.17 15), oklch(68% 0.16 15));
   --color-meter-over-track: light-dark(oklch(72% 0.08 15), oklch(53% 0.09 15));
   --color-meter-stale: light-dark(oklch(56% 0.012 265), oklch(64% 0.01 265));
   --color-meter-stale-track: light-dark(
@@ -592,8 +536,6 @@
   --color-media-buffered: var(--color-neutral-8);
   /* How much has played, on the scrubber's track, and its thumb: ink, never coral, which is the action (DESIGN.md, The Coral Is Where You Act Rule). */
   --color-media-fill: var(--color-ink-strong);
-  /* The band of raised surface that crosses the app's skeleton once per loop (CawCoDesign SkeletonView, until the app takes the web's pulse; the web's skeleton pulses, --dur-skeleton-pulse). */
-  --color-skeleton-sheen: oklch(from var(--color-surface-raised) l c h / 0.6);
   /* List bullets in rendered markdown. */
   --color-prose-bullet: oklch(from var(--muted-foreground) l c h / 0.55);
   /* Project identity ink at hue 0; the identity-ink utility turns it to the project's --identity-h. 48%, not 50%: on a row's hover surface the cyan end of the wheel fell to 4.39:1 at 50%, and 48% holds every one of the ten hues above 4.5:1. */
@@ -603,19 +545,6 @@
     in oklab,
     var(--color-neutral-8) 62%,
     var(--color-neutral-11)
-  );
-  /* Data colour: chroma survives in numerals. */
-  --color-data-ok: light-dark(
-    oklch(from var(--color-success-9) 46% 0.125 h),
-    oklch(from var(--color-success-9) 78% 0.135 h)
-  );
-  --color-data-warn: light-dark(
-    oklch(from var(--color-warning-9) 46% 0.125 h),
-    oklch(from var(--color-warning-9) 80% 0.13 h)
-  );
-  --color-data-bad: light-dark(
-    oklch(from var(--color-error-9) 46% 0.135 h),
-    oklch(from var(--color-error-9) 81% 0.13 h)
   );
   /* A diff's added row, over code-bg. */
   --color-diff-add-bg: oklch(from var(--color-success-9) l c h / 0.15);
@@ -643,7 +572,10 @@
   --color-chart-5: var(--color-neutral-9);
   /* Syntax (code blocks and diffs). Every syntax token holds 4.5:1 or more on every ground a code surface draws: code-bg, a diff's added and removed rows (diff-add-bg, diff-del-bg) and their word emphasis over them (diff-add-emphasis, diff-del-emphasis), in both themes. */
   --color-code-ink: var(--color-ink-strong);
-  --color-code-keyword: light-dark(oklch(45% 0.15 33), oklch(76% 0.12 34));
+  --color-code-keyword: light-dark(
+    oklch(from var(--color-mark-7) 45% c h),
+    var(--color-mark-7)
+  );
   --color-code-fn: light-dark(oklch(43% 0.1 245), oklch(80% 0.07 240));
   --color-code-string: light-dark(oklch(42% 0.105 122), oklch(84% 0.1 118));
   --color-code-number: light-dark(oklch(44% 0.115 55), oklch(84% 0.1 70));
@@ -718,19 +650,12 @@
   --shadow-raised:
     0 1px 3px var(--color-shadow-tint), 0 1px 1px var(--color-shadow-tint),
     inset 0 0 0 1px var(--color-night-ring);
-  --shadow-hairline: 0 3px 7px -2px var(--color-shadow-tint-2);
   /* A stat tile's lift: drawn below the card, not around it; ringed at night. */
-  --shadow-stat:
+  --shadow-hairline:
     0 3px 7px -2px var(--color-shadow-tint-2),
     inset 0 0 0 1px var(--color-night-ring);
   --shadow-md:
     0 3px 10px var(--color-shadow-tint-2), 0 1px 2px var(--color-shadow-tint),
-    inset 0 0 0 1px var(--color-night-ring);
-  --shadow-lg:
-    0 10px 30px var(--color-shadow-tint-2), 0 3px 8px var(--color-shadow-tint),
-    inset 0 0 0 1px var(--color-night-ring);
-  --shadow-xl:
-    0 24px 64px var(--color-shadow-tint-3), 0 6px 16px var(--color-shadow-tint),
     inset 0 0 0 1px var(--color-night-ring);
   --shadow-overlay:
     0 18px 48px var(--color-shadow-tint-3), 0 2px 6px var(--color-shadow-tint),
@@ -738,7 +663,6 @@
   /* A hanging surface whose top shows its own surface across the cut into its anchor (Caw's panel, kit-hang): the overlay's drop without the night ring, which would draw across the cut as a seam. */
   --shadow-overlay-hung:
     0 18px 48px var(--color-shadow-tint-3), 0 2px 6px var(--color-shadow-tint);
-  --shadow-modal: var(--shadow-overlay);
   --shadow-drawer: 0 12px 40px var(--color-shadow-tint-3);
   /* A drawn shape's drop (the grown composer), drawn as the SVG's own feDropShadow filters so it follows the shape, not a box, and is painted once rather than reapplied as the shape moves (grown.ts): this far layer, then shadow-drop-near. */
   --drop-shadow-drop: 0 14px 28px var(--color-shadow-tint-2);
@@ -764,7 +688,6 @@
   --font-sans:
     "Figtree Variable", "Figtree Variable Fallback", ui-sans-serif, system-ui,
     -apple-system, "Segoe UI", sans-serif;
-  --font-body: var(--font-sans);
   /* JetBrains Mono for code, paths, IDs and measurements; ligatures off. */
   --font-mono:
     "JetBrains Mono Variable", "JetBrains Mono Variable Fallback", ui-monospace,
@@ -792,7 +715,6 @@
   --text-display: 2.5rem;
   --leading-meta: 1.35;
   --leading-label: 1.3;
-  --leading-tight: 1.2;
   --leading-ui: 1.25;
   --leading-body: 1.45;
   --leading-prose: 1.55;
@@ -803,25 +725,23 @@
   --font-weight-normal: 400;
   /* Nothing in product UI goes above 500. */
   --font-weight-medium: 500;
-  --tracking-display: -0.008em;
+  --tracking-display: -0.02em;
   --tracking-title: -0.01em;
-  --tracking-caps: 0.06em;
-  /* A menu item's keyboard shortcut (the kit's command, dropdown and context menu shortcuts, Tailwind's widest). */
-  --tracking-widest: 0.1em;
+  --tracking-caps: 0.05em;
   /* How far under its words a text link's underline stands, when it is drawn (its hover). */
   --underline-offset: 3px;
   /* Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric. */
-  --type-meta: 400 var(--text-meta) / 1.35 var(--font-body);
-  --type-label: 500 var(--text-label) / 1.3 var(--font-body);
-  --type-body: 400 var(--text-body) / 1.45 var(--font-body);
-  --type-row: 500 var(--text-row) / 1.3 var(--font-body);
-  --type-prose: 400 var(--text-body) / 1.55 var(--font-body);
-  --type-button: 500 var(--text-body) / 1 var(--font-body);
+  --type-meta: 400 var(--text-meta) / var(--leading-meta) var(--font-sans);
+  --type-label: 500 var(--text-label) / var(--leading-label) var(--font-sans);
+  --type-body: 400 var(--text-body) / var(--leading-body) var(--font-sans);
+  --type-row: 500 var(--text-row) / var(--leading-label) var(--font-sans);
+  --type-prose: 400 var(--text-body) / var(--leading-prose) var(--font-sans);
+  --type-button: 500 var(--text-body) / var(--leading-kpi) var(--font-sans);
   /* Set with its tracking: the web's `text-title` utility carries it (app.css @theme, `--text-title--letter-spacing`), and the native role carries the same token. */
-  --type-title: 500 var(--text-title) / 1.25 var(--font-body);
-  --type-kpi: 500 var(--text-kpi) / 1 var(--font-body);
-  --type-code: 400 var(--text-code) / 1.6 var(--font-mono);
-  --type-caps: 500 11px / 1 var(--font-body);
+  --type-title: 500 var(--text-title) / var(--leading-ui) var(--font-sans);
+  --type-kpi: 500 var(--text-kpi) / var(--leading-kpi) var(--font-sans);
+  --type-code: 400 var(--text-code) / var(--leading-code) var(--font-mono);
+  --type-caps: 500 0.75rem / var(--leading-kpi) var(--font-sans);
   /* The 16px Field Rule's floor: no field's text under it on a phone, so iOS Safari never zooms into one. */
   --text-field-floor: 16px;
   /* Measured off the comps, deliberately not a 4px ladder. Keep the odd values. */
@@ -849,15 +769,9 @@
   --radius-lg: 12px;
   /* The stat tile's recessed well; the segmented control's thumb and segments, concentric in its 10px groove (less its 3px pad). */
   --radius-well: 7px;
-  /* A panel's shell: the paywall's hero, a decision page's panels. */
-  --radius-panel: 16px;
   /* Dialog tray: 6px pad + 12px body, concentric. */
   --radius-modal: 18px;
   --radius-pill: 999px;
-  /* The reader's row mark. */
-  --radius-row-mark: 4.6px;
-  /* The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side. */
-  --radius-tab-icon: 4px;
   /* A row standing at a glide popover's own inset (the new-session form's popovers, `roomy`): concentric with the surface (The Concentric Rule), its 12px less its space-2 pad and its 1px edge. */
   --radius-glide-row: calc(
     var(--radius-lg) - var(--spacing-space-2) - var(--border-width)
@@ -1456,12 +1370,8 @@
   --duration-exit: 160ms;
   /* A button's width following its label while it works. */
   --duration-morph: 180ms;
-  /* A transcript row's place opening, its rail drawing down with it. */
-  --duration-rail: 180ms;
   /* Fades that carry a state change in place. */
   --duration-fade: 200ms;
-  /* The longest a transcript that opens on a compaction holds its reveal for Caw's mark to be drawn, so the first frame that shows the list shows him. A bound, not a pace: the list is shown the moment he is ready (about 90ms on a cold load), and at the bound without him. Under --dur-wait-grace, so the hold shows nothing of its own. */
-  --duration-mark-hold: 200ms;
   /* How long a wait runs before its loading state (Caw at loading or reconnecting) appears; a shorter wait shows its plain surface. NN/g, Response Times: no special feedback is needed for delays under 1.0 second. */
   --duration-wait-grace: 1000ms;
   --duration-pop: 260ms;
@@ -1470,10 +1380,6 @@
   --duration-panel-exit: 220ms;
   /* A pane card picked up off the deck: the lift's scale, sixty percent of the panel's beat, derived from it the way the breath is. */
   --duration-pick-up: calc(var(--duration-panel) * 0.6);
-  /* The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited. */
-  --duration-grow: 320ms;
-  /* The grown composer folding back into its pill, shorter than its growth. */
-  --duration-grow-exit: 220ms;
   /* A comment's card pouring out of its pill as one silhouette, on --ease-goo. transitions.dev Gooey plus menu, its open (--pv3x). */
   --duration-goo: 350ms;
   /* A comment's card drawn back into its pill as one silhouette, on --ease-out, shorter than its open. transitions.dev Gooey plus menu, its close (--pv3g). */
@@ -1486,8 +1392,6 @@
   --duration-goo-content-exit: 120ms;
   /* The dip a goo shape's anchor takes as what poured out of it drains back: down --goo-dip at 30% and home, on --ease-out. A comment's pin as its card closes. transitions.dev Gooey plus menu, its anticipation (--pv2w). */
   --duration-goo-settle: 700ms;
-  /* A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve. */
-  --duration-lift: 340ms;
   /* How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it. */
   --duration-press-hold: 380ms;
   /* The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, "Slow · 400ms"). */
@@ -1691,7 +1595,7 @@
 }
 
 @theme inline {
-  --default-font-family: var(--font-body);
+  --default-font-family: var(--font-sans);
   --default-mono-font-family: var(--font-mono);
   --default-transition-duration: var(--duration-control);
   --default-transition-timing-function: var(--ease-out);
@@ -1742,7 +1646,7 @@
   --animate-face-out: kit-fade-out var(--duration-exit) var(--ease-out) forwards;
   --animate-face-in: kit-fade-in var(--duration-menu) var(--ease-out) backwards;
   --animate-wave-arrive: wave-draw var(--duration-pop) var(--ease-out)
-    calc(var(--duration-rail) + var(--lead)) backwards;
+    calc(var(--duration-morph) + var(--lead)) backwards;
   --animate-wave-draw: wave-draw var(--duration-pop) var(--ease-out) backwards;
   --animate-wave-breathe:
     wave-breath-draw calc(var(--duration-breath) * 2) var(--ease-out) infinite,

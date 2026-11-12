@@ -26,7 +26,7 @@
 </script>
 
 <div
-  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
+  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-surface-recess px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
   data-slot="draft-bar"
   data-state="set"
 >

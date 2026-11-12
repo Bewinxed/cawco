@@ -821,7 +821,7 @@
     {/if}
     {#if refusal}
       <p
-        class="absolute inset-x-0 bottom-0 m-0 px-space-3 py-space-2 border-t border-border-hairline bg-surface-raised text-data-bad text-size-body text-pretty wrap-anywhere"
+        class="absolute inset-x-0 bottom-0 m-0 px-space-3 py-space-2 border-t border-border-hairline bg-surface-raised text-error-9 text-size-body text-pretty wrap-anywhere"
         data-slot="browser-refusal"
         role="alert"
       >

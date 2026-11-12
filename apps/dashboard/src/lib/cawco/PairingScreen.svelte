@@ -73,7 +73,7 @@
           <p
             data-num
             data-slot="code"
-            class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-stat select-all"
+            class="num m-0 rounded-well bg-surface-recess px-space-5 py-space-3 type-kpi font-(family-name:--font-mono) text-ink-row select-all"
           >
             <span class="sr-only">Pairing code </span>{stage.userCode}
           </p>

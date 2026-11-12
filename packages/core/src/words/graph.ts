@@ -177,12 +177,10 @@ export const graphWords = {
     "--duration-exit": "Exit",
     "--duration-morph": "Morph",
     "--duration-fade": "Fade",
-    "--duration-grow-exit": "Grow exit",
+    "--duration-panel-exit": "Panel exit",
     "--duration-pop": "Pop",
     "--duration-panel": "Panel",
     "--duration-glide": "Glide",
-    "--duration-grow": "Grow",
-    "--duration-lift": "Lift",
     "--duration-settle": "Settle",
   } as Record<string, string>,
   /** The curve the agent wrote, when it is none of the design system's: offered to go back to. */

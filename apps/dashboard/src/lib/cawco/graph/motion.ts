@@ -90,9 +90,7 @@ const LADDER = [
   "--duration-fade",
   "--duration-pop",
   "--duration-panel",
-  "--duration-grow-exit",
-  "--duration-grow",
-  "--duration-lift",
+  "--duration-panel-exit",
   "--duration-glide",
   "--duration-settle",
 ] as const;

@@ -344,12 +344,12 @@
         {#snippet tipExtra(tab: (typeof railItems)[number])}
           {#if tab.soon}
             <span
-              class="font-body text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
+              class="font-sans text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
               >{spawnWords.model.soon}</span
             >
           {:else if tab.disabled}
             <span
-              class="font-body text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
+              class="font-sans text-size-label leading-none font-medium tracking-caps uppercase opacity-60"
               >{spawnWords.model.notInstalled}</span
             >
           {/if}
@@ -370,7 +370,7 @@
           aria-label={spawnWords.searchModels}
           autocapitalize="off"
           autocorrect="off"
-          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-body font-normal text-ink-strong placeholder:text-ink-muted"
+          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 font-sans text-size-body leading-body font-normal text-ink-strong placeholder:text-ink-muted"
           id={`${uid}-search`}
           oninput={(event) => {
             query = event.currentTarget.value;
@@ -474,7 +474,7 @@
               >
             </span>
             <span
-              class="font-body text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
+              class="font-sans text-size-meta leading-none font-normal whitespace-nowrap text-ink-subtle"
               >{spawnWords.model.enter}</span
             >
           </button>

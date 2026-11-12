@@ -575,7 +575,7 @@
             <!-- The strip's time: its line here, the figure face on its own
                  span (`mono-figure`). -->
             <span
-              class="flex-none font-body text-size-label leading-icon-md font-medium num text-ink-strong data-muted:text-ink-muted"
+              class="flex-none font-sans text-size-label leading-icon-md font-medium num text-ink-strong data-muted:text-ink-muted"
               data-muted={claude.stale !== null || undefined}
               data-strip-digits
               ><span class="mono-figure"
@@ -588,7 +588,7 @@
                marks and digits: only when the rail cannot fit it at all does
                it end in an ellipsis. -->
           <span
-            class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-c-usage-cap-lh font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+            class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-size-meta leading-c-usage-cap-lh font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
             data-next={claude.next?.id}
             data-strip-caption
             ><Words parts={caption(claude, now, nameOf)} /></span
@@ -621,7 +621,7 @@
               >
             {/if}
             <span
-              class="flex-none font-body text-size-label leading-icon-md font-medium num text-ink-strong"
+              class="flex-none font-sans text-size-label leading-icon-md font-medium num text-ink-strong"
               data-strip-go-time
               ><span class="mono-figure"
                 ><Figure text={goTime?.figure ?? ""} /></span
@@ -632,7 +632,7 @@
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
             <span
-              class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-c-usage-cap-lh font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+              class="line-clamp-1 line-clamp-std-1 min-w-0 font-sans text-size-meta leading-c-usage-cap-lh font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
               data-strip-go-week
               ><WeekMark ring={openCode} />
               <span class="mono-figure">{goWeek}%</span></span
@@ -799,7 +799,7 @@
     data-usage-cell
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--duration-fade) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
+    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--duration-fade) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-row-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
@@ -922,7 +922,7 @@
                 data-num
                 {...props}
                 aria-label={stop?.said}
-                class="type-kpi num whitespace-nowrap text-ink-stat data-muted:text-ink-muted"
+                class="type-kpi num whitespace-nowrap text-ink-row data-muted:text-ink-muted"
                 data-muted={claude.stale !== null || undefined}
                 data-stop-kpi
                 role="img"

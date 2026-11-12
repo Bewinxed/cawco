@@ -992,17 +992,17 @@
       aria-hidden="true"
     >
       {#if finder.view === "waiting"}
-        <span><kbd class="font-body text-ink-muted">↵</kbd> open</span><span
-          ><kbd class="font-body text-ink-muted">←</kbd> back</span
-        ><span><kbd class="font-body text-ink-muted">esc</kbd></span>
+        <span><kbd class="font-sans text-ink-muted">↵</kbd> open</span><span
+          ><kbd class="font-sans text-ink-muted">←</kbd> back</span
+        ><span><kbd class="font-sans text-ink-muted">esc</kbd></span>
       {:else}
         {#if finder.stops.length > 0}
-          <span><kbd class="font-body text-ink-muted">↵</kbd> {enterHint}</span>
+          <span><kbd class="font-sans text-ink-muted">↵</kbd> {enterHint}</span>
           {#if peekable}
-            <span><kbd class="font-body text-ink-muted">→</kbd> peek</span>
+            <span><kbd class="font-sans text-ink-muted">→</kbd> peek</span>
           {/if}
         {/if}
-        <span><kbd class="font-body text-ink-muted">esc</kbd></span>
+        <span><kbd class="font-sans text-ink-muted">esc</kbd></span>
       {/if}
     </div>
   {/if}

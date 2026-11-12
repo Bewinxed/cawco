@@ -29,7 +29,7 @@
 
 <span
   class={cn(
-    "ml-auto coarse:hidden text-ink-muted text-meta tracking-widest",
+    "ml-auto coarse:hidden text-ink-muted text-meta tracking-caps",
     FOCUSED[menu],
     className
   )}

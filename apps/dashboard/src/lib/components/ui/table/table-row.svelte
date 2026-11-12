@@ -7,7 +7,7 @@
     variants: {
       variant: {
         /** The header's band: no rule, on the band surface. */
-        band: "border-0 bg-surface-band",
+        band: "border-0 bg-surface-recess",
         /*
          * A body's last row: TableBody's `[&_tr:last-child]:border-0` (0,2,1)
          * writes every side's width and style there. Where a row's own bottom

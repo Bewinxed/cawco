@@ -256,6 +256,6 @@
       />{/if}</span
   >
   {#if payload.keys}
-    <kbd class="font-body opacity-70">{payload.keys}</kbd>
+    <kbd class="font-sans opacity-70">{payload.keys}</kbd>
   {/if}
 {/snippet}

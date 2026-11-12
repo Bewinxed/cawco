@@ -103,7 +103,7 @@
 
 <section
   aria-label={setupWords.draftStage(stage.name)}
-  class="group/col flex flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline"
+  class="group/col flex flex-col gap-space-1 rounded-lg bg-surface-recess p-space-1 inset-ring inset-ring-border-hairline"
   data-kind={stage.kind}
   data-share="stage:{stage.name}"
   data-slot="draft-column"

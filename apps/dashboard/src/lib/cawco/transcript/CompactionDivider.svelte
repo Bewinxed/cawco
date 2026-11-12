@@ -124,7 +124,7 @@
     if (watched) {
       return dur("--duration-fade");
     }
-    return lead === null ? 0 : dur("--duration-rail") + lead;
+    return lead === null ? 0 : dur("--duration-morph") + lead;
   }
 
   const disclosed = $derived(disclosureAt(row.session, row.key));

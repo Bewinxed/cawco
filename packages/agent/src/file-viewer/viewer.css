@@ -122,7 +122,7 @@ body {
   margin-inline: auto;
   padding-block: var(--spacing-space-3);
   background: var(--color-surface-raised);
-  border: var(--border-width) solid var(--color-border-card);
+  border: var(--border-width) solid var(--color-border-control);
   border-radius: var(--radius-md);
 }
 .lines {
@@ -160,7 +160,7 @@ body {
   max-inline-size: var(--spacing-c-measure-short);
   padding: var(--spacing-space-5);
   background: var(--color-surface-raised);
-  border: var(--border-width) solid var(--color-border-card);
+  border: var(--border-width) solid var(--color-border-control);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-raised);
 }

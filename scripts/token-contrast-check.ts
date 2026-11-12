@@ -102,7 +102,6 @@ const S = {
   inkSolid: "DESIGN.md, Ink-solid",
   chips: "DESIGN.md, Tertiary: status (each chip 4.5:1)",
   syntax: "DESIGN.md, Syntax; token code-ink",
-  outline: "DESIGN.md, Edges; token border-button-outline",
   contrastEdge: "DESIGN.md, Edges; token border-contrast",
   inks: "DESIGN.md, Inks",
   subtle: "DESIGN.md, Inks; token ink-subtle",
@@ -125,7 +124,7 @@ const S = {
 
 const PAIRS: Pair[] = [
   // Text inks on the surfaces they stand on.
-  ...["ink-strong", "ink-row", "ink-stat", "ink-muted"].flatMap((ink) =>
+  ...["ink-strong", "ink-row", "ink-muted"].flatMap((ink) =>
     [
       "surface-page",
       "surface-raised",
@@ -156,9 +155,9 @@ const PAIRS: Pair[] = [
       ["ink-subtle", S.subtle],
     ] as const
   ).map(([ink, source]) => ({
-    label: `${ink} on surface-band (a board column's head)`,
+    label: `${ink} on surface-recess (a board column's head)`,
     fg: ink,
-    bg: ["surface-band"],
+    bg: ["surface-recess"],
     floor: TEXT,
     source,
   })),
@@ -220,9 +219,9 @@ const PAIRS: Pair[] = [
     source: S.selected,
   },
   {
-    label: "on-ink on ink-solid",
+    label: "on-ink on ink-strong",
     fg: "on-ink",
-    bg: ["ink-solid"],
+    bg: ["ink-strong"],
     floor: TEXT,
     source: S.inkSolid,
   },
@@ -258,13 +257,6 @@ const PAIRS: Pair[] = [
   })),
   // Non-text: edges, rings, rims, marks.
   {
-    label: "border-button-outline on surface-raised",
-    fg: "border-button-outline",
-    bg: ["surface-raised"],
-    floor: UI,
-    source: S.outline,
-  },
-  {
     label: "border-contrast on surface-raised",
     fg: "border-contrast",
     bg: ["surface-raised"],
@@ -285,13 +277,6 @@ const PAIRS: Pair[] = [
     bg: ["surface-raised"],
     floor: { light: 1.36, dark: 1.43 },
     source: "DESIGN.md, Borders are graded; token border-control",
-  },
-  {
-    label: "border-button-outline on surface-recess",
-    fg: "border-button-outline",
-    bg: ["surface-recess"],
-    floor: { light: 2.95, dark: UI },
-    source: S.rowOutline,
   },
   ...["surface-raised", "surface-recess"].map((bg) => ({
     label: `border-row-outline on ${bg}`,
@@ -332,6 +317,13 @@ const PAIRS: Pair[] = [
       source: S.glyphs,
     }))
   ),
+  {
+    label: "status-done-glyph on status-done-bg",
+    fg: "status-done-glyph",
+    bg: ["status-done-bg"],
+    floor: UI,
+    source: S.glyphs,
+  },
   // Every breather at its floor, on every surface it stands on.
   ...[
     "status-live-glyph",

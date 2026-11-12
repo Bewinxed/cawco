@@ -265,7 +265,7 @@
       {#key shownTip}
         <span
           data-slot="tip-text"
-          class="inline-flex items-center gap-space-2 px-space-3 font-body text-size-meta leading-none font-normal whitespace-nowrap motion-safe:animate-rail-label-in"
+          class="inline-flex items-center gap-space-2 px-space-3 font-sans text-size-meta leading-none font-normal whitespace-nowrap motion-safe:animate-rail-label-in"
           {@attach measureTip}
           >{items[shownTip]?.label}
           {#if tipExtra && items[shownTip]}

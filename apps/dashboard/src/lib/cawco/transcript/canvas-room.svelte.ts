@@ -4,7 +4,7 @@
  * the pill as the recall wheel grows, the field below it writable.
  *
  * - **Open.** The grown shape (grown.ts) rises out of the pill's top edge
- *   over `--duration-grow` and keeps rising until the canvas stands over the
+ *   over `--duration-panel` and keeps rising until the canvas stands over the
  *   column above the field; the canvas (its stage, canvas/stage.svelte.ts)
  *   is clipped to the shape as it grows. Reopened from its chip, the canvas
  *   opens out of the chip's box on the same clock.
@@ -18,7 +18,7 @@
  *   settle on one spring. The grown shape's shoulders step out from the
  *   pill's edges to it (grown.ts `wide`, the same each side). The height
  *   and the width chosen are kept across Done and reopen.
- * - **Done** folds it over `--duration-grow-exit` into its chip, its picture the
+ * - **Done** folds it over `--duration-panel-exit` into its chip, its picture the
  *   chip's thumbnail. The rail's **Remove** folds it back into the pill on
  *   the same clock, leaves no chip, and takes it out of the message as the
  *   chip's remove does; the panel still lists it.
@@ -478,7 +478,7 @@ export class CanvasRoom {
 
   /**
    * The canvas stands up out of the pill (`from` null) or out of its chip's
-   * box: the shape grows over `--duration-grow` and the stage, already on its
+   * box: the shape grows over `--duration-panel` and the stage, already on its
    * box, is uncovered by the same outline.
    */
   async #grow(from: Box | null): Promise<void> {
@@ -506,7 +506,7 @@ export class CanvasRoom {
     stage.standAt("composer");
     this.#tellStage();
     const { halo } = shape.layers;
-    const ms = dur("--duration-grow");
+    const ms = dur("--duration-panel");
     const rest = shape.cutAt(1, sizes.stage);
     let runs: Animation[];
     if (motionOk.current) {
@@ -564,7 +564,7 @@ export class CanvasRoom {
     }
   }
 
-  /** Done: the canvas folds into its chip over `--duration-grow-exit`; its picture becomes the chip's. */
+  /** Done: the canvas folds into its chip over `--duration-panel-exit`; its picture becomes the chip's. */
   async fold(): Promise<void> {
     await this.#fold(true);
   }
@@ -581,7 +581,7 @@ export class CanvasRoom {
   }
 
   /**
-   * The canvas folds over `--duration-grow-exit`: into its chip's box (`intoChip`),
+   * The canvas folds over `--duration-panel-exit`: into its chip's box (`intoChip`),
    * or back into the pill along the grown shape's own fold. Whether it
    * landed folded.
    */
@@ -606,7 +606,7 @@ export class CanvasRoom {
       to = chip ? atRest(() => boxOf(chip)) : null;
     }
     const { halo } = shape.layers;
-    const ms = dur("--duration-grow-exit");
+    const ms = dur("--duration-panel-exit");
     let runs: Animation[];
     if (motionOk.current && (to || !intoChip)) {
       const into = to

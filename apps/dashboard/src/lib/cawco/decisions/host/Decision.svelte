@@ -1,6 +1,6 @@
 <!--
   One decision: a raised card on the page's recessed ground (DESIGN.md, The
-  Frame Recesses Rule; --radius-panel, a decision page's panels; the tile
+  Frame Recesses Rule; --radius-modal, a decision page's panels; the tile
   shadow, no border; 18px in, 14px under a finger). The card carries its id
   twice: `data-cawco-choice`, which the overlay's bridge picks on (a click
   on an option's `data-option` stores it, pick.ts), and `id="decision-<id>"`,
@@ -437,7 +437,7 @@
 
 <article
   {@attach morph()}
-  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-(--card-in) shadow-tile"
+  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-modal bg-surface-raised p-(--card-in) shadow-tile"
   data-cawco-choice={id}
   data-cawco-multiple={multiple ? "" : undefined}
   data-slot="decision"

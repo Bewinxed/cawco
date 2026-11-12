@@ -102,8 +102,8 @@
         form: "gap-3",
       },
       frame: {
-        panel: "rounded-lg shadow-lg",
-        "panel-high": "rounded-lg shadow-xl",
+        panel: "rounded-lg shadow-md",
+        "panel-high": "rounded-lg shadow-overlay",
         raised: "shadow-raised",
       },
       look: { "new-session": "ns-theme bg-surface-recess" },

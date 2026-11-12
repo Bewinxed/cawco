@@ -263,7 +263,7 @@
         aria-label="Archived, {archived.length} {archived.length === 1
           ? 'task'
           : 'tasks'}. Open it."
-        class="select-none press-tint mb-space-3 flex w-c-btn-h-lg flex-none flex-col items-center gap-space-2 rounded-lg border-none border-current bg-surface-band px-0 py-space-3 text-ink-muted inset-ring inset-ring-border-hairline"
+        class="select-none press-tint mb-space-3 flex w-c-btn-h-lg flex-none flex-col items-center gap-space-2 rounded-lg border-none border-current bg-surface-recess px-0 py-space-3 text-ink-muted inset-ring inset-ring-border-hairline"
         onclick={() => setRail(true)}
         type="button"
       >

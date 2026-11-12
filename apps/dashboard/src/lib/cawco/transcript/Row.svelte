@@ -107,7 +107,7 @@
    *
    * THE ARRIVAL: THE RAIL FIRST, THEN WHAT STANDS ON IT. Every row that
    * arrives opens its place first — from nothing, or from the height of the
-   * row it took over, to its own measured height over --duration-rail on
+   * row it took over, to its own measured height over --duration-morph on
    * --ease-out — and a rail row's rail, being its own background, draws down
    * with that opening as one stroke. Only once the place is open does the
    * content fade up into it (--duration-menu, --pop-rise). A rail row's content is what
@@ -319,7 +319,7 @@
     /** The height the place opens from. */
     from: number;
     /** The duration token the place opens over. */
-    over: "--duration-rail" | "--duration-control";
+    over: "--duration-morph" | "--duration-control";
     /** The row's own height, as the frame laid it out (`onFirstLayout`). */
     own: number;
   }
@@ -457,7 +457,7 @@
       delay: 0,
       content: arrives,
       clip: true,
-      over: "--duration-rail",
+      over: "--duration-morph",
     });
     if (!arrives) {
       return;
@@ -478,7 +478,7 @@
       delay: lead,
       content: !emerges,
       clip: !emerges,
-      over: emerges ? "--duration-control" : "--duration-rail",
+      over: emerges ? "--duration-control" : "--duration-morph",
     });
     if (played) {
       played.finished.then(spent, () => {

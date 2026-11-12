@@ -3,7 +3,7 @@
    * One figure on one surface, DESIGN.md's stat tile: a 10px raised card,
    * 90px tall at least, holding its recessed well 7px in (the one
    * card-in-card). In the well the label (label role, muted) stands over the
-   * value (KPI role, `ink-stat`, tabular) with its unit in meta on the same
+   * value (KPI role, `ink-row`, tabular) with its unit in meta on the same
    * baseline. The unit sits after the value, so it coming and going never
    * moves the figure or the tile's height. `action` is a control the figure
    * is changed with (the budget's Set budget), under the figure in the well.
@@ -37,7 +37,7 @@
 </script>
 
 <div
-  class="group flex h-full min-h-c-stat-h flex-col rounded-md bg-surface-raised p-space-2 shadow-stat"
+  class="group flex h-full min-h-c-stat-h flex-col rounded-md bg-surface-raised p-space-2 shadow-hairline"
   data-tone={tone}
   {...rest}
 >
@@ -51,7 +51,7 @@
       <span
         data-slot="num"
         data-stat-value
-        class="num min-h-lh type-kpi text-ink-stat group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink group-tone-caution:text-data-warn group-tone-bad:text-data-bad max-desk:type-title"
+        class="num min-h-lh type-kpi text-ink-row group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink group-tone-caution:text-warning-9 group-tone-bad:text-error-9 max-desk:type-title"
         ><MorphText text={String(value)} /></span
       >
       {#if unit}

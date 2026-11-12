@@ -390,7 +390,7 @@
           class={[
             "box-border grid size-full place-items-center rounded-pill border bg-transparent text-meta leading-none num before:content-data-n",
             mark === "standing"
-              ? "border-border-button-outline text-ink-strong"
+              ? "border-border-row-outline text-ink-strong"
               : "border-border-control text-ink-muted",
           ]}
           data-n={n}

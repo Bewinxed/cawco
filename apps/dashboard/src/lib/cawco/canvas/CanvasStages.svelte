@@ -156,7 +156,7 @@
           role="alert"
         >
           <p
-            class="flex-1 basis-c-draft-line min-w-0 m-0 text-size-body text-data-bad text-pretty"
+            class="flex-1 basis-c-draft-line min-w-0 m-0 text-size-body text-error-9 text-pretty"
           >
             {stage.unreached}
           </p>

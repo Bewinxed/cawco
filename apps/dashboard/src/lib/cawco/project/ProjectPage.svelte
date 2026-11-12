@@ -2061,7 +2061,7 @@
           <!-- The tab already says `draft`; the bar says what it is and
                offers the two answers, kept together on one row. -->
           <div
-            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
+            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-lg bg-surface-recess px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
             out:crossOut
           >
             <span
@@ -2644,7 +2644,7 @@
       >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
           <div
-            class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 inset-ring inset-ring-border-hairline"
+            class="flex flex-col gap-space-2 rounded-lg bg-surface-recess p-space-2 inset-ring inset-ring-border-hairline"
           >
             <Skeleton class="w-3/5" line="label" />
             <Skeleton class="w-full" height="card" radius="chip" />

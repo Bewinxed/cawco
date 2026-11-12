@@ -186,7 +186,7 @@
     // A reference on the prompt's line: one line box tall less its 1px
     // margin each side, so a line holding chips keeps the prompt's leading.
     chip.className =
-      "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm border border-border-control bg-surface-fill ps-space-1 pe-space-2 align-top font-body text-label leading-none font-medium whitespace-nowrap text-ink-strong select-all";
+      "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm border border-border-control bg-surface-fill ps-space-1 pe-space-2 align-top font-sans text-label leading-none font-medium whitespace-nowrap text-ink-strong select-all";
     const mark = document.createElement("span");
     mark.className = "inline-flex *:[svg]:size-icon-sm";
     mark.style.color = item.hue ?? "";
@@ -372,7 +372,7 @@
     data-slot="editor"
     aria-label={spawnWords.firstPrompt}
     aria-multiline="true"
-    class="fai-scroll h-c-row-h data-grown:h-30 max-phone:h-30 w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:duration-(--duration-pop) motion-safe:phone:ease-in-out"
+    class="fai-scroll h-c-row-h data-grown:h-30 max-phone:h-30 w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-sans text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:duration-(--duration-pop) motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={closeMenu}
@@ -389,7 +389,7 @@
   {#if promptEmpty}
     <span
       aria-hidden="true"
-      class="pointer-events-none absolute inset-x-space-4 top-space-3 truncate font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal text-ink-subtle"
+      class="pointer-events-none absolute inset-x-space-4 top-space-3 truncate font-sans text-(length:--prompt-fs) leading-(--prompt-lh) font-normal text-ink-subtle"
       >{spawnWords.form.promptPlaceholder}
       <span class="text-ink-subtle max-phone:hidden"
         >{spawnWords.form.promptKeys}</span

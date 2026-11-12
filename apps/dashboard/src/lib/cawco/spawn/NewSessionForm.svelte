@@ -2277,7 +2277,7 @@
         </BarGlass>
       {:else}
         <span
-          class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink"
+          class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-strong text-on-ink"
           ><Bolt class="size-icon-sm" /></span
         >
       {/if}

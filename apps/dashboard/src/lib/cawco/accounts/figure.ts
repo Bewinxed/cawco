@@ -287,7 +287,7 @@ const PART = {
    * status khaki (DESIGN.md, The Reserved Hue Rule).
    */
   clockWash: `${AT} rounded-xs bg-selection opacity-0`,
-  blocked: `${AT} ${META} font-medium text-right text-data-bad opacity-0`,
+  blocked: `${AT} ${META} font-medium text-right text-error-9 opacity-0`,
   bar: `${STRIP} bg-surface-fill`,
   headroom: `${STRIP} bg-(--c)/42 opacity-0`,
   fill: `${STRIP} bg-(--c) origin-left`,

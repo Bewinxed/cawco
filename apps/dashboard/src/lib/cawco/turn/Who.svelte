@@ -145,7 +145,7 @@
         data-slot="dot"
         data-a={!you || undefined}
         aria-hidden="true"
-        class="relative size-(--row-mark-box) rounded-xs flex items-center justify-center leading-0 flex-none data-u:size-(--row-mark) data-u:mx-(--well-x) data-u:rounded-row-mark data-u:bg-action-surface not-data-a:data-u:text-on-action data-a:bg-brand-solid data-a:text-on-brand"
+        class="relative size-(--row-mark-box) rounded-xs flex items-center justify-center leading-0 flex-none data-u:size-(--row-mark) data-u:mx-(--well-x) data-u:rounded-xs data-u:bg-action-surface not-data-a:data-u:text-on-action data-a:bg-brand-solid data-a:text-on-action"
         data-box
       >
         {#if you}

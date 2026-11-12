@@ -452,7 +452,7 @@
            restyled every `data-slot` in the tab under each state change. -->
       <use
         data-ff-sheet
-        class="pick-inherit paint-tab-sheet hover-hover:group-data-ghosted/ff-tab:not-group-data-tab-item-selected/ff-tab:paint-tab-hover group-hit-pressed/ff-tab:fill-press-fill"
+        class="pick-inherit paint-tab-sheet hover-hover:group-data-ghosted/ff-tab:not-group-data-tab-item-selected/ff-tab:paint-tab-hover group-hit-pressed/ff-tab:fill-surface-pressed"
         href="#{uid}-outline"
       />
       {#if !hung}

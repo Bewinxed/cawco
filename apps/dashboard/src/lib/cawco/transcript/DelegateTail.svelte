@@ -68,7 +68,7 @@
     | TailNote;
 
   /** A failed call's glyph ink, the transcript's (ToolGroup `.glyph.err`). */
-  const FAILED_INK = "text-data-bad";
+  const FAILED_INK = "text-error-9";
 
   /** Rows on screen, the height of the tail; one row's height, in px. */
   const SLOTS = 6;

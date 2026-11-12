@@ -483,7 +483,7 @@
                over it. -->
           <span
             data-slot="glyph"
-            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-data-bad"
+            class="col-start-1 row-start-1 grid place-items-center {d.color} data-err:text-error-9"
             data-err={failed || undefined}
             in:glyphIn
             out:glyphOut
@@ -562,7 +562,7 @@
           >{#each factParts(d.fact) as part, i (i)}
             <span
               data-add={part.add || undefined}
-              class="not-data-del:data-add:text-data-ok data-del:text-data-bad"
+              class="not-data-del:data-add:text-success-9 data-del:text-error-9"
               data-del={part.del || undefined}>{part.text}</span
             >
           {/each}</span
@@ -689,7 +689,7 @@
               <!-- What happened and the way back, under the row that asked;
                    the row itself is still the way to open it. -->
               <p
-                class="max-w-(--tx-preview-max) mb-space-2 text-data-bad text-size-meta font-normal"
+                class="max-w-(--tx-preview-max) mb-space-2 text-error-9 text-size-meta font-normal"
                 role="alert"
               >
                 Couldn't open {name}: {openFailed.get(callId(m))}
@@ -803,7 +803,7 @@
                         {#if refusal}
                           <p
                             data-slot="refusal"
-                            class="ms-(--diffs-inset) text-size-label text-data-bad wrap-anywhere"
+                            class="ms-(--diffs-inset) text-size-label text-error-9 wrap-anywhere"
                           >
                             {refusal}
                           </p>

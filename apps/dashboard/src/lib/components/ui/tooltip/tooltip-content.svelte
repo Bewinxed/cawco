@@ -42,7 +42,7 @@
          `--tip-rise` toward its trigger (`--kit-tip-from`, by its side); it leaves at
          once, so moving on is never held up by the last one. With reduced
          motion only the fade runs. */
-        "type-meta rounded-sm bg-ink-solid text-on-ink [--kit-tip-from:0_var(--tip-rise)] data-[state$=open]:animate-tip-fade motion-safe:data-[state$=open]:animate-tip-in data-[side=bottom]:[--kit-tip-from:0_calc(-1*var(--tip-rise))] data-[side=left]:[--kit-tip-from:var(--tip-rise)_0] data-[side=right]:[--kit-tip-from:calc(-1*var(--tip-rise))_0]",
+        "type-meta rounded-sm bg-ink-strong text-on-ink [--kit-tip-from:0_var(--tip-rise)] data-[state$=open]:animate-tip-fade motion-safe:data-[state$=open]:animate-tip-in data-[side=bottom]:[--kit-tip-from:0_calc(-1*var(--tip-rise))] data-[side=left]:[--kit-tip-from:var(--tip-rise)_0] data-[side=right]:[--kit-tip-from:calc(-1*var(--tip-rise))_0]",
         "z-(--layer-float) inline-flex w-fit max-w-80 origin-(--bits-tooltip-content-transform-origin) items-center gap-1.5 px-2.5 py-1.5",
         className
       )}
@@ -59,7 +59,7 @@
         {#snippet child({ props })}
           <div
             class={cn(
-              "z-1 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-hair bg-ink-solid fill-ink-solid data-[side=left]:-translate-x-c-tip-arrow-nudge",
+              "z-1 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-hair bg-ink-strong fill-ink-strong data-[side=left]:-translate-x-c-tip-arrow-nudge",
               "data-[side=top]:translate-x-1/2 data-[side=top]:translate-y-[calc(-50%+2px)]",
               "data-[side=bottom]:-translate-x-1/2 data-[side=bottom]:-translate-y-[calc(-50%+1px)]",
               "data-[side=right]:translate-x-[calc(50%+2px)] data-[side=right]:translate-y-1/2",

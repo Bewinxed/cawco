@@ -82,7 +82,7 @@
 >
   <span
     data-slot="fill"
-    class="absolute inset-y-0 start-0 w-(--fill-w) rounded-hair bg-meter-calm group-state-near/bar:bg-meter-near group-state-over/bar:bg-meter-over group-state-reached/bar:bg-meter-over group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
+    class="absolute inset-y-0 start-0 w-(--fill-w) rounded-hair bg-meter-calm group-state-near/bar:bg-warning-9 group-state-over/bar:bg-error-9 group-state-reached/bar:bg-error-9 group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:duration-(--duration-morph) motion-safe:ease-drawer"
     style:--fill-w={shown > 0
       ? "max(calc(var(--share) * 100%), var(--bar-h))"
       : "0px"}

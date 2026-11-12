@@ -7,7 +7,7 @@
  * scrubbed through the DevTools protocol, anim.ts) and the hub's answers.
  *
  * 1. A pen's swipe up on the pill (pen pointer events) starts the grown
- *    shape's growth at --duration-grow; scrubbed to its end, the canvas's iframe
+ *    shape's growth at --duration-panel; scrubbed to its end, the canvas's iframe
  *    fills the column above the field, and the field still takes keys.
  * 2. A finger's swipe up on the pill (a touch screen) brings the recall
  *    wheel, not the canvas.
@@ -41,7 +41,7 @@
  *    survives Done and reopen (its own box and its foot on the composer's
  *    top, which follows the field); with reduced motion it lands at once.
  * 13. The rail's Remove: a drawn canvas folds as Done's does (on
- *    --duration-grow-exit), no chip is left, the message carries no canvas, and
+ *    --duration-panel-exit), no chip is left, the message carries no canvas, and
  *    the session still lists the artifact.
  * 14. What the canvas shows is what Send sends. The canvas page's sync
  *    socket goes through the iOS probe's gate (ComposerCanvas.swift `gate`,
@@ -1155,14 +1155,14 @@ const touchCheck = async (on: On) => {
   await page.close();
 };
 
-/** 1. The pen's swipe grows the canvas over --duration-grow; at its end it fills the column above the field; the field takes keys. */
+/** 1. The pen's swipe grows the canvas over --duration-panel; at its end it fills the column above the field; the field takes keys. */
 const openCheck = async (
   on: On,
   clock: Clock,
   pen: ReturnType<typeof penOf>
 ) => {
   const { kit, page } = on;
-  const grow = await ms(page, "--duration-grow");
+  const grow = await ms(page, "--duration-panel");
   const pill = (await box(page, PILL)) as Box;
   const x = pill.left + pill.width * 0.3;
   const y = pill.top + pill.height / 2;
@@ -1228,14 +1228,14 @@ const openCheck = async (
     `${JSON.stringify(halfway)}; grown ${whole}`
   );
   kit.check(
-    "1: a pen's swipe up on the pill starts the grown shape's growth on --duration-grow: the shape and the canvas in it, together",
+    "1: a pen's swipe up on the pill starts the grown shape's growth on --duration-panel: the shape and the canvas in it, together",
     growth.length === 2 &&
       growth.every((one) => one.duration === grow) &&
       started.length === 2 &&
       started.every((one) => one !== null) &&
       near(Number(started[0]), Number(started[1]), 0.5) &&
       caught.length >= 2,
-    `--duration-grow ${grow}; started ${started.join(", ")}; ${JSON.stringify(growth)}`
+    `--duration-panel ${grow}; started ${started.join(", ")}; ${JSON.stringify(growth)}`
   );
   kit.check(
     "1: scrubbed to its end, the canvas's iframe fills the column above the field",
@@ -1689,7 +1689,7 @@ const removeCheck = async (
   pen: ReturnType<typeof penOf>
 ) => {
   const { kit, page, fleet, session } = on;
-  const exit = await ms(page, "--duration-grow-exit");
+  const exit = await ms(page, "--duration-panel-exit");
   // The reduced-motion check left its canvas folded to its chip: open it and draw.
   await page.click(`${CHIP} [data-slot="canvas-open"]`);
   await settle(page, 300);
@@ -1731,14 +1731,14 @@ const removeCheck = async (
     hubRequest("GET /api/instances/:id/artifacts", { path: { id: session } })
   );
   kit.check(
-    "13: Remove folds the drawn canvas as Done does (its runs on --duration-grow-exit), leaves no canvas in the message, and the session still lists the artifact",
+    "13: Remove folds the drawn canvas as Done does (its runs on --duration-panel-exit), leaves no canvas in the message, and the session still lists the artifact",
     runs.length > 0 &&
       runs.every((one) => one.duration === exit) &&
       !after.stage &&
       !after.chip &&
       after.atts === 0 &&
       listed.some((one) => one.id === id),
-    `--duration-grow-exit ${exit}; ${JSON.stringify(runs)}; ${JSON.stringify(after)}; listed ${listed.some((one) => one.id === id)}`
+    `--duration-panel-exit ${exit}; ${JSON.stringify(runs)}; ${JSON.stringify(after)}; listed ${listed.some((one) => one.id === id)}`
   );
 };
 

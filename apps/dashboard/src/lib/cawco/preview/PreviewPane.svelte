@@ -4886,7 +4886,7 @@
         role="alert"
         transition:appear
       >
-        <p class="m-0 text-data-bad text-size-body font-medium">
+        <p class="m-0 text-error-9 text-size-body font-medium">
           {errorTitle(first.kind)}
           <code class="type-code">{errorPlace(first)}</code>
         </p>
@@ -5220,7 +5220,7 @@
       transition:appear
     >
       <p
-        class="flex-1 basis-c-draft-line min-w-0 m-0 text-data-bad text-size-body font-normal text-pretty wrap-anywhere"
+        class="flex-1 basis-c-draft-line min-w-0 m-0 text-error-9 text-size-body font-normal text-pretty wrap-anywhere"
       >
         {failure ? failure.message : paneRefused?.reason}
       </p>

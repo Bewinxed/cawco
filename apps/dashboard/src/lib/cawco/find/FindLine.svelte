@@ -95,7 +95,7 @@
         aria-hidden="true"
       />
       <input
-        class="flex-1 min-w-0 h-c-composer-field appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-body text-(length:--text-field-floor) text-ink-strong caret-brand-solid placeholder:text-ink-subtle outline-none"
+        class="flex-1 min-w-0 h-c-composer-field appearance-none border-none p-0 [&::-webkit-search-cancel-button]:hidden bg-transparent font-sans text-(length:--text-field-floor) text-ink-strong caret-brand-solid placeholder:text-ink-subtle outline-none"
         aria-keyshortcuts="Enter Shift+Enter Escape"
         aria-label={findInWords.field}
         autocomplete="off"

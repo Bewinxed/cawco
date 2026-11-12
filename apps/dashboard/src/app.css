@@ -445,8 +445,8 @@
     --crepe-color-selected: var(--color-surface-fill);
 
     --crepe-base-font-size: var(--text-body);
-    --crepe-font-title: var(--font-body);
-    --crepe-font-default: var(--font-body);
+    --crepe-font-title: var(--font-sans);
+    --crepe-font-default: var(--font-sans);
     --crepe-font-code: var(--font-mono);
 
     --crepe-shadow-1: var(--shadow-tile);
@@ -995,13 +995,13 @@
   .prose h1:not(:where(pre, .not-prose) *),
   .prose h2:not(:where(pre, .not-prose) *) {
     font-size: var(--text-title);
-    line-height: var(--leading-tight);
+    line-height: var(--leading-ui);
     letter-spacing: var(--tracking-display);
     font-weight: var(--font-weight-medium);
   }
   .prose h3:not(:where(pre, .not-prose) *) {
     font-size: var(--text-body);
-    line-height: var(--leading-tight);
+    line-height: var(--leading-ui);
     font-weight: var(--font-weight-medium);
   }
   .prose h4:not(:where(pre, .not-prose) *),
@@ -1046,19 +1046,19 @@
       --ec-color-400: var(--color-border-control);
       --ec-color-300: var(--color-border-hairline);
       --ec-color-200: var(--color-surface-hover);
-      --ec-color-100: var(--color-surface-band);
-      --ec-color-50: var(--color-surface-band);
+      --ec-color-100: var(--color-surface-recess);
+      --ec-color-50: var(--color-surface-recess);
       --ec-button-bg-color: var(--color-surface-raised);
       --ec-button-border-color: var(--color-border-control);
       --ec-button-text-color: var(--color-ink-strong);
       --ec-button-active-bg-color: var(--color-surface-hover);
       --ec-button-active-border-color: var(--color-border-control);
       --ec-button-active-text-color: var(--color-ink-strong);
-      --ec-today-bg-color: var(--color-surface-band);
+      --ec-today-bg-color: var(--color-surface-recess);
       --ec-highlight-color: var(--color-surface-hover);
       --ec-event-bg-color: var(--color-surface-raised);
       --ec-event-text-color: var(--color-ink-strong);
-      --ec-bg-event-color: var(--color-surface-band);
+      --ec-bg-event-color: var(--color-surface-recess);
       --ec-bg-event-opacity: 1;
       --ec-event-col-gap: var(--spacing-space-1);
       --ec-now-indicator-color: var(--color-brand-solid);
