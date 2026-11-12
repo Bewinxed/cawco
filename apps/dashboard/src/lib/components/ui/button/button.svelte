@@ -47,19 +47,19 @@
       },
       size: {
         default:
-          "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:var(--spacing-c-btn-gap)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:var(--spacing-space-1)] [--btn-icon:var(--spacing-icon-sm)] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
         /* In a head control's compact form (side/head.ts, `data-form`), its
            words not drawn, it stands as its glyph: the icon size's square,
            the glyph centred inside its edge, and a count it still says kept
            that inset from the glyph and the edge. */
         sm: "h-c-btn-h-sm glass-item:h-c-bar-item in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--spacing-c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 text-label [--btn-gap:var(--spacing-space-2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:var(--spacing-c-btn-gap)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         /* A control standing in a composer shell (the composer's surface brief, Composer:
            "34px Attach … and Send/Stop … each at the concentric 4px
            radius"): the default's recipe at the composer field's height. */
         composer:
-          "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:var(--spacing-c-btn-gap)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:calc(var(--spacing)_*_2)] [--btn-icon:var(--spacing-icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm":

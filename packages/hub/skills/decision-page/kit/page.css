@@ -105,7 +105,7 @@ a {
 }
 .dp-bar {
   width: var(--spacing-c-decision-meter-w);
-  height: var(--spacing-c-decision-meter-h);
+  height: calc(var(--spacing) _ * _1);
   border-radius: var(--radius-xs);
   background: var(--color-surface-recess);
   overflow: hidden;
@@ -158,7 +158,7 @@ a {
 }
 .dp-card h2 {
   font-size: var(--text-title);
-  flex: 1 1 var(--spacing-c-decision-title-min);
+  flex: 1 1 calc(var(--spacing) _ * _60);
 }
 .dp-state {
   font-size: var(--text-meta);
@@ -336,8 +336,8 @@ a {
   display: inline-grid;
   place-items: center;
   flex: none;
-  min-width: var(--spacing-c-decision-keycap);
-  height: var(--spacing-c-decision-keycap);
+  min-width: calc(var(--spacing) _ * _4.25);
+  height: calc(var(--spacing) _ * _4.25);
   padding: 0 var(--spacing-space-1);
   border-radius: var(--radius-xs);
   background: var(--color-surface-recess);

@@ -158,7 +158,7 @@
 )}
   <div
     class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
-    style:--edge-cols="var(--spacing-c-task-edge-label-w) minmax(0, 1fr)"
+    style:--edge-cols="calc(var(--spacing)_*_24) minmax(0, 1fr)"
   >
     <span class="pt-space-1 type-label text-ink-muted">{name}</span>
     <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
@@ -204,9 +204,7 @@
               : "Find a task…"}
             bind:value={query}
           />
-          <ul
-            class="flex flex-col max-h-c-task-candidates-max-h m-0 p-0 overflow-y-auto list-none"
-          >
+          <ul class="flex flex-col max-h-56 m-0 p-0 overflow-y-auto list-none">
             {#if pasted}
               <li>
                 <button
@@ -260,7 +258,7 @@
   </div>
   <div
     class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
-    style:--edge-cols="var(--spacing-c-task-edge-label-w) minmax(0, 1fr)"
+    style:--edge-cols="calc(var(--spacing)_*_24) minmax(0, 1fr)"
   >
     <span class="pt-space-1 type-label text-ink-muted">Waits on</span>
     <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
@@ -287,7 +285,7 @@
     {@const drawn = referenceOf(task.foundInNamed.href)}
     <div
       class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
-      style:--edge-cols="var(--spacing-c-task-edge-label-w) minmax(0, 1fr)"
+      style:--edge-cols="calc(var(--spacing)_*_24) minmax(0, 1fr)"
     >
       <span class="pt-space-1 type-label text-ink-muted">Found in</span>
       <span class="pt-space-1 min-w-0 type-label">

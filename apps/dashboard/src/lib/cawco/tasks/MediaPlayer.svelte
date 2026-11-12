@@ -87,7 +87,7 @@
     const { w, h } = shape;
     const limits = ["100%", `${w}px`];
     if (capped) {
-      limits.push(`calc(var(--spacing-c-task-output-video-h) * ${w} / ${h})`);
+      limits.push(`calc(calc(var(--spacing)_*_96) * ${w} / ${h})`);
     }
     return { ratio: `${w} / ${h}`, width: `min(${limits.join(", ")})` };
   });
@@ -168,7 +168,7 @@
     label={madeWords.position}
   >
     <media-slider-track
-      class="relative block h-c-scrub-h w-full overflow-clip rounded-pill bg-media-track transition-[height] duration-(--duration-control) ease-out group-data-interactive/scrub:h-c-scrub-h-active"
+      class="relative block h-1 w-full overflow-clip rounded-pill bg-media-track transition-[height] duration-(--duration-control) ease-out group-data-interactive/scrub:h-1.5"
     >
       <media-slider-buffer
         class="absolute inset-y-0 start-0 block w-(--media-slider-buffer,0%) bg-media-buffered"
@@ -178,7 +178,7 @@
       ></media-slider-fill>
     </media-slider-track>
     <media-slider-thumb
-      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-c-scrub-thumb -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-media-fill opacity-0 transition-opacity duration-(--duration-control) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
+      class="absolute start-(--media-slider-fill,0%) top-1/2 block size-3 -translate-x-1/2 rtl:translate-x-1/2 -translate-y-1/2 touch-hit rounded-full bg-media-fill opacity-0 transition-opacity duration-(--duration-control) ease-out group-data-interactive/scrub:opacity-100 group-data-dragging/scrub:start-(--media-slider-pointer,0%) coarse:opacity-100 focus-visible:opacity-100"
     ></media-slider-thumb>
   </media-time-slider>
 {/snippet}

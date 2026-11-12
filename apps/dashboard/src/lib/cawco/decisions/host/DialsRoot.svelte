@@ -68,7 +68,7 @@
           class={[
             "flex flex-col gap-space-3",
             !docked &&
-              "pointer-events-auto max-h-full w-c-graph-room-w max-w-full min-h-0 overflow-y-auto",
+              "pointer-events-auto max-h-full w-100 max-w-full min-h-0 overflow-y-auto",
           ]}
           data-slot="dials-column"
         >

@@ -395,7 +395,7 @@
         {#if group.faults[0]?.detail}
           {#if group.cause === "unknown"}
             <pre
-              class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group
+              class="max-h-48 overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group
                 .faults[0].detail}</pre>
           {:else}
             <button
@@ -419,7 +419,7 @@
               {#each shown as fault (fault.scope + fault.key)}
                 {#if fault.detail}
                   <pre
-                    class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span
+                    class="max-h-48 overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span
                       class="block text-ink-muted">{faultLabel(fault)}</span
                     >{fault.detail}</pre>
                 {/if}

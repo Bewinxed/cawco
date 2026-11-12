@@ -299,7 +299,7 @@
         <span
           aria-hidden="true"
           data-slot="suggest-shimmer"
-          class="block w-c-suggest-shimmer-w flex-none pointer-events-auto"
+          class="block w-36 flex-none pointer-events-auto"
           in:fade={{ duration: dur("--duration-panel"), easing: easeOut }}
           out:revealOut><Skeleton class="w-full" height="chip" /></span
         >

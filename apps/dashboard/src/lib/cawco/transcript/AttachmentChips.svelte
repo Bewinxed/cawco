@@ -198,7 +198,7 @@
        negative margin gives the layout that room back. -->
   <div
     data-atts
-    class="flex flex-wrap gap-c-tray-gap max-h-c-atts-max-h overflow-y-auto py-space-2 -my-space-2 pointer-events-auto transition-fade-show group-data-drawing/dock:relative group-data-drawing/dock:z-2 group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
+    class="flex flex-wrap gap-c-tray-gap max-h-45 overflow-y-auto py-space-2 -my-space-2 pointer-events-auto transition-fade-show group-data-drawing/dock:relative group-data-drawing/dock:z-2 group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
     transition:unfold
     {@attach reflow()}
   >

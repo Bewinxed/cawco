@@ -330,7 +330,7 @@
         {#if refused}
           <p
             data-slot="refused"
-            class="type-meta m-0 max-w-c-measure grow basis-c-block-refused-basis text-pretty text-status-fail-ink"
+            class="type-meta m-0 max-w-c-measure grow basis-72 text-pretty text-status-fail-ink"
             role="status"
           >
             {refused}

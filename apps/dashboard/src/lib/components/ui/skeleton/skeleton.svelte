@@ -48,9 +48,9 @@
         /** A stat tile. */
         stat: "h-c-stat-h",
         /** A card on a project's board. */
-        card: "h-c-skeleton-card-h",
+        card: "h-13.5",
         /** A finder row with its reason under its name. */
-        "reason-row": "h-c-find-skeleton-tall",
+        "reason-row": "h-13.5",
       },
       /** One line of text in its type role, at that role's line box, so the
           lines it stands for take its place without moving anything. */

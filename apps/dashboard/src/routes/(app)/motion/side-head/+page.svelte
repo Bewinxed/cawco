@@ -43,7 +43,7 @@
 <main class="grid gap-space-4 p-space-3">
   {#each CARDS as card (card.key)}
     <div
-      class="h-c-side-bench-h w-(--card-w) max-w-full"
+      class="h-30 w-(--card-w) max-w-full"
       data-card={card.key}
       style:--card-w={"calc(max(45vw, var(--spacing-c-side-surface-min)) - 2 * var(--spacing-space-3))"}
     >

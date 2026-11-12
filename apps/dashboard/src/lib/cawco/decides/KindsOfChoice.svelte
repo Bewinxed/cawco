@@ -336,7 +336,7 @@
         overflow="clip"
         pad="none"
         side="bottom"
-        style="--pop-w: min(var(--spacing-c-kinds-max-w), var(--bits-popover-content-available-width, 100vw)); --pop-max-h: var(--bits-popover-content-available-height)"
+        style="--pop-w: min(calc(var(--spacing)_*_176), var(--bits-popover-content-available-width, 100vw)); --pop-max-h: var(--bits-popover-content-available-height)"
         width="room"
       >
         {#if who.kindsOpen}
@@ -360,7 +360,7 @@
     data-state="open"
     data-still-popover
     id="{uid}-panel"
-    style="--pop-w: min(var(--spacing-c-kinds-max-w), 100%)"
+    style="--pop-w: min(calc(var(--spacing)_*_176), 100%)"
     {@attach placeUnder(() => anchor, "end")}
   >
     {@render panel(`${uid}-head`)}

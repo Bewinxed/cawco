@@ -2009,9 +2009,7 @@
 {#snippet tableBody(_block: string)}
   <div class="flex flex-col gap-space-3">
     {#if adding}
-      <div
-        class="max-w-c-new-task-w rounded-lg bg-surface-raised p-space-3 shadow-tile"
-      >
+      <div class="max-w-144 rounded-lg bg-surface-raised p-space-3 shadow-tile">
         <NewTaskForm
           oncreate={create}
           stage={newIn ?? ""}

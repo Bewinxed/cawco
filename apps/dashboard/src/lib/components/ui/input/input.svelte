@@ -20,7 +20,7 @@
           centred in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       field: {
         number: {
-          box: "w-c-number-field-w",
+          box: "w-16",
           field: "px-space-2 text-center tabular-nums",
         },
         /** A figure before its unit, at the field's end (a dial's value). */

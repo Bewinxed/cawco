@@ -466,7 +466,7 @@
   <main class="flex flex-wrap items-start gap-space-6 p-space-5">
     <div
       data-slot="controls"
-      class="grid max-w-c-bench-controls-w justify-items-start gap-space-4"
+      class="grid max-w-95 justify-items-start gap-space-4"
     >
       <h1 class="type-title m-0">Caw's notices</h1>
       <div class="type-meta grid gap-space-1 text-ink-muted">

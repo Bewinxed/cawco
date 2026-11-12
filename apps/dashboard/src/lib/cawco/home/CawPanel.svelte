@@ -183,8 +183,8 @@
   ]}
   data-safe-bottom
   style:--fade-len="var(--spacing-c-edge-fade-len)"
-  style:--list-max={"min(var(--spacing-c-caw-list-h), calc(100dvh - var(--spacing-c-caw-list-clear)))"}
-  style:--list-max-phone={"calc(100dvh - var(--spacing-c-top-bar-h) - var(--spacing-space-3) - var(--safe-bottom) - var(--spacing-c-caw-list-clear-phone))"}
+  style:--list-max={"min(calc(var(--spacing)_*_140), calc(100dvh - calc(var(--spacing)_*_30)))"}
+  style:--list-max-phone={"calc(100dvh - var(--spacing-c-top-bar-h) - var(--spacing-space-3) - var(--safe-bottom) - calc(var(--spacing)_*_24))"}
   style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--color-mask-opaque) var(--fade-start), var(--color-mask-opaque))"}
   {@attach reflow()}
   {@attach measured}

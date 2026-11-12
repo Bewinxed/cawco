@@ -148,9 +148,7 @@
           type="button"
           style:--c={hueVar(account.hue)}
         >
-          <span
-            aria-hidden="true"
-            class="h-space-4 w-c-drag-dots-w flex-none drag-dots"
+          <span aria-hidden="true" class="h-space-4 w-2.5 flex-none drag-dots"
           ></span>
           <span
             data-slot="dot"

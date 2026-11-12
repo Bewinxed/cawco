@@ -119,6 +119,7 @@ export default {
         // Run by hand, and by a branch written with the old token names after it rebases.
         "scripts/codemods/tokens-to-theme.ts",
         "scripts/codemods/tokens-to-theme.proof.ts",
+        "scripts/codemods/theme-prune.ts",
         // scripts/check.ts, beside compress-answer-check.ts
         "scripts/shell-bodies-check.ts",
         // scripts/check.ts, beside compress-answer-check.ts

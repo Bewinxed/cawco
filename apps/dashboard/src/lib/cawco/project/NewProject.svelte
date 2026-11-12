@@ -223,7 +223,7 @@
 </script>
 
 <main
-  class="mx-auto flex w-full max-w-c-new-project-w flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
+  class="mx-auto flex w-full max-w-288 flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
   style:--pad-top="calc(var(--spacing-space-8) * 2)"
 >
   <!-- His slot goes with him when he peeks over a card, and comes back
@@ -251,7 +251,7 @@
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
       </div>
     {/if}
-    <div class="w-full max-w-c-new-project-field-w">
+    <div class="w-full max-w-142.5">
       <h1
         data-slot="title"
         class="m-0 px-(--field-px) type-title text-ink-strong max-desk:px-space-3"
@@ -261,7 +261,7 @@
     </div>
     <div
       data-slot="new-page-field"
-      class="relative w-full max-w-c-new-project-field-w"
+      class="relative w-full max-w-142.5"
       style:block-size={footBox}
     >
       <Composer
@@ -291,7 +291,7 @@
       <!-- Known, not guessed: the line stands only once the hub has listed
            the machines. The words stay in the field (the draft survives a
            reload) and Send waits; the cards stay. -->
-      <div class="w-full max-w-c-new-project-field-w">
+      <div class="w-full max-w-142.5">
         <div
           data-slot="no-machine"
           class="mark-line flex flex-wrap items-center gap-x-space-3 gap-y-space-2 px-(--field-px) max-desk:px-space-3"
@@ -319,7 +319,7 @@
       </div>
     {/if}
     <!-- As wide as the field, so the chips stand on its composer's column. -->
-    <div class="relative w-full max-w-c-new-project-field-w">
+    <div class="relative w-full max-w-142.5">
       <div
         data-slot="chips"
         class={chipsVariants({

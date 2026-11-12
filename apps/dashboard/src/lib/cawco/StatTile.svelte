@@ -43,7 +43,7 @@
 >
   <div
     data-slot="well"
-    class="flex min-w-0 flex-auto flex-col justify-between gap-space-1 rounded-well bg-surface-recess p-c-stat-well-pad inset-ring inset-ring-border-hairline"
+    class="flex min-w-0 flex-auto flex-col justify-between gap-space-1 rounded-well bg-surface-recess p-2.5 inset-ring inset-ring-border-hairline"
   >
     <span class="min-w-0 type-label text-ink-muted">{label}</span>
     <span class="flex flex-wrap items-baseline gap-x-space-2">

@@ -37,12 +37,12 @@
    *   a short run so a tab slides under the toggle and Caw.
    */
   const tabsListVariants = tv({
-    base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--spacing-space-row)] [--icon:var(--spacing-icon-md)] [--px:var(--spacing-c-tab-px)] [--text:var(--text-label)] coarse:[--item:var(--spacing-space-8)]",
+    base: "relative inline-flex flex-none select-none items-center gap-(--gap) p-(--pad) [--gap:var(--spacing-space-row)] [--icon:var(--spacing-icon-md)] [--px:calc(var(--spacing)_*_3)] [--text:var(--text-label)] coarse:[--item:var(--spacing-space-8)]",
     variants: {
       size: {
         default: "",
         compact:
-          "[--px:var(--spacing-c-segment-pad-x)] coarse:[--item:var(--spacing-c-tab-item)]",
+          "[--px:var(--spacing-c-segment-pad-x)] coarse:[--item:calc(var(--spacing)_*_7)]",
       },
       variant: {
         /* The kit's one segmented recipe (tabs/thumb.ts): its groove, pad,
@@ -51,7 +51,7 @@
            lifted in surface-lift. */
         segmented: `${SEGMENTED_TRACK} [--sheet:var(--color-surface-lift)]`,
         folder:
-          "isolate gap-0 rounded-none bg-transparent [--item:var(--spacing-c-tab-item)] [--pad:var(--spacing-space-1)] [--radius:var(--radius-sm)] [--sheet:var(--color-surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--duration-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--spacing-c-tab-slope-end)] [--slope-start:var(--spacing-c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
+          "isolate gap-0 rounded-none bg-transparent [--item:calc(var(--spacing)_*_7)] [--pad:var(--spacing-space-1)] [--radius:var(--radius-sm)] [--sheet:var(--color-surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--duration-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:calc(var(--spacing)_*_0)] [--slope-start:calc(var(--spacing)_*_0.25)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
       },
       fill: {
         true: "flex w-full min-w-0 [&>[data-slot=ff-tab]]:min-w-0 [&>[data-slot=ff-tab]]:flex-1 [&_[data-slot=hit]]:justify-center",

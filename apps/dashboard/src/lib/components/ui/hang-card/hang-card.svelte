@@ -191,7 +191,7 @@
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
     settings: "w-max max-w-(--frame-w) gap-0 p-0",
     details:
-      "flex max-h-[min(var(--spacing-c-details-card-max-h),var(--bits-popover-content-available-height,var(--spacing-c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--spacing-c-top-bar-h)-2*var(--spacing-c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--spacing-c-sheet-max-h)))]",
+      "flex max-h-[min(calc(var(--spacing)_*_190),var(--bits-popover-content-available-height,var(--spacing-c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--spacing-c-top-bar-h)-2*var(--spacing-c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--spacing-c-sheet-max-h)))]",
   };
   /** The shell less a floating card's edge each side. */
   const ROOM = "calc(100cqi - 2 * var(--spacing-c-screen-margin))";

@@ -83,7 +83,7 @@
     {#if holds === "mode"}
       {@render modes()}
     {:else if holds === "toolbar"}
-      <div class="flex items-center gap-c-bar-groups-gap">
+      <div class="flex items-center gap-2">
         <BarGlass form="group">
           <BarItem icon={IconSearch} label="Search" tip={false} />
           <BarItem

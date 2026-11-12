@@ -22,5 +22,5 @@ export const iconCardVariants = tv({
  * where two would not fit), so no breakpoint stands outside DESIGN.md's.
  */
 export const iconCardsVariants = tv({
-  base: "relative grid grid-cols-[repeat(auto-fit,minmax(min(100%,var(--spacing-c-icon-card-min)),1fr))] gap-space-3",
+  base: "relative grid grid-cols-[repeat(auto-fit,minmax(min(100%,calc(var(--spacing)_*_40)),1fr))] gap-space-3",
 });

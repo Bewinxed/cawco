@@ -1831,7 +1831,7 @@
 @keyframes rail-label-in {
   from {
     opacity: 0;
-    transform: translateY(var(--spacing-c-rail-label-rise));
+    transform: translateY(calc(var(--spacing) _ * _2));
   }
 }
 @keyframes kit-fade-in {

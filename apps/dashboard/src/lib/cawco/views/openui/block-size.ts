@@ -10,7 +10,7 @@
 import { DIAGRAM_SIZES, type DiagramSize } from "@cawco/core/views-library";
 
 export const BLOCK_ROOM: Record<DiagramSize, string> = {
-  small: "w-c-diagram-small max-w-[100cqi] max-phone:w-[100cqi]",
+  small: "w-100 max-w-[100cqi] max-phone:w-[100cqi]",
   medium: "w-c-diagram-medium max-w-[100cqi]",
   full: "w-[100cqi]",
 };

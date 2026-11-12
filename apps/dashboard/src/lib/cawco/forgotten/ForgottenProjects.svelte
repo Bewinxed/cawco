@@ -82,7 +82,7 @@
 
   /** The ledger's columns: mark, name, what it brings, when, the actions. */
   const COLUMNS =
-    "var(--spacing-c-row-lead) minmax(0, 1fr) var(--spacing-c-forgotten-brings-w) var(--spacing-c-forgotten-when-w) auto";
+    "var(--spacing-c-row-lead) minmax(0, 1fr) calc(var(--spacing)_*_48) calc(var(--spacing)_*_30) auto";
   /** Under the container width: mark, then everything else under the name. */
   const COLUMNS_NARROW = "var(--spacing-c-row-lead) minmax(0, 1fr)";
   /** Three rows stand in while the list is read. */

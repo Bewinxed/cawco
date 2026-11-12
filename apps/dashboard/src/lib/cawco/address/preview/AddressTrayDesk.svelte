@@ -201,7 +201,7 @@
                     floatHeight = value;
                   }
                 )}
-                class="absolute end-0 top-0 z-1 w-c-address-tray-w max-w-full"
+                class="absolute end-0 top-0 z-1 w-96 max-w-full"
                 data-slot="address-float"
               >
                 <TrayView bind:ref={trayEl} {direction} form="desk" {tray} />

@@ -110,7 +110,7 @@
   <div
     data-slot="head"
     data-session-hover-head
-    class="mark-line mb-space-2 flex min-w-c-session-hover-head items-center gap-space-2"
+    class="mark-line mb-space-2 flex min-w-60 items-center gap-space-2"
   >
     <span
       data-slot="mark"

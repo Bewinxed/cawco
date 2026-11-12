@@ -912,7 +912,7 @@
                       >
                         <span
                           data-slot="text"
-                          class="flex min-w-0 shrink grow basis-c-offer-text-basis flex-col gap-space-row"
+                          class="flex min-w-0 shrink grow basis-60 flex-col gap-space-row"
                         >
                           <span
                             class="flex flex-wrap items-baseline gap-space-2"

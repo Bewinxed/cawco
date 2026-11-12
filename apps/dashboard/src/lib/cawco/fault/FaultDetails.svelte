@@ -28,7 +28,7 @@
   transition:unfold
 >
   <pre
-    class="kit-edge-fade-block fade-len-c-edge-fade-len m-0 max-h-c-fault-details-h min-w-0 flex-1 overflow-y-auto overscroll-contain py-space-1 text-start text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere">{details}</pre>
+    class="kit-edge-fade-block fade-len-c-edge-fade-len m-0 max-h-48 min-w-0 flex-1 overflow-y-auto overscroll-contain py-space-1 text-start text-ink-muted type-code liga-none whitespace-pre-wrap wrap-anywhere">{details}</pre>
   <CopyButton
     aria-label={regionFaultWords.copyError}
     class="flex-none"

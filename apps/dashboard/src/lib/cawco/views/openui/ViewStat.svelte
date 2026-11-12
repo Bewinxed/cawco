@@ -17,7 +17,7 @@
   );
 </script>
 
-<div class="min-w-c-stat-min shrink grow basis-c-stat-min">
+<div class="min-w-40 shrink grow basis-40">
   <StatTile
     label={String(props.label ?? "")}
     {tone}

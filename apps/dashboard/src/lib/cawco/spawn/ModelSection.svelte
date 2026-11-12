@@ -411,7 +411,7 @@
       <div
         data-slot="list"
         aria-label={spawnWords.model.list(harnessName(listHarness))}
-        class="fai-scroll relative grid h-c-model-list-h content-box-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
+        class="fai-scroll relative grid h-75 content-box-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
         id={`${uid}-models`}
         role="listbox"
         tabindex="-1"
@@ -510,7 +510,7 @@
               data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
-              class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-xs px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control select-none min-w-0 shrink grow basis-c-model-row-basis border border-transparent bg-transparent"
+              class="group relative flex h-c-row-h w-full items-center gap-space-3 rounded-xs px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint transition-control select-none min-w-0 shrink grow basis-48 border border-transparent bg-transparent"
               data-fh="1"
               data-model={entry.id}
               disabled={Boolean(reason)}

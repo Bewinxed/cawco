@@ -1611,7 +1611,7 @@
             class={chipVariants({
               variant: "tray",
               class:
-                "touch-hit flex-none min-w-0 w-c-tray-more-w justify-center num data-needs:text-status-attn-ink data-needs:before:bg-status-attn-bg",
+                "touch-hit flex-none min-w-0 w-13 justify-center num data-needs:text-status-attn-ink data-needs:before:bg-status-attn-bg",
             })}
             data-tray-chip
             data-flip="pop"

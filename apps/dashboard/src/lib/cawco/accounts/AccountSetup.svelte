@@ -659,7 +659,7 @@
   <div data-slot="host" class="@container/setup min-w-0">
     <div
       class="grid grid-cols-(--setup-cols) items-box-start gap-space-7 @max-setup/setup:grid-cols-(--setup-cols-narrow) @max-setup/setup:gap-space-4"
-      style:--setup-cols="var(--spacing-c-setup-rail-w) minmax(0, 1fr)"
+      style:--setup-cols="calc(var(--spacing)_*_46) minmax(0, 1fr)"
       style:--setup-cols-narrow="minmax(0, 1fr)"
     >
       <ol
@@ -948,7 +948,7 @@
         class="m-0 flex list-none flex-col p-0"
         style:--mrow-areas={'"name controls st" ". problem problem"'}
         style:--mrow-areas-stack={'"name st" "controls controls" "problem problem"'}
-        style:--mrow-cols={"var(--spacing-c-setup-machine-name-w) minmax(0, 1fr) auto"}
+        style:--mrow-cols={"calc(var(--spacing)_*_37.5) minmax(0, 1fr) auto"}
         style:--mrow-cols-two="minmax(0, 1fr) auto"
       >
         {#each machines as machine (machine.machineId)}
@@ -1057,7 +1057,7 @@
                   class="col-(--area) row-(--area) flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 group-data-paste:pt-space-2 @max-setup/setup:pt-space-2"
                   in:unfold
                   style:--area="controls"
-                  style:--code-flex="1 1 var(--spacing-c-setup-code-basis)"
+                  style:--code-flex="1 1 calc(var(--spacing)_*_35)"
                 >
                   {#if paste.url}
                     <Button
@@ -1152,9 +1152,7 @@
       <span data-slot="account-setup-label" class="type-label text-ink-strong"
         >{words.howItShows}</span
       >
-      <div
-        class="flex max-w-c-setup-preview-w min-w-0 items-center gap-space-3"
-      >
+      <div class="flex max-w-90 min-w-0 items-center gap-space-3">
         <AccountTile {hue} provider={choice?.provider ?? ""} size={28} />
         <AccountName account={shown} />
       </div>

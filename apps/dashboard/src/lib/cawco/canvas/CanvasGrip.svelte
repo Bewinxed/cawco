@@ -49,7 +49,7 @@
   class={[
     "group/grab absolute flex touch-none select-none outline-off",
     handle === "top" &&
-      "start-1/2 top-0 h-c-btn-h-lg w-c-canvas-grab-w -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
+      "start-1/2 top-0 h-c-btn-h-lg w-40 -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
     handle === "top-left" &&
       "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] duration-(--duration-grow) ease-out starting:opacity-0",
     handle === "top-right" &&
@@ -75,13 +75,12 @@
       "group-focus-visible/grab:outline-(length:--focus-ring-width) group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-focus-ring group-focus-visible/grab:outline-solid",
       handle === "top" &&
         "h-c-grabber-h w-c-grabber-w rounded-pill bg-border-control",
-      handle !== "top" &&
-        "relative m-c-corner-grip-inset size-c-corner-grip-leg overflow-clip",
+      handle !== "top" && "relative m-1.5 size-3 overflow-clip",
       handle === "top-left" && "rounded-ss-(--grip-r)",
       handle === "top-right" && "rounded-se-(--grip-r)",
     ]}
-    style:--grip-box="calc(2 * var(--spacing-c-corner-grip-leg))"
-    style:--grip-r={"max(0px, calc(var(--corner-r) - var(--spacing-c-corner-grip-inset)))"}
+    style:--grip-box="calc(2 * calc(var(--spacing)_*_3))"
+    style:--grip-r={"max(0px, calc(var(--corner-r) - calc(var(--spacing)_*_1.5)))"}
   >
     {#if handle !== "top"}
       <span

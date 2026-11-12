@@ -448,7 +448,7 @@
   <div
     data-move-wait-empty={!cawThere || undefined}
     data-gone={job.stage === "cancelled" || undefined}
-    class="grid place-items-center min-h-c-move-wait-caw-h group-data-phone/wait:min-h-c-move-wait-caw-h-phone data-move-wait-empty:invisible data-gone:hidden"
+    class="grid place-items-center min-h-32 group-data-phone/wait:min-h-24 data-move-wait-empty:invisible data-gone:hidden"
   >
     {#if cawThere}
       <Caw
@@ -518,7 +518,7 @@
                 {@const file = job.lfsFile}
                 <div
                   class="grid grid-cols-(--file-cols) items-center gap-space-2"
-                  style:--file-cols={"minmax(0, 1fr) var(--spacing-c-move-wait-file-bar-w) auto"}
+                  style:--file-cols={"minmax(0, 1fr) calc(var(--spacing)_*_24) auto"}
                   in:unfold
                   out:unfold
                 >

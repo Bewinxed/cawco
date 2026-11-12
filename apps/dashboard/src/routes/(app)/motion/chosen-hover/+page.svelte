@@ -188,7 +188,7 @@
       value="default"
     />
   </section>
-  <section class="h-c-bench-side-h w-c-bench-side-w min-w-0" data-probe="side">
+  <section class="h-60 w-90 min-w-0" data-probe="side">
     <SideSurface label="Preview" onclose={noop} title="Preview">
       {#snippet actions()}
         <Toggle aria-label="Inspect" pressed={true} size="sm"
@@ -222,7 +222,7 @@
     <MarkdownEditor bind:value={markdown} label="Notes" />
   </section>
   <!-- The Comments rail as it stands beside the page, its first comment's thread open. -->
-  <section class="h-c-bench-side-h min-w-0" data-probe="pins">
+  <section class="h-60 min-w-0" data-probe="pins">
     <CommentRail
       down={null}
       focused="pin-1"
@@ -273,7 +273,7 @@
        side surface, each holding its own words, so the handle reads as what
        parts them. The page is the session's exchange over the first
        comment; the surface, the preview with the comment still open. -->
-  <section class="h-c-bench-side-h w-c-bench-side-w min-w-0" data-probe="split">
+  <section class="h-60 w-90 min-w-0" data-probe="split">
     <Resizable.PaneGroup direction="horizontal">
       <Resizable.Pane defaultSize={50} look="split">
         <div class="flex min-w-0 flex-1 flex-col gap-space-2 p-space-3">

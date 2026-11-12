@@ -130,7 +130,7 @@
   <MachineAway away={copies.waits.away(`settle:${at}`)} />
   {#if detail}
     <pre
-      class="max-h-c-detail-max overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
+      class="max-h-24 overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
       in:unfold
       out:unfold>{detail}</pre>
   {/if}

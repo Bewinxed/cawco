@@ -1788,7 +1788,7 @@
             side="bottom"
             sideOffset={0}
             class="min-w-(--menu-min)"
-            style="--menu-min: max(var(--spacing-c-tab-menu-min), {menuMin}px)"
+            style="--menu-min: max(calc(var(--spacing)_*_48), {menuMin}px)"
             surface="recess"
             tab
             bind:joined={

@@ -391,7 +391,7 @@
               />
               <!-- The port: "Port 22 ▾" until it is asked for, then its field in
                    the same cell, so nothing beside it moves. -->
-              <span class="grid w-c-port-field-w flex-none" data-box>
+              <span class="grid w-24 flex-none" data-box>
                 {#if portOpen || connect.fields.port}
                   <input
                     bind:this={portField}

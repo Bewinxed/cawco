@@ -338,7 +338,7 @@
             </div>
           </div>
           <div
-            class="fai-scroll grid max-h-c-folder-list-max-h content-box-start gap-space-row overflow-auto overscroll-contain p-space-2"
+            class="fai-scroll grid max-h-49 content-box-start gap-space-row overflow-auto overscroll-contain p-space-2"
           >
             {#if canGoUp}
               <button

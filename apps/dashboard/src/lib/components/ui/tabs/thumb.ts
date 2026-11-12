@@ -24,7 +24,7 @@ import { tv } from "#lib/utils.js";
  * track's ghost.
  */
 export const SEGMENTED_TRACK =
-  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--ghost:var(--color-groove-hover)] [--item:var(--spacing-c-btn-h-sm)] [--pad:var(--spacing-c-segmented-pad)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
+  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--ghost:var(--color-groove-hover)] [--item:var(--spacing-c-btn-h-sm)] [--pad:calc(var(--spacing)_*_0.75)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
 
 /**
  * The kit's segmented parts: the groove (its recipe above), the thumb that
@@ -42,7 +42,7 @@ export const segmentedVariants = tv({
     thumb:
       "pointer-events-none absolute start-0 top-0 origin-top-left rounded-(--shape) bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
     segment:
-      "relative inline-flex h-(--item) items-center justify-center gap-c-segment-gap rounded-(--shape) px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line hover:not-data-[state=active]:not-data-[state=on]:bg-groove-hover data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
+      "relative inline-flex h-(--item) items-center justify-center gap-1.5 rounded-(--shape) px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line hover:not-data-[state=active]:not-data-[state=on]:bg-groove-hover data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },
 });
 

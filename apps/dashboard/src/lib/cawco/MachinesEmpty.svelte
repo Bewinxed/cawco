@@ -54,10 +54,7 @@
   class="group mx-auto flex w-full max-w-c-page-column-w flex-col items-center gap-space-4"
   data-leaving={!present || undefined}
 >
-  <div
-    data-slot="caw-80"
-    class="grid min-h-c-empty-fleet-caw place-items-center"
-  >
+  <div data-slot="caw-80" class="grid min-h-20 place-items-center">
     <Caw
       next={["ready", "idle"]}
       {ongone}

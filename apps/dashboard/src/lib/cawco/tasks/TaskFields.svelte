@@ -73,7 +73,7 @@
     <dl
       data-slot="grid"
       class="m-0 grid grid-cols-(--cols) gap-x-space-2 gap-y-space-1"
-      style:--cols="var(--spacing-c-task-key-w) minmax(0, 1fr)"
+      style:--cols="calc(var(--spacing)_*_24) minmax(0, 1fr)"
     >
       {#each Object.entries(fields) as [key, value] (key)}
         <dt class="type-code liga-none wrap-anywhere pt-space-1 text-ink-muted">
@@ -140,7 +140,7 @@
       <input
         data-slot="task-fields-field"
         aria-label="Field name"
-        class="field-edge transition-control h-c-btn-h-sm min-w-0 shrink grow-0 basis-c-task-key-w rounded-sm border border-border-control bg-surface-raised px-space-2 type-code text-ink-strong"
+        class="field-edge transition-control h-c-btn-h-sm min-w-0 shrink grow-0 basis-24 rounded-sm border border-border-control bg-surface-raised px-space-2 type-code text-ink-strong"
         placeholder="name"
         bind:value={newKey}
         {@attach (node) => node.focus()}

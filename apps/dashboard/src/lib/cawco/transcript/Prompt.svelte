@@ -1226,7 +1226,7 @@
                 {field.key}
               </dt>
               <dd
-                class="max-h-c-ask-value-max-h overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap break-words"
+                class="max-h-50 overflow-auto font-(family-name:--font-mono) text-size-meta text-ink-strong whitespace-pre-wrap break-words"
               >
                 {field.value}
               </dd>

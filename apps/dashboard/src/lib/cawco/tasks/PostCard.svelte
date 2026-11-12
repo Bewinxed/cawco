@@ -145,14 +145,14 @@
               {#if kind === "image"}
                 <img
                   alt=""
-                  class="max-h-c-post-media-max-h max-w-full rounded-sm"
+                  class="max-h-64 max-w-full rounded-sm"
                   src={folderRawHref(projectId, file)}
                 />
               {:else if kind === "video"}
                 <!-- svelte-ignore a11y_media_has_caption: a post's media file carries no caption track -->
                 <!-- biome-ignore lint/a11y/useMediaCaption: a post's media file carries no caption track -->
                 <video
-                  class="max-h-c-post-media-max-h max-w-full rounded-sm"
+                  class="max-h-64 max-w-full rounded-sm"
                   controls
                   preload="metadata"
                   src={folderRawHref(projectId, file)}

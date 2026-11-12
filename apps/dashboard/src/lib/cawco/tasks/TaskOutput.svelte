@@ -213,7 +213,7 @@
           data-slot="markdown"
           in:reveal
           style:--markdown-fade={"linear-gradient(to bottom, var(--color-mask-opaque) calc(100% - var(--spacing-space-6)), transparent)"}
-          class="group-data-compact:max-h-c-task-output-compact-h group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
+          class="group-data-compact:max-h-24 group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
         >
           <MessageBody source={content} />
         </div>
@@ -227,7 +227,7 @@
         >
           <img
             alt={name}
-            class="block max-w-full max-h-c-task-output-image-h group-data-compact:max-h-c-task-output-compact-h rounded-sm"
+            class="block max-w-full max-h-80 group-data-compact:max-h-24 rounded-sm"
             {src}
             bind:this={image}
             {@attach whenFailed}

@@ -78,7 +78,7 @@
 <nav
   data-slot="rail"
   aria-label={words.title}
-  class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-c-config-rail-w variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
+  class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-58 variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
   data-variant={variant}
   {@attach highlight({
     rows: '[data-slot="row"]',
