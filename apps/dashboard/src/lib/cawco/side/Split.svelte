@@ -486,14 +486,16 @@
       {#if mounted}
         <!-- Expanded, the card meets the split's edges (SideSurface), so the
              page is drawn at the full width; its inset goes on the slide's
-             clock. No inset on its leading side: the card's edge is the
-             handle's place, its drag on that edge (the owner, on the design
-             graph's working area, 2026-11-12: "the resize bar should be on
-             the edge of the card"). -->
+             clock. An inset on every side as deep as the card's drop (shadow-md,
+             space-4), so the pane, which paneforge clips to its box, never
+             cuts the shadow: the card reads as floating. The handle's drag
+             is moved by that inset onto the card's leading edge (the owner,
+             2026-11-12: "the resize bar should be on the edge of the
+             card"). -->
         <div
           data-split-shown={open || undefined}
           hidden={squeezed}
-          class="w-full min-w-c-side-surface-min py-space-2 pe-space-2 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--dur-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--dur-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
+          class="w-full min-w-c-side-surface-min p-space-4 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--dur-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--dur-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
           style:--surface-off="translateX(var(--space-7))"
           style:--surface-on="translateX(0)"
           in:surfaceIn

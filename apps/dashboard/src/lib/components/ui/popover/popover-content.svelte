@@ -37,13 +37,15 @@
     variants: {
       /**
        * Its drop (DESIGN.md, Shadow Vocabulary): `overlay` for what opens
-       * over the page (a popover, a menu, a toast); `tile` for a card that
-       * stands in its own place, as the side card does in its split, whose
-       * pane clips anything wider than the tile's drop.
+       * over the page (a popover, a menu, a toast); `panel` for a card that
+       * floats in a place of its own, as the side card in its split: the
+       * ladder's md, whose drop (13px at most) its split's inset holds whole,
+       * where the overlay's 48px was cut by the pane into a band and the
+       * tile's 2px read as no shadow at all.
        */
       depth: {
         overlay: "shadow-overlay",
-        tile: "shadow-tile",
+        panel: "shadow-md",
       },
       motion: {
         pop: popMotion,
