@@ -1465,6 +1465,8 @@
     --c-scrub-h-active: 6px;
     /* The scrubber's thumb (MediaPlayer), shown while the scrubber is pointed at, focused or dragged, and always under a finger. */
     --c-scrub-thumb: 12px;
+    /* The room above an inline block (InlineBlock) that its Keep as artifact capsule stands in, over the block's top trailing corner and never over its content: the capsule's height (c-btn-h, 36) and space-2 (7) between it and the block. */
+    --c-block-act-room: 43px;
     /* A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none). */
     --c-dialog-max-h: 85dvh;
     /* What a dialog's header keeps clear at its trailing edge for the kit's Close, 30px and 12px from the corner. */

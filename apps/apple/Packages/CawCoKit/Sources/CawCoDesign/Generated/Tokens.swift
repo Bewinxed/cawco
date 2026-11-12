@@ -1260,6 +1260,8 @@ public enum Size {
     public static let cScrubHActive: Double = 6
     /// The scrubber's thumb (MediaPlayer), shown while the scrubber is pointed at, focused or dragged, and always under a finger.
     public static let cScrubThumb: Double = 12
+    /// The room above an inline block (InlineBlock) that its Keep as artifact capsule stands in, over the block's top trailing corner and never over its content: the capsule's height (c-btn-h, 36) and space-2 (7) between it and the block.
+    public static let cBlockActRoom: Double = 43
     /// A dialog's height cap, its body scrolling inside; a document dialog stands at it (the parent's call: DESIGN.md's Drawer cap, its Dialog naming none).
     public static let cDialogMaxH: Double = 717.4
     /// What a dialog's header keeps clear at its trailing edge for the kit's Close, 30px and 12px from the corner.

@@ -6853,6 +6853,14 @@
       },
       "$description": "The scrubber's thumb (MediaPlayer), shown while the scrubber is pointed at, focused or dragged, and always under a finger."
     },
+    "c-block-act-room": {
+      "$type": "dimension",
+      "$value": {
+        "value": 43,
+        "unit": "px"
+      },
+      "$description": "The room above an inline block (InlineBlock) that its Keep as artifact capsule stands in, over the block's top trailing corner and never over its content: the capsule's height (c-btn-h, 36) and space-2 (7) between it and the block."
+    },
     "c-dialog-max-h": {
       "$type": "dimension",
       "$value": {

@@ -618,6 +618,7 @@
   --spacing-c-scrub-h: var(--c-scrub-h);
   --spacing-c-scrub-h-active: var(--c-scrub-h-active);
   --spacing-c-scrub-thumb: var(--c-scrub-thumb);
+  --spacing-c-block-act-room: var(--c-block-act-room);
   --spacing-c-dialog-max-h: var(--c-dialog-max-h);
   --spacing-c-dialog-close-clear: var(--c-dialog-close-clear);
   --spacing-c-dialog-document-w: var(--c-dialog-document-w);

@@ -663,6 +663,7 @@ export type TokenSize =
   | "size.c-scrub-h"
   | "size.c-scrub-h-active"
   | "size.c-scrub-thumb"
+  | "size.c-block-act-room"
   | "size.c-dialog-max-h"
   | "size.c-dialog-close-clear"
   | "size.c-dialog-document-w"

@@ -7,7 +7,11 @@
    *
    * It has no head: a title is the program's own, where the agent wants one.
    * Its act, Keep as artifact, is a bare symbol in one capsule of glass
-   * floating over its content's top trailing corner. Its body is the
+   * standing over its top trailing corner, in the room the block keeps
+   * above itself (`c-block-act-room`), never over its content: a short
+   * block (a sound's row, a failure's line) keeps its own controls and
+   * words clear of it. The room is kept from its first word, while it is
+   * still written, so nothing moves when the capsule comes. Its body is the
    * program's own surfaces (a ledger, stat tiles) standing in the reply: the
    * block draws no card of its own round them (The Frame Recesses Rule).
    *
@@ -99,6 +103,8 @@
 
   /** It doesn't parse into anything it can draw: it stands as the code it is. */
   let unparsed = $state(false);
+  /** Keep as artifact stands: a latest block, written whole and read. */
+  const keepShown = $derived(!(still || streaming || unparsed));
   function parsed(result: ParseResult | null) {
     unparsed = !result?.root;
   }
@@ -186,10 +192,11 @@
   data-slot="inline-block"
   data-state={mode}
   data-marked={marked}
+  data-acts={still ? undefined : ""}
   style:--mark-in={marked
     ? "kit-fade-in var(--dur-panel) var(--ease-out)"
     : undefined}
-  class="group/block relative my-space-4 w-fit max-w-full min-w-0 has-data-[slot=ledger]:w-auto data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-space-2 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
+  class="group/block relative my-space-4 data-acts:mt-c-block-act-room w-fit max-w-full min-w-0 has-data-[slot=ledger]:w-auto data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-space-2 data-marked:before:rounded-well data-marked:before:bg-selection motion-safe:data-marked:before:animate-(--mark-in) marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
 >
   {#if still}
     <!-- Replaced: its first rows as they were drawn, under the scrim, inert; the one act is the capsule standing on the veil. -->
@@ -258,13 +265,16 @@
         </div>
       {/if}
     </div>
-    <!-- Its act floats over its content's top trailing corner (The Title
-         Bars Follow Liquid Glass Rule: "A panel opened by its name carries
-         none, its actions floating over its content"): there under a hover
-         or focus on a desk, always under a finger. -->
-    {#if !(streaming || unparsed)}
+    <!-- Its act floats at its top trailing corner (The Title Bars Follow
+         Liquid Glass Rule: "A panel opened by its name carries none, its
+         actions floating over its content"), lifted into the room the block
+         keeps above itself, so it never stands on what the block holds;
+         its pad bridges the step to the block, so the hover holds on the
+         way up to it. There under a hover or focus on a desk, always under
+         a finger. -->
+    {#if keepShown}
       <div
-        class="absolute end-space-2 top-space-2 opacity-0 transition-opacity duration-(--dur-fade) group-hover/block:opacity-100 focus-within:opacity-100 coarse:opacity-100"
+        class="absolute end-0 bottom-full pb-space-2 opacity-0 transition-opacity duration-(--dur-fade) group-hover/block:opacity-100 focus-within:opacity-100 coarse:opacity-100"
       >
         <BarGlass form="group">
           <BarItem
