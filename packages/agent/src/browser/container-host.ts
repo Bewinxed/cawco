@@ -9,10 +9,16 @@
  * neko's HTTP and Chromium's DevTools are published on 127.0.0.1 alone; the
  * media port, UDP and TCP, on every address, advertised with the machine's
  * own addresses so a screen on the LAN or the tailnet connects directly.
- * Every container stands on the runtime's media network at its slot's
- * address (media-network.ts), where the stream relay's coturn stands too on
- * the relay's machine; its relay URLs are composed for this machine
- * (relay-urls.ts).
+ * Where the runtime gives it a namespace of its own (native rootless Podman
+ * 5.3 or later with pasta, egress.ts `placementOf`), a container stands in
+ * one (`NetworkMode: "pasta"`), made from the machine's network at each of
+ * its starts, and reaches the relay of its own machine at
+ * `host.containers.internal`; the machine's network at its start is kept in
+ * its record, and it is started again when that no longer holds
+ * (browsers.ts `followNetwork`). On every other runtime it stands on the
+ * runtime's media network at its slot's address (media-network.ts), where
+ * the stream relay's coturn stands too on the relay's machine. Its relay URLs
+ * are composed for this machine (relay-urls.ts).
  *
  * The media port is published for what the runtime forwards
  * (media-forwarding.ts), measured once the container is live, and a
@@ -42,6 +48,12 @@ import { machineId } from "@cawco/core/machine-id";
 import { stunServer } from "@cawco/core/stream-relay";
 import { DAY_MS } from "@cawco/core/time";
 import type Docker from "dockerode";
+import {
+  type MachineNetwork,
+  machineNetwork,
+  type Placement,
+  placementOf,
+} from "./egress";
 import { ensureImage } from "./image";
 import {
   carriesLess,
@@ -71,6 +83,9 @@ import {
   type Progress,
   portsOf,
 } from "./state";
+
+/** Where a container in a namespace of its own reaches the machine, and so the relay on it: pasta's `--map-guest-addr`, Podman 5.3 on. */
+const MACHINE_FROM_PASTA = "host.containers.internal";
 
 /** The image's repository on the machine. */
 const IMAGE = "cawco-browser";
@@ -254,19 +269,22 @@ const relayExpiry = (relay: BrowserRelay): number | undefined => {
 /**
  * Whether `record`'s container was made as a start asks now: the same image,
  * published on the record's ports, the media port published for what the
- * runtime forwards now, at its slot's address on the media network, made
- * with the STUN server named now and the preview names' rules found now
- * (preview-names.ts), and its relay credential, for the same relay, good
- * for a day more (or no relay asked for). Otherwise a new one is made on the
- * same volume, with the credential just minted. One made before it named
- * its STUN server has neko's own default in it, and is made again.
+ * runtime forwards now, at its slot's address on the media network or in a
+ * namespace of its own as the runtime places it (one made on the media
+ * network is made again in its own), made with the STUN server named now and
+ * the preview names' rules found now (preview-names.ts), and its relay
+ * credential, for the same relay, good for a day more (or no relay asked
+ * for). Otherwise a new one is made on the same volume, with the credential
+ * just minted. One made before it named its STUN server has neko's own
+ * default in it, and is made again.
  */
 const keptAsAsked = (
   record: BrowserRecord,
   now: {
     image: string;
     media: MediaPath;
-    address: string;
+    /** Its slot's address on the media network; none in a namespace of its own. */
+    address: string | undefined;
     hostRules: string | undefined;
   },
   relay: BrowserRelay | undefined
@@ -289,6 +307,22 @@ const keptAsAsked = (
     kept.hostRules === now.hostRules &&
     relayHolds
   );
+};
+
+/**
+ * `container` as its record keeps it: with the machine's network it
+ * `started` on where it stands in a namespace of its own, and none
+ * elsewhere.
+ */
+const startedOn = (
+  container: NonNullable<BrowserRecord["container"]>,
+  placement: Placement,
+  started: MachineNetwork | undefined
+): NonNullable<BrowserRecord["container"]> => {
+  const { network: _before, ...made } = container;
+  return placement === "own-namespace" && started
+    ? { ...made, network: started }
+    : made;
 };
 
 /** Waits until `url` answers 2xx, or throws after {@link LIVE_MS}. */
@@ -420,31 +454,19 @@ export class ContainerHost implements BrowserHost {
     const { endpoint } = this.#runtime;
     const forwarding = await mediaForwarding(endpoint);
     let { media } = forwarding;
-    const network = await ensureMediaNetwork(this.#docker);
-    if (record.slot === undefined) {
-      throw new Error(`${record.key} has no slot on the container host.`);
-    }
-    const address = slotAddress(network, record.slot);
+    const { placement, network, address } = await this.#placed(record);
     // Not known now (the hub didn't answer): the container's own stand.
     const wanted = await wantedHostRules(this.#runtime);
     const hostRules = wanted ? wanted.rules : kept?.hostRules;
     let reuse =
       kept &&
       keptAsAsked(record, { image, media, address, hostRules }, options.relay)
-        ? await this.#docker
-            .getContainer(kept.id)
-            .inspect()
-            .then(
-              () => true,
-              (error: unknown) => {
-                if (notFound(error)) {
-                  return false;
-                }
-                throw error;
-              }
-            )
+        ? await this.#exists(kept.id)
         : false;
     let container = kept && reuse ? kept : undefined;
+    // The machine's network its namespace was made from: read just before
+    // the container starts, kept while a reused one runs on.
+    let started: MachineNetwork | undefined = container?.network;
     if (!container && forwarding.advice) {
       console.info(
         `[browser] ${record.key}: media published for ${media}. ${forwarding.advice}`
@@ -472,7 +494,7 @@ export class ContainerHost implements BrowserHost {
           hostRules,
         });
       }
-      await this.#live(container.id, ports);
+      started = (await this.#live(container.id, ports, placement)) ?? started;
       const measured = await measureMedia(
         this.#runtime,
         mediaPort,
@@ -491,6 +513,7 @@ export class ContainerHost implements BrowserHost {
       await recordMeasurement(endpoint, measured);
       media = measured;
       container = undefined;
+      started = undefined;
       reuse = false;
     }
     // A new container carries the credential it was made with, or none.
@@ -508,7 +531,7 @@ export class ContainerHost implements BrowserHost {
         : { relayExpiresAt: relay.relayExpiresAt }),
       ...(relay.relayKey ? { relayKey: relay.relayKey } : {}),
       host: "container",
-      container,
+      container: startedOn(container, placement, started),
       state: "live",
     };
     // neko answers its admin's login, or the browser is not one CawCo can drive.
@@ -516,11 +539,63 @@ export class ContainerHost implements BrowserHost {
     return next;
   }
 
-  /** Starts the container when it is not running, and waits until neko and DevTools answer. */
-  async #live(id: string, ports: ReturnType<typeof portsOf>): Promise<void> {
+  /**
+   * Where `record`'s container stands on this runtime (egress.ts
+   * `placementOf`): on the media network at its slot's address, or in a
+   * namespace of its own with no address, so a kept one made on the media
+   * network is made again in its own.
+   */
+  async #placed(record: BrowserRecord): Promise<{
+    placement: Placement;
+    network: MediaNetwork | undefined;
+    address: string | undefined;
+  }> {
+    const { slot } = record;
+    if (slot === undefined) {
+      throw new Error(`${record.key} has no slot on the container host.`);
+    }
+    const placement = placementOf(this.#runtime);
+    if (placement === "own-namespace") {
+      return { placement, network: undefined, address: undefined };
+    }
+    const network = await ensureMediaNetwork(this.#docker);
+    return { placement, network, address: slotAddress(network, slot) };
+  }
+
+  /** Whether the runtime still has container `id`. */
+  #exists(id: string): Promise<boolean> {
+    return this.#docker
+      .getContainer(id)
+      .inspect()
+      .then(
+        () => true,
+        (error: unknown) => {
+          if (notFound(error)) {
+            return false;
+          }
+          throw error;
+        }
+      );
+  }
+
+  /**
+   * Starts the container when it is not running, and waits until neko and
+   * DevTools answer. Answers the machine's network read just before it
+   * started, where it is placed in a namespace of its own (a start makes
+   * that namespace anew); undefined when it ran already or stands on the
+   * media network.
+   */
+  async #live(
+    id: string,
+    ports: ReturnType<typeof portsOf>,
+    placement: Placement
+  ): Promise<MachineNetwork | undefined> {
     const handle = this.#docker.getContainer(id);
     const state = await handle.inspect();
+    let started: MachineNetwork | undefined;
     if (!state.State.Running) {
+      started =
+        placement === "own-namespace" ? await machineNetwork() : undefined;
       await handle.start();
     }
     await answers(`http://127.0.0.1:${ports.http}/health`, "neko");
@@ -528,6 +603,7 @@ export class ContainerHost implements BrowserHost {
       `http://127.0.0.1:${ports.devtools}/json/version`,
       "Chromium's DevTools"
     );
+    return started;
   }
 
   /** The volume `record` names (its sign-ins), or one made for it now, named and labelled for `owner`. */
@@ -556,9 +632,10 @@ export class ContainerHost implements BrowserHost {
       relay: BrowserRelay | undefined;
       media: MediaPath;
       owner: string;
-      network: MediaNetwork;
-      /** Its slot's address on the media network. */
-      address: string;
+      /** The media network it stands on; none in a namespace of its own. */
+      network: MediaNetwork | undefined;
+      /** Its slot's address on the media network; none in a namespace of its own. */
+      address: string | undefined;
       /** Chromium's resolver rules for the preview names (preview-names.ts); none to map. */
       hostRules: string | undefined;
     }
@@ -570,14 +647,22 @@ export class ContainerHost implements BrowserHost {
     const passwords = { admin: password(), user: password() };
     const stun = stunServer();
     const protocols = mediaProtocols(media);
-    const placed = onMediaNetwork(network.name, address);
+    // A namespace of its own: pasta's, Podman's default rootless mode, which
+    // takes no network beside it. Otherwise its slot's address on the media
+    // network.
+    const placed =
+      network && address
+        ? onMediaNetwork(network.name, address)
+        : { NetworkMode: "pasta", NetworkingConfig: undefined };
     const neko = relay
       ? {
           username: relay.username,
           credential: relay.credential,
           urls: relayUrlsFor(relay, {
             machineId: await machineId(),
-            relayMedia: relayMediaAddress(network),
+            relayMedia: network
+              ? relayMediaAddress(network)
+              : MACHINE_FROM_PASTA,
           }),
         }
       : undefined;
@@ -597,7 +682,9 @@ export class ContainerHost implements BrowserHost {
         // chromium.conf passes it to Chromium's --host-resolver-rules.
         ...(hostRules ? [`CAWCO_HOST_RULES=${hostRules}`] : []),
       ],
-      NetworkingConfig: placed.NetworkingConfig,
+      ...(placed.NetworkingConfig
+        ? { NetworkingConfig: placed.NetworkingConfig }
+        : {}),
       ExposedPorts: {
         "8080/tcp": {},
         "9222/tcp": {},
@@ -637,7 +724,7 @@ export class ContainerHost implements BrowserHost {
     });
     return {
       id: created.id,
-      address,
+      ...(address ? { address } : {}),
       image,
       media,
       ports: { http, devtools, media: port },

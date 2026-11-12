@@ -25,6 +25,12 @@
  * the hub last gave it), and holds it awake while connected. It watches the
  * records' dir, so a browser `cawco browser` starts has its gate as its
  * record is written, and one it removes has none.
+ *
+ * It follows the machine's network ({@link followNetwork}): a container in a
+ * namespace of its own copied the machine's network as it started
+ * (egress.ts), and is started again once the machine is routed and that copy
+ * no longer matches, so it has the internet whenever the machine does,
+ * whatever order the machine booted in.
  */
 import { watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -41,6 +47,7 @@ import type {
 import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
+import { type MachineNetwork, machineNetwork, startAgainDue } from "./egress";
 import { frontOrigin, setOriginSink, syncOrigins } from "./front-origin";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
@@ -77,6 +84,9 @@ const RUNTIME_RECHECK_MS = 10 * 60_000;
 
 /** How often idle browsers are looked for. */
 const TICK_MS = 60_000;
+
+/** How often the machine's network is read ({@link followNetwork}): our call, a few seconds of a page failing at most. */
+const NETWORK_POLL_MS = 5000;
 
 let runtime: Runtime | { missing: string } | undefined;
 let runtimeAt = 0;
@@ -982,7 +992,116 @@ const moveLocals = async (
   }
 };
 
-/** One tick: the runtime again when due, every browser's gate, the records against their hosts, those that waited on the runtime started again, the local ones moved into a container once it answers, the idle ones down, and the frame. */
+/**
+ * `key`'s browser, live, stopped and started again under its lock because
+ * the machine's network is `now` and its container's namespace was made from
+ * another ({@link followNetwork}). A start makes its namespace anew from the
+ * machine's network as it stands; the stop cuts its held connections with
+ * the gate's "The browser stopped.", and each door's pages open again.
+ */
+const startAgainOnNetwork = (
+  key: BrowserKey,
+  now: MachineNetwork
+): Promise<void> =>
+  withBrowser(key, async () => {
+    const record = await readBrowser(key);
+    if (!(
+      record?.state === "live" && startAgainDue(record.container?.network, now)
+    )) {
+      return;
+    }
+    const host = await hostOf(record);
+    if (!(host && (await host.running(record)))) {
+      return;
+    }
+    console.info(
+      `[browser] ${key}: the machine's network is ${JSON.stringify(now)}, its container started on ${JSON.stringify(record.container?.network)}; starting it again`
+    );
+    await host.stop(record);
+    const { relay } = record;
+    await launch(
+      record,
+      host,
+      relay && relayHolds(relay) ? relay : undefined,
+      (await host.heldSlots?.()) ?? new Set<number>()
+    );
+  });
+
+/** What {@link followNetwork} reads and acts through: the daemon's own unless a probe gives others. */
+export interface NetworkFollowing {
+  /** How often the machine's network is read. */
+  pollMs?: number;
+  read?: () => Promise<MachineNetwork>;
+  records?: () => Promise<BrowserRecord[]>;
+  startAgain?: (key: BrowserKey, now: MachineNetwork) => Promise<void>;
+}
+
+/** A running {@link followNetwork}: its sweep, run by each tick, and its stop. */
+export interface NetworkFollower {
+  stop: () => void;
+  /** Reads the machine's network and starts again every live browser {@link startAgainDue} names. */
+  sweep: () => Promise<void>;
+}
+
+/**
+ * Follows the machine's network: read every {@link NETWORK_POLL_MS}, and at
+ * its start, whenever the reading changes, and at each {@link sweep} (the
+ * minute's tick), every live record whose container
+ * {@link startAgainDue} names is stopped and started again
+ * ({@link startAgainOnNetwork}). One sweep at a time; a reading that changes
+ * during one is swept after it.
+ */
+export const followNetwork = ({
+  pollMs = NETWORK_POLL_MS,
+  read = machineNetwork,
+  records = allBrowsers,
+  startAgain = startAgainOnNetwork,
+}: NetworkFollowing = {}): NetworkFollower => {
+  let last = "";
+  let queue: Promise<void> = Promise.resolve();
+  const once = async (always: boolean): Promise<void> => {
+    const now = await read();
+    const said = JSON.stringify(now);
+    if (!always && said === last) {
+      return;
+    }
+    last = said;
+    for (const record of await records()) {
+      if (
+        record.state === "live" &&
+        startAgainDue(record.container?.network, now)
+      ) {
+        await startAgain(record.key, now).catch((error: unknown) =>
+          console.warn(
+            `[browser] ${record.key} was not started again on the machine's network: ${why(error)}`
+          )
+        );
+      }
+    }
+  };
+  const look = (always: boolean): Promise<void> => {
+    const next = queue.then(() => once(always));
+    queue = next.catch(() => undefined);
+    return next;
+  };
+  const polls = setInterval(() => {
+    look(false).catch((error: unknown) =>
+      console.warn(
+        `[browser] the machine's network was not read: ${why(error)}`
+      )
+    );
+  }, pollMs);
+  polls.unref();
+  look(true).catch((error: unknown) =>
+    console.warn(`[browser] the machine's network was not read: ${why(error)}`)
+  );
+  return { sweep: () => look(true), stop: () => clearInterval(polls) };
+};
+
+/** The daemon's {@link followNetwork}, while {@link watchBrowsers} runs. */
+let following: NetworkFollower | undefined;
+
+/** One tick: the runtime again when due, every browser's gate, the records against their hosts, those that waited on the runtime started again, the local ones moved into a container once it answers, those whose namespace the machine's network outgrew started again, the idle ones down, and the frame. */
 const tick = async (): Promise<void> => {
   const records = await allBrowsers();
   const waiting = records.some((record) => record.runtimeAway);
@@ -997,6 +1116,7 @@ const tick = async (): Promise<void> => {
     await backFromAway(await allBrowsers());
     await moveLocals(await allBrowsers(), found);
   }
+  await following?.sweep();
   await idleDown();
   await tell();
 };
@@ -1004,9 +1124,10 @@ const tick = async (): Promise<void> => {
 /**
  * The daemon's part: the runtime and the records read as it starts, every
  * gate served and served again as any record is written (a terminal's
- * `cawco browser start` among them), then a tick every minute. Answers its
- * stop, which the daemon's scope runs as it ends: the records' watch closed
- * and the tick cleared.
+ * `cawco browser start` among them), the machine's network followed
+ * ({@link followNetwork}), then a tick every minute. Answers its stop, which
+ * the daemon's scope runs as it ends: the records' watch closed, the
+ * network's reading and the tick cleared.
  *
  * The watch covers the records' dir alone: a local Chromium writes its
  * profile under `chromium/` (state.ts `chromiumDir`), so on macOS, where a
@@ -1035,6 +1156,8 @@ export const watchBrowsers = async (): Promise<() => void> => {
   let ticks: ReturnType<typeof setInterval> | undefined;
   const stop = (): void => {
     records.close();
+    following?.stop();
+    following = undefined;
     clearInterval(ticks);
   };
   try {
@@ -1042,9 +1165,12 @@ export const watchBrowsers = async (): Promise<() => void> => {
     console.info(
       "missing" in found
         ? "[browser] no container runtime: browsers run as local Chromium"
-        : `[browser] runtime ${found.kind} ${found.version} (API ${found.api}${found.rootless ? ", rootless" : ""}) at ${found.endpoint}`
+        : `[browser] runtime ${found.kind} ${found.version} (API ${found.api}${found.rootless ? `, rootless${found.rootlessNetwork ? ` on ${found.rootlessNetwork}` : ""}` : ""}) at ${found.endpoint}`
     );
     await tick();
+    // After the first tick read the records back: a container the machine's
+    // restart stopped is asleep then, and only a running one starts again.
+    following = followNetwork();
   } catch (error) {
     stop();
     throw error;

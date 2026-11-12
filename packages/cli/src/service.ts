@@ -950,7 +950,11 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         [CAWCO_ENV.localDashboardPort]: String(localDashboardPort()),
       },
       workingDirectory: LAYOUT_ROOT,
-      after: ["network-online.target"],
+      // Nothing to wait for: a user unit cannot order itself after the
+      // system's network-online.target (podman-systemd.unit(5), "Implicit
+      // network dependencies"). Containers follow the machine's network
+      // instead (agent browser/egress.ts).
+      after: [],
       wants: [],
       restartOnSuccess: true,
       restartSec: 2,
@@ -1276,8 +1280,8 @@ const xml = (value: string): string =>
 const CAWCO_SIBLING_SERVICE = /^cawco-(.+)\.service$/u;
 
 const orderingComment = (spec: ServiceSpec): string => {
-  // Only sibling cawco services mean anything under launchd; systemd targets
-  // like `network-online.target` have no launchd counterpart to name.
+  // Only sibling cawco services mean anything under launchd; a systemd
+  // target has no launchd counterpart to name.
   const siblings = spec.after
     .map((target) => CAWCO_SIBLING_SERVICE.exec(target)?.[1])
     .filter((id): id is string => id !== undefined && isServiceId(id))

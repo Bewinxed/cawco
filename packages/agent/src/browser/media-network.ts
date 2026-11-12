@@ -2,9 +2,13 @@
  * The runtime's media network, `cawco-media`: one user-defined bridge per
  * container runtime, with fixed addresses in its /24: the gateway at .1, the
  * stream relay's coturn at .2 (relay.ts), and browser slot s at .10 + s
- * (container-host.ts). Every browser container of every machine is made on
- * it; coturn joins it on the relay's machine, so a browser there reaches the
- * relay at .2 with no forwarder and no hairpin.
+ * (container-host.ts). Every browser container is made on it, but on a
+ * runtime that gives each container a namespace of its own (native rootless
+ * Podman with pasta, egress.ts `placementOf`): a rootless runtime's bridges
+ * share one namespace that keeps the machine's network as it stood when it
+ * was made. coturn joins it on the relay's machine, so a browser there on
+ * the media network reaches the relay at .2 with no forwarder and no
+ * hairpin.
  *
  * Fixed addresses need a subnet named at the network's making: Docker takes
  * an address for a container only "when connecting to networks with user

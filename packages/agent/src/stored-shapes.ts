@@ -19,6 +19,7 @@ import {
 } from "@cawco/core/stored-shapes";
 import { declared } from "@cawco/core/stored-types";
 import { z } from "zod";
+import type { MachineNetwork as MachineNetworkType } from "./browser/egress";
 import type { MediaMeasurement as MediaMeasurementType } from "./browser/media-forwarding";
 import type { BrowserRecord as BrowserRecordType } from "./browser/state";
 import type {
@@ -42,6 +43,16 @@ const MediaMeasurementShape = declared(
 export const MediaMeasurementSchema: z.ZodType<MediaMeasurementType> =
   MediaMeasurementShape;
 
+const MachineNetworkShape = declared(
+  z.object({
+    address: z.string().optional(),
+    resolver: z.string().optional(),
+    routed: z.boolean(),
+  }),
+  "MachineNetwork",
+  "packages/agent/src/browser/egress.ts"
+);
+
 const BrowserRecordShape = declared(
   z.object({
     container: z
@@ -51,6 +62,7 @@ const BrowserRecordShape = declared(
         id: z.string(),
         image: z.string(),
         media: MediaPathShape,
+        network: MachineNetworkShape.optional(),
         hostRules: z.string().optional(),
         ports: BrowserPortsShape.optional(),
         runtime: z
@@ -165,6 +177,7 @@ const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 prove<
   [
     Same<z.output<typeof MediaMeasurementShape>, MediaMeasurementType>,
+    Same<z.output<typeof MachineNetworkShape>, MachineNetworkType>,
     Same<z.output<typeof BrowserRecordShape>, BrowserRecordType>,
     Same<z.output<typeof SetHarnessConfigShape>, SetHarnessConfigType>,
     Same<z.output<typeof SetHookShape>, SetHookType>,

@@ -43,6 +43,7 @@ import {
   writeStateFile,
 } from "@cawco/core/state-file";
 import { BrowserRecordSchema } from "../stored-shapes";
+import type { MachineNetwork } from "./egress";
 
 /** What a browser's record keeps between processes. */
 export interface BrowserRecord {
@@ -55,6 +56,12 @@ export interface BrowserRecord {
     image: string;
     /** What its media port was published, and neko's candidates advertised, for. */
     media: MediaPath;
+    /**
+     * The machine's network as it stood when this container last started;
+     * only where the container has a namespace of its own (egress.ts): it is
+     * started again when the machine's network no longer matches.
+     */
+    network?: MachineNetwork;
     /**
      * Chromium's `--host-resolver-rules` it was made with: the hub's preview
      * names that resolve to this machine's loopback, mapped to the machine

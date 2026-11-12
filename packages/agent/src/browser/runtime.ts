@@ -33,6 +33,12 @@ export interface Runtime {
   ownNetwork: boolean;
   /** Runs without root: ports under 1024 need the host's leave. */
   rootless: boolean;
+  /**
+   * A rootless Podman's network command, which makes each rootless network
+   * namespace (libpod `/info`'s `host.rootlessNetworkCmd`); unread for any
+   * other runtime. Where containers stand follows it (egress.ts).
+   */
+  rootlessNetwork?: "pasta" | "slirp4netns";
   /** The engine's own version. */
   version: string;
 }
@@ -187,7 +193,42 @@ const dockerAt = (socketPath: string, timeout?: number): Docker => {
   }
 };
 
-/** Asks the runtime at `socketPath` who it is: `/_ping`, `/version`, `/info`. */
+/** What libpod's `/info` says of its rootless network (libpod/define/info.go `HostInfo.RootlessNetworkCmd`). */
+const LibpodInfoShape = z.object({
+  host: z
+    .object({
+      rootlessNetworkCmd: z.enum(["pasta", "slirp4netns"]).optional(),
+    })
+    .optional(),
+});
+
+/**
+ * A rootless Podman's network command, read from its own API's `GET
+ * /libpod/info` (the Docker-compatible `/info` does not carry it); undefined
+ * when it does not answer, does not say, or names one this agent does not
+ * know.
+ */
+const rootlessNetworkOf = async (
+  docker: Docker,
+  socketPath: string
+): Promise<Runtime["rootlessNetwork"]> => {
+  try {
+    const info = await new Promise<unknown>((resolve, reject) => {
+      docker.modem.dial(
+        { path: "/libpod/info", method: "GET", statusCodes: { 200: true } },
+        (error: unknown, data: unknown) =>
+          error ? reject(error) : resolve(data)
+      );
+    });
+    return LibpodInfoShape.safeParse(info).data?.host?.rootlessNetworkCmd;
+  } catch (error) {
+    console.info(
+      `[browser] ${socketPath}: libpod's /info did not answer (${error instanceof Error ? error.message : String(error)}); its containers stay on the media network`
+    );
+  }
+};
+
+/** Asks the runtime at `socketPath` who it is: `/_ping`, `/version`, `/info`, and a rootless Podman's `/libpod/info`. */
 const probeEndpoint = async (socketPath: string): Promise<EndpointAnswer> => {
   const docker = dockerAt(socketPath, PING_MS);
   try {
@@ -214,6 +255,10 @@ const probeEndpoint = async (socketPath: string): Promise<EndpointAnswer> => {
     : ((info as { SecurityOptions?: string[] }).SecurityOptions ?? []).some(
         (option) => option.includes("name=rootless")
       );
+  const rootlessNetwork =
+    podman && rootless
+      ? await rootlessNetworkOf(docker, socketPath)
+      : undefined;
   const ownNetwork =
     platform() === "linux" &&
     !colima &&
@@ -227,6 +272,7 @@ const probeEndpoint = async (socketPath: string): Promise<EndpointAnswer> => {
       api: version.ApiVersion,
       ownNetwork,
       rootless,
+      ...(rootlessNetwork ? { rootlessNetwork } : {}),
     },
   };
 };

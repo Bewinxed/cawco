@@ -4,9 +4,14 @@
  * the credential the hub minted (`BrowserRelay`, its `reach` naming the
  * relay's machine and that machine's own addresses):
  *
- * - on the relay's own machine: `turn:<coturn's media address>:3478` over UDP
- *   alone. The browser and coturn share the media network (media-network.ts),
- *   so the allocation needs no forwarder and no hairpin through the router.
+ * - on the relay's own machine: `turn:<relayMedia>:3478` over UDP alone. On
+ *   a runtime that keeps the media network, `relayMedia` is coturn's address
+ *   there: the browser and coturn share it (media-network.ts), so the
+ *   allocation needs no forwarder and no hairpin through the router. A
+ *   browser in a namespace of its own (egress.ts) is given
+ *   `host.containers.internal`, the machine as pasta maps it, and reaches
+ *   coturn at the listener published on every address of the machine, as a
+ *   browser of another machine does.
  * - on another machine: the relay at its tailnet address when both machines
  *   hold one (100.64/10), and at its LAN address when that address lies
  *   inside one of this machine's interface prefixes (`os.networkInterfaces()`
@@ -29,7 +34,7 @@ const TAILNET = "100.64.0.0/10";
 /** Where a browser of this machine composes its URLs from: its machine, and coturn's media address on its runtime. */
 export interface RelayHere {
   machineId: string;
-  /** coturn's address on this runtime's media network (media-network.ts `relayMediaAddress`). */
+  /** Where a browser of this machine reaches coturn on it: its address on the runtime's media network (media-network.ts `relayMediaAddress`), or the machine's name in a namespace of its own (`host.containers.internal`). */
   relayMedia: string;
 }
 
