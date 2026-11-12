@@ -16,6 +16,7 @@
    * one sighting at a time.
    */
   import { onDestroy, onMount } from "svelte";
+  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import { theme } from "#lib/theme.svelte.js";
   import {
     type Axes,
@@ -225,45 +226,48 @@
 
 <svelte:window {onkeydown} />
 
-<div
-  class="grid min-h-dvh grid-cols-1 content-start gap-space-6 bg-surface-page p-space-6"
-  data-preview="address"
->
-  <header class="grid max-w-c-measure gap-space-4" data-slot="bar">
-    <div class="grid gap-space-1">
-      <h1 class="m-0 type-title tracking-title text-ink-strong">
-        Open CawCo by one word
-      </h1>
-      <p class="m-0 type-body text-pretty text-ink-muted">
-        One tray, at its real size: in Needs you, over Configure › Devices, and
-        as a phone's sheet. Its own buttons move it on; a waiting state moves on
-        by itself, as the hub would, and where it stands is kept across a
-        reload.
-      </p>
-    </div>
-  </header>
-
-  <main
-    class="flex flex-wrap items-start gap-x-space-8 gap-y-space-6"
-    data-slot="frames"
+<!-- This mount's one tooltip provider, at its root (main.ts). -->
+<TooltipProvider>
+  <div
+    class="grid min-h-dvh grid-cols-1 content-start gap-space-6 bg-surface-page p-space-6"
+    data-preview="address"
   >
-    <figure class="m-0 grid min-w-0 grid-cols-1 content-start gap-space-3">
-      <figcaption class="type-meta text-ink-muted">
-        Desk · Needs you, onboarding
-      </figcaption>
-      <DeskNeeds bind:this={needs} {flow} />
-    </figure>
-    <figure
-      class="m-0 grid min-w-0 grow basis-c-connect-w grid-cols-1 content-start gap-space-3"
+    <header class="grid max-w-c-measure gap-space-4" data-slot="bar">
+      <div class="grid gap-space-1">
+        <h1 class="m-0 type-title tracking-title text-ink-strong">
+          Open CawCo by one word
+        </h1>
+        <p class="m-0 type-body text-pretty text-ink-muted">
+          One tray, at its real size: in Needs you, over Configure › Devices,
+          and as a phone's sheet. Its own buttons move it on; a waiting state
+          moves on by itself, as the hub would, and where it stands is kept
+          across a reload.
+        </p>
+      </div>
+    </header>
+
+    <main
+      class="flex flex-wrap items-start gap-x-space-8 gap-y-space-6"
+      data-slot="frames"
     >
-      <figcaption class="type-meta text-ink-muted">
-        Desk · Configure › Devices
-      </figcaption>
-      <DeskSettings bind:this={settings} {flow} />
-    </figure>
-    <figure class="m-0 grid min-w-0 grid-cols-1 content-start gap-space-3">
-      <figcaption class="type-meta text-ink-muted">Phone · 390</figcaption>
-      <PhoneSheet bind:this={phone} {flow} />
-    </figure>
-  </main>
-</div>
+      <figure class="m-0 grid min-w-0 grid-cols-1 content-start gap-space-3">
+        <figcaption class="type-meta text-ink-muted">
+          Desk · Needs you, onboarding
+        </figcaption>
+        <DeskNeeds bind:this={needs} {flow} />
+      </figure>
+      <figure
+        class="m-0 grid min-w-0 grow basis-c-connect-w grid-cols-1 content-start gap-space-3"
+      >
+        <figcaption class="type-meta text-ink-muted">
+          Desk · Configure › Devices
+        </figcaption>
+        <DeskSettings bind:this={settings} {flow} />
+      </figure>
+      <figure class="m-0 grid min-w-0 grid-cols-1 content-start gap-space-3">
+        <figcaption class="type-meta text-ink-muted">Phone · 390</figcaption>
+        <PhoneSheet bind:this={phone} {flow} />
+      </figure>
+    </main>
+  </div>
+</TooltipProvider>

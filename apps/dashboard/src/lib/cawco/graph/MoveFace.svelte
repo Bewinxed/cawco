@@ -87,7 +87,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
-  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronDown,
@@ -958,242 +957,287 @@
   </div>
 {/snippet}
 
-<!-- Its own tooltips' provider, so the face stands whole wherever it is
-     mounted (its states file draws it alone). -->
-<TooltipProvider>
-  <div
-    data-slot="move"
-    class="@container/move flex min-h-0 min-w-0 flex-1 flex-col gap-space-3"
-    {@attach (node: HTMLElement) => {
-      node.addEventListener("keydown", closeRow);
-      return () => node.removeEventListener("keydown", closeRow);
-    }}
-  >
-    {#if peek}
-      <!-- The drawer at its head stop: Play, the time and the move on one
-         line over the stage, so the move plays in sight of the stage. -->
-      {#if move.kind === "ready" && clips.length > 0}
-        <div class="flex min-h-c-btn-h min-w-0 items-center gap-space-3">
-          {@render transport()}
-          <span class="min-w-0 flex-1 truncate type-label text-ink-strong"
-            >{words.move(move.from, move.to)}</span
-          >
-        </div>
-        {#if zoomed}
-          {@render overviewStrip()}
-        {/if}
-      {:else}
-        <p class="m-0 min-w-0 truncate type-label text-ink-muted">
-          {peekLine}
-        </p>
+<div
+  data-slot="move"
+  class="@container/move flex min-h-0 min-w-0 flex-1 flex-col gap-space-3"
+  {@attach (node: HTMLElement) => {
+    node.addEventListener("keydown", closeRow);
+    return () => node.removeEventListener("keydown", closeRow);
+  }}
+>
+  {#if peek}
+    <!-- The drawer at its head stop: Play, the time and the move on one
+       line over the stage, so the move plays in sight of the stage. -->
+    {#if move.kind === "ready" && clips.length > 0}
+      <div class="flex min-h-c-btn-h min-w-0 items-center gap-space-3">
+        {@render transport()}
+        <span class="min-w-0 flex-1 truncate type-label text-ink-strong"
+          >{words.move(move.from, move.to)}</span
+        >
+      </div>
+      {#if zoomed}
+        {@render overviewStrip()}
       {/if}
     {:else}
-      <!-- The head: the move as the face's title, and once he changed any
-         timing, Reset all. -->
-      <!-- One line of one height, whatever it holds (the title alone, Undo
-           reset, or Reset all), never wrapping, so the rows under it never
-           move as it comes and goes. The title gives way first, its whole
-           name in its menu. -->
-      <header
-        class="flex h-c-btn-h min-w-0 flex-none items-center gap-x-space-3"
-        data-slot="move-head"
-      >
-        <div class="flex min-w-0 flex-1 items-center">
-          {#if titled}
-            {@render title()}
-          {/if}
-        </div>
-        {#if move.kind === "ready" && changedCount === 0 && undoable}
-          <!-- Reset all taken back in place, until anything changes again
-               (the house answer: undo over confirm). -->
+      <p class="m-0 min-w-0 truncate type-label text-ink-muted">
+        {peekLine}
+      </p>
+    {/if}
+  {:else}
+    <!-- The head: the move as the face's title, and once he changed any
+       timing, Reset all. -->
+    <!-- One line of one height, whatever it holds (the title alone, Undo
+         reset, or Reset all), never wrapping, so the rows under it never
+         move as it comes and goes. The title gives way first, its whole
+         name in its menu. -->
+    <header
+      class="flex h-c-btn-h min-w-0 flex-none items-center gap-x-space-3"
+      data-slot="move-head"
+    >
+      <div class="flex min-w-0 flex-1 items-center">
+        {#if titled}
+          {@render title()}
+        {/if}
+      </div>
+      {#if move.kind === "ready" && changedCount === 0 && undoable}
+        <!-- Reset all taken back in place, until anything changes again
+             (the house answer: undo over confirm). -->
+        <Button
+          data-slot="undo-reset"
+          onclick={onundo}
+          size="sm"
+          variant="ghost">{words.undoReset}</Button
+        >
+      {/if}
+      {#if move.kind === "ready" && changedCount > 0}
+        <div class="flex flex-none items-center gap-space-2">
+          <!-- Reset all, as the Controls face writes it: the undo glyph
+               and its words, at every width. -->
           <Button
-            data-slot="undo-reset"
-            onclick={onundo}
+            aria-label={words.resetAllSaid}
+            data-slot="reset-all"
+            icon={IconReset}
+            label={words.resetAll}
+            onclick={() =>
+              onreset(clips.filter((clip) => clip.was).map((clip) => clip.id))}
             size="sm"
-            variant="ghost">{words.undoReset}</Button
-          >
-        {/if}
-        {#if move.kind === "ready" && changedCount > 0}
-          <div class="flex flex-none items-center gap-space-2">
-            <!-- Reset all, as the Controls face writes it: the undo glyph
-                 and its words, at every width. -->
-            <Button
-              aria-label={words.resetAllSaid}
-              data-slot="reset-all"
-              icon={IconReset}
-              label={words.resetAll}
-              onclick={() =>
-                onreset(
-                  clips.filter((clip) => clip.was).map((clip) => clip.id)
-                )}
-              size="sm"
-              variant="ghost"
-            />
-          </div>
-        {/if}
-      </header>
-
-      {#if move.kind === "none"}
-        <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
-          {words.noMove(move.state)}
-        </p>
-      {:else if move.kind === "reading"}
-        <p class="m-0 type-meta text-ink-muted" role="status">
-          {words.reading}
-        </p>
-      {:else if move.kind === "failed"}
-        <!-- Why it didn't play, and the way back: Try again plays it once
-           more from its from state, as it played on arrival. -->
-        <div class="flex min-w-0 flex-col items-start gap-space-3" role="alert">
-          <p class="m-0 type-body text-status-fail-ink wrap-anywhere">
-            {words.moveFailed(move.why)}
-          </p>
-          <Button onclick={onretry} size="sm" variant="outline"
-            >{words.tryAgain}</Button
-          >
+            variant="ghost"
+          />
         </div>
-      {:else if clips.length === 0}
-        <p class="m-0 type-body text-ink-muted text-pretty">
-          {words.nothingAnimated(move.from, move.to)}
+      {/if}
+    </header>
+
+    {#if move.kind === "none"}
+      <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
+        {words.noMove(move.state)}
+      </p>
+    {:else if move.kind === "reading"}
+      <p class="m-0 type-meta text-ink-muted" role="status">
+        {words.reading}
+      </p>
+    {:else if move.kind === "failed"}
+      <!-- Why it didn't play, and the way back: Try again plays it once
+         more from its from state, as it played on arrival. -->
+      <div class="flex min-w-0 flex-col items-start gap-space-3" role="alert">
+        <p class="m-0 type-body text-status-fail-ink wrap-anywhere">
+          {words.moveFailed(move.why)}
         </p>
-      {:else}
-        <!-- The timeline: one grid of three fixed columns (what moves, its
-           length, its lane), the ruler's row then a row per thing, each a
-           subgrid of the timeline's columns. Narrower than a timeline's
-           least, the lane takes a line of its own under its row's words. -->
-        <!-- Under a finger the scroller keeps its scrollbar's room, so the
-           lengths at the trailing edge never stand under it. -->
-        <!-- Its scroller clips: it stands a step out on every side and pads
-             the step back, so a focus ring on its edge (Play's, the first
-             row's) is drawn whole (The One Ring Rule). -->
+        <Button onclick={onretry} size="sm" variant="outline"
+          >{words.tryAgain}</Button
+        >
+      </div>
+    {:else if clips.length === 0}
+      <p class="m-0 type-body text-ink-muted text-pretty">
+        {words.nothingAnimated(move.from, move.to)}
+      </p>
+    {:else}
+      <!-- The timeline: one grid of three fixed columns (what moves, its
+         length, its lane), the ruler's row then a row per thing, each a
+         subgrid of the timeline's columns. Narrower than a timeline's
+         least, the lane takes a line of its own under its row's words. -->
+      <!-- Under a finger the scroller keeps its scrollbar's room, so the
+         lengths at the trailing edge never stand under it. -->
+      <!-- Its scroller clips: it stands a step out on every side and pads
+           the step back, so a focus ring on its edge (Play's, the first
+           row's) is drawn whole (The One Ring Rule). -->
+      <div
+        class="-m-space-1 min-h-0 min-w-0 overflow-y-auto p-space-1 coarse:pe-space-4"
+      >
         <div
-          class="-m-space-1 min-h-0 min-w-0 overflow-y-auto p-space-1 coarse:pe-space-4"
+          data-slot="timeline"
+          class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-1"
+          style:--cols="minmax(var(--c-graph-move-name-w), 38%) minmax(0, 1fr)"
+          {@attach (node: HTMLElement) => {
+            // Not passive: a pinch or a Ctrl-wheel zooms the lanes, never the page.
+            node.addEventListener("wheel", wheel, { passive: false });
+            return () => node.removeEventListener("wheel", wheel);
+          }}
         >
           <div
-            data-slot="timeline"
-            class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-1"
-            style:--cols="minmax(var(--c-graph-move-name-w), 38%) minmax(0, 1fr)"
-            {@attach (node: HTMLElement) => {
-              // Not passive: a pinch or a Ctrl-wheel zooms the lanes, never the page.
-              node.addEventListener("wheel", wheel, { passive: false });
-              return () => node.removeEventListener("wheel", wheel);
-            }}
+            class="sticky top-0 z-2 col-span-full grid min-h-c-btn-h grid-cols-subgrid bg-surface-raised"
           >
-            <div
-              class="sticky top-0 z-2 col-span-full grid min-h-c-btn-h grid-cols-subgrid bg-surface-raised"
-            >
-              <div class="flex min-w-0 items-center">
-                {@render transport()}
-              </div>
-              <div
-                class="relative flex min-w-0 flex-col justify-end gap-space-1 px-space-2"
-                data-slot="ruler"
-              >
-                <!-- Tall enough that its figures (at its top) and the
-                     playhead's flag (at its foot) never meet: at 25px the
-                     flag ran 3px into a figure standing over it. -->
-                <Slider.Root
-                  class="relative block h-space-8 w-full cursor-ew-resize touch-none select-none coarse:h-c-btn-h-lg"
-                  max={Math.max(viewTo, viewFrom + 1)}
-                  min={viewFrom}
-                  onValueChange={(next: number) =>
-                    onseek(Math.min(next, length))}
-                  onValueCommit={(next: number) =>
-                    letGo(Math.min(next, length))}
-                  onpointerdown={() => {
-                    scrubbing = true;
-                  }}
-                  step={1}
-                  thumbPositioning="exact"
-                  type="single"
-                  value={Math.min(viewTo, Math.max(viewFrom, handle))}
-                >
-                  <div
-                    bind:this={ruler}
-                    class="absolute inset-0 overflow-x-clip type-code leading-none num"
-                    aria-hidden="true"
-                    data-slot="ruler-lane"
-                    {@attach frameSize(
-                      (node: HTMLElement) => [node.clientWidth, node] as const,
-                      ([width, node]) => {
-                        lane = width;
-                        rulerLane = node;
-                      }
-                    )}
-                  >
-                    {#each marks as mark (mark)}
-                      <span
-                        class="absolute start-(--at) bottom-0 h-space-1 w-px -translate-x-1/2 bg-border-control rtl:translate-x-1/2"
-                        data-mark={mark}
-                        style:--at={pct(mark)}
-                      ></span>
-                      {#if figured.has(mark)}
-                        <!-- Centred on its mark; a figure at either end of the
-                             lane stands from that end, so the lane's clip never
-                             cuts it (its "0" stood half outside). -->
-                        <span
-                          class="absolute start-(--at) top-0 -translate-x-(--shift) text-ink-muted rtl:translate-x-(--shift) coarse:top-space-2"
-                          style:--at={pct(mark)}
-                          style:--shift={shiftOf(mark)}>{figure(mark)}</span
-                        >
-                      {/if}
-                    {/each}
-                  </div>
-                  <!-- The playhead's flag: a pill standing on the ruler's
-                     foot, its line running down the rows; under a finger
-                     its area stays inside the ruler, never over a bar. -->
-                  <!-- Hidden while it stands outside the part the lanes show (zoomed). -->
-                  <Slider.Thumb
-                    aria-label={words.scrub}
-                    aria-valuetext={words.playhead(
-                      figure(handle),
-                      figure(Math.round(length))
-                    )}
-                    class={[
-                      "pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 coarse:w-space-3",
-                      (handle < viewFrom || handle > viewTo) && "invisible",
-                    ]}
-                    data-slot="playhead-head"
-                    index={0}
-                    onkeydown={rulerKey}
-                  />
-                  {#if repeat && loopFrom >= viewFrom && loopFrom <= viewTo}
-                    <!-- Where a repeat goes round again from: at 0 until dragged. -->
-                    <span
-                      aria-label={words.repeatFrom(figure(loopFrom))}
-                      aria-valuemax={Math.round(length)}
-                      aria-valuemin={0}
-                      aria-valuenow={Math.round(loopFrom)}
-                      class="pointer-hit touch-hit absolute top-0 start-(--at) z-1 block h-space-3 w-space-1 -translate-x-1/2 cursor-ew-resize touch-none rounded-pill bg-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 rtl:translate-x-1/2"
-                      data-slot="repeat-from"
-                      onkeydown={loopKey}
-                      onpointerdown={dragAlong(setLoopFrom, () => rulerLane)}
-                      role="slider"
-                      style:--at={pct(loopFrom)}
-                      tabindex="0"
-                    ></span>
-                  {/if}
-                </Slider.Root>
-                {#if zoomed}
-                  {@render overviewStrip()}
-                {/if}
-              </div>
+            <div class="flex min-w-0 items-center">
+              {@render transport()}
             </div>
-
-            {#each entries as entry (entry.key)}
-              {#if entry.kind === "head"}
-                {@const open = !folded.includes(entry.group)}
-                <!-- The agent's group: the house section head over its rows, its chevron folding them. -->
+            <div
+              class="relative flex min-w-0 flex-col justify-end gap-space-1 px-space-2"
+              data-slot="ruler"
+            >
+              <!-- Tall enough that its figures (at its top) and the
+                   playhead's flag (at its foot) never meet: at 25px the
+                   flag ran 3px into a figure standing over it. -->
+              <Slider.Root
+                class="relative block h-space-8 w-full cursor-ew-resize touch-none select-none coarse:h-c-btn-h-lg"
+                max={Math.max(viewTo, viewFrom + 1)}
+                min={viewFrom}
+                onValueChange={(next: number) => onseek(Math.min(next, length))}
+                onValueCommit={(next: number) => letGo(Math.min(next, length))}
+                onpointerdown={() => {
+                  scrubbing = true;
+                }}
+                step={1}
+                thumbPositioning="exact"
+                type="single"
+                value={Math.min(viewTo, Math.max(viewFrom, handle))}
+              >
                 <div
-                  class="col-span-full flex min-h-c-btn-h min-w-0 items-center border-t border-border-hairline"
-                  data-slot="clip-group"
+                  bind:this={ruler}
+                  class="absolute inset-0 overflow-x-clip type-code leading-none num"
+                  aria-hidden="true"
+                  data-slot="ruler-lane"
+                  {@attach frameSize(
+                    (node: HTMLElement) => [node.clientWidth, node] as const,
+                    ([width, node]) => {
+                      lane = width;
+                      rulerLane = node;
+                    }
+                  )}
                 >
+                  {#each marks as mark (mark)}
+                    <span
+                      class="absolute start-(--at) bottom-0 h-space-1 w-px -translate-x-1/2 bg-border-control rtl:translate-x-1/2"
+                      data-mark={mark}
+                      style:--at={pct(mark)}
+                    ></span>
+                    {#if figured.has(mark)}
+                      <!-- Centred on its mark; a figure at either end of the
+                           lane stands from that end, so the lane's clip never
+                           cuts it (its "0" stood half outside). -->
+                      <span
+                        class="absolute start-(--at) top-0 -translate-x-(--shift) text-ink-muted rtl:translate-x-(--shift) coarse:top-space-2"
+                        style:--at={pct(mark)}
+                        style:--shift={shiftOf(mark)}>{figure(mark)}</span
+                      >
+                    {/if}
+                  {/each}
+                </div>
+                <!-- The playhead's flag: a pill standing on the ruler's
+                   foot, its line running down the rows; under a finger
+                   its area stays inside the ruler, never over a bar. -->
+                <!-- Hidden while it stands outside the part the lanes show (zoomed). -->
+                <Slider.Thumb
+                  aria-label={words.scrub}
+                  aria-valuetext={words.playhead(
+                    figure(handle),
+                    figure(Math.round(length))
+                  )}
+                  class={[
+                    "pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 coarse:w-space-3",
+                    (handle < viewFrom || handle > viewTo) && "invisible",
+                  ]}
+                  data-slot="playhead-head"
+                  index={0}
+                  onkeydown={rulerKey}
+                />
+                {#if repeat && loopFrom >= viewFrom && loopFrom <= viewTo}
+                  <!-- Where a repeat goes round again from: at 0 until dragged. -->
+                  <span
+                    aria-label={words.repeatFrom(figure(loopFrom))}
+                    aria-valuemax={Math.round(length)}
+                    aria-valuemin={0}
+                    aria-valuenow={Math.round(loopFrom)}
+                    class="pointer-hit touch-hit absolute top-0 start-(--at) z-1 block h-space-3 w-space-1 -translate-x-1/2 cursor-ew-resize touch-none rounded-pill bg-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 rtl:translate-x-1/2"
+                    data-slot="repeat-from"
+                    onkeydown={loopKey}
+                    onpointerdown={dragAlong(setLoopFrom, () => rulerLane)}
+                    role="slider"
+                    style:--at={pct(loopFrom)}
+                    tabindex="0"
+                  ></span>
+                {/if}
+              </Slider.Root>
+              {#if zoomed}
+                {@render overviewStrip()}
+              {/if}
+            </div>
+          </div>
+
+          {#each entries as entry (entry.key)}
+            {#if entry.kind === "head"}
+              {@const open = !folded.includes(entry.group)}
+              <!-- The agent's group: the house section head over its rows, its chevron folding them. -->
+              <div
+                class="col-span-full flex min-h-c-btn-h min-w-0 items-center border-t border-border-hairline"
+                data-slot="clip-group"
+              >
+                <button
+                  aria-expanded={open}
+                  aria-label={words.groupFold(entry.group, open)}
+                  class="mark-line pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 items-center rounded-sm pe-space-2 type-meta text-ink-muted transition-control can-hover:hover:bg-surface-hover"
+                  onclick={() => foldGroup(entry.group)}
+                  type="button"
+                >
+                  <span
+                    class="grid w-c-btn-h-xs flex-none place-items-center"
+                    data-box
+                  >
+                    <IconChevronRight
+                      aria-hidden="true"
+                      class={[
+                        "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
+                        open && "rotate-90 rtl:-rotate-90",
+                      ]}
+                    />
+                  </span>
+                  <span
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                    >{entry.group}</span
+                  >
+                </button>
+              </div>
+            {:else}
+              {@const line = entry.line}
+              {@const track = line.track}
+              {@const name = lineName(line)}
+              {@const open = isOpen(line)}
+              {@const chosen = picked?.key === line.key}
+              {@const edited = editsOf(track).size > 0}
+              <!-- A row: one thing that moves, or under it one animation; one
+               comment target named by its words, as a person says it. -->
+              <div
+                data-slot="clip"
+                data-selected={chosen || undefined}
+                class={[
+                  "col-span-full grid min-w-0 grid-cols-subgrid border-t border-border-hairline",
+                ]}
+                {...lights(track)}
+              >
+                <div
+                  class={[
+                    "flex min-h-c-btn-h-lg min-w-0 items-center",
+                    line.part && "ps-c-btn-h-xs",
+                  ]}
+                >
+                  <!-- The row's one press: it opens or closes the row, its
+                       chevron turning; what opens is under it. -->
                   <button
-                    aria-expanded={open}
-                    aria-label={words.groupFold(entry.group, open)}
-                    class="mark-line pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 items-center rounded-sm pe-space-2 type-meta text-ink-muted transition-control can-hover:hover:bg-surface-hover"
-                    onclick={() => foldGroup(entry.group)}
                     type="button"
+                    aria-expanded={open}
+                    aria-label={name}
+                    class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
+                    data-chosen={chosen || undefined}
+                    onclick={() => press(line)}
+                    title={name}
                   >
                     <span
                       class="grid w-c-btn-h-xs flex-none place-items-center"
@@ -1204,172 +1248,119 @@
                         class={[
                           "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
                           open && "rotate-90 rtl:-rotate-90",
+                          chosen ? "text-selected-ink" : "text-ink-muted",
                         ]}
                       />
                     </span>
-                    <span
-                      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                      >{entry.group}</span
-                    >
+                    {@render rowWords(line, chosen ? "open" : "rest")}
                   </button>
+                  <!-- The undo glyph's slot, held in every row (as the Controls
+                       face holds its column), so the row's press and its wash
+                       keep one width as the glyph comes and goes, and the
+                       lanes never move. -->
+                  <span
+                    class="flex h-c-btn-h-sm w-c-btn-h-xs flex-none items-center justify-center"
+                  >
+                    {#if edited}
+                      {@const said = words.resetRow(name)}
+                      <Tip label={said}>
+                        {#snippet children(tip)}
+                          <Button
+                            {...tip}
+                            aria-label={said}
+                            data-edited
+                            icon={IconReset}
+                            onclick={() =>
+                              onreset(
+                                track.clips
+                                  .filter((clip) => clip.was)
+                                  .map((clip) => clip.id)
+                              )}
+                            press="pressable"
+                            size="icon-xs"
+                            tone="edited"
+                            variant="ghost"
+                          />
+                        {/snippet}
+                      </Tip>
+                    {/if}
+                  </span>
                 </div>
-              {:else}
-                {@const line = entry.line}
-                {@const track = line.track}
-                {@const name = lineName(line)}
-                {@const open = isOpen(line)}
-                {@const chosen = picked?.key === line.key}
-                {@const edited = editsOf(track).size > 0}
-                <!-- A row: one thing that moves, or under it one animation; one
-                 comment target named by its words, as a person says it. -->
                 <div
-                  data-slot="clip"
-                  data-selected={chosen || undefined}
-                  class={[
-                    "col-span-full grid min-w-0 grid-cols-subgrid border-t border-border-hairline",
-                  ]}
-                  {...lights(track)}
+                  class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:min-h-c-btn-h"
+                  data-slot="lane"
                 >
+                  <!-- A press on its empty part scrubs, as the ruler does; with Shift, a press on a bar too. -->
                   <div
                     class={[
-                      "flex min-h-c-btn-h-lg min-w-0 items-center",
-                      line.part && "ps-c-btn-h-xs",
+                      "relative flex size-full min-w-0 cursor-ew-resize items-center",
+                      zoomed && "overflow-x-clip",
                     ]}
+                    onpointerdowncapture={laneScrub}
+                    role="presentation"
+                    title={words.laneScrub}
                   >
-                    <!-- The row's one press: it opens or closes the row, its
-                         chevron turning; what opens is under it. -->
-                    <button
-                      type="button"
-                      aria-expanded={open}
-                      aria-label={name}
-                      class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
-                      data-chosen={chosen || undefined}
-                      onclick={() => press(line)}
-                      title={name}
-                    >
-                      <span
-                        class="grid w-c-btn-h-xs flex-none place-items-center"
-                        data-box
-                      >
-                        <IconChevronRight
-                          aria-hidden="true"
-                          class={[
-                            "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
-                            open && "rotate-90 rtl:-rotate-90",
-                            chosen ? "text-selected-ink" : "text-ink-muted",
-                          ]}
-                        />
-                      </span>
-                      {@render rowWords(line, chosen ? "open" : "rest")}
-                    </button>
-                    <!-- The undo glyph's slot, held in every row (as the Controls
-                         face holds its column), so the row's press and its wash
-                         keep one width as the glyph comes and goes, and the
-                         lanes never move. -->
-                    <span
-                      class="flex h-c-btn-h-sm w-c-btn-h-xs flex-none items-center justify-center"
-                    >
-                      {#if edited}
-                        {@const said = words.resetRow(name)}
-                        <Tip label={said}>
-                          {#snippet children(tip)}
-                            <Button
-                              {...tip}
-                              aria-label={said}
-                              data-edited
-                              icon={IconReset}
-                              onclick={() =>
-                                onreset(
-                                  track.clips
-                                    .filter((clip) => clip.was)
-                                    .map((clip) => clip.id)
-                                )}
-                              press="pressable"
-                              size="icon-xs"
-                              tone="edited"
-                              variant="ghost"
-                            />
-                          {/snippet}
-                        </Tip>
-                      {/if}
-                    </span>
+                    {@render back()}
+                    <ClipBar
+                      edges={edgesBesides}
+                      {lang}
+                      {name}
+                      onlegs={(clip, legs, replay) =>
+                        onretime([releg(clip, legs)], replay)}
+                      onretime={(run, from, to, replay) =>
+                        onretime(retimeRun(run, from, to), replay)}
+                      view={{ from: viewFrom, to: viewTo }}
+                      onselect={() => {
+                        if (!open) {
+                          press(line);
+                        }
+                      }}
+                      {scale}
+                      selected={chosen}
+                      {track}
+                    />
+                    {@render playheadLine()}
                   </div>
-                  <div
-                    class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:min-h-c-btn-h"
-                    data-slot="lane"
-                  >
-                    <!-- A press on its empty part scrubs, as the ruler does; with Shift, a press on a bar too. -->
-                    <div
-                      class={[
-                        "relative flex size-full min-w-0 cursor-ew-resize items-center",
-                        zoomed && "overflow-x-clip",
-                      ]}
-                      onpointerdowncapture={laneScrub}
-                      role="presentation"
-                      title={words.laneScrub}
-                    >
-                      {@render back()}
-                      <ClipBar
-                        edges={edgesBesides}
-                        {lang}
-                        {name}
-                        onlegs={(clip, legs, replay) =>
-                          onretime([releg(clip, legs)], replay)}
-                        onretime={(run, from, to, replay) =>
-                          onretime(retimeRun(run, from, to), replay)}
-                        view={{ from: viewFrom, to: viewTo }}
-                        onselect={() => {
-                          if (!open) {
-                            press(line);
-                          }
-                        }}
-                        {scale}
-                        selected={chosen}
-                        {track}
-                      />
-                      {@render playheadLine()}
-                    </div>
-                  </div>
-                  {#if chosen}
-                    <div
-                      class="col-span-full min-w-0 ps-c-btn-h-xs pt-space-2 pb-space-3"
-                      in:unfold
-                      out:unfold
-                    >
-                      <ClipSettings
-                        {lang}
-                        {name}
-                        onretime={(next) => onretime(next)}
-                        {track}
-                      />
-                    </div>
-                  {/if}
                 </div>
-              {/if}
-            {/each}
-          </div>
-          <!-- What the bars' colours say: each kind on the face, its
-               swatch the bar's own wash and edge, then its word. -->
-          <ul
-            aria-label={words.kindsKey}
-            class="m-0 flex list-none flex-wrap gap-x-space-4 gap-y-space-1 border-t border-border-hairline p-0 pt-space-3"
-            data-slot="kinds"
-          >
-            {#each kindsShown as kind (kind)}
-              <li
-                class="mark-line flex items-center gap-space-1 type-meta text-ink-muted"
-              >
-                <span
-                  aria-hidden="true"
-                  class={["h-space-2 w-space-4 rounded-hair border", BAR[kind]]}
-                  data-box
-                ></span>
-                <span>{words.kinds[kind]}</span>
-              </li>
-            {/each}
-          </ul>
+                {#if chosen}
+                  <div
+                    class="col-span-full min-w-0 ps-c-btn-h-xs pt-space-2 pb-space-3"
+                    in:unfold
+                    out:unfold
+                  >
+                    <ClipSettings
+                      {lang}
+                      {name}
+                      onretime={(next) => onretime(next)}
+                      {track}
+                    />
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          {/each}
         </div>
-      {/if}
+        <!-- What the bars' colours say: each kind on the face, its
+             swatch the bar's own wash and edge, then its word. -->
+        <ul
+          aria-label={words.kindsKey}
+          class="m-0 flex list-none flex-wrap gap-x-space-4 gap-y-space-1 border-t border-border-hairline p-0 pt-space-3"
+          data-slot="kinds"
+        >
+          {#each kindsShown as kind (kind)}
+            <li
+              class="mark-line flex items-center gap-space-1 type-meta text-ink-muted"
+            >
+              <span
+                aria-hidden="true"
+                class={["h-space-2 w-space-4 rounded-hair border", BAR[kind]]}
+                data-box
+              ></span>
+              <span>{words.kinds[kind]}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
     {/if}
-  </div>
-</TooltipProvider>
+  {/if}
+</div>

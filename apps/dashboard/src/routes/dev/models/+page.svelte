@@ -44,7 +44,6 @@
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
 
   provideConfig(new ConfigStore());
 
@@ -182,50 +181,48 @@
   <title>Models CawCo uses &middot; CawCo</title>
 </svelte:head>
 
-<Tooltip.Provider>
-  <div class="flex min-h-dvh flex-col bg-surface-recess">
-    <div
-      class="flex flex-wrap items-center gap-space-3 px-space-5 pt-space-4"
-      data-slot="bench"
-    >
-      <label class="flex items-center gap-space-2 type-label text-ink-muted">
-        Fleet
-        <NativeSelect
-          aria-label="Fleet"
-          onchange={(event) => {
-            fleet = event.currentTarget.value as Fleet;
-          }}
-          value={fleet}
-        >
-          {#each Object.entries(FLEETS) as [value, label] (value)}
-            <NativeSelectOption {value}>{label}</NativeSelectOption>
-          {/each}
-        </NativeSelect>
-      </label>
-      <label class="flex items-center gap-space-2 type-label text-ink-muted">
-        Hub
-        <NativeSelect
-          aria-label="Hub"
-          onchange={(event) => {
-            hub = event.currentTarget.value as Hub;
-          }}
-          value={hub}
-        >
-          {#each Object.entries(HUBS) as [value, label] (value)}
-            <NativeSelectOption {value}>{label}</NativeSelectOption>
-          {/each}
-        </NativeSelect>
-      </label>
+<div class="flex min-h-dvh flex-col bg-surface-recess">
+  <div
+    class="flex flex-wrap items-center gap-space-3 px-space-5 pt-space-4"
+    data-slot="bench"
+  >
+    <label class="flex items-center gap-space-2 type-label text-ink-muted">
+      Fleet
+      <NativeSelect
+        aria-label="Fleet"
+        onchange={(event) => {
+          fleet = event.currentTarget.value as Fleet;
+        }}
+        value={fleet}
+      >
+        {#each Object.entries(FLEETS) as [value, label] (value)}
+          <NativeSelectOption {value}>{label}</NativeSelectOption>
+        {/each}
+      </NativeSelect>
+    </label>
+    <label class="flex items-center gap-space-2 type-label text-ink-muted">
+      Hub
+      <NativeSelect
+        aria-label="Hub"
+        onchange={(event) => {
+          hub = event.currentTarget.value as Hub;
+        }}
+        value={hub}
+      >
+        {#each Object.entries(HUBS) as [value, label] (value)}
+          <NativeSelectOption {value}>{label}</NativeSelectOption>
+        {/each}
+      </NativeSelect>
+    </label>
+  </div>
+  <!-- Configure's frame (routes/(app)/config/+layout.svelte): the rail on a
+       desk, the section's pane beside it. -->
+  <div class="flex min-h-0 min-w-0 flex-auto">
+    <div class="flex min-h-0 py-space-2 pl-space-5 max-desk:hidden">
+      <ConfigRail current="models" />
     </div>
-    <!-- Configure's frame (routes/(app)/config/+layout.svelte): the rail on a
-         desk, the section's pane beside it. -->
-    <div class="flex min-h-0 min-w-0 flex-auto">
-      <div class="flex min-h-0 py-space-2 pl-space-5 max-desk:hidden">
-        <ConfigRail current="models" />
-      </div>
-      <div class="flex min-h-0 min-w-0 flex-auto flex-col">
-        <ModelsSection accounts={shown.accounts} machines={shown.machines} />
-      </div>
+    <div class="flex min-h-0 min-w-0 flex-auto flex-col">
+      <ModelsSection accounts={shown.accounts} machines={shown.machines} />
     </div>
   </div>
-</Tooltip.Provider>
+</div>

@@ -67,7 +67,8 @@
 <svelte:head><title>{found?.title ?? "Artifact"} · CawCo</title></svelte:head>
 
 <!-- Outside the app's group: nothing of the app around it, only what the pane
-     stands in (Overlays: the tooltip provider and the lightbox), the stage
+     stands in (Overlays: the lightbox; the root layout holds the tooltip
+     provider), the stage
      a canvas stands on over the pane's slot, and the toasts the artifact
      menu says a refusal in. -->
 <Overlays>

@@ -2500,6 +2500,19 @@
    same in the dashboard (a view's or an agent's block's Diagram) and on a
    decision page (host.css imports this sheet). */
 @layer components {
+  /* The cut the card comes down from behind (`hang`): its floating wrapper,
+     cut at the card's top edge, the anchor's foot, with room for the whole
+     overlay shadow past the others. It never moves, so the card's slide is
+     all the compositor has to play. In CSS, not the wrapper's own style,
+     which bits-ui writes whole on every placement; HangCard marks the
+     wrapper it draws (`data-hang`). A card that rises out of its anchor's
+     top (`data-hang="rises"`) is cut at its foot instead. */
+  [data-bits-floating-content-wrapper][data-hang] {
+    @apply clip-block-start;
+  }
+  [data-bits-floating-content-wrapper][data-hang="rises"] {
+    @apply clip-block-end;
+  }
   /* Pele's diagram (pele.run/theming: its variables, then its classes),
      drawn straight on its card's ground with no panel of its own (The
      Frame Recesses Rule): a node raised (The Frame Recesses Rule) with a

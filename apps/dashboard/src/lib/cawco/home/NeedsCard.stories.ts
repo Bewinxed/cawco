@@ -4,12 +4,12 @@
  * own args are what it changes.
  */
 import type { NeedsItem } from "./home-state.svelte";
-import NeedsCardSheet from "./NeedsCardSheet.svelte";
+import NeedsCard from "./NeedsCard.svelte";
 import { reachedCap } from "./reached-cap";
 
 export default {
   title: "Needs you/Budget",
-  component: NeedsCardSheet,
+  component: NeedsCard,
   args: { stale: false, onchoose: () => undefined },
   parameters: { viewport: 400 },
 };

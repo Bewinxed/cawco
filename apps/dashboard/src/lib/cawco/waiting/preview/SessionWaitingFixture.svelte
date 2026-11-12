@@ -51,7 +51,6 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import {
     IconClose,
     IconFilesLinear,
@@ -299,118 +298,114 @@
   {/if}
 {/snippet}
 
-<TooltipProvider>
-  {#if caw}
-    <!-- A project's page with Caw's panel docked beside it, a conversation's width. -->
+{#if caw}
+  <!-- A project's page with Caw's panel docked beside it, a conversation's width. -->
+  <div
+    class="flex h-(--fixture-h) overflow-clip bg-surface-shelf text-ink-strong"
+    data-slot="caw-fixture"
+    style:--fixture-h="{height}px"
+  >
     <div
-      class="flex h-(--fixture-h) overflow-clip bg-surface-shelf text-ink-strong"
-      data-slot="caw-fixture"
-      style:--fixture-h="{height}px"
+      class="flex min-w-0 flex-auto flex-col gap-space-4 p-space-6 max-desk:hidden"
     >
-      <div
-        class="flex min-w-0 flex-auto flex-col gap-space-4 p-space-6 max-desk:hidden"
-      >
-        <h1 class="type-title m-0">Cawco-Dev</h1>
-        <p class="type-body m-0 text-ink-muted">
-          31 tasks · 4 in review · 2 sessions working
-        </p>
-      </div>
-      <div
-        class="relative m-space-2 flex w-c-panel-w flex-none flex-col overflow-clip rounded-lg bg-surface-raised shadow-tile max-desk:m-0 max-desk:w-full max-desk:rounded-none"
-        data-caw-panel
-        style:--bar-room="var(--c-top-bar-h)"
-      >
-        <div class="absolute inset-x-0 top-0 z-2">
-          <BarFloat tint="bg-surface-raised">
-            {#snippet trailing()}
-              <BarGlass form="group">
-                <BarItem
-                  icon={IconListRowsLinear}
-                  label={transcriptWords.sessionDetails}
-                />
-                <BarItem
-                  icon={IconPlus}
-                  label={conversationWords.newConversation}
-                />
-                <BarItem
-                  icon={IconMoveTabLinear}
-                  label={conversationWords.openAsTab}
-                />
-              </BarGlass>
-              <BarGlass form="group">
-                <BarItem icon={IconClose} label={conversationWords.hidePanel} />
-              </BarGlass>
-            {/snippet}
-          </BarFloat>
-        </div>
-        {@render conversation()}
-        {#if paged}
-          <!-- Caw's panel holds one view at a time: the page takes it whole,
-               its Close leading back to the conversation. -->
-          <div class="absolute inset-0 z-3 flex flex-col">
-            {@render panel(paged, "sheet")}
-          </div>
-        {/if}
-      </div>
+      <h1 class="type-title m-0">Cawco-Dev</h1>
+      <p class="type-body m-0 text-ink-muted">
+        31 tasks · 4 in review · 2 sessions working
+      </p>
     </div>
-  {:else}
     <div
-      class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-surface-shelf text-ink-strong"
-      data-slot="session-fixture"
-      style:--fixture-h="{height}px"
+      class="relative m-space-2 flex w-c-panel-w flex-none flex-col overflow-clip rounded-lg bg-surface-raised shadow-tile max-desk:m-0 max-desk:w-full max-desk:rounded-none"
+      data-caw-panel
+      style:--bar-room="var(--c-top-bar-h)"
     >
-      <!-- The shelf: the session's tab, then the bar's trailing glass, a
-           step of room above it for the glass's corner counts. -->
-      <div
-        class="relative z-2 box-content flex h-c-top-bar-h flex-none items-end gap-space-3 pbs-space-3 ps-space-3 pe-space-2"
-      >
-        <div class="relative min-w-0 flex-auto">
-          <Tabs value="this" variant="folder">
-            <TabsList aria-label="Sessions">
-              <TabItem label="Continue CawCo open tasks" value="this">
-                {#snippet lead()}
-                  {#if live.length > 0}
-                    <IconNeedsYou
-                      aria-hidden="true"
-                      class="size-icon-md text-status-attn-glyph"
-                    />
-                  {/if}
-                {/snippet}
-              </TabItem>
-            </TabsList>
-          </Tabs>
-        </div>
-        <div class="relative flex-none self-center max-desk:hidden">
-          <BarGlass form="group">
-            <BarItem count={100} icon={IconFilesLinear} label="Files, 100" />
-            <BarItem label="Jump to session">
-              <IconSearch
-                aria-hidden="true"
-                class="size-icon-md text-ink-muted"
+      <div class="absolute inset-x-0 top-0 z-2">
+        <BarFloat tint="bg-surface-raised">
+          {#snippet trailing()}
+            <BarGlass form="group">
+              <BarItem
+                icon={IconListRowsLinear}
+                label={transcriptWords.sessionDetails}
               />
-            </BarItem>
-            <BarItem count={4} icon={IconServerLinear} label="4 machines" />
-          </BarGlass>
-        </div>
+              <BarItem
+                icon={IconPlus}
+                label={conversationWords.newConversation}
+              />
+              <BarItem
+                icon={IconMoveTabLinear}
+                label={conversationWords.openAsTab}
+              />
+            </BarGlass>
+            <BarGlass form="group">
+              <BarItem icon={IconClose} label={conversationWords.hidePanel} />
+            </BarGlass>
+          {/snippet}
+        </BarFloat>
       </div>
-      <!-- The conversation, and beside it on a desk the panel a pressed
-           row opened; on a phone the panel is a sheet over it. -->
-      <div class="relative flex min-h-0 flex-auto">
-        <div class="flex min-w-0 flex-auto flex-col">
-          {@render conversation()}
+      {@render conversation()}
+      {#if paged}
+        <!-- Caw's panel holds one view at a time: the page takes it whole,
+             its Close leading back to the conversation. -->
+        <div class="absolute inset-0 z-3 flex flex-col">
+          {@render panel(paged, "sheet")}
         </div>
-        {#if paged && !phone.current}
-          <div class="flex w-1/2 flex-none flex-col p-space-2">
-            {@render panel(paged, "beside")}
-          </div>
-        {:else if paged}
-          <div
-            class="absolute inset-x-0 bottom-0 top-space-6 z-3 flex flex-col"
-          >
-            {@render panel(paged, "sheet")}
-          </div>
-        {/if}
+      {/if}
+    </div>
+  </div>
+{:else}
+  <div
+    class="relative isolate flex h-(--fixture-h) flex-col overflow-clip bg-surface-shelf text-ink-strong"
+    data-slot="session-fixture"
+    style:--fixture-h="{height}px"
+  >
+    <!-- The shelf: the session's tab, then the bar's trailing glass, a
+         step of room above it for the glass's corner counts. -->
+    <div
+      class="relative z-2 box-content flex h-c-top-bar-h flex-none items-end gap-space-3 pbs-space-3 ps-space-3 pe-space-2"
+    >
+      <div class="relative min-w-0 flex-auto">
+        <Tabs value="this" variant="folder">
+          <TabsList aria-label="Sessions">
+            <TabItem label="Continue CawCo open tasks" value="this">
+              {#snippet lead()}
+                {#if live.length > 0}
+                  <IconNeedsYou
+                    aria-hidden="true"
+                    class="size-icon-md text-status-attn-glyph"
+                  />
+                {/if}
+              {/snippet}
+            </TabItem>
+          </TabsList>
+        </Tabs>
+      </div>
+      <div class="relative flex-none self-center max-desk:hidden">
+        <BarGlass form="group">
+          <BarItem count={100} icon={IconFilesLinear} label="Files, 100" />
+          <BarItem label="Jump to session">
+            <IconSearch
+              aria-hidden="true"
+              class="size-icon-md text-ink-muted"
+            />
+          </BarItem>
+          <BarItem count={4} icon={IconServerLinear} label="4 machines" />
+        </BarGlass>
       </div>
     </div>
-  {/if}
-</TooltipProvider>
+    <!-- The conversation, and beside it on a desk the panel a pressed
+         row opened; on a phone the panel is a sheet over it. -->
+    <div class="relative flex min-h-0 flex-auto">
+      <div class="flex min-w-0 flex-auto flex-col">
+        {@render conversation()}
+      </div>
+      {#if paged && !phone.current}
+        <div class="flex w-1/2 flex-none flex-col p-space-2">
+          {@render panel(paged, "beside")}
+        </div>
+      {:else if paged}
+        <div class="absolute inset-x-0 bottom-0 top-space-6 z-3 flex flex-col">
+          {@render panel(paged, "sheet")}
+        </div>
+      {/if}
+    </div>
+  </div>
+{/if}

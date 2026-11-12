@@ -16,6 +16,7 @@
   import { trackKeyed } from "#lib/cawco/motion/keyed.svelte.js";
   import ScreenEdges from "#lib/cawco/ScreenEdges.svelte";
   import { trackVisibleViewport } from "#lib/cawco/visible-viewport.svelte.js";
+  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
 
   let { children }: { children: Snippet } = $props();
 
@@ -36,4 +37,8 @@
      anything a route draws: straight in the body, so no transformed box
      ever holds them. -->
 <ScreenEdges />
-{@render children()}
+<!-- The app's one tooltip provider, around every route, so every tooltip
+     shares its delay and its skip and no caller supplies one. -->
+<TooltipProvider>
+  {@render children()}
+</TooltipProvider>

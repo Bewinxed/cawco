@@ -42,7 +42,6 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
-  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import type { SheetChange } from "../../artifact-api";
   import { SheetInspector } from "../../preview/sheet-inspector.svelte";
   import DesignGraph from "../DesignGraph.svelte";
@@ -588,29 +587,27 @@
 <!-- In the artifact panel as a person meets it: the panel's card and its
      floating head (SideSurface), beside the page on a desk and a sheet's
      on a phone, the graph under the head as PreviewPane hosts it. -->
-<TooltipProvider>
-  <div
-    class="flex h-dvh min-h-0 bg-surface-page p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+<div
+  class="flex h-dvh min-h-0 bg-surface-page p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+>
+  <SideSurface
+    label="Preview"
+    onclose={() => undefined}
+    placement={phone.current ? "sheet" : "beside"}
+    title="Routine form, every state"
   >
-    <SideSurface
-      label="Preview"
-      onclose={() => undefined}
-      placement={phone.current ? "sheet" : "beside"}
-      title="Routine form, every state"
-    >
-      <div class="absolute inset-0" data-slot="graph-host">
-        <DesignGraph
-          ask="Judge the routine form's dials"
-          files={[FILE, ...also]}
-          {frame}
-          {inspector}
-          {link}
-          keptDials={turned}
-          {spec}
-          {stale}
-          startFace={face}
-        />
-      </div>
-    </SideSurface>
-  </div>
-</TooltipProvider>
+    <div class="absolute inset-0" data-slot="graph-host">
+      <DesignGraph
+        ask="Judge the routine form's dials"
+        files={[FILE, ...also]}
+        {frame}
+        {inspector}
+        {link}
+        keptDials={turned}
+        {spec}
+        {stale}
+        startFace={face}
+      />
+    </div>
+  </SideSurface>
+</div>

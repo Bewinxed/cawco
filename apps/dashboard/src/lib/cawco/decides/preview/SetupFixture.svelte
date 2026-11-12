@@ -12,7 +12,6 @@
   import { untrack } from "svelte";
   import { HUB_UNREACHABLE } from "#lib/cawco/hub-read.js";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { type RecordRead, WhoDecides } from "../decides.svelte";
   import type { FleetOffer } from "../decides-client";
   import { drawPopoversInPlace, holdsPanels } from "../in-place";
@@ -224,18 +223,16 @@
   });
 </script>
 
-<Tooltip.Provider>
-  <!-- The settings draw in place under their card (SetupPopover), and the
-       page grows to hold them whole: a frame is as tall as its page. -->
-  <div
-    class="relative bg-surface-page p-space-5 max-desk:p-space-4"
-    {@attach holdsPanels}
-  >
-    <WhoRoster
-      facts={(member) => who.facts(member, who.lead?.project ?? undefined)}
-      {project}
-      settings
-      {who}
-    />
-  </div>
-</Tooltip.Provider>
+<!-- The settings draw in place under their card (SetupPopover), and the
+     page grows to hold them whole: a frame is as tall as its page. -->
+<div
+  class="relative bg-surface-page p-space-5 max-desk:p-space-4"
+  {@attach holdsPanels}
+>
+  <WhoRoster
+    facts={(member) => who.facts(member, who.lead?.project ?? undefined)}
+    {project}
+    settings
+    {who}
+  />
+</div>

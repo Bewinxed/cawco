@@ -30,6 +30,7 @@ import {
   staticClasses,
   unknownClasses,
 } from "./shadcn.mjs";
+import { tooltipProviderAtRoot } from "./tooltip-provider.mjs";
 import { variantOrder } from "./variant-order.mjs";
 
 const KIT = "src/lib/components/ui/";
@@ -331,6 +332,7 @@ const FIND = {
   "house/bar-symbol-linear": barSymbols,
   "house/back-close-symbol": backCloseWords,
   "house/no-detached-bar-menu": detachedBarMenus,
+  "house/tooltip-provider-at-root": tooltipProviderAtRoot,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

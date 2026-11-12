@@ -570,14 +570,22 @@ const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
         })
       );
     const old = await frame.locator(OLD_ROWS).count();
+    // A part that threw stands as its fault line in its place (the Setup
+    // whole, when a stage's More found no tooltip provider, tsk-354).
+    const faults = await frame
+      .locator('[data-slot="line-fault"]')
+      .evaluateAll((all) =>
+        all.map((one) => (one as HTMLElement).innerText.trim())
+      );
     await page.screenshot({ path: join(kit.out, `setup-page-${view}.png`) });
     console.log(`… the setup page at ${view}: ${JSON.stringify(columns)}`);
     kit.check(
-      `8: the setup page at ${view === "desk" ? 1440 : 390} draws every stage as the board's column, none of the old rows`,
+      `8: the setup page at ${view === "desk" ? 1440 : 390} draws every stage as the board's column, none of the old rows, and no part as its fault line`,
       columns.length === OFFICE_STAGES.length &&
         OFFICE_STAGES.every((name, at) => columns[at]?.startsWith(name)) &&
-        old === 0,
-      JSON.stringify({ columns, old })
+        old === 0 &&
+        faults.length === 0,
+      JSON.stringify({ columns, old, faults })
     );
   }
 };

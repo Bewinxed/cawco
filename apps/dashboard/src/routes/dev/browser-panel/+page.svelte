@@ -33,7 +33,6 @@
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconExternalLinear } from "#lib/icons.js";
   import { page } from "$app/state";
 
@@ -373,57 +372,55 @@
   >
 {/snippet}
 
-<Tooltip.Provider>
-  <!-- Shown in CawCo's own artifact panel (the overlay's `data-cawco-headed`),
-     the card fills the frame edge to edge: the panel's well holds it, with no
-     page round it. -->
-  <div
-    class="flex h-dvh bg-surface-recess p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+<!-- Shown in CawCo's own artifact panel (the overlay's `data-cawco-headed`),
+   the card fills the frame edge to edge: the panel's well holds it, with no
+   page round it. -->
+<div
+  class="flex h-dvh bg-surface-recess p-space-2 *:flex-1 max-phone:p-0 in-data-cawco-headed:p-0"
+>
+  <SideSurface
+    items={[
+      ...(shows.control
+        ? [
+            {
+              key: "control",
+              priority: HEAD_PRIORITY.control,
+              bar: controlBar,
+              menu: controlMenu,
+              place: "prominent" as const,
+            },
+          ]
+        : []),
+      ...(shows.address
+        ? [
+            {
+              key: "address",
+              priority: HEAD_PRIORITY.address,
+              bar: addressBar,
+              menu: addressMenu,
+              place: "lead" as const,
+            },
+          ]
+        : []),
+      {
+        key: "open",
+        priority: HEAD_PRIORITY.open,
+        bar: openBar,
+        menu: openMenu,
+      },
+    ]}
+    label="Preview"
+    onclose={() => undefined}
+    placement={phone.current ? "sheet" : "beside"}
+    title="Check the billing page after the plan change"
   >
-    <SideSurface
-      items={[
-        ...(shows.control
-          ? [
-              {
-                key: "control",
-                priority: HEAD_PRIORITY.control,
-                bar: controlBar,
-                menu: controlMenu,
-                place: "prominent" as const,
-              },
-            ]
-          : []),
-        ...(shows.address
-          ? [
-              {
-                key: "address",
-                priority: HEAD_PRIORITY.address,
-                bar: addressBar,
-                menu: addressMenu,
-                place: "lead" as const,
-              },
-            ]
-          : []),
-        {
-          key: "open",
-          priority: HEAD_PRIORITY.open,
-          bar: openBar,
-          menu: openMenu,
-        },
-      ]}
-      label="Preview"
-      onclose={() => undefined}
-      placement={phone.current ? "sheet" : "beside"}
-      title="Check the billing page after the plan change"
-    >
-      <BrowserView
-        addressAtFoot={phone.current}
-        artifactId="northwind-billing"
-        {browser}
-        instanceId="bench"
-        {machine}
-        bind:viewing
-      />
-    </SideSurface>
-  </div>
-</Tooltip.Provider>
+    <BrowserView
+      addressAtFoot={phone.current}
+      artifactId="northwind-billing"
+      {browser}
+      instanceId="bench"
+      {machine}
+      bind:viewing
+    />
+  </SideSurface>
+</div>

@@ -29,6 +29,7 @@
 <script lang="ts">
   import { DIALS_ROOT } from "@cawco/core/dials-root";
   import { BitsConfig } from "bits-ui";
+  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import Dials from "./Dials.svelte";
   import { scheme } from "./scheme.svelte.js";
 
@@ -42,40 +43,44 @@
   let layer = $state<HTMLElement>();
 </script>
 
-<div
-  {...{ [DIALS_ROOT]: "" }}
-  data-theme={scheme.now}
-  class={[
-    "type-body text-ink-strong antialiased",
-    scheme.now === "dark" && "dark",
-  ]}
->
-  <BitsConfig defaultPortalTo={layer}>
-    <!-- Undocked, a box over the page inset by --space-4 that takes no
-         pointer, the column at its bottom-right: the room's width at most,
-         scrolling inside the box past the window's height. -->
-    <div
-      class={[
-        !docked &&
-          "pointer-events-none fixed inset-space-4 flex flex-col items-end justify-end",
-      ]}
-    >
+<!-- This mount's one tooltip provider, at its root: a dial's segments and
+     reset draw tips. -->
+<TooltipProvider>
+  <div
+    {...{ [DIALS_ROOT]: "" }}
+    data-theme={scheme.now}
+    class={[
+      "type-body text-ink-strong antialiased",
+      scheme.now === "dark" && "dark",
+    ]}
+  >
+    <BitsConfig defaultPortalTo={layer}>
+      <!-- Undocked, a box over the page inset by --space-4 that takes no
+           pointer, the column at its bottom-right: the room's width at most,
+           scrolling inside the box past the window's height. -->
       <div
         class={[
-          "flex flex-col gap-space-3",
           !docked &&
-            "pointer-events-auto max-h-full w-c-graph-room-w max-w-full min-h-0 overflow-y-auto",
+            "pointer-events-none fixed inset-space-4 flex flex-col items-end justify-end",
         ]}
-        data-slot="dials-column"
       >
-        {#each shown.list as panel (panel)}
-          <Dials
-            onvalues={panel.onvalues}
-            props={{ name: panel.name, config: panel.config }}
-          />
-        {/each}
+        <div
+          class={[
+            "flex flex-col gap-space-3",
+            !docked &&
+              "pointer-events-auto max-h-full w-c-graph-room-w max-w-full min-h-0 overflow-y-auto",
+          ]}
+          data-slot="dials-column"
+        >
+          {#each shown.list as panel (panel)}
+            <Dials
+              onvalues={panel.onvalues}
+              props={{ name: panel.name, config: panel.config }}
+            />
+          {/each}
+        </div>
       </div>
-    </div>
-  </BitsConfig>
-  <div bind:this={layer} data-slot="dials-layer"></div>
-</div>
+    </BitsConfig>
+    <div bind:this={layer} data-slot="dials-layer"></div>
+  </div>
+</TooltipProvider>

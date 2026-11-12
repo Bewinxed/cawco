@@ -284,7 +284,6 @@
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
-  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
 
   let {
     path = canvasPath(["src/lib/cawco/transcript/Prompt.stories.ts"], {}),
@@ -490,63 +489,61 @@
   const lent = $derived(composerBindings.get(ID));
 </script>
 
-<TooltipProvider>
+<div
+  class="@container/shell contain-layout relative flex aspect-16/10 w-full flex-col bg-surface-shelf text-ink-strong"
+  data-hang-layer={layer.id}
+  data-working-area
+  style:--shell-h={`${shellHeight}px`}
+  {@attach frameSize(
+    (node: HTMLElement) => node.clientHeight,
+    (value) => {
+      shellHeight = value;
+    }
+  )}
+  {@attach relayInFrames}
+  {@attach keepFloat}
+>
   <div
-    class="@container/shell contain-layout relative flex aspect-16/10 w-full flex-col bg-surface-shelf text-ink-strong"
-    data-hang-layer={layer.id}
-    data-working-area
-    style:--shell-h={`${shellHeight}px`}
-    {@attach frameSize(
-      (node: HTMLElement) => node.clientHeight,
-      (value) => {
-        shellHeight = value;
-      }
-    )}
-    {@attach relayInFrames}
-    {@attach keepFloat}
+    data-slot="leaf"
+    class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-surface-recess"
   >
+    <PaneTabs {leaf} />
     <div
-      data-slot="leaf"
-      class="@container/leaf relative flex min-h-0 min-w-0 flex-auto flex-col overflow-hidden bg-surface-recess"
+      data-slot="stack"
+      class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden"
     >
-      <PaneTabs {leaf} />
-      <div
-        data-slot="stack"
-        class="relative flex min-h-0 min-w-0 flex-auto overflow-hidden"
-      >
-        <div data-slot="pane" class="absolute inset-0 flex">
-          <SessionPane
-            active
-            browsing={null}
-            browsingCwd=""
-            browsingHarness="claude"
-            focused
-            viewId={ID}
-            visible
-          />
-        </div>
+      <div data-slot="pane" class="absolute inset-0 flex">
+        <SessionPane
+          active
+          browsing={null}
+          browsingCwd=""
+          browsingHarness="claude"
+          focused
+          viewId={ID}
+          visible
+        />
       </div>
-      {#if lent}
-        <!-- The composer's box, as PaneLeaf docks it: over the transcript's
-             share, and put away with the transcript when a side surface
-             expands over the whole conversation. -->
-        <div
-          data-slot="dock"
-          data-pane-leaf-away={lent.transcriptShare === 0 || undefined}
-          class="pointer-events-none absolute inset-y-0 start-0 z-1 w-(--share) data-pane-leaf-away:invisible"
-          inert={lent.transcriptShare === 0}
-          style:--share="{lent.transcriptShare * 100}%"
-        >
-          <Composer
-            fleet={composerFleet}
-            {...composerOf(lent)}
-            showing={ID}
-            trayRows={[
-              { delegatesOf: lent.delegatesOf, id: ID, prompts: lent.prompts },
-            ]}
-          />
-        </div>
-      {/if}
     </div>
+    {#if lent}
+      <!-- The composer's box, as PaneLeaf docks it: over the transcript's
+           share, and put away with the transcript when a side surface
+           expands over the whole conversation. -->
+      <div
+        data-slot="dock"
+        data-pane-leaf-away={lent.transcriptShare === 0 || undefined}
+        class="pointer-events-none absolute inset-y-0 start-0 z-1 w-(--share) data-pane-leaf-away:invisible"
+        inert={lent.transcriptShare === 0}
+        style:--share="{lent.transcriptShare * 100}%"
+      >
+        <Composer
+          fleet={composerFleet}
+          {...composerOf(lent)}
+          showing={ID}
+          trayRows={[
+            { delegatesOf: lent.delegatesOf, id: ID, prompts: lent.prompts },
+          ]}
+        />
+      </div>
+    {/if}
   </div>
-</TooltipProvider>
+</div>

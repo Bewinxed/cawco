@@ -25,7 +25,6 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import * as Select from "#lib/components/ui/select/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconDownload, IconRefresh } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -261,10 +260,8 @@
     {:else}
       <div class="max-phone:order-1"><LimitsBlock /></div>
       <div class="flex flex-col gap-space-group max-phone:order-3">
-        <Tooltip.Provider>
-          <WhereItGoes {since} bind:this={where} />
-          <History hourly={range === "window" || range === "today"} {since} />
-        </Tooltip.Provider>
+        <WhereItGoes {since} bind:this={where} />
+        <History hourly={range === "window" || range === "today"} {since} />
       </div>
     {/if}
   </div>

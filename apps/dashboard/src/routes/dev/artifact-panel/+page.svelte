@@ -73,7 +73,6 @@
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     IconChat,
     IconExternal,
@@ -655,212 +654,210 @@
   />
 {/snippet}
 
-<Tooltip.Provider>
-  <div
-    class="h-dvh bg-surface-recess p-space-2 max-phone:p-0"
-    data-bench-panel={asked}
+<div
+  class="h-dvh bg-surface-recess p-space-2 max-phone:p-0"
+  data-bench-panel={asked}
+>
+  <SideSurface
+    items={[
+      {
+        key: "mode",
+        priority: HEAD_PRIORITY.mode,
+        bar: modeBar,
+        menu: modeMenu,
+        group: true,
+        place: "centre",
+      },
+      {
+        key: "comments",
+        priority: HEAD_PRIORITY.comments,
+        bar: commentsBar,
+        menu: commentsMenu,
+        count: {
+          glyph: IconChat,
+          n: listOpen ? 0 : openCount,
+          of: "Comments",
+        },
+      },
+      {
+        key: "reload",
+        priority: HEAD_PRIORITY.reload,
+        bar: reloadBar,
+        menu: reloadMenu,
+      },
+      {
+        key: "open",
+        priority: HEAD_PRIORITY.open,
+        bar: openBar,
+        menu: openMenu,
+      },
+    ] satisfies HeadItem[]}
+    label="Preview"
+    mode="interact"
+    of="preview"
+    onclose={() => undefined}
+    placement={phone.current ? "sheet" : "beside"}
+    bind:section
+    subtitle={shown?.ask}
+    subtitleId="bench-line"
   >
-    <SideSurface
-      items={[
-        {
-          key: "mode",
-          priority: HEAD_PRIORITY.mode,
-          bar: modeBar,
-          menu: modeMenu,
-          group: true,
-          place: "centre",
-        },
-        {
-          key: "comments",
-          priority: HEAD_PRIORITY.comments,
-          bar: commentsBar,
-          menu: commentsMenu,
-          count: {
-            glyph: IconChat,
-            n: listOpen ? 0 : openCount,
-            of: "Comments",
-          },
-        },
-        {
-          key: "reload",
-          priority: HEAD_PRIORITY.reload,
-          bar: reloadBar,
-          menu: reloadMenu,
-        },
-        {
-          key: "open",
-          priority: HEAD_PRIORITY.open,
-          bar: openBar,
-          menu: openMenu,
-        },
-      ] satisfies HeadItem[]}
-      label="Preview"
-      mode="interact"
-      of="preview"
-      onclose={() => undefined}
-      placement={phone.current ? "sheet" : "beside"}
-      bind:section
-      subtitle={shown?.ask}
-      subtitleId="bench-line"
+    <!-- The page as a decision page draws itself in the panel: beneath
+         the head, its scroller padding its top by the head's room
+         (`cawco:head-room`, Decisions' `--page-inset-top`), the timeline
+         the head's scroll edge effect plays on; its scrollbar undrawn as
+         the overlay leaves a page's (`data-cawco-bare-scroll`). -->
+    <div
+      class="size-full overflow-y-auto overscroll-contain pt-(--side-room) scroll-timeline-transcript-head no-scrollbar"
+      data-slot="bench-page"
+      onscroll={readMark}
+      bind:this={benchPage}
+      {@attach measureWell}
     >
-      <!-- The page as a decision page draws itself in the panel: beneath
-           the head, its scroller padding its top by the head's room
-           (`cawco:head-room`, Decisions' `--page-inset-top`), the timeline
-           the head's scroll edge effect plays on; its scrollbar undrawn as
-           the overlay leaves a page's (`data-cawco-bare-scroll`). -->
-      <div
-        class="size-full overflow-y-auto overscroll-contain pt-(--side-room) scroll-timeline-transcript-head no-scrollbar"
-        data-slot="bench-page"
-        onscroll={readMark}
-        bind:this={benchPage}
-        {@attach measureWell}
-      >
-        <!-- The picture and the open comments' pills on it, as the page's
-             overlay draws them: each a press that opens its thread. -->
-        <div class="relative w-fit max-w-full" data-slot="bench-picture">
-          <img
-            alt={shown?.title}
-            class="block h-auto max-w-full"
-            src={phone.current ? pagePhone : pageDesk}
-            {@attach (img) => {
-              // Scrolled to its foot once the picture has its height, and
-              // the opened pill read where it stands.
-              const loaded = () => {
-                if (scrolled && benchPage) {
-                  benchPage.scrollTop = benchPage.scrollHeight;
-                }
-                readMark();
-              };
-              if (img.complete) {
-                loaded();
+      <!-- The picture and the open comments' pills on it, as the page's
+           overlay draws them: each a press that opens its thread. -->
+      <div class="relative w-fit max-w-full" data-slot="bench-picture">
+        <img
+          alt={shown?.title}
+          class="block h-auto max-w-full"
+          src={phone.current ? pagePhone : pageDesk}
+          {@attach (img) => {
+            // Scrolled to its foot once the picture has its height, and
+            // the opened pill read where it stands.
+            const loaded = () => {
+              if (scrolled && benchPage) {
+                benchPage.scrollTop = benchPage.scrollHeight;
               }
-              img.addEventListener("load", loaded);
-              return () => img.removeEventListener("load", loaded);
-            }}
-          />
-          {#each Object.entries(spots) as [key, [x, y, w, h]] (key)}
-            <!-- The element's chosen line, drawn while it is chosen. -->
-            <span
-              aria-hidden="true"
-              class="pointer-events-none absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-(length:--c-target-stroke) outline-offset-(--c-target-stroke) outline-transparent outline-solid data-chosen:outline-brand-solid"
-              data-chosen={chosen === Number(key) || undefined}
-              data-spot-box={key}
-              style:--box-h="{h * 100}%"
-              style:--box-w="{w * 100}%"
-              style:--box-x="{x * 100}%"
-              style:--box-y="{y * 100}%"
-            ></span>
-          {/each}
-          {#each onPage as one (one.id)}
-            {@const [x, y, w] = spots[one.number] ?? [0, 0, 0, 0]}
-            <button
-              aria-label={commentWords.openThread(one.number)}
-              class="absolute start-(--spot-x) top-(--spot-y) z-1 flex -translate-y-full rounded-pill outline-off focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
-              data-pin-spot={one.number}
-              onclick={() => openFromPage(one)}
-              onpointerenter={() => {
-                hovered = one.id;
-              }}
-              onpointerleave={() => {
-                hovered = null;
-              }}
-              style:--spot-x="{(x + w) * 100}%"
-              style:--spot-y="{y * 100}%"
-              type="button"
-            >
-              <PinMark number={one.number} state={markState(one)} />
-            </button>
-          {/each}
-        </div>
-      </div>
-      {#if asked === "changes"}
-        <!-- The page's own foot bar (its Send) stands at the picture's foot,
-             scrolled there: 66px, as the overlay reads it (cawco:page-foot). -->
-        <ChangesTag
-          at={tourAt}
-          onoff={() => {
-            tourAt = null;
+              readMark();
+            };
+            if (img.complete) {
+              loaded();
+            }
+            img.addEventListener("load", loaded);
+            return () => img.removeEventListener("load", loaded);
           }}
-          onstep={(by) => {
-            tourAt =
-              tourAt === null
-                ? 0
-                : (((tourAt + by) % CHANGES) + CHANGES) % CHANGES;
-          }}
-          total={CHANGES}
         />
-      {/if}
-      {#if composing && phone.current}
-        <!-- A comment on the whole page on a phone: the composer as the
-             well's foot sheet, as PreviewPane draws it; a press outside it,
-             or Escape, puts it away. -->
-        <div class="contents">
-          <PinFloat
-            bare
-            box={null}
-            label={commentWords.comment}
-            mark={null}
-            room={well}
-            sheet
-            slot="pin-composer"
-            bind:float={composerFloat}
+        {#each Object.entries(spots) as [key, [x, y, w, h]] (key)}
+          <!-- The element's chosen line, drawn while it is chosen. -->
+          <span
+            aria-hidden="true"
+            class="pointer-events-none absolute start-(--box-x) top-(--box-y) h-(--box-h) w-(--box-w) rounded-xs outline-(length:--c-target-stroke) outline-offset-(--c-target-stroke) outline-transparent outline-solid data-chosen:outline-brand-solid"
+            data-chosen={chosen === Number(key) || undefined}
+            data-spot-box={key}
+            style:--box-h="{h * 100}%"
+            style:--box-w="{w * 100}%"
+            style:--box-x="{x * 100}%"
+            style:--box-y="{y * 100}%"
+          ></span>
+        {/each}
+        {#each onPage as one (one.id)}
+          {@const [x, y, w] = spots[one.number] ?? [0, 0, 0, 0]}
+          <button
+            aria-label={commentWords.openThread(one.number)}
+            class="absolute start-(--spot-x) top-(--spot-y) z-1 flex -translate-y-full rounded-pill outline-off focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+            data-pin-spot={one.number}
+            onclick={() => openFromPage(one)}
+            onpointerenter={() => {
+              hovered = one.id;
+            }}
+            onpointerleave={() => {
+              hovered = null;
+            }}
+            style:--spot-x="{(x + w) * 100}%"
+            style:--spot-y="{y * 100}%"
+            type="button"
           >
-            {@render composer()}
-          </PinFloat>
-        </div>
-      {/if}
-      {#if phone.current}
-        <!-- The Comments sheet: its list, or a thread opened from it in the same sheet, Back leading. -->
+            <PinMark number={one.number} state={markState(one)} />
+          </button>
+        {/each}
+      </div>
+    </div>
+    {#if asked === "changes"}
+      <!-- The page's own foot bar (its Send) stands at the picture's foot,
+           scrolled there: 66px, as the overlay reads it (cawco:page-foot). -->
+      <ChangesTag
+        at={tourAt}
+        onoff={() => {
+          tourAt = null;
+        }}
+        onstep={(by) => {
+          tourAt =
+            tourAt === null
+              ? 0
+              : (((tourAt + by) % CHANGES) + CHANGES) % CHANGES;
+        }}
+        total={CHANGES}
+      />
+    {/if}
+    {#if composing && phone.current}
+      <!-- A comment on the whole page on a phone: the composer as the
+           well's foot sheet, as PreviewPane draws it; a press outside it,
+           or Escape, puts it away. -->
+      <div class="contents">
+        <PinFloat
+          bare
+          box={null}
+          label={commentWords.comment}
+          mark={null}
+          room={well}
+          sheet
+          slot="pin-composer"
+          bind:float={composerFloat}
+        >
+          {@render composer()}
+        </PinFloat>
+      </div>
+    {/if}
+    {#if phone.current}
+      <!-- The Comments sheet: its list, or a thread opened from it in the same sheet, Back leading. -->
+      <ThreadSheet
+        label={thread ? `Comment ${thread.number}` : commentWords.comments}
+        onclose={() => {
+          openPin = null;
+          listOpen = false;
+        }}
+        open={listOpen && !composing}
+        short={(pins.length === 0 && !thread) || placingThread}
+      >
+        {#if thread}
+          {#key thread.id}
+            {@render card(thread, true)}
+          {/key}
+        {:else}
+          {@render railOf("sheet")}
+        {/if}
+      </ThreadSheet>
+      {#if thread && !listOpen}
         <ThreadSheet
-          label={thread ? `Comment ${thread.number}` : commentWords.comments}
+          label={`Comment ${thread.number}`}
           onclose={() => {
             openPin = null;
-            listOpen = false;
           }}
-          open={listOpen && !composing}
-          short={(pins.length === 0 && !thread) || placingThread}
+          open
+          short={placingThread}
         >
-          {#if thread}
-            {#key thread.id}
-              {@render card(thread, true)}
-            {/key}
-          {:else}
-            {@render railOf("sheet")}
-          {/if}
+          {@render card(thread)}
         </ThreadSheet>
-        {#if thread && !listOpen}
-          <ThreadSheet
-            label={`Comment ${thread.number}`}
-            onclose={() => {
-              openPin = null;
-            }}
-            open
-            short={placingThread}
-          >
-            {@render card(thread)}
-          </ThreadSheet>
-        {/if}
-      {:else if thread && !hung}
-        <!-- The card beside its pin in the pane's own shell (PinFloat),
-             poured out of its pill on the page. -->
-        <div class="contents">
-          <PinFloat
-            label={`Comment ${thread.number}`}
-            mark={cardMark}
-            onclosed={() => {
-              if (!cardOpen) {
-                openPin = null;
-              }
-            }}
-            open={cardOpen}
-            pin={thread.number}
-            room={well}
-            slot="pin-card"
-          >
-            {@render card(thread)}
-          </PinFloat>
-        </div>
       {/if}
-    </SideSurface>
-  </div>
-</Tooltip.Provider>
+    {:else if thread && !hung}
+      <!-- The card beside its pin in the pane's own shell (PinFloat),
+           poured out of its pill on the page. -->
+      <div class="contents">
+        <PinFloat
+          label={`Comment ${thread.number}`}
+          mark={cardMark}
+          onclosed={() => {
+            if (!cardOpen) {
+              openPin = null;
+            }
+          }}
+          open={cardOpen}
+          pin={thread.number}
+          room={well}
+          slot="pin-card"
+        >
+          {@render card(thread)}
+        </PinFloat>
+      </div>
+    {/if}
+  </SideSurface>
+</div>

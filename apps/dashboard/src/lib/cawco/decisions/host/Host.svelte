@@ -18,6 +18,7 @@
 <script lang="ts">
   import { programLibraryOf } from "@cawco/core/inline-blocks";
   import { onMount, tick } from "svelte";
+  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import { loadPhotoSwipe } from "../../lightbox/photoswipe";
   import { provideBlockMedia } from "../../views/openui/block-media";
   import OpenUiRenderer from "../../views/openui/OpenUiRenderer.svelte";
@@ -89,37 +90,40 @@
 
 <!-- A part that throws stands as its fault face in its place: a Decision
      as its card, its question named, anything else as a line; the page's
-     other cards and Send go on working. -->
-{#if block}
-  <main
-    class="decision-page-insets grid h-dvh min-w-0 pb-(--page-inset-bottom)"
-    data-slot="block-page"
-  >
-    <div
-      class="kit-edge-fade-block min-h-0 overflow-y-auto overscroll-y-contain pt-(--page-inset-top) scrollbar-gutter-stable max-phone:no-scrollbar in-data-cawco-bare-scroll:no-scrollbar"
-      data-slot="page-scroll"
+     other cards and Send go on working. The document's one tooltip
+     provider stands here, at its root: a stage's More is a GlideTip. -->
+<TooltipProvider>
+  {#if block}
+    <main
+      class="decision-page-insets grid h-dvh min-w-0 pb-(--page-inset-bottom)"
+      data-slot="block-page"
     >
       <div
-        class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col overflow-x-clip px-(--page-in) py-(--page-in) @container"
-        data-block-gallery
-        data-slot="page-column"
+        class="kit-edge-fade-block min-h-0 overflow-y-auto overscroll-y-contain pt-(--page-inset-top) scrollbar-gutter-stable max-phone:no-scrollbar in-data-cawco-bare-scroll:no-scrollbar"
+        data-slot="page-scroll"
       >
-        <OpenUiRenderer
-          caw={stillCaw}
-          class="min-w-0"
-          library={HOST_BLOCK_LIBRARY}
-          label={`kept block "${document.title}" (${location.pathname})`}
-          response={program}
-        />
+        <div
+          class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col overflow-x-clip px-(--page-in) py-(--page-in) @container"
+          data-block-gallery
+          data-slot="page-column"
+        >
+          <OpenUiRenderer
+            caw={stillCaw}
+            class="min-w-0"
+            library={HOST_BLOCK_LIBRARY}
+            label={`kept block "${document.title}" (${location.pathname})`}
+            response={program}
+          />
+        </div>
       </div>
-    </div>
-  </main>
-{:else}
-  <OpenUiRenderer
-    cardOf={decisionCardOf}
-    caw={stillCaw}
-    library={DECISION_LIBRARY}
-    label={`decision page "${document.title}" (${location.pathname})`}
-    response={program}
-  />
-{/if}
+    </main>
+  {:else}
+    <OpenUiRenderer
+      cardOf={decisionCardOf}
+      caw={stillCaw}
+      library={DECISION_LIBRARY}
+      label={`decision page "${document.title}" (${location.pathname})`}
+      response={program}
+    />
+  {/if}
+</TooltipProvider>

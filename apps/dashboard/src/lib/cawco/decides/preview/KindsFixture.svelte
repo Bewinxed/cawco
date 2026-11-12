@@ -36,7 +36,6 @@
   import { decidesWords } from "@cawco/core/words/decides";
   import { untrack } from "svelte";
   import { HUB_UNREACHABLE } from "#lib/cawco/hub-read.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { WhoDecides } from "../decides.svelte";
   import { drawPopoversInPlace, holdsPanels } from "../in-place";
   import KindsOfChoice from "../KindsOfChoice.svelte";
@@ -194,30 +193,28 @@
   });
 </script>
 
-<Tooltip.Provider>
-  <!-- Kinds of choice draws in place under its button, and the page grows
-       to hold it whole: a frame is as tall as its page. -->
+<!-- Kinds of choice draws in place under its button, and the page grows
+     to hold it whole: a frame is as tall as its page. -->
+<div
+  class="relative flex flex-col gap-space-5 bg-surface-page p-space-5 max-desk:p-space-4"
+  {@attach holdsPanels}
+>
   <div
-    class="relative flex flex-col gap-space-5 bg-surface-page p-space-5 max-desk:p-space-4"
-    {@attach holdsPanels}
+    class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
+    style:--head-cols="minmax(0, 1fr) auto"
   >
-    <div
-      class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
-      style:--head-cols="minmax(0, 1fr) auto"
-    >
-      <h1 class="m-0 type-title text-balance text-ink-strong wrap-anywhere">
-        {project === null
-          ? decidesWords.detailsLabel
-          : decidesWords.title(project)}
-      </h1>
-      <KindsOfChoice {who} />
-    </div>
-    {#if who.read.state === "read"}
-      <WhoRoster
-        facts={(member) => addedFacts[member.id] ?? null}
-        {project}
-        {who}
-      />
-    {/if}
+    <h1 class="m-0 type-title text-balance text-ink-strong wrap-anywhere">
+      {project === null
+        ? decidesWords.detailsLabel
+        : decidesWords.title(project)}
+    </h1>
+    <KindsOfChoice {who} />
   </div>
-</Tooltip.Provider>
+  {#if who.read.state === "read"}
+    <WhoRoster
+      facts={(member) => addedFacts[member.id] ?? null}
+      {project}
+      {who}
+    />
+  {/if}
+</div>

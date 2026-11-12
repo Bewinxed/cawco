@@ -209,10 +209,14 @@ export function tellHolder(column: EmbedColumn): EmbedTeller {
       const arriving = column.arriving();
       if (arriving.length > 0) {
         const ended = () => Promise.allSettled(arriving);
-        // Seen, it waits on them only until the long motion's time is up (one paused never ends).
-        (seenAt === null
-          ? ended()
-          : readWithin(Math.max(0, seenAt + longest - performance.now()), ended)
+        // It waits on them only for the long motion's time (one paused never
+        // ends: a skeleton's fade-in its cover pauses once it is ready), from
+        // when it was seen, else from now; then reads which still run.
+        readWithin(
+          seenAt === null
+            ? longest
+            : Math.max(0, seenAt + longest - performance.now()),
+          ended
         ).then(ask, ask);
         return;
       }

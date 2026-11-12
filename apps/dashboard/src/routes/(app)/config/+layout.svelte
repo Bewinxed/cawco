@@ -19,7 +19,6 @@
   } from "#lib/cawco/config/store.svelte.js";
   import { pageIn, pageOut } from "#lib/cawco/motion/route.svelte.js";
   import { store as storeLocally } from "#lib/cawco/storage.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { page } from "$app/state";
 
   let { children } = $props();
@@ -69,31 +68,29 @@
   });
 </script>
 
-<Tooltip.Provider>
-  <div class="flex min-h-0 min-w-0 flex-auto bg-surface-recess">
-    {#if slug}
-      <div class="flex min-h-0 py-space-2 pl-space-5 max-desk:hidden">
-        <ConfigRail current={slug} />
-      </div>
-    {/if}
-    <!-- Keyed on the path, so a section change or a drill into an editor
-         swaps only this pane (motion/route.svelte.ts) while the rail beside
-         it holds still and its pill glides to the new section. -->
-    <!-- The two pages of a swap stand in one cell; a phone's push slides the
-         new one in from off the pane's edge, so the pane clips it. -->
-    <div
-      data-slot="pane"
-      class="grid min-h-0 min-w-0 flex-auto grid-cols-1 grid-rows-1 overflow-hidden"
-    >
-      {#key page.url.pathname}
-        <div
-          class="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col bg-surface-recess"
-          in:pageIn
-          out:pageOut
-        >
-          {@render children()}
-        </div>
-      {/key}
+<div class="flex min-h-0 min-w-0 flex-auto bg-surface-recess">
+  {#if slug}
+    <div class="flex min-h-0 py-space-2 pl-space-5 max-desk:hidden">
+      <ConfigRail current={slug} />
     </div>
+  {/if}
+  <!-- Keyed on the path, so a section change or a drill into an editor
+       swaps only this pane (motion/route.svelte.ts) while the rail beside
+       it holds still and its pill glides to the new section. -->
+  <!-- The two pages of a swap stand in one cell; a phone's push slides the
+       new one in from off the pane's edge, so the pane clips it. -->
+  <div
+    data-slot="pane"
+    class="grid min-h-0 min-w-0 flex-auto grid-cols-1 grid-rows-1 overflow-hidden"
+  >
+    {#key page.url.pathname}
+      <div
+        class="col-start-1 row-start-1 flex min-h-0 min-w-0 flex-col bg-surface-recess"
+        in:pageIn
+        out:pageOut
+      >
+        {@render children()}
+      </div>
+    {/key}
   </div>
-</Tooltip.Provider>
+</div>

@@ -20,6 +20,13 @@
 @source "../../views/openui/OpenUiRenderer.svelte";
 @source "../../views/openui/ViewStat.svelte";
 @source "../../views/openui/ViewTable.svelte";
+@source "../../views/openui/BlockAudio.svelte";
+@source "../../views/openui/BlockDiagram.svelte";
+@source "../../views/openui/BlockImage.svelte";
+@source "../../views/openui/BlockSlides.svelte";
+@source "../../views/openui/BlockVideo.svelte";
+@source "../../tasks/MediaPlayer.svelte";
+@source "../../tasks/MediaButton.svelte";
 @source "../../StatTile.svelte";
 @source "../../graph/Dials.svelte";
 @source "../../graph/DialNumber.svelte";
@@ -27,6 +34,8 @@
 @source "../../graph/VersionSwitch.svelte";
 @source "../../project/DraftColumn.svelte";
 @source "../../project/DraftStages.svelte";
+@source "../../project/StageKindItems.svelte";
+@source "../../project/StageLookItems.svelte";
 @source "../../fault/FaultActions.svelte";
 @source "../../fault/FaultBoundary.svelte";
 @source "../../fault/FaultDetails.svelte";
@@ -35,11 +44,14 @@
 @source "../../fault/ShowDetails.svelte";
 @source "../../../components/ui/alert/";
 @source "../../../components/ui/badge/";
+@source "../../../components/ui/bar-glass/";
 @source "../../../components/ui/button/";
+@source "../../../components/ui/carousel/";
 @source "../../../components/ui/checkbox/checkbox.svelte";
 @source "../../../components/ui/chip/";
 @source "../../../components/ui/copy-button/";
 @source "../../../components/ui/dropdown-menu/";
+@source "../../../components/ui/hang-card/";
 @source "../../../components/ui/icon-tile/";
 @source "../../../components/ui/input/";
 @source "../../../components/ui/section-header/";

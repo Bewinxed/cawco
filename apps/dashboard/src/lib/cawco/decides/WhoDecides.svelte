@@ -33,7 +33,6 @@
   import { listTasks, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { IconFolder, IconGlobe } from "#lib/icons.js";
   import { WhoDecides } from "./decides.svelte";
   import KindsOfChoice from "./KindsOfChoice.svelte";
@@ -128,119 +127,114 @@
   {/if}
 </svelte:head>
 
-<Tooltip.Provider>
-  {#if projectId === null}
-    <!-- Configure's section, its cards straight on the recessed ground: the
-         section template's raised body would hold them card in card. -->
+{#if projectId === null}
+  <!-- Configure's section, its cards straight on the recessed ground: the
+       section template's raised body would hold them card in card. -->
+  <div
+    class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-5 py-space-2"
+  >
     <div
-      class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-5 py-space-2"
+      class="flex max-w-c-config-max-w min-w-0 flex-col gap-space-5 py-space-6"
     >
       <div
-        class="flex max-w-c-config-max-w min-w-0 flex-col gap-space-5 py-space-6"
+        class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
+        style:--head-cols="minmax(0, 1fr) auto"
       >
-        <div
-          class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
-          style:--head-cols="minmax(0, 1fr) auto"
-        >
-          <!-- No head of its own: the rail, or the phone's bar, names the
-               section (DESIGN.md, Layout); its purpose opens the page. -->
-          <p class="m-0 min-w-0 text-pretty" data-slot="lead">
-            {section.purpose}
-          </p>
-          <KindsOfChoice {named} {who} />
-        </div>
-        {@render roster()}
+        <!-- No head of its own: the rail, or the phone's bar, names the
+             section (DESIGN.md, Layout); its purpose opens the page. -->
+        <p class="m-0 min-w-0 text-pretty" data-slot="lead">
+          {section.purpose}
+        </p>
+        <KindsOfChoice {named} {who} />
       </div>
+      {@render roster()}
     </div>
-  {:else}
-    <div
-      class="min-w-0 flex-auto overflow-y-auto pt-space-5 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:py-space-4"
-    >
-      <div class="flex flex-col gap-space-5">
-        <nav
-          aria-label={decidesWords.crumbs}
-          class="flex flex-wrap items-baseline justify-between gap-x-space-4 gap-y-space-1 type-label"
+  </div>
+{:else}
+  <div
+    class="min-w-0 flex-auto overflow-y-auto pt-space-5 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:py-space-4"
+  >
+    <div class="flex flex-col gap-space-5">
+      <nav
+        aria-label={decidesWords.crumbs}
+        class="flex flex-wrap items-baseline justify-between gap-x-space-4 gap-y-space-1 type-label"
+      >
+        <ol
+          class="m-0 flex min-w-0 list-none flex-wrap items-baseline gap-x-space-2 p-0"
         >
-          <ol
-            class="m-0 flex min-w-0 list-none flex-wrap items-baseline gap-x-space-2 p-0"
-          >
-            <li class="min-w-0">
-              <a
-                class="text-ink-muted wrap-anywhere can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
-                href="/config/decides">{decidesWords.fleet}</a
-              >
-            </li>
-            <li aria-hidden="true" class="text-ink-muted">/</li>
-            <li class="min-w-0">
-              {#if project}
-                <a
-                  class="text-ink-strong wrap-anywhere can-hover:hover:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
-                  href={projectHref}>{name}</a
-                >
-              {:else}
-                <Skeleton line="label" radius="text" width="name" />
-              {/if}
-            </li>
-          </ol>
-          <a
-            class="flex-none text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
-            href="{projectHref}?view=decisions">{decidesWords.decisions}</a
-          >
-        </nav>
-        <div
-          class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
-          style:--head-cols="minmax(0, 1fr) auto"
-        >
-          <header class="flex min-w-0 flex-col gap-space-2">
+          <li class="min-w-0">
+            <a
+              class="text-ink-muted wrap-anywhere can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+              href="/config/decides">{decidesWords.fleet}</a
+            >
+          </li>
+          <li aria-hidden="true" class="text-ink-muted">/</li>
+          <li class="min-w-0">
             {#if project}
-              <h1
-                class="m-0 type-title text-balance text-ink-strong wrap-anywhere"
+              <a
+                class="text-ink-strong wrap-anywhere can-hover:hover:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+                href={projectHref}>{name}</a
               >
-                {decidesWords.title(name)}
-              </h1>
             {:else}
-              <Skeleton line="title" radius="text" width="title" />
+              <Skeleton line="label" radius="text" width="name" />
             {/if}
-            {#if ready}
-              <p class="m-0 type-body text-pretty text-ink-muted">
-                {who.own.length === 0
-                  ? decidesWords.follows(name)
-                  : decidesWords.except(name, who.own.length)}
-                {#if who.own.length > 0}
-                  <button
-                    aria-disabled={who.asking !== null || undefined}
-                    class="text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
-                    onclick={() => {
-                      if (who.asking === null) {
-                        who.useFleet(who.own);
-                      }
-                    }}
-                    type="button"
-                    >{decidesWords.putAllBack(who.own.length)}</button
-                  >
-                {/if}
-              </p>
-              <ul
-                class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-1 p-0 type-meta text-ink-muted"
-              >
-                <li class="mark-line flex items-center gap-x-space-1">
-                  <IconGlobe aria-hidden="true" class="size-icon-sm" />
-                  <span>{decidesWords.followsFleet}</span>
-                </li>
-                <li class="mark-line flex min-w-0 items-center gap-x-space-1">
-                  <IconFolder
-                    aria-hidden="true"
-                    class="size-icon-sm flex-none"
-                  />
-                  <span class="wrap-anywhere">{decidesWords.own(name)}</span>
-                </li>
-              </ul>
-            {/if}
-          </header>
-          <KindsOfChoice {named} {who} />
-        </div>
-        {@render roster()}
+          </li>
+        </ol>
+        <a
+          class="flex-none text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+          href="{projectHref}?view=decisions">{decidesWords.decisions}</a
+        >
+      </nav>
+      <div
+        class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
+        style:--head-cols="minmax(0, 1fr) auto"
+      >
+        <header class="flex min-w-0 flex-col gap-space-2">
+          {#if project}
+            <h1
+              class="m-0 type-title text-balance text-ink-strong wrap-anywhere"
+            >
+              {decidesWords.title(name)}
+            </h1>
+          {:else}
+            <Skeleton line="title" radius="text" width="title" />
+          {/if}
+          {#if ready}
+            <p class="m-0 type-body text-pretty text-ink-muted">
+              {who.own.length === 0
+                ? decidesWords.follows(name)
+                : decidesWords.except(name, who.own.length)}
+              {#if who.own.length > 0}
+                <button
+                  aria-disabled={who.asking !== null || undefined}
+                  class="text-brand-ink underline underline-offset-2 can-hover:hover:not-aria-disabled:text-brand-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs aria-disabled:text-ink-muted"
+                  onclick={() => {
+                    if (who.asking === null) {
+                      who.useFleet(who.own);
+                    }
+                  }}
+                  type="button"
+                  >{decidesWords.putAllBack(who.own.length)}</button
+                >
+              {/if}
+            </p>
+            <ul
+              class="m-0 flex list-none flex-wrap items-center gap-x-space-4 gap-y-space-1 p-0 type-meta text-ink-muted"
+            >
+              <li class="mark-line flex items-center gap-x-space-1">
+                <IconGlobe aria-hidden="true" class="size-icon-sm" />
+                <span>{decidesWords.followsFleet}</span>
+              </li>
+              <li class="mark-line flex min-w-0 items-center gap-x-space-1">
+                <IconFolder aria-hidden="true" class="size-icon-sm flex-none" />
+                <span class="wrap-anywhere">{decidesWords.own(name)}</span>
+              </li>
+            </ul>
+          {/if}
+        </header>
+        <KindsOfChoice {named} {who} />
       </div>
+      {@render roster()}
     </div>
-  {/if}
-</Tooltip.Provider>
+  </div>
+{/if}

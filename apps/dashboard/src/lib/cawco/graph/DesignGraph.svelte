@@ -63,7 +63,6 @@
   } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
-  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import {
     IconAdaptLinear,
     IconBranchingLinear,
@@ -1567,140 +1566,135 @@
   </div>
 {/snippet}
 
-<TooltipProvider>
-  <div
-    data-slot="design-graph"
-    class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
-    data-arriving={arriving || reading || undefined}
-    {lang}
-    {@attach frameSize(
-      (node: HTMLElement) => node.clientWidth,
-      (value) => {
-        surface = value;
-      }
-    )}
-  >
-    <!-- The page: the stage, to the surface's edges, the panel's head
-         floating over it and keeping no band (The Title Bars Follow Liquid
-         Glass Rule). -->
+<div
+  data-slot="design-graph"
+  class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
+  data-arriving={arriving || reading || undefined}
+  {lang}
+  {@attach frameSize(
+    (node: HTMLElement) => node.clientWidth,
+    (value) => {
+      surface = value;
+    }
+  )}
+>
+  <!-- The page: the stage, to the surface's edges, the panel's head
+       floating over it and keeping no band (The Title Bars Follow Liquid
+       Glass Rule). -->
+  <div data-slot="graph-page" class="flex min-h-0 min-w-0 flex-1 overflow-clip">
     <div
-      data-slot="graph-page"
-      class="flex min-h-0 min-w-0 flex-1 overflow-clip"
+      class="relative flex min-h-0 min-w-0 flex-1 flex-col"
+      {@attach frameSize(
+        (node: HTMLElement) => node.clientWidth,
+        (value) => {
+          stageAcross = value;
+        }
+      )}
     >
-      <div
-        class="relative flex min-h-0 min-w-0 flex-1 flex-col"
-        {@attach frameSize(
-          (node: HTMLElement) => node.clientWidth,
-          (value) => {
-            stageAcross = value;
-          }
-        )}
-      >
-        <StagePane
-          bind:need={stageNeed}
-          compare={againstState
-            ? {
-                name: againstState.name,
-                flipped,
-                read: link.differences,
-              }
-            : null}
-          {frame}
-          {lang}
-          laid={link.laid}
-          bind:room={stageRoom}
-          ondifference={showDifference}
-          onflip={() => {
-            flipped = !flipped;
+      <StagePane
+        bind:need={stageNeed}
+        compare={againstState
+          ? {
+              name: againstState.name,
+              flipped,
+              read: link.differences,
+            }
+          : null}
+        {frame}
+        {lang}
+        laid={link.laid}
+        bind:room={stageRoom}
+        ondifference={showDifference}
+        onflip={() => {
+          flipped = !flipped;
+        }}
+        name={keptState?.name ?? ""}
+        {stale}
+        variant={keptVariant?.name ?? null}
+      />
+      <!-- Over the drawing, what acts on it: the mode leading, the
+               states' stepper in the middle (the state on show is the
+               drawing's, never a back button: the owner's pin), the view
+               trailing. -->
+      {#if rising && review && kept && !narrow}
+        <!-- What rises over the drawing's foot, above the tools: the
+                 map of every state (the owner's pick on pin 47: a card
+                 over the drawing, never in its place), the move's
+                 transport and timeline, or the dials. Under the phone
+                 line it is a bottom sheet instead (below). -->
+        <div
+          class={[
+            floatingSurface({ motion: "pop" }),
+            "absolute inset-x-space-3 bottom-(--rise-foot) z-2 mx-auto flex min-h-0 flex-col overflow-hidden",
+            rising === "map"
+              ? "h-1/2 max-w-c-graph-stage-min"
+              : "max-h-1/2 max-w-c-measure p-space-3",
+          ]}
+          data-slot="graph-rising"
+          style:--rise-foot={riseFoot}
+          in:rise={"--dur-panel"}
+          out:rise={"--dur-exit"}
+        >
+          {@render risingBody()}
+        </div>
+      {/if}
+      {#if narrow && sheetDrawn && review && kept}
+        <!-- Under the phone line what rises is the kit's bottom sheet
+             (the owner's pick: "Open as a sheet on phones"): half the
+             room as it opens, dragged up to the whole, its grabber and
+             its stops ThreadSheet's. -->
+        <ThreadSheet
+          label={risingName}
+          onclose={() => {
+            rising = null;
           }}
-          name={keptState?.name ?? ""}
-          {stale}
-          variant={keptVariant?.name ?? null}
-        />
-        <!-- Over the drawing, what acts on it: the mode leading, the
-                 states' stepper in the middle (the state on show is the
-                 drawing's, never a back button: the owner's pin), the view
-                 trailing. -->
-        {#if rising && review && kept && !narrow}
-          <!-- What rises over the drawing's foot, above the tools: the
-                   map of every state (the owner's pick on pin 47: a card
-                   over the drawing, never in its place), the move's
-                   transport and timeline, or the dials. Under the phone
-                   line it is a bottom sheet instead (below). -->
+          onclosed={() => {
+            if (!rising) {
+              sheetDrawn = false;
+            }
+          }}
+          open={rising !== null}
+        >
           <div
-            class={[
-              floatingSurface({ motion: "pop" }),
-              "absolute inset-x-space-3 bottom-(--rise-foot) z-2 mx-auto flex min-h-0 flex-col overflow-hidden",
-              rising === "map"
-                ? "h-1/2 max-w-c-graph-stage-min"
-                : "max-h-1/2 max-w-c-measure p-space-3",
-            ]}
-            data-slot="graph-rising"
-            style:--rise-foot={riseFoot}
-            in:rise={"--dur-panel"}
-            out:rise={"--dur-exit"}
+            class="flex min-h-0 flex-1 flex-col px-space-3 pb-space-3"
+            data-slot="graph-rising-sheet"
           >
             {@render risingBody()}
           </div>
-        {/if}
-        {#if narrow && sheetDrawn && review && kept}
-          <!-- Under the phone line what rises is the kit's bottom sheet
-               (the owner's pick: "Open as a sheet on phones"): half the
-               room as it opens, dragged up to the whole, its grabber and
-               its stops ThreadSheet's. -->
-          <ThreadSheet
-            label={risingName}
-            onclose={() => {
-              rising = null;
-            }}
-            onclosed={() => {
-              if (!rising) {
-                sheetDrawn = false;
-              }
-            }}
-            open={rising !== null}
-          >
-            <div
-              class="flex min-h-0 flex-1 flex-col px-space-3 pb-space-3"
-              data-slot="graph-rising-sheet"
-            >
-              {@render risingBody()}
-            </div>
-          </ThreadSheet>
-        {/if}
-        <!-- The row folds on a phone's pane, or wherever its full form is
-             wider than the stage: the mode and the view each one button
-             opening its menu above it, the states' group as it is. -->
-        <PreviewTools
-          away={narrow && link.scrolledDown && !rising}
-          spread={!folded}
-          bind:height={toolsHeight}
-          bind:need={toolsNeed}
-        >
-          <div class="flex items-center">
-            {#if folded}
-              {@render modeCompact?.()}
-            {:else}
-              {@render modeTools?.()}
-            {/if}
-          </div>
-          <!-- Folded, the states' group gives up width first, its name cut
-               at its end, so the row holds to one line. -->
-          <div class="flex min-w-0">
-            {@render headLead()}
-          </div>
-          <!-- What changed since he looked, beside the view (the owner's
-                   pick: "On the page only"). -->
-          <div class="flex items-end gap-space-2">
-            {@render changesTools?.()}
-            {#if folded}
-              {@render viewButton()}
-            {:else}
-              {@render viewTools()}
-            {/if}
-          </div>
-        </PreviewTools>
-      </div>
+        </ThreadSheet>
+      {/if}
+      <!-- The row folds on a phone's pane, or wherever its full form is
+           wider than the stage: the mode and the view each one button
+           opening its menu above it, the states' group as it is. -->
+      <PreviewTools
+        away={narrow && link.scrolledDown && !rising}
+        spread={!folded}
+        bind:height={toolsHeight}
+        bind:need={toolsNeed}
+      >
+        <div class="flex items-center">
+          {#if folded}
+            {@render modeCompact?.()}
+          {:else}
+            {@render modeTools?.()}
+          {/if}
+        </div>
+        <!-- Folded, the states' group gives up width first, its name cut
+             at its end, so the row holds to one line. -->
+        <div class="flex min-w-0">
+          {@render headLead()}
+        </div>
+        <!-- What changed since he looked, beside the view (the owner's
+                 pick: "On the page only"). -->
+        <div class="flex items-end gap-space-2">
+          {@render changesTools?.()}
+          {#if folded}
+            {@render viewButton()}
+          {:else}
+            {@render viewTools()}
+          {/if}
+        </div>
+      </PreviewTools>
     </div>
   </div>
-</TooltipProvider>
+</div>

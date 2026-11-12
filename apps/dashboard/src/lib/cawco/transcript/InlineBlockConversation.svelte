@@ -15,8 +15,10 @@
   import type { Message } from "../types";
   import { provideBlockSources } from "../views/openui/block-media";
   import { type FixturePage, fixtureSources } from "./block-fixture";
+  import InlineBlock from "./InlineBlock.svelte";
   import {
     ConversationBlocks,
+    loadedBlock,
     provideInlineBlocks,
   } from "./inline-blocks.svelte";
   import TranscriptBlock from "./TranscriptBlock.svelte";
@@ -72,6 +74,9 @@
     )
   );
   provideMarkdownBlocks(TranscriptBlock);
+  // The block's code as a transcript holds it once loaded: the stage draws
+  // the conversation whole, not first its rooms.
+  loadedBlock.InlineBlock = InlineBlock;
 </script>
 
 <div

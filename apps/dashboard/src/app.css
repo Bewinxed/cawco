@@ -95,19 +95,6 @@
   [data-flip-anchor][data-state="closing"] {
     pointer-events: none;
   }
-  /* The cut the card comes down from behind (`hang`): its floating wrapper,
-     cut at the card's top edge, the anchor's foot, with room for the whole
-     overlay shadow past the others. It never moves, so the card's slide is
-     all the compositor has to play. In CSS, not the wrapper's own style,
-     which bits-ui writes whole on every placement; HangCard marks the
-     wrapper it draws (`data-hang`). A card that rises out of its anchor's
-     top (`data-hang="rises"`) is cut at its foot instead. */
-  [data-bits-floating-content-wrapper][data-hang] {
-    @apply clip-block-start;
-  }
-  [data-bits-floating-content-wrapper][data-hang="rises"] {
-    @apply clip-block-end;
-  }
   /* vaul's own slide out (slideToBottom and its siblings) sets no fill
      mode, and bits-ui unmounts the sheet a frame after it finishes: that
      frame would paint the sheet back fully open. It holds the last frame. */

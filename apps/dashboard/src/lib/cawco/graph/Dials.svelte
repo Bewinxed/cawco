@@ -32,7 +32,6 @@
   import { MediaQuery } from "svelte/reactivity";
   import { BarSegments } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import {
     IconReset,
     IconTextEmojiLinear,
@@ -244,208 +243,205 @@
   </h4>
 {/snippet}
 
-<TooltipProvider>
+<div
+  class="@container/dials flex min-h-0 min-w-0 flex-1 flex-col"
+  data-slot="dials"
+  style:--cols={COLUMNS}
+  style:--grid-max={GRID_MAX}
+  style:--narrow={NARROW_COLUMNS}
+>
+  <!-- Its scroller clips: it stands a step out and pads the step back, so
+       a focus ring on its edge is drawn whole (The One Ring Rule); under a
+       finger its foot holds the last row's touch areas too (The 44 Touch
+       Rule's `::after` reaches past a switch), so nothing scrolls short.
+       It takes its rows' height, up to what the face has. -->
   <div
-    class="@container/dials flex min-h-0 min-w-0 flex-1 flex-col"
-    data-slot="dials"
-    style:--cols={COLUMNS}
-    style:--grid-max={GRID_MAX}
-    style:--narrow={NARROW_COLUMNS}
+    class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-initial overflow-y-auto p-space-1 scroll-timeline-transcript-head coarse:pb-space-4"
+    data-slot="dials-rows"
   >
-    <!-- Its scroller clips: it stands a step out and pads the step back, so
-         a focus ring on its edge is drawn whole (The One Ring Rule); under a
-         finger its foot holds the last row's touch areas too (The 44 Touch
-         Rule's `::after` reaches past a switch), so nothing scrolls short.
-         It takes its rows' height, up to what the face has. -->
+    <!-- One grid for every section, so each control starts on one edge
+         whatever its heading; each section a subgrid of it, each control
+         its own subgrid row, its name beside it, rows a step apart as a
+         panel's are. -->
+    <!-- Under a floating head the rows clear it at rest (`--face-top`). -->
+    <div aria-hidden="true" class="h-(--face-top,0px)"></div>
     <div
-      class="kit-edge-fade-block -m-space-1 min-h-0 min-w-0 flex-initial overflow-y-auto p-space-1 scroll-timeline-transcript-head coarse:pb-space-4"
-      data-slot="dials-rows"
+      class="grid min-w-0 max-w-(--grid-max) grid-cols-(--cols) gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
+      data-slot="dials-grid"
     >
-      <!-- One grid for every section, so each control starts on one edge
-           whatever its heading; each section a subgrid of it, each control
-           its own subgrid row, its name beside it, rows a step apart as a
-           panel's are. -->
-      <!-- Under a floating head the rows clear it at rest (`--face-top`). -->
-      <div aria-hidden="true" class="h-(--face-top,0px)"></div>
-      <div
-        class="grid min-w-0 max-w-(--grid-max) grid-cols-(--cols) gap-x-space-3 gap-y-space-5 @max-timeline/dials:grid-cols-(--narrow)"
-        data-slot="dials-grid"
-      >
-        {#if dials.length > 0}
-          <section
-            aria-label={stateProps ? words.dials.agentHead : undefined}
-            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3"
-            data-slot="dials-agent"
+      {#if dials.length > 0}
+        <section
+          aria-label={stateProps ? words.dials.agentHead : undefined}
+          class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3"
+          data-slot="dials-agent"
+        >
+          {#if stateProps}
+            {@render partHead(words.dials.agentHead)}
+          {/if}
+          <div
+            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-5"
           >
-            {#if stateProps}
-              {@render partHead(words.dials.agentHead)}
+            {#each sections as section (section.head)}
+              <section
+                aria-label={section.head ?? undefined}
+                class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
+              >
+                {#if section.head}
+                  {@render groupHead(section.head)}
+                {/if}
+                {#each section.dials as dial (dial.name)}
+                  {@const hand = held?.name === dial.name ? held : null}
+                  <DialRow
+                    {dial}
+                    edited={changed.includes(dial.name)}
+                    held={hand}
+                    {lang}
+                    onchange={(next) => onchange(dial.name, next)}
+                    onopenchange={layerOf(dial.name)}
+                    onreset={() => onreset([dial.name], false)}
+                    open={open === dial.name}
+                    phone={phone.current}
+                    value={values[dial.name] ?? written[dial.name]}
+                    was={written[dial.name]}
+                  />
+                {/each}
+              </section>
+            {/each}
+          </div>
+        </section>
+      {/if}
+      {#if stateProps && stateProps.props.length > 0}
+        {@const own = stateProps}
+        {@const title = words.dials.propsHead(wordsOf(own.component))}
+        <!-- After the agent's part, a hairline across the card and the
+             space of a part's gap on each side of it: where one ends. -->
+        <section
+          aria-label={title}
+          class={[
+            "col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3",
+            dials.length > 0 && "border-t border-t-border-hairline pt-space-5",
+          ]}
+          data-slot="dials-props"
+        >
+          <!-- The part's head carries the props' own control on its line,
+               at its end, out of the props' columns: it acts on all of
+               them, so it stands with what names them, not among them
+               (the owner's pin 12: it read as "another option in the
+               picker, not a feature of the picker"). -->
+          <div
+            class="col-span-full flex min-w-0 flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
+            data-slot="dials-props-head"
+          >
+            <h3 class="m-0 min-w-0 text-ink-strong type-row text-pretty">
+              {title}
+            </h3>
+            {#if own.content && own.content.cases.length > 0}
+              {@const pick = own.content}
+              <!-- The kit's segmented control in its glass (BarSegments):
+                   one glyph a case, the chosen one washed; never a menu
+                   (the owner's pin 14). Hovering a case shows it in the
+                   text rows (pin 15). -->
+              <BarSegments
+                label={words.dials.content}
+                onpreview={(next) => {
+                  previewing = next;
+                }}
+                onValueChange={(next) =>
+                  pick.onpick(
+                    pick.cases.find((one) => one.is === next)?.fill ?? null
+                  )}
+                segments={[
+                  {
+                    value: "saved",
+                    label: words.dials.cases.saved,
+                    icon: CASE_ICON.saved,
+                  },
+                  ...pick.cases.map((one) => ({
+                    value: one.is,
+                    label: one.label,
+                    icon: CASE_ICON[one.is],
+                  })),
+                ]}
+                value={contentPicked}
+              />
             {/if}
-            <div
-              class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-5"
-            >
-              {#each sections as section (section.head)}
-                <section
-                  aria-label={section.head ?? undefined}
-                  class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
-                >
-                  {#if section.head}
-                    {@render groupHead(section.head)}
-                  {/if}
-                  {#each section.dials as dial (dial.name)}
-                    {@const hand = held?.name === dial.name ? held : null}
-                    <DialRow
-                      {dial}
-                      edited={changed.includes(dial.name)}
-                      held={hand}
-                      {lang}
-                      onchange={(next) => onchange(dial.name, next)}
-                      onopenchange={layerOf(dial.name)}
-                      onreset={() => onreset([dial.name], false)}
-                      open={open === dial.name}
-                      phone={phone.current}
-                      value={values[dial.name] ?? written[dial.name]}
-                      was={written[dial.name]}
-                    />
-                  {/each}
-                </section>
-              {/each}
-            </div>
-          </section>
-        {/if}
-        {#if stateProps && stateProps.props.length > 0}
-          {@const own = stateProps}
-          {@const title = words.dials.propsHead(wordsOf(own.component))}
-          <!-- After the agent's part, a hairline across the card and the
-               space of a part's gap on each side of it: where one ends. -->
-          <section
-            aria-label={title}
-            class={[
-              "col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3",
-              dials.length > 0 &&
-                "border-t border-t-border-hairline pt-space-5",
-            ]}
-            data-slot="dials-props"
+          </div>
+          <div
+            class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
           >
-            <!-- The part's head carries the props' own control on its line,
-                 at its end, out of the props' columns: it acts on all of
-                 them, so it stands with what names them, not among them
-                 (the owner's pin 12: it read as "another option in the
-                 picker, not a feature of the picker"). -->
-            <div
-              class="col-span-full flex min-w-0 flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
-              data-slot="dials-props-head"
-            >
-              <h3 class="m-0 min-w-0 text-ink-strong type-row text-pretty">
-                {title}
-              </h3>
-              {#if own.content && own.content.cases.length > 0}
-                {@const pick = own.content}
-                <!-- The kit's segmented control in its glass (BarSegments):
-                     one glyph a case, the chosen one washed; never a menu
-                     (the owner's pin 14). Hovering a case shows it in the
-                     text rows (pin 15). -->
-                <BarSegments
-                  label={words.dials.content}
-                  onpreview={(next) => {
-                    previewing = next;
-                  }}
-                  onValueChange={(next) =>
-                    pick.onpick(
-                      pick.cases.find((one) => one.is === next)?.fill ?? null
-                    )}
-                  segments={[
-                    {
-                      value: "saved",
-                      label: words.dials.cases.saved,
-                      icon: CASE_ICON.saved,
-                    },
-                    ...pick.cases.map((one) => ({
-                      value: one.is,
-                      label: one.label,
-                      icon: CASE_ICON[one.is],
-                    })),
-                  ]}
-                  value={contentPicked}
-                />
-              {/if}
-            </div>
-            <div
-              class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-2"
-            >
-              {#each own.props as prop (prop.name)}
-                <DialRow
-                  dial={prop}
-                  edited={propsChanged.includes(prop.name)}
-                  idPrefix="prop"
-                  {lang}
-                  onchange={(next) => own.onchange(prop.name, next)}
-                  onopenchange={layerOf(`prop:${prop.name}`)}
-                  onreset={() => own.onreset([prop.name], false)}
-                  open={open === `prop:${prop.name}`}
-                  phone={phone.current}
-                  value={previewed && prop.name in previewed
-                    ? previewed[prop.name]
-                    : (own.edits[prop.name] ?? own.saved[prop.name])}
-                  was={own.saved[prop.name]}
-                />
-              {/each}
-            </div>
-          </section>
+            {#each own.props as prop (prop.name)}
+              <DialRow
+                dial={prop}
+                edited={propsChanged.includes(prop.name)}
+                idPrefix="prop"
+                {lang}
+                onchange={(next) => own.onchange(prop.name, next)}
+                onopenchange={layerOf(`prop:${prop.name}`)}
+                onreset={() => own.onreset([prop.name], false)}
+                open={open === `prop:${prop.name}`}
+                phone={phone.current}
+                value={previewed && prop.name in previewed
+                  ? previewed[prop.name]
+                  : (own.edits[prop.name] ?? own.saved[prop.name])}
+                was={own.saved[prop.name]}
+              />
+            {/each}
+          </div>
+        </section>
+      {/if}
+    </div>
+  </div>
+  {#if changed.length > 0 || propsChanged.length > 0 || undoable}
+    <!-- Under the rows, on the grid's edges: the way back at the names'
+         start, the state's saves at the controls' end. -->
+    <div
+      class="grid min-w-0 max-w-(--grid-max) flex-none grid-cols-(--cols) gap-x-space-3 pt-space-3 @max-timeline/dials:grid-cols-(--narrow)"
+      data-slot="dials-foot"
+    >
+      <div class="col-span-full flex min-w-0 items-center gap-space-1">
+        {#if changed.length > 0 || propsChanged.length > 0}
+          <Button
+            aria-label={words.dials.resetAllSaid}
+            class="-ms-space-2"
+            data-slot="reset-all"
+            icon={IconReset}
+            label={words.resetAll}
+            onclick={resetAll}
+            size="sm"
+            variant="ghost"
+          />
+        {:else}
+          <Button
+            class="-ms-space-3"
+            data-slot="undo-reset"
+            onclick={onundo}
+            size="sm"
+            variant="ghost">{words.undoReset}</Button
+          >
+        {/if}
+        {#if stateProps && propsChanged.length > 0}
+          <Button
+            class="ms-auto"
+            data-slot="save-new"
+            disabled={!!stateProps.saving}
+            label={words.dials.saveNew}
+            onclick={stateProps.onsavenew}
+            pending={stateProps.saving === "new"}
+            pendingLabel={words.dials.saving}
+            size="sm"
+            variant="ghost"
+          />
+          <Button
+            data-slot="save"
+            disabled={!!stateProps.saving}
+            label={words.dials.save}
+            onclick={stateProps.onsave}
+            pending={stateProps.saving === "save"}
+            pendingLabel={words.dials.saving}
+            size="sm"
+          />
         {/if}
       </div>
     </div>
-    {#if changed.length > 0 || propsChanged.length > 0 || undoable}
-      <!-- Under the rows, on the grid's edges: the way back at the names'
-           start, the state's saves at the controls' end. -->
-      <div
-        class="grid min-w-0 max-w-(--grid-max) flex-none grid-cols-(--cols) gap-x-space-3 pt-space-3 @max-timeline/dials:grid-cols-(--narrow)"
-        data-slot="dials-foot"
-      >
-        <div class="col-span-full flex min-w-0 items-center gap-space-1">
-          {#if changed.length > 0 || propsChanged.length > 0}
-            <Button
-              aria-label={words.dials.resetAllSaid}
-              class="-ms-space-2"
-              data-slot="reset-all"
-              icon={IconReset}
-              label={words.resetAll}
-              onclick={resetAll}
-              size="sm"
-              variant="ghost"
-            />
-          {:else}
-            <Button
-              class="-ms-space-3"
-              data-slot="undo-reset"
-              onclick={onundo}
-              size="sm"
-              variant="ghost">{words.undoReset}</Button
-            >
-          {/if}
-          {#if stateProps && propsChanged.length > 0}
-            <Button
-              class="ms-auto"
-              data-slot="save-new"
-              disabled={!!stateProps.saving}
-              label={words.dials.saveNew}
-              onclick={stateProps.onsavenew}
-              pending={stateProps.saving === "new"}
-              pendingLabel={words.dials.saving}
-              size="sm"
-              variant="ghost"
-            />
-            <Button
-              data-slot="save"
-              disabled={!!stateProps.saving}
-              label={words.dials.save}
-              onclick={stateProps.onsave}
-              pending={stateProps.saving === "save"}
-              pendingLabel={words.dials.saving}
-              size="sm"
-            />
-          {/if}
-        </div>
-      </div>
-    {/if}
-  </div>
-</TooltipProvider>
+  {/if}
+</div>

@@ -9,7 +9,6 @@
    * overridden by a hand-over until the next state's args arrive.
    */
   import type { Kind, Member } from "@cawco/core/decides";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import type { Facts, Fault } from "../decides.svelte";
   import Roster from "../Roster.svelte";
 
@@ -46,27 +45,25 @@
   );
 </script>
 
-<Tooltip.Provider>
-  <div class="bg-surface-page p-space-5 max-desk:p-space-4">
-    <Roster
-      {asking}
-      facts={(member) => facts[member.id] ?? null}
-      {fault}
-      {fleetRoutes}
-      bind:handing
-      {kinds}
-      {members}
-      onhand={(kind, member) => {
-        routes = { ...routes, [kind]: member };
-        return Promise.resolve(true);
-      }}
-      onputback={(kind) => {
-        routes = { ...routes, [kind]: fleetRoutes[kind] as string };
-        return Promise.resolve(true);
-      }}
-      {own}
-      {project}
-      {routes}
-    />
-  </div>
-</Tooltip.Provider>
+<div class="bg-surface-page p-space-5 max-desk:p-space-4">
+  <Roster
+    {asking}
+    facts={(member) => facts[member.id] ?? null}
+    {fault}
+    {fleetRoutes}
+    bind:handing
+    {kinds}
+    {members}
+    onhand={(kind, member) => {
+      routes = { ...routes, [kind]: member };
+      return Promise.resolve(true);
+    }}
+    onputback={(kind) => {
+      routes = { ...routes, [kind]: fleetRoutes[kind] as string };
+      return Promise.resolve(true);
+    }}
+    {own}
+    {project}
+    {routes}
+  />
+</div>
