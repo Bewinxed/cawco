@@ -486,11 +486,13 @@
       {#if mounted}
         <!-- Expanded, the card meets the split's edges (SideSurface), so the
              page is drawn at the full width; its inset goes on the slide's
-             clock. -->
+             clock. The card floats with an inset on every side, its shadow
+             inside the pane (paneforge clips a pane to its box); the
+             handle, drawing no line, takes its drag in the leading gap. -->
         <div
           data-split-shown={open || undefined}
           hidden={squeezed}
-          class="w-full min-w-c-side-surface-min p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--dur-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--dur-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
+          class="w-full min-w-c-side-surface-min p-space-2 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--dur-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--dur-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
           style:--surface-off="translateX(var(--space-7))"
           style:--surface-on="translateX(0)"
           in:surfaceIn

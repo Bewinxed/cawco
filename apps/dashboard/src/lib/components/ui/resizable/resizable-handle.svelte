@@ -4,9 +4,10 @@
 
   /** Its callers' looks, each as they drew it: the line in the hairline
       ink, the control's under the pointer and the muted ink while it is
-      dragged, its colour easing over --dur-control. A split's side handle
-      marks the drag with `data-active`; a pane grid's with paneforge's
+      dragged, its colour easing over --dur-control. A pane grid's marks the drag with paneforge's
       keyboard or pointer state, and eases only with motion. A split's
+      side handle draws no line, its surface floating on its own edge: its
+      hit area straddles that edge, where the handle stands. A split's
       handle is gone while its surface is shut (`data-hidden`); while the
       surface has the whole split (`data-expanded`) the handle stands on the
       page area's edge, under the sidebar's grip (a grip's width centred on
@@ -17,7 +18,7 @@
     variants: {
       look: {
         split:
-          "bg-border-hairline transition-[background-color] duration-(--dur-control) ease-out not-data-active:hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-px data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
+          "z-1 bg-transparent after:w-space-3 data-hidden:hidden data-expanded:after:left-px data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
         grid: "bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-reduce:transition-off",
       },
     },
