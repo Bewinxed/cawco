@@ -3854,7 +3854,7 @@
                the field below it, growing from its bottom edge, the side the
                caret is on. The list inside carries its own inset. shadcn's
                Command parts are addressed by slot from here, so the menu
-               wears Quiet Ledger tokens rather than the stock ladder: the
+               wears CawCo's tokens rather than the stock ladder: the
                list is the one thing that scrolls, the shell stays put; each
                family is a titled section, ruled off from the one above so
                "Skills" and "Commands" read as two kinds of thing; one row is

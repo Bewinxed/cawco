@@ -3,7 +3,7 @@
 ## Rendered Evidence (Step 0)
 - Screenshots: `/tmp/rv9b.png` (1440×960 light), `/tmp/rv9b-dark.png` (1440×960 dark), `/tmp/rv9b-mobile.png` (390×960). All three read directly.
 - Surface: the Outpost Assistant floating panel (empty/first-ask state) over a scrimmed, blurred session transcript (sidebar Fleet/Tools/Rules/Usage + "wire delegate row outcomes" transcript with a "You" and a "Claude Code" turn).
-- Source: `mocks/v5-assistant.html` + `tokens.css` (DESIGN.md "Quiet Ledger", LOCKED).
+- Source: `mocks/v5-assistant.html` + `tokens.css` (DESIGN.md, LOCKED).
 
 ## Assessment B — Deterministic Detector
 - Command: `node scripts/detect.mjs mocks/v5-assistant.html > /tmp/p9b-detect.json`
@@ -30,7 +30,7 @@
 | Note | visual/composition | The orb empty-region occupies ~45% of the 899px panel; the actionable content (heading, 4 suggestions, action list) sits in the lower half. | Data-ink / composition balance (Tufte). | Register-justified: DESIGN.md §Expressive moments names the summoned orb as the single accent moment; the calm-budget register makes the empty space deliberate. Leave as-is. |
 | Note | ai-native / content-design | DW-9b.2 action→undo/checkpoint rationale and DW-9b.4 canon-gap "principle-derived" labels + the four inference areas (streaming, latency, refusal, reasoning display) live in HTML source comments, not on rendered pixels; the surface shows only the four `undo`/`checkpoint` tags + "every action asks first, none is silent". | ai-native: "mark the canon gap in the deliverable" (comment satisfies it); the requirement explicitly accepts "the deliverable comment". | Acceptable as specified; noted so a pixel-only reader knows the canon-gap labelling is not on-screen. |
 
-**Distinctiveness (ai-tells CHECKER, always-on):** PASS. The direction is nameable in 2–3 words — **"Quiet Ledger"**: a fully hueless graphite accent (no decorative hue anywhere), the never-flat gradient carried onto the logo mark and send button (top-light/bottom-shade), and a masked radial dot-grid behind the summon orb. These are choices a generic AI system would not make (the default would be a purple/blue accent and a flat tinted send button). Not competent-but-generic.
+**Distinctiveness (ai-tells CHECKER, always-on):** PASS. The direction is nameable in 2–3 words — **DESIGN.md's direction**: a fully hueless graphite accent (no decorative hue anywhere), the never-flat gradient carried onto the logo mark and send button (top-light/bottom-shade), and a masked radial dot-grid behind the summon orb. These are choices a generic AI system would not make (the default would be a purple/blue accent and a flat tinted send button). Not competent-but-generic.
 
 ## Requirement Fulfillment
 
@@ -67,4 +67,4 @@ VERDICT:  PASS
 - DW-9b.2/9b.4 rationale and canon-gap labels are in source comments, not rendered pixels — acceptable per the requirement wording.
 - Pixel evidence was fully available (light + dark + mobile renders read); no coverage gap.
 
-**Verdict: PASS** — All four DW items and every listed edge case met on the rendered surface; deterministic gates green (verify.sh ALL PASS, v5assistantcheck 28/0, Phase-5 gate 82/0); detector ran (exit 0) with only register-justified control-in-panel Notes; distinctiveness passes (nameable "Quiet Ledger"). No blockers.
+**Verdict: PASS** — All four DW items and every listed edge case met on the rendered surface; deterministic gates green (verify.sh ALL PASS, v5assistantcheck 28/0, Phase-5 gate 82/0); detector ran (exit 0) with only register-justified control-in-panel Notes; distinctiveness passes (nameable as DESIGN.md's direction). No blockers.

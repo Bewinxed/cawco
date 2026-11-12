@@ -1,5 +1,5 @@
 /**
- * Identity mark helpers — maps a session to its Quiet Ledger item mark: an
+ * Identity mark helpers — maps a session to its CawCo item mark: an
  * identity HUE (1–8, stable per project/path) carrying a per-session SPRITE.
  * Mirrors the marks in mocks/v2-fleet.html (the lead column of every board row).
  */

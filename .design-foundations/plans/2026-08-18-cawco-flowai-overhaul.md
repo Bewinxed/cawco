@@ -1316,7 +1316,7 @@ separate, required gate, and it is the orchestrator's job when the review model 
       orchestrator after the Ox Alpha delegate stalled with no output (and Ox balance later ran out).
 - [x] REVIEW: **PASS** — by the in-process Claude `design-review-agent` (the command's default reviewer;
       switched to it after Ox Alpha balance was exhausted). Dual-blind clean (Assessment B =
-      `scripts/detect.mjs`, 5 register-justified nested-cards, distinctiveness "Quiet Ledger" PASS);
+      `scripts/detect.mjs`, 5 register-justified nested-cards, distinctiveness PASS);
       all four DW-9b items verified on pixels + source; both CUT suggestions confirmed ABSENT; gates
       green (verify.sh ALL PASS, v5assistantcheck 28/0, Phase-5 82/0). No blockers.
 - [x] Committed

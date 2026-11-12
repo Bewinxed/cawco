@@ -2,7 +2,7 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-/// The quiet ledger's non-turn lines (SystemLine.svelte), every one a rail
+/// The transcript's non-turn lines (SystemLine.svelte), every one a rail
 /// row in the muted label face: a harness notification folded over its
 /// report, a task's line, a command's output in its well, an interruption, a
 /// failure in the fail ink with why under it, and a note that opens when it

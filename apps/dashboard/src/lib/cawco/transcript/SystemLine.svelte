@@ -21,7 +21,7 @@
   import MessageBody from "../MessageBody.svelte";
   import { CAW_EVENT } from "../turn/voice";
   /**
-   * The quiet ledger's non-turn lines: a command's output in a recessed well, a
+   * The transcript's non-turn lines: a command's output in a recessed well, a
    * system note folded on the rail, and a failure or refusal as a named card
    * with its handoff. Everything the transcript carries that is neither a turn
    * nor a tool call lands here.

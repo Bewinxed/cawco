@@ -247,8 +247,6 @@ This file holds what spans screens: the principles, what the tokens mean, and th
 
 ## Overview
 
-**Creative North Star: "The Quiet Ledger, re-skinned for Caw&Co"**
-
 CawCo is a board an operator glances at between other work, to answer one question: does anything need me right now? It reads like a departure board: rows hold still, numbers line up, and a quiet row means a healthy row.
 
 The surface is warm paper by day and roost-dark at night, low in chroma. Colour is spent on five things only: the coral action, status, identity marks, the focus ring, and data past a threshold. Depth is a recessed frame holding raised content. Neither scheme is the original: every colour token picks its side through `light-dark()`, and a design is drawn and checked in both.

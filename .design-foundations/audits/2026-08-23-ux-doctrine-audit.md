@@ -1,7 +1,7 @@
 # UX + Doctrine Audit — CawCo dashboard
 
 **Date:** 2026-08-23 · **Status:** open checklist · **Scope:** the 7 route surfaces + shared chrome
-**Law:** `DESIGN.md` (Quiet Ledger) · `JOURNEY.md` (page specs, flows, IA)
+**Law:** `DESIGN.md` · `JOURNEY.md` (page specs, flows, IA)
 **Method:** code read of every surface + live measurement of the running app at `localhost:3000`
 (headless Chromium on :9222, `ui-observer/scan.mjs` plus direct DOM probes at 1440×900 and at
 390×844 with `pointer: coarse` emulation).
