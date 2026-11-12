@@ -905,30 +905,60 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
     undefined,
     { timeout: 10_000 }
   );
-  // The form shut, then opened again inside the head's --dur-panel: the
-  // head's seat slides out and is called back as it went, the 80 lands and
-  // leaves.
+  // Routines, then Board again inside the head's --dur-panel: the head's
+  // seat slides out and is called back as it went, the 80 lands and leaves.
+  // The form stays open across the tabs (`adding`), so Board seats him in
+  // the head whether or not the board would stand him (a setup page Caw
+  // drew makes the empty board seat him too, `setUpFresh`); the empty
+  // Routines page stands him once its page is read (ViewRoutines
+  // `standing`), and the head's seat leaves in that same update.
   const raced = await page.evaluate(async () => {
-    // The new task form's Cancel: the form that holds its title field.
-    const cancel = [
-      ...(document
-        .querySelector('input[aria-label="Task title"]')
-        ?.closest("form")
-        ?.querySelectorAll<HTMLButtonElement>('[data-slot="actions"] button') ??
-        []),
-    ].find((one) => one.textContent?.trim() === "Cancel");
-    const again = document.querySelector<HTMLButtonElement>(
-      '[data-slot="strip"] button[aria-label="New task"]'
-    );
-    cancel?.click();
-    await new Promise((done) => setTimeout(done, 60));
-    // The 80 stood, and the head's seat was still on its way out.
-    const crossed =
-      document.querySelector('[data-slot="caw-80"]') !== null &&
-      document.querySelector('[data-slot="seat"]') !== null;
-    again?.click();
+    // The strip's tabs on screen, not the inert copies it measures with.
+    const tabOf = (name: string) =>
+      [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+        (one) =>
+          one.checkVisibility() &&
+          !one.closest('[inert], [aria-hidden="true"]') &&
+          one.querySelector('[data-slot="text"]')?.textContent?.trim() === name
+      );
+    const routines = tabOf("Routines");
+    const board = tabOf("Board");
+    // Read every frame from the press until the 80 and the head's seat both
+    // stand, or 2 s went by: the 80 is drawn in the update that seats him
+    // no more, while the head's seat leaves over --dur-panel (ProjectHead
+    // `transition:slot`, 280 ms). At the first frame both stand, Board
+    // calls the seat back as it goes. Each frame is [ms, 80, seat, form].
+    const frames: [number, number, number, number][] = [];
+    const at = performance.now();
+    routines?.click();
+    const crossedAt = await new Promise<number | null>((done) => {
+      const read = () => {
+        const ms = Math.round(performance.now() - at);
+        const stood = document.querySelector('[data-slot="caw-80"]') !== null;
+        const seat = document.querySelector('[data-slot="seat"]') !== null;
+        const form =
+          document.querySelector('input[aria-label="Task title"]') !== null;
+        frames.push([ms, Number(stood), Number(seat), Number(form)]);
+        if (stood && seat) {
+          done(ms);
+        } else if (ms > 2000) {
+          done(null);
+        } else {
+          requestAnimationFrame(read);
+        }
+      };
+      read();
+    });
+    if (crossedAt !== null) {
+      board?.click();
+    }
     await new Promise((done) => setTimeout(done, 1000));
-    return { controls: Boolean(cancel && again), crossed };
+    return {
+      controls: Boolean(routines && board),
+      crossed: crossedAt !== null,
+      crossedAt,
+      frames: frames.slice(0, 60),
+    };
   });
   /** The seat's `aria-expanded`, and whether his docked panel is drawn. */
   const state = async () => ({
