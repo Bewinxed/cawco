@@ -834,27 +834,38 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
   // Routines page stands him at 80 too, as its mark (22d8c78d0), so its
   // head draws no seat of his: one seat on the page (ProjectPage
   // `standing`). Round 559 found both there, the head's and the 80.
+  // A view that leaves stands, inert, while the next one comes in (the
+  // pane's `{#key shown}` swaps them with `out:leave`, list-swap.svelte.ts
+  // `leaveView` making the leaving view inert): for that while two of his
+  // 80s stand, the leaving one under an inert box. His seat is the one in
+  // the view that stays.
+  const STOOD = '[data-slot="caw-80"]:not([inert]):not([inert] *)';
   await page
-    .locator('[data-slot="caw-80"] [data-slot="caw-seat"]')
+    .locator(`${STOOD} [data-slot="caw-seat"]`)
     .waitFor({ timeout: 120_000 });
   const tab = (name: string) =>
     page
       .locator('[data-slot="strip"]')
       .getByRole("tab", { name, exact: true })
       .first();
-  const head = page.locator('[data-slot="seat"] [data-slot="caw-seat"]');
+  // The head's seat comes and goes with `transition:slot` (ProjectHead): one
+  // on its way out is inert beside the one coming in.
+  const head = page.locator(
+    '[data-slot="seat"]:not([inert]) [data-slot="caw-seat"]'
+  );
   /** His seats on the page, past any that is on its way out (Svelte makes a leaving node inert until its outro ends). */
   const seats = () =>
     page.evaluate(() => ({
-      stood: document.querySelectorAll('[data-slot="caw-80"]:not([inert])')
-        .length,
+      stood: document.querySelectorAll(
+        '[data-slot="caw-80"]:not([inert]):not([inert] *)'
+      ).length,
       head: document.querySelectorAll(
-        '[data-slot="seat"] [data-slot="caw-seat"]'
+        '[data-slot="seat"]:not([inert]) [data-slot="caw-seat"]'
       ).length,
     }));
   await tab("Routines").click();
   await page
-    .locator('[data-slot="caw-empty"] [data-slot="caw-80"]')
+    .locator(`[data-slot="caw-empty"] ${STOOD}`)
     .waitFor({ timeout: 30_000 });
   await page.waitForTimeout(1000);
   const onRoutines = await seats();
@@ -867,7 +878,7 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
   // task is being added), and the 80 leaves.
   await tab("Board").click();
   await page
-    .locator('[data-slot="caw-80"] [data-slot="caw-seat"]')
+    .locator(`${STOOD} [data-slot="caw-seat"]`)
     .waitFor({ timeout: 10_000 });
   const newTask = page.locator(
     '[data-slot="strip"] button[aria-label="New task"]'
