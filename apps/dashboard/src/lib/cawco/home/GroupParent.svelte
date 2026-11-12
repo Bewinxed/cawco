@@ -4,8 +4,11 @@
    * Projects' area or machine) as a tree parent: its own tree mark (a day
    * the calendar, an area the layers, a machine its OS mark, a project its
    * ProjectMark) and its name, the rows under it hung from that mark by the
-   * rail's nesting lines (tree-lines.ts). The row is the switch that
-   * folds them; folded, its mark shows how many it holds. It is the row's
+   * rail's nesting lines (tree-lines.ts). A day, an area or a machine has
+   * no page: its row is the switch that folds them. A project's group is
+   * the project's row too: its body opens the project (project-press.ts),
+   * as its row in Projects does, and its mark is the switch that folds the
+   * sessions under it. Folded, the mark shows how many it holds. It is the row's
    * own box a regroup moves (`data-regroup`), a parent the regroup makes
    * fading in where it stands and one it removes fading out where it stood
    * (motion/share `regroup`).
@@ -22,10 +25,12 @@
   import { landRegroup } from "../motion/share.svelte";
   import OsMark from "../OsMark.svelte";
   import ProjectMark from "../ProjectMark.svelte";
+  import { inRailSheet, openProjectPress } from "../project-press";
   import { folderOf } from "../projects";
   import RailProjectEnd from "../RailProjectEnd.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import TreeMark from "../TreeMark.svelte";
+  import { projectHref } from "../workspace/tabs";
   import { grouping } from "./grouping.svelte";
   import { machineOs, projectHue } from "./recent.svelte";
 
@@ -56,57 +61,90 @@
     by === "project" && groupKey ? cawco.project(groupKey) : undefined
   );
   /** The row: an end's tray hands the focus back to it. */
-  let rowEl = $state<HTMLButtonElement | null>(null);
+  let rowEl = $state<HTMLElement | null>(null);
+  /** Whether its rail is the phone's sheet, where its link is followed. */
+  const inSheet = inRailSheet();
+  const rowClass =
+    "select-none mark-line press-tint focus-inset m-0 flex w-full min-w-0 h-(--row-compact-h) coarse:h-c-btn-h-lg items-center gap-(--row-compact-gap) rounded-sm border-none border-current bg-transparent py-0 ps-(--row-compact-gap) pe-(--row-compact-pad-end) text-start type-label text-ink-row no-underline";
 </script>
 
-<!-- A disclosure, so a button; the rail's hover ghost lands on it as on any
-     row (`data-rail-row`). Under a finger it is the touch floor tall. -->
-{#snippet row()}
-  <button
-    bind:this={rowEl}
-    aria-expanded={open}
-    class="select-none mark-line press-tint focus-inset m-0 flex w-full min-w-0 h-(--row-compact-h) coarse:h-c-btn-h-lg items-center gap-(--row-compact-gap) rounded-sm border-none border-current bg-transparent py-0 ps-(--row-compact-gap) pe-(--row-compact-pad-end) text-start type-label text-ink-row"
-    data-rail-row
-    data-regroup={regroupKey}
-    data-regroup-parent
-    onclick={() => grouping.toggle(path)}
-    type="button"
-    {@attach landRegroup(() => regroupKey)}
+{#snippet name()}
+  <span class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
+    >{label}</span
   >
-    {#if by === "project"}
+{/snippet}
+
+<!-- A project's group is a link to its page, its mark the switch; any other
+     group is a disclosure, so a button. The rail's hover ghost lands on
+     either as on any row (`data-rail-row`). Under a finger it is the touch
+     floor tall. -->
+{#snippet row()}
+  {#if project}
+    <a
+      bind:this={rowEl}
+      class={rowClass}
+      data-rail-row
+      data-regroup={regroupKey}
+      data-regroup-parent
+      href={projectHref(project.id)}
+      onclick={(event) => openProjectPress(event, project.id, inSheet())}
+      style:--mark-hit-gap="var(--row-compact-gap)"
+      {@attach landRegroup(() => regroupKey)}
+    >
       <ProjectMark
         count={open ? 0 : count}
+        holds="sessions"
         hue={projectHue(groupKey)}
         name={label}
+        ontoggle={() => grouping.toggle(path)}
         {open}
-        rowToggles
       />
-    {:else}
-      <!-- A bare glyph while it is open, as the rail's own glyphs stand; folded,
-         its count stands on a tile in its own hue, with the deck behind. -->
-      <TreeMark
-        count={open ? 0 : count}
-        countIsStatus
-        fill={open ? undefined : `var(--color-mark-${markHue(path)})`}
-        {open}
-        rowToggles
-      >
-        {#snippet face()}
-          {#if by === "machine"}
-            <OsMark class="size-icon-sm" os={machineOs(groupKey)} />
-          {:else if by === "area"}
-            <IconLayers aria-hidden="true" class="size-icon-sm" />
-          {:else}
-            <IconCalendar aria-hidden="true" class="size-icon-sm" />
-          {/if}
-        {/snippet}
-      </TreeMark>
-    {/if}
-    <span
-      class="min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
-      >{label}</span
+      {@render name()}
+    </a>
+  {:else}
+    <button
+      bind:this={rowEl}
+      aria-expanded={open}
+      class={rowClass}
+      data-rail-row
+      data-regroup={regroupKey}
+      data-regroup-parent
+      onclick={() => grouping.toggle(path)}
+      type="button"
+      {@attach landRegroup(() => regroupKey)}
     >
-  </button>
+      {#if by === "project"}
+        <ProjectMark
+          count={open ? 0 : count}
+          hue={projectHue(groupKey)}
+          name={label}
+          {open}
+          rowToggles
+        />
+      {:else}
+        <!-- A bare glyph while it is open, as the rail's own glyphs stand; folded,
+           its count stands on a tile in its own hue, with the deck behind. -->
+        <TreeMark
+          count={open ? 0 : count}
+          countIsStatus
+          fill={open ? undefined : `var(--color-mark-${markHue(path)})`}
+          {open}
+          rowToggles
+        >
+          {#snippet face()}
+            {#if by === "machine"}
+              <OsMark class="size-icon-sm" os={machineOs(groupKey)} />
+            {:else if by === "area"}
+              <IconLayers aria-hidden="true" class="size-icon-sm" />
+            {:else}
+              <IconCalendar aria-hidden="true" class="size-icon-sm" />
+            {/if}
+          {/snippet}
+        </TreeMark>
+      {/if}
+      {@render name()}
+    </button>
+  {/if}
 {/snippet}
 
 {#if project && endAt}

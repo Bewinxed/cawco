@@ -69,6 +69,9 @@ export const sidebarWords = {
   /** A project's count in Projects, as the switch that unfolds its running sessions under its row. */
   showRunning: (project: string) => `Show ${project}'s running sessions`,
   hideRunning: (project: string) => `Hide ${project}'s running sessions`,
+  /** A project group's mark in Recent: the switch that unfolds the sessions listed under it. */
+  showSessions: (project: string) => `Show ${project}'s sessions`,
+  hideSessions: (project: string) => `Hide ${project}'s sessions`,
   /** The sidebar's one list of the sessions the person started or wrote in. */
   recent: "Recent",
   /** Recent with nothing in it. */

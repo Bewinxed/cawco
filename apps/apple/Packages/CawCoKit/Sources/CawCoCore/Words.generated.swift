@@ -1584,6 +1584,15 @@ public enum Words {
             "Hide \(project)'s running sessions"
         }
 
+        /// A project group's mark in Recent: the switch that unfolds the sessions listed under it.
+        public static func showSessions(project: String) -> String {
+            "Show \(project)'s sessions"
+        }
+
+        public static func hideSessions(project: String) -> String {
+            "Hide \(project)'s sessions"
+        }
+
         /// The sidebar's one list of the sessions the person started or wrote in.
         public static let recent = "Recent"
 

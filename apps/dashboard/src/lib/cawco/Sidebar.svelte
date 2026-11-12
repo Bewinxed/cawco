@@ -83,6 +83,7 @@
   import PresenceMenu from "./PresenceMenu.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { endAtRail } from "./project-end.svelte";
+  import { openProjectPress, setRailSheet } from "./project-press";
   import { folderOf } from "./projects";
   import RailProjectEnd from "./RailProjectEnd.svelte";
   import { rail } from "./rail.svelte";
@@ -168,27 +169,9 @@
   const activeSession = $derived(
     onWorkspace ? workspace.activeSessionId : null
   );
-  /**
-   * A project's row, pressed with the workspace in front, opens its tab
-   * where it is, as it was left (workspace `openProject`); a press with a
-   * key held, from another spoke, or in the phone's sheet (which goes as
-   * its link is followed) follows its link.
-   */
-  function openProjectTab(event: MouseEvent, projectId: string) {
-    if (
-      sheet ||
-      !onWorkspace ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    ) {
-      return;
-    }
-    event.preventDefault();
-    workspace.openProject(projectId);
-  }
+  // Rows drawn in this rail (Projects', Recent's project groups) follow
+  // their link in the phone's sheet (project-press.ts).
+  setRailSheet(() => sheet);
 
   /** The rail itself: its session rows open the session card (SessionHover). */
   let railEl = $state<HTMLElement>();
@@ -537,17 +520,15 @@
              them under the row, as a session's mark unfolds its delegates;
              its press never reaches the link. Under a finger the switch
              reaches sideways to the name, the row's own gap (`row="list"`,
-             a compact row's), as a session row's does. The row opens its
-             project as the press bubbles up to it, so the switch, which
-             stops the press where it lands (TreeMark `toggle`), keeps it:
-             heard on the way down, the row opened the project under a
-             press on the mark. -->
+             a compact row's), as a session row's does. Its body opens the
+             project (project-press.ts), heard as the press bubbles up, so
+             the switch keeps a press on the mark. -->
         <a
           {href}
           {...props}
           id={railLinkId(project.id)}
           aria-current={here ? "page" : undefined}
-          onclick={(event) => openProjectTab(event, project.id)}
+          onclick={(event) => openProjectPress(event, project.id, sheet)}
           class="{props.class} mark-line coarse:h-c-btn-h-lg"
           style:--mark-hit-gap="var(--row-compact-gap)"
           data-regroup="regroup:project:{project.id}"
