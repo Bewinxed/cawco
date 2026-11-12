@@ -1,8 +1,8 @@
 /**
- * The empty state on Caw's axis (The Caw Stands On The Axis Rule). Before
- * setup, mark, title, line and a lone action centred as one block; on an
- * empty board, Caw alone centred over the column, the title, the line and
- * the starters on its left edge.
+ * The board's empty states (The Caw Stands On The Axis Rule). Where Caw can
+ * start, before setup and on an empty board, Caw alone centred over the
+ * column, the title, the line and the action on its left edge; where he
+ * can't, the folder glyph, title and line centred as one block.
  */
 import EmptyOnAxis from "./EmptyOnAxis.svelte";
 
@@ -27,5 +27,5 @@ export const NotSetUp = { args: { look: "setup" } };
 /** An empty board: Caw over four things to start him on. */
 export const Starters = { args: { look: "starters" } };
 
-/** The project isn't set up and Caw can't start it, so there is nothing to press. */
+/** Not set up, and Caw can't start it: nothing to press. */
 export const NoAction = { args: { look: "none" } };

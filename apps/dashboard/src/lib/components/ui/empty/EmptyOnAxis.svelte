@@ -1,11 +1,13 @@
 <script lang="ts">
   /**
    * The axis empty state (`EmptyState` with `axis`) as its callers draw it,
-   * for its states file: `setup`, the board before it is set up (the real
-   * SetupScene, one outline button, the whole block on the axis);
+   * for its states file: `setup`, the board before it is set up as Caw
+   * offers it (the real SetupScene with his seat, `axis="mark"`, one
+   * outline button);
    * `starters`, the empty board as ProjectPage draws it (`axis="mark"`):
    * Caw at 80 centred over the column, the title, the line and the
-   * starters on its left edge; `none`, the not-set-up board with no action.
+   * starters on its left edge; `none`, the not-set-up board where Caw
+   * can't start: the folder glyph, no action, the whole block on the axis.
    * Caw stands in at rest (`lead`), with no head to sit down in.
    */
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
@@ -47,10 +49,19 @@
       {/snippet}
     </EmptyState>
   </div>
+{:else if look === "setup"}
+  <SetupScene act={{ kind: "ask", ask: () => undefined }} {seat} />
 {:else}
-  <SetupScene
-    act={look === "setup"
-      ? { kind: "ask", ask: () => undefined }
-      : { kind: "none" }}
-  />
+  <SetupScene act={{ kind: "none" }} />
 {/if}
+
+{#snippet seat()}
+  <div data-slot="caw-80" class="grid justify-items-center">
+    <CawSeat
+      lead={RESTING_LEAD}
+      projectId="launch"
+      projectName="Launch"
+      size={80}
+    />
+  </div>
+{/snippet}
