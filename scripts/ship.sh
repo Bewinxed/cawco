@@ -2,9 +2,8 @@
 # The one way a commit on main becomes a published release, for the nightly and for the agent that fixed something
 # (the hub runs it after a landing whose finish_item says `ship`, as gate.md's `Ship:` line declares it):
 #
-#   bash scripts/ship.sh --commit SHA --notes FILE [--channel nightly|stable] [--tag vX.Y.Z] [--mac]
-#       Without --mac the release is the linux builds only; --mac (`bun run release:mac`) adds the signed, notarized Mac builds.
-#       With --mac, checks Apple's notarization limit has room for a release (release-quota.ts; refused in its words, exit 2),
+#   bash scripts/ship.sh --commit SHA --notes FILE [--channel nightly|stable] [--tag vX.Y.Z]
+#       Checks Apple's notarization limit has room for a release (release-quota.ts; refused in its words, exit 2),
 #       then starts the release as a user unit of its own, `cawco-ship-<sha12>-<time>`, which outlives whoever asked
 #       (the release restarts the hub it is asked from), prints the unit's name and returns.
 #   bash scripts/ship.sh --run --commit SHA --notes FILE [--channel …] [--tag …]
@@ -22,7 +21,7 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(git -C "$here" rev-parse --show-toplevel)
-run=0 commit= notes= channel=nightly tag= republish= mac=
+run=0 commit= notes= channel=nightly tag= republish=
 while (($#)); do
   case $1 in
     --run) run=1; shift ;;
@@ -31,7 +30,6 @@ while (($#)); do
     --channel) channel=${2:-}; shift 2 ;;
     --tag) tag=${2:-}; shift 2 ;;
     --republish) republish=${2:-}; shift 2 ;;
-    --mac) mac=1; shift ;;
     *) echo "ship.sh: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -57,10 +55,7 @@ if [[ -n $republish ]]; then
 fi
 
 if ((run == 0)); then
-  # Only a release that notarizes spends Apple's quota.
-  if [[ -n $mac ]]; then
-    said=$(bun "$here/release-quota.ts") || { echo "$said"; exit 2; }
-  fi
+  said=$(bun "$here/release-quota.ts") || { echo "$said"; exit 2; }
   git -C "$repo" fetch --quiet origin
   sha=$(git -C "$repo" rev-parse --verify "$commit^{commit}")
   git -C "$repo" merge-base --is-ancestor "$sha" origin/main ||
@@ -81,7 +76,7 @@ if ((run == 0)); then
   systemd-run --user --collect --quiet --unit="$unit" --working-directory="$repo" \
     --property=KillMode=mixed --property=TimeoutStopSec=300 \
     --setenv=PATH="$PATH" --setenv=HOME="$HOME" \
-    bash "$here/ship.sh" --run --commit "$sha" ${kept:+--notes "$kept"} --channel "$channel" ${tag:+--tag "$tag"} ${mac:+--mac}
+    bash "$here/ship.sh" --run --commit "$sha" ${kept:+--notes "$kept"} --channel "$channel" ${tag:+--tag "$tag"}
   echo "Shipping $sha as $unit (journalctl --user -u $unit)"
   exit 0
 fi
@@ -111,7 +106,7 @@ git -C "$repo" worktree add --quiet --detach "$runner" "$sha"
 (cd "$runner" && bun install --frozen-lockfile)
 cd "$runner"
 bun scripts/release.ts --commit "$sha" --channel "$channel" ${notes:+--notes "$notes"} \
-  --output "$cache/out" ${tag:+--tag "$tag"} ${mac:+--mac} --publish &
+  --output "$cache/out" ${tag:+--tag "$tag"} --publish &
 release=$!
 # A trapped signal cuts `wait` short (status above 128) while the release is still clearing: wait on until it is gone.
 until wait "$release"; status=$?; ((status <= 128)) || ! kill -0 "$release" 2> /dev/null; do :; done

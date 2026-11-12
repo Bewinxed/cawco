@@ -1,11 +1,7 @@
 /**
  * The release pipeline:
  *   bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path
- *     [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--mac] [--dry-run]
- *
- * Without `--mac` a release is the two linux targets: no darwin compile, bundle, signing, notarization,
- * archive or upload step is in the graph, and the Apple secrets are not needed. `--mac` (`bun run release:mac`)
- * adds the two darwin targets to the same version and the same manifest.
+ *     [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--dry-run]
  *
  * A release names its commit, and is built from exactly that commit: a
  * worktree of it under ~/.worktrees/release-<sha>, on real disk, made here
@@ -97,7 +93,6 @@ import { describeSteps, runSteps, type Step } from "./release-graph";
 import { quotaRefusal } from "./release-quota";
 import {
   missingSecrets,
-  SECRET_VARIABLES,
   signingPem,
   takeReleaseSecrets,
   underSigningEnv,
@@ -115,13 +110,12 @@ const commitInput = argument("--commit");
 const channel = argument("--channel");
 const output = argument("--output");
 const publishing = argv.includes("--publish");
-const mac = argv.includes("--mac");
 if (
   !(commitInput && output && isAbsolute(output)) ||
   (channel !== "stable" && channel !== "nightly")
 ) {
   console.error(
-    "Usage: bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--mac] [--dry-run]"
+    "Usage: bun scripts/release.ts --commit <sha> --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--publish] [--dry-run]"
   );
   process.exit(2);
 }
@@ -137,8 +131,6 @@ interface Request {
   commit: string;
   /** This request, apart from any other for the same commit. */
   id: string;
-  /** Whether the darwin targets are built too (`--mac`). */
-  mac: boolean;
   /** A nightly's end-user notes, carried with the request so a queued one keeps its own. */
   notes?: string;
   output: string;
@@ -229,10 +221,6 @@ const gatePassed = async (commit: string): Promise<boolean> => {
 const stagingOf = (commit: string): string =>
   join(state, `staging-${commit.slice(0, 12)}`);
 
-/** The targets a request builds: the linux two, and with `--mac` the darwin two. */
-const targetsOf = (asked: Request): readonly (typeof TARGETS)[number][] =>
-  TARGETS.filter((target) => asked.mac || !target.startsWith("darwin"));
-
 /** Whether a target's builds are darwin's: a signed, notarized bundle. */
 const isDarwin = (target: string): boolean => target.startsWith("darwin");
 
@@ -268,7 +256,6 @@ const releaseSteps = (
   gated: boolean
 ): Step[] => {
   const trees = treesOf(current.commit);
-  const targets = targetsOf(current);
   const staging = stagingOf(current.commit);
   const proofBinary = join(staging, "cawco-proof");
   const infoHome = join(staging, "binary-info-home");
@@ -430,7 +417,7 @@ const releaseSteps = (
   };
   const promotion = [
     "gate",
-    ...targets.flatMap((target) => [
+    ...TARGETS.flatMap((target) => [
       `archive ${target}`,
       ...(isDarwin(target) ? [] : [`run ${target}`]),
       ...(publish ? [`upload ${target}`] : []),
@@ -516,21 +503,17 @@ const releaseSteps = (
       ) as Pick<ReleaseManifest, "protocol">;
       manifest().protocol = protocol;
     }),
-    ...(current.mac
-      ? [
-          step("bundle files", ["install build"], 0.3, async () => {
-            await mkdir(bundleFiles, { recursive: true });
-            await run(
-              [
-                process.execPath,
-                "scripts/binary/info-plist.ts",
-                join(bundleFiles, "Info.plist"),
-              ],
-              trees.build
-            );
-          }),
-        ]
-      : []),
+    step("bundle files", ["install build"], 0.3, async () => {
+      await mkdir(bundleFiles, { recursive: true });
+      await run(
+        [
+          process.execPath,
+          "scripts/binary/info-plist.ts",
+          join(bundleFiles, "Info.plist"),
+        ],
+        trees.build
+      );
+    }),
     ...(publish
       ? [
           step("draft", ["version"], 2, async () => {
@@ -549,7 +532,7 @@ const releaseSteps = (
           }),
         ]
       : []),
-    ...targets.flatMap(targetSteps),
+    ...TARGETS.flatMap(targetSteps),
     step("promote", promotion, 5, () =>
       promote(current, publish, staging, manifest(), secrets, notStopped)
     ),
@@ -894,7 +877,6 @@ if (argv.includes("--dry-run")) {
           id: "dry-run",
           output,
           notes: "dry run",
-          mac,
           tag: argument("--tag"),
         },
         publishing,
@@ -998,9 +980,7 @@ if (Bun.version !== PINNED_BUN) {
 }
 const releaseSecrets = takeReleaseSecrets();
 // What the build cannot do without, before anything is queued or built.
-const missing = missingSecrets(releaseSecrets).filter(
-  (name) => mac || name === SECRET_VARIABLES.manifestKey
-);
+const missing = missingSecrets(releaseSecrets);
 if (missing.length > 0) {
   refuse(
     `${missing.join(", ")} missing from the release env: bash scripts/release-setup.sh --check says what is missing, and --import-secrets writes them`
@@ -1247,7 +1227,6 @@ const request: Request = {
   notes: channel === "nightly" ? nightlyNotes : undefined,
   tag: argument("--tag"),
   output,
-  mac,
 };
 
 // THE QUEUE. One request waits: the newest. A request for a commit that a
